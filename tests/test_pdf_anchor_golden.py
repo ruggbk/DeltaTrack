@@ -582,3 +582,27 @@ class TestPrecisionHarnessOracle:
         # vocabulary precision/recall are bounded ratios.
         assert 0.0 <= m["vocab_precision"] <= 1.0
         assert 0.0 <= m["vocab_recall"] <= 1.0
+
+
+class TestNoOpenerAccountRecall:
+    """DeltaTrack#85 regression: a leaf account whose body does NOT open with
+    'For necessary expenses' must still be captured as an account anchor.
+
+    The documented case is the special-fund account FEDERAL PROTECTIVE SERVICE
+    (118-hr-8752 v1, page 3), whose body opens 'The revenues and collections of
+    security fees...'. When account capture depended on the 'For necessary
+    expenses' backwalk, its heading was never anchored and the whole account was
+    absorbed into the prior account's block. The glyph-size path captures the
+    heading independent of its body opener; this pins that.
+
+    Unlike the golden snapshot above (regenerated when a change is intended),
+    never regenerate this away — losing this anchor reintroduces #85.
+    """
+
+    def test_hr8752_special_fund_account_captured(self, hr8752_v1_pages):
+        anchors = extract_anchors(hr8752_v1_pages)
+        fps = [a for a in anchors if a.text == "FEDERAL PROTECTIVE SERVICE"]
+        assert [(a.kind, a.page_number) for a in fps] == [("account", 3)], (
+            "FEDERAL PROTECTIVE SERVICE (no 'For necessary expenses' opener) must be "
+            f"captured exactly once as an account anchor on page 3; got {fps}"
+        )
