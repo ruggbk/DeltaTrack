@@ -166,8 +166,11 @@ def test_uncovered_position_degrades_to_empty_path():
 
 
 def test_removed_joins_on_v1_tree():
+    # v1 offsets resolve against the v1 tree (OLD ACCOUNT [10,50)); the leaf
+    # label has no v2 counterpart, so the breadcrumb remaps to the nearest
+    # matching v2 ancestor group (TITLE I).
     node_path = _join_one(_change("removed", v1=_span(20, 30)))
-    assert _labels(node_path) == ("TITLE I", "OLD ACCOUNT")
+    assert _labels(node_path) == ("TITLE I",)
 
 
 def test_added_joins_on_v2_only():
@@ -228,6 +231,99 @@ def test_node_path_default_is_empty_tuple():
         amount_pairs=(),
     )
     assert cv.node_path == ()
+
+
+# ---------- removed placement: v1 join remapped into the v2 tree ----------------
+#
+# The report is organized by the v2 tree, but a removal only has v1 offsets.
+# The join resolves the v1 breadcrumb, then remaps it onto the v2 group whose
+# labels match (normalized, deepest segment first, document-order tiebreak) so
+# "what left Title III" is findable where the reader is looking. No match at
+# any depth keeps the v1-derived breadcrumb as its own group heading.
+
+
+def _tree_v1_matched():
+    return [
+        _node(
+            "TITLE I",
+            "title",
+            _span(0, 7),
+            [
+                _node(
+                    "DEPARTMENT OF JUSTICE",
+                    "agency",
+                    _span(8, 12),
+                    [_node("legal activities", "account", _span(20, 60))],
+                ),
+                _node("VANISHED ACCOUNT", "account", _span(70, 90)),
+            ],
+        ),
+    ]
+
+
+def _tree_v2_matched():
+    return [
+        _node(
+            "TITLE I",
+            "title",
+            _span(0, 7),
+            [
+                _node(
+                    "GENERAL ADMINISTRATION",
+                    "agency",
+                    _span(8, 12),
+                    [_node("Legal Activities", "account", _span(20, 45))],
+                ),
+                _node(
+                    "DEPARTMENT OF JUSTICE",
+                    "agency",
+                    _span(50, 55),
+                    [_node("Legal Activities", "account", _span(60, 95))],
+                ),
+            ],
+        ),
+    ]
+
+
+def test_removed_remaps_to_matching_v2_group_with_v2_labels():
+    tree = {"v1": _tree_v1_matched(), "v2": _tree_v2_matched()}
+    # v1 breadcrumb: TITLE I > DEPARTMENT OF JUSTICE > legal activities.
+    # Two v2 "Legal Activities" exist; the one under DEPARTMENT OF JUSTICE
+    # shares the longer trailing-path match and must win over document order.
+    node_path = _join_one(_change("removed", v1=_span(30, 40)), tree=tree)
+    assert _labels(node_path) == ("TITLE I", "DEPARTMENT OF JUSTICE", "Legal Activities")
+    # Stored labels are the v2 node's own (casing normalized only for matching).
+    assert node_path[-1] == ("Legal Activities", "account")
+
+
+def test_removed_with_no_v2_leaf_match_falls_to_nearest_matching_ancestor():
+    tree = {"v1": _tree_v1_matched(), "v2": _tree_v2_matched()}
+    # VANISHED ACCOUNT exists nowhere in v2; its parent TITLE I does.
+    node_path = _join_one(_change("removed", v1=_span(75, 80)), tree=tree)
+    assert _labels(node_path) == ("TITLE I",)
+
+
+def test_removed_with_no_v2_match_at_all_keeps_v1_breadcrumb():
+    tree = {
+        "v1": _tree_v1_matched(),
+        "v2": [_node("TOTALLY NEW", "title", _span(0, 10))],
+    }
+    node_path = _join_one(_change("removed", v1=_span(75, 80)), tree=tree)
+    assert _labels(node_path) == ("TITLE I", "VANISHED ACCOUNT")
+
+
+def test_removed_with_empty_v1_tree_degrades():
+    tree = {"v1": [], "v2": _tree_v2_matched()}
+    assert _join_one(_change("removed", v1=_span(30, 40)), tree=tree) == ()
+
+
+def test_removed_label_match_is_case_and_whitespace_insensitive():
+    tree = {
+        "v1": [_node("Salaries and Expenses", "account", _span(0, 50))],
+        "v2": [_node("  SALARIES AND EXPENSES ", "account", _span(0, 40))],
+    }
+    node_path = _join_one(_change("removed", v1=_span(10, 20)), tree=tree)
+    assert _labels(node_path) == ("SALARIES AND EXPENSES",)
 
 
 # ---------- multiple hulls ------------------------------------------------------
