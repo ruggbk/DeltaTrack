@@ -24,6 +24,7 @@ from diff_bill import (
     diff_bills,
     extract_amounts,
 )
+from tests.conftest import require_corpus_or_skip
 
 BILLS_DIR = Path(__file__).parent.parent / "bills"
 
@@ -382,6 +383,18 @@ class TestDeadZoneBaseline:
 # ---------------------------------------------------------------------------
 # Corpus-wide smoke test: diff all adjacent version pairs
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_corpus_present_when_required():
+    """Fail-loud completeness floor for the diff-validation gates (#167).
+
+    In REQUIRE_CORPUS mode this asserts the pinned baseline bills are present and that
+    TestCorpusDiffSmoke discovered at least one version pair. Without it, an unfetched
+    checkout runs this whole module's slow assertions green without executing any of
+    them (empty parametrization + skipping fixtures). Skips outside required mode.
+    """
+    require_corpus_or_skip(_adjacent_version_pairs(), "diff-validation")
 
 
 def _adjacent_version_pairs():

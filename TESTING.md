@@ -152,6 +152,25 @@ uv run pytest -m "not slow and not browser"   # Fast group: built-in examples, n
 uv run pytest                 # Everything, including checks against real bills
 ```
 
+**Auto-skip cuts both ways.** The corpus property gates
+(`test_diff_validation`, `test_corpus_properties`, `test_corpus_tree_properties`)
+parametrize over the fetched bill files. When those files are absent the cases
+skip, and an empty parametrization produces *no cases at all* -- so on an
+unfetched checkout the gate runs green without asserting anything. "Skip" reads
+as "pass" (the fail-open pattern). Before relying on a corpus gate -- e.g. in a
+pre-PR run for matcher or financial-diff work -- fetch the corpus and set
+`REQUIRE_CORPUS=1`:
+
+```bash
+REQUIRE_CORPUS=1 uv run pytest -m slow   # missing baseline assets now FAIL, not skip
+```
+
+In required mode each corpus module's `test_corpus_present_when_required` guard
+asserts the pinned baseline bills are present and that the gate discovered at
+least one case. Without the env var the guard skips, so a clean clone still
+skips the corpus cleanly (it was deliberately made fetch-scripted, not a hard
+dependency).
+
 Run a single area:
 
 ```bash

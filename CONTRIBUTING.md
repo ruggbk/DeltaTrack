@@ -109,7 +109,7 @@ Tests are split into groups by speed and dependencies:
 
 - **Fast tests** (`uv run pytest -m "not slow and not browser"`) -- unit tests on inline XML and mocked data; no bill files needed.
 - **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`.
-- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files in `bills/`.
+- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files in `bills/`. These auto-skip when their assets are absent, so a corpus gate can pass green having run nothing (fail-open). When you rely on one, fetch the corpus and run with `REQUIRE_CORPUS=1` to make missing pinned baselines fail loudly (see [TESTING.md](TESTING.md)).
 
 When adding code, write tests for it. Test files live in `tests/`; mark tests that need real XML files with `@pytest.mark.slow` and front-end tests with `@pytest.mark.browser`. Shared helpers are in `tests/conftest.py`. [TESTING.md](TESTING.md) is the home for the full command catalog and what each validation layer proves.
 

@@ -21,6 +21,7 @@ This repo follows the workflow in [CONTRIBUTING.md](CONTRIBUTING.md). The load-b
 - **Branch from `develop`** (never `main`), commit in small focused steps, and open the PR against `develop`. A maintainer merges; do not merge yourself.
 - **Link the issue in the PR** body with `Closes #<n>` so the issue and its board card resolve on merge.
 - **Before pushing, run the CI gates locally** (lint, `ruff format --check`, fast, browser, external-validation) -- see CONTRIBUTING's "What CI checks." `ruff check` is not covered by the pre-commit format hook, so run it explicitly.
+- **For changes touching the parser, diff engine, or matcher, run the corpus gates in strict mode:** `REQUIRE_CORPUS=1 uv run pytest -m slow`. The corpus auto-skips when unfetched, so an ordinary slow run can pass having checked nothing (fail-open, #167); strict mode makes a missing baseline fail loudly. This is the pre-PR enforcement point until CI fetches a curated corpus and sets the var itself (#126). Fetch the corpus first (`fetch_bills.py download ... --format both`, `scripts/fetch_test_assets.py`).
 - **Before opening a PR, review and show evidence unprompted**: run a code review on the diff, then present visual before/after examples of the change (e.g. `scripts/serve_compare.py` or the diff HTML) for the maintainer's verification — don't wait to be asked.
 
 ### Sprints (biweekly, theme-driven)
@@ -55,6 +56,7 @@ The team meets in person every two weeks (Wednesdays); that meeting is the only 
 
 - All test files live in `tests/`; source modules stay at the repo root and are importable because `pythonpath = ["."]` is set in `pyproject.toml`. Run pytest from the repo root so CWD-relative fixtures (`bills/`, `test_data/`) resolve.
 - Tests requiring real bill XML files are marked `@pytest.mark.slow`; front-end tests `@pytest.mark.browser`. The fast suite is `-m "not slow and not browser"`. CI runs more than the fast suite (see CONTRIBUTING's "What CI checks")
+- Corpus gates parametrize over fetched assets, so on an unfetched checkout they run *empty and green* (skip reads as pass, the fail-open pattern, #167). Set `REQUIRE_CORPUS=1` on a slow run to make missing pinned baselines fail loudly instead of skip; each corpus module carries a `test_corpus_present_when_required` completeness guard. Curated floor is `REQUIRED_CORPUS_BILLS` in `tests/conftest.py`. See TESTING.md.
 - Shared test helpers live in `tests/conftest.py`: `make_bill_node()`, `make_bill_tree()`, `make_node_diff()`, `make_change_dict()`
 - Session-scoped fixtures in `tests/conftest.py` cache parsed bill trees and diffs to avoid redundant XML parsing
 - `fetch_bills.py` tests use `respx.mock` decorator and monkeypatch `time.sleep`

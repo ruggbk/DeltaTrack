@@ -43,6 +43,7 @@ from formatters.diff_html import _build_toc_from_tree
 from formatters.text_serializer import _xml_tree_payload, serialize_tree_for_tree
 from parsers.pdf_anchors import extract_anchors
 from parsers.pdf_text import pdf_full_text
+from tests.conftest import require_corpus_or_skip
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow
@@ -201,6 +202,18 @@ def _assert_money_conserves(roots: list[dict], reference: Counter, max_drop: int
     dropped = sum((reference - union).values())
     assert over == 0, f"{label}: tree over-counts {over} amount(s) — double-count"
     assert dropped <= max_drop, f"{label}: dropped {dropped} > documented budget {max_drop}"
+
+
+def test_corpus_present_when_required() -> None:
+    """Fail-loud completeness floor for the tree property gates (#167).
+
+    The XML and PDF invariant gates parametrize over ALL_XML_FILES / ALL_PDF_FILES; an
+    unfetched checkout makes those empty and the suite passes green. In REQUIRE_CORPUS
+    mode this asserts the pinned XML baselines are present and both parametrizations
+    discovered at least one case.
+    """
+    require_corpus_or_skip(ALL_XML_FILES, "tree-properties (XML)")
+    require_corpus_or_skip(ALL_PDF_FILES, "tree-properties (PDF)")
 
 
 # --- XML corpus ----------------------------------------------------------------

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from bill_tree import _extract_appropriations_text, find_bill_body, normalize_bill
+from tests.conftest import require_corpus_or_skip
 
 pytestmark = pytest.mark.slow
 
@@ -62,6 +63,16 @@ def _extract_dollar_amounts(text: str) -> list[int]:
 def _xml_id(xml_path: Path) -> str:
     """Create a readable test ID from a bill XML path."""
     return f"{xml_path.parent.name}/{xml_path.name}"
+
+
+def test_corpus_present_when_required() -> None:
+    """Fail-loud completeness floor for the corpus property gates (#167).
+
+    These gates parametrize over ALL_XML_FILES; an unfetched checkout makes that empty,
+    so pytest emits no cases and the suite passes green. In REQUIRE_CORPUS mode this
+    asserts the pinned baselines are present and at least one case was discovered.
+    """
+    require_corpus_or_skip(ALL_XML_FILES, "corpus-properties")
 
 
 # Files with known 0-node issues. Currently empty (issue #2 fixed).
