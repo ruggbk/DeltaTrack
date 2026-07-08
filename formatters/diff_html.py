@@ -179,28 +179,72 @@ def _build_nav_item(change: ChangeView, index: int) -> str:
     )
 
 
-def _build_change_groups(view: DiffView) -> str:
-    """Group nav items under collapsible section headers (collapsed by default).
+def _group_changes_by_node(view: DiffView) -> tuple[dict, dict[str, list[int]]]:
+    """Nest change indices by node_path; degraded changes fall back flat (#172).
 
-    Insertion-ordered by first appearance; an empty `group_label` collects into a
-    trailing "Uncategorized" group. `_build_nav_item`'s <li> is unchanged — only
-    the wrapping differs. Returns "<ul></ul>" when there are no changes.
+    Returns ``(root, fallback)``: ``root`` is a nested ``{"children": {(label,
+    level): node}, "items": [change indices]}`` tree keyed by node_path
+    segments, insertion-ordered by first appearance; ``fallback`` maps
+    ``group_label`` (or "Uncategorized") to the indices of changes the join
+    couldn't place (empty node_path) — never worse than the old flat grouping.
     """
-    groups: dict[str, list[str]] = {}
+    root: dict = {"children": {}, "items": []}
+    fallback: dict[str, list[int]] = {}
     for i, c in enumerate(view.changes):
-        groups.setdefault(c.group_label or "Uncategorized", []).append(_build_nav_item(c, i))
-    if not groups:
-        return "<ul></ul>"
-    # Insertion order, but "Uncategorized" always trails the real sections.
-    labels = [label for label in groups if label != "Uncategorized"]
-    if "Uncategorized" in groups:
+        if c.node_path:
+            node = root
+            for seg in c.node_path:
+                node = node["children"].setdefault(seg, {"children": {}, "items": []})
+            node["items"].append(i)
+        else:
+            fallback.setdefault(c.group_label or "Uncategorized", []).append(i)
+    return root, fallback
+
+
+def _fallback_labels(fallback: dict[str, list[int]]) -> list[str]:
+    """Fallback group order: first appearance, "Uncategorized" always last."""
+    labels = [label for label in fallback if label != "Uncategorized"]
+    if "Uncategorized" in fallback:
         labels.append("Uncategorized")
-    blocks = [
-        f'<details class="nav-group"><summary>{escape(label)}'
-        f' <span class="nav-group__count">({len(groups[label])})</span></summary>'
-        f"<ul>{''.join(groups[label])}</ul></details>"
-        for label in labels
-    ]
+    return labels
+
+
+def _build_change_groups(view: DiffView) -> str:
+    """Group nav items under nested collapsible tree-node headers (#172).
+
+    One ``<details class="nav-group">`` per node_path segment, nested to
+    arbitrary depth; a group's count is its SUBTREE item count — the same
+    number ``applyFilters`` recomputes, since its ``querySelectorAll`` is
+    recursive. Changes without a node_path keep the old flat ``group_label``
+    grouping, trailing the tree groups ("Uncategorized" last).
+    `_build_nav_item`'s <li> is unchanged — only the wrapping differs.
+    Returns "<ul></ul>" when there are no changes.
+    """
+    if not view.changes:
+        return "<ul></ul>"
+    root, fallback = _group_changes_by_node(view)
+
+    def subtree_count(node: dict) -> int:
+        return len(node["items"]) + sum(subtree_count(c) for c in node["children"].values())
+
+    def render(seg: tuple[str, str], node: dict) -> str:
+        label, _level = seg
+        items = "".join(_build_nav_item(view.changes[i], i) for i in node["items"])
+        kids = "".join(render(s, c) for s, c in node["children"].items())
+        return (
+            f'<details class="nav-group"><summary>{escape(label)}'
+            f' <span class="nav-group__count">({subtree_count(node)})</span></summary>'
+            f"<ul>{items}</ul>{kids}</details>"
+        )
+
+    blocks = [render(seg, node) for seg, node in root["children"].items()]
+    for label in _fallback_labels(fallback):
+        items = "".join(_build_nav_item(view.changes[i], i) for i in fallback[label])
+        blocks.append(
+            f'<details class="nav-group"><summary>{escape(label)}'
+            f' <span class="nav-group__count">({len(fallback[label])})</span></summary>'
+            f"<ul>{items}</ul></details>"
+        )
     return "".join(blocks)
 
 
@@ -400,10 +444,42 @@ def _bill_label(view: DiffView) -> str:
 
 
 def _cards_section_html(view: DiffView) -> str:
-    """Cards section: stitch built cards together, or show a no-changes message."""
+    """Cards section: cards grouped under their tree-node headings (#172).
+
+    One ``<details class="card-group" open>`` per node_path segment, nested to
+    arbitrary depth. ``open`` is load-bearing, not cosmetic: ``navTargets()``
+    filters cards by ``offsetParent``, so a closed-by-default group's cards
+    would silently vanish from prev/next stepping and the counter. Each card
+    keeps ``id="change-{original index}"`` — the sidebar hrefs and the
+    financial summary link by change-order index, so grouping may reorder the
+    DOM but never renumber. Changes without a node_path trail in flat
+    ``group_label`` groups; when NO change has one (no tree in the canonical)
+    the section renders flat exactly as before.
+    """
     if not view.changes:
         return '<p class="no-changes">No changes found between these versions.</p>'
-    return "\n".join(_build_card(c, i) for i, c in enumerate(view.changes))
+    if all(not c.node_path for c in view.changes):
+        return "\n".join(_build_card(c, i) for i, c in enumerate(view.changes))
+    root, fallback = _group_changes_by_node(view)
+
+    def group_html(label: str, level: str, inner: str) -> str:
+        cls = f"card-group card-group--{escape(level)}" if level else "card-group"
+        return (
+            f'<details class="{cls}" open>'
+            f'<summary class="card-group__label">{escape(label)}</summary>\n{inner}\n</details>'
+        )
+
+    def render(seg: tuple[str, str], node: dict) -> str:
+        label, level = seg
+        cards = "\n".join(_build_card(view.changes[i], i) for i in node["items"])
+        kids = "\n".join(render(s, c) for s, c in node["children"].items())
+        return group_html(label, level, "\n".join(part for part in (cards, kids) if part))
+
+    blocks = [render(seg, node) for seg, node in root["children"].items()]
+    for label in _fallback_labels(fallback):
+        cards = "\n".join(_build_card(view.changes[i], i) for i in fallback[label])
+        blocks.append(group_html(label, "", cards))
+    return "\n".join(blocks)
 
 
 def _build_financial_summary(view: DiffView) -> str:
@@ -1005,6 +1081,7 @@ h1, h2, h3, h4 { font-family: var(--font-serif); letter-spacing: -0.02em; }
 .nav-group > summary:hover { background: var(--secondary); }
 .nav-group__count { color: var(--muted-foreground); font-weight: 400; font-variant-numeric: tabular-nums; }
 .nav-group ul { margin: 2px 0 6px 10px; }
+.nav-group .nav-group { margin-left: 10px; }
 
 /* Filters */
 .filters { margin-bottom: 16px; }
@@ -1046,6 +1123,17 @@ h1, h2, h3, h4 { font-family: var(--font-serif); letter-spacing: -0.02em; }
 .financial-table a:hover { text-decoration: underline; }
 tr.increase .change-amount { color: var(--success); }
 tr.decrease .change-amount { color: var(--destructive); }
+
+/* Card groups: cards nested under their tree-node headings (#172) */
+.card-group { margin: 6px 0 14px; }
+.card-group > summary { cursor: pointer; font-weight: 600; padding: 6px 8px;
+  border-radius: var(--radius); list-style: none; display: flex; align-items: center; gap: 6px; }
+.card-group > summary::-webkit-details-marker { display: none; }
+.card-group > summary::before { content: "\\25be"; color: var(--muted-foreground); font-size: 10px; }
+.card-group:not([open]) > summary::before { content: "\\25b8"; }
+.card-group > summary:hover { background: var(--secondary); }
+.card-group .card-group { margin-left: 16px; }
+.card-group > .change-card { margin-left: 16px; }
 
 /* Change cards */
 .change-card { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px;
@@ -1345,6 +1433,8 @@ document.addEventListener('DOMContentLoaded', function() {
       li.style.display = (card && card.style.display !== 'none') ? '' : 'none';
     });
     // Update each section group's count and hide groups with no visible items.
+    // querySelectorAll is recursive, so a nested group's parent counts its
+    // whole subtree — the same number the renderer emits initially.
     document.querySelectorAll('.nav-group').forEach(function(g) {
       var vis = [].slice.call(g.querySelectorAll('.nav-item')).filter(function(li) {
         return li.style.display !== 'none';
@@ -1352,6 +1442,13 @@ document.addEventListener('DOMContentLoaded', function() {
       g.style.display = vis === 0 ? 'none' : '';
       var cnt = g.querySelector('.nav-group__count');
       if (cnt) cnt.textContent = '(' + vis + ')';
+    });
+    // Same for card groups: a heading over only filter-hidden cards is noise.
+    document.querySelectorAll('.card-group').forEach(function(g) {
+      var vis = [].slice.call(g.querySelectorAll('.change-card')).filter(function(c) {
+        return c.style.display !== 'none';
+      }).length;
+      g.style.display = vis === 0 ? 'none' : '';
     });
     var empty = document.getElementById('filter-empty');
     if (empty) empty.hidden = visible !== 0;
