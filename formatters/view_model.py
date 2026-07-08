@@ -59,6 +59,12 @@ class ChangeView:
     """Raw (unescaped) section label the sidebar groups this change under —
     the top of its breadcrumb (e.g. "TITLE I"). Empty → "Uncategorized"."""
 
+    node_path: tuple[tuple[str, str], ...] = ()
+    """Raw (label, level) breadcrumb, root → the tree node this change was
+    filed under by the own-span containment join (#172). Empty when the join
+    could not place the change (no tree, null span, uncovered position) — the
+    renderer then falls back to group_label for that card."""
+
 
 @dataclass(frozen=True)
 class DiffView:
