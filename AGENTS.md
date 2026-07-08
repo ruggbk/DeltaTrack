@@ -55,6 +55,7 @@ The team meets in person every two weeks (Wednesdays); that meeting is the only 
 
 - All test files live in `tests/`; source modules stay at the repo root and are importable because `pythonpath = ["."]` is set in `pyproject.toml`. Run pytest from the repo root so CWD-relative fixtures (`bills/`, `test_data/`) resolve.
 - Tests requiring real bill XML files are marked `@pytest.mark.slow`; front-end tests `@pytest.mark.browser`. The fast suite is `-m "not slow and not browser"`. CI runs more than the fast suite (see CONTRIBUTING's "What CI checks")
+- Corpus gates parametrize over fetched assets, so on an unfetched checkout they run *empty and green* (skip reads as pass, the fail-open pattern, #167). Set `REQUIRE_CORPUS=1` on a slow run to make missing pinned baselines fail loudly instead of skip; each corpus module carries a `test_corpus_present_when_required` completeness guard. Curated floor is `REQUIRED_CORPUS_BILLS` in `tests/conftest.py`. See TESTING.md.
 - Shared test helpers live in `tests/conftest.py`: `make_bill_node()`, `make_bill_tree()`, `make_node_diff()`, `make_change_dict()`
 - Session-scoped fixtures in `tests/conftest.py` cache parsed bill trees and diffs to avoid redundant XML parsing
 - `fetch_bills.py` tests use `respx.mock` decorator and monkeypatch `time.sleep`
