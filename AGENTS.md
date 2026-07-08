@@ -21,6 +21,7 @@ This repo follows the workflow in [CONTRIBUTING.md](CONTRIBUTING.md). The load-b
 - **Branch from `develop`** (never `main`), commit in small focused steps, and open the PR against `develop`. A maintainer merges; do not merge yourself.
 - **Link the issue in the PR** body with `Closes #<n>` so the issue and its board card resolve on merge.
 - **Before pushing, run the CI gates locally** (lint, `ruff format --check`, fast, browser, external-validation) -- see CONTRIBUTING's "What CI checks." `ruff check` is not covered by the pre-commit format hook, so run it explicitly.
+- **For changes touching the parser, diff engine, or matcher, run the corpus gates in strict mode:** `REQUIRE_CORPUS=1 uv run pytest -m slow`. The corpus auto-skips when unfetched, so an ordinary slow run can pass having checked nothing (fail-open, #167); strict mode makes a missing baseline fail loudly. This is the pre-PR enforcement point until CI fetches a curated corpus and sets the var itself (#126). Fetch the corpus first (`fetch_bills.py download ... --format both`, `scripts/fetch_test_assets.py`).
 - **Before opening a PR, review and show evidence unprompted**: run a code review on the diff, then present visual before/after examples of the change (e.g. `scripts/serve_compare.py` or the diff HTML) for the maintainer's verification — don't wait to be asked.
 
 ### Sprints (biweekly, theme-driven)
