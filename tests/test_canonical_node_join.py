@@ -326,6 +326,22 @@ def test_removed_label_match_is_case_and_whitespace_insensitive():
     assert _labels(node_path) == ("SALARIES AND EXPENSES",)
 
 
+# ---------- perf shape ----------------------------------------------------------
+
+
+def test_span_index_built_once_per_side_not_per_change(monkeypatch):
+    # The omnibus blow-up is O(changes x nodes); the guard is structural —
+    # exactly one index build per side regardless of change count.
+    import formatters.canonical as canonical_mod
+
+    calls = []
+    real = canonical_mod._span_join_index
+    monkeypatch.setattr(canonical_mod, "_span_join_index", lambda nodes: calls.append(1) or real(nodes))
+    changes = [_change(v2=_span(80, 90)) for _ in range(25)]
+    view_from_canonical(_canonical(changes))
+    assert len(calls) == 2
+
+
 # ---------- multiple hulls ------------------------------------------------------
 
 
