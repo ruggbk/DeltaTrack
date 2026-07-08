@@ -462,23 +462,22 @@ def _cards_section_html(view: DiffView) -> str:
         return "\n".join(_build_card(c, i) for i, c in enumerate(view.changes))
     root, fallback = _group_changes_by_node(view)
 
-    def group_html(label: str, level: str, inner: str) -> str:
-        cls = f"card-group card-group--{escape(level)}" if level else "card-group"
+    def group_html(label: str, inner: str) -> str:
         return (
-            f'<details class="{cls}" open>'
+            '<details class="card-group" open>'
             f'<summary class="card-group__label">{escape(label)}</summary>\n{inner}\n</details>'
         )
 
     def render(seg: tuple[str, str], node: dict) -> str:
-        label, level = seg
+        label, _level = seg
         cards = "\n".join(_build_card(view.changes[i], i) for i in node["items"])
         kids = "\n".join(render(s, c) for s, c in node["children"].items())
-        return group_html(label, level, "\n".join(part for part in (cards, kids) if part))
+        return group_html(label, "\n".join(part for part in (cards, kids) if part))
 
     blocks = [render(seg, node) for seg, node in root["children"].items()]
     for label in _fallback_labels(fallback):
         cards = "\n".join(_build_card(view.changes[i], i) for i in fallback[label])
-        blocks.append(group_html(label, "", cards))
+        blocks.append(group_html(label, cards))
     return "\n".join(blocks)
 
 

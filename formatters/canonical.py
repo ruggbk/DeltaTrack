@@ -542,7 +542,7 @@ def _span_join_index(nodes: list[dict]) -> tuple[list[int], list[tuple], list[tu
     Returns ``(starts, leaves, hulls)``: ``leaves`` as ``(start, end, path)``
     sorted by start with ``starts`` pre-extracted for bisect; ``hulls`` as
     ``(start, end, depth, path)``. Built once per side per view — the lookup is
-    O(log N) per change, never O(nodes).
+    O(log leaves) + O(hulls) per change (hulls ≈ 1 today), never O(nodes).
     """
     leaves: list[tuple[int, int, tuple]] = []
     hulls: list[tuple[int, int, int, tuple]] = []
@@ -627,9 +627,12 @@ def _remap_removed_path(v1_path: tuple, v2_lookup: dict) -> tuple:
     group ("what left Title III" is findable where the reader looks). Among
     same-label v2 candidates, prefer the one sharing the longest normalized
     trailing-path match with the v1 breadcrumb (distinguishes duplicate account
-    names under different agencies), then document order. Labels drift across
-    independently-serialized sides, hence normalized matching — the returned
-    path carries the v2 node's own labels so group heading and card agree.
+    names under different agencies), then matching level (an account named like
+    a title must not remap to a same-named title — the #155 phenomenon; a hard
+    level requirement would hurt recall since sides can drift, hence tiebreak
+    only), then document order. Labels drift across independently-serialized
+    sides, hence normalized matching — the returned path carries the v2 node's
+    own labels so group heading and card agree.
     No label matches at any depth: keep the v1 breadcrumb as its own group.
     """
     if not v1_path:
@@ -639,15 +642,16 @@ def _remap_removed_path(v1_path: tuple, v2_lookup: dict) -> tuple:
         candidates = v2_lookup.get(norm[i])
         if not candidates:
             continue
+        level = v1_path[i][1]
 
-        def trailing_match(item: tuple[int, tuple], i: int = i) -> int:
+        def rank(item: tuple[int, tuple], i: int = i, level: str = level) -> tuple[int, int, int]:
             candidate_norm = [label.casefold() for label, _level in item[1]]
             k = 0
             while k < min(len(candidate_norm), i + 1) and candidate_norm[-1 - k] == norm[i - k]:
                 k += 1
-            return k
+            return (k, 1 if item[1][-1][1] == level else 0, -item[0])
 
-        return max(candidates, key=lambda item: (trailing_match(item), -item[0]))[1]
+        return max(candidates, key=rank)[1]
     return v1_path
 
 

@@ -317,6 +317,22 @@ def test_removed_with_empty_v1_tree_degrades():
     assert _join_one(_change("removed", v1=_span(30, 40)), tree=tree) == ()
 
 
+def test_removed_remap_prefers_matching_level_over_document_order():
+    # Accounts named like titles are a real corpus phenomenon (#155): when a
+    # removed account's label also exists in v2 as a title, the remap must
+    # prefer the same-level candidate even though the title comes first in
+    # document order (trailing-path match ties at 1 for both).
+    tree = {
+        "v1": [_node("Title 17 Innovations", "account", _span(0, 50))],
+        "v2": [
+            _node("TITLE 17 INNOVATIONS", "title", _span(0, 10)),
+            _node("Title 17 Innovations", "account", _span(20, 60)),
+        ],
+    }
+    node_path = _join_one(_change("removed", v1=_span(10, 20)), tree=tree)
+    assert node_path == (("Title 17 Innovations", "account"),)
+
+
 def test_removed_label_match_is_case_and_whitespace_insensitive():
     tree = {
         "v1": [_node("Salaries and Expenses", "account", _span(0, 50))],

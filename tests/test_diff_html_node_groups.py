@@ -99,7 +99,22 @@ def test_degraded_card_without_group_label_lands_in_uncategorized():
 
 
 def test_filter_js_hides_empty_card_groups():
-    assert ".card-group" in _JS
+    # Pin the hide logic, not just the selector: applyFilters must toggle a
+    # card group's display off when none of its cards survive the filter.
+    block_start = _JS.find(".card-group")
+    assert block_start != -1
+    block = _JS[block_start : block_start + 400]
+    assert ".change-card" in block and "display = vis === 0 ? 'none' : ''" in block
+
+
+def test_group_labels_are_escaped_in_cards_and_sidebar():
+    # Group labels come straight from bill text; a dropped escape() would ship
+    # markup injection with the suite otherwise green.
+    hostile = "<img src=x onerror=alert(1)>&"
+    view = _view([_change(node_path=((hostile, "title"),)), _change(group_label=hostile)])
+    for html in (_cards_section_html(view), _build_change_groups(view)):
+        assert hostile not in html
+        assert "&lt;img" in html
 
 
 # ---------- sidebar -------------------------------------------------------------
