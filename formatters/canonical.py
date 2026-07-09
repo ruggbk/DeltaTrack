@@ -19,6 +19,7 @@ parity tests something to assert against.
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from html import escape
 
 from diff_bill import extract_amounts
@@ -524,6 +525,156 @@ def _group_label_from_path(canonical_change: dict) -> str:
     return parts[0] if parts else ""
 
 
+def _span_join_index(nodes: list[dict]) -> tuple[list[int], list[tuple], list[tuple]]:
+    """Build the own-span containment index for one side's structure tree (#172).
+
+    Splits spanned nodes into LEAF spans (own spans overlapping no descendant's —
+    body slices and heading lines, pairwise disjoint on the corpus) and HULL
+    spans (a span overlapping a descendant's — today only the synthesized Front
+    Matter node, whose span is the min/max hull of its children; handled
+    generically so any future container files changes correctly instead of
+    silently claiming them). Null spans are skipped; zero-length spans exist by
+    design on PDF (collision/non-monotonic guards) and must claim nothing.
+
+    An unlabeled node contributes its span under the nearest labeled ancestor's
+    path, mirroring how the TOC hoists unlabeled nodes' children.
+
+    Returns ``(starts, leaves, hulls)``: ``leaves`` as ``(start, end, path)``
+    sorted by start with ``starts`` pre-extracted for bisect; ``hulls`` as
+    ``(start, end, depth, path)``. Built once per side per view — the lookup is
+    O(log leaves) + O(hulls) per change (hulls ≈ 1 today), never O(nodes).
+    """
+    leaves: list[tuple[int, int, tuple]] = []
+    hulls: list[tuple[int, int, int, tuple]] = []
+
+    def walk(ns: list[dict], path: tuple, depth: int) -> tuple[int, int] | None:
+        lo = hi = None
+        for n in ns:
+            label = (n.get("label") or "").strip()
+            p = path + ((label, n.get("level") or ""),) if label else path
+            sub = walk(n.get("children") or [], p, depth + 1)
+            span = n.get("full_text_span")
+            if span and span["end"] > span["start"]:
+                if sub is not None and span["start"] < sub[1] and sub[0] < span["end"]:
+                    hulls.append((span["start"], span["end"], depth, p))
+                else:
+                    leaves.append((span["start"], span["end"], p))
+                lo = span["start"] if lo is None else min(lo, span["start"])
+                hi = span["end"] if hi is None else max(hi, span["end"])
+            if sub is not None:
+                lo = sub[0] if lo is None else min(lo, sub[0])
+                hi = sub[1] if hi is None else max(hi, sub[1])
+        return None if lo is None else (lo, hi)
+
+    walk(nodes, (), 0)
+    leaves.sort()
+    return [leaf[0] for leaf in leaves], leaves, hulls
+
+
+def _join_node_path(index: tuple[list[int], list[tuple], list[tuple]], pos: int) -> tuple:
+    """The (label, level) breadcrumb of the deepest tree node containing ``pos``.
+
+    Interval stabbing, not a bare bisect: the bisect candidate must pass an
+    end-containment check (spans are disjoint-with-gaps — a position in a gap
+    would otherwise be misfiled to the preceding leaf), and a leaf miss falls
+    through to the deepest containing hull. Front Matter shares its exact start
+    offset with its first child, so a flat sorted index without the leaf/hull
+    split would resolve that tie to the container — the wrong (shallowest) node.
+    Returns () when no span contains ``pos``.
+    """
+    starts, leaves, hulls = index
+    i = bisect_right(starts, pos) - 1
+    if i >= 0:
+        start, end, path = leaves[i]
+        if start <= pos < end:
+            return path
+    best: tuple = ()
+    best_key: tuple[int, int] | None = None
+    for start, end, depth, path in hulls:
+        if start <= pos < end:
+            key = (depth, -(end - start))  # deepest; tiebreak narrowest
+            if best_key is None or key > best_key:
+                best_key, best = key, path
+    return best
+
+
+def _v2_label_lookup(nodes: list[dict]) -> dict[str, list[tuple[int, tuple]]]:
+    """Normalized (casefolded, stripped) label -> [(document_order, path)] over
+    one tree, for remapping removed changes' v1 breadcrumbs into v2 groups."""
+    lookup: dict[str, list[tuple[int, tuple]]] = {}
+    order = 0
+
+    def walk(ns: list[dict], path: tuple) -> None:
+        nonlocal order
+        for n in ns:
+            label = (n.get("label") or "").strip()
+            p = path + ((label, n.get("level") or ""),) if label else path
+            if label:
+                lookup.setdefault(label.casefold(), []).append((order, p))
+                order += 1
+            walk(n.get("children") or [], p)
+
+    walk(nodes, ())
+    return lookup
+
+
+def _remap_removed_path(v1_path: tuple, v2_lookup: dict) -> tuple:
+    """Place a removed change's v1 breadcrumb into the v2-organized grouping.
+
+    The report groups by the v2 tree, but a removal only exists in v1. Walk the
+    v1 breadcrumb deepest-segment-first; the first segment whose normalized
+    label exists in v2 wins, so the card files under the nearest surviving
+    group ("what left Title III" is findable where the reader looks). Among
+    same-label v2 candidates, prefer the one sharing the longest normalized
+    trailing-path match with the v1 breadcrumb (distinguishes duplicate account
+    names under different agencies), then matching level (an account named like
+    a title must not remap to a same-named title — the #155 phenomenon; a hard
+    level requirement would hurt recall since sides can drift, hence tiebreak
+    only), then document order. Labels drift across independently-serialized
+    sides, hence normalized matching — the returned path carries the v2 node's
+    own labels so group heading and card agree.
+    No label matches at any depth: keep the v1 breadcrumb as its own group.
+    """
+    if not v1_path:
+        return ()
+    norm = [label.casefold() for label, _level in v1_path]
+    for i in range(len(v1_path) - 1, -1, -1):
+        candidates = v2_lookup.get(norm[i])
+        if not candidates:
+            continue
+        level = v1_path[i][1]
+
+        def rank(item: tuple[int, tuple], i: int = i, level: str = level) -> tuple[int, int, int]:
+            candidate_norm = [label.casefold() for label, _level in item[1]]
+            k = 0
+            while k < min(len(candidate_norm), i + 1) and candidate_norm[-1 - k] == norm[i - k]:
+                k += 1
+            return (k, 1 if item[1][-1][1] == level else 0, -item[0])
+
+        return max(candidates, key=rank)[1]
+    return v1_path
+
+
+def _node_path_for_change(canonical_change: dict, join_index: dict, v2_lookup: dict) -> tuple:
+    """Join one change to its tree node by start offset, per-side (#172).
+
+    Removals join on the v1 side (their only span, against the v1 tree) and
+    are then remapped into the v2 grouping; everything else joins on its v2
+    start — never a v1 offset against the v2 index, the offset spaces are
+    unrelated. The span dict can be None as a whole (PDF without offset
+    tables, XML without full_text), not just per-side null; both degrade to
+    () rather than raising.
+    """
+    side = "v1" if canonical_change["change_type"] == "removed" else "v2"
+    span = (canonical_change.get("full_text_span") or {}).get(side)
+    if not span:
+        return ()
+    node_path = _join_node_path(join_index[side], span["start"])
+    if side == "v1":
+        return _remap_removed_path(node_path, v2_lookup)
+    return node_path
+
+
 def _card_texts(canonical_change: dict, source: str, full_text: dict | None) -> tuple[str, str]:
     """Card old/new text, preferring the readable full_text slice over collapsed body.
 
@@ -561,7 +712,9 @@ def _card_texts(canonical_change: dict, source: str, full_text: dict | None) -> 
     return old_text, new_text
 
 
-def _change_view_from_canonical(canonical_change: dict, source: str, full_text: dict | None) -> ChangeView:
+def _change_view_from_canonical(
+    canonical_change: dict, source: str, full_text: dict | None, join_index: dict, v2_lookup: dict
+) -> ChangeView:
     heading_html, nav_label_html, degraded = _heading_and_nav(canonical_change, source)
     old_text, new_text = _card_texts(canonical_change, source, full_text)
     return ChangeView(
@@ -576,12 +729,19 @@ def _change_view_from_canonical(canonical_change: dict, source: str, full_text: 
         new_text=new_text,
         amount_pairs=tuple((p["old"], p["new"]) for p in canonical_change.get("amounts") or ()),
         group_label=_group_label_from_path(canonical_change),
+        node_path=_node_path_for_change(canonical_change, join_index, v2_lookup),
     )
 
 
 def view_from_canonical(canonical: dict) -> DiffView:
     source = canonical["versions"]["v1"]["source"]
     full_text = canonical.get("full_text")
+    # The join reads only THIS canonical's tree — on PDF the caller also builds a
+    # print-faithful display_canonical whose full_text offsets differ; joining
+    # change spans (from here) against that tree would misfile silently (#172).
+    tree = canonical.get("tree") or {}  # .get: pre-1.3 canonicals omit it → degrade
+    join_index = {side: _span_join_index(tree.get(side) or []) for side in ("v1", "v2")}
+    v2_lookup = _v2_label_lookup(tree.get("v2") or [])
     return DiffView(
         bill_type=canonical["bill"]["type"],
         bill_number=canonical["bill"]["number"],
@@ -591,5 +751,8 @@ def view_from_canonical(canonical: dict) -> DiffView:
         v1_version_number=canonical["versions"]["v1"]["version_number"],
         v2_version_number=canonical["versions"]["v2"]["version_number"],
         summary=dict(canonical.get("summary") or {}),
-        changes=tuple(_change_view_from_canonical(c, source, full_text) for c in canonical.get("changes") or ()),
+        changes=tuple(
+            _change_view_from_canonical(c, source, full_text, join_index, v2_lookup)
+            for c in canonical.get("changes") or ()
+        ),
     )
