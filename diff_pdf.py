@@ -291,7 +291,15 @@ def _group_into_blocks(indexed_lines: list[_IndexedLine], anchors: list[Anchor])
         end = anchor_at[j + 1][1] if j + 1 < len(anchor_at) else len(indexed_lines)
         blocks.append(_Block(anchor, _strip_heading_lines(tuple(indexed_lines[pos:end]), anchor)))
 
-    return blocks
+    # Drop empty blocks. One arises ONLY when two anchors share a (page, line): the
+    # SEC-inline run-in subsection collision (DeltaTrack#96), where the section anchor
+    # gets indexed_lines[pos:pos] and the subsection (later in doc order) owns the text.
+    # `_strip_heading_lines` never empties a block and rejoined-line anchors are skipped
+    # above, so this is surgical — it removes the phantom empty-text hunk a
+    # renumbered/removed colliding section would emit (contradictory move citation),
+    # while the section anchor stays in the anchor lists for TOC/breadcrumbs. The
+    # renumber then surfaces as a text diff inside the subsection's hunk instead.
+    return [b for b in blocks if b.indexed_lines]
 
 
 def _block_key(block: _Block) -> str:
