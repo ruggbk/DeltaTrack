@@ -92,7 +92,7 @@ roles*, not DTD tag names — note `Intermediate` (the tag) surfaces as the leve
 | `agency` | **leaf**, tag `appropriations-intermediate` | `agency` anchor |
 | `account` | **leaf**, tag `appropriations-small` (and the default) | `account` anchor |
 | `section` | **leaf**, tag `section` | `section` anchor |
-| `subsection` | — *(folded into the section's text; `bill_tree` exposes no per-subsection node)* | `subsection` anchor (run-in `(a) …—`, #96) |
+| `subsection` | **leaf**, tag `subsection` (every direct non-quoted one, #188) | `subsection` anchor (run-in `(a) …—`, catchline-bearing only, #96) |
 | `grouping` | — *(surfaces as `heading`; see below)* | `grouping` anchor |
 | `preamble` | **leaf**, tag `front-matter` | `preamble` anchor |
 | `heading` | interior fallback: any synthesized container that is not a division/title | — *(PDF anchors are always typed)* |
@@ -106,9 +106,16 @@ the **PDF** side are a typed `grouping` anchor. So `grouping` is PDF-only, `head
 XML-only, and an agency/major that is a *synthesized container* (not a body-bearing
 leaf) is `heading` on XML but `agency`/`major` on PDF. The leaf levels
 (`major`/`agency`/`account`/`section`/`preamble`) and `division`/`title` agree on both.
-`subsection` is likewise PDF-only (#96): the run-in `(a) …—` header renders inline at
-body size, which the PDF detector recovers as a `subsection` anchor nested under its
-`section`, whereas `bill_tree` folds subsections into the section's text on XML.
+`subsection` is emitted by both pipelines, at different depths by design (#96/#188):
+XML emits **every** direct, non-quoted `<subsection>` as a node (the tag is
+authoritative — bare `(a)` subdivisions and roman-enum subsections included), while
+the PDF detector recovers only the **catchline-bearing** subset (a run-in
+`(a) Catchline.—` renders inline at body size; a bare `(a)` leaves no detectable
+signature, and roman-lookalike enums are rejected). So the XML tree sits deeper than
+the PDF tree on bare subsections — the same detection-path-dependent-depth class as
+`major`/`agency` (ADR 0012), pointing the right way: the primary source is the deeper
+one. On the catchline-bearing set the two pipelines converge exactly (gated in
+`tests/test_xml_subsection_nodes.py`).
 
 **Where these terms come from (two separate sources, do not conflate them):**
 

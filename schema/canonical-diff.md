@@ -98,7 +98,7 @@ A `TreeNode`:
 | Field | Type | Notes |
 |-------|------|-------|
 | `label` | string | The node's own heading text (`""` for an empty-path root). |
-| `level` | enum | Shared GPO vocabulary: `division`, `title`, `major`, `agency`, `account`, `section`, `subsection`, `grouping`, `preamble`, `heading`. Leaf level is typed from the source tag/kind; interior levels are positional (`heading` when an interior container has no typed source). `subsection` is a PDF-only run-in level (#96) nested under its `section`. |
+| `level` | enum | Shared GPO vocabulary: `division`, `title`, `major`, `agency`, `account`, `section`, `subsection`, `grouping`, `preamble`, `heading`. Leaf level is typed from the source tag/kind; interior levels are positional (`heading` when an interior container has no typed source). `subsection` nests under its `section` on both pipelines: XML emits every direct non-quoted `<subsection>` (#188), the PDF the catchline-bearing run-in subset (#96). |
 | `own_amounts` | int[] | Dollar amounts in **this node's own block only** (never its children's). The union over all nodes conserves the bill's amounts exactly. |
 | `full_text_span` | Offset \| null | `{ start, end }` char range into `full_text[side]` locating this node; `null` when it can't be located. Reference only — never duplicates the text. |
 | `children` | TreeNode[] | Ordered child nodes. |
