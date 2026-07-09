@@ -41,6 +41,7 @@ _LEAF_LEVEL: dict[str, str] = {
     "appropriations-intermediate": "agency",  # bureau / agency
     "appropriations-small": "account",  # the budget account that holds money
     "section": "section",  # general-provisions SEC.
+    "subsection": "subsection",  # run-in (a) subdivision of a section (#188)
     "front-matter": "preamble",  # bill front matter
 }
 
