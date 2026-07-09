@@ -175,7 +175,9 @@ def _render_grouped_report() -> str:
             "path": {"v1": ["TITLE I"], "v2": ["TITLE I"]},
             "location": None,
             "anchor_resolution": "resolved",
-            "text": {"old": f"old {i}", "new": f"new {i}"},
+            # The appended token survives word_diff as ONE contiguous <ins>
+            # text node, so the find bar (which scans text nodes) can hit it.
+            "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
             "amounts": amounts,
             "move": None,
             "full_text_span": {"v1": None, "v2": {"start": start, "end": end}},
@@ -277,6 +279,16 @@ def test_prev_next_steps_into_nested_groups_and_reveals_collapsed(chromium, tmp_
     page.locator('.sidebar a[href="#change-1"]').click()
     assert salaries.evaluate("el => el.open") is True
     assert page.locator("#change-1").is_visible()
+
+    # Find-bar stepping is the third navigation mechanism: a hit inside a
+    # collapsed group must re-open it too ("added1" only occurs in change-1).
+    # runFind is debounced 150ms on input, then lands on the first hit itself;
+    # wait for the mark rather than racing the debounce.
+    salaries.evaluate("el => el.open = false")
+    page.locator("#find-input").fill("added1")
+    page.locator("mark.find-hit--current").wait_for(state="attached")
+    assert salaries.evaluate("el => el.open") is True
+    assert page.locator("mark.find-hit--current").is_visible()
     page.close()
 
 

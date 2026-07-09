@@ -403,7 +403,12 @@ def _build_toc_from_tree(tree_nodes: list[dict], full_text: str) -> str:
     return f'<div class="toc__title">Sections</div><ul class="toc toc--root">{blocks}</ul>'
 
 
-def _build_sidebar(view: DiffView, canonical: dict | None = None, sections: list[dict] | None = None) -> str:
+def _build_sidebar(
+    view: DiffView,
+    canonical: dict | None = None,
+    sections: list[dict] | None = None,
+    order_map: dict[tuple, int] | None = None,
+) -> str:
     """Render the sidebar with both view variants inside one ``<nav>``.
 
     ``.sidebar-changes`` (filters + changes grouped by section) is shown in the
@@ -416,6 +421,8 @@ def _build_sidebar(view: DiffView, canonical: dict | None = None, sections: list
     is available (XML/no full bill).
     """
     tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
+    if order_map is None:
+        order_map = _node_order_map(tree_v2)
     changes_pane = (
         '<div class="sidebar-changes">\n'
         '<div class="filters">\n'
@@ -424,7 +431,7 @@ def _build_sidebar(view: DiffView, canonical: dict | None = None, sections: list
         '<label class="filter-row"><input type="radio" name="change-filter" value="financial"> Financial</label>\n'
         '<label class="filter-row"><input type="radio" name="change-filter" value="structural"> Structural</label>\n'
         "</div>\n"
-        f"{_build_change_groups(view, _node_order_map(tree_v2))}\n"
+        f"{_build_change_groups(view, order_map)}\n"
         "</div>"
     )
     full_text_v2 = (canonical.get("full_text") or {}).get("v2") if canonical else None
@@ -868,13 +875,15 @@ def _views_html(
     canonical: dict | None,
     display_canonical: dict | None = None,
     sections: list[dict] | None = None,
+    order_map: dict[tuple, int] | None = None,
 ) -> str:
     """Main content: classic cards, or the toggled changes/full-bill pair.
 
     The full-bill view renders from ``display_canonical`` when given (the
     print-faithful text + spans) and falls back to ``canonical`` otherwise.
     """
-    order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
+    if order_map is None:
+        order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
     changes_inner = (
         f"{_build_financial_summary(view)}\n<h2>Changes</h2>\n{_cards_section_html(view, order_map)}"
         '\n<p class="filter-empty" id="filter-empty" hidden>No changes match this filter.</p>'
@@ -1011,7 +1020,10 @@ def format_diff_html(
     # The TOC/full-bill anchors must come from the same canonical the full-bill view
     # renders from (display_canonical when given), so their offsets line up.
     sidebar_canonical = (display_canonical or canonical) if _has_full_bill(canonical) else None
-    sidebar = _build_sidebar(view, sidebar_canonical, sections if _has_full_bill(canonical) else None)
+    # One order map for both panes, from the join's canonical — guarantees the
+    # sidebar and cards can never sort their shared groups from different trees.
+    order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
+    sidebar = _build_sidebar(view, sidebar_canonical, sections if _has_full_bill(canonical) else None, order_map)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1042,7 +1054,7 @@ def format_diff_html(
 {_export_button_html(canonical)}
 </div>
 </div>
-{_views_html(view, canonical, display_canonical, sections)}
+{_views_html(view, canonical, display_canonical, sections, order_map)}
 </div>
 </div>
 {_export_modal_html(canonical)}
@@ -1608,6 +1620,7 @@ document.addEventListener('DOMContentLoaded', function() {
     findIdx = (i % findHits.length + findHits.length) % findHits.length;
     var cur = findHits[findIdx];
     cur.classList.add('find-hit--current');
+    revealCard(cur);  // a hit inside a collapsed card group must open it, like goTo
     cur.scrollIntoView({behavior: 'smooth', block: 'center'});
     updateFindCounter();
   }
