@@ -132,12 +132,25 @@ def _search_span(
 
 
 def _xml_move(change: dict) -> dict:
-    """XML pipeline always uses path-form moves -- there's no anchor-text identifier
-    that could be 'renumbered'."""
-    return {
-        "kind": "relocated",
-        "body_unchanged": (change.get("old_text") or "") == (change.get("new_text") or ""),
-    }
+    """Move kind from the display paths, mirroring ``_pdf_move`` (#188).
+
+    A move whose paths share the same parent and differ only in the trailing
+    label is an identifier change — a renumbered/renamed section or subsection
+    (their match keys ARE their labels, so a rename reconciles as a move) — not a
+    relocation within the hierarchy. Reporting "relocated" there told a staffer
+    the provision moved when nothing did.
+    """
+    old_path = change.get("display_path_old") or []
+    new_path = change.get("display_path_new") or []
+    body_unchanged = (change.get("old_text") or "") == (change.get("new_text") or "")
+    if old_path and new_path and list(old_path[:-1]) == list(new_path[:-1]) and old_path[-1] != new_path[-1]:
+        return {
+            "kind": "renumbered",
+            "old_label": old_path[-1],
+            "new_label": new_path[-1],
+            "body_unchanged": body_unchanged,
+        }
+    return {"kind": "relocated", "body_unchanged": body_unchanged}
 
 
 def xml_diff_to_canonical(

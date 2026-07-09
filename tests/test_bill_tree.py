@@ -1794,3 +1794,63 @@ class TestSubsectionNodes:
         assert len(subs) == 3
         assert subs[0].display_path == ("TITLE V—GENERAL PROVISIONS", "sec. 547", "(a) In general")
         assert subs[0].match_path == ("general provisions", "sec. 547", "(a) in general")
+
+
+class TestSubsectionLabelBounds:
+    """Review hardening (#188): the inline matcher must not fabricate labels the
+    PDF's physical line window could never produce."""
+
+    def test_mid_prose_period_dash_does_not_fabricate_a_label(self):
+        # 113-hr-83 SEC. 415(a): "…party to the U.S.–E.U.–Iceland–Norway Air
+        # Transport Agreement" — a period+en-dash deep in plain prose matched the
+        # run-in pattern and fabricated a 335-char label. Must fall back to the
+        # bare enum (the designed degradation path).
+        xml = (
+            '<section id="S415"><enum>415.</enum>'
+            '<subsection id="s415a"><enum>(a)</enum>'
+            "<text>None of the funds made available by this Act may be used to approve "
+            "a new foreign air carrier permit or exemption application of an air carrier "
+            "already holding a certificate if the carrier is established under the laws of "
+            "a country that is party to the U.S.–E.U. Air Transport Agreement.</text>"
+            "</subsection></section>"
+        )
+        nodes = walk_body_sections(_body_with(xml))
+        assert nodes[1].display_path[-1] == "(a)"
+        assert nodes[1].header_text == ""
+
+    def test_real_catchline_within_bounds_still_matches(self):
+        xml = (
+            '<section id="S547"><enum>547.</enum>'
+            '<subsection id="s547a"><enum>(a)</enum>'
+            "<text>In general.—Notwithstanding any other provision of law, none of the "
+            "funds provided by this Act may be used.</text></subsection></section>"
+        )
+        nodes = walk_body_sections(_body_with(xml))
+        assert nodes[1].display_path[-1] == "(a) In general"
+
+    def test_quote_opening_text_does_not_contribute_a_catchline(self):
+        # A subsection whose text opens with a GPO quote is quoting other law;
+        # its catchline belongs to the quoted text, not this subsection —
+        # mirrors the PDF's _RUNIN_QUOTED_LINE self-exclusion.
+        xml = (
+            '<section id="S610"><enum>610.</enum>'
+            '<subsection id="s610a"><enum>(a)</enum>'
+            "<text>‘‘In general.—The Secretary shall carry out a program.</text>"
+            "</subsection></section>"
+        )
+        nodes = walk_body_sections(_body_with(xml))
+        assert nodes[1].display_path[-1] == "(a)"
+
+    def test_carved_subsection_tail_text_survives_in_the_section_display(self):
+        # Latent-conservation hardening: a carved child's .tail belongs to the
+        # SECTION's flow; skipping the child must not drop its tail from the
+        # section's display_text (own_amounts read display_text).
+        section = ET.fromstring(
+            '<section id="S1"><enum>1.</enum>'
+            '<subsection id="s1a"><enum>(a)</enum><text>Body.</text></subsection>'
+            "trailing $9,999 rider</section>"
+        )
+        sub = section.find("subsection")
+        out = extract_display_text(section, skip_children=frozenset({id(sub)}))
+        assert "Body." not in out
+        assert "$9,999" in out

@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-from parsers.pdf_anchors import _match_runin_subsection
+from parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subsection
 
 
 @dataclass(frozen=True)
@@ -277,6 +277,11 @@ def _walk_display(
         if skip_header_enum and child.tag in ("enum", "header"):
             continue
         if id(child) in skip_children:
+            # The skipped child's tail is the PARENT's flow (a trailing rider
+            # after a carved subsection) — dropping it would drop its amounts
+            # from the section's display_text (conservation).
+            if child.tail:
+                cur.append(child.tail)
             continue
         if child.tag in _BREAK_TAGS:
             cur.append(" ")
@@ -343,6 +348,12 @@ def get_header_text(element: ET.Element) -> str:
     return ""
 
 
+# Bounds for the inline catchline probe (#188 review hardening) — see the comment
+# at the match site in _subsection_label.
+_RUNIN_PROBE_WINDOW = 240
+_RUNIN_CATCHLINE_CAP = 120
+
+
 def _subsection_label(sub: ET.Element) -> tuple[str, str]:
     """``(label, catchline)`` for a direct ``<subsection>`` child, or ``("", "")``
     when no label is derivable (#188).
@@ -367,9 +378,20 @@ def _subsection_label(sub: ET.Element) -> tuple[str, str]:
         return "", ""
     text_el = sub.find("text")
     if text_el is not None:
-        matched = _match_runin_subsection(f"{enum} {extract_text_content(text_el)}", [])
-        if matched is not None:
-            return matched, matched.split(" ", 1)[1]
+        opening = extract_text_content(text_el)
+        # Mirror the PDF's physical bounds: its matcher sees one print line plus
+        # two continuations, so a probe over unbounded flattened text fabricates
+        # "catchlines" from a period+dash deep in plain prose (113-hr-83 §415(a):
+        # "…U.S.–E.U.…" produced a 335-char label). Window ≈ three print lines;
+        # cap ≈ the longest real catchline with wide margin (corpus max 90, the
+        # three fabrications 303–335). A quote-opening text is quoting other law —
+        # its catchline is not this subsection's (the PDF self-exclusion).
+        if not _RUNIN_QUOTED_LINE.match(opening):
+            matched = _match_runin_subsection(f"{enum} {opening[:_RUNIN_PROBE_WINDOW]}", [])
+            if matched is not None:
+                catchline = matched.split(" ", 1)[1]
+                if len(catchline) <= _RUNIN_CATCHLINE_CAP:
+                    return matched, catchline
     return enum, ""
 
 
