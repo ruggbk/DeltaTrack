@@ -59,8 +59,16 @@ _PARITY: dict[str, tuple[tuple[int, int], tuple[int, int], str]] = {
     # bill:          xml_band,      pdf_band,        attributed cause of the gap
     "118-hr-8752": ((37, 37), (37, 37), "clean: no prose-leading agencies → exact parity"),
     "118-hr-8774": ((30, 33), (31, 36), "PDF over-segments a few blocks (segmentation granularity)"),
-    "117-hr-4502": ((1090, 1130), (1430, 1500), "PDF over-segments a large added block"),
-    "115-hr-5895": ((240, 255), (310, 335), "division-collapse + segmentation (#107 reframe)"),
+    "117-hr-4502": (
+        (1090, 1130),
+        (1430, 1520),
+        "PDF over-segments a large added block; +33 from run-in subsection nesting (#96)",
+    ),
+    "115-hr-5895": (
+        (240, 255),
+        (310, 345),
+        "division-collapse + segmentation (#107); +15 from run-in subsection nesting (#96)",
+    ),
 }
 
 # Senate #89 residual: size-band ratio is "in range" when account-anchor recovery

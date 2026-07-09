@@ -56,7 +56,18 @@ _SCHEMA_PATH = Path(__file__).parent.parent / "schema" / "canonical-diff.schema.
 ALL_XML_FILES = sorted(BILLS_DIR.glob("*/[0-9]*_*.xml"))
 ALL_PDF_FILES = sorted(BILLS_DIR.glob("*/[0-9]*_*.pdf"))
 
-_LEVELS = {"division", "title", "major", "agency", "account", "section", "grouping", "preamble", "heading"}
+_LEVELS = {
+    "division",
+    "title",
+    "major",
+    "agency",
+    "account",
+    "section",
+    "subsection",
+    "grouping",
+    "preamble",
+    "heading",
+}
 
 
 def _corpus_id(path: Path) -> str:

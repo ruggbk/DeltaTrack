@@ -201,6 +201,12 @@ def test_pdf_without_account_level_lands_at_section_level(bill, v1, v2):
     # (v1 tree, same section-only shape); the level property is type-agnostic.
     placed = [cv for cv in view.changes if cv.node_path]
     assert len(placed) > 0, "gate ran on zero placed changes (fail-open, #167)"
+    # Exact set, NOT a fail-open ⊆: both sides of this fixture were measured to have
+    # ZERO run-in subsection candidates (#96), so a `subsection` level cannot appear
+    # here. Keep the exact assertion. If a future fixture swap introduces run-ins, the
+    # replacement is `⊆ {"section", "subsection"}` PAIRED with a positive "≥1 change
+    # lands at subsection" assertion (matching this file's checked>0 floors), never a
+    # bare ⊆.
     assert {cv.node_path[-1][1] for cv in placed} == {"section"}
 
 

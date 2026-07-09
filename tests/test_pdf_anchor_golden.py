@@ -405,17 +405,25 @@ class TestMajorLevelAcrossSubcommittees:
 
 
 @pytest.mark.parametrize("name", sorted(FIXTURES))
-def test_no_duplicate_page_line_anchors(name: str):
-    # breadcrumb_for resolves parents via list.index() on value-equality, which relies
-    # on anchors being unique per (page, line). The new major anchors must preserve
-    # that invariant (a major's first line is distinct from the title/agency/account
-    # lines around it). Guards every fixture, all kinds.
+def test_no_value_equal_duplicate_anchors(name: str):
+    # breadcrumb_for resolves parents via list.index() on VALUE-equality, so the
+    # invariant it needs is value-uniqueness, NOT (page, line) coordinate-uniqueness.
+    # A SEC-inline run-in subsection (#96) deliberately shares its section's
+    # (page, line) — allowed because the two anchors differ in kind+text, so .index()
+    # still resolves each distinctly. A FULLY value-equal duplicate would break it;
+    # pin its absence. Guards every fixture, all kinds.
     pdf_path = FIXTURES[name]
     if not pdf_path.exists():
         pytest.skip(f"{name} PDF not present")
     anchors = extract_anchors(extract_clean_pages(pdf_path))
-    seen = [(a.page_number, a.line_number) for a in anchors]
-    assert len(seen) == len(set(seen)), "duplicate (page, line) anchors break breadcrumb .index()"
+    values = [(a.page_number, a.line_number, a.kind, a.text, a.division) for a in anchors]
+    assert len(values) == len(set(values)), "value-equal duplicate anchors break breadcrumb .index()"
+    # Any (page, line) collision must be exactly the #96 section/subsection pair
+    # (distinct kinds), never an accidental exact-coordinate dup within one kind.
+    coords = [(a.page_number, a.line_number) for a in anchors]
+    for coord in {c for c in coords if coords.count(c) > 1}:
+        kinds = sorted(a.kind for a in anchors if (a.page_number, a.line_number) == coord)
+        assert kinds == ["section", "subsection"], f"unexpected collision at {coord}: {kinds}"
 
 
 class TestCarryoverAgenciesEndToEnd:
