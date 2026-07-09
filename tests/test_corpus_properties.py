@@ -138,19 +138,24 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
 # Files known to have duplicate match_paths (cross-division collisions, issue #1).
 # Values are the current duplicate counts. Files not listed must have zero duplicates.
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
-    "113-hr-3547/5_engrossed-amendment-house.xml": 150,
+    # #188 note: subsection nodes inherit their section's match_path as a prefix, so
+    # a cross-division duplicated section duplicates its subsection paths one level
+    # deeper. Every #188 count increase was verified to be exactly that class (new
+    # duplicate keys are all subsection nodes under already-colliding sections) —
+    # the same collision-group matching (#1) covers them.
+    "113-hr-3547/5_engrossed-amendment-house.xml": 168,
     # Enrolled has 12 divisions whose later titles spill out as orphan <title>
     # siblings. Walking them (#146) surfaces genuine cross-division collisions
     # (general provisions, same-named bureaus across divisions) on division-stripped
     # match_paths — now matching the engrossed-amendment version's 150 (was 73 when
     # the orphan titles were silently dropped). Real source structure, not a bug.
-    "113-hr-3547/6_enrolled-bill.xml": 150,
-    "113-hr-83/6_engrossed-amendment-house.xml": 112,
-    "113-hr-83/7_enrolled-bill.xml": 112,
-    "114-hr-2029/6_engrossed-amendment-house.xml": 156,
-    "114-hr-2029/7_enrolled-bill.xml": 156,
-    "115-hr-1625/7_enrolled-bill.xml": 153,
-    "115-hr-244/6_enrolled-bill.xml": 136,
+    "113-hr-3547/6_enrolled-bill.xml": 168,
+    "113-hr-83/6_engrossed-amendment-house.xml": 128,
+    "113-hr-83/7_enrolled-bill.xml": 128,
+    "114-hr-2029/6_engrossed-amendment-house.xml": 176,
+    "114-hr-2029/7_enrolled-bill.xml": 176,
+    "115-hr-1625/7_enrolled-bill.xml": 177,
+    "115-hr-244/6_enrolled-bill.xml": 159,
     "115-hr-5895/2_engrossed-in-house.xml": 20,
     "115-hr-5895/3_placed-on-calendar-senate.xml": 20,
     "115-hr-5895/4_engrossed-amendment-senate.xml": 6,
@@ -162,8 +167,8 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "115-hr-5895/5_enrolled-bill.xml": 8,
     "116-hr-1865/5_engrossed-amendment-house.xml": 55,
     "116-hr-1865/6_enrolled-bill.xml": 55,
-    "118-hr-2882/5_engrossed-amendment-house.xml": 41,
-    "118-hr-2882/6_enrolled-bill.xml": 41,
+    "118-hr-2882/5_engrossed-amendment-house.xml": 55,
+    "118-hr-2882/6_enrolled-bill.xml": 55,
     "118-hr-4366/4_engrossed-amendment-senate.xml": 7,
     "118-hr-4366/5_engrossed-amendment-house.xml": 33,
     "118-hr-4366/6_enrolled-bill.xml": 33,
@@ -174,9 +179,9 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "117-hr-4502/3_received-in-senate.xml": 39,
     "118-hr-4820/1_reported-in-house.xml": 7,
     # Fresh bills added for Part C smoke test (2026-04-15)
-    "116-hr-133/6_engrossed-amendment-house.xml": 132,
-    "116-hr-133/7_enrolled-bill.xml": 132,
-    "117-hr-2471/6_enrolled-bill.xml": 120,
+    "116-hr-133/6_engrossed-amendment-house.xml": 160,
+    "116-hr-133/7_enrolled-bill.xml": 160,
+    "117-hr-2471/6_enrolled-bill.xml": 151,
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
     # limitation/administrative-provisions section, and general provisions), not parser

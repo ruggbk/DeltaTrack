@@ -103,7 +103,14 @@ class TestLegBranchValidation:
         assert missing == [], f"{len(missing)} nodes not found:\n" + "\n".join(f"  {m}" for m in missing[:10])
 
     def test_all_amounts_match(self, fixture_data, bill_trees):
-        """Every fixture amount should appear in the node's extracted amounts."""
+        """Every fixture amount should appear in the node's SUBTREE amounts.
+
+        The ground truth pins a budget line's amount to a match_path; since #188
+        the amount may sit one level deeper, in a subsection node whose match_path
+        extends the pinned one (verified: 3 fixtures moved to a subsection child,
+        none disappeared). The subtree — the pinned node plus its prefix
+        descendants — is the unit that owns the line.
+        """
         mismatches = []
         for account in fixture_data["accounts"]:
             tree = bill_trees.get(account["bill"])
@@ -111,10 +118,10 @@ class TestLegBranchValidation:
                 continue
             path = tuple(account["match_path"])
             expected = account["expected_amount"]
-            node = next((n for n in tree.nodes if n.match_path == path), None)
-            if node is None:
+            subtree = [n for n in tree.nodes if n.match_path[: len(path)] == path]
+            if not any(n.match_path == path for n in subtree):
                 continue  # caught by test_all_nodes_found
-            extracted = extract_amounts(node.body_text)
+            extracted = [a for n in subtree for a in extract_amounts(n.body_text)]
             if expected not in extracted:
                 mismatches.append(
                     f"{account['fy']} {account['chamber']}: {account['excel_name']} "
