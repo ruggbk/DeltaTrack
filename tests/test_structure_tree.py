@@ -116,12 +116,25 @@ class TestLevelVocabulary:
             ("appropriations-intermediate", "agency"),
             ("appropriations-small", "account"),
             ("section", "section"),
+            ("subsection", "subsection"),
             ("front-matter", "preamble"),
         ],
     )
     def test_leaf_level_from_tag(self, tag, expected):
         roots = build_xml_tree(_bill([_node(("TITLE I", "Leaf"), tag=tag)]))
         assert _content_nodes(roots)[0].level == expected
+
+    def test_subsection_nests_under_its_section_content_node(self):
+        # #188: a subsection's display_path extends its section's, so the trie
+        # adopts the section content node as the parent — content AND container.
+        sec = _node(("TITLE V", "sec. 547"), tag="section")
+        sub = _node(("TITLE V", "sec. 547", "(a) In general"), tag="subsection")
+        roots = build_xml_tree(_bill([sec, sub]))
+        section = roots[0].children[0]
+        assert section.level == "section"
+        assert section.source is not None
+        assert [c.label for c in section.children] == ["(a) In general"]
+        assert section.children[0].level == "subsection"
 
     def test_interior_division_and_title(self):
         roots = build_xml_tree(_bill([_node(("Division A: X", "TITLE I", "Acct"))]))

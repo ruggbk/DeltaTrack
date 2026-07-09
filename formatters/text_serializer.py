@@ -158,7 +158,13 @@ def _serialize(
         # For section nodes, the trailing display_path segment is a lowercased
         # copy of section_number ("sec. 101"). Drop it from the heading run so
         # we can emit a bill-style "SEC. 101." run-in heading on the body line.
-        heading_path = new_path[:-1] if node.section_number and new_path else new_path
+        # A subsection node (#188) additionally drops its own label — its body
+        # already opens with the run-in "(a) Catchline" — and the section segment
+        # above it, which the sibling section node rendered as its SEC. line.
+        if node.tag == "subsection":
+            heading_path = new_path[:-2] if node.section_number else new_path[:-1]
+        else:
+            heading_path = new_path[:-1] if node.section_number and new_path else new_path
         # Find the longest common prefix between previous and new path.
         common = 0
         while common < len(prev_path) and common < len(heading_path) and prev_path[common] == heading_path[common]:
@@ -180,17 +186,26 @@ def _serialize(
         if not new_path and node.header_text:
             out.append(node.header_text)
         # Body: section nodes get "SEC. NN." prefixed as a run-in heading;
-        # everything else just emits body_text on its own.
-        if node.body_text:
+        # everything else just emits body_text on its own. An empty-body section
+        # still emits its SEC. line (#188 — its children are all subsection nodes;
+        # the line anchors the TOC entry and a zero-length body span).
+        if node.body_text or (node.tag == "section" and node.section_number):
             if out and out[-1] != "":
                 out.append("")
             display = node.display_text or node.body_text
             idx = len(out)
-            if node.section_number:
+            if node.tag == "subsection":
+                # The body opens with its own "(a) Catchline" run-in — no prefix.
+                # Jump-list entry mirrors PDF _section_nav's subsection anchors.
+                markers.append((idx, new_path[-1] if new_path else node.header_text, "subsection"))
+                out.append(display)
+                prefix_len = 0
+            elif node.section_number:
                 markers.append((idx, node.section_number, "section"))
                 prefix = f"{node.section_number.upper()}.  "
-                out.append(f"{prefix}{display}")
-                prefix_len = len(prefix)
+                line = f"{prefix}{display}" if display else f"{node.section_number.upper()}."
+                out.append(line)
+                prefix_len = len(prefix) if display else len(line)
             else:
                 out.append(display)
                 prefix_len = 0

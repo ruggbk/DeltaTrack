@@ -353,8 +353,11 @@ class TestAmountSanityChecks:
     """Sanity checks on extracted amounts from real bill XML."""
 
     def test_nodes_with_amounts_count(self, hr4366_v6):
+        # 567 -> 584 with #188: amounts redistribute from section blobs onto
+        # subsection nodes (more, finer holders). Verified pure redistribution —
+        # the amount MULTISET over all body_texts is identical (1676 amounts).
         count = sum(1 for n in hr4366_v6.nodes if extract_amounts(n.body_text))
-        assert count == 567
+        assert count == 584
 
     def test_all_amounts_in_valid_range(self, hr4366_v6):
         # Lower bound is 0: $0 is kept as real budget data (#60).

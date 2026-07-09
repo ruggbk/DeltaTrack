@@ -79,15 +79,22 @@ not an equality it would have to fudge:
 
 | bill (v1→v2) | XML | PDF | gap | attributed cause |
 |--------------|----:|----:|----:|------------------|
-| 118-hr-8752  |  37 |  37 |   0 | clean — no prose-leading agencies |
+| 118-hr-8752  |  39 |  37 |  −2 | clean; XML sees 2 bare subsections of added SEC.s the PDF folds into the section block (#188) |
 | 118-hr-8774  |  31 |  33 |  +2 | PDF over-segments a few blocks |
-| 117-hr-4502  | 1111 | 1500 | +389 | PDF over-segments a large added block; +33 from run-in subsection nesting (#96) |
-| 115-hr-5895  | 246 | 336 | +90 | division-collapse + segmentation; +15 from run-in subsection nesting (#96) |
+| 117-hr-4502  | 1415 | 1500 | +85 | PDF over-segments a large added block; XML +304 from subsection nodes (#188) |
+| 115-hr-5895  | 300 | 336 | +36 | division-collapse + segmentation; XML +54 from subsection nodes (#188) |
 
 Snapshot 2026-06-29; the 117-hr-4502 and 115-hr-5895 PDF rows re-measured
 2026-07-09 after run-in subsection anchors (#96) split subsection-region changes
 out of their parent sections (4502 1467→1500, 5895 321→336; XML and the other two
-PDF rows unchanged). The live numbers and the bands that gate them are in
+PDF rows unchanged). XML rows re-measured 2026-07-09 after XML subsection nodes
+(#188): every XML delta is pure `added` (subsections of added provisions —
+modified/removed/moved counts identical on all four bills, the same signature as
+the #96 PDF recalibration), and the XML↔PDF gap narrows sharply (4502 +389→+85,
+5895 +90→+36) — much of what was attributed to PDF over-segmentation was
+subsection granularity the XML tree previously lacked. 118-hr-8752's exact parity
+gives way to a −2 by design: XML emits bare subsections the PDF cannot detect
+(the all-subsections scope decision recorded on #188). The live numbers and the bands that gate them are in
 `tests/test_pipeline_parity.py` (regenerate: `pytest -k parity -s`). The Senate #89
 residual `118-s-4795` recovers its heading hierarchy at a size-band ratio of 1.02
 (account anchors vs XML leaf headings) — in range, the residual closes.

@@ -57,17 +57,25 @@ _VALID_OPS = {"modified", "added", "removed", "moved"}
 # the gate so the number + the ADR snapshot get recalibrated together.
 _PARITY: dict[str, tuple[tuple[int, int], tuple[int, int], str]] = {
     # bill:          xml_band,      pdf_band,        attributed cause of the gap
-    "118-hr-8752": ((37, 37), (37, 37), "clean: no prose-leading agencies → exact parity"),
+    # XML bands recalibrated 2026-07-09 for #188 (XML subsection nodes): every XML
+    # delta is PURE `added` (subsections of added provisions; modified/removed/
+    # moved identical to the pre-#188 measurement on all four bills), the same
+    # signature as #96's PDF recalibration. PDF totals untouched.
+    "118-hr-8752": (
+        (39, 39),
+        (37, 37),
+        "clean; XML +2 = bare subsections of added SEC.s, which the PDF folds into the section block (#188)",
+    ),
     "118-hr-8774": ((30, 33), (31, 36), "PDF over-segments a few blocks (segmentation granularity)"),
     "117-hr-4502": (
-        (1090, 1130),
+        (1390, 1445),
         (1430, 1520),
-        "PDF over-segments a large added block; +33 from run-in subsection nesting (#96)",
+        "PDF over-segments a large added block; XML +304 added from subsection nodes (#188) — gap narrowed +389→+85",
     ),
     "115-hr-5895": (
-        (240, 255),
+        (290, 315),
         (310, 345),
-        "division-collapse + segmentation (#107); +15 from run-in subsection nesting (#96)",
+        "division-collapse + segmentation (#107); XML +54 added from subsection nodes (#188) — gap narrowed +90→+36",
     ),
 }
 

@@ -138,6 +138,27 @@ def test_xml_moved_change_emits_relocated_move():
     assert c["move"] == {"kind": "relocated", "body_unchanged": True}
 
 
+def test_xml_same_parent_label_change_emits_renumbered_move():
+    # #188 review fix: a subsection (or section) whose match key IS its label
+    # reconciles a rename/renumber as a move — same parent, different tail is a
+    # "renumbered" identifier change, not a relocation (mirrors _pdf_move).
+    change = {
+        "change_type": "moved",
+        "display_path_old": ["TITLE V", "sec. 5", "(a) In general"],
+        "display_path_new": ["TITLE V", "sec. 5", "(b) In general"],
+        "old_text": "same body",
+        "new_text": "same body",
+        "section_number": "Sec. 5",
+    }
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[change]))
+    assert canonical["changes"][0]["move"] == {
+        "kind": "renumbered",
+        "old_label": "(a) In general",
+        "new_label": "(b) In general",
+        "body_unchanged": True,
+    }
+
+
 def test_xml_amounts_filtered_to_real_changes():
     change = {
         "change_type": "modified",
