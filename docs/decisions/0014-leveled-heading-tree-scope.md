@@ -81,10 +81,13 @@ not an equality it would have to fudge:
 |--------------|----:|----:|----:|------------------|
 | 118-hr-8752  |  37 |  37 |   0 | clean — no prose-leading agencies |
 | 118-hr-8774  |  31 |  33 |  +2 | PDF over-segments a few blocks |
-| 117-hr-4502  | 1111 | 1467 | +356 | PDF over-segments a large added block |
-| 115-hr-5895  | 246 | 321 | +75 | division-collapse + segmentation |
+| 117-hr-4502  | 1111 | 1500 | +389 | PDF over-segments a large added block; +33 from run-in subsection nesting (#96) |
+| 115-hr-5895  | 246 | 336 | +90 | division-collapse + segmentation; +15 from run-in subsection nesting (#96) |
 
-Snapshot 2026-06-29; the live numbers and the bands that gate them are in
+Snapshot 2026-06-29; the 117-hr-4502 and 115-hr-5895 PDF rows re-measured
+2026-07-09 after run-in subsection anchors (#96) split subsection-region changes
+out of their parent sections (4502 1467→1500, 5895 321→336; XML and the other two
+PDF rows unchanged). The live numbers and the bands that gate them are in
 `tests/test_pipeline_parity.py` (regenerate: `pytest -k parity -s`). The Senate #89
 residual `118-s-4795` recovers its heading hierarchy at a size-band ratio of 1.02
 (account anchors vs XML leaf headings) — in range, the residual closes.
