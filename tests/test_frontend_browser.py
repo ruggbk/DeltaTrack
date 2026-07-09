@@ -147,6 +147,139 @@ def test_toc_group_caret_sits_on_header_line(chromium, tmp_path):
     )
 
 
+def _render_grouped_report() -> str:
+    """A full standalone report whose cards group under tree nodes (#172).
+
+    Hand-built canonical (the consumed contract) with a v2 tree and change
+    spans in one offset space, so the own-span join is live: one financial
+    change directly under TITLE I, two non-financial changes under its
+    SALARIES / OPERATIONS accounts. Exercises the real _JS.
+    """
+    from formatters.canonical import view_from_canonical
+    from formatters.diff_html import format_diff_html
+
+    def node(label, level, span, children=()):
+        return {
+            "label": label,
+            "level": level,
+            "own_amounts": [],
+            "full_text_span": span,
+            "children": list(children),
+        }
+
+    def change(i, start, end, amounts):
+        return {
+            "id": f"c{i}",
+            "change_type": "modified",
+            "section_number": "",
+            "path": {"v1": ["TITLE I"], "v2": ["TITLE I"]},
+            "location": None,
+            "anchor_resolution": "resolved",
+            "text": {"old": f"old {i}", "new": f"new {i}"},
+            "amounts": amounts,
+            "move": None,
+            "full_text_span": {"v1": None, "v2": {"start": start, "end": end}},
+        }
+
+    tree_v2 = [
+        node(
+            "TITLE I",
+            "title",
+            {"start": 0, "end": 7},
+            [
+                node("SALARIES", "account", {"start": 10, "end": 50}),
+                node("OPERATIONS", "account", {"start": 60, "end": 100}),
+            ],
+        ),
+    ]
+    canonical = {
+        "schema_version": "1.3",
+        "bill": {"type": "hr", "number": 1, "congress": 119},
+        "versions": {
+            "v1": {"label": "v1", "version_number": 1, "source": "xml"},
+            "v2": {"label": "v2", "version_number": 2, "source": "xml"},
+        },
+        "summary": {"added": 0, "removed": 0, "modified": 3, "moved": 0},
+        "changes": [
+            change(0, 2, 5, [{"old": 100, "new": 200}]),  # TITLE I direct, financial
+            change(1, 20, 30, []),  # SALARIES
+            change(2, 70, 80, []),  # OPERATIONS
+        ],
+        "full_text": {"v1": "x" * 120, "v2": "TITLE I\n" + "y" * 112},
+        "tree": {"v1": [], "v2": tree_v2},
+    }
+    return format_diff_html(view_from_canonical(canonical), canonical=canonical)
+
+
+def test_filtering_hides_empty_card_groups_and_updates_nav_counts(chromium, tmp_path):
+    """Financial filter empties the account groups: their card-group headings
+    hide, and the TITLE I nav-group count recounts to the visible subtree (#172).
+    Browser-level because the contract lives in applyFilters' runtime behavior,
+    which string-level _JS assertions can't prove."""
+    report = tmp_path / "grouped.html"
+    report.write_text(_render_grouped_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")
+
+    groups = page.locator(".card-group")
+    assert groups.count() == 3  # TITLE I + two nested accounts
+    title_count = page.locator(".nav-group__count").first
+    assert title_count.inner_text() == "(3)"
+
+    page.locator('input[name="change-filter"][value="financial"]').check()
+    # The two account groups hold only non-financial cards -> hidden; the
+    # TITLE I group keeps its direct financial card and its count recounts.
+    assert page.locator(".card-group:visible").count() == 1
+    assert title_count.inner_text() == "(1)"
+    assert page.locator("#change-0").is_visible()
+    assert page.locator("#change-1").is_hidden()
+    page.close()
+
+
+def test_prev_next_steps_into_nested_groups_and_reveals_collapsed(chromium, tmp_path):
+    """Prev/next reaches cards inside nested open groups with a true counter,
+    and stepping to a card inside a user-collapsed group re-opens the group
+    rather than scrolling to an invisible card; likewise a sidebar link into a
+    collapsed group (#172). (Modern Chromium keeps closed-details content in
+    the layout tree — content-visibility, not display:none — so collapsed
+    cards stay in the target set; revealCard makes reaching them work.)"""
+    report = tmp_path / "grouped_nav.html"
+    report.write_text(_render_grouped_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")
+
+    counter = page.locator("#nav-counter")
+    assert counter.inner_text() == "0 / 3"
+    nxt = page.locator("#btn-next")
+    for expected in ("1 / 3", "2 / 3", "3 / 3"):
+        nxt.click()
+        assert counter.inner_text() == expected
+
+    # Collapse the SALARIES group, then step back to the card inside it:
+    # revealCard must re-open the group so the card is actually shown.
+    salaries = page.locator(".card-group .card-group").first
+    salaries.locator("> summary").click()
+    assert salaries.evaluate("el => el.open") is False
+    page.locator("#btn-prev").click()
+    assert salaries.evaluate("el => el.open") is True
+    assert page.locator("#change-1").is_visible()
+
+    # Same via a sidebar link into a re-collapsed group (fragment navigation
+    # into a closed <details> doesn't auto-expand in every browser). Collapse
+    # via JS here: after the scroll the summary can sit under the sticky
+    # header, where a UI click never becomes actionable (the click-collapse
+    # path is already exercised above).
+    salaries.evaluate("el => el.open = false")
+    assert salaries.evaluate("el => el.open") is False
+    # Sidebar nav groups are collapsed by default; expand down to the link.
+    page.locator(".sidebar .nav-group > summary").first.click()
+    page.locator(".sidebar .nav-group .nav-group > summary").first.click()
+    page.locator('.sidebar a[href="#change-1"]').click()
+    assert salaries.evaluate("el => el.open") is True
+    assert page.locator("#change-1").is_visible()
+    page.close()
+
+
 def test_sample_report_opens_in_new_tab(live_url, chromium):
     """Clicking "View a sample report" opens the report in a new tab (#41).
 

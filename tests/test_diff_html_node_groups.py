@@ -56,16 +56,27 @@ TITLE = (("TITLE I", "title"),)
 ACCOUNT = (("TITLE I", "title"), ("SALARIES", "account"))
 
 
+def _details_depth_at(html: str, needle: str) -> int:
+    """<details> nesting depth at the first occurrence of ``needle``.
+
+    Pins ANCESTRY, not just ordering: a regression flattening nested groups to
+    siblings keeps counts and label order but changes the depth here.
+    """
+    pos = html.find(needle)
+    assert pos != -1, f"{needle!r} not rendered"
+    prefix = html[:pos]
+    return prefix.count("<details") - prefix.count("</details>")
+
+
 # ---------- cards area ----------------------------------------------------------
 
 
 def test_cards_group_nested_by_node_path_and_open_by_default():
     html = _cards_section_html(_view([_change(node_path=TITLE), _change(node_path=ACCOUNT)]))
-    # One outer group for TITLE I containing a nested group for SALARIES.
-    assert html.count("card-group") >= 2
-    title_pos = html.find(">TITLE I<")
-    salaries_pos = html.find(">SALARIES<")
-    assert -1 < title_pos < salaries_pos
+    # One outer group for TITLE I CONTAINING a nested group for SALARIES —
+    # the child renders one <details> level deeper, not as a sibling.
+    assert _details_depth_at(html, ">TITLE I<") == 1
+    assert _details_depth_at(html, ">SALARIES<") == 2
     # navTargets() coupling: a closed group's cards vanish from prev/next nav.
     assert "<details" in html and html.count(" open>") == html.count("<details")
 
@@ -93,6 +104,22 @@ def test_degraded_card_falls_back_to_group_label_group():
     assert html.find(">TITLE I<") < html.find(">TITLE IX<")
 
 
+def test_cards_fallback_groups_first_appearance_and_uncategorized_last():
+    # Mirror of the sidebar ordering test: shared _fallback_labels, but pin the
+    # cards path independently so a divergence can't slip through.
+    html = _cards_section_html(
+        _view(
+            [
+                _change(),  # no node_path, no group_label -> Uncategorized
+                _change(node_path=TITLE),
+                _change(group_label="TITLE IX"),
+                _change(group_label="TITLE II"),
+            ]
+        )
+    )
+    assert html.find(">TITLE I<") < html.find(">TITLE IX<") < html.find(">TITLE II<") < html.find(">Uncategorized<")
+
+
 def test_degraded_card_without_group_label_lands_in_uncategorized():
     html = _cards_section_html(_view([_change(node_path=TITLE), _change()]))
     assert ">Uncategorized<" in html
@@ -117,6 +144,79 @@ def test_group_labels_are_escaped_in_cards_and_sidebar():
         assert "&lt;img" in html
 
 
+# ---------- document-order group sorting -----------------------------------------
+
+
+def _order_map():
+    from formatters.diff_html import _node_order_map
+
+    tree = [
+        {
+            "label": "TITLE I",
+            "level": "title",
+            "own_amounts": [],
+            "full_text_span": None,
+            "children": [
+                {
+                    "label": "SALARIES",
+                    "level": "account",
+                    "own_amounts": [],
+                    "full_text_span": None,
+                    "children": [],
+                }
+            ],
+        },
+        {
+            "label": "TITLE II",
+            "level": "title",
+            "own_amounts": [],
+            "full_text_span": None,
+            "children": [],
+        },
+    ]
+    return _node_order_map(tree)
+
+
+def test_groups_follow_tree_document_order_not_change_order():
+    # A removal remapped into a LATE v2 group can appear FIRST in the change
+    # list; insertion order would hoist TITLE II above TITLE I in both panes.
+    view = _view(
+        [
+            _change(node_path=(("TITLE II", "title"),)),
+            _change(node_path=TITLE),
+        ]
+    )
+    order_map = _order_map()
+    cards = _cards_section_html(view, order_map)
+    assert -1 < cards.find(">TITLE I</summary>") < cards.find(">TITLE II</summary>")
+    sidebar = _build_change_groups(view, order_map)
+    assert -1 < sidebar.find(">TITLE I <span") < sidebar.find(">TITLE II <span")
+
+
+def test_groups_keep_insertion_order_without_an_order_map():
+    view = _view(
+        [
+            _change(node_path=(("TITLE II", "title"),)),
+            _change(node_path=TITLE),
+        ]
+    )
+    html = _cards_section_html(view)
+    assert html.find(">TITLE II<") < html.find(">TITLE I<")
+
+
+def test_unknown_paths_trail_ordered_groups():
+    # A v1-kept breadcrumb (removed change with no v2 match) isn't in the v2
+    # order map; it renders after the ordered groups, keeping insertion order.
+    view = _view(
+        [
+            _change(node_path=(("VANISHED TITLE", "title"),)),
+            _change(node_path=TITLE),
+        ]
+    )
+    html = _cards_section_html(view, _order_map())
+    assert html.find(">TITLE I<") < html.find(">VANISHED TITLE<")
+
+
 # ---------- sidebar -------------------------------------------------------------
 
 
@@ -126,7 +226,9 @@ def test_sidebar_groups_nest_by_node_path_with_subtree_counts():
     )
     # Outer TITLE I group counts its whole subtree (3); nested SALARIES counts 2.
     assert "(3)" in html and "(2)" in html
-    assert html.find(">TITLE I ") < html.find(">SALARIES ")
+    # Ancestry, not just ordering: SALARIES nests INSIDE the TITLE I details.
+    assert _details_depth_at(html, ">TITLE I ") == 1
+    assert _details_depth_at(html, ">SALARIES ") == 2
     # Existing applyFilters contract preserved.
     assert 'class="nav-group"' in html and "nav-group__count" in html
 

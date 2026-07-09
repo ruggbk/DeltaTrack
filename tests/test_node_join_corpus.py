@@ -211,10 +211,15 @@ def test_pdf_null_span_changes_degrade_to_group_label(bill, v1, v2):
     # never a crash or a misfile.
     canonical, view = _pdf_view(bill, v1, v2)
     assert len(view.changes) > 0
+    checked = 0
     for change, cv in zip(canonical["changes"], view.changes):
         span = (change.get("full_text_span") or {}).get("v2")
         if span is None and cv.change_type != "removed":
+            checked += 1
             assert cv.node_path == ()
+    # Completeness floor (#167): if this fixture ever starts resolving spans,
+    # the loop above asserts nothing — fail loud so the fixture gets replaced.
+    assert checked > 0, "fixture no longer has null-span changes; pick another pair"
 
 
 # ---------- perf smoke ------------------------------------------------------------

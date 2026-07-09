@@ -209,14 +209,57 @@ def _fallback_labels(fallback: dict[str, list[int]]) -> list[str]:
     return labels
 
 
-def _build_change_groups(view: DiffView) -> str:
+def _node_order_map(tree_nodes: list[dict] | None) -> dict[tuple, int]:
+    """(label, level) breadcrumb -> v2 document order, for sorting groups (#172).
+
+    Grouping by first appearance in the change list can deviate from bill
+    order — a removal remapped into a late v2 group but appearing early in the
+    change list would hoist that group above earlier titles. Sorting siblings
+    by the tree's own document order keeps groups in bill order regardless of
+    change order. Same labeled-ancestor hoisting convention as the join, so
+    the keys match node_path prefixes exactly.
+    """
+    order: dict[tuple, int] = {}
+    counter = 0
+
+    def walk(ns: list[dict], path: tuple) -> None:
+        nonlocal counter
+        for n in ns:
+            label = (n.get("label") or "").strip()
+            p = path + ((label, n.get("level") or ""),) if label else path
+            if label and p not in order:
+                order[p] = counter
+                counter += 1
+            walk(n.get("children") or [], p)
+
+    walk(tree_nodes or [], ())
+    return order
+
+
+def _ordered_children(node: dict, path: tuple, order_map: dict[tuple, int] | None):
+    """A group node's children sorted by v2 document order, insertion order for
+    paths the map doesn't know (v1-kept breadcrumbs trail, mutual order kept)."""
+    items = list(node["children"].items())
+    if not order_map:
+        return items
+    last = len(order_map)
+    ranked = sorted(
+        enumerate(items),
+        key=lambda pair: (order_map.get(path + (pair[1][0],), last), pair[0]),
+    )
+    return [item for _, item in ranked]
+
+
+def _build_change_groups(view: DiffView, order_map: dict[tuple, int] | None = None) -> str:
     """Group nav items under nested collapsible tree-node headers (#172).
 
     One ``<details class="nav-group">`` per node_path segment, nested to
     arbitrary depth; a group's count is its SUBTREE item count — the same
     number ``applyFilters`` recomputes, since its ``querySelectorAll`` is
     recursive. Changes without a node_path keep the old flat ``group_label``
-    grouping, trailing the tree groups ("Uncategorized" last).
+    grouping, trailing the tree groups ("Uncategorized" last). Sibling groups
+    follow v2 document order when ``order_map`` is given (see
+    ``_node_order_map``), first appearance otherwise.
     `_build_nav_item`'s <li> is unchanged — only the wrapping differs.
     Returns "<ul></ul>" when there are no changes.
     """
@@ -227,17 +270,18 @@ def _build_change_groups(view: DiffView) -> str:
     def subtree_count(node: dict) -> int:
         return len(node["items"]) + sum(subtree_count(c) for c in node["children"].values())
 
-    def render(seg: tuple[str, str], node: dict) -> str:
+    def render(seg: tuple[str, str], node: dict, path: tuple) -> str:
         label, _level = seg
+        p = path + (seg,)
         items = "".join(_build_nav_item(view.changes[i], i) for i in node["items"])
-        kids = "".join(render(s, c) for s, c in node["children"].items())
+        kids = "".join(render(s, c, p) for s, c in _ordered_children(node, p, order_map))
         return (
             f'<details class="nav-group"><summary>{escape(label)}'
             f' <span class="nav-group__count">({subtree_count(node)})</span></summary>'
             f"<ul>{items}</ul>{kids}</details>"
         )
 
-    blocks = [render(seg, node) for seg, node in root["children"].items()]
+    blocks = [render(seg, node, ()) for seg, node in _ordered_children(root, (), order_map)]
     for label in _fallback_labels(fallback):
         items = "".join(_build_nav_item(view.changes[i], i) for i in fallback[label])
         blocks.append(
@@ -371,6 +415,7 @@ def _build_sidebar(view: DiffView, canonical: dict | None = None, sections: list
     ``sections`` jump-list, and is omitted entirely (the swap no-ops) when neither
     is available (XML/no full bill).
     """
+    tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
     changes_pane = (
         '<div class="sidebar-changes">\n'
         '<div class="filters">\n'
@@ -379,10 +424,9 @@ def _build_sidebar(view: DiffView, canonical: dict | None = None, sections: list
         '<label class="filter-row"><input type="radio" name="change-filter" value="financial"> Financial</label>\n'
         '<label class="filter-row"><input type="radio" name="change-filter" value="structural"> Structural</label>\n'
         "</div>\n"
-        f"{_build_change_groups(view)}\n"
+        f"{_build_change_groups(view, _node_order_map(tree_v2))}\n"
         "</div>"
     )
-    tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
     full_text_v2 = (canonical.get("full_text") or {}).get("v2") if canonical else None
     if tree_v2 and full_text_v2:
         toc_html = _build_toc_from_tree(tree_v2, full_text_v2)
@@ -443,7 +487,7 @@ def _bill_label(view: DiffView) -> str:
     return f"{escape(str(view.bill_type).upper())} {escape(str(view.bill_number))}"
 
 
-def _cards_section_html(view: DiffView) -> str:
+def _cards_section_html(view: DiffView, order_map: dict[tuple, int] | None = None) -> str:
     """Cards section: cards grouped under their tree-node headings (#172).
 
     One ``<details class="card-group" open>`` per node_path segment, nested to
@@ -452,7 +496,8 @@ def _cards_section_html(view: DiffView) -> str:
     would silently vanish from prev/next stepping and the counter. Each card
     keeps ``id="change-{original index}"`` — the sidebar hrefs and the
     financial summary link by change-order index, so grouping may reorder the
-    DOM but never renumber. Changes without a node_path trail in flat
+    DOM but never renumber. Sibling groups follow v2 document order when
+    ``order_map`` is given. Changes without a node_path trail in flat
     ``group_label`` groups; when NO change has one (no tree in the canonical)
     the section renders flat exactly as before.
     """
@@ -468,13 +513,14 @@ def _cards_section_html(view: DiffView) -> str:
             f'<summary class="card-group__label">{escape(label)}</summary>\n{inner}\n</details>'
         )
 
-    def render(seg: tuple[str, str], node: dict) -> str:
+    def render(seg: tuple[str, str], node: dict, path: tuple) -> str:
         label, _level = seg
+        p = path + (seg,)
         cards = "\n".join(_build_card(view.changes[i], i) for i in node["items"])
-        kids = "\n".join(render(s, c) for s, c in node["children"].items())
+        kids = "\n".join(render(s, c, p) for s, c in _ordered_children(node, p, order_map))
         return group_html(label, "\n".join(part for part in (cards, kids) if part))
 
-    blocks = [render(seg, node) for seg, node in root["children"].items()]
+    blocks = [render(seg, node, ()) for seg, node in _ordered_children(root, (), order_map)]
     for label in _fallback_labels(fallback):
         cards = "\n".join(_build_card(view.changes[i], i) for i in fallback[label])
         blocks.append(group_html(label, cards))
@@ -828,8 +874,9 @@ def _views_html(
     The full-bill view renders from ``display_canonical`` when given (the
     print-faithful text + spans) and falls back to ``canonical`` otherwise.
     """
+    order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
     changes_inner = (
-        f"{_build_financial_summary(view)}\n<h2>Changes</h2>\n{_cards_section_html(view)}"
+        f"{_build_financial_summary(view)}\n<h2>Changes</h2>\n{_cards_section_html(view, order_map)}"
         '\n<p class="filter-empty" id="filter-empty" hidden>No changes match this filter.</p>'
     )
     if not _has_full_bill(canonical):
@@ -1362,10 +1409,22 @@ document.addEventListener('DOMContentLoaded', function() {
   toggleBtns.forEach(function(b) {
     b.addEventListener('click', function() { showView(b.dataset.view); });
   });
+  // Reveal a card before navigating to it: fragment navigation into a closed
+  // <details> doesn't auto-expand in every browser, so a sidebar link into a
+  // user-collapsed card group would otherwise scroll nowhere (#172).
+  function revealCard(el) {
+    for (var d = el && el.parentElement; d; d = d.parentElement) {
+      if (d.tagName === 'DETAILS') d.open = true;
+    }
+  }
   // Change-list anchors (#change-N) live in the changes view; jump back to it
   // first. TOC links (.sidebar-toc a) just scroll within the full-bill view.
   document.querySelectorAll('.sidebar-changes a').forEach(function(a) {
-    a.addEventListener('click', function() { showView('changes'); });
+    a.addEventListener('click', function() {
+      showView('changes');
+      var href = a.getAttribute('href') || '';
+      if (href.charAt(0) === '#') revealCard(document.getElementById(href.slice(1)));
+    });
   });
 
   // Export modal: download diff.json / report.html, then reveal AI prompts.
@@ -1492,6 +1551,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var targets = navTargets();
     if (idx >= 0 && idx < targets.length) {
       current = idx;
+      revealCard(targets[idx]);
       targets[idx].scrollIntoView({behavior: 'smooth', block: 'start'});
     }
     refreshNav();
