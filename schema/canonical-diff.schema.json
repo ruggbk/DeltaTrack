@@ -86,7 +86,7 @@
       "properties": {
         "label": { "type": "string" },
         "level": {
-          "enum": ["division", "title", "major", "agency", "account", "section", "grouping", "preamble", "heading"],
+          "enum": ["division", "title", "major", "agency", "account", "section", "subsection", "grouping", "preamble", "heading"],
           "description": "Shared GPO vocabulary (docs/bill-structure.md). Leaf level from the tag/kind; interior positional."
         },
         "own_amounts": {
