@@ -1097,13 +1097,18 @@ class TestWalkBodySections:
             "</section>"
             "</legis-body>"
         )
+        # #188: header-bearing subsections are their own nodes; the section keeps
+        # the SEC. heading and an empty own body. Header-only subsections (no enum)
+        # take the header alone as their label.
         nodes = walk_body_sections(body)
-        assert len(nodes) == 1
-        node = nodes[0]
-        assert node.match_path == ("sec. 2",)
-        assert node.header_text == "Sanctions"
-        assert "President shall impose sanctions" in node.body_text
-        assert "person that violates" in node.body_text
+        assert [n.tag for n in nodes] == ["section", "subsection", "subsection"]
+        section = nodes[0]
+        assert section.match_path == ("sec. 2",)
+        assert section.header_text == "Sanctions"
+        assert section.body_text == ""
+        assert nodes[1].display_path == ("Sec. 2", "In general")
+        assert "President shall impose sanctions" in nodes[1].body_text
+        assert "person that violates" in nodes[2].body_text
 
     def test_section_with_text_and_subsections(self):
         """Sections with both <text> and <subsection> should capture all content."""
@@ -1124,12 +1129,15 @@ class TestWalkBodySections:
             "</section>"
             "</legis-body>"
         )
+        # #188: bare enum-only subsections split out as "(a)" / "(b)" nodes; the
+        # lead-in stays the section's own body. All content is conserved across
+        # the three nodes.
         nodes = walk_body_sections(body)
-        assert len(nodes) == 1
-        node = nodes[0]
-        assert "shall submit a report" in node.body_text
-        assert "$5,000,000" in node.body_text
-        assert "program effectiveness" in node.body_text
+        assert [n.tag for n in nodes] == ["section", "subsection", "subsection"]
+        assert "shall submit a report" in nodes[0].body_text
+        assert nodes[1].display_path == ("Sec. 1", "(a)")
+        assert "$5,000,000" in nodes[1].body_text
+        assert "program effectiveness" in nodes[2].body_text
 
     def test_section_without_text_or_subsections(self):
         """Sections with nothing extractable are skipped."""
@@ -1473,7 +1481,9 @@ class TestNormalizeBillIntegration:
         assert hr4366_v1.bill_type == "hr"
         assert hr4366_v1.bill_number == 4366
         assert hr4366_v1.version == "reported-in-house"
-        assert len(_content(hr4366_v1)) == 165
+        # 165 -> 202 with #188: +37 subsection nodes (set-diff verified: only
+        # subsection nodes added, zero removed).
+        assert len(_content(hr4366_v1)) == 202
 
     def test_reported_in_house_has_expected_paths(self, hr4366_v1):
         match_paths = [n.match_path for n in hr4366_v1.nodes]
@@ -1483,11 +1493,26 @@ class TestNormalizeBillIntegration:
 
     def test_enrolled_bill_node_count(self, hr4366_v6):
         assert hr4366_v6.congress == 118
-        assert len(_content(hr4366_v6)) == 1095
+        # 1095 -> 1453 with #188: +358 subsection nodes (set-diff verified).
+        assert len(_content(hr4366_v6)) == 1453
 
     def test_enrolled_no_empty_body_text(self, hr4366_v6):
-        empty = [n for n in hr4366_v6.nodes if not n.body_text]
-        assert empty == [], f"Nodes with empty body_text: {[n.display_path for n in empty[:5]]}"
+        # #188 carved the one legitimate empty-body shape: a section whose children
+        # are all node-ized subsections. Such a section must be immediately followed
+        # by a subsection node extending its path; any other empty body is a bug.
+        nodes = hr4366_v6.nodes
+        empty = [(i, n) for i, n in enumerate(nodes) if not n.body_text]
+        stray = [
+            n.display_path
+            for i, n in empty
+            if not (
+                n.tag == "section"
+                and i + 1 < len(nodes)
+                and nodes[i + 1].tag == "subsection"
+                and nodes[i + 1].display_path[: len(n.display_path)] == n.display_path
+            )
+        ]
+        assert stray == [], f"Nodes with empty body_text: {stray[:5]}"
 
     def test_enrolled_has_all_seven_divisions(self, hr4366_v6):
         div_labels = sorted(
@@ -1527,13 +1552,16 @@ class TestNormalizeBillIntegration:
         for div, count in counts.items():
             letter = div.split(":")[0].replace("Division ", "") if "Division" in div else div
             by_letter[letter] = count
-        assert by_letter["A"] == 162
-        assert by_letter["B"] == 178
-        assert by_letter["C"] == 173
-        assert by_letter["D"] == 107
-        assert by_letter["E"] == 186
-        assert by_letter["F"] == 239
-        assert by_letter["G"] == 44
+        # Re-pinned for #188 subsection nodes (set-diff verified: only subsection
+        # nodes added, zero removed; the division split of the +358 varies with
+        # each division's general-provisions density).
+        assert by_letter["A"] == 192
+        assert by_letter["B"] == 201
+        assert by_letter["C"] == 219
+        assert by_letter["D"] == 166
+        assert by_letter["E"] == 235
+        assert by_letter["F"] == 296
+        assert by_letter["G"] == 138
 
     def test_enrolled_content_matches_path(self, hr4366_v6):
         """Spot-check that node body_text contains content appropriate to its path."""
@@ -1598,3 +1626,171 @@ class TestNormalizeDivisionTitle:
     def test_embedded_newline(self):
         label = "Division B: LEGISLATIVE BRANCH\nAPPROPRIATIONS ACT, 2019"
         assert normalize_division_title(label) == "legislative branch appropriations act, 2019"
+
+
+# --- Subsection nodes (#188): every direct non-quoted <subsection> becomes its own
+# BillNode, element-exact carve. (a) inline catchline, (b) header form, (c) bare.
+_SEC547_SUBS_XML = """
+<section id="S547"><enum>547.</enum>
+<subsection id="s547a"><enum>(a)</enum>
+<text display-inline="yes-display-inline">In general.—Notwithstanding any other provision of
+law, none of the funds provided by this Act may be used, up to $1,000,000.</text></subsection>
+<subsection id="s547b"><enum>(b)</enum><header>Discriminatory action defined</header>
+<text>As used in subsection (a), a discriminatory action costs $2,000,000.</text></subsection>
+<subsection id="s547c"><enum>(c)</enum>
+<text>Whoever violates this section shall pay $3,000,000.</text></subsection>
+</section>
+"""
+
+# Lead-in text with its own amount, then two subsections (money-partition fixture).
+_SEC552_LEADIN_XML = """
+<section id="S552"><enum>552.</enum>
+<text display-inline="yes-display-inline">Of the funds made available by this Act,
+$500,000 shall be transferred as follows.</text>
+<subsection id="s552a"><enum>(a)</enum><header>Set aside</header>
+<text>Not less than $100,000 shall be set aside.</text></subsection>
+<subsection id="s552b"><enum>(b)</enum>
+<text>The remaining $400,000 shall lapse on expiration.</text></subsection>
+</section>
+"""
+
+# Amendment-style section: lead-in + <quoted-block> whose subsections are inserted
+# text (other law), NOT this bill's structure.
+_SEC_QUOTED_XML = """
+<section id="S610"><enum>610.</enum>
+<text>Section 3 of the Act is amended by adding the following:</text>
+<quoted-block id="qb1">
+<subsection id="q-a"><enum>(a)</enum><header>In general</header>
+<text>The Secretary shall obligate $9,000,000.</text></subsection>
+</quoted-block>
+<after-quoted-block>.</after-quoted-block>
+</section>
+"""
+
+
+def _body_with(*sections: str) -> ET.Element:
+    return ET.fromstring("<legis-body>" + "".join(sections) + "</legis-body>")
+
+
+class TestSubsectionNodes:
+    """#188: XML emits run-in subsections as tree nodes (all <subsection> children)."""
+
+    def test_every_direct_subsection_becomes_a_node_in_document_order(self):
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        assert [n.tag for n in nodes] == ["section", "subsection", "subsection", "subsection"]
+        assert [n.element_id for n in nodes] == ["S547", "s547a", "s547b", "s547c"]
+
+    def test_labels_cover_inline_header_and_bare_forms(self):
+        # The fail-open trap from #96: catchlines live in <header> on some bills and
+        # inline in <text> on others — the label derivation must cover BOTH, and a
+        # bare subsection keeps its enum as the label.
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        assert nodes[1].display_path[-1] == "(a) In general"
+        assert nodes[2].display_path[-1] == "(b) Discriminatory action defined"
+        assert nodes[3].display_path[-1] == "(c)"
+
+    def test_match_path_extends_the_sections(self):
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        section, sub_a = nodes[0], nodes[1]
+        assert sub_a.match_path == (*section.match_path, "(a) in general")
+        assert sub_a.display_path == (*section.display_path, "(a) In general")
+
+    def test_section_body_is_carved_to_exclude_subsection_text(self):
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        section = nodes[0]
+        assert "Notwithstanding" not in section.body_text
+        assert "discriminatory" not in section.body_text.lower()
+        assert nodes[1].body_text.startswith("(a)")
+        assert "Notwithstanding" in nodes[1].body_text
+        assert "$1,000,000" in nodes[1].body_text
+
+    def test_empty_leadin_section_node_is_retained(self):
+        # SEC. 547 has no lead-in <text>; after the carve its own body is empty but
+        # the section node must survive (it anchors the SEC. heading + the nesting).
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        section = nodes[0]
+        assert section.tag == "section"
+        assert section.body_text == ""
+        assert section.section_number == "Sec. 547"
+
+    def test_subsections_carry_the_enclosing_section_number(self):
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        assert all(n.section_number == "Sec. 547" for n in nodes[1:])
+
+    def test_header_text_is_the_catchline_without_enum(self):
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        assert nodes[1].header_text == "In general"
+        assert nodes[2].header_text == "Discriminatory action defined"
+        assert nodes[3].header_text == ""
+
+    def test_display_text_keeps_the_runin_form(self):
+        nodes = walk_body_sections(_body_with(_SEC547_SUBS_XML))
+        assert nodes[1].display_text.startswith("(a) In general")
+        assert nodes[2].display_text.startswith("(b) Discriminatory action defined")
+
+    def test_quoted_block_subsections_stay_folded_in_the_section(self):
+        nodes = walk_body_sections(_body_with(_SEC_QUOTED_XML))
+        assert [n.tag for n in nodes] == ["section"]
+        assert "$9,000,000" in nodes[0].body_text  # amendment payload conserved
+
+    def test_money_partitions_exactly_across_section_and_subsections(self):
+        from collections import Counter
+
+        from diff_bill import extract_amounts
+
+        body = _body_with(_SEC552_LEADIN_XML)
+        nodes = walk_body_sections(body)
+        by_id = {n.element_id: n for n in nodes}
+        assert extract_amounts(by_id["S552"].display_text or by_id["S552"].body_text) == (500_000,)
+        assert extract_amounts(by_id["s552a"].display_text) == (100_000,)
+        assert extract_amounts(by_id["s552b"].display_text) == (400_000,)
+        # Union == the raw element's amounts (conservation at the source).
+        union: Counter = Counter()
+        for n in nodes:
+            union.update(extract_amounts(n.display_text or n.body_text))
+        assert union == Counter(extract_amounts(extract_text_content(body)))
+
+    def test_roman_enum_subsection_with_header_is_emitted(self):
+        # XML is structured: a genuine (i) subsection with a <header> gets a full
+        # label — no roman-lookalike reject on the XML side (all-subsections scope).
+        xml = (
+            '<section id="S559"><enum>559.</enum>'
+            '<subsection id="s559i"><enum>(i)</enum><header>Role of general services administration</header>'
+            "<text>Collaboration shall be as the Administrator prescribes.</text></subsection></section>"
+        )
+        nodes = walk_body_sections(_body_with(xml))
+        assert nodes[1].display_path[-1] == "(i) Role of general services administration"
+
+    def test_roman_enum_inline_catchline_falls_back_to_bare_label(self):
+        # Inline-form label parsing reuses the PDF's run-in matcher, whose roman
+        # reject makes "(i) In general.—" unparseable — the node is still emitted,
+        # with the bare enum label.
+        xml = (
+            '<section id="S560"><enum>560.</enum>'
+            '<subsection id="s560i"><enum>(i)</enum>'
+            "<text>In general.—The pilot program is extended.</text></subsection></section>"
+        )
+        nodes = walk_body_sections(_body_with(xml))
+        assert [n.tag for n in nodes] == ["section", "subsection"]
+        assert nodes[1].display_path[-1] == "(i)"
+
+    def test_enumless_headerless_subsection_stays_folded(self):
+        # No enum and no header -> no derivable label; the subsection folds into the
+        # section body (a blank path segment would corrupt match keys / TOC rows).
+        xml = (
+            '<section id="S561"><enum>561.</enum><text>Lead-in.</text>'
+            '<subsection id="s561x"><text>Continuation prose with $7,000,000.</text></subsection></section>'
+        )
+        nodes = walk_body_sections(_body_with(xml))
+        assert [n.tag for n in nodes] == ["section"]
+        assert "$7,000,000" in nodes[0].body_text
+
+    def test_walk_title_subsections_inherit_the_title_prefix(self):
+        title = ET.fromstring(
+            "<title><enum>V</enum><header>GENERAL PROVISIONS</header>" + _SEC547_SUBS_XML + "</title>"
+        )
+        nodes = walk_title(title, "TITLE V—GENERAL PROVISIONS", "")
+        subs = [n for n in nodes if n.tag == "subsection"]
+        assert len(subs) == 3
+        assert subs[0].display_path == ("TITLE V—GENERAL PROVISIONS", "sec. 547", "(a) In general")
+        assert subs[0].match_path == ("general provisions", "sec. 547", "(a) in general")
