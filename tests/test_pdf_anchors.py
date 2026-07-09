@@ -225,6 +225,131 @@ class TestDivision:
         assert all(a.division == "" for a in anchors)
 
 
+class TestRunInSubsection:
+    """Run-in subsection anchors (DeltaTrack#96).
+
+    A run-in subsection header (`(a) In general.—`, `(b) DISCRIMINATORY ACTION
+    DEFINED.—`) renders inline at body size, so the size path can't see it. A
+    dedicated format-grammatical detector emits a `subsection` anchor from the
+    parenthesized lower-case enumerator + capitalized catchline + `.—` signature,
+    matched over a 2-line de-hyphenating continuation window with a stop-rule.
+    """
+
+    def _subs(self, page_number, text):
+        return [a for a in _scan_anchors_in_page(page_number, text) if a.kind == "subsection"]
+
+    def test_line_start_title_case(self):
+        subs = self._subs(1, "1 (a) In general.—The Secretary shall carry out the program.")
+        assert subs == [Anchor(1, 1, "subsection", "(a) In general")]
+
+    def test_all_caps_catchline(self):
+        # GPO renders the catchline ALL-CAPS in some bills; must not require mixed case.
+        subs = self._subs(1, "1 (b) DISCRIMINATORY ACTION DEFINED.—In this section the term.")
+        assert subs == [Anchor(1, 1, "subsection", "(b) DISCRIMINATORY ACTION DEFINED")]
+
+    def test_wrapped_catchline_one_line(self):
+        # The terminal `.—` wraps onto the next line; a single-line match would drop it.
+        text = "3 (c) APPLICABILITY OF CERTAIN\n4 PAY.—The provisions of this subsection."
+        subs = self._subs(1, text)
+        assert subs == [Anchor(1, 3, "subsection", "(c) APPLICABILITY OF CERTAIN PAY")]
+
+    def test_wrapped_catchline_soft_hyphen(self):
+        # A GPO soft-wrap hyphen de-hyphenates across the join (ASSIST- + ANCE -> ASSISTANCE).
+        text = "5 (d) EMERGENCY ASSIST-\n6 ANCE.—Funds appropriated under this heading."
+        subs = self._subs(1, text)
+        assert subs == [Anchor(1, 5, "subsection", "(d) EMERGENCY ASSISTANCE")]
+
+    def test_wrapped_catchline_two_lines(self):
+        # Real catchlines wrap up to two continuation lines (measured on 119-hr-1):
+        # a soft-hyphen join on line 1, a plain space-join on line 2.
+        text = (
+            "7 (a) URBAN AND EMERGING AGRI-\n"
+            "8 CULTURAL RESEARCH, EDUCATION, AND\n"
+            "9 EXTENSION INITIATIVE.—There is established."
+        )
+        subs = self._subs(1, text)
+        assert subs == [
+            Anchor(
+                1, 7, "subsection", "(a) URBAN AND EMERGING AGRICULTURAL RESEARCH, EDUCATION, AND EXTENSION INITIATIVE"
+            )
+        ]
+
+    def test_same_line_after_sec_collision(self):
+        # A SEC. line can carry an inline (a) run-in: emit BOTH a section and a
+        # subsection at the same (page, line), section appended FIRST so it sorts
+        # before the subsection (block-ownership order, load-bearing for Seam #2).
+        anchors = _scan_anchors_in_page(2, "5 SEC. 547. (a) In general.—The Secretary shall act.")
+        collided = [a for a in anchors if a.page_number == 2 and a.line_number == 5]
+        assert collided == [
+            Anchor(2, 5, "section", "SEC. 547"),
+            Anchor(2, 5, "subsection", "(a) In general"),
+        ]
+
+    def test_abbreviation_period_not_truncated(self):
+        # The non-greedy `.*?[.]` backtracks past abbreviation periods to the real
+        # terminal `.—`, so `U.S.` does not truncate the catchline at "U.".
+        subs = self._subs(1, "1 (a) U.S. citizens.—A citizen of the United States.")
+        assert subs == [Anchor(1, 1, "subsection", "(a) U.S. citizens")]
+
+    def test_doubled_two_letter_enumerator(self):
+        subs = self._subs(1, "1 (aa) Special rule.—Notwithstanding any other provision.")
+        assert subs == [Anchor(1, 1, "subsection", "(aa) Special rule")]
+
+    # ---- negatives -------------------------------------------------------------
+
+    def test_no_em_dash_is_not_a_subsection(self):
+        # `(a) the term "x" means…` is definitional prose, not a run-in header.
+        assert self._subs(1, '1 (a) the term "covered entity" means an entity described.') == []
+
+    def test_paragraph_enumerator_out_of_scope(self):
+        # Numeric `(1)` is paragraph-level, deliberately out of subsection scope.
+        assert self._subs(1, "1 (1) In general.—The paragraph applies to.") == []
+
+    def test_quoted_amendment_block_self_excludes(self):
+        # A quoted amendment target opens with GPO's `‘‘`, so `^\(` never matches.
+        assert self._subs(1, "1 ‘‘(a) IN GENERAL.—Amounts made available under.") == []
+
+    def test_roman_lookalike_enumerators_rejected(self):
+        # (i)/(v)/(x) singles and non-doubled/`ii` two-letter combos are clause-level
+        # romans, rejected to avoid mis-nesting them as section children.
+        assert self._subs(1, "1 (i) Foo.—Bar.") == []
+        assert self._subs(1, "1 (ii) Foo.—Bar.") == []
+        assert self._subs(1, "1 (iv) Foo.—Bar.") == []
+        assert self._subs(1, "1 (v) Foo.—Bar.") == []
+        assert self._subs(1, "1 (x) Foo.—Bar.") == []
+
+    def test_stop_rule_rejects_quoted_continuation(self):
+        # An unconditional join would pull a quoted catchline into the window; the
+        # stop-rule (`^‘`) blocks it. Uses a VALID enumerator so the reject is the
+        # stop-rule, not the roman filter.
+        text = "1 (c) by striking subsection (b) and inserting\n2 ‘‘(A) IN GENERAL.—the following new."
+        assert self._subs(1, text) == []
+
+    def test_stop_rule_rejects_sibling_enumerator_continuation(self):
+        # A bare enumerator line whose own catchline had no `.—` must NOT swallow the
+        # NEXT enumerator's catchline into a fabricated anchor. Line 1 emits nothing;
+        # line 2 is a legitimate subsection header on its own.
+        text = "1 (b) imposes a fee on that alien.\n2 (b) FEE SPECIFIED.—The fee is."
+        subs = self._subs(1, text)
+        # The false join `(b) imposes a fee on that alien. (b) FEE SPECIFIED` is absent;
+        # only line 2's genuine header survives.
+        assert not any("imposes a fee" in a.text for a in subs)
+        assert [(a.line_number, a.text) for a in subs] == [(2, "(b) FEE SPECIFIED")]
+
+    def test_breadcrumb_nests_subsection_under_section(self):
+        text = "1 TITLE I\n2 SEC. 547. General provisions.\n3 (a) In general.—The Secretary shall carry out."
+        anchors = _scan_anchors_in_page(1, text)
+        sub = _by(anchors, "subsection", "(a) In general")
+        assert breadcrumb_for(sub, anchors) == ("TITLE I", "SEC. 547", "(a) In general")
+
+    def test_breadcrumb_degrades_without_a_section(self):
+        # A subsection with no preceding section before the title degrades to itself.
+        text = "1 TITLE I\n2 (a) In general.—The Secretary shall carry out."
+        anchors = _scan_anchors_in_page(1, text)
+        sub = _by(anchors, "subsection", "(a) In general")
+        assert breadcrumb_for(sub, anchors) == ("(a) In general",)
+
+
 class TestAnchorOrderingWithinPage:
     def test_anchors_returned_in_line_order(self):
         text = (

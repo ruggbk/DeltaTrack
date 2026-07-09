@@ -18,7 +18,7 @@ from typing import Literal
 
 from parsers.pdf_text import Page, parse_lines, strip_page_chrome
 
-AnchorKind = Literal["title", "section", "account", "grouping", "agency", "major", "preamble"]
+AnchorKind = Literal["title", "section", "account", "grouping", "agency", "major", "subsection", "preamble"]
 
 
 @dataclass(frozen=True)
@@ -91,6 +91,32 @@ _DANGLING_TAIL = frozenset({"AND", "OR", "OF", "FOR", "TO", "THE", "A", "AN", "I
 # Line-final hyphens that mark a GPO soft wrap to de-hyphenate across (DeltaTrack#105):
 # ASCII hyphen-minus, Unicode hyphen, and non-breaking hyphen.
 _WRAP_HYPHENS = ("-", "‐", "‑")
+
+# Run-in subsection header (DeltaTrack#96): a parenthesized lower-case-letter enumerator
+# + a short capitalized catchline + `.—` (period + em/en-dash), rendered INLINE at body
+# size so the glyph-size path can't see it. Format-grammatical only — enumerator, dash,
+# casing — no appropriations vocabulary, so it sits on the carve-out side of #114's
+# text-trigger ban (universal legislative tokens). The non-greedy `\S.*?[.]` backtracks
+# past abbreviation periods (`(a) U.S. citizens.—` keeps the full catchline). Dash class
+# is em/en only, matching `_INLINE_TITLE_NAME`; ASCII `.-` catchlines don't occur.
+_RUNIN_SUBSECTION = re.compile(r"^\(([a-z]{1,2})\)\s+(\S.*?)[.]\s*[—–]")
+# The enumerator line alone, catchline possibly still wrapping (no `.—` yet).
+_RUNIN_ENUM_START = re.compile(r"^\([a-z]{1,2}\)\s+\S")
+# Roman-lookalike single enumerators. `(i)/(v)/(x)` and non-doubled/`ii` two-letter combos
+# are clause-level catchlines (`(i) IN GENERAL.—`), emitted at the wrong level and mis-nested
+# as section children if accepted; rejected (measured 100% clause-level on the corpus). A
+# genuine subsection `(i)`/`(v)`/`(x)`/`(ii)` is a documented sequence-gap residue.
+_ROMAN_SINGLE_ENUMS = frozenset({"i", "v", "x"})
+# A quote-opening line (GPO double-quote `‘‘`, or any smart/ASCII quote). The anchor line
+# self-excludes on this so a quoted amendment target (`‘‘(a) IN GENERAL.—…`) never emits.
+_RUNIN_QUOTED_LINE = re.compile(r"^[‘“'\"]")
+# Continuation-join stop-rule (DeltaTrack#96): never join a continuation line that opens a
+# quote OR ANY enumerator. An unconditional join otherwise pulls a quoted catchline or a
+# sibling enumerator's catchline into the window and fabricates an anchor; the anchor-line
+# quote self-exclusion doesn't carry through a joined continuation. Measured on 119-hr-1:
+# removes all 29 false joins. (The anchor line's OWN enumerator is expected, so this
+# enumerator clause applies only to continuations, never the first line.)
+_RUNIN_CONTINUATION_STOP = re.compile(r"^[‘“'\"]|^\([0-9A-Za-z]{1,4}\)\s")
 # Line-fullness split (DeltaTrack#130): two stacked majors vs one wrapped name. A run
 # line broke EARLY (its successor's first word would have fit) ⇒ an intentional break
 # between stacked headings; otherwise it wrapped because the next word didn't fit. The
@@ -214,25 +240,93 @@ def _scan_anchors_in_page(page_number: int, raw_text: str) -> list[Anchor]:
     return extract_anchors([page])
 
 
-def _anchors_from_page(page: Page) -> list[Anchor]:
-    """TITLE and SEC anchors for one page (per-page; no cross-line context needed).
+def _valid_subsection_enum(enum: str) -> bool:
+    """True when a matched `(x)` enumerator is a real subsection level, not a roman.
 
-    Account anchors are emitted separately by `extract_anchors`, which needs the
-    flattened document line stream for size-band classification and page-seam
-    look-ahead.
+    Singles reject the roman set `{i, v, x}`; two-letter accepts only a DOUBLED letter
+    (`aa`, `bb`, …) and never `ii`. Letters like `c`/`l`/`d`/`m` are kept — they are
+    never used as bare lowercase clause enumerators, so they are unambiguous
+    subsections (DeltaTrack#96)."""
+    if len(enum) == 1:
+        return enum not in _ROMAN_SINGLE_ENUMS
+    return enum[0] == enum[1] and enum != "ii"
+
+
+def _match_runin_subsection(first_text: str, next_texts: list[str]) -> str | None:
+    """Canonical `(enum) Catchline` for a run-in subsection at the start of `first_text`,
+    or None (DeltaTrack#96).
+
+    Joins up to TWO continuation lines to recover a catchline whose terminal `.—` GPO
+    wrapped, de-hyphenating soft wraps via `_WRAP_HYPHENS` exactly as `_join_major_run`
+    does. The stop-rule (`_RUNIN_CONTINUATION_STOP`) and the quote self-exclusion guard
+    against fabricated anchors; roman-lookalike enumerators are rejected. Printed casing
+    is preserved (the PDF is source-of-truth), trailing `.—` and body stripped."""
+    first = first_text.strip()
+    if _RUNIN_QUOTED_LINE.match(first):  # quoted amendment target self-excludes
+        return None
+    m0 = _RUNIN_ENUM_START.match(first)
+    if m0 is None:
+        return None
+    joined = first
+    conts_used = 0
+    while True:
+        m = _RUNIN_SUBSECTION.match(joined)
+        if m is not None:
+            if not _valid_subsection_enum(m.group(1)):
+                return None
+            catchline = re.sub(r"\s+", " ", m.group(2).strip())
+            return f"({m.group(1)}) {catchline}"
+        if conts_used >= 2 or conts_used >= len(next_texts):
+            return None
+        cont = next_texts[conts_used].strip()
+        conts_used += 1
+        if not cont or _RUNIN_CONTINUATION_STOP.match(cont):
+            return None
+        joined = joined[:-1] + cont if joined.endswith(_WRAP_HYPHENS) else f"{joined} {cont}"
+
+
+def _anchors_from_page(page: Page) -> list[Anchor]:
+    """TITLE, SEC and run-in subsection anchors for one page.
+
+    Emitted here (the per-page pass runs unconditionally, before the size/legacy
+    branch) so run-in subsections surface on BOTH the size path and the legacy
+    fallback — they render at body size and are never gated on a size band. Account
+    anchors are emitted separately by `extract_anchors`, which needs the flattened
+    document line stream for size-band classification and page-seam look-ahead.
+
+    Two subsection match sites (DeltaTrack#96): a line-start `(a) …—`, and a SEC. line
+    carrying an inline `(a) …—` after its catchline number. On the SEC-inline case the
+    section anchor is appended BEFORE the subsection at the SAME (page, line) — a
+    deliberate physical collision (embrace-the-collision, Seam #2). The order is
+    load-bearing: after `extract_anchors`' stable `(page, line)` sort the subsection is
+    the later of the two, so it owns the block `[start, next)` and the section's
+    zero-length span carries no money.
     """
     anchors: list[Anchor] = []
-    for line in page.lines:
+    lines = page.lines
+    for idx, line in enumerate(lines):
         if line.line_number is None:
             continue
         title_match = _TITLE_PATTERN.match(line.text)
         if title_match:
             anchors.append(Anchor(page.page_number, line.line_number, "title", f"TITLE {title_match.group(1)}"))
             continue
+        # Up to two continuation lines for a wrapped catchline (page-local; a page-seam
+        # wrap is documented 0-measured residue — the per-page window never crosses pages).
+        next_texts = [ln.text for ln in lines[idx + 1 : idx + 3]]
         section_match = _SECTION_PATTERN.match(line.text)
         if section_match:
             canonical = re.sub(r"\s+", " ", section_match.group(1))
             anchors.append(Anchor(page.page_number, line.line_number, "section", canonical))
+            remainder = re.match(r"^\.?\s*(\(.*)$", line.text[section_match.end() :])
+            if remainder is not None:
+                sub = _match_runin_subsection(remainder.group(1), next_texts)
+                if sub is not None:
+                    anchors.append(Anchor(page.page_number, line.line_number, "subsection", sub))
+            continue
+        sub = _match_runin_subsection(line.text, next_texts)
+        if sub is not None:
+            anchors.append(Anchor(page.page_number, line.line_number, "subsection", sub))
     return anchors
 
 
@@ -772,6 +866,18 @@ def _breadcrumb_core(anchor: Anchor, all_anchors: tuple[Anchor, ...] | list[Anch
     try:
         idx = list(all_anchors).index(anchor)
     except ValueError:
+        return (anchor.text,)
+    # A run-in subsection (DeltaTrack#96) nests under its enclosing SEC.: extend that
+    # section's own breadcrumb by the subsection text. The subsection path is then an
+    # exact prefix-extension of the section path, so `build_pdf_tree` adopts the section
+    # leaf as its parent. Degrade to itself if a TITLE is reached with no section between.
+    if anchor.kind == "subsection":
+        for j in range(idx - 1, -1, -1):
+            prev = all_anchors[j]
+            if prev.kind == "section":
+                return (*_breadcrumb_core(prev, all_anchors), anchor.text)
+            if prev.kind == "title":
+                break
         return (anchor.text,)
     # Walk back to the nearest preceding TITLE, capturing a grouping-header parent
     # (sections) or a carry-over agency parent (accounts) that falls between that
