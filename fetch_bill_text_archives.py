@@ -1,0 +1,264 @@
+#!/usr/bin/env -S uv run --quiet python
+"""
+fetch_bill_text_archives:
+
+Bulk builder for a multi-version bill-text corpus, on top of the govinfo access
+layer in ``fetch_govinfo.py``. The companion to ``fetch_bill_archives.py``
+(which fetches BILLSTATUS *metadata*); this fetches the BILLS *text* collection.
+
+Downloads the per-(congress, session, type) BILLS ZIPs from govinfo bulk data
+(no API key, no rate limit), then converts them into the corpus layout the diff
+pipeline reads: ``bills/<congress>-<type>-<number>/<index>_<version-slug>.xml``.
+
+Versions are ordered by date (BILLSTATUS-supplied where available, else the
+govinfo dc:date), matching the curated corpus's sort. ``--min-versions`` selects
+the use case: 1 (default) keeps every bill -- the general fetch #10 wants; 2+
+keeps only bills matchable across versions -- the #170 test corpus.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import zipfile
+import zlib
+from collections import Counter, defaultdict
+from pathlib import Path
+
+import httpx
+
+import fetch_govinfo as gi
+
+PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_BILLS_DIR = PROJECT_DIR / "bills"
+
+# govinfo BILLS member filename, e.g. BILLS-119hr1eh.xml, BILLS-119hconres14enr.xml.
+# Groups: congress, bill_type, number, version_code.
+_MEMBER_RE = re.compile(r"^BILLS-(\d+)([a-z]+)(\d+)([a-z0-9]+)\.xml$", re.IGNORECASE)
+# The per-version date inside the govinfo BILLS XML (namespace-agnostic fallback).
+_DATE_RE = re.compile(rb"<dc:date>([^<]+)</dc:date>", re.IGNORECASE)
+
+DEFAULT_BILL_TYPES = ("hr", "s", "hjres", "sjres", "hconres")
+
+
+# ---- STEP 1: download the per-(congress, session, type) BILLS ZIPs -----------
+
+
+def _print_progress(downloaded: int, total: int) -> None:
+    mb = downloaded / (1024 * 1024)
+    if total:
+        pct = downloaded * 100 // total
+        print(f"\r  {mb:.1f}/{total / 1048576:.1f} MB ({pct}%)", end="", file=sys.stderr, flush=True)
+    else:
+        print(f"\r  {mb:.1f} MB", end="", file=sys.stderr, flush=True)
+
+
+def download_zip(client: httpx.Client, url: str, dest: Path) -> bool:
+    """Stream one BILLS ZIP to disk atomically. Returns False on a 404 (missing combo)."""
+    temp = dest.with_suffix(dest.suffix + ".part")
+    if temp.exists():
+        temp.unlink()
+    try:
+        with client.stream("GET", url, follow_redirects=True, timeout=300) as resp:
+            if resp.status_code == 404:
+                return False
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0) or 0)
+            downloaded = 0
+            with temp.open("wb") as fh:
+                for chunk in resp.iter_bytes(chunk_size=256 * 1024):
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+                    downloaded += len(chunk)
+                    _print_progress(downloaded, total)
+            print(file=sys.stderr)
+            if total and downloaded != total:
+                raise httpx.HTTPError(f"Incomplete: {downloaded} of {total} bytes")
+        temp.replace(dest)
+        return True
+    except Exception:
+        if temp.exists():
+            temp.unlink()
+        raise
+
+
+def download_archives(congresses: list[int], bill_types: list[str], zip_dir: Path) -> list[Path]:
+    """Download BILLS ZIPs for each (congress, session, type); skip existing."""
+    zip_dir.mkdir(parents=True, exist_ok=True)
+    saved: list[Path] = []
+    tasks = [(c, s, t) for c in congresses for s in gi.sessions_for_congress(c) for t in bill_types]
+    with httpx.Client(timeout=300) as client:
+        for i, (congress, session, bill_type) in enumerate(tasks, 1):
+            dest = zip_dir / f"BILLS-{congress}-{session}-{bill_type}.zip"
+            prefix = f"{i}/{len(tasks)}:"
+            if dest.exists():
+                print(f"{prefix} skip existing {dest.name}", file=sys.stderr)
+                saved.append(dest)
+                continue
+            url = gi.bills_zip_url(congress, session, bill_type)
+            print(f"{prefix} {dest.name}\n  {url}", file=sys.stderr)
+            try:
+                ok = download_zip(client, url, dest)
+            except Exception as exc:
+                print(f"{prefix} FAILED {dest.name}: {exc}", file=sys.stderr)
+                continue
+            if not ok:
+                print(f"{prefix} no zip (404) for {dest.name}", file=sys.stderr)
+                continue
+            saved.append(dest)
+            print(f"{prefix} saved {dest.name}", file=sys.stderr)
+    return saved
+
+
+# ---- STEP 2: convert ZIP members into the bills/<id>/<index>_<slug>.xml layout
+
+
+def convert_archives(
+    zip_dir: Path,
+    out_dir: Path,
+    *,
+    min_versions: int = 1,
+    skip_existing_dirs: bool = True,
+    billstatus_dir: Path | None = None,
+) -> dict[str, int]:
+    """Group ZIP members by bill, order versions, and write the corpus layout.
+
+    ``min_versions`` selects the use case: 1 keeps every bill (the general
+    fetch); 2+ keeps only bills matchable across versions (the test corpus).
+
+    Two passes so memory stays flat on the full corpus, where ~90% of bills are
+    single-version and get filtered: pass 1 indexes members by bill *without*
+    reading their bytes; pass 2 reads bytes only for the bills that survive the
+    filter. Versions order by each version's own govinfo dc:date, falling back to
+    the BILLSTATUS date for the ~26% govinfo omits (notably engrossed-in-house);
+    undated versions sort to the bill's latest date, tie-broken by tier then code.
+    Returns summary stats.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    date_index = gi.build_billstatus_date_index(billstatus_dir) if billstatus_dir else {}
+
+    open_zips: dict[Path, zipfile.ZipFile] = {}
+    by_bill: dict[str, dict[str, tuple[Path, str]]] = defaultdict(dict)  # bill_id -> {code: (zip, member)}
+    unknown_codes: Counter[str] = Counter()
+    stats: Counter[str] = Counter()
+    version_hist: Counter[int] = Counter()
+    try:
+        # Pass 1: index members by bill (no byte reads). A code appearing twice
+        # across session ZIPs is the same version; keep the first (identical
+        # contents). A corrupt/truncated ZIP (e.g. an interrupted prior run) is
+        # skipped, not fatal -- one bad file must not abort the whole convert.
+        for zp in sorted(zip_dir.glob("BILLS-*.zip")):
+            try:
+                zf = zipfile.ZipFile(zp)
+            except zipfile.BadZipFile:
+                stats["corrupt_zip_skipped"] += 1
+                print(f"  skipping corrupt ZIP: {zp.name}", file=sys.stderr)
+                continue
+            open_zips[zp] = zf
+            for name in zf.namelist():
+                m = _MEMBER_RE.match(Path(name).name)
+                if not m:
+                    continue
+                congress, bill_type, number, code = (g.lower() for g in m.groups())
+                bill_id = f"{congress}-{bill_type}-{number}"
+                if gi.resolve_code(code)[1] == 0:
+                    unknown_codes[code] += 1
+                by_bill[bill_id].setdefault(code, (zp, name))
+
+        # Pass 2: read bytes only for bills that survive the filter. A bill whose
+        # members fail to read/decompress is skipped, not fatal.
+        for bill_id, code_refs in by_bill.items():
+            version_hist[len(code_refs)] += 1
+            if len(code_refs) < min_versions:
+                stats["below_min_versions_skipped"] += 1
+                continue
+            bill_dir = out_dir / bill_id
+            if skip_existing_dirs and bill_dir.exists():
+                stats["existing_dir_skipped"] += 1
+                continue
+
+            try:
+                bill_dates = date_index.get(bill_id, {})
+                resolved = []  # (date, tier, code, name, data)
+                for code, (zp, member) in code_refs.items():
+                    data = open_zips[zp].read(member)
+                    dm = _DATE_RE.search(data)
+                    govinfo_dt = dm.group(1).decode("utf-8", "ignore") if dm else ""
+                    name, tier = gi.resolve_code(code)
+                    # Prefer the version's own govinfo date; fall back to BILLSTATUS,
+                    # which fills versions govinfo omits (notably engrossed-in-house).
+                    date = govinfo_dt or bill_dates.get(name.lower(), "")
+                    resolved.append((date, tier, code, name, data))
+                # Undated versions (typically enrolled) sort to the bill's latest
+                # date, then by tier (final text last), then code (deterministic
+                # tie-break so repeated types like eas/eas2 stay ordered by date).
+                max_date = max((r[0] for r in resolved if r[0]), default="")
+                ordered = sorted(resolved, key=lambda r: (r[0] or max_date, r[1], r[2]))
+
+                bill_dir.mkdir(parents=True, exist_ok=True)
+                for idx, (_date, _tier, _code, name, data) in enumerate(ordered, 1):
+                    (bill_dir / f"{idx}_{gi.sanitize(name)}.xml").write_bytes(data)
+                stats["bills_written"] += 1
+            except (OSError, zipfile.BadZipFile, zlib.error) as exc:
+                stats["read_error_skipped"] += 1
+                print(f"  skipping {bill_id} (read/write error: {exc})", file=sys.stderr)
+    finally:
+        for zf in open_zips.values():
+            zf.close()
+
+    stats["bills_seen"] = len(by_bill)
+    if unknown_codes:
+        print(f"  unresolved version codes (tier 0): {dict(unknown_codes)}", file=sys.stderr)
+    print(f"  version-count histogram (versions -> #bills): {dict(sorted(version_hist.items()))}", file=sys.stderr)
+    return dict(stats)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--from-congress", type=int, default=118)
+    p.add_argument("--to-congress", type=int, default=119)
+    p.add_argument("--types", nargs="+", default=list(DEFAULT_BILL_TYPES))
+    p.add_argument("--zip-dir", type=Path, default=PROJECT_DIR / "bills_bulk_text")
+    p.add_argument("--out-dir", type=Path, default=DEFAULT_BILLS_DIR)
+    p.add_argument(
+        "--min-versions",
+        type=int,
+        default=1,
+        help="Keep bills with >= this many versions (1=every bill, 2+=matchable test corpus)",
+    )
+    p.add_argument(
+        "--billstatus-dir",
+        type=Path,
+        default=DEFAULT_BILLS_DIR,
+        help="Dir holding BILLSTATUS-*.zip for authoritative version dates (default: bills/)",
+    )
+    p.add_argument("--download-only", action="store_true", help="Download ZIPs, skip conversion")
+    p.add_argument("--convert-only", action="store_true", help="Convert already-downloaded ZIPs")
+    p.add_argument(
+        "--overwrite-existing",
+        action="store_true",
+        help="Overwrite bill dirs that already exist (default: skip, protects the curated corpus)",
+    )
+    return p
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    congresses = list(range(args.from_congress, args.to_congress + 1))
+    if not args.convert_only:
+        download_archives(congresses, args.types, args.zip_dir)
+    if not args.download_only:
+        stats = convert_archives(
+            args.zip_dir,
+            args.out_dir,
+            min_versions=args.min_versions,
+            skip_existing_dirs=not args.overwrite_existing,
+            billstatus_dir=args.billstatus_dir,
+        )
+        print(f"convert stats: {stats}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
