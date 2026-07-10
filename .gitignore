@@ -40,6 +40,8 @@ reports/*
 plans/
 test_data/*
 !test_data/validation_*.json
+# Hand-labeled similarity-threshold answer key (DeltaTrack #8); regen: scripts/build_similarity_labels.py
+!test_data/similarity_labels.json
 !test_data/pdf/
 # Vendored committee-report HTML (public domain) — the external-validation ground-truth source.
 !test_data/CRPT-*.htm

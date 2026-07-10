@@ -130,7 +130,14 @@ We keep these in the open rather than papering over them:
   partly similar but not clearly the same and not clearly different, the tool
   has to make a judgment call, and that is where it is most likely to mislabel
   an edit. We track how often this borderline case comes up so it cannot quietly
-  increase.
+  increase. A hand-labeled answer key (`test_data/similarity_labels.json`, checked
+  by `tests/test_similarity_labels.py`) pins the current behavior: real section
+  pairs the tool gets right anchor the metric, and five human-ruled dead-zone pairs
+  are recorded as `xfail` because today's word-similarity thresholds classify them
+  wrong. The key is body-text-only on purpose — it is the evidence that pure text
+  similarity has no skill in that band and that the fix is structural context (the
+  division/agency/account breadcrumb), tracked in #170. An `xfail` flips to XPASS if
+  the thresholds are improved.
 - **Large combined bills.** In omnibus bills that bundle many areas together,
   section numbers repeat across areas, which makes matching harder. The tool
   handles this, but it is the trickiest case.
