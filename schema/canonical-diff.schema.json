@@ -175,6 +175,7 @@
         },
         "amounts": {
           "type": "array",
+          "description": "DEPRECATED (v1.4): the `changed`-kind subset of `amount_entries`. Kept for back-compat; to be removed at the next major.",
           "items": {
             "type": "object",
             "required": ["old", "new"],
@@ -182,6 +183,20 @@
             "properties": {
               "old": { "type": "integer" },
               "new": { "type": "integer" }
+            }
+          }
+        },
+        "amount_entries": {
+          "type": "array",
+          "description": "Optional (v1.4+). Self-describing base-amount changes: every changed/added/removed amount, losslessly (no reorder cancellation — that is #87/consumer policy). `added` has null old, `removed` has null new, `changed` has both present and differing. Unchanged (old == new) pairs are dropped.",
+          "items": {
+            "type": "object",
+            "required": ["old", "new", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "old": { "type": ["integer", "null"] },
+              "new": { "type": ["integer", "null"] },
+              "kind": { "enum": ["changed", "added", "removed"] }
             }
           }
         },

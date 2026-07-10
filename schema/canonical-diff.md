@@ -1,4 +1,4 @@
-# Canonical Diff JSON — v1.3
+# Canonical Diff JSON — v1.4
 
 This document specifies the canonical JSON shape produced when comparing two
 versions of a bill. It is the public contract between the diff engine and any
@@ -8,10 +8,19 @@ XML inputs and a diff produced from PDF inputs share this shape.
 
 ## Versioning
 
-Top-level field: `schema_version: "1.3"`.
+Top-level field: `schema_version: "1.4"`.
 
 ## Changelog
 
+- **1.4** — Added optional `amount_entries` array on each change object (#86):
+  self-describing base-amount changes with an explicit `kind`
+  (`changed`/`added`/`removed`) and a nullable absent side, so whole-item
+  additions and removals — not just changed-value pairs — are representable.
+  The existing `amounts` field is now **deprecated**: it is exactly the
+  `changed`-kind subset of `amount_entries`, kept for back-compat until the next
+  major. No consumer reads `schema_version`, so a consumer reading `amount_entries`
+  MUST fall back to `amounts` when the field is absent (pre-1.4 documents).
+  Additive, backward compatible.
 - **1.3** — Added optional top-level `tree: { v1, v2 } | null` field: the
   per-side leveled structure tree (#108). Each side is an ordered list of
   root `TreeNode`s; each node carries `label`, `level` (the shared GPO
@@ -247,7 +256,7 @@ Plain text bodies. `null` on the side that doesn't exist (`added`: `old=null`;
 `removed`: `new=null`). Word-level inline diffs are NOT carried in the JSON;
 renderers compute them at render time.
 
-### `amounts`
+### `amounts` (deprecated, v1.4)
 
 Pre-filtered list of `(old, new)` integer pairs representing meaningful base
 amount changes. Filter rule (guaranteed by the producer):
@@ -255,13 +264,47 @@ amount changes. Filter rule (guaranteed by the producer):
 - Both `old` and `new` are present (non-null).
 - `old != new`.
 
-Pairs where one side is `null` (pure annotation insertions) and pairs where
-old equals new are dropped before serialization. Consumers needing the
-unfiltered set must wait for a future field; v1.0 does not expose it.
+**Deprecated as of v1.4**: this is exactly the `changed`-kind subset of
+`amount_entries` (below). It drops whole-item additions and removals, so it
+cannot answer "what money moved here" on its own. New consumers should read
+`amount_entries` and fall back to `amounts` only for pre-1.4 documents. Kept for
+back-compat; slated for removal at the next major.
 
 ```jsonc
 "amounts": [ { "old": 5000000, "new": 5500000 }, ... ]
 ```
+
+### `amount_entries` (optional, v1.4+)
+
+Self-describing base-amount changes: every changed, added, or removed amount the
+diff found, in document order, **losslessly**.
+
+```jsonc
+"amount_entries": [
+  { "old": 250000000, "new": 500000000, "kind": "changed" },
+  { "old": 250000000, "new": null,      "kind": "removed" },
+  { "old": null,      "new": 350000000, "kind": "added"   }
+]
+```
+
+- `kind: "changed"` — both sides present and differing (`old != new`).
+- `kind: "added"` — `old` is `null`; a whole item appeared.
+- `kind: "removed"` — `new` is `null`; a whole item vanished.
+- Unchanged pairs (`old == new`, e.g. only floor-amendment annotations moved) are
+  dropped.
+
+**No reorder cancellation.** On a renumbered list, `match_amounts` emits a shifted
+item's identical value as a net-zero added/removed pair. Distinguishing that from
+two genuinely-distinct equal-value items needs within-list content alignment (#87),
+so the producer reports every entry honestly and leaves reorder handling to the
+consumer. A cross-version consumer (e.g. BillTrax) may apply its own alignment
+policy; any presentation-side collapse is a consumer concern, not baked into the
+contract.
+
+Producer invariant: `amounts` equals the `changed`-kind subset of `amount_entries`.
+
+- `null` (or absent) — pre-1.4 document. A consumer reading `amount_entries` MUST
+  fall back to `amounts` (mapped to `kind: "changed"`).
 
 ### `full_text_span` (optional, v1.2+)
 

@@ -28,8 +28,9 @@ from formatters.canonical import (
 )
 from parsers.pdf_anchors import Anchor
 
-# Local pin (guard against unintended bumps). 1.3 added the optional `tree` field (#108).
-SCHEMA_VERSION = "1.3"
+# Local pin (guard against unintended bumps). 1.4 added the optional `amount_entries`
+# field (#86); 1.3 added the optional `tree` field (#108).
+SCHEMA_VERSION = "1.4"
 
 
 # ---------- XML producer ------------------------------------------------------
@@ -517,6 +518,31 @@ def test_pdf_amounts_filtered_to_real_changes():
     diff = PdfDiff(hunks=(hunk,), v1_anchors=(SEC_101,), v2_anchors=(SEC_101,))
     canonical = pdf_diff_to_canonical(diff, **_pdf_meta())
     assert canonical["changes"][0]["amounts"] == [{"old": 1000, "new": 1500}]
+
+
+def test_pdf_amount_entries_categorize_added_removed():
+    """#86: amount_entries carries the full categorized set (changed/added/removed),
+    losslessly, while `amounts` stays the deprecated changed-only subset."""
+    hunk = PdfHunk(
+        change_type="modified",
+        v1_anchor=SEC_101,
+        v2_anchor=SEC_101,
+        v1_range=(1, 1, 1, 5),
+        v2_range=(1, 1, 1, 5),
+        v1_text="x",
+        v2_text="y",
+        amount_pairs=((1000, 1500), (2000, 2000), (None, 500), (5000, None)),
+    )
+    diff = PdfDiff(hunks=(hunk,), v1_anchors=(SEC_101,), v2_anchors=(SEC_101,))
+    change = pdf_diff_to_canonical(diff, **_pdf_meta())["changes"][0]
+    # Unchanged (2000, 2000) dropped; the rest categorized in order.
+    assert change["amount_entries"] == [
+        {"old": 1000, "new": 1500, "kind": "changed"},
+        {"old": None, "new": 500, "kind": "added"},
+        {"old": 5000, "new": None, "kind": "removed"},
+    ]
+    # Back-compat: `amounts` == the changed-kind subset.
+    assert change["amounts"] == [{"old": 1000, "new": 1500}]
 
 
 # ---------- Schema validation -------------------------------------------------

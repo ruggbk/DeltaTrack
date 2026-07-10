@@ -28,7 +28,7 @@ from formatters.view_model import ChangeView, DiffView
 from parsers.pdf_anchors import Anchor, breadcrumb_for
 from structure_tree import TreeNode, build_pdf_tree
 
-SCHEMA_VERSION = "1.3"
+SCHEMA_VERSION = "1.4"
 GENERATOR_NAME = "deltatrack"
 
 
@@ -42,9 +42,59 @@ def _real_amount_pairs(
 
     Keep pairs where both sides are present and old != new. The producer
     guarantees this filter so a consumer reading the JSON doesn't have to
-    reimplement it.
+    reimplement it. Deprecated (v1.4): the changed-only subset of the richer
+    `amount_entries` field; kept for back-compat, to be removed at the next major.
     """
     return [{"old": old, "new": new} for old, new in pairs if old is not None and new is not None and old != new]
+
+
+def _amount_entries(
+    pairs: tuple[tuple[int | None, int | None], ...] | list,
+) -> list[dict]:
+    """Categorize match_amounts pairs into self-describing entries (#86, v1.4).
+
+    Each pair becomes ``{"old", "new", "kind"}`` where kind is:
+      - ``"changed"``: both sides present and differ,
+      - ``"added"``:   old side absent (a whole item appeared),
+      - ``"removed"``: new side absent (a whole item vanished).
+    Unchanged pairs (``old == new``, e.g. only floor-amendment annotations moved)
+    are dropped — ``changed`` is defined as ``old != new``.
+
+    The set is **lossless**: no value-symmetric cancellation happens here. On a
+    renumbered list, ``match_amounts`` emits a shuffled item's identical value as a
+    net-zero added/removed pair; distinguishing that from two genuinely distinct
+    equal-value items needs within-list content alignment (#87), so this producer
+    reports every entry honestly and leaves reorder handling to the consumer /
+    #87. A cross-version consumer (BillTrax, ADR 0005/0006) can apply its own
+    alignment; presentation-side collapse stays consumer policy.
+    """
+    entries: list[dict] = []
+    for old, new in pairs:
+        if old is None and new is None:
+            continue
+        if old is None:
+            entries.append({"old": None, "new": new, "kind": "added"})
+        elif new is None:
+            entries.append({"old": old, "new": None, "kind": "removed"})
+        elif old != new:
+            entries.append({"old": old, "new": new, "kind": "changed"})
+        # old == new: unchanged, dropped (see docstring).
+    return entries
+
+
+def _amounts_and_entries(
+    pairs: tuple[tuple[int | None, int | None], ...] | list,
+) -> tuple[list[dict], list[dict]]:
+    """Dual-write ``amounts`` (deprecated) and ``amount_entries`` from one source.
+
+    Asserts ``amounts`` equals the ``changed``-kind subset of ``amount_entries`` so
+    the two fields cannot drift (cheap drift-insurance; both derive from ``pairs``).
+    """
+    amounts = _real_amount_pairs(pairs)
+    entries = _amount_entries(pairs)
+    changed_subset = [{"old": e["old"], "new": e["new"]} for e in entries if e["kind"] == "changed"]
+    assert amounts == changed_subset, "amounts must equal the changed-kind subset of amount_entries"
+    return amounts, entries
 
 
 def _make_id(index: int) -> str:
@@ -68,6 +118,7 @@ def _xml_change_to_canonical(
     text_new = change.get("new_text")
     id_old = change.get("element_id_old")
     id_new = change.get("element_id_new")
+    amounts, amount_entries = _amounts_and_entries((change.get("financial") or {}).get("paired_amounts", ()))
     return {
         "id": _make_id(index),
         "change_type": change_type,
@@ -79,7 +130,8 @@ def _xml_change_to_canonical(
         "location": None,  # XML carries no source coordinates
         "anchor_resolution": "resolved",  # XML pipeline always resolves structurally
         "text": {"old": text_old, "new": text_new},
-        "amounts": _real_amount_pairs((change.get("financial") or {}).get("paired_amounts", ())),
+        "amounts": amounts,
+        "amount_entries": amount_entries,
         "move": _xml_move(change) if change_type == "moved" else None,
         "full_text_span": _search_span(full_text, full_text_spans, text_old, text_new, id_old, id_new, search_state),
     }
@@ -300,6 +352,7 @@ def _pdf_hunk_to_canonical(
     expected_v1 = hunk.v1_range is not None
     expected_v2 = hunk.v2_range is not None
     resolved = (path_v1 is not None) or (path_v2 is not None) or not (expected_v1 or expected_v2)
+    amounts, amount_entries = _amounts_and_entries(hunk.amount_pairs)
     return {
         "id": _make_id(index),
         "change_type": hunk.change_type,
@@ -314,7 +367,8 @@ def _pdf_hunk_to_canonical(
             "old": hunk.v1_text if hunk.v1_range is not None else None,
             "new": hunk.v2_text if hunk.v2_range is not None else None,
         },
-        "amounts": _real_amount_pairs(hunk.amount_pairs),
+        "amounts": amounts,
+        "amount_entries": amount_entries,
         "move": _pdf_move(hunk) if hunk.change_type == "moved" else None,
         "full_text_span": _pdf_span(hunk, line_offsets_v1, line_offsets_v2),
     }
@@ -725,6 +779,19 @@ def _card_texts(canonical_change: dict, source: str, full_text: dict | None) -> 
     return old_text, new_text
 
 
+def _amount_entries_from_canonical(canonical_change: dict) -> tuple[tuple[int | None, int | None, str], ...]:
+    """Read `amount_entries` (v1.4+), falling back to the deprecated `amounts`.
+
+    No consumer checks `schema_version`, so a pre-1.4 document (or a hand-built
+    test canonical) simply lacks `amount_entries`; its `amounts` are all changed
+    pairs, mapped to kind "changed".
+    """
+    entries = canonical_change.get("amount_entries")
+    if entries is not None:
+        return tuple((e["old"], e["new"], e["kind"]) for e in entries)
+    return tuple((p["old"], p["new"], "changed") for p in canonical_change.get("amounts") or ())
+
+
 def _change_view_from_canonical(
     canonical_change: dict, source: str, full_text: dict | None, join_index: dict, v2_lookup: dict
 ) -> ChangeView:
@@ -743,6 +810,7 @@ def _change_view_from_canonical(
         amount_pairs=tuple((p["old"], p["new"]) for p in canonical_change.get("amounts") or ()),
         group_label=_group_label_from_path(canonical_change),
         node_path=_node_path_for_change(canonical_change, join_index, v2_lookup),
+        amount_entries=_amount_entries_from_canonical(canonical_change),
     )
 
 
