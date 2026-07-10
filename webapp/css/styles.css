@@ -244,6 +244,10 @@ del.diff-del { background: var(--removed-bg); color: var(--removed); text-decora
 .amount-row__arrow { color: var(--text-dim); }
 .amount-row__new { color: var(--added); font-weight: 600; }
 .amount-row__delta { color: var(--text-dim); font-size: 11px; margin-left: 6px; }
+.amount-row__label { color: var(--text-dim); font-weight: 600; }
+.amount-row--net { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); font-weight: 600; }
+/* An added row has no old amount (and vice versa); don't strike the "—" placeholder. */
+.amount-row--added .amount-row__old, .amount-row--removed .amount-row__new { text-decoration: none; color: var(--text-dim); }
 
 /* ---------- Full-bill tracked-changes view ---------- */
 .full-bill-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

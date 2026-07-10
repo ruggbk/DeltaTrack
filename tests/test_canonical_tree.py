@@ -43,9 +43,11 @@ def _walk(nodes):
         yield from _walk(n["children"])
 
 
-def test_canonical_carries_tree_at_schema_1_3():
+def test_canonical_carries_tree():
+    # The tree field ships from v1.3 on; assert it against the current pin rather
+    # than a frozen literal so a later additive bump doesn't trip this.
     canonical, _ = _canonical(_V1, _V2)
-    assert canonical["schema_version"] == SCHEMA_VERSION == "1.3"
+    assert canonical["schema_version"] == SCHEMA_VERSION
     assert canonical["tree"] is not None
     assert len(canonical["tree"]["v1"]) > 0 and len(canonical["tree"]["v2"]) > 0
 

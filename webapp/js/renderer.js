@@ -103,10 +103,18 @@
     return `<div class="summary-bar">${pills}</div>`;
   }
 
+  // Amount entries (#86), preferring the lossless `amount_entries` and falling
+  // back to the deprecated `amounts` (changed-only) for pre-1.4 documents — no
+  // consumer checks schema_version.
+  function amountEntriesFor(c) {
+    if (c.amount_entries && c.amount_entries.length) return c.amount_entries;
+    return (c.amounts || []).map((a) => ({ old: a.old, new: a.new, kind: 'changed' }));
+  }
+
   function applyFilter(changes) {
     if (state.filter === 'all') return changes;
     if (state.filter === 'financial') {
-      return changes.filter((c) => (c.amounts || []).length > 0);
+      return changes.filter((c) => amountEntriesFor(c).length > 0);
     }
     // structural: anything other than a pure prose modification
     return changes.filter((c) => c.change_type !== 'modified');
@@ -159,19 +167,42 @@
   }
 
   function renderAmounts(c) {
-    if (!c.amounts || c.amounts.length === 0) return '';
-    const rows = c.amounts.map((a) => {
-      const delta = a.new - a.old;
-      const sign = delta > 0 ? '+' : '';
-      const pct = a.old !== 0 ? ` (${sign}${((delta / a.old) * 100).toFixed(1)}%)` : '';
-      return `<div class="amount-row">
-        <span class="amount-row__old">${formatDollars(a.old)}</span>
+    const entries = amountEntriesFor(c);
+    if (entries.length === 0) return '';
+    let net = 0;
+    let hasOneSided = false;
+    const rows = entries.map((e) => {
+      let delta;
+      let pct = '';
+      if (e.kind === 'added') {
+        hasOneSided = true;
+        delta = e.new;
+        net += e.new;
+      } else if (e.kind === 'removed') {
+        hasOneSided = true;
+        delta = -e.old;
+        net -= e.old;
+      } else {
+        delta = e.new - e.old;
+        net += delta;
+        if (e.old !== 0) pct = ` (${signedPct((delta / e.old) * 100)})`;
+      }
+      return `<div class="amount-row amount-row--${e.kind}">
+        <span class="amount-row__old">${dollarsOrDash(e.old)}</span>
         <span class="amount-row__arrow">→</span>
-        <span class="amount-row__new">${formatDollars(a.new)}</span>
-        <span class="amount-row__delta">${sign}${formatDollars(delta)}${pct}</span>
+        <span class="amount-row__new">${dollarsOrDash(e.new)}</span>
+        <span class="amount-row__delta">${signedDollars(delta)}${pct}</span>
       </div>`;
     }).join('');
-    return `<div class="amounts"><div class="amounts__title">Financial</div>${rows}</div>`;
+    // When any whole-item add/remove is present, close with the honest net
+    // (Σnew − Σold); a changed-only callout omits it (the single delta IS the net).
+    const netRow = hasOneSided
+      ? `<div class="amount-row amount-row--net">
+        <span class="amount-row__label">Net</span>
+        <span class="amount-row__delta">${signedDollars(net)}</span>
+      </div>`
+      : '';
+    return `<div class="amounts"><div class="amounts__title">Financial</div>${rows}${netRow}</div>`;
   }
 
   function formatRange(r) {
@@ -182,6 +213,22 @@
 
   function formatDollars(n) {
     return '$' + n.toLocaleString('en-US');
+  }
+
+  // Sign outside the formatter so a decrease reads "-$500", not "$-500".
+  function signedDollars(n) {
+    if (n > 0) return '+' + formatDollars(n);
+    if (n < 0) return '-' + formatDollars(-n);
+    return formatDollars(0);
+  }
+
+  // Null-safe: an added row has no old amount, a removed row no new amount.
+  function dollarsOrDash(n) {
+    return n == null ? '—' : formatDollars(n);
+  }
+
+  function signedPct(p) {
+    return (p >= 0 ? '+' : '') + p.toFixed(1) + '%';
   }
 
   // --- Full-bill tracked-changes view --------------------------------------

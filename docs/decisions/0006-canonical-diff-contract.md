@@ -85,3 +85,26 @@ Alternatives:
   future v2.0 change, but cross-version analysis may belong in BillTrax while
   DeltaTrack stays strictly two-at-a-time. That call is not made here, and when it
   is, the question is the format's scope, not whether to keep JSON.
+
+## Amendment — v1.4: `amount_entries` (2026-07-09, #86)
+
+An additive minor bump (1.3 → 1.4) adds an optional `amount_entries` array on each
+change: self-describing base-amount changes with an explicit `kind`
+(`changed`/`added`/`removed`) and a nullable absent side, so whole-item additions
+and removals — not just changed-value pairs — are representable. The prior `amounts`
+field is deprecated as its `changed`-kind subset. Two decisions worth recording:
+
+- **The contract stays lossless.** `amount_entries` carries every entry the pairing
+  found, with no value-symmetric cancellation. On a renumbered list the word-diff
+  emits a shuffled item's identical value as a net-zero added/removed pair;
+  distinguishing that from two genuinely-distinct equal-value items needs within-list
+  content alignment (#87). Baking a heuristic cancellation into the contract would be
+  lossy and could mislead a cross-version consumer (BillTrax, [0005](0005-deltatrack-billtrax-boundary.md)),
+  so the producer reports honestly and any presentation-side collapse stays a
+  consumer concern. Renumbering noise on the report is left to #87.
+- **Degrade, but not silently, on the money axis.** The degrade-by-design ethos
+  ([0012](0012-pdf-heading-levels.md)) is about heading levels; applying it to money
+  is new here. The PDF pipeline previously carried *no* amounts on whole-item
+  added/removed hunks (`amount_pairs=()`), so an XML demo could look done while PDF
+  stayed silent on exactly the "what money moved" case. #86 closes that: PDF
+  added/removed hunks now run `match_amounts` against the empty other side.

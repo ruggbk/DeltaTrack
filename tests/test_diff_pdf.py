@@ -6,6 +6,8 @@ from diff_pdf import (
     _Block,
     _block_key,
     _group_into_blocks,
+    _hunk_for_added,
+    _hunk_for_removed,
     _IndexedLine,
     _rejoin_cross_page_hyphens,
     diff_pdfs,
@@ -546,3 +548,32 @@ class TestPdfDiffSummary:
         ]
         result = diff_pdfs(v1, v2)
         assert result.summary == {"modified": 1, "added": 1}
+
+
+class TestWholeItemAmounts:
+    """#86: whole-account added/removed PDF hunks must carry their dollar amounts.
+
+    Previously ``_hunk_for_added`` / ``_hunk_for_removed`` hardcoded
+    ``amount_pairs=()``, so a PDF-only added or removed account surfaced no money
+    at all. The builders now run ``match_amounts`` against the empty other side.
+    """
+
+    def test_added_hunk_carries_amounts(self):
+        block = _block(
+            Anchor(1, 1, "account", "NEW PROGRAM"),
+            (1, 1, "NEW PROGRAM"),
+            (1, 2, "For necessary expenses, $5,000,000."),
+        )
+        hunk = _hunk_for_added(block)
+        assert hunk.change_type == "added"
+        assert hunk.amount_pairs == ((None, 5000000),)
+
+    def test_removed_hunk_carries_amounts(self):
+        block = _block(
+            Anchor(1, 1, "account", "OLD PROGRAM"),
+            (1, 1, "OLD PROGRAM"),
+            (1, 2, "For necessary expenses, $5,000,000."),
+        )
+        hunk = _hunk_for_removed(block)
+        assert hunk.change_type == "removed"
+        assert hunk.amount_pairs == ((5000000, None),)

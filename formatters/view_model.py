@@ -65,6 +65,14 @@ class ChangeView:
     could not place the change (no tree, null span, uncovered position) — the
     renderer then falls back to group_label for that card."""
 
+    amount_entries: tuple[tuple[int | None, int | None, str], ...] = ()
+    """Self-describing base-amount changes (#86): (old, new, kind) with kind in
+    {"changed", "added", "removed"}. Lossless — added/removed whole items included,
+    no reorder cancellation (that is #87). Defaulted so pre-#86 constructions and
+    pre-1.4 canonicals (fallback to `amount_pairs` as all-"changed") still build.
+    The callout and financial summary read this; `amount_pairs` stays the
+    changed-only back-compat view."""
+
 
 @dataclass(frozen=True)
 class DiffView:

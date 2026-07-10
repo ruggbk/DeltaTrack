@@ -52,7 +52,7 @@ def _build_card(change: ChangeView, index: int) -> str:
     # adapter pulls it from a dict that ultimately reflects upstream parser
     # output. Escape so a stray value can't break attribute quoting.
     ct = escape(change.change_type)
-    data_financial = "1" if change.amount_pairs else "0"
+    data_financial = "1" if _amount_entries_for(change) else "0"
 
     parts = [
         f'<div class="change-card {ct}{extra_card_class}" id="change-{index}"'
@@ -131,32 +131,81 @@ def _moved_body_html(change: ChangeView) -> str:
     return "\n".join(parts)
 
 
+def _amount_entries_for(change: ChangeView) -> tuple[tuple[int | None, int | None, str], ...]:
+    """The change's amount entries, preferring `amount_entries` (#86).
+
+    Falls back to mapping the deprecated `amount_pairs` (changed-only) to
+    ``kind="changed"`` entries, so a ChangeView built with only `amount_pairs`
+    (older callers, hand-built test fixtures) still renders.
+    """
+    if change.amount_entries:
+        return change.amount_entries
+    return tuple((old, new, "changed") for old, new in change.amount_pairs)
+
+
+def _signed_delta(value: int) -> tuple[str, str]:
+    """(display, css_class) for a signed dollar delta. Sign goes outside the
+    formatter so the result is "-$500", not "$-500"."""
+    if value > 0:
+        return f"+{fmt_dollar(value)}", "increase"
+    if value < 0:
+        return f"-{fmt_dollar(abs(value))}", "decrease"
+    return fmt_dollar(0), "neutral"
+
+
 def _build_callout(change: ChangeView) -> str:
     """Render the financial callout for a card.
 
     Layout: flex rows with semantic .increase / .decrease delta classes for
-    color. Returns "" when there are no real amount changes.
+    color. Returns "" when the change carries no amount entries.
 
-    `change.amount_pairs` is already filtered to real changes by the adapters
-    (both sides present and differing), so this function does not re-filter —
-    every pair becomes a row, and zero deltas can't reach this code.
+    Three row kinds (#86): a `changed` value pair (``$X → $Y``), a whole-item
+    `added` amount (``+$X``), and a whole-item `removed` amount (``−$X``). When any
+    added/removed row is present, a closing **Net:** row sums the honest movement
+    (Σnew − Σold across entries) — this is what makes a removal-plus-equal-change
+    read as $0 rather than a lone increase. Renumbering can leave net-zero
+    added/removed noise rows (deferred to #87); they are shown honestly and cancel
+    in the net.
     """
-    if not change.amount_pairs:
+    entries = _amount_entries_for(change)
+    if not entries:
         return ""
     parts = ['<div class="financial-callout">']
-    for old, new in change.amount_pairs:
-        diff = new - old
-        if diff > 0:
-            delta_str = f"+{fmt_dollar(diff)}"
-            delta_class = "increase"
-        else:
-            # Sign goes outside the dollar formatter so the result is "-$500", not "$-500".
-            delta_str = f"-{fmt_dollar(abs(diff))}"
-            delta_class = "decrease"
+    net = 0
+    has_one_sided = False
+    for old, new, kind in entries:
+        if kind == "added":
+            has_one_sided = True
+            net += new
+            delta_str, delta_class = _signed_delta(new)
+            parts.append(
+                f'<div class="row"><span class="label">Added:</span>'
+                f"<span>{fmt_dollar(new)}</span>"
+                f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            )
+        elif kind == "removed":
+            has_one_sided = True
+            net -= old
+            delta_str, delta_class = _signed_delta(-old)
+            parts.append(
+                f'<div class="row"><span class="label">Removed:</span>'
+                f"<span>{fmt_dollar(old)}</span>"
+                f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            )
+        else:  # changed
+            diff = new - old
+            net += diff
+            delta_str, delta_class = _signed_delta(diff)
+            parts.append(
+                f'<div class="row"><span class="label">Amount:</span>'
+                f"<span>{fmt_dollar(old)} &rarr; {fmt_dollar(new)}</span>"
+                f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            )
+    if has_one_sided:
+        net_str, net_class = _signed_delta(net)
         parts.append(
-            f'<div class="row"><span class="label">Amount:</span>'
-            f"<span>{fmt_dollar(old)} &rarr; {fmt_dollar(new)}</span>"
-            f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            f'<div class="row net"><span class="label">Net:</span>'
+            f'<span class="delta {net_class}">{net_str}</span></div>'
         )
     parts.append("</div>")
     return "".join(parts)
@@ -169,7 +218,7 @@ def _build_nav_item(change: ChangeView, index: int) -> str:
     if change.section_number:
         label = f"{escape(change.section_number)} — {label}"
     ct = escape(change.change_type)
-    fin = "1" if change.amount_pairs else "0"
+    fin = "1" if _amount_entries_for(change) else "0"
     return (
         f'<li class="{nav_class}" data-type="{ct}" data-financial="{fin}">'
         f'<a href="#change-{index}">'
@@ -537,14 +586,15 @@ def _cards_section_html(view: DiffView, order_map: dict[tuple, int] | None = Non
 def _build_financial_summary(view: DiffView) -> str:
     """Render the top-of-page Financial Summary table.
 
-    Includes only changes whose pre-filtered amount_pairs is non-empty. Each
-    pair becomes a row; pairs from the same change share a section cell via
-    rowspan when there are multiple. Each row carries a data-group index so
-    the JS column sort keeps multi-pair groups together.
+    One row per amount entry (#86): changed value pairs plus whole-item added and
+    removed amounts. Entries from the same change share a section cell via rowspan.
+    Each row carries a data-group index so the JS column sort keeps groups
+    together. An added row has no old amount and a removed row no new amount —
+    rendered as "—", never ``fmt_dollar(None)`` (which raises).
 
-    Returns "" when no change has any real amount changes.
+    Returns "" when no change carries any amount entry.
     """
-    rows: list[tuple[int, ChangeView]] = [(i, c) for i, c in enumerate(view.changes) if c.amount_pairs]
+    rows: list[tuple[int, ChangeView]] = [(i, c) for i, c in enumerate(view.changes) if _amount_entries_for(c)]
     if not rows:
         return ""
 
@@ -562,26 +612,30 @@ def _build_financial_summary(view: DiffView) -> str:
     ]
 
     for group_idx, (change_index, change) in enumerate(rows):
-        pairs = change.amount_pairs
+        entries = _amount_entries_for(change)
         section_label = change.heading_html or change.nav_label_html
-        for pair_idx, (old, new) in enumerate(pairs):
-            diff = new - old
-            if diff > 0:
-                change_dollar = f"+{fmt_dollar(diff)}"
-                row_class = "increase"
-            else:
-                # _real_changes drops zero-deltas, so diff < 0 here.
-                change_dollar = f"-{fmt_dollar(abs(diff))}"
-                row_class = "decrease"
-            if old != 0:
-                pct_value = diff / old * 100
-                pct_sign = "+" if pct_value >= 0 else ""
-                change_pct = f"{pct_sign}{pct_value:.1f}%"
-            else:
-                change_pct = "—"
+        for entry_idx, (old, new, kind) in enumerate(entries):
+            if kind == "added":
+                change_dollar, row_class = _signed_delta(new)
+                change_pct = "—"  # no old baseline to compute a percentage against
+            elif kind == "removed":
+                change_dollar, row_class = _signed_delta(-old)
+                change_pct = "-100.0%" if old != 0 else "—"  # the item is fully removed
+            else:  # changed
+                diff = new - old
+                change_dollar, row_class = _signed_delta(diff)
+                if old != 0:
+                    pct_value = diff / old * 100
+                    pct_sign = "+" if pct_value >= 0 else ""
+                    change_pct = f"{pct_sign}{pct_value:.1f}%"
+                else:
+                    change_pct = "—"
 
-            if pair_idx == 0:
-                rowspan_attr = f' rowspan="{len(pairs)}"' if len(pairs) > 1 else ""
+            old_cell = fmt_dollar(old) if old is not None else "—"
+            new_cell = fmt_dollar(new) if new is not None else "—"
+
+            if entry_idx == 0:
+                rowspan_attr = f' rowspan="{len(entries)}"' if len(entries) > 1 else ""
                 section_cell = f'<td{rowspan_attr}><a href="#change-{change_index}">{section_label}</a></td>'
             else:
                 section_cell = ""
@@ -589,8 +643,8 @@ def _build_financial_summary(view: DiffView) -> str:
             lines.append(
                 f'<tr class="{row_class}" data-group="{group_idx}">'
                 f"{section_cell}"
-                f'<td class="amount">{fmt_dollar(old)}</td>'
-                f'<td class="amount">{fmt_dollar(new)}</td>'
+                f'<td class="amount">{old_cell}</td>'
+                f'<td class="amount">{new_cell}</td>'
                 f'<td class="amount change-amount">{change_dollar}</td>'
                 f'<td class="amount change-amount">{change_pct}</td>'
                 f"</tr>"
@@ -1327,9 +1381,12 @@ mark.find-hit--current { background: var(--gold); color: #fff; }
   border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;
   font-variant-numeric: tabular-nums; }
 .financial-callout .row { display: flex; gap: 10px; margin-bottom: 2px; }
+.financial-callout .row.net { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border);
+  font-weight: 600; }
 .financial-callout .label { color: var(--muted-foreground); min-width: 110px; }
 .financial-callout .delta.decrease { color: var(--destructive); font-weight: 600; }
 .financial-callout .delta.increase { color: var(--success); font-weight: 600; }
+.financial-callout .delta.neutral { color: var(--muted-foreground); font-weight: 600; }
 
 /* Nav targets clear the sticky action bar when scrolled to via Prev/Next */
 .change-card, .full-bill [id^="attr-"], .full-bill [id^="sec-"], .full-bill [id^="fb-off-"],
