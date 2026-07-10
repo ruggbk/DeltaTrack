@@ -189,7 +189,15 @@ def convert_archives(
                     name, tier = gi.resolve_code(code)
                     # Prefer the version's own govinfo date; fall back to BILLSTATUS,
                     # which fills versions govinfo omits (notably engrossed-in-house).
-                    date = govinfo_dt or bill_dates.get(name.lower(), "")
+                    # Keyed by version code -- the identifier both sides share verbatim;
+                    # a name-based join silently misses types BILLSTATUS spells
+                    # differently (e.g. "Reported to Senate" vs our "Reported in Senate").
+                    # Truncate to the date: govinfo emits YYYY-MM-DD, BILLSTATUS the full
+                    # YYYY-MM-DDThh:mm:ssZ. Left mixed, the bare date is a lexicographic
+                    # prefix of the datetime, so two same-day versions from different
+                    # sources sort by string length instead of falling through to the
+                    # tier tie-break (would put printed-as-passed before engrossed).
+                    date = (govinfo_dt or bill_dates.get(code, ""))[:10]
                     resolved.append((date, tier, code, name, data))
                 # Undated versions (typically enrolled) sort to the bill's latest
                 # date, then by tier (final text last), then code (deterministic

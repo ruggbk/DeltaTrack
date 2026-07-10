@@ -158,15 +158,41 @@ def fetch_title(client: httpx.Client, congress: int, bill_type: str, number: int
 
 # ---- BILLSTATUS version dates (authoritative ordering for bulk downloads) ----
 
+# The govinfo version code embedded in a BILLS package URL, e.g.
+# https://www.govinfo.gov/content/pkg/BILLS-119s337rs/xml/BILLS-119s337rs.xml -> "rs".
+_URL_CODE_RE = re.compile(r"/BILLS-\d+[a-z]+\d+([a-z0-9]+)\.(?:xml|htm|pdf)\b", re.IGNORECASE)
+
+
+def _version_code_from_item(item: ET.Element) -> str | None:
+    """Extract the govinfo version code from a BILLSTATUS textVersions <item>.
+
+    Reads it from the item's format URL rather than the display <type>, because
+    the code is the identifier govinfo and our VERSION_CODES table share verbatim
+    (the <type> spelling diverges: "Reported to Senate" vs "Reported in Senate").
+    """
+    for url in item.iter("url"):
+        m = _URL_CODE_RE.search(url.text or "")
+        if m:
+            return m.group(1).lower()
+    return None
+
 
 def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str]]:
-    """{bill_id: {version-type-name-lower: date}} from local BILLSTATUS ZIPs.
+    """{bill_id: {version-code: date}} from local BILLSTATUS ZIPs.
 
     The govinfo BILLS text carries dc:date only ~74% of the time, and it is
     missing on exactly the versions whose order is load-bearing (engrossed-in-
     house). BILLSTATUS metadata (downloaded by fetch_bill_archives.py) supplies
     the complete, authoritative dates -- the same source the curated corpus was
     ordered from -- so bulk-downloaded versions order correctly.
+
+    Keyed by the govinfo *version code* (extracted from each textVersions item's
+    format URL, e.g. .../BILLS-119s337rs.xml -> ``rs``), not the display-name.
+    BILLSTATUS's ``<type>`` vocabulary diverges from VERSION_CODES's names for
+    some versions (it says "Reported to Senate" where our table says "Reported
+    in Senate"), so a name-based join would silently miss those and mis-order
+    the very versions this index exists to place. The code is the one identifier
+    both sides share verbatim, including suffixed variants (eas2, rfs2).
     """
     index: dict[str, dict[str, str]] = {}
     for zp in sorted(billstatus_dir.glob("*.zip")):
@@ -189,11 +215,11 @@ def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str
             tv = bill.find("textVersions")
             if not (congress and btype and number) or tv is None:
                 continue
-            dates = {
-                (it.findtext("type") or "").lower(): (it.findtext("date") or "")
-                for it in tv.findall("item")
-                if it.findtext("type")
-            }
+            dates: dict[str, str] = {}
+            for it in tv.findall("item"):
+                code = _version_code_from_item(it)
+                if code:
+                    dates[code] = it.findtext("date") or ""
             if dates:
                 index[f"{congress}-{btype}-{number}"] = dates
     return index

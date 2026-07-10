@@ -73,8 +73,18 @@ def _write_zip(path: Path, members):
 
 
 def _billstatus_zip(path: Path, congress, btype, num, versions):
-    """One BILLSTATUS ZIP for a bill; versions = [(type_name, date), ...]."""
-    items = "".join(f"<item><type>{t}</type><date>{d}</date></item>" for t, d in versions)
+    """One BILLSTATUS ZIP for a bill; versions = [(type_name, date, code), ...].
+
+    Each item carries a format URL embedding the version code, mirroring real
+    BILLSTATUS: the date index keys off that code, not the display <type>.
+    """
+    items = "".join(
+        f"<item><type>{t}</type><date>{d}</date><formats><item>"
+        f"<url>https://www.govinfo.gov/content/pkg/BILLS-{congress}{btype}{num}{code}"
+        f"/xml/BILLS-{congress}{btype}{num}{code}.xml</url>"
+        f"</item></formats></item>"
+        for t, d, code in versions
+    )
     xml = (
         f"<billStatus><bill><congress>{congress}</congress><type>{btype.upper()}</type>"
         f"<number>{num}</number><textVersions>{items}</textVersions></bill></billStatus>"
@@ -158,7 +168,7 @@ def test_convert_uses_billstatus_date_when_govinfo_date_missing(tmp_path):
     )
     bs_dir = tmp_path / "billstatus"
     bs_dir.mkdir()
-    _billstatus_zip(bs_dir / "999-hr.zip", 999, "hr", 5, [("Engrossed in House", "2025-05-22")])
+    _billstatus_zip(bs_dir / "999-hr.zip", 999, "hr", 5, [("Engrossed in House", "2025-05-22", "eh")])
 
     # Without the join, eh has no date -> sorts to max_date, after pcs (wrong order).
     out_none = tmp_path / "none"
@@ -173,6 +183,64 @@ def test_convert_uses_billstatus_date_when_govinfo_date_missing(tmp_path):
         "1_introduced-in-house.xml",
         "2_engrossed-in-house.xml",
         "3_placed-on-calendar-senate.xml",
+    ]
+
+
+def test_billstatus_join_survives_type_name_divergence(tmp_path):
+    # Real bug: BILLSTATUS spells rs "Reported to Senate" while VERSION_CODES says
+    # "Reported in Senate". A name-based join misses it, so a dateless rs sorts to
+    # max_date (last) instead of its true mid-sequence position. Keying by the
+    # version code (shared verbatim by both sources) fixes it.
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _write_zip(
+        zip_dir / "BILLS-999-1-s.zip",
+        [
+            _member(999, "s", 8, "is", "2025-01-10"),
+            _member(999, "s", 8, "rs"),  # govinfo omits the date
+            _member(999, "s", 8, "es", "2025-03-15"),
+        ],
+    )
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    # Divergent display name; the code in the URL is still "rs".
+    _billstatus_zip(bs_dir / "999-s.zip", 999, "s", 8, [("Reported to Senate", "2025-02-05", "rs")])
+
+    out = tmp_path / "bills"
+    fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
+    # rs (2025-02-05) sorts between is and es, not last.
+    assert sorted(p.name for p in (out / "999-s-8").glob("*.xml")) == [
+        "1_introduced-in-senate.xml",
+        "2_reported-in-senate.xml",
+        "3_engrossed-in-senate.xml",
+    ]
+
+
+def test_same_day_cross_source_dates_break_tie_by_tier(tmp_path):
+    # es (engrossed) and pap (printed-as-passed) fall on the same calendar day, but
+    # es's date comes from BILLSTATUS (full datetime) while pap's is the bare
+    # govinfo date. Both must normalize to the date so the tie breaks by tier
+    # (es=4 before pap=5), not by the datetime string being longer than the date.
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _write_zip(
+        zip_dir / "BILLS-999-1-s.zip",
+        [
+            _member(999, "s", 9, "is", "2025-01-05"),
+            _member(999, "s", 9, "es"),  # govinfo omits date -> BILLSTATUS datetime
+            _member(999, "s", 9, "pap", "2025-03-20"),  # bare govinfo date, same day as es
+        ],
+    )
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    _billstatus_zip(bs_dir / "999-s.zip", 999, "s", 9, [("Engrossed in Senate", "2025-03-20T04:00:00Z", "es")])
+
+    out = tmp_path / "bills"
+    fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
+    assert sorted(p.name for p in (out / "999-s-9").glob("*.xml")) == [
+        "1_introduced-in-senate.xml",
+        "2_engrossed-in-senate.xml",  # tier 4, before printed-as-passed on the same day
+        "3_printed-as-passed.xml",  # tier 5
     ]
 
 
@@ -214,7 +282,29 @@ def test_convert_repeated_type_ordered_by_own_date(tmp_path):
     assert b">eas2<" in (d / "3_engrossed-amendment-senate.xml").read_bytes()
 
 
-# ---- integration: govinfo bytes == curated corpus (#10 regression guard) -----
+# ---- byte-identity: govinfo BILLS == Congress.gov "Formatted XML" (#10 guard) ---
+#
+# The #10 premise -- "nothing downstream needs to change" -- rests on govinfo's
+# bulk BILLS XML being byte-for-byte identical to the Congress.gov Formatted XML
+# the corpus was built from. Two guards:
+#   1. A hermetic, always-runs check against a vendored cross-source pair for one
+#      small bill (118-hr-2882 introduced-in-house, 17 U.S.C. 105 public domain).
+#      The two files were independently sourced -- one from govinfo bulkdata, one
+#      from the Congress.gov API -- so equality is a real provenance lock, not a
+#      tautology, and it catches a future divergence in CI.
+#   2. A broader local check over the freshly-downloaded bulk ZIP vs the curated
+#      corpus, which skips on a clean/CI checkout (both dirs are gitignored).
+
+_FIXTURES = REPO / "tests" / "fixtures" / "byte_identity"
+_GOVINFO_FIXTURE = _FIXTURES / "govinfo_BILLS-118hr2882ih.xml"
+_CONGRESSGOV_FIXTURE = _FIXTURES / "congressgov_118-hr-2882_introduced-in-house.xml"
+
+
+def test_govinfo_bytes_identical_to_congressgov_fixture():
+    assert _GOVINFO_FIXTURE.read_bytes() == _CONGRESSGOV_FIXTURE.read_bytes(), (
+        "govinfo BILLS text must be byte-identical to the Congress.gov Formatted XML"
+    )
+
 
 _BULK_ZIP = REPO / "bills_bulk_text" / "BILLS-119-1-hr.zip"
 _CURATED = REPO / "bills" / "119-hr-1" / "1_reported-in-house.xml"
@@ -222,7 +312,7 @@ _CURATED = REPO / "bills" / "119-hr-1" / "1_reported-in-house.xml"
 
 @pytest.mark.skipif(
     not (_BULK_ZIP.exists() and _CURATED.exists()),
-    reason="local govinfo bulk ZIP or curated corpus absent (clean checkout)",
+    reason="local-only: freshly-downloaded bulk ZIP + curated corpus (both gitignored)",
 )
 def test_govinfo_bytes_identical_to_curated_corpus():
     with zipfile.ZipFile(_BULK_ZIP) as zf:
