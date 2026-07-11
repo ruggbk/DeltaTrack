@@ -29,6 +29,10 @@ dev = [
 
 [tool.ruff]
 line-length = 120
+# Research reproducibility scripts are frozen artifacts (hardcoded paths, ad-hoc
+# one-liners) that reproduce a study's numbers, not maintained source. Exclude them
+# from lint/format so they stay verbatim. Applies to future studies' probes too.
+extend-exclude = ["docs/research/**/probes"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
