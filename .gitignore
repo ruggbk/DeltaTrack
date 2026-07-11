@@ -54,3 +54,5 @@ test_data/extract_cache/
 # Vendored GPO render chain (public domain, ~2.2MB incl. binary JPGs) — local reference only.
 # Mined into docs/gpo-render-conventions.md; re-fetch from govinfo bulkdata when needed. See DeltaTrack#40.
 reference/
+# govinfo-derived test corpus for provision-matching research (#170); large, re-derivable
+bills_corpus/
