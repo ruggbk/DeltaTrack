@@ -166,15 +166,22 @@ _URL_CODE_RE = re.compile(r"/BILLS-\d+[a-z]+\d+([a-z0-9]+)\.(?:xml|htm|pdf)\b", 
 def _version_code_from_item(item: ET.Element) -> str | None:
     """Extract the govinfo version code from a BILLSTATUS textVersions <item>.
 
-    Reads it from the item's format URL rather than the display <type>, because
-    the code is the identifier govinfo and our VERSION_CODES table share verbatim
-    (the <type> spelling diverges: "Reported to Senate" vs "Reported in Senate").
+    Primary: the code embedded in the item's format URL. It is unambiguous and
+    survives the <type>-vs-VERSION_CODES name divergence ("Reported to Senate"
+    vs "Reported in Senate"), so the URL is preferred whenever present.
+
+    Fallback: some items carry a <type> and <date> but no BILLS format URL (govinfo
+    has not published one yet). Map the display name to a code so these still land
+    in the index -- notably engrossed-in-house, whose ordering depends entirely on
+    this fallback. Only the handful of names BILLSTATUS spells differently from
+    VERSION_CODES stay unresolved here, which is no worse than a name-based join.
     """
     for url in item.iter("url"):
         m = _URL_CODE_RE.search(url.text or "")
         if m:
             return m.group(1).lower()
-    return None
+    typ = item.findtext("type")
+    return NAME_TO_CODE.get(sanitize(typ)) if typ else None
 
 
 def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str]]:

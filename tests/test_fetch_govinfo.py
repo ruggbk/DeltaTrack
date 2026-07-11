@@ -244,6 +244,40 @@ def test_same_day_cross_source_dates_break_tie_by_tier(tmp_path):
     ]
 
 
+def test_billstatus_urlless_item_falls_back_to_name(tmp_path):
+    # Some BILLSTATUS items carry a <type> + <date> but no format URL (govinfo
+    # hasn't published one). The code must still be recovered from the display
+    # name, or engrossed-in-house -- which relies on this fallback -- would drop
+    # out of the index and sort last again. Real cases: 117-hr-5705, 119-hr-6703.
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _write_zip(
+        zip_dir / "BILLS-999-1-hr.zip",
+        [
+            _member(999, "hr", 10, "ih", "2025-01-03"),
+            _member(999, "hr", 10, "eh"),  # govinfo omits the date
+            _member(999, "hr", 10, "rfs", "2025-04-01"),
+        ],
+    )
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    # eh item has a date but NO format URL -> code recovered via the name.
+    items = "<item><type>Engrossed in House</type><date>2025-02-10T05:00:00Z</date></item>"
+    xml = (
+        f"<billStatus><bill><congress>999</congress><type>HR</type><number>10</number>"
+        f"<textVersions>{items}</textVersions></bill></billStatus>"
+    ).encode()
+    _write_zip(bs_dir / "999-hr.zip", [("BILLSTATUS-999hr10.xml", xml)])
+
+    out = tmp_path / "bills"
+    fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
+    assert sorted(p.name for p in (out / "999-hr-10").glob("*.xml")) == [
+        "1_introduced-in-house.xml",
+        "2_engrossed-in-house.xml",  # placed by name-fallback date, not sorted last
+        "3_referred-in-senate.xml",
+    ]
+
+
 def test_convert_skips_corrupt_zip_without_aborting(tmp_path):
     # A truncated/garbage ZIP alongside good ones (e.g. an interrupted prior run)
     # must be skipped, not abort the whole conversion.
