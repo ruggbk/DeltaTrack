@@ -66,6 +66,7 @@ The product commands are wrapper scripts in the project root; run them after `so
 | `./diff_bill compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
 | `./diff_pdf <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
 | `./fetch_bill_archives` | Bulk-build a bill-metadata index from govinfo archives — **see the warning below** |
+| `./fetch_bill_text_archives --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
 
 Environment setup is `source init` (installs dependencies and activates the virtualenv). Use `source` so the environment change sticks; it is not a runnable command.
 
