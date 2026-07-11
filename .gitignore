@@ -56,3 +56,6 @@ test_data/extract_cache/
 reference/
 # govinfo-derived test corpus for provision-matching research (#170); large, re-derivable
 bills_corpus/
+
+# Generated research render (regenerate via probes/build_artifact.py)
+docs/research/provision-matching/paper.html
