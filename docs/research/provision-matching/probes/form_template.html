@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pass 2 labeling — __REVIEWER__</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1c;--muted:#666;--line:#e0e0dc;--accent:#2c2c5c;--old:#fbeaea;--new:#eaf3ea}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+header{background:var(--accent);color:#fff;padding:12px 18px;position:sticky;top:0;z-index:5;
+  display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header b{font-size:16px}
+#prog{flex:1;min-width:120px;height:8px;background:#ffffff33;border-radius:4px;overflow:hidden}
+#progbar{height:100%;background:#8fd18f;width:0}
+header button{font:inherit;padding:6px 12px;border:0;border-radius:6px;background:#ffffff22;color:#fff;cursor:pointer}
+header button:hover{background:#ffffff40}
+main{max-width:900px;margin:18px auto;padding:0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;box-shadow:0 1px 3px #0001}
+.q{font-weight:600;font-size:17px;margin:0 0 14px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:680px){.pair{grid-template-columns:1fr}}
+.side{border:1px solid var(--line);border-radius:8px;padding:12px;overflow-wrap:anywhere}
+.side.o{background:var(--old)}.side.n{background:var(--new)}
+.bc{font-size:12px;color:var(--muted);margin-bottom:8px}.bc b{color:var(--ink)}
+.txt{white-space:pre-wrap;font-size:14px}
+.opts{margin:16px 0 8px;display:flex;gap:10px;flex-wrap:wrap}
+.opts label{border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+.opts input{margin-right:6px}.opts label.sel{border-color:var(--accent);background:#2c2c5c11;font-weight:600}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.row select,.row textarea{font:inherit;padding:6px;border:1px solid var(--line);border-radius:6px}
+.row textarea{flex:1;min-width:200px;min-height:44px}
+.nav{display:flex;justify-content:space-between;margin:16px 0;gap:10px}
+.nav button{font:inherit;padding:8px 16px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}
+.nav button:hover{background:#f0f0ec}
+.help{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-top:14px;
+  font-size:13px;color:var(--muted)}
+.help summary{cursor:pointer;color:var(--accent);font-weight:600}
+.help dt{font-weight:600;color:var(--ink);margin-top:6px}
+.done{color:#2a7a2a;font-weight:600}
+</style></head><body>
+<header><b>Pass 2 labeling</b><span id="who"></span>
+<div id="prog"><div id="progbar"></div></div><span id="count"></span>
+<button onclick="jumpNext()">Next unlabeled</button>
+<button onclick="exportLabels()">Download my labels</button></header>
+<main><div class="card" id="card"></div>
+<div class="nav"><button onclick="go(-1)">&larr; Prev</button><span id="pos"></span>
+<button onclick="go(1)">Next &rarr;</button></div>
+<details class="help"><summary>What counts as "same" / "different" / "absorbed"?</summary>
+<dl id="std"></dl>
+<p style="margin-top:8px">Pick the confidence honestly.
+<b>A rationale is required when confidence is medium or low.</b>
+Your work autosaves in this browser; download and send your file when done (or partway).</p></details>
+</main>
+<script>
+const DATA = __DATA__;
+const KEY = "pass2-labels-" + DATA.reviewer;
+let labels = JSON.parse(localStorage.getItem(KEY) || "{}");
+let i = 0;
+document.getElementById("who").textContent = "reviewer: " + DATA.reviewer;
+document.getElementById("std").innerHTML = DATA.standard.map(s => `<dt>${s[0]}</dt><dd>${s[1]}</dd>`).join("");
+
+function save(){ localStorage.setItem(KEY, JSON.stringify(labels)); }
+function esc(s){ return (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function bc(a){ return a && a.length ? a.map(esc).join(" &rsaquo; ") : "(none)"; }
+
+function render(){
+  const e = DATA.entries[i]; const L = labels[e.id] || {};
+  const opts = e.options.map(o => {
+    const sel = L.label === o[0] ? "sel" : "";
+    return `<label class="${sel}"><input type="radio" name="lab" value="${o[0]}" `
+      + `${L.label === o[0] ? "checked" : ""} onchange="setLabel('${o[0]}')">${o[1]}</label>`;
+  }).join("");
+  const confOpts = ["high","medium","low"].map(
+    c => `<option value="${c}" ${L.confidence === c ? "selected" : ""}>${c}</option>`).join("");
+  document.getElementById("card").innerHTML =
+    `<p class="q">${esc(e.question)}</p>`
+    + `<div class="pair">`
+    + `<div class="side o"><div class="bc">OLD &middot; ${esc(e.bill_old)} ${esc(e.version_old)}`
+    + `<br><b>${bc(e.bc_old)}</b></div><div class="txt">${esc(e.text_old)}</div></div>`
+    + `<div class="side n"><div class="bc">NEW &middot; ${esc(e.bill_new)} ${esc(e.version_new)}`
+    + `<br><b>${bc(e.bc_new)}</b></div><div class="txt">${esc(e.text_new)}</div></div></div>`
+    + `<div class="opts">${opts}</div>`
+    + `<div class="row">Confidence: <select onchange="setConf(this.value)">`
+    + `<option value="">—</option>${confOpts}</select>`
+    + `<textarea placeholder="Rationale (required for medium/low)" `
+    + `oninput="setRat(this.value)">${esc(L.rationale || "")}</textarea></div>`;
+  document.getElementById("pos").textContent = `${i+1} / ${DATA.entries.length}`;
+  updateProgress();
+}
+function merge(id, patch){ labels[id] = Object.assign({}, labels[id], patch); save(); }
+function setLabel(v){ merge(DATA.entries[i].id, {label:v}); render(); }
+function setConf(v){ merge(DATA.entries[i].id, {confidence:v}); render(); }
+function setRat(v){ merge(DATA.entries[i].id, {rationale:v}); }
+function go(d){ i = Math.max(0, Math.min(DATA.entries.length-1, i+d)); render(); }
+function jumpNext(){
+  for(let k=0;k<DATA.entries.length;k++){
+    const j = (i+1+k) % DATA.entries.length;
+    if(!(labels[DATA.entries[j].id]||{}).label){ i=j; render(); return; }
+  }
+  alert("All items have a label.");
+}
+function labeledCount(){ return DATA.entries.filter(e => (labels[e.id]||{}).label).length; }
+function updateProgress(){
+  const n = labeledCount(), t = DATA.entries.length;
+  document.getElementById("progbar").style.width = (100*n/t) + "%";
+  document.getElementById("count").innerHTML =
+    n === t ? `<span class="done">${n}/${t} done</span>` : `${n}/${t}`;
+}
+function exportLabels(){
+  const missing = [], out = [], now = new Date().toISOString();
+  for(const e of DATA.entries){
+    const L = labels[e.id]; if(!L || !L.label) continue;
+    if((L.confidence === "medium" || L.confidence === "low") && !(L.rationale||"").trim()){
+      missing.push(e.id); continue;
+    }
+    out.push({candidate_id:e.id, label:L.label, confidence:L.confidence||"",
+      rationale:L.rationale||"", labeler:DATA.reviewer, labeled_at:now});
+  }
+  if(missing.length){
+    alert(missing.length + " item(s) have medium/low confidence but no rationale and were left "
+      + "out. Add a rationale or raise confidence. First: " + missing[0]);
+  }
+  const blob = new Blob([JSON.stringify(
+    {reviewer:DATA.reviewer, exported_at:now, n:out.length, labels:out}, null, 2)],
+    {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "labels_" + DATA.reviewer + ".json"; a.click();
+}
+render();
+</script></body></html>
