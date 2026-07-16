@@ -65,3 +65,14 @@ docs/research/provision-matching/paper.html
 docs/research/provision-matching/probes/idf_cache.json
 docs/research/provision-matching/probes/candidates_*.json
 docs/research/provision-matching/probes/split_assignment.json
+
+# Pass 2 (#203) labeling artifacts — generated per run from the mined candidate pools; they carry
+# stratum/split (worklist) or in-progress labels, so they are re-derivable and not committed. The
+# self-contained HTML form TEMPLATE is committed; the per-reviewer forms are not.
+docs/research/provision-matching/probes/worklist.json
+docs/research/provision-matching/probes/worklist_sample.md
+docs/research/provision-matching/probes/assignments.json
+docs/research/provision-matching/probes/form_*.html
+!docs/research/provision-matching/probes/form_template.html
+docs/research/provision-matching/probes/labels/
+docs/research/provision-matching/probes/merged_labels.json
