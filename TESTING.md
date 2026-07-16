@@ -130,7 +130,14 @@ We keep these in the open rather than papering over them:
   partly similar but not clearly the same and not clearly different, the tool
   has to make a judgment call, and that is where it is most likely to mislabel
   an edit. We track how often this borderline case comes up so it cannot quietly
-  increase.
+  increase. A hand-labeled answer key (`test_data/similarity_labels.json`, checked
+  by `tests/test_similarity_labels.py`) pins the current behavior: real section
+  pairs the tool gets right anchor the metric, and five human-ruled dead-zone pairs
+  are recorded as `xfail` because today's word-similarity thresholds classify them
+  wrong. The key is body-text-only on purpose — it is the evidence that pure text
+  similarity has no skill in that band and that the fix is structural context (the
+  division/agency/account breadcrumb), tracked in #170. An `xfail` flips to XPASS if
+  the thresholds are improved.
 - **Large combined bills.** In omnibus bills that bundle many areas together,
   section numbers repeat across areas, which makes matching harder. The tool
   handles this, but it is the trickiest case.
@@ -151,6 +158,25 @@ files and skips automatically if those files are not present.
 uv run pytest -m "not slow and not browser"   # Fast group: built-in examples, no downloads
 uv run pytest                 # Everything, including checks against real bills
 ```
+
+**Auto-skip cuts both ways.** The corpus property gates
+(`test_diff_validation`, `test_corpus_properties`, `test_corpus_tree_properties`)
+parametrize over the fetched bill files. When those files are absent the cases
+skip, and an empty parametrization produces *no cases at all* -- so on an
+unfetched checkout the gate runs green without asserting anything. "Skip" reads
+as "pass" (the fail-open pattern). Before relying on a corpus gate -- e.g. in a
+pre-PR run for matcher or financial-diff work -- fetch the corpus and set
+`REQUIRE_CORPUS=1`:
+
+```bash
+REQUIRE_CORPUS=1 uv run pytest -m slow   # missing baseline assets now FAIL, not skip
+```
+
+In required mode each corpus module's `test_corpus_present_when_required` guard
+asserts the pinned baseline bills are present and that the gate discovered at
+least one case. Without the env var the guard skips, so a clean clone still
+skips the corpus cleanly (it was deliberately made fetch-scripted, not a hard
+dependency).
 
 Run a single area:
 

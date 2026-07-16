@@ -1,5 +1,7 @@
 """Shared test helpers and fixtures."""
 
+import os
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,76 @@ from bill_tree import BillNode, BillTree, normalize_bill
 from diff_bill import NodeDiff, diff_bills
 
 BILLS_DIR = Path(__file__).parent.parent / "bills"
+
+# --- Corpus completeness policy (#167) -----------------------------------------
+# The corpus property gates (test_diff_validation, test_corpus_properties,
+# test_corpus_tree_properties) parametrize over bill assets that are gitignored and
+# fetch-scripted. When an asset is absent the case skips, and pytest emits nothing at
+# all for an empty parametrization — so on an unfetched checkout the whole gate runs
+# green without executing a single assertion. "Skip" reads as "pass": the fail-open
+# pattern. PR #146 merged with a red corpus gate this way (the proof case pinned below).
+#
+# The deliberate design is that a clean local clone / CI skips the corpus cleanly
+# (PRs #62/#64/#66 made the corpus fetch-scripted precisely so it wouldn't be a hard
+# dependency). So the policy is NOT "always fail" — it is "never SILENTLY skip where
+# completeness is required." REQUIRE_CORPUS=1 opts into the required mode: a pre-PR
+# strict run (or CI after running the fetch scripts) sets it, and then a missing
+# baseline asset or an empty parametrization is a loud failure instead of a silent skip.
+REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
+
+# The curated baseline floor: bills whose hand-pinned expectations the corpus gates
+# encode (diff-validation class fixtures, _KNOWN_DUPLICATE_COUNTS / _KNOWN_MISSING_APPRO,
+# the tree money-drop budgets). In REQUIRE_CORPUS mode every one of these must be on
+# disk, else the gate that pins it against a hardcoded baseline skips silently. Paths
+# are relative to BILLS_DIR. Not the whole CI corpus (curation is #126) — just the floor
+# below which the regression harness is provably inert.
+REQUIRED_CORPUS_BILLS = (
+    # 118-hr-4366: TestControlledDiff (v1->v2) and TestStructureExpansion (v1->v6).
+    "118-hr-4366/1_reported-in-house.xml",
+    "118-hr-4366/2_engrossed-in-house.xml",
+    "118-hr-4366/4_engrossed-amendment-senate.xml",
+    "118-hr-4366/5_engrossed-amendment-house.xml",
+    "118-hr-4366/6_enrolled-bill.xml",
+    # 115-hr-5895: TestDeadZoneBaseline (v4->v5), the corpus's densest dead-zone case.
+    "115-hr-5895/4_engrossed-amendment-senate.xml",
+    "115-hr-5895/5_enrolled-bill.xml",
+    # 113-hr-3547 enrolled: the #146/#167 proof case (duplicate match_path count).
+    "113-hr-3547/6_enrolled-bill.xml",
+    # 119-hr-1 reported: the twin-Sec.-10012 collision baseline (#8).
+    "119-hr-1/1_reported-in-house.xml",
+)
+
+
+def missing_required_corpus() -> list[str]:
+    """Baseline bills (relative paths) absent from BILLS_DIR."""
+    return [rel for rel in REQUIRED_CORPUS_BILLS if not (BILLS_DIR / rel).exists()]
+
+
+def require_corpus_or_skip(discovered: Sequence, kind: str) -> None:
+    """Completeness floor for a corpus property gate (#167).
+
+    Call from a plain (non-parametrized) guard test so it always collects and runs.
+    Outside REQUIRE_CORPUS mode it skips, preserving clean-clone behavior. In
+    REQUIRE_CORPUS mode it asserts the pinned baseline assets are present AND that the
+    module actually discovered at least one parametrized case — turning a silently
+    inert suite into a loud failure.
+
+    ``discovered`` is the module's parametrization source (the file list or the pair
+    list); ``kind`` names the gate in failure messages.
+    """
+    if not REQUIRE_CORPUS:
+        pytest.skip("corpus not required (set REQUIRE_CORPUS=1 to enforce completeness)")
+    missing = missing_required_corpus()
+    assert not missing, (
+        f"REQUIRE_CORPUS=1 but pinned baseline assets are missing: {missing}. "
+        "Fetch the corpus (fetch_bills.py download ... --format both / "
+        "scripts/fetch_test_assets.py) before enforcing the corpus gates."
+    )
+    assert len(discovered) > 0, (
+        f"REQUIRE_CORPUS=1 but the {kind} gate discovered zero cases under {BILLS_DIR} — "
+        "the gate would run green without asserting anything (fail-open, #167)."
+    )
+
 
 # Paths to commonly used bill versions (118-hr-4366).
 HR4366_V1_PATH = BILLS_DIR / "118-hr-4366" / "1_reported-in-house.xml"

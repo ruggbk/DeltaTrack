@@ -1,4 +1,4 @@
-# Canonical Diff JSON — v1.2
+# Canonical Diff JSON — v1.4
 
 This document specifies the canonical JSON shape produced when comparing two
 versions of a bill. It is the public contract between the diff engine and any
@@ -8,10 +8,28 @@ XML inputs and a diff produced from PDF inputs share this shape.
 
 ## Versioning
 
-Top-level field: `schema_version: "1.2"`.
+Top-level field: `schema_version: "1.4"`.
 
 ## Changelog
 
+- **1.4** — Added optional `amount_entries` array on each change object (#86):
+  self-describing base-amount changes with an explicit `kind`
+  (`changed`/`added`/`removed`) and a nullable absent side, so whole-item
+  additions and removals — not just changed-value pairs — are representable.
+  The existing `amounts` field is now **deprecated**: it is exactly the
+  `changed`-kind subset of `amount_entries`, kept for back-compat until the next
+  major. No consumer reads `schema_version`, so a consumer reading `amount_entries`
+  MUST fall back to `amounts` when the field is absent (pre-1.4 documents).
+  Additive, backward compatible.
+- **1.3** — Added optional top-level `tree: { v1, v2 } | null` field: the
+  per-side leveled structure tree (#108). Each side is an ordered list of
+  root `TreeNode`s; each node carries `label`, `level` (the shared GPO
+  vocabulary), `own_amounts` (the dollar figures in its own block), a
+  `full_text_span` into `full_text` (reference, never duplicated text), and
+  nested `children`. Requires `full_text` present (spans index into it). A
+  leveled TOC is derivable from it (the renderer still consumes the separate
+  `sections` jump-list today; absorbing it is a later step). Additive,
+  backward compatible.
 - **1.2** — Added optional `full_text_span: { v1, v2 } | null` field on
   each change object, locating the change's content inside `full_text.v1`
   and `full_text.v2` as character offsets. Renderers use it to project
@@ -75,6 +93,31 @@ fragments in `changes[].text` — `full_text` is the document; `text.old`/
 `text.new` are the diff fragments. Consumers using `full_text` for
 rendering should compute the diff at render time over the full strings,
 not try to splice the change fragments into the document.
+
+### `tree` (optional, v1.3+)
+
+Top-level object: the per-side leveled structure tree (#108). Each of `v1`
+and `v2` is an ordered list of root `TreeNode`s in document order. The whole
+field is `null` (or absent) when no tree is available. **Co-presence:** a
+non-null `tree` requires a non-null `full_text` — every node's
+`full_text_span` indexes into `full_text[side]`.
+
+A `TreeNode`:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `label` | string | The node's own heading text (`""` for an empty-path root). |
+| `level` | enum | Shared GPO vocabulary: `division`, `title`, `major`, `agency`, `account`, `section`, `subsection`, `grouping`, `preamble`, `heading`. Leaf level is typed from the source tag/kind; interior levels are positional (`heading` when an interior container has no typed source). `subsection` nests under its `section` on both pipelines: XML emits every direct non-quoted `<subsection>` (#188), the PDF the catchline-bearing run-in subset (#96). |
+| `own_amounts` | int[] | Dollar amounts in **this node's own block only** (never its children's). The union over all nodes conserves the bill's amounts exactly. |
+| `full_text_span` | Offset \| null | `{ start, end }` char range into `full_text[side]` locating this node; `null` when it can't be located. Reference only — never duplicates the text. |
+| `children` | TreeNode[] | Ordered child nodes. |
+
+The tree is **per-side, independently built, not paired** — cross-version
+node pairing remains the diff engine's job (the `changes` array). A node may
+be both content and container (an account that holds sub-accounts has a
+`full_text_span`/`own_amounts` AND `children`). A leveled section TOC is
+derivable from this tree; the renderer still reads the separate `sections`
+jump-list today, and folding it into the tree is a later step (#108 commit B).
 
 ### `bill`
 
@@ -213,7 +256,7 @@ Plain text bodies. `null` on the side that doesn't exist (`added`: `old=null`;
 `removed`: `new=null`). Word-level inline diffs are NOT carried in the JSON;
 renderers compute them at render time.
 
-### `amounts`
+### `amounts` (deprecated, v1.4)
 
 Pre-filtered list of `(old, new)` integer pairs representing meaningful base
 amount changes. Filter rule (guaranteed by the producer):
@@ -221,13 +264,47 @@ amount changes. Filter rule (guaranteed by the producer):
 - Both `old` and `new` are present (non-null).
 - `old != new`.
 
-Pairs where one side is `null` (pure annotation insertions) and pairs where
-old equals new are dropped before serialization. Consumers needing the
-unfiltered set must wait for a future field; v1.0 does not expose it.
+**Deprecated as of v1.4**: this is exactly the `changed`-kind subset of
+`amount_entries` (below). It drops whole-item additions and removals, so it
+cannot answer "what money moved here" on its own. New consumers should read
+`amount_entries` and fall back to `amounts` only for pre-1.4 documents. Kept for
+back-compat; slated for removal at the next major.
 
 ```jsonc
 "amounts": [ { "old": 5000000, "new": 5500000 }, ... ]
 ```
+
+### `amount_entries` (optional, v1.4+)
+
+Self-describing base-amount changes: every changed, added, or removed amount the
+diff found, in document order, **losslessly**.
+
+```jsonc
+"amount_entries": [
+  { "old": 250000000, "new": 500000000, "kind": "changed" },
+  { "old": 250000000, "new": null,      "kind": "removed" },
+  { "old": null,      "new": 350000000, "kind": "added"   }
+]
+```
+
+- `kind: "changed"` — both sides present and differing (`old != new`).
+- `kind: "added"` — `old` is `null`; a whole item appeared.
+- `kind: "removed"` — `new` is `null`; a whole item vanished.
+- Unchanged pairs (`old == new`, e.g. only floor-amendment annotations moved) are
+  dropped.
+
+**No reorder cancellation.** On a renumbered list, `match_amounts` emits a shifted
+item's identical value as a net-zero added/removed pair. Distinguishing that from
+two genuinely-distinct equal-value items needs within-list content alignment (#87),
+so the producer reports every entry honestly and leaves reorder handling to the
+consumer. A cross-version consumer (e.g. BillTrax) may apply its own alignment
+policy; any presentation-side collapse is a consumer concern, not baked into the
+contract.
+
+Producer invariant: `amounts` equals the `changed`-kind subset of `amount_entries`.
+
+- `null` (or absent) — pre-1.4 document. A consumer reading `amount_entries` MUST
+  fall back to `amounts` (mapped to `kind: "changed"`).
 
 ### `full_text_span` (optional, v1.2+)
 

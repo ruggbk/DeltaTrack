@@ -405,17 +405,25 @@ class TestMajorLevelAcrossSubcommittees:
 
 
 @pytest.mark.parametrize("name", sorted(FIXTURES))
-def test_no_duplicate_page_line_anchors(name: str):
-    # breadcrumb_for resolves parents via list.index() on value-equality, which relies
-    # on anchors being unique per (page, line). The new major anchors must preserve
-    # that invariant (a major's first line is distinct from the title/agency/account
-    # lines around it). Guards every fixture, all kinds.
+def test_no_value_equal_duplicate_anchors(name: str):
+    # breadcrumb_for resolves parents via list.index() on VALUE-equality, so the
+    # invariant it needs is value-uniqueness, NOT (page, line) coordinate-uniqueness.
+    # A SEC-inline run-in subsection (#96) deliberately shares its section's
+    # (page, line) — allowed because the two anchors differ in kind+text, so .index()
+    # still resolves each distinctly. A FULLY value-equal duplicate would break it;
+    # pin its absence. Guards every fixture, all kinds.
     pdf_path = FIXTURES[name]
     if not pdf_path.exists():
         pytest.skip(f"{name} PDF not present")
     anchors = extract_anchors(extract_clean_pages(pdf_path))
-    seen = [(a.page_number, a.line_number) for a in anchors]
-    assert len(seen) == len(set(seen)), "duplicate (page, line) anchors break breadcrumb .index()"
+    values = [(a.page_number, a.line_number, a.kind, a.text, a.division) for a in anchors]
+    assert len(values) == len(set(values)), "value-equal duplicate anchors break breadcrumb .index()"
+    # Any (page, line) collision must be exactly the #96 section/subsection pair
+    # (distinct kinds), never an accidental exact-coordinate dup within one kind.
+    coords = [(a.page_number, a.line_number) for a in anchors]
+    for coord in {c for c in coords if coords.count(c) > 1}:
+        kinds = sorted(a.kind for a in anchors if (a.page_number, a.line_number) == coord)
+        assert kinds == ["section", "subsection"], f"unexpected collision at {coord}: {kinds}"
 
 
 class TestCarryoverAgenciesEndToEnd:
@@ -582,3 +590,27 @@ class TestPrecisionHarnessOracle:
         # vocabulary precision/recall are bounded ratios.
         assert 0.0 <= m["vocab_precision"] <= 1.0
         assert 0.0 <= m["vocab_recall"] <= 1.0
+
+
+class TestNoOpenerAccountRecall:
+    """DeltaTrack#85 regression: a leaf account whose body does NOT open with
+    'For necessary expenses' must still be captured as an account anchor.
+
+    The documented case is the special-fund account FEDERAL PROTECTIVE SERVICE
+    (118-hr-8752 v1, page 3), whose body opens 'The revenues and collections of
+    security fees...'. When account capture depended on the 'For necessary
+    expenses' backwalk, its heading was never anchored and the whole account was
+    absorbed into the prior account's block. The glyph-size path captures the
+    heading independent of its body opener; this pins that.
+
+    Unlike the golden snapshot above (regenerated when a change is intended),
+    never regenerate this away — losing this anchor reintroduces #85.
+    """
+
+    def test_hr8752_special_fund_account_captured(self, hr8752_v1_pages):
+        anchors = extract_anchors(hr8752_v1_pages)
+        fps = [a for a in anchors if a.text == "FEDERAL PROTECTIVE SERVICE"]
+        assert [(a.kind, a.page_number) for a in fps] == [("account", 3)], (
+            "FEDERAL PROTECTIVE SERVICE (no 'For necessary expenses' opener) must be "
+            f"captured exactly once as an account anchor on page 3; got {fps}"
+        )

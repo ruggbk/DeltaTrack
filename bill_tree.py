@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+from parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subsection
+
 
 @dataclass(frozen=True)
 class BillNode:
@@ -247,7 +249,14 @@ def _starts_display_line(child: ET.Element) -> bool:
     return child.tag in _DISPLAY_RANK and child.get("display-inline") != "yes-display-inline"
 
 
-def _walk_display(element: ET.Element, rank: int, blocks: list[list], *, skip_header_enum: bool = False) -> None:
+def _walk_display(
+    element: ET.Element,
+    rank: int,
+    blocks: list[list],
+    *,
+    skip_header_enum: bool = False,
+    skip_children: frozenset[int] = frozenset(),
+) -> None:
     """Accumulate readable text into ``blocks`` (a list of ``[rank, parts]``).
 
     Mirrors :func:`_itertext_block_spaced`'s inline/block distinction, but instead of
@@ -257,13 +266,22 @@ def _walk_display(element: ET.Element, rank: int, blocks: list[list], *, skip_he
     ``_BLOCK_TAGS``) and ``display-inline`` blocks flow into the current line.
 
     ``skip_header_enum`` drops the element's own ``<enum>``/``<header>`` (the section
-    number and heading are rendered separately) — applied only at the top level.
+    number and heading are rendered separately); ``skip_children`` drops specific
+    direct children by identity (subsections that became their own nodes, #188).
+    Both are applied only at the top level.
     """
     cur = blocks[-1][1]
     if element.text:
         cur.append(element.text)
     for child in element:
         if skip_header_enum and child.tag in ("enum", "header"):
+            continue
+        if id(child) in skip_children:
+            # The skipped child's tail is the PARENT's flow (a trailing rider
+            # after a carved subsection) — dropping it would drop its amounts
+            # from the section's display_text (conservation).
+            if child.tail:
+                cur.append(child.tail)
             continue
         if child.tag in _BREAK_TAGS:
             cur.append(" ")
@@ -295,17 +313,25 @@ def _walk_display(element: ET.Element, rank: int, blocks: list[list], *, skip_he
                 cur.append(child.tail)
 
 
-def extract_display_text(element: ET.Element) -> str:
+def extract_display_text(
+    element: ET.Element,
+    *,
+    skip_header_enum: bool = True,
+    skip_children: frozenset[int] = frozenset(),
+) -> str:
     """Readable multi-line rendering of an element's body for the full-bill view (#51).
 
     Unlike :func:`extract_text_content` (which collapses spacing for diff matching),
     this keeps a space after each list marker and breaks structural levels onto their
     own indented lines, so ``(a)The...include—(1)a description`` reads as the published
     bill does. The element's own ``<enum>``/``<header>`` are dropped (rendered
-    separately). Whitespace within a line is collapsed to single spaces.
+    separately) unless ``skip_header_enum`` is False (subsection nodes keep their
+    run-in ``(a) Catchline`` opening, #188); ``skip_children`` drops direct children
+    by ``id()`` (the element-exact carve for node-ized subsections). Whitespace
+    within a line is collapsed to single spaces.
     """
     blocks: list[list] = [[0, []]]
-    _walk_display(element, 0, blocks, skip_header_enum=True)
+    _walk_display(element, 0, blocks, skip_header_enum=skip_header_enum, skip_children=skip_children)
     lines = []
     for rank, parts in blocks:
         collapsed = " ".join("".join(parts).split())
@@ -320,6 +346,99 @@ def get_header_text(element: ET.Element) -> str:
     if header is not None:
         return extract_text_content(header).strip()
     return ""
+
+
+# Bounds for the inline catchline probe (#188 review hardening) — see the comment
+# at the match site in _subsection_label.
+_RUNIN_PROBE_WINDOW = 240
+_RUNIN_CATCHLINE_CAP = 120
+
+
+def _subsection_label(sub: ET.Element) -> tuple[str, str]:
+    """``(label, catchline)`` for a direct ``<subsection>`` child, or ``("", "")``
+    when no label is derivable (#188).
+
+    The canonical label is the #96 anchor form ``(enum) Catchline``. The catchline
+    comes from ``<header>`` when present (XML-structured — no regex, and roman
+    enums like ``(i)`` are fine because the tag is authoritative); otherwise it is
+    parsed from the ``<text>`` opening with the PDF's run-in matcher, so both
+    pipelines derive the same label from the same ``.—`` signal (the header-OR-
+    inline union — catchlines live in ``<header>`` on some bills and inline on
+    others, and covering only one form is the #96 fail-open trap). A subsection
+    with neither yields the bare enum; one with no enum and no header yields
+    ``("", "")`` and the caller keeps it folded (a blank path segment would corrupt
+    match keys and TOC rows).
+    """
+    enum_el = sub.find("enum")
+    enum = enum_el.text.strip() if enum_el is not None and enum_el.text else ""
+    header = get_header_text(sub)
+    if header:
+        return (f"{enum} {header}" if enum else header, header)
+    if not enum:
+        return "", ""
+    text_el = sub.find("text")
+    if text_el is not None:
+        opening = extract_text_content(text_el)
+        # Mirror the PDF's physical bounds: its matcher sees one print line plus
+        # two continuations, so a probe over unbounded flattened text fabricates
+        # "catchlines" from a period+dash deep in plain prose (113-hr-83 §415(a):
+        # "…U.S.–E.U.…" produced a 335-char label). Window ≈ three print lines;
+        # cap ≈ the longest real catchline with wide margin (corpus max 90, the
+        # three fabrications 303–335). A quote-opening text is quoting other law —
+        # its catchline is not this subsection's (the PDF self-exclusion).
+        if not _RUNIN_QUOTED_LINE.match(opening):
+            matched = _match_runin_subsection(f"{enum} {opening[:_RUNIN_PROBE_WINDOW]}", [])
+            if matched is not None:
+                catchline = matched.split(" ", 1)[1]
+                if len(catchline) <= _RUNIN_CATCHLINE_CAP:
+                    return matched, catchline
+    return enum, ""
+
+
+def _node_subsections(section: ET.Element) -> list[tuple[ET.Element, str, str]]:
+    """The direct ``<subsection>`` children that become their own BillNodes, as
+    ``(element, label, catchline)`` in document order (#188).
+
+    Direct children only: subsections inside a ``<quoted-block>`` are amendment
+    payload (text inserted into other law), not this bill's structure — they stay
+    folded in the section's text, mirroring the PDF's quote self-exclusion.
+    """
+    specs = []
+    for child in section:
+        if child.tag != "subsection":
+            continue
+        label, catchline = _subsection_label(child)
+        if label:
+            specs.append((child, label, catchline))
+    return specs
+
+
+def _append_subsection_nodes(
+    sub_specs: list[tuple[ET.Element, str, str]],
+    match_path: tuple[str, ...],
+    display_path: tuple[str, ...],
+    section_num: str,
+    division_label: str,
+    nodes: list[BillNode],
+) -> None:
+    """Emit one BillNode per node-worthy subsection, nested under the section's
+    paths (#188). The body keeps the run-in ``(a) Catchline`` opening — the same
+    text the PDF pipeline's block carries — and ``section_number`` is the
+    enclosing section's, so a subsection change still cites its SEC."""
+    for el, label, catchline in sub_specs:
+        nodes.append(
+            BillNode(
+                match_path=(*match_path, normalize_header(label)),
+                display_path=(*display_path, label),
+                tag="subsection",
+                element_id=el.attrib.get("id", ""),
+                header_text=catchline,
+                body_text=extract_text_content(el),
+                display_text=extract_display_text(el, skip_header_enum=False),
+                section_number=section_num,
+                division_label=division_label,
+            )
+        )
 
 
 def build_title_label(title: ET.Element) -> str:
@@ -608,9 +727,14 @@ def _process_section_element(
                     nodes,
                 )
     else:
-        body_text = _extract_section_text(section)
-        display_text = extract_display_text(section)
-        if body_text:
+        sub_specs = _node_subsections(section)
+        carve = frozenset(id(el) for el, _label, _catch in sub_specs)
+        body_text = _extract_section_text(section, carve)
+        display_text = extract_display_text(section, skip_children=carve)
+        # A section whose children are all node-ized subsections has an empty own
+        # body (e.g. SEC. 547) but must survive as a node — it anchors the SEC.
+        # heading and parents the subsections (#188).
+        if body_text or sub_specs:
             sec_label = section_num.lower() if section_num else ""
             match_path, display_path = _build_paths(
                 title_header,
@@ -632,6 +756,7 @@ def _process_section_element(
                     division_label=division_label,
                 )
             )
+            _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division_label, nodes)
 
 
 _STRUCTURAL_TAGS = {"subtitle", "part", "chapter", "subchapter"}
@@ -762,7 +887,7 @@ def _extract_appropriations_text(element: ET.Element) -> str:
     return " ".join(part for part in parts if part).strip()
 
 
-def _extract_section_text(section: ET.Element) -> str:
+def _extract_section_text(section: ET.Element, exclude: frozenset[int] = frozenset()) -> str:
     """Extract text from a section element.
 
     If the section is a simple lead-in line (a direct <text> child with no
@@ -770,6 +895,9 @@ def _extract_section_text(section: ET.Element) -> str:
     Otherwise, extract all text recursively from the section
     (excluding the enum and header), which captures subsections and the
     <quoted-block> body of "amend ... by adding the following" sections.
+    ``exclude`` drops direct children by ``id()`` — the element-exact carve for
+    subsections that became their own nodes (#188), so each character of the
+    section lives in exactly one node (money conservation by construction).
     Returns empty string if no text content found.
     """
     text_el = section.find("text")
@@ -786,7 +914,7 @@ def _extract_section_text(section: ET.Element) -> str:
     # payload. Extract text from everything except enum and header.
     parts = []
     for child in section:
-        if child.tag in ("enum", "header"):
+        if child.tag in ("enum", "header") or id(child) in exclude:
             continue
         parts.append(extract_text_content(child))
     # Join with a space so adjacent parts keep a word boundary (a bare
@@ -816,9 +944,12 @@ def walk_body_sections(body: ET.Element) -> list[BillNode]:
         if child.tag != "section":
             continue
 
-        body_text = _extract_section_text(child)
-        display_text = extract_display_text(child)
-        if not body_text:
+        sub_specs = _node_subsections(child)
+        carve = frozenset(id(el) for el, _label, _catch in sub_specs)
+        body_text = _extract_section_text(child, carve)
+        display_text = extract_display_text(child, skip_children=carve)
+        # Empty own body is fine when the section parents node-ized subsections (#188).
+        if not body_text and not sub_specs:
             continue
 
         enum_el = child.find("enum")
@@ -843,6 +974,7 @@ def walk_body_sections(body: ET.Element) -> list[BillNode]:
                 division_label="",
             )
         )
+        _append_subsection_nodes(sub_specs, match_path, display_path, section_num, "", nodes)
 
     return nodes
 
@@ -987,26 +1119,32 @@ def normalize_bill(xml_path: Path) -> BillTree:
     divisions = body.findall("division")
     if divisions:
         all_nodes.extend(walk_body_sections(body))
-        for div in divisions:
-            div_enum = div.find("enum")
-            div_header = div.find("header")
-            div_enum_text = div_enum.text.strip() if div_enum is not None and div_enum.text else ""
-            div_header_text = extract_text_content(div_header).strip() if div_header is not None else ""
-            if div_header_text:
-                division_label = f"Division {div_enum_text}: {div_header_text}"
-            else:
-                division_label = f"Division {div_enum_text}"
+        # Walk divisions and titles in document order. Some enrolled bills place a
+        # division's later titles as <title> siblings beside the <division> (only
+        # TITLE I stays nested) — e.g. 113-hr-3547, 115-hr-5895. Such an orphan
+        # title continues the preceding division's numbering, so attribute it to
+        # that division (its label) rather than dropping it (#146) or detaching it
+        # at the bill's end with no division breadcrumb. match_path excludes the
+        # division, so cross-version diff matching is unaffected; only the
+        # display_path (breadcrumb) and document order change.
+        current_division_label = ""
+        for child in body:
+            if child.tag == "division":
+                div_enum = child.find("enum")
+                div_header = child.find("header")
+                div_enum_text = div_enum.text.strip() if div_enum is not None and div_enum.text else ""
+                div_header_text = extract_text_content(div_header).strip() if div_header is not None else ""
+                if div_header_text:
+                    current_division_label = f"Division {div_enum_text}: {div_header_text}"
+                else:
+                    current_division_label = f"Division {div_enum_text}"
 
-            for title in div.findall("title"):
-                title_header = build_title_label(title)
-                all_nodes.extend(walk_title(title, title_header, division_label))
-
-        # Top-level titles can sit beside the divisions under <legis-body>
-        # (e.g. 115-hr-5895 enrolled). Walk them too, else they (and their
-        # amounts) are silently dropped (#146).
-        for title in body.findall("title"):
-            title_header = build_title_label(title)
-            all_nodes.extend(walk_title(title, title_header, ""))
+                for title in child.findall("title"):
+                    title_header = build_title_label(title)
+                    all_nodes.extend(walk_title(title, title_header, current_division_label))
+            elif child.tag == "title":
+                title_header = build_title_label(child)
+                all_nodes.extend(walk_title(child, title_header, current_division_label))
         return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
 
     # Check for titles directly under body

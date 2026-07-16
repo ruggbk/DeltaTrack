@@ -52,7 +52,7 @@ def _build_card(change: ChangeView, index: int) -> str:
     # adapter pulls it from a dict that ultimately reflects upstream parser
     # output. Escape so a stray value can't break attribute quoting.
     ct = escape(change.change_type)
-    data_financial = "1" if change.amount_pairs else "0"
+    data_financial = "1" if _amount_entries_for(change) else "0"
 
     parts = [
         f'<div class="change-card {ct}{extra_card_class}" id="change-{index}"'
@@ -131,32 +131,81 @@ def _moved_body_html(change: ChangeView) -> str:
     return "\n".join(parts)
 
 
+def _amount_entries_for(change: ChangeView) -> tuple[tuple[int | None, int | None, str], ...]:
+    """The change's amount entries, preferring `amount_entries` (#86).
+
+    Falls back to mapping the deprecated `amount_pairs` (changed-only) to
+    ``kind="changed"`` entries, so a ChangeView built with only `amount_pairs`
+    (older callers, hand-built test fixtures) still renders.
+    """
+    if change.amount_entries:
+        return change.amount_entries
+    return tuple((old, new, "changed") for old, new in change.amount_pairs)
+
+
+def _signed_delta(value: int) -> tuple[str, str]:
+    """(display, css_class) for a signed dollar delta. Sign goes outside the
+    formatter so the result is "-$500", not "$-500"."""
+    if value > 0:
+        return f"+{fmt_dollar(value)}", "increase"
+    if value < 0:
+        return f"-{fmt_dollar(abs(value))}", "decrease"
+    return fmt_dollar(0), "neutral"
+
+
 def _build_callout(change: ChangeView) -> str:
     """Render the financial callout for a card.
 
     Layout: flex rows with semantic .increase / .decrease delta classes for
-    color. Returns "" when there are no real amount changes.
+    color. Returns "" when the change carries no amount entries.
 
-    `change.amount_pairs` is already filtered to real changes by the adapters
-    (both sides present and differing), so this function does not re-filter —
-    every pair becomes a row, and zero deltas can't reach this code.
+    Three row kinds (#86): a `changed` value pair (``$X → $Y``), a whole-item
+    `added` amount (``+$X``), and a whole-item `removed` amount (``−$X``). When any
+    added/removed row is present, a closing **Net:** row sums the honest movement
+    (Σnew − Σold across entries) — this is what makes a removal-plus-equal-change
+    read as $0 rather than a lone increase. Renumbering can leave net-zero
+    added/removed noise rows (deferred to #87); they are shown honestly and cancel
+    in the net.
     """
-    if not change.amount_pairs:
+    entries = _amount_entries_for(change)
+    if not entries:
         return ""
     parts = ['<div class="financial-callout">']
-    for old, new in change.amount_pairs:
-        diff = new - old
-        if diff > 0:
-            delta_str = f"+{fmt_dollar(diff)}"
-            delta_class = "increase"
-        else:
-            # Sign goes outside the dollar formatter so the result is "-$500", not "$-500".
-            delta_str = f"-{fmt_dollar(abs(diff))}"
-            delta_class = "decrease"
+    net = 0
+    has_one_sided = False
+    for old, new, kind in entries:
+        if kind == "added":
+            has_one_sided = True
+            net += new
+            delta_str, delta_class = _signed_delta(new)
+            parts.append(
+                f'<div class="row"><span class="label">Added:</span>'
+                f"<span>{fmt_dollar(new)}</span>"
+                f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            )
+        elif kind == "removed":
+            has_one_sided = True
+            net -= old
+            delta_str, delta_class = _signed_delta(-old)
+            parts.append(
+                f'<div class="row"><span class="label">Removed:</span>'
+                f"<span>{fmt_dollar(old)}</span>"
+                f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            )
+        else:  # changed
+            diff = new - old
+            net += diff
+            delta_str, delta_class = _signed_delta(diff)
+            parts.append(
+                f'<div class="row"><span class="label">Amount:</span>'
+                f"<span>{fmt_dollar(old)} &rarr; {fmt_dollar(new)}</span>"
+                f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            )
+    if has_one_sided:
+        net_str, net_class = _signed_delta(net)
         parts.append(
-            f'<div class="row"><span class="label">Amount:</span>'
-            f"<span>{fmt_dollar(old)} &rarr; {fmt_dollar(new)}</span>"
-            f'<span class="delta {delta_class}">({delta_str})</span></div>'
+            f'<div class="row net"><span class="label">Net:</span>'
+            f'<span class="delta {net_class}">{net_str}</span></div>'
         )
     parts.append("</div>")
     return "".join(parts)
@@ -169,7 +218,7 @@ def _build_nav_item(change: ChangeView, index: int) -> str:
     if change.section_number:
         label = f"{escape(change.section_number)} — {label}"
     ct = escape(change.change_type)
-    fin = "1" if change.amount_pairs else "0"
+    fin = "1" if _amount_entries_for(change) else "0"
     return (
         f'<li class="{nav_class}" data-type="{ct}" data-financial="{fin}">'
         f'<a href="#change-{index}">'
@@ -179,28 +228,116 @@ def _build_nav_item(change: ChangeView, index: int) -> str:
     )
 
 
-def _build_change_groups(view: DiffView) -> str:
-    """Group nav items under collapsible section headers (collapsed by default).
+def _group_changes_by_node(view: DiffView) -> tuple[dict, dict[str, list[int]]]:
+    """Nest change indices by node_path; degraded changes fall back flat (#172).
 
-    Insertion-ordered by first appearance; an empty `group_label` collects into a
-    trailing "Uncategorized" group. `_build_nav_item`'s <li> is unchanged — only
-    the wrapping differs. Returns "<ul></ul>" when there are no changes.
+    Returns ``(root, fallback)``: ``root`` is a nested ``{"children": {(label,
+    level): node}, "items": [change indices]}`` tree keyed by node_path
+    segments, insertion-ordered by first appearance; ``fallback`` maps
+    ``group_label`` (or "Uncategorized") to the indices of changes the join
+    couldn't place (empty node_path) — never worse than the old flat grouping.
     """
-    groups: dict[str, list[str]] = {}
+    root: dict = {"children": {}, "items": []}
+    fallback: dict[str, list[int]] = {}
     for i, c in enumerate(view.changes):
-        groups.setdefault(c.group_label or "Uncategorized", []).append(_build_nav_item(c, i))
-    if not groups:
-        return "<ul></ul>"
-    # Insertion order, but "Uncategorized" always trails the real sections.
-    labels = [label for label in groups if label != "Uncategorized"]
-    if "Uncategorized" in groups:
+        if c.node_path:
+            node = root
+            for seg in c.node_path:
+                node = node["children"].setdefault(seg, {"children": {}, "items": []})
+            node["items"].append(i)
+        else:
+            fallback.setdefault(c.group_label or "Uncategorized", []).append(i)
+    return root, fallback
+
+
+def _fallback_labels(fallback: dict[str, list[int]]) -> list[str]:
+    """Fallback group order: first appearance, "Uncategorized" always last."""
+    labels = [label for label in fallback if label != "Uncategorized"]
+    if "Uncategorized" in fallback:
         labels.append("Uncategorized")
-    blocks = [
-        f'<details class="nav-group"><summary>{escape(label)}'
-        f' <span class="nav-group__count">({len(groups[label])})</span></summary>'
-        f"<ul>{''.join(groups[label])}</ul></details>"
-        for label in labels
-    ]
+    return labels
+
+
+def _node_order_map(tree_nodes: list[dict] | None) -> dict[tuple, int]:
+    """(label, level) breadcrumb -> v2 document order, for sorting groups (#172).
+
+    Grouping by first appearance in the change list can deviate from bill
+    order — a removal remapped into a late v2 group but appearing early in the
+    change list would hoist that group above earlier titles. Sorting siblings
+    by the tree's own document order keeps groups in bill order regardless of
+    change order. Same labeled-ancestor hoisting convention as the join, so
+    the keys match node_path prefixes exactly.
+    """
+    order: dict[tuple, int] = {}
+    counter = 0
+
+    def walk(ns: list[dict], path: tuple) -> None:
+        nonlocal counter
+        for n in ns:
+            label = (n.get("label") or "").strip()
+            p = path + ((label, n.get("level") or ""),) if label else path
+            if label and p not in order:
+                order[p] = counter
+                counter += 1
+            walk(n.get("children") or [], p)
+
+    walk(tree_nodes or [], ())
+    return order
+
+
+def _ordered_children(node: dict, path: tuple, order_map: dict[tuple, int] | None):
+    """A group node's children sorted by v2 document order, insertion order for
+    paths the map doesn't know (v1-kept breadcrumbs trail, mutual order kept)."""
+    items = list(node["children"].items())
+    if not order_map:
+        return items
+    last = len(order_map)
+    ranked = sorted(
+        enumerate(items),
+        key=lambda pair: (order_map.get(path + (pair[1][0],), last), pair[0]),
+    )
+    return [item for _, item in ranked]
+
+
+def _build_change_groups(view: DiffView, order_map: dict[tuple, int] | None = None) -> str:
+    """Group nav items under nested collapsible tree-node headers (#172).
+
+    One ``<details class="nav-group">`` per node_path segment, nested to
+    arbitrary depth; a group's count is its SUBTREE item count — the same
+    number ``applyFilters`` recomputes, since its ``querySelectorAll`` is
+    recursive. Changes without a node_path keep the old flat ``group_label``
+    grouping, trailing the tree groups ("Uncategorized" last). Sibling groups
+    follow v2 document order when ``order_map`` is given (see
+    ``_node_order_map``), first appearance otherwise.
+    `_build_nav_item`'s <li> is unchanged — only the wrapping differs.
+    Returns "<ul></ul>" when there are no changes.
+    """
+    if not view.changes:
+        return "<ul></ul>"
+    root, fallback = _group_changes_by_node(view)
+
+    def subtree_count(node: dict) -> int:
+        return len(node["items"]) + sum(subtree_count(c) for c in node["children"].values())
+
+    def render(seg: tuple[str, str], node: dict, path: tuple) -> str:
+        label, _level = seg
+        p = path + (seg,)
+        items = "".join(_build_nav_item(view.changes[i], i) for i in node["items"])
+        kids = "".join(render(s, c, p) for s, c in _ordered_children(node, p, order_map))
+        return (
+            f'<details class="nav-group"><summary>{escape(label)}'
+            f' <span class="nav-group__count">({subtree_count(node)})</span></summary>'
+            f"<ul>{items}</ul>{kids}</details>"
+        )
+
+    blocks = [render(seg, node, ()) for seg, node in _ordered_children(root, (), order_map)]
+    for label in _fallback_labels(fallback):
+        items = "".join(_build_nav_item(view.changes[i], i) for i in fallback[label])
+        blocks.append(
+            f'<details class="nav-group"><summary>{escape(label)}'
+            f' <span class="nav-group__count">({len(fallback[label])})</span></summary>'
+            f"<ul>{items}</ul></details>"
+        )
     return "".join(blocks)
 
 
@@ -236,15 +373,105 @@ def _build_toc(sections: list[dict]) -> str:
     return f'<div class="toc__title">Sections</div>{"".join(blocks)}'
 
 
-def _build_sidebar(view: DiffView, sections: list[dict] | None = None) -> str:
+def _walk_tree(nodes: list[dict]):
+    """Depth-first walk over canonical structure-tree nodes (#108)."""
+    for n in nodes:
+        yield n
+        yield from _walk_tree(n.get("children") or [])
+
+
+def _node_anchor_offset(full_text: str, node: dict) -> int | None:
+    """Char offset of the heading ROW a tree node should jump to.
+
+    A node's ``full_text_span`` locates its *content*: for an interior node that is
+    its own heading line, but for a content node (account/section) it's the body,
+    which sits below an own-line heading equal to the node's ``label``. To land the
+    TOC on the heading (matching the flat ``sections`` anchors and the PDF pipeline,
+    not one line into the body), resolve the anchor from the label:
+
+      - if the span's own line already starts with the label, it IS the heading;
+      - else jump to the nearest preceding line equal to the label (the own-line
+        heading the serializer emitted just above the body);
+      - else (e.g. a ``SEC. NN.`` run-in, whose label is the lowercased number and
+        never appears as a bare line) fall back to the span's line start — the
+        run-in line, which is the right anchor for a section.
+
+    Deriving from the label keeps this a renderer concern (no extra contract field)
+    and is robust to duplicate account names: the nearest preceding match wins.
+    """
+    span = node.get("full_text_span")
+    if not span:
+        return None
+    line_start = full_text.rfind("\n", 0, span["start"]) + 1
+    label = node.get("label") or ""
+    if not label or full_text.startswith(label, line_start):
+        return line_start
+    pos = full_text.rfind("\n" + label + "\n", 0, span["start"])
+    return pos + 1 if pos != -1 else line_start
+
+
+def _build_toc_from_tree(tree_nodes: list[dict], full_text: str) -> str:
+    """Leveled full-bill navigation built from the canonical structure tree (#108).
+
+    Renders the tree as arbitrary-depth nested ``<details>``, so the hierarchy
+    mirrors the bill (division > title > agency > account > section). Unlike the
+    former flat 2-level TOC, this is where the #155 fix becomes visible: an account
+    named "Title 17 …" nests under its agency instead of being promoted to a title
+    group, because the node's level is tag-derived, not inferred from its label
+    text. Each node links to its heading row in the full-bill view; groups are
+    collapsed by default.
+    """
+    if not tree_nodes:
+        return '<p class="toc-empty">No sections detected.</p>'
+
+    def link(node: dict) -> str:
+        off = _node_anchor_offset(full_text, node)
+        label = escape(node["label"])
+        return f'<a href="#fb-off-{off}">{label}</a>' if off is not None else f"<span>{label}</span>"
+
+    def render(node: dict) -> str:
+        kids = node.get("children") or []
+        if not (node.get("label") or "").strip():
+            # An unlabeled node (e.g. the front-matter boilerplate placeholders —
+            # masthead, enacting clause — which carry no heading) makes no useful TOC
+            # entry; skip it but hoist any children so their subtree stays reachable.
+            return "".join(render(k) for k in kids)
+        inner = "".join(render(k) for k in kids)
+        if not inner:
+            # Labeled, but no child renders a visible entry (e.g. a "Front Matter"
+            # group over only unlabeled boilerplate): a toggle would expand to
+            # nothing, so render a clickable leaf that jumps to the node's span. When
+            # the group DOES have labeled children (leading short-title/definitions
+            # sections) it falls through to the <details> toggle below (#161).
+            return f'<li class="toc-child">{link(node)}</li>'
+        return (
+            f'<li><details class="toc-group"><summary>{link(node)}</summary><ul class="toc">{inner}</ul></details></li>'
+        )
+
+    blocks = "".join(render(n) for n in tree_nodes)
+    return f'<div class="toc__title">Sections</div><ul class="toc toc--root">{blocks}</ul>'
+
+
+def _build_sidebar(
+    view: DiffView,
+    canonical: dict | None = None,
+    sections: list[dict] | None = None,
+    order_map: dict[tuple, int] | None = None,
+) -> str:
     """Render the sidebar with both view variants inside one ``<nav>``.
 
     ``.sidebar-changes`` (filters + changes grouped by section) is shown in the
     Changes view; ``.sidebar-toc`` (full-bill section jump list) in the Full bill
-    view — the JS view toggle swaps them. The TOC variant is rendered only when
-    ``sections`` is provided (the PDF/full-bill path); ``None`` (XML/no full bill)
-    renders just the changes variant and the swap no-ops.
+    view — the JS view toggle swaps them. The TOC is built from ``canonical``'s
+    leveled structure tree when present (#108 — the renderer that surfaces the tree
+    in the contract; its anchors and nesting come from the same canonical the
+    full-bill view renders from, so they line up). It falls back to the flat
+    ``sections`` jump-list, and is omitted entirely (the swap no-ops) when neither
+    is available (XML/no full bill).
     """
+    tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
+    if order_map is None:
+        order_map = _node_order_map(tree_v2)
     changes_pane = (
         '<div class="sidebar-changes">\n'
         '<div class="filters">\n'
@@ -253,10 +480,17 @@ def _build_sidebar(view: DiffView, sections: list[dict] | None = None) -> str:
         '<label class="filter-row"><input type="radio" name="change-filter" value="financial"> Financial</label>\n'
         '<label class="filter-row"><input type="radio" name="change-filter" value="structural"> Structural</label>\n'
         "</div>\n"
-        f"{_build_change_groups(view)}\n"
+        f"{_build_change_groups(view, order_map)}\n"
         "</div>"
     )
-    toc_pane = "" if sections is None else f'<div class="sidebar-toc" hidden>{_build_toc(sections)}</div>'
+    full_text_v2 = (canonical.get("full_text") or {}).get("v2") if canonical else None
+    if tree_v2 and full_text_v2:
+        toc_html = _build_toc_from_tree(tree_v2, full_text_v2)
+    elif sections is not None:
+        toc_html = _build_toc(sections)
+    else:
+        toc_html = None
+    toc_pane = "" if toc_html is None else f'<div class="sidebar-toc" hidden>{toc_html}</div>'
     return f'<nav class="sidebar">\n{changes_pane}\n{toc_pane}\n</nav>'
 
 
@@ -309,24 +543,58 @@ def _bill_label(view: DiffView) -> str:
     return f"{escape(str(view.bill_type).upper())} {escape(str(view.bill_number))}"
 
 
-def _cards_section_html(view: DiffView) -> str:
-    """Cards section: stitch built cards together, or show a no-changes message."""
+def _cards_section_html(view: DiffView, order_map: dict[tuple, int] | None = None) -> str:
+    """Cards section: cards grouped under their tree-node headings (#172).
+
+    One ``<details class="card-group" open>`` per node_path segment, nested to
+    arbitrary depth. ``open`` is load-bearing, not cosmetic: ``navTargets()``
+    filters cards by ``offsetParent``, so a closed-by-default group's cards
+    would silently vanish from prev/next stepping and the counter. Each card
+    keeps ``id="change-{original index}"`` — the sidebar hrefs and the
+    financial summary link by change-order index, so grouping may reorder the
+    DOM but never renumber. Sibling groups follow v2 document order when
+    ``order_map`` is given. Changes without a node_path trail in flat
+    ``group_label`` groups; when NO change has one (no tree in the canonical)
+    the section renders flat exactly as before.
+    """
     if not view.changes:
         return '<p class="no-changes">No changes found between these versions.</p>'
-    return "\n".join(_build_card(c, i) for i, c in enumerate(view.changes))
+    if all(not c.node_path for c in view.changes):
+        return "\n".join(_build_card(c, i) for i, c in enumerate(view.changes))
+    root, fallback = _group_changes_by_node(view)
+
+    def group_html(label: str, inner: str) -> str:
+        return (
+            '<details class="card-group" open>'
+            f'<summary class="card-group__label">{escape(label)}</summary>\n{inner}\n</details>'
+        )
+
+    def render(seg: tuple[str, str], node: dict, path: tuple) -> str:
+        label, _level = seg
+        p = path + (seg,)
+        cards = "\n".join(_build_card(view.changes[i], i) for i in node["items"])
+        kids = "\n".join(render(s, c, p) for s, c in _ordered_children(node, p, order_map))
+        return group_html(label, "\n".join(part for part in (cards, kids) if part))
+
+    blocks = [render(seg, node, ()) for seg, node in _ordered_children(root, (), order_map)]
+    for label in _fallback_labels(fallback):
+        cards = "\n".join(_build_card(view.changes[i], i) for i in fallback[label])
+        blocks.append(group_html(label, cards))
+    return "\n".join(blocks)
 
 
 def _build_financial_summary(view: DiffView) -> str:
     """Render the top-of-page Financial Summary table.
 
-    Includes only changes whose pre-filtered amount_pairs is non-empty. Each
-    pair becomes a row; pairs from the same change share a section cell via
-    rowspan when there are multiple. Each row carries a data-group index so
-    the JS column sort keeps multi-pair groups together.
+    One row per amount entry (#86): changed value pairs plus whole-item added and
+    removed amounts. Entries from the same change share a section cell via rowspan.
+    Each row carries a data-group index so the JS column sort keeps groups
+    together. An added row has no old amount and a removed row no new amount —
+    rendered as "—", never ``fmt_dollar(None)`` (which raises).
 
-    Returns "" when no change has any real amount changes.
+    Returns "" when no change carries any amount entry.
     """
-    rows: list[tuple[int, ChangeView]] = [(i, c) for i, c in enumerate(view.changes) if c.amount_pairs]
+    rows: list[tuple[int, ChangeView]] = [(i, c) for i, c in enumerate(view.changes) if _amount_entries_for(c)]
     if not rows:
         return ""
 
@@ -344,26 +612,30 @@ def _build_financial_summary(view: DiffView) -> str:
     ]
 
     for group_idx, (change_index, change) in enumerate(rows):
-        pairs = change.amount_pairs
+        entries = _amount_entries_for(change)
         section_label = change.heading_html or change.nav_label_html
-        for pair_idx, (old, new) in enumerate(pairs):
-            diff = new - old
-            if diff > 0:
-                change_dollar = f"+{fmt_dollar(diff)}"
-                row_class = "increase"
-            else:
-                # _real_changes drops zero-deltas, so diff < 0 here.
-                change_dollar = f"-{fmt_dollar(abs(diff))}"
-                row_class = "decrease"
-            if old != 0:
-                pct_value = diff / old * 100
-                pct_sign = "+" if pct_value >= 0 else ""
-                change_pct = f"{pct_sign}{pct_value:.1f}%"
-            else:
-                change_pct = "—"
+        for entry_idx, (old, new, kind) in enumerate(entries):
+            if kind == "added":
+                change_dollar, row_class = _signed_delta(new)
+                change_pct = "—"  # no old baseline to compute a percentage against
+            elif kind == "removed":
+                change_dollar, row_class = _signed_delta(-old)
+                change_pct = "-100.0%" if old != 0 else "—"  # the item is fully removed
+            else:  # changed
+                diff = new - old
+                change_dollar, row_class = _signed_delta(diff)
+                if old != 0:
+                    pct_value = diff / old * 100
+                    pct_sign = "+" if pct_value >= 0 else ""
+                    change_pct = f"{pct_sign}{pct_value:.1f}%"
+                else:
+                    change_pct = "—"
 
-            if pair_idx == 0:
-                rowspan_attr = f' rowspan="{len(pairs)}"' if len(pairs) > 1 else ""
+            old_cell = fmt_dollar(old) if old is not None else "—"
+            new_cell = fmt_dollar(new) if new is not None else "—"
+
+            if entry_idx == 0:
+                rowspan_attr = f' rowspan="{len(entries)}"' if len(entries) > 1 else ""
                 section_cell = f'<td{rowspan_attr}><a href="#change-{change_index}">{section_label}</a></td>'
             else:
                 section_cell = ""
@@ -371,8 +643,8 @@ def _build_financial_summary(view: DiffView) -> str:
             lines.append(
                 f'<tr class="{row_class}" data-group="{group_idx}">'
                 f"{section_cell}"
-                f'<td class="amount">{fmt_dollar(old)}</td>'
-                f'<td class="amount">{fmt_dollar(new)}</td>'
+                f'<td class="amount">{old_cell}</td>'
+                f'<td class="amount">{new_cell}</td>'
                 f'<td class="amount change-amount">{change_dollar}</td>'
                 f'<td class="amount change-amount">{change_pct}</td>'
                 f"</tr>"
@@ -606,8 +878,19 @@ def _full_bill_html(canonical: dict, sections: list[dict] | None = None) -> str:
         cursor = end
     placed = len(marks)
 
-    # Heading char offset -> TOC index, so the heading's row gets id="sec-{i}".
-    sec_starts = {s["start"]: i for i, s in enumerate(sections or [])}
+    # Heading row char offset -> its DOM id, so the sidebar TOC can jump to it.
+    # Prefer the canonical structure tree (leveled, #155-correct anchors); fall
+    # back to the flat sections list when no tree is present (legacy / no full
+    # text). Both schemes are internally consistent with their matching TOC.
+    tree_v2 = (canonical.get("tree") or {}).get("v2") if canonical.get("tree") else None
+    if tree_v2:
+        row_ids: dict[int, str] = {}
+        for node in _walk_tree(tree_v2):
+            off = _node_anchor_offset(v2_text, node)
+            if off is not None:
+                row_ids.setdefault(off, f"fb-off-{off}")
+    else:
+        row_ids = {s["start"]: f"sec-{i}" for i, s in enumerate(sections or [])}
 
     guttered = _full_text_is_guttered(canonical)
     emitted_ids: set[str] = set()
@@ -618,8 +901,8 @@ def _full_bill_html(canonical: dict, sections: list[dict] | None = None) -> str:
             seen_page = row["page"]
             parts.append(f'<div class="fb-page">p. {seen_page}</div>')
         body = _render_fb_row_body(v2_text, row, marks, emitted_ids)
-        sid = sec_starts.get(row["raw_start"])
-        row_id = f' id="sec-{sid}"' if sid is not None else ""
+        anchor = row_ids.get(row["raw_start"])
+        row_id = f' id="{anchor}"' if anchor else ""
         if guttered:
             gutter = str(row["line"]) if row["line"] is not None else ""
             parts.append(
@@ -646,14 +929,17 @@ def _views_html(
     canonical: dict | None,
     display_canonical: dict | None = None,
     sections: list[dict] | None = None,
+    order_map: dict[tuple, int] | None = None,
 ) -> str:
     """Main content: classic cards, or the toggled changes/full-bill pair.
 
     The full-bill view renders from ``display_canonical`` when given (the
     print-faithful text + spans) and falls back to ``canonical`` otherwise.
     """
+    if order_map is None:
+        order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
     changes_inner = (
-        f"{_build_financial_summary(view)}\n<h2>Changes</h2>\n{_cards_section_html(view)}"
+        f"{_build_financial_summary(view)}\n<h2>Changes</h2>\n{_cards_section_html(view, order_map)}"
         '\n<p class="filter-empty" id="filter-empty" hidden>No changes match this filter.</p>'
     )
     if not _has_full_bill(canonical):
@@ -785,6 +1071,13 @@ def format_diff_html(
         heading = "Bill Comparison"
         doc_title = "Bill Comparison — Diff"
     data_script = _embed_canonical(canonical) if canonical else ""
+    # The TOC/full-bill anchors must come from the same canonical the full-bill view
+    # renders from (display_canonical when given), so their offsets line up.
+    sidebar_canonical = (display_canonical or canonical) if _has_full_bill(canonical) else None
+    # One order map for both panes, from the join's canonical — guarantees the
+    # sidebar and cards can never sort their shared groups from different trees.
+    order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
+    sidebar = _build_sidebar(view, sidebar_canonical, sections if _has_full_bill(canonical) else None, order_map)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -798,7 +1091,7 @@ def format_diff_html(
 <body>
 <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar" title="Toggle sidebar">&#9776;</button>
 <div class="layout">
-{_build_sidebar(view, sections if _has_full_bill(canonical) else None)}
+{sidebar}
 <div class="main">
 <div class="report-header">
 <h1>{heading}</h1>
@@ -815,7 +1108,7 @@ def format_diff_html(
 {_export_button_html(canonical)}
 </div>
 </div>
-{_views_html(view, canonical, display_canonical, sections)}
+{_views_html(view, canonical, display_canonical, sections, order_map)}
 </div>
 </div>
 {_export_modal_html(canonical)}
@@ -900,6 +1193,7 @@ h1, h2, h3, h4 { font-family: var(--font-serif); letter-spacing: -0.02em; }
 .nav-group > summary:hover { background: var(--secondary); }
 .nav-group__count { color: var(--muted-foreground); font-weight: 400; font-variant-numeric: tabular-nums; }
 .nav-group ul { margin: 2px 0 6px 10px; }
+.nav-group .nav-group { margin-left: 10px; }
 
 /* Filters */
 .filters { margin-bottom: 16px; }
@@ -941,6 +1235,17 @@ h1, h2, h3, h4 { font-family: var(--font-serif); letter-spacing: -0.02em; }
 .financial-table a:hover { text-decoration: underline; }
 tr.increase .change-amount { color: var(--success); }
 tr.decrease .change-amount { color: var(--destructive); }
+
+/* Card groups: cards nested under their tree-node headings (#172) */
+.card-group { margin: 6px 0 14px; }
+.card-group > summary { cursor: pointer; font-weight: 600; padding: 6px 8px;
+  border-radius: var(--radius); list-style: none; display: flex; align-items: center; gap: 6px; }
+.card-group > summary::-webkit-details-marker { display: none; }
+.card-group > summary::before { content: "\\25be"; color: var(--muted-foreground); font-size: 10px; }
+.card-group:not([open]) > summary::before { content: "\\25b8"; }
+.card-group > summary:hover { background: var(--secondary); }
+.card-group .card-group { margin-left: 16px; }
+.card-group > .change-card { margin-left: 16px; }
 
 /* Change cards */
 .change-card { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px;
@@ -1076,18 +1381,24 @@ mark.find-hit--current { background: var(--gold); color: #fff; }
   border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;
   font-variant-numeric: tabular-nums; }
 .financial-callout .row { display: flex; gap: 10px; margin-bottom: 2px; }
+.financial-callout .row.net { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border);
+  font-weight: 600; }
 .financial-callout .label { color: var(--muted-foreground); min-width: 110px; }
 .financial-callout .delta.decrease { color: var(--destructive); font-weight: 600; }
 .financial-callout .delta.increase { color: var(--success); font-weight: 600; }
+.financial-callout .delta.neutral { color: var(--muted-foreground); font-weight: 600; }
 
 /* Nav targets clear the sticky action bar when scrolled to via Prev/Next */
-.change-card, .full-bill [id^="attr-"], .full-bill [id^="sec-"], .removed-block { scroll-margin-top: 64px; }
+.change-card, .full-bill [id^="attr-"], .full-bill [id^="sec-"], .full-bill [id^="fb-off-"],
+.removed-block { scroll-margin-top: 64px; }
 
 /* Full-bill section TOC (sidebar variant) */
 .sidebar-changes[hidden], .sidebar-toc[hidden] { display: none; }
 .toc__title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--muted-foreground); margin-bottom: 8px; font-weight: 600; }
 .toc { list-style: none; }
+.toc--root { margin: 0; padding: 0; }
+.toc li { list-style: none; }
 .toc-group { margin-bottom: 2px; }
 .toc-group > summary { cursor: pointer; padding: 6px 8px; border-radius: var(--radius);
   font-size: 13px; font-weight: 600; color: var(--foreground); list-style: none;
@@ -1167,10 +1478,22 @@ document.addEventListener('DOMContentLoaded', function() {
   toggleBtns.forEach(function(b) {
     b.addEventListener('click', function() { showView(b.dataset.view); });
   });
+  // Reveal a card before navigating to it: fragment navigation into a closed
+  // <details> doesn't auto-expand in every browser, so a sidebar link into a
+  // user-collapsed card group would otherwise scroll nowhere (#172).
+  function revealCard(el) {
+    for (var d = el && el.parentElement; d; d = d.parentElement) {
+      if (d.tagName === 'DETAILS') d.open = true;
+    }
+  }
   // Change-list anchors (#change-N) live in the changes view; jump back to it
   // first. TOC links (.sidebar-toc a) just scroll within the full-bill view.
   document.querySelectorAll('.sidebar-changes a').forEach(function(a) {
-    a.addEventListener('click', function() { showView('changes'); });
+    a.addEventListener('click', function() {
+      showView('changes');
+      var href = a.getAttribute('href') || '';
+      if (href.charAt(0) === '#') revealCard(document.getElementById(href.slice(1)));
+    });
   });
 
   // Export modal: download diff.json / report.html, then reveal AI prompts.
@@ -1237,6 +1560,8 @@ document.addEventListener('DOMContentLoaded', function() {
       li.style.display = (card && card.style.display !== 'none') ? '' : 'none';
     });
     // Update each section group's count and hide groups with no visible items.
+    // querySelectorAll is recursive, so a nested group's parent counts its
+    // whole subtree — the same number the renderer emits initially.
     document.querySelectorAll('.nav-group').forEach(function(g) {
       var vis = [].slice.call(g.querySelectorAll('.nav-item')).filter(function(li) {
         return li.style.display !== 'none';
@@ -1244,6 +1569,13 @@ document.addEventListener('DOMContentLoaded', function() {
       g.style.display = vis === 0 ? 'none' : '';
       var cnt = g.querySelector('.nav-group__count');
       if (cnt) cnt.textContent = '(' + vis + ')';
+    });
+    // Same for card groups: a heading over only filter-hidden cards is noise.
+    document.querySelectorAll('.card-group').forEach(function(g) {
+      var vis = [].slice.call(g.querySelectorAll('.change-card')).filter(function(c) {
+        return c.style.display !== 'none';
+      }).length;
+      g.style.display = vis === 0 ? 'none' : '';
     });
     var empty = document.getElementById('filter-empty');
     if (empty) empty.hidden = visible !== 0;
@@ -1288,6 +1620,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var targets = navTargets();
     if (idx >= 0 && idx < targets.length) {
       current = idx;
+      revealCard(targets[idx]);
       targets[idx].scrollIntoView({behavior: 'smooth', block: 'start'});
     }
     refreshNav();
@@ -1344,6 +1677,7 @@ document.addEventListener('DOMContentLoaded', function() {
     findIdx = (i % findHits.length + findHits.length) % findHits.length;
     var cur = findHits[findIdx];
     cur.classList.add('find-hit--current');
+    revealCard(cur);  // a hit inside a collapsed card group must open it, like goTo
     cur.scrollIntoView({behavior: 'smooth', block: 'center'});
     updateFindCounter();
   }

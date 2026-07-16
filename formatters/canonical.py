@@ -19,13 +19,16 @@ parity tests something to assert against.
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from html import escape
 
+from diff_bill import extract_amounts
 from diff_pdf import PdfDiff, PdfHunk
 from formatters.view_model import ChangeView, DiffView
 from parsers.pdf_anchors import Anchor, breadcrumb_for
+from structure_tree import TreeNode, build_pdf_tree
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.4"
 GENERATOR_NAME = "deltatrack"
 
 
@@ -39,9 +42,59 @@ def _real_amount_pairs(
 
     Keep pairs where both sides are present and old != new. The producer
     guarantees this filter so a consumer reading the JSON doesn't have to
-    reimplement it.
+    reimplement it. Deprecated (v1.4): the changed-only subset of the richer
+    `amount_entries` field; kept for back-compat, to be removed at the next major.
     """
     return [{"old": old, "new": new} for old, new in pairs if old is not None and new is not None and old != new]
+
+
+def _amount_entries(
+    pairs: tuple[tuple[int | None, int | None], ...] | list,
+) -> list[dict]:
+    """Categorize match_amounts pairs into self-describing entries (#86, v1.4).
+
+    Each pair becomes ``{"old", "new", "kind"}`` where kind is:
+      - ``"changed"``: both sides present and differ,
+      - ``"added"``:   old side absent (a whole item appeared),
+      - ``"removed"``: new side absent (a whole item vanished).
+    Unchanged pairs (``old == new``, e.g. only floor-amendment annotations moved)
+    are dropped — ``changed`` is defined as ``old != new``.
+
+    The set is **lossless**: no value-symmetric cancellation happens here. On a
+    renumbered list, ``match_amounts`` emits a shuffled item's identical value as a
+    net-zero added/removed pair; distinguishing that from two genuinely distinct
+    equal-value items needs within-list content alignment (#87), so this producer
+    reports every entry honestly and leaves reorder handling to the consumer /
+    #87. A cross-version consumer (BillTrax, ADR 0005/0006) can apply its own
+    alignment; presentation-side collapse stays consumer policy.
+    """
+    entries: list[dict] = []
+    for old, new in pairs:
+        if old is None and new is None:
+            continue
+        if old is None:
+            entries.append({"old": None, "new": new, "kind": "added"})
+        elif new is None:
+            entries.append({"old": old, "new": None, "kind": "removed"})
+        elif old != new:
+            entries.append({"old": old, "new": new, "kind": "changed"})
+        # old == new: unchanged, dropped (see docstring).
+    return entries
+
+
+def _amounts_and_entries(
+    pairs: tuple[tuple[int | None, int | None], ...] | list,
+) -> tuple[list[dict], list[dict]]:
+    """Dual-write ``amounts`` (deprecated) and ``amount_entries`` from one source.
+
+    Asserts ``amounts`` equals the ``changed``-kind subset of ``amount_entries`` so
+    the two fields cannot drift (cheap drift-insurance; both derive from ``pairs``).
+    """
+    amounts = _real_amount_pairs(pairs)
+    entries = _amount_entries(pairs)
+    changed_subset = [{"old": e["old"], "new": e["new"]} for e in entries if e["kind"] == "changed"]
+    assert amounts == changed_subset, "amounts must equal the changed-kind subset of amount_entries"
+    return amounts, entries
 
 
 def _make_id(index: int) -> str:
@@ -65,6 +118,7 @@ def _xml_change_to_canonical(
     text_new = change.get("new_text")
     id_old = change.get("element_id_old")
     id_new = change.get("element_id_new")
+    amounts, amount_entries = _amounts_and_entries((change.get("financial") or {}).get("paired_amounts", ()))
     return {
         "id": _make_id(index),
         "change_type": change_type,
@@ -76,7 +130,8 @@ def _xml_change_to_canonical(
         "location": None,  # XML carries no source coordinates
         "anchor_resolution": "resolved",  # XML pipeline always resolves structurally
         "text": {"old": text_old, "new": text_new},
-        "amounts": _real_amount_pairs((change.get("financial") or {}).get("paired_amounts", ())),
+        "amounts": amounts,
+        "amount_entries": amount_entries,
         "move": _xml_move(change) if change_type == "moved" else None,
         "full_text_span": _search_span(full_text, full_text_spans, text_old, text_new, id_old, id_new, search_state),
     }
@@ -129,16 +184,33 @@ def _search_span(
 
 
 def _xml_move(change: dict) -> dict:
-    """XML pipeline always uses path-form moves -- there's no anchor-text identifier
-    that could be 'renumbered'."""
-    return {
-        "kind": "relocated",
-        "body_unchanged": (change.get("old_text") or "") == (change.get("new_text") or ""),
-    }
+    """Move kind from the display paths, mirroring ``_pdf_move`` (#188).
+
+    A move whose paths share the same parent and differ only in the trailing
+    label is an identifier change — a renumbered/renamed section or subsection
+    (their match keys ARE their labels, so a rename reconciles as a move) — not a
+    relocation within the hierarchy. Reporting "relocated" there told a staffer
+    the provision moved when nothing did.
+    """
+    old_path = change.get("display_path_old") or []
+    new_path = change.get("display_path_new") or []
+    body_unchanged = (change.get("old_text") or "") == (change.get("new_text") or "")
+    if old_path and new_path and list(old_path[:-1]) == list(new_path[:-1]) and old_path[-1] != new_path[-1]:
+        return {
+            "kind": "renumbered",
+            "old_label": old_path[-1],
+            "new_label": new_path[-1],
+            "body_unchanged": body_unchanged,
+        }
+    return {"kind": "relocated", "body_unchanged": body_unchanged}
 
 
 def xml_diff_to_canonical(
-    diff_dict: dict, *, full_text: dict | None = None, full_text_spans: dict | None = None
+    diff_dict: dict,
+    *,
+    full_text: dict | None = None,
+    full_text_spans: dict | None = None,
+    tree: dict | None = None,
 ) -> dict:
     """Convert a bill-diff dict (from bill_diff_to_dict) into canonical JSON.
 
@@ -179,6 +251,7 @@ def xml_diff_to_canonical(
         },
         "summary": dict(diff_dict.get("summary") or {}),
         "full_text": normalized_full_text,
+        "tree": _normalize_tree(tree, normalized_full_text),
         "changes": [
             _xml_change_to_canonical(c, i, normalized_full_text, full_text_spans, search_state)
             for i, c in enumerate(diffed)
@@ -200,6 +273,25 @@ def _normalize_full_text(full_text: dict | None) -> dict | None:
     if not all(isinstance(full_text[k], str) for k in ("v1", "v2")):
         raise ValueError("full_text values must be strings")
     return {"v1": full_text["v1"], "v2": full_text["v2"]}
+
+
+def _normalize_tree(tree: dict | None, full_text: dict | None) -> dict | None:
+    """Validate and pass through the optional per-side `tree` field (#108, v1.3+).
+
+    Accepts None for "no tree available," or a dict with v1/v2 keys each a list of
+    root nodes. Co-presence rule: a non-null tree REQUIRES a non-null full_text —
+    every node's `full_text_span` indexes into `full_text[side]`, so a tree without
+    it would carry dangling spans. The producer is the schema gatekeeper.
+    """
+    if tree is None:
+        return None
+    if not isinstance(tree, dict) or set(tree) != {"v1", "v2"}:
+        raise ValueError("tree must be None or a dict with keys 'v1' and 'v2'")
+    if not all(isinstance(tree[k], list) for k in ("v1", "v2")):
+        raise ValueError("tree values must be lists of root nodes")
+    if full_text is None:
+        raise ValueError("tree requires full_text (its spans index into it)")
+    return {"v1": tree["v1"], "v2": tree["v2"]}
 
 
 # ---------- PDF producer -----------------------------------------------------
@@ -260,6 +352,7 @@ def _pdf_hunk_to_canonical(
     expected_v1 = hunk.v1_range is not None
     expected_v2 = hunk.v2_range is not None
     resolved = (path_v1 is not None) or (path_v2 is not None) or not (expected_v1 or expected_v2)
+    amounts, amount_entries = _amounts_and_entries(hunk.amount_pairs)
     return {
         "id": _make_id(index),
         "change_type": hunk.change_type,
@@ -274,7 +367,8 @@ def _pdf_hunk_to_canonical(
             "old": hunk.v1_text if hunk.v1_range is not None else None,
             "new": hunk.v2_text if hunk.v2_range is not None else None,
         },
-        "amounts": _real_amount_pairs(hunk.amount_pairs),
+        "amounts": amounts,
+        "amount_entries": amount_entries,
         "move": _pdf_move(hunk) if hunk.change_type == "moved" else None,
         "full_text_span": _pdf_span(hunk, line_offsets_v1, line_offsets_v2),
     }
@@ -303,6 +397,70 @@ def _pdf_span(hunk: PdfHunk, line_offsets_v1: dict | None, line_offsets_v2: dict
     return {"v1": _span(hunk.v1_range, line_offsets_v1), "v2": _span(hunk.v2_range, line_offsets_v2)}
 
 
+def _pdf_tree_payload(
+    anchors: tuple[Anchor, ...],
+    side_offsets: dict | None,
+    side_text: str | None,
+) -> list[dict]:
+    """Serialize one PDF version's structure tree to canonical JSON nodes (#108).
+
+    The XML pipeline gets per-node ``own_amounts`` and spans for free from the
+    serializer's body-span index; PDF has no such index, so this derives both from
+    the anchor stream and the per-line offset table: each anchor's OWN block is the
+    char range ``[start(this anchor), start(next anchor))`` in ``side_text``. That
+    partitions the body across anchors with no overlap, so a node's ``own_amounts``
+    (amounts in its own block) never double-counts a child's — the conservation
+    invariant. Text before the first anchor (front matter) is unattributed; for
+    appropriations bills it carries no dollar amounts (bounded, documented drop).
+
+    Returns ``[]`` when there are no anchors or no offset table to index into.
+    """
+    if not anchors or side_offsets is None or side_text is None:
+        return []
+    ordered = list(anchors)  # extract_anchors yields document order
+    # The synthesized front-matter anchor (diff_pdf #33) sits at the bill's opening;
+    # its coerced (page, 1) coordinate is often absent from the per-line offset table,
+    # which would leave its block — the masthead / enacting clause — unattributed and
+    # the "Front Matter" node un-navigable. Anchor it at offset 0 (the document
+    # beginning) so it owns [0, start(first real anchor)) and renders as a navigable
+    # entry (#161). Front matter carries no dollar amounts in appropriations bills,
+    # so claiming this range stays conservation-clean.
+    starts = [
+        0
+        if a.kind == "preamble"
+        else (off[0] if (off := side_offsets.get((a.page_number, a.line_number))) is not None else None)
+        for a in ordered
+    ]
+    # Per-anchor own block, computed BY INDEX and keyed by id(anchor). Index-based
+    # ranges make the partition robust to two anchors sharing a (page, line): they
+    # get start_i == start_{i+1}, so all but the last collapse to an empty range
+    # rather than both inheriting one block — which would double-count, the #108
+    # prohibition. id() keeps colliding anchors distinct in the lookup. (The current
+    # corpus never collides — title/section/account/major detectors are size-disjoint
+    # — so this is a guard against a future anchor emitter, not an active path.)
+    block: dict[int, tuple[dict | None, tuple[int, ...]]] = {}
+    for i, a in enumerate(ordered):
+        start = starts[i]
+        if start is None:
+            block[id(a)] = (None, ())
+            continue
+        end = next((s for s in starts[i + 1 :] if s is not None), len(side_text))
+        end = max(start, end)  # guard non-monotonic offsets (multi-column) → empty, never overlap
+        block[id(a)] = ({"start": start, "end": end}, tuple(extract_amounts(side_text[start:end])))
+
+    def node_json(n: TreeNode) -> dict:
+        span, own = block.get(id(n.source), (None, ())) if n.source is not None else (None, ())
+        return {
+            "label": n.label,
+            "level": n.level,
+            "own_amounts": list(own),
+            "full_text_span": span,
+            "children": [node_json(c) for c in n.children],
+        }
+
+    return [node_json(r) for r in build_pdf_tree(ordered)]
+
+
 def pdf_diff_to_canonical(
     diff: PdfDiff,
     *,
@@ -323,6 +481,15 @@ def pdf_diff_to_canonical(
     """
     line_offsets_v1 = (line_offsets or {}).get("v1")
     line_offsets_v2 = (line_offsets or {}).get("v2")
+    normalized_full_text = _normalize_full_text(full_text)
+    # The structure tree's spans index into full_text, so it only ships when
+    # full_text does (co-presence rule, enforced by _normalize_tree).
+    tree = None
+    if normalized_full_text is not None:
+        tree = {
+            "v1": _pdf_tree_payload(diff.v1_anchors, line_offsets_v1, normalized_full_text["v1"]),
+            "v2": _pdf_tree_payload(diff.v2_anchors, line_offsets_v2, normalized_full_text["v2"]),
+        }
     return {
         "schema_version": SCHEMA_VERSION,
         "generator": {"name": GENERATOR_NAME, "version": "0"},
@@ -332,7 +499,8 @@ def pdf_diff_to_canonical(
             "v2": {"label": v2_label, "version_number": None, "source": "pdf"},
         },
         "summary": dict(diff.summary),
-        "full_text": _normalize_full_text(full_text),
+        "full_text": normalized_full_text,
+        "tree": _normalize_tree(tree, normalized_full_text),
         "changes": [
             _pdf_hunk_to_canonical(h, i, diff.v1_anchors, diff.v2_anchors, line_offsets_v1, line_offsets_v2)
             for i, h in enumerate(diff.hunks)
@@ -424,6 +592,156 @@ def _group_label_from_path(canonical_change: dict) -> str:
     return parts[0] if parts else ""
 
 
+def _span_join_index(nodes: list[dict]) -> tuple[list[int], list[tuple], list[tuple]]:
+    """Build the own-span containment index for one side's structure tree (#172).
+
+    Splits spanned nodes into LEAF spans (own spans overlapping no descendant's —
+    body slices and heading lines, pairwise disjoint on the corpus) and HULL
+    spans (a span overlapping a descendant's — today only the synthesized Front
+    Matter node, whose span is the min/max hull of its children; handled
+    generically so any future container files changes correctly instead of
+    silently claiming them). Null spans are skipped; zero-length spans exist by
+    design on PDF (collision/non-monotonic guards) and must claim nothing.
+
+    An unlabeled node contributes its span under the nearest labeled ancestor's
+    path, mirroring how the TOC hoists unlabeled nodes' children.
+
+    Returns ``(starts, leaves, hulls)``: ``leaves`` as ``(start, end, path)``
+    sorted by start with ``starts`` pre-extracted for bisect; ``hulls`` as
+    ``(start, end, depth, path)``. Built once per side per view — the lookup is
+    O(log leaves) + O(hulls) per change (hulls ≈ 1 today), never O(nodes).
+    """
+    leaves: list[tuple[int, int, tuple]] = []
+    hulls: list[tuple[int, int, int, tuple]] = []
+
+    def walk(ns: list[dict], path: tuple, depth: int) -> tuple[int, int] | None:
+        lo = hi = None
+        for n in ns:
+            label = (n.get("label") or "").strip()
+            p = path + ((label, n.get("level") or ""),) if label else path
+            sub = walk(n.get("children") or [], p, depth + 1)
+            span = n.get("full_text_span")
+            if span and span["end"] > span["start"]:
+                if sub is not None and span["start"] < sub[1] and sub[0] < span["end"]:
+                    hulls.append((span["start"], span["end"], depth, p))
+                else:
+                    leaves.append((span["start"], span["end"], p))
+                lo = span["start"] if lo is None else min(lo, span["start"])
+                hi = span["end"] if hi is None else max(hi, span["end"])
+            if sub is not None:
+                lo = sub[0] if lo is None else min(lo, sub[0])
+                hi = sub[1] if hi is None else max(hi, sub[1])
+        return None if lo is None else (lo, hi)
+
+    walk(nodes, (), 0)
+    leaves.sort()
+    return [leaf[0] for leaf in leaves], leaves, hulls
+
+
+def _join_node_path(index: tuple[list[int], list[tuple], list[tuple]], pos: int) -> tuple:
+    """The (label, level) breadcrumb of the deepest tree node containing ``pos``.
+
+    Interval stabbing, not a bare bisect: the bisect candidate must pass an
+    end-containment check (spans are disjoint-with-gaps — a position in a gap
+    would otherwise be misfiled to the preceding leaf), and a leaf miss falls
+    through to the deepest containing hull. Front Matter shares its exact start
+    offset with its first child, so a flat sorted index without the leaf/hull
+    split would resolve that tie to the container — the wrong (shallowest) node.
+    Returns () when no span contains ``pos``.
+    """
+    starts, leaves, hulls = index
+    i = bisect_right(starts, pos) - 1
+    if i >= 0:
+        start, end, path = leaves[i]
+        if start <= pos < end:
+            return path
+    best: tuple = ()
+    best_key: tuple[int, int] | None = None
+    for start, end, depth, path in hulls:
+        if start <= pos < end:
+            key = (depth, -(end - start))  # deepest; tiebreak narrowest
+            if best_key is None or key > best_key:
+                best_key, best = key, path
+    return best
+
+
+def _v2_label_lookup(nodes: list[dict]) -> dict[str, list[tuple[int, tuple]]]:
+    """Normalized (casefolded, stripped) label -> [(document_order, path)] over
+    one tree, for remapping removed changes' v1 breadcrumbs into v2 groups."""
+    lookup: dict[str, list[tuple[int, tuple]]] = {}
+    order = 0
+
+    def walk(ns: list[dict], path: tuple) -> None:
+        nonlocal order
+        for n in ns:
+            label = (n.get("label") or "").strip()
+            p = path + ((label, n.get("level") or ""),) if label else path
+            if label:
+                lookup.setdefault(label.casefold(), []).append((order, p))
+                order += 1
+            walk(n.get("children") or [], p)
+
+    walk(nodes, ())
+    return lookup
+
+
+def _remap_removed_path(v1_path: tuple, v2_lookup: dict) -> tuple:
+    """Place a removed change's v1 breadcrumb into the v2-organized grouping.
+
+    The report groups by the v2 tree, but a removal only exists in v1. Walk the
+    v1 breadcrumb deepest-segment-first; the first segment whose normalized
+    label exists in v2 wins, so the card files under the nearest surviving
+    group ("what left Title III" is findable where the reader looks). Among
+    same-label v2 candidates, prefer the one sharing the longest normalized
+    trailing-path match with the v1 breadcrumb (distinguishes duplicate account
+    names under different agencies), then matching level (an account named like
+    a title must not remap to a same-named title — the #155 phenomenon; a hard
+    level requirement would hurt recall since sides can drift, hence tiebreak
+    only), then document order. Labels drift across independently-serialized
+    sides, hence normalized matching — the returned path carries the v2 node's
+    own labels so group heading and card agree.
+    No label matches at any depth: keep the v1 breadcrumb as its own group.
+    """
+    if not v1_path:
+        return ()
+    norm = [label.casefold() for label, _level in v1_path]
+    for i in range(len(v1_path) - 1, -1, -1):
+        candidates = v2_lookup.get(norm[i])
+        if not candidates:
+            continue
+        level = v1_path[i][1]
+
+        def rank(item: tuple[int, tuple], i: int = i, level: str = level) -> tuple[int, int, int]:
+            candidate_norm = [label.casefold() for label, _level in item[1]]
+            k = 0
+            while k < min(len(candidate_norm), i + 1) and candidate_norm[-1 - k] == norm[i - k]:
+                k += 1
+            return (k, 1 if item[1][-1][1] == level else 0, -item[0])
+
+        return max(candidates, key=rank)[1]
+    return v1_path
+
+
+def _node_path_for_change(canonical_change: dict, join_index: dict, v2_lookup: dict) -> tuple:
+    """Join one change to its tree node by start offset, per-side (#172).
+
+    Removals join on the v1 side (their only span, against the v1 tree) and
+    are then remapped into the v2 grouping; everything else joins on its v2
+    start — never a v1 offset against the v2 index, the offset spaces are
+    unrelated. The span dict can be None as a whole (PDF without offset
+    tables, XML without full_text), not just per-side null; both degrade to
+    () rather than raising.
+    """
+    side = "v1" if canonical_change["change_type"] == "removed" else "v2"
+    span = (canonical_change.get("full_text_span") or {}).get(side)
+    if not span:
+        return ()
+    node_path = _join_node_path(join_index[side], span["start"])
+    if side == "v1":
+        return _remap_removed_path(node_path, v2_lookup)
+    return node_path
+
+
 def _card_texts(canonical_change: dict, source: str, full_text: dict | None) -> tuple[str, str]:
     """Card old/new text, preferring the readable full_text slice over collapsed body.
 
@@ -461,7 +779,22 @@ def _card_texts(canonical_change: dict, source: str, full_text: dict | None) -> 
     return old_text, new_text
 
 
-def _change_view_from_canonical(canonical_change: dict, source: str, full_text: dict | None) -> ChangeView:
+def _amount_entries_from_canonical(canonical_change: dict) -> tuple[tuple[int | None, int | None, str], ...]:
+    """Read `amount_entries` (v1.4+), falling back to the deprecated `amounts`.
+
+    No consumer checks `schema_version`, so a pre-1.4 document (or a hand-built
+    test canonical) simply lacks `amount_entries`; its `amounts` are all changed
+    pairs, mapped to kind "changed".
+    """
+    entries = canonical_change.get("amount_entries")
+    if entries is not None:
+        return tuple((e["old"], e["new"], e["kind"]) for e in entries)
+    return tuple((p["old"], p["new"], "changed") for p in canonical_change.get("amounts") or ())
+
+
+def _change_view_from_canonical(
+    canonical_change: dict, source: str, full_text: dict | None, join_index: dict, v2_lookup: dict
+) -> ChangeView:
     heading_html, nav_label_html, degraded = _heading_and_nav(canonical_change, source)
     old_text, new_text = _card_texts(canonical_change, source, full_text)
     return ChangeView(
@@ -476,12 +809,20 @@ def _change_view_from_canonical(canonical_change: dict, source: str, full_text: 
         new_text=new_text,
         amount_pairs=tuple((p["old"], p["new"]) for p in canonical_change.get("amounts") or ()),
         group_label=_group_label_from_path(canonical_change),
+        node_path=_node_path_for_change(canonical_change, join_index, v2_lookup),
+        amount_entries=_amount_entries_from_canonical(canonical_change),
     )
 
 
 def view_from_canonical(canonical: dict) -> DiffView:
     source = canonical["versions"]["v1"]["source"]
     full_text = canonical.get("full_text")
+    # The join reads only THIS canonical's tree — on PDF the caller also builds a
+    # print-faithful display_canonical whose full_text offsets differ; joining
+    # change spans (from here) against that tree would misfile silently (#172).
+    tree = canonical.get("tree") or {}  # .get: pre-1.3 canonicals omit it → degrade
+    join_index = {side: _span_join_index(tree.get(side) or []) for side in ("v1", "v2")}
+    v2_lookup = _v2_label_lookup(tree.get("v2") or [])
     return DiffView(
         bill_type=canonical["bill"]["type"],
         bill_number=canonical["bill"]["number"],
@@ -491,5 +832,8 @@ def view_from_canonical(canonical: dict) -> DiffView:
         v1_version_number=canonical["versions"]["v1"]["version_number"],
         v2_version_number=canonical["versions"]["v2"]["version_number"],
         summary=dict(canonical.get("summary") or {}),
-        changes=tuple(_change_view_from_canonical(c, source, full_text) for c in canonical.get("changes") or ()),
+        changes=tuple(
+            _change_view_from_canonical(c, source, full_text, join_index, v2_lookup)
+            for c in canonical.get("changes") or ()
+        ),
     )

@@ -6,6 +6,8 @@ from diff_pdf import (
     _Block,
     _block_key,
     _group_into_blocks,
+    _hunk_for_added,
+    _hunk_for_removed,
     _IndexedLine,
     _rejoin_cross_page_hyphens,
     diff_pdfs,
@@ -479,6 +481,55 @@ class TestAccountHeadingRename:
         assert hunks[0].amount_pairs == ((1000, 1500),)
 
 
+class TestSecInlineSubsectionCollision:
+    """DeltaTrack#96 Seam #2: a SEC. line carrying an inline `(a)` run-in subsection
+    collides on ONE (page, line) — the section and subsection anchors share it. The
+    section anchor's block is then empty (`indexed_lines[pos:pos]`); the subsection,
+    later in doc order, owns the text. A renumbered/removed colliding section would
+    otherwise emit a phantom empty-text hunk whose citation renders a contradictory
+    `— (new in v2)` AND `— (removed in v2)`. Empty blocks arise ONLY from this
+    collision, so `_group_into_blocks` drops them; the section stays in the anchor
+    lists (TOC/breadcrumbs unaffected) and the renumber surfaces as a text diff
+    inside the subsection's hunk."""
+
+    def test_group_into_blocks_drops_empty_collision_block(self):
+        indexed = [
+            _IndexedLine("SEC. 547. (a) In general. The Secretary shall act, $5,000.", 1, 5),
+            _IndexedLine("to remain available until expended.", 1, 6),
+        ]
+        anchors = [
+            Anchor(1, 5, "section", "SEC. 547"),
+            Anchor(1, 5, "subsection", "(a) In general"),
+        ]
+        blocks = _group_into_blocks(indexed, anchors)
+        assert all(b.indexed_lines for b in blocks), "empty collision block leaked"
+        assert [b.anchor.kind for b in blocks] == ["subsection"]
+        assert blocks[0].text.startswith("SEC. 547. (a) In general")
+
+    def test_renumbered_colliding_section_emits_no_phantom_hunk(self):
+        v1 = [
+            _page(
+                1,
+                (5, "SEC. 547. (a) In general.—The Secretary shall act, $5,000."),
+                (6, "to remain available until expended."),
+            )
+        ]
+        v2 = [
+            _page(
+                1,
+                (5, "SEC. 548. (a) In general.—The Secretary shall act, $5,000."),
+                (6, "to remain available until expended."),
+            )
+        ]
+        hunks = diff_pdfs(v1, v2).hunks
+        # The renumber surfaces once, as a text diff inside the subsection's block —
+        # never as a phantom hunk carrying empty text on both sides (the collision
+        # artifact the filter removes).
+        assert not any(h.v1_text == "" and h.v2_text == "" for h in hunks), (
+            f"phantom empty-text collision hunk leaked: {[(h.change_type, h.v1_text, h.v2_text) for h in hunks]}"
+        )
+
+
 class TestPdfDiffSummary:
     def test_summary_counts_by_change_type(self):
         v1 = [
@@ -497,3 +548,32 @@ class TestPdfDiffSummary:
         ]
         result = diff_pdfs(v1, v2)
         assert result.summary == {"modified": 1, "added": 1}
+
+
+class TestWholeItemAmounts:
+    """#86: whole-account added/removed PDF hunks must carry their dollar amounts.
+
+    Previously ``_hunk_for_added`` / ``_hunk_for_removed`` hardcoded
+    ``amount_pairs=()``, so a PDF-only added or removed account surfaced no money
+    at all. The builders now run ``match_amounts`` against the empty other side.
+    """
+
+    def test_added_hunk_carries_amounts(self):
+        block = _block(
+            Anchor(1, 1, "account", "NEW PROGRAM"),
+            (1, 1, "NEW PROGRAM"),
+            (1, 2, "For necessary expenses, $5,000,000."),
+        )
+        hunk = _hunk_for_added(block)
+        assert hunk.change_type == "added"
+        assert hunk.amount_pairs == ((None, 5000000),)
+
+    def test_removed_hunk_carries_amounts(self):
+        block = _block(
+            Anchor(1, 1, "account", "OLD PROGRAM"),
+            (1, 1, "OLD PROGRAM"),
+            (1, 2, "For necessary expenses, $5,000,000."),
+        )
+        hunk = _hunk_for_removed(block)
+        assert hunk.change_type == "removed"
+        assert hunk.amount_pairs == ((5000000, None),)

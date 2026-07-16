@@ -28,7 +28,9 @@ from formatters.canonical import (
 )
 from parsers.pdf_anchors import Anchor
 
-SCHEMA_VERSION = "1.2"
+# Local pin (guard against unintended bumps). 1.4 added the optional `amount_entries`
+# field (#86); 1.3 added the optional `tree` field (#108).
+SCHEMA_VERSION = "1.4"
 
 
 # ---------- XML producer ------------------------------------------------------
@@ -135,6 +137,27 @@ def test_xml_moved_change_emits_relocated_move():
     c = canonical["changes"][0]
     assert c["change_type"] == "moved"
     assert c["move"] == {"kind": "relocated", "body_unchanged": True}
+
+
+def test_xml_same_parent_label_change_emits_renumbered_move():
+    # #188 review fix: a subsection (or section) whose match key IS its label
+    # reconciles a rename/renumber as a move — same parent, different tail is a
+    # "renumbered" identifier change, not a relocation (mirrors _pdf_move).
+    change = {
+        "change_type": "moved",
+        "display_path_old": ["TITLE V", "sec. 5", "(a) In general"],
+        "display_path_new": ["TITLE V", "sec. 5", "(b) In general"],
+        "old_text": "same body",
+        "new_text": "same body",
+        "section_number": "Sec. 5",
+    }
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[change]))
+    assert canonical["changes"][0]["move"] == {
+        "kind": "renumbered",
+        "old_label": "(a) In general",
+        "new_label": "(b) In general",
+        "body_unchanged": True,
+    }
 
 
 def test_xml_amounts_filtered_to_real_changes():
@@ -266,7 +289,7 @@ def test_pdf_agency_breadcrumb_flows_into_canonical_path_without_schema_change()
     canonical = pdf_diff_to_canonical(diff, **_pdf_meta())
     c = canonical["changes"][0]
     assert c["path"]["v2"] == ["TITLE I", "MANAGEMENT DIRECTORATE", "OPERATIONS AND SUPPORT"]
-    assert canonical["schema_version"] == SCHEMA_VERSION  # unchanged (still 1.2)
+    assert canonical["schema_version"] == SCHEMA_VERSION  # PDF breadcrumb change adds no bump of its own
 
 
 # Major/department-level anchor for the #105 breadcrumb (slice C).
@@ -298,7 +321,7 @@ def test_pdf_major_breadcrumb_flows_into_canonical_path_without_schema_change():
         "MANAGEMENT DIRECTORATE",
         "OPERATIONS AND SUPPORT",
     ]
-    assert canonical["schema_version"] == SCHEMA_VERSION  # unchanged (still 1.2)
+    assert canonical["schema_version"] == SCHEMA_VERSION  # PDF breadcrumb change adds no bump of its own
 
 
 def test_pdf_division_breadcrumb_flows_into_canonical_path_without_schema_change():
@@ -330,7 +353,7 @@ def test_pdf_division_breadcrumb_flows_into_canonical_path_without_schema_change
         "MANAGEMENT DIRECTORATE",
         "OPERATIONS AND SUPPORT",
     ]
-    assert canonical["schema_version"] == SCHEMA_VERSION  # unchanged (still 1.2)
+    assert canonical["schema_version"] == SCHEMA_VERSION  # PDF breadcrumb change adds no bump of its own
 
 
 def test_pdf_envelope_marks_source_pdf_and_version_number_null():
@@ -495,6 +518,31 @@ def test_pdf_amounts_filtered_to_real_changes():
     diff = PdfDiff(hunks=(hunk,), v1_anchors=(SEC_101,), v2_anchors=(SEC_101,))
     canonical = pdf_diff_to_canonical(diff, **_pdf_meta())
     assert canonical["changes"][0]["amounts"] == [{"old": 1000, "new": 1500}]
+
+
+def test_pdf_amount_entries_categorize_added_removed():
+    """#86: amount_entries carries the full categorized set (changed/added/removed),
+    losslessly, while `amounts` stays the deprecated changed-only subset."""
+    hunk = PdfHunk(
+        change_type="modified",
+        v1_anchor=SEC_101,
+        v2_anchor=SEC_101,
+        v1_range=(1, 1, 1, 5),
+        v2_range=(1, 1, 1, 5),
+        v1_text="x",
+        v2_text="y",
+        amount_pairs=((1000, 1500), (2000, 2000), (None, 500), (5000, None)),
+    )
+    diff = PdfDiff(hunks=(hunk,), v1_anchors=(SEC_101,), v2_anchors=(SEC_101,))
+    change = pdf_diff_to_canonical(diff, **_pdf_meta())["changes"][0]
+    # Unchanged (2000, 2000) dropped; the rest categorized in order.
+    assert change["amount_entries"] == [
+        {"old": 1000, "new": 1500, "kind": "changed"},
+        {"old": None, "new": 500, "kind": "added"},
+        {"old": 5000, "new": None, "kind": "removed"},
+    ]
+    # Back-compat: `amounts` == the changed-kind subset.
+    assert change["amounts"] == [{"old": 1000, "new": 1500}]
 
 
 # ---------- Schema validation -------------------------------------------------

@@ -1,6 +1,6 @@
 # 13. Bill identity is the slug; version is a per-bill ordinal, not a universal one
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-06-29
 
 ## Context

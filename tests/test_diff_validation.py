@@ -24,6 +24,7 @@ from diff_bill import (
     diff_bills,
     extract_amounts,
 )
+from tests.conftest import require_corpus_or_skip
 
 BILLS_DIR = Path(__file__).parent.parent / "bills"
 
@@ -125,17 +126,19 @@ class TestControlledDiff:
     def test_summary_baseline(self, hr4366_v1_v2_diff):
         """Regression baseline for summary counts.
 
-        Current values: added=7, modified=17, unchanged=150, moved=1. Front matter
+        Current values: added=7, modified=17, unchanged=187, moved=1. Front matter
         (#48) adds three nodes: the masthead is modified ("A BILL" -> "AN ACT" on
         passing the chamber) and the official title + enacting clause are unchanged,
-        so modified 16->17 and unchanged 148->150. A change here flags a
-        parser/matching regression to investigate.
+        so modified 16->17 and unchanged 148->150. #188's subsection nodes add 37
+        per side, all textually identical v1->v2, so unchanged 150->187 while every
+        real-change count stays put. A change here flags a parser/matching
+        regression to investigate.
         """
         s = hr4366_v1_v2_diff.summary
         assert s["added"] == 7
         assert s["removed"] == 0
         assert s["modified"] == 17
-        assert s["unchanged"] == 150
+        assert s["unchanged"] == 187
         assert s["moved"] == 1
 
     # -- Financial validation --
@@ -363,9 +366,13 @@ class TestDeadZoneBaseline:
                     if old_title and new_title and old_title != new_title:
                         cross_div += 1
 
-        # Baseline: 1. Only 3 true cross-division mismatches exist across
-        # the entire corpus (all are "moved" pairings).
-        assert cross_div <= 5, f"Cross-division mismatches increased: {cross_div} (baseline: 1)"
+        # Baseline: 10 (was 1 before #188). The subsection carve leaves each
+        # section's own body as its distinctive lead-in, so nine identical-text
+        # provisions that were previously LOST as removed+added pairs now
+        # reconcile as cross-division moves — each verified sim=1.00 "moved"
+        # (recovered relocations, not mismatches). A further increase is a
+        # regression to investigate.
+        assert cross_div <= 12, f"Cross-division mismatches increased: {cross_div} (baseline: 10)"
 
     def test_summary_baseline(self, hr5895_v4_v5_diff):
         """Regression baseline.
@@ -382,6 +389,18 @@ class TestDeadZoneBaseline:
 # ---------------------------------------------------------------------------
 # Corpus-wide smoke test: diff all adjacent version pairs
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_corpus_present_when_required():
+    """Fail-loud completeness floor for the diff-validation gates (#167).
+
+    In REQUIRE_CORPUS mode this asserts the pinned baseline bills are present and that
+    TestCorpusDiffSmoke discovered at least one version pair. Without it, an unfetched
+    checkout runs this whole module's slow assertions green without executing any of
+    them (empty parametrization + skipping fixtures). Skips outside required mode.
+    """
+    require_corpus_or_skip(_adjacent_version_pairs(), "diff-validation")
 
 
 def _adjacent_version_pairs():

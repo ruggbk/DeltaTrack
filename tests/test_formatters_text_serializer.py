@@ -300,3 +300,78 @@ def test_real_bill_serializes_without_error_and_contains_known_text():
     assert len(out) > 1000
     assert "DEPARTMENT OF DEFENSE" in out
     assert "military construction" in out.lower()
+
+
+# --- Subsection nodes (#188) -------------------------------------------------
+
+
+def _sec_with_subs() -> list[BillNode]:
+    """A SEC. 547 whose children are all node-ized subsections (empty own body),
+    followed by a sibling section — the shape #188 introduces."""
+    return [
+        _node(path=("TITLE V", "sec. 547"), sec="Sec. 547", eid="S547", body="", display=""),
+        _node(
+            path=("TITLE V", "sec. 547", "(a) In general"),
+            tag="subsection",
+            sec="Sec. 547",
+            eid="s547a",
+            body="(a)In general.—None of the funds may be used.",
+            display="(a) In general.—None of the funds may be used.",
+        ),
+        _node(
+            path=("TITLE V", "sec. 547", "(b) Definitions"),
+            tag="subsection",
+            sec="Sec. 547",
+            eid="s547b",
+            body="(b)DefinitionsIn this section—",
+            display="(b) Definitions In this section—",
+        ),
+        _node(path=("TITLE V", "sec. 548"), sec="Sec. 548", eid="S548", body="Next section.", display="Next section."),
+    ]
+
+
+def test_subsection_body_follows_section_line_without_heading_lines():
+    # The subsection's own label and the section's "sec. 547" segment are run-in
+    # chrome, not heading lines — the text flows SEC. 547. / (a) ... / (b) ...
+    out = serialize_tree(_tree(_sec_with_subs()))
+    assert "SEC. 547." in out
+    assert "(a) In general.—None of the funds may be used." in out
+    # No lowercase "sec. 547" heading line and no bare label heading line.
+    assert "\nsec. 547\n" not in out
+    assert "\n(a) In general\n" not in out
+
+
+def test_empty_body_section_still_emits_its_heading_line():
+    # A section whose children are all subsections has an empty own body but must
+    # keep its SEC. line — it anchors the TOC entry and the tree span.
+    out = serialize_tree(_tree(_sec_with_subs()))
+    lines = out.split("\n")
+    assert "SEC. 547." in lines
+    # Document order: the SEC. line precedes its subsections' bodies.
+    assert lines.index("SEC. 547.") < lines.index("(a) In general.—None of the funds may be used.")
+
+
+def test_subsection_jump_list_entries_carry_subsection_kind():
+    # PDF's _section_nav includes subsection anchors (kind="subsection", #96);
+    # the XML jump list mirrors it so _build_toc consumes both identically.
+    _text, sections = serialize_tree_with_offsets(_tree(_sec_with_subs()))
+    kinds = [(s["label"], s["kind"]) for s in sections]
+    assert ("Sec. 547", "section") in kinds
+    assert ("(a) In general", "subsection") in kinds
+    assert ("(b) Definitions", "subsection") in kinds
+
+
+def test_subsection_body_spans_are_exact():
+    text, _sections, spans = serialize_tree_for_diff(_tree(_sec_with_subs()))
+    start, end = spans["s547a"]
+    assert text[start:end] == "(a) In general.—None of the funds may be used."
+    # The empty-body section's span is zero-length at the end of its SEC. line.
+    s_start, s_end = spans["S547"]
+    assert s_start == s_end
+
+
+def test_offsets_remain_consistent_after_subsections():
+    # The sibling section AFTER the subsections still resolves exactly.
+    text, _sections, spans = serialize_tree_for_diff(_tree(_sec_with_subs()))
+    start, end = spans["S548"]
+    assert text[start:end] == "Next section."

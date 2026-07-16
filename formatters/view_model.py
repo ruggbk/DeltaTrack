@@ -59,6 +59,20 @@ class ChangeView:
     """Raw (unescaped) section label the sidebar groups this change under —
     the top of its breadcrumb (e.g. "TITLE I"). Empty → "Uncategorized"."""
 
+    node_path: tuple[tuple[str, str], ...] = ()
+    """Raw (label, level) breadcrumb, root → the tree node this change was
+    filed under by the own-span containment join (#172). Empty when the join
+    could not place the change (no tree, null span, uncovered position) — the
+    renderer then falls back to group_label for that card."""
+
+    amount_entries: tuple[tuple[int | None, int | None, str], ...] = ()
+    """Self-describing base-amount changes (#86): (old, new, kind) with kind in
+    {"changed", "added", "removed"}. Lossless — added/removed whole items included,
+    no reorder cancellation (that is #87). Defaulted so pre-#86 constructions and
+    pre-1.4 canonicals (fallback to `amount_pairs` as all-"changed") still build.
+    The callout and financial summary read this; `amount_pairs` stays the
+    changed-only back-compat view."""
+
 
 @dataclass(frozen=True)
 class DiffView:

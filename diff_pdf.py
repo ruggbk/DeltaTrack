@@ -291,7 +291,19 @@ def _group_into_blocks(indexed_lines: list[_IndexedLine], anchors: list[Anchor])
         end = anchor_at[j + 1][1] if j + 1 < len(anchor_at) else len(indexed_lines)
         blocks.append(_Block(anchor, _strip_heading_lines(tuple(indexed_lines[pos:end]), anchor)))
 
-    return blocks
+    # Drop empty blocks. A block is empty only when its slice `[pos:end]` is empty,
+    # i.e. the next anchor resolves to `end <= pos` — in practice the SEC-inline run-in
+    # subsection collision (DeltaTrack#96), where the section anchor and subsection share
+    # a (page, line) so the section gets `indexed_lines[pos:pos]` and the subsection
+    # (later in doc order) owns the text; a non-monotonic within-page line ordering could
+    # in principle also yield `end < pos`, and dropping that is likewise correct (an empty
+    # slice carries no diff content either way). `_strip_heading_lines` never empties a
+    # block and rejoined-line anchors are skipped above, so the filter only removes these
+    # zero-line artifacts — surgically killing the phantom empty-text hunk a
+    # renumbered/removed colliding section would emit (contradictory move citation), while
+    # the section anchor stays in the anchor lists for TOC/breadcrumbs. The renumber then
+    # surfaces as a text diff inside the subsection's hunk instead.
+    return [b for b in blocks if b.indexed_lines]
 
 
 def _block_key(block: _Block) -> str:
@@ -310,12 +322,11 @@ def _block_key(block: _Block) -> str:
 def _extract_amount_pairs(v1_text: str, v2_text: str) -> tuple[tuple[int | None, int | None], ...]:
     """All amount pairs from match_amounts as a tuple, including unchanged pairs.
 
-    Unchanged pairs (e.g. `$281,358,000 → $281,358,000` when only floor
-    amendment annotations were added) are preserved here so the renderer can
-    show them in the callout — matches the XML pipeline's
-    `_financial_callout`, which renders every paired amount including `(+$0)`
-    rows. The Financial Summary table at the top still filters to truly-changed
-    pairs via `_has_real_amount_change` in the renderer.
+    The full pair list (changed / added / removed / unchanged) is carried on the
+    hunk. The canonical producer categorizes it into `amount_entries` and drops
+    unchanged (`old == new`) pairs there; the deprecated `amounts` field keeps only
+    the changed subset (`formatters/canonical.py:_amount_entries`). Preserving the
+    unchanged pairs here keeps this function a lossless view of match_amounts.
     """
     return tuple(match_amounts(v1_text, v2_text))
 
@@ -358,6 +369,9 @@ def _hunk_for_paired_blocks(v1_block: _Block, v2_block: _Block, similarity: floa
 
 
 def _hunk_for_added(v2_block: _Block) -> PdfHunk:
+    # A whole account added on the PDF side carries real dollars; match against the
+    # empty other side so they surface as `added` amount entries (#86). Previously
+    # hardcoded to (), leaving PDF added/removed hunks silent on the money axis.
     return PdfHunk(
         change_type="added",
         v1_anchor=None,
@@ -366,12 +380,14 @@ def _hunk_for_added(v2_block: _Block) -> PdfHunk:
         v2_range=v2_block.page_range,
         v1_text="",
         v2_text=v2_block.text,
-        amount_pairs=(),
+        amount_pairs=tuple(match_amounts("", v2_block.text)),
         has_amendment_annotations=_has_amendment_annotations("", v2_block.text),
     )
 
 
 def _hunk_for_removed(v1_block: _Block) -> PdfHunk:
+    # Mirror of _hunk_for_added: a whole account removed surfaces its dollars as
+    # `removed` entries (#86).
     return PdfHunk(
         change_type="removed",
         v1_anchor=v1_block.anchor,
@@ -380,7 +396,7 @@ def _hunk_for_removed(v1_block: _Block) -> PdfHunk:
         v2_range=None,
         v1_text=v1_block.text,
         v2_text="",
-        amount_pairs=(),
+        amount_pairs=tuple(match_amounts(v1_block.text, "")),
         has_amendment_annotations=_has_amendment_annotations(v1_block.text, ""),
     )
 
