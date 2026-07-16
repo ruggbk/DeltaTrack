@@ -68,7 +68,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Parity with the human form: same neutral questions, same §5 rubric, same leak-guard field set.
-from make_form import _FORBIDDEN, _QUESTION, _STANDARD
+from make_form import _CONFIDENCE, _EXAMPLES, _FORBIDDEN, _QUESTION, _STANDARD
 
 _HERE = Path(__file__).parent
 _LABELS = _HERE / "labels"
@@ -96,18 +96,37 @@ def _rubric() -> str:
     return "\n".join(f"- {name}: {desc}" for name, desc in _STANDARD)
 
 
+def _confidence_guide() -> str:
+    """The confidence scale, verbatim from the shared form (parity — the human sees the same)."""
+    return "\n".join(f"- {lvl}: {desc}" for lvl, desc in _CONFIDENCE)
+
+
+def _examples_block() -> str:
+    """The shared worked examples (parity). Hand-crafted, not from the dataset; they name no stratum
+    and carry no score, so they pass the blindness leak-guard like any other authored framing."""
+    out = []
+    for ex in _EXAMPLES:
+        out.append(f"[{ex['verdict']} — {ex['kind']}]")
+        out.append(f"  OLD: {ex['old']}")
+        out.append(f"  NEW: {ex['new']}")
+        out.append(f"  Why: {ex['why']}")
+    return "\n".join(out)
+
+
 def _system_prompt() -> str:
-    # Parity with the human form (make_form._STANDARD): orientation + the shared rubric ONLY. The
-    # earlier coaching ("structural context ... you SHOULD use it", "a shared citation is NOT
-    # evidence of sameness") is deliberately absent — the humans never got it, and it partly
-    # inoculated the model against the correlated-error mode the §8 caveat depends on. The
-    # anti-correlation hint the task needs is already in the rubric's "Different" bullet, which
-    # both the human and the model see.
+    # Parity with the human form: the model gets EXACTLY what the reviewer gets — the shared rubric,
+    # the shared confidence scale, and the shared worked examples (make_form._STANDARD/_CONFIDENCE/
+    # _EXAMPLES) — no more. Earlier LLM-only coaching ("structural context ... you SHOULD use it")
+    # stays absent: it partly inoculated the model against the correlated-error mode §8 depends on,
+    # and the humans never got it. The examples are parallel coaching (both sides see them), so they
+    # preserve parity rather than break it.
     return (
         "You are an independent labeler establishing ground truth for whether two versions of a "
         "legislative provision are the same provision or distinct provisions. Judge on substance "
         "using the standard below.\n\n"
-        "Decision standard:\n" + _rubric()
+        "Decision standard:\n" + _rubric() + "\n\n"
+        "Confidence scale:\n" + _confidence_guide() + "\n\n"
+        "Worked examples (illustrative, not from this dataset):\n" + _examples_block()
     )
 
 

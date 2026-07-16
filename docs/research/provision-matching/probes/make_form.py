@@ -46,21 +46,74 @@ _QUESTION = {
     ),
 }
 
+# Plain-language decision standard (same substance as protocol §5, clearer words). NB: never names a
+# mining stratum — "consolidation" etc. are stratum names the reviewer/LLM must not see (§5), so the
+# absorbed/contained rows describe the SCENARIO ("folded into a bigger section") instead.
 _STANDARD = [
     (
-        "Same",
-        "Same subject, same statutory target, same account/authority — continued or edited "
-        "across versions, no matter how much text was added or removed.",
+        "Same provision",
+        "The same underlying provision carried forward or edited across versions — same subject, "
+        "same law or account it targets — no matter how much text was added or cut.",
     ),
-    ("Different", "Distinct provisions that merely share boilerplate, a citation, or a reused section number."),
+    (
+        "Different provisions",
+        "Genuinely different provisions that only look related because they share boilerplate, a "
+        "citation, or a reused section number.",
+    ),
     (
         "Genuinely absorbed",
-        "The old provision's statutory target actually appears, substantively, inside the new section.",
+        "When the old provision may be folded into a bigger new section: its actual subject really "
+        "continues inside that section — not just a shared citation.",
     ),
     (
         "Coincidentally contained",
-        "The overlap is just a shared boilerplate citation, with no substantive continuation.",
+        "When the old provision may be folded into a bigger new section: the two only share a "
+        "boilerplate citation, and the old provision is not actually continued.",
     ),
+]
+
+# Confidence scale — what each level MEANS (low has a real downstream effect: all-reviewers-low flags
+# the pair for Will's adjudication, so it is meaningful, not modesty).
+_CONFIDENCE = [
+    ("high", "Clear-cut — a careful reader would very likely agree."),
+    ("medium", "You have a lean, but it is genuinely arguable."),
+    ("low", "A real toss-up — this flags the pair for a second look / adjudication."),
+]
+
+# Worked examples — HAND-CRAFTED illustrations of the standard, never drawn from the worklist and
+# never encoding a stratum's expected answer (that would spoil a card or bias toward the mining
+# hypothesis). `kind` avoids naming any stratum.
+_EXAMPLES = [
+    {
+        "verdict": "Same provision",
+        "kind": "edited across versions",
+        "old": "The program shall terminate on September 30, 2025.",
+        "new": "The program shall terminate on September 30, 2027, unless extended by the Secretary.",
+        "why": "The one program's sunset clause, just edited (date changed, exception added). How "
+        "much text changed does not matter.",
+    },
+    {
+        "verdict": "Different provisions",
+        "kind": "share only a citation",
+        "old": "Nothing in this Act shall be construed to affect section 7701 of title 26.",
+        "new": "Section 7701 of title 26 is amended by adding a paragraph defining 'covered entity'.",
+        "why": "Both name section 7701, but the old is a boilerplate savings clause and the new "
+        "actually amends the statute — the shared citation is coincidental.",
+    },
+    {
+        "verdict": "Genuinely absorbed",
+        "kind": "old provision folded into a bigger section",
+        "old": "Section 8206 of the Agricultural Act of 2014 is amended to authorize timber sales.",
+        "new": "…(3) amending section 8206 of the Agricultural Act of 2014 to authorize timber sales…",
+        "why": "The old provision's actual substance really continues inside the bigger new section.",
+    },
+    {
+        "verdict": "Coincidentally contained",
+        "kind": "old provision folded into a bigger section",
+        "old": "Section 8206 of the Agricultural Act of 2014 is amended to authorize timber sales.",
+        "new": "…as authorized under sections 8201, 8206, and 8301…",
+        "why": "8206 just appears in a citation list; the old provision is not continued.",
+    },
 ]
 
 
@@ -102,7 +155,13 @@ def main() -> None:
     leaked = {k for card in payload for k in card if k in _FORBIDDEN}
     if leaked:
         sys.exit(f"score/mining fields leaked into the form: {leaked} — refusing to write (§5)")
-    data = {"reviewer": reviewer, "standard": _STANDARD, "entries": payload}
+    data = {
+        "reviewer": reviewer,
+        "standard": _STANDARD,
+        "confidence": _CONFIDENCE,
+        "examples": _EXAMPLES,
+        "entries": payload,
+    }
     # </ breaks out of <script>; U+2028/U+2029 are legal JSON but JS line terminators that
     # would make the whole embedded blob fail to parse — escape all three.
     injected = (
