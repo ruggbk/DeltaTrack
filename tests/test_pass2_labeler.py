@@ -116,6 +116,21 @@ def test_leak_guard_masks_bill_and_version_fields():
     L._assert_blind(card)  # must not raise on the (masked) 'cosine' in the version slot
 
 
+def test_llm_prompt_mirrors_human_guidance_and_names_no_stratum():
+    from make_form import _CONFIDENCE, _EXAMPLES, _STANDARD
+
+    sp = L._system_prompt()
+    # parity (§8): the LLM sees the SAME rubric, confidence scale, and worked examples as the human
+    assert _STANDARD[0][0] in sp
+    assert all(lvl in sp for lvl, _ in _CONFIDENCE)
+    assert all(ex["verdict"] in sp and ex["old"] in sp for ex in _EXAMPLES)
+    # blindness (§5): the shared guidance must name NO mining stratum (why the rubric/examples say
+    # "folded into a bigger section" rather than "consolidation", which the leak-guard forbids)
+    low = sp.lower()
+    for stratum in ("high-containment-different", "financial-line", "consolidation"):
+        assert stratum not in low
+
+
 def test_build_card_drops_score_and_mining_fields():
     # structural blindness: `stratum` is allowed on the card (internal routing to pick the question,
     # kept out of prompts by _assert_blind), but the SCORE / mining-artifact fields never get copied.
