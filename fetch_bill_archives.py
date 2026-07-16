@@ -94,6 +94,26 @@ def archive_temp_path(dest: Path) -> Path:
     return dest.with_suffix(dest.suffix + ".part")
 
 
+def _verify_archive_complete(path: Path) -> None:
+    """Raise unless path is a readable, non-empty ZIP archive.
+
+    The content-length check is the completeness signal only when the server sends
+    that header; a chunked response legitimately omits it, and then a truncated body
+    is indistinguishable from a whole one by byte count alone (#63). The archive's own
+    end-of-central-directory record is the fallback signal: it is written last, so a
+    short read loses it and the file no longer opens. This is the same operation
+    extract_archive performs downstream -- doing it before committing turns a silently
+    cached partial archive into a failed download that the next run retries.
+    """
+    try:
+        with zipfile.ZipFile(path) as zf:
+            members = zf.namelist()
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise httpx.HTTPError(f"Incomplete download: {path.name} is not a readable ZIP archive ({exc})") from exc
+    if not members:
+        raise httpx.HTTPError(f"Incomplete download: {path.name} contains no archive members")
+
+
 def _progress_prefix(index: int, total: int) -> str:
     """Build a ``current/total:`` progress prefix for batch status lines."""
     return f"{index}/{total}:"
@@ -134,6 +154,7 @@ def download_archive_zip(client: httpx.Client, url: str, dest: Path) -> None:
             print(file=sys.stderr)
             if total and downloaded != total:
                 raise httpx.HTTPError(f"Incomplete download: got {downloaded} of {total} bytes")
+        _verify_archive_complete(temp_path)
         temp_path.replace(dest)
     except Exception:
         if temp_path.exists():
