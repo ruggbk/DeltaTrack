@@ -1,11 +1,87 @@
 # Pass 2 Protocol — Expand and Re-Stratify the Provision-Matching Labeled Dataset
 
-**Status:** DRAFT for review. No dataset-building until Will approves.
-**Context:** Study 2 of the provision-matching program (DeltaTrack #170 / #8). Prerequisites and
-the numbers it builds on are in `plans/paper.md` §8–§10 and memory note
+**Status:** Miners built + verified (Pass-2a, 2026-07-11); **human labeling still gated** on
+Will's review of this protocol and of the mined candidate samples. The automated candidate
+mining is done; no pair is labeled or frozen into the fixture until Will approves.
+**Context:** Study 2 of the provision-matching program (DeltaTrack #203, blocking #170; epic
+#175). Prerequisites and the numbers it builds on are in `paper.md` §8–§10 and memory note
 `project_issue_56_similarity_thresholds` (AUTHORITATIVE UPDATE block). This document is the
 labeling protocol §9 called for.
-**Date:** 2026-07-10.
+**Date:** 2026-07-10 (draft); 2026-07-11 (Pass-2a update block below).
+
+---
+
+## 0. Pass-2a update — corpus census supersedes the "17-bill hard limit" (2026-07-11)
+
+The draft below was written against the curated 31-directory `bills/` set, before the wider
+`bills_corpus/` mining pool was assembled. A census of that pool (reproducer:
+`probes/mine_idf.py` + the census in the #203 work log) changes two load-bearing premises. This
+is a gap the draft could not have closed — the pool did not exist when it was written — not an
+error in it. What changed:
+
+- **The mining pool is corpus-wide, not 17 bills.** `bills_corpus/` holds **2,784 parseable
+  multi-version bills** (1,822 `hr` + 962 `s`; the 177 unparseable are joint/concurrent
+  resolutions whose XML body `normalize_bill` does not recognize). **1,884** produce ≥1
+  matched-changed decision on their first version pair alone (≥5,191 modified decisions, a lower
+  bound). The pool is **disjoint** from the 17 curated appropriations bills and is broad
+  *general legislation*, not appropriations.
+- **Cross-bill-type coverage is now available**, not deferred. §3's "cross-type generalization
+  cannot be measured in Pass 2" was true of `bills/`; it is false of `bills_corpus/` (both
+  chambers, many subjects). And ≥11 corpus bills show consolidation-scale churn (NDAAs etc.) —
+  candidate *second* consolidation-bearing bills that could give consolidation a held-out
+  counterpart §6 says it lacks (needs validation before use).
+
+**What this pass built (Pass-2a, automated half — the two priority strata):**
+`probes/mine_idf.py` (shared rarity model → `idf_cache.json`), `probes/mine_common.py`
+(candidate schema §4 + the three measures, stored analysis-only), and the two priority miners:
+- `mine_high_containment_different.py` → **80 candidates** (quota 30). Cross-bill short(cited)→
+  long negative control, the §8.2 false-keep mode the 12-pair set cannot test. Split: **30 dev /
+  17 held-out** (33 cross-line pairs excluded, §6). ~1,330 such pairs exist at containment ≥ 0.70
+  corpus-wide — the false-keep mode is abundant, confirming §6.4 at scale.
+- `mine_consolidation.py` → **51 candidates** (quota 25), all in many-to-one groups (119-hr-1
+  v3→v4). Reproduces §6.4 (493 removed, ~261 repaired, 41 many-to-one targets, max fan-in 29).
+  Dev-only (§6). `assign_split.py` freezes the by-bill split.
+- `mine_financial_lines.py` → **80 candidates** (priority stream, added per Will 2026-07-11 —
+  appropriations financial tables are the primary value). Two regimes over the 17 approps bills,
+  all adjacent pairs: `amount-edit-kept` (modified financial nodes, amounts changed — 384 exist,
+  the "same, amount edit" anchor) and `amount-edit-split` (removed↔added financial re-pairing —
+  the false-split an amount swap causes; 34 found, mostly 119-hr-1). Split: **65 dev / 15
+  held-out**. This is the §7 word-overlap regime, distinct from the containment strata.
+
+**Decisions Will ruled (2026-07-11):**
+- **Estimation-set scope = (A)+cross-type slice.** Appropriations is the *headline* deployment
+  precision/recall (primary focus, financial tables specifically); general-legislation (the hr/s
+  bills that parse in `bills_corpus/`) is a *secondary* cross-type generalization number,
+  reported separately. Approps stays primary but the differ is meant to work across bill types,
+  so cross-type is a real (secondary) acceptance concern, not merely deferred to Study 3.
+- **Financial tables = a first-class priority stream** (the `mine_financial_lines.py` above), not
+  the buried "amount-only edit" fill of the draft §3.
+- **Continuing-resolution / other-document-type coverage is tracked separately in DeltaTrack
+  #201** (Parser: handle joint/concurrent resolutions), NOT re-filed here — CRs are enacted as
+  H.J.Res. and #201 already measures the 0/57 hjres parse gap with the root cause. #203's
+  cross-type/CR *estimation* is therefore **blocked-by #201** for the resolution family; the
+  cross-type estimation proceeds on the hr/s bills that parse today, with CR coverage documented
+  as pending #201.
+
+**Labeling toolchain (built 2026-07-11 — supersedes §8's solo-labeler assumption).** Labeling is
+a mixed technical/non-technical CivicTech team (3-4 reviewers, possibly one), no server, labels
+returned as files. The pipeline decouples the immutable candidate pool from labels so multiple
+reviewers and future candidate additions never clobber each other (candidate `id`s are content
+hashes, so re-mining is idempotent and only new pairs appear):
+- `make_worklist.py` → blind entries (scores stripped, §5); `make_assignments.py <names...>` →
+  disjoint shards + a stratified ~24-item **overlap set labeled by everyone** (real
+  inter-annotator agreement, not solo-plus-LLM); only new ids are assigned on re-run.
+- `make_form.py <reviewer>` + `form_template.html` → a **self-contained HTML form** per reviewer
+  (no install; one card at a time; neutral question, never the stratum name; rationale forced on
+  medium/low confidence; localStorage autosave; exports `labels_<name>.json`).
+- `merge_labels.py` → joins the returned files, reports **per-stratum Cohen's kappa** (pooling
+  across the different label spaces would trigger the kappa paradox) + raw agreement on the
+  overlap, and flags disagreements as `needs_adjudication` for Will's final ruling (§8). The LLM
+  second opinion writes the same file shape and is reported separately — a disagreement-flagger,
+  never a vote in the human agreement number (§8 correlated-error caveat).
+
+This does **not** block the challenge strata already built (their split is independent). §3 and
+§6 below are annotated inline where the census supersedes them.
 
 ---
 
@@ -83,9 +159,12 @@ and stratified, gives a *wide* confidence interval and may contain ~zero instanc
 error modes (that is what the challenge set is for). The estimation number is **directional** at
 this scale; tightening it is Study 3's job. Report the CI, do not over-read a point estimate.
 
-**Bill-type coverage — a hard corpus limit, not a choice.** The usable matching pool (bills with
-≥2 versions) is **17 bills, all House: 16 appropriations + 119-hr-1 (reconciliation), the only
-non-appropriations and only consolidation-bearing bill** (verified 2026-07-10). So:
+**Bill-type coverage.** *[Superseded by §0, 2026-07-11: the "hard limit" held for `bills/` only;
+`bills_corpus/` supplies 2,784 usable bills across both chambers. The paragraph below still
+governs the appropriations-only estimation option (A); cross-type is now option (C), not a
+deferral.]* As drafted: the usable matching pool (bills with ≥2 versions) is **17 bills, all
+House: 16 appropriations + 119-hr-1 (reconciliation), the only non-appropriations and only
+consolidation-bearing bill** (verified 2026-07-10). So:
 - The estimation sample is appropriations-dominated and stays proportional (it must, to be
   representative).
 - **Cross-bill-type generalization cannot be measured in Pass 2** and is deferred to Study 3. Any
@@ -158,6 +237,15 @@ false-keep positive (a "different" that scores high containment); *genuinely-abs
 many-to-one "same." The consolidation labels feed the false-keep test under this mapping and are
 also reported in their own bucket.
 
+**Delivery + question framing (disclosed, not hidden).** Reviewers only ever receive their
+generated `form_<name>.html`, never `worklist.json` (which carries `stratum`/`split`). The neutral
+question is **stratum-conditional** — consolidation asks "genuinely absorbed vs coincidentally
+contained," the rest ask "same vs different provision" — so the wording encodes the mining
+hypothesis for that stratum. This framing is shared by the human form and the LLM labeler
+identically, so it is *correlated framing across labelers*, not an LLM-only leak; it does not reveal
+the stratum name or the scores. (A uniform question across the two same/different strata is a
+possible future simplification.)
+
 **Mining-by-the-measure is not circular** as long as the *label* is independent (human rules on
 substance) and *tuning never sees the held-out labels* (§6). Targeting high-containment pairs is
 standard hard-negative mining; the challenge set's rigged base rate is disclosed (§1), not hidden.
@@ -169,8 +257,12 @@ standard hard-negative mining; the challenge set's rigged base rate is disclosed
 Pairs from one bill share vocabulary and drafting style; pair-level holdout leaks. Split by whole
 bill (continues the leave-one-bill-out discipline the paper already validated).
 
-- Designate **~1/3 of the 17 usable bills as locked held-out test bills** (~5–6 bills). **All**
-  their pairs — challenge and estimation — are held out and touched **once, at the end**.
+- Designate ~1/3 of the usable bills as locked held-out test bills. **All** their pairs —
+  challenge and estimation — are held out and touched **once, at the end**. *[Implemented in
+  `assign_split.py`: deterministic by-bill hash (~1/3 held-out) over the whole `bills_corpus/`
+  pool, not "5–6 of 17". A cross-bill high-containment-different pair is held-out only if BOTH
+  endpoint bills are; cross-line pairs are excluded from both metrics, never leaked. Live Pass-2a
+  partition: high-containment-different 30 dev / 17 held-out / 33 cross-excluded.]*
 - Cutoffs and any learned weighting are fit **only** on dev bills. The re-tuned word-overlap
   baseline is fit the same way, on the same dev bills, so the comparison is like-for-like.
 - Report **generalization gap = dev accuracy − held-out accuracy**, per subset.
@@ -209,20 +301,53 @@ bill (continues the leave-one-bill-out discipline the paper already validated).
 
 ---
 
-## 8. Adjudication (solo + LLM second-opinion)
+## 8. Adjudication (multi-reviewer + LLM second-opinion)
 
-- Will is the primary labeler for all pairs.
-- An LLM independently labels the **same** pairs **blind to Will's label and to the scores**, under
-  the §5 decision standard.
-- Disagreements are surfaced to Will with both rationales; Will's ruling is final and recorded in
-  `adjudication` (`{llm_label, agreed, resolved_by: "will", note}`).
-- Agreement rate is reported as a rough inter-annotator signal (not a Cohen's kappa with a second
-  human, but better than solo-unchecked). Persistent-disagreement pairs are flagged `confidence:
-  low` and reported both in and out of the headline accuracy (§7).
+> **Annotation (2026-07-11, supersedes the solo-labeler bullets below).** The labeling toolchain
+> (§0) is now a **multi-reviewer** round-robin with a stratified overlap set, so the primary
+> inter-annotator signal is a real **per-stratum Cohen's kappa** among humans (with support counts,
+> §7), not a solo-plus-LLM agreement rate. The LLM second opinion now plays **two never-conflated
+> roles**, both reported separately and neither ever voting in the human number
+> (`probes/merge_labels.py`):
+> 1. **Per-pair disagreement-flagger** — `llm_label` / `llm_disagrees` on every id, including the
+>    many SOLO round-robin ids, collected in `llm_disagreements`. Kept **distinct from
+>    `needs_adjudication`** (which stays human-driven: a human-human disagreement or an
+>    all-low-confidence id). An LLM disagreement is a flag for Will's *attention*, weaker evidence
+>    than a human-human split — silence would be the only wrong choice, but it must not inflate the
+>    human adjudication queue.
+> 2. **Per-reviewer reliability screen** — a **two-tailed** LLM-agreement rate over each reviewer's
+>    full shard (denser than the ~24-item human overlap). LOW agreement (below a leave-one-out
+>    cohort mean) flags a confused/speedrunning reviewer; HIGH agreement flags possible LLM
+>    delegation (which would *correlate* the reviewer with the LLM on the shared-cite false-keeps —
+>    the worst case for independence); near-constant per-stratum labeling is flagged via entropy
+>    (raw agreement misses it under the strata's rigged base rates). **Reliability ≠ validity:** the
+>    screen says who to inspect, never whether a label is correct. Flags are triage, never verdicts.
+>
+> **Procedural guard (adjudication independence).** Will records his ruling on a flagged pair
+> **before** reading the LLM rationale, and the `adjudication` record notes if he changed his mind
+> after — otherwise a persuasive LLM rationale can launder a correlated false-keep into held-out
+> ground truth.
+>
+> **Threshold home.** The reliability thresholds live in `probes/merge_labels.py`
+> (`_MIN_SUPPORT=20` overall / `_MIN_STRATUM_SUPPORT=12` per stratum before a flag fires;
+> `_LOW_FLOOR=0.55` + `_LOW_MARGIN=0.15` below the LOO cohort mean → low engagement;
+> `_HIGH_DELEGATION=0.90` → possible delegation; `_LOW_ENTROPY=0.2` bits → near-constant responder).
+> They are heuristic triage screens, not tuned operating points; each is commented at its
+> definition. In SOLO mode (one reviewer) the low-vs-cohort tail cannot fire and there is no human
+> kappa — the screen is half-dead and `merge_labels.py` says so.
+
+- Will is the primary adjudicator for all pairs.
+- Every reviewer (and the LLM) labels **blind to the scores** and blind to every other labeler; the
+  LLM is additionally blind to project context (verified empirically — see
+  `plans/pass2-llm-review-fixes.md`).
+- Disagreements are surfaced to Will with all rationales; Will's ruling is final and recorded in
+  `adjudication` (`{final_label, llm_label, agreed, resolved_by: "will", read_llm_after, note}`).
+- Pairs that stay contested after adjudication are flagged `confidence: low` and reported **both in
+  and out** of the headline accuracy (§7), so a hard core is visible rather than silently averaged in.
 - **Correlated-error caveat — the load-bearing one.** The LLM can fail the *same way* the measure
   under test does: an LLM reasoning about shared statute citations may rule "same" precisely where
-  containment false-keeps on a shared cite. So **high Will-LLM agreement is weak evidence** (it may
-  be two correlated errors), while **low agreement is the informative signal** (it flags a genuinely
+  containment false-keeps on a shared cite. So **high LLM agreement is weak evidence** (it may be
+  two correlated errors), while **low agreement is the informative signal** (it flags a genuinely
   hard pair for Will). Use the LLM as a disagreement-flagger, not a validator; never treat agreement
   as confirmation that a label is correct.
 - The LLM is a *second opinion*, never the ground truth — it proposes, Will disposes.
@@ -241,14 +366,18 @@ The dataset is done when:
 4. High-containment-different is present in **both** dev and held-out; consolidation is present in
    dev only, and its missing held-out counterpart is documented (§6), not silently omitted.
 5. Every pair has label + confidence; every medium/low-confidence pair has a rationale; every pair
-   has an LLM second opinion with agreement recorded.
+   has an LLM second opinion recorded (`llm_label` + `llm_disagrees`). Human inter-annotator
+   agreement is recorded as **per-stratum Cohen's kappa with support counts** over the overlap set;
+   the LLM's contribution is recorded as the **per-reviewer two-tailed reliability screen**, never as
+   a per-pair "agreement" that votes in the human number (§8 annotation).
 6. The fixture rebuilds from the corpus with `text_sha256` assertions passing; any drift-quarantined
    pair is re-reviewed, not auto-refrozen (§4).
 7. The re-tuned baseline is frozen and reported. Both false-keep numbers run and are labeled
    correctly — the challenge-set failure-existence probe and the estimation-set population precision
    (with its support count), never conflated (§7).
-8. A short `docs/`-or-`plans/` writeup records the sampler, quotas hit vs targeted, the agreement
-   rate, the estimation-set CI, and every stratum or metric that fell short (consolidation held-out,
+8. A short `docs/`-or-`plans/` writeup records the sampler, quotas hit vs targeted, the per-stratum
+   inter-annotator kappa (with support) + LLM reliability screen, the estimation-set CI, and every
+   stratum or metric that fell short (consolidation held-out,
    engine stratum, cross-type) — stated as limitations, not omitted.
 
 ---
