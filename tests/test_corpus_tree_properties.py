@@ -93,8 +93,9 @@ def _corpus_id(path: Path) -> str:
 # #108 — #108's job is conservation (no double-count) + documented residue.
 
 # XML: union(own_amounts) vs the INDEPENDENT raw-XML body (the strong gate).
-# Calibrated against the FULL local corpus (every fetched version, not just the
-# committed-reproducible subset); a clean clone simply won't reach the absent entries.
+# Calibrated against the FULL local corpus so it also holds under CORPUS_SWEEP=1; the
+# committed manifest reaches only a subset of these keys, and the rest are inert
+# `.get(id, 0)` lookups (no budget = conserve exactly) until the sweep reaches them.
 # Note the shape: the product's actual diff targets — reported / engrossed / introduced
 # working versions — conserve EXACTLY (none listed); residue lives only in the
 # secondary enrolled / engrossed-amendment / reconciliation shapes.

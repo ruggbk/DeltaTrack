@@ -167,8 +167,8 @@ def require_corpus_or_skip(discovered: Sequence, kind: str) -> None:
     missing = missing_required_corpus()
     assert not missing, (
         f"REQUIRE_CORPUS=1 but pinned baseline assets are missing: {missing}. "
-        "Fetch the corpus (fetch_bills.py download ... --format both / "
-        "scripts/fetch_test_assets.py) before enforcing the corpus gates."
+        "Fetch them (fetch_bills.py download ... --format both / "
+        "scripts/fetch_test_assets.py) before enforcing this module in strict mode."
     )
     assert len(discovered) > 0, (
         f"REQUIRE_CORPUS=1 but the {kind} gate discovered zero cases under {BILLS_DIR} — "

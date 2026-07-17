@@ -195,8 +195,8 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
     # limitation/administrative-provisions section, and general provisions), not parser
-    # errors. These bills are gitignored (fetched via scripts/build_validation.py), so CI
-    # skips them; the counts guard local runs.
+    # errors. These Senate prints are committed (bills/118-s-* allowlist) and named in
+    # the corpus manifest, so the gate runs them in CI; these counts are its baselines.
     "118-s-4795/1_reported-in-senate.xml": 2,  # CJS: DOJ general-provisions + NASA pair
     "118-s-4796/1_reported-in-senate.xml": 7,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats
     "118-s-4797/1_reported-in-senate.xml": 1,  # State-Foreign Ops: callable-capital limitation
@@ -208,7 +208,7 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # 119-hr-1 (reconciliation): two genuinely-distinct Sec. 10012 in the reported version
     # (Alien SNAP eligibility + Emergency food assistance), one renumbered to 10013 later.
     # Real source duplicate, not a parser error; exposes the matcher's reliance on body
-    # similarity over header (tracked in DeltaTrack#8). Gitignored, so CI skips it.
+    # similarity over header (tracked in DeltaTrack#8). Committed + in the manifest, so CI runs it.
     "119-hr-1/1_reported-in-house.xml": 1,
 }
 

@@ -70,8 +70,8 @@ The team meets in person every two weeks (Wednesdays); that meeting is the only 
 - Session-scoped fixtures in `tests/conftest.py` cache parsed bill trees and diffs to avoid redundant XML parsing
 - `fetch_bills.py` tests use `respx.mock` decorator and monkeypatch `time.sleep`
 - `bill_tree.py` tests use inline XML snippets; integration tests use session fixtures
-- `tests/test_diff_validation.py` holds the hand-curated cross-version correctness assertions plus `TestCorpusDiffSmoke`, which runs invariant checks across every adjacent version pair in the corpus
-- `tests/test_corpus_properties.py` parametrizes over all XML files in `bills/`; uses `_KNOWN_DUPLICATE_COUNTS` and `_KNOWN_MISSING_APPRO` dicts for per-file baselines
+- `tests/test_diff_validation.py` holds the hand-curated cross-version correctness assertions plus `TestCorpusDiffSmoke`, which runs invariant checks across every adjacent committed-manifest version pair
+- `tests/test_corpus_properties.py` parametrizes over the committed corpus manifest (`tests/corpus_manifest.toml`), broadened to every local XML file under `CORPUS_SWEEP=1`; uses `_KNOWN_DUPLICATE_COUNTS` and `_KNOWN_MISSING_APPRO` dicts for per-file baselines
 - Bill DTD XML uses flat-sibling `appropriations-major/intermediate/small` tags (not nested)
 - Dollar amounts are embedded in prose `<text>` elements, extracted via regex
 - HTML formatter functions (`word_diff`, `build_financial_table`, etc.) are individually testable
