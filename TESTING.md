@@ -173,9 +173,12 @@ manifest names is committed to git (public-domain government works, 17 U.S.C. 10
 Each of those modules carries a `test_manifest_fixtures_committed` floor that
 **fails closed**: if a manifested bill is missing from the checkout, the gate
 goes red rather than silently collecting fewer cases. That is what CI relies on.
-It replaces the old opt-in `REQUIRE_CORPUS=1` mode, which existed only because
-the gates used to parametrize over a fetched glob that was empty -- and so
-green, asserting nothing -- on a clean checkout (the fail-open pattern).
+It replaces the old opt-in `REQUIRE_CORPUS=1` mode *for these three gates*, which
+existed only because they used to parametrize over a fetched glob that was empty --
+and so green, asserting nothing -- on a clean checkout (the fail-open pattern).
+(`REQUIRE_CORPUS=1` still guards a few corpus modules not yet on the manifest --
+`test_node_join_corpus`, `test_xml_subsection_nodes`, `test_pdf_subsection_recall` --
+which read larger fetched bills; see AGENTS.md.)
 
 To sweep every bill you have fetched locally -- broader than the committed set,
 and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`.
@@ -220,12 +223,14 @@ uv run pytest tests/test_pdf_corpus_smoke.py     # PDF comparison soundness acro
 ```
 
 A few slow suites still read bills beyond the committed set -- the PDF recall
-suites (`test_pdf_*`) and the Legislative Branch spreadsheet validation exercise
-larger fetched bills, and skip automatically when those bills are absent. To run
-them, download the bill files first (see the Testing section of the
-[README](README.md#testing)). The PDF suites need each bill's PDF as well as its
-XML; pass `--format both` to `fetch_bills.py download` to fetch both at once,
-e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.
+suites (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the
+provision-matching corpus modules (`test_node_join_corpus`,
+`test_xml_subsection_nodes`, `test_pdf_subsection_recall`) exercise larger
+fetched bills, and skip automatically when those bills are absent (or fail loudly
+under `REQUIRE_CORPUS=1`). To run them, download the bill files first (see the
+Testing section of the [README](README.md#testing)). The PDF suites need each
+bill's PDF as well as its XML; pass `--format both` to `fetch_bills.py download`
+to fetch both at once, e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.
 
 Some of those suites read files sourced directly from govinfo rather than the
 bill API (for example, the reported-in-Senate watermarked PDF of S.4795 that
