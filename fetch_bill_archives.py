@@ -95,7 +95,7 @@ def archive_temp_path(dest: Path) -> Path:
 
 
 def _verify_archive_complete(path: Path) -> None:
-    """Raise unless path is a readable, non-empty ZIP archive.
+    """Raise unless path is a readable ZIP archive.
 
     The content-length check is the completeness signal only when the server sends
     that header; a chunked response legitimately omits it, and then a truncated body
@@ -104,14 +104,16 @@ def _verify_archive_complete(path: Path) -> None:
     short read loses it and the file no longer opens. This is the same operation
     extract_archive performs downstream -- doing it before committing turns a silently
     cached partial archive into a failed download that the next run retries.
+
+    Emptiness is deliberately not checked: a zero-member ZIP is structurally valid,
+    and truncation always destroys the end-of-central-directory record, so a short
+    read can only ever produce "does not open", never "opens with zero members".
     """
     try:
-        with zipfile.ZipFile(path) as zf:
-            members = zf.namelist()
+        with zipfile.ZipFile(path):
+            pass
     except (zipfile.BadZipFile, OSError) as exc:
         raise httpx.HTTPError(f"Incomplete download: {path.name} is not a readable ZIP archive ({exc})") from exc
-    if not members:
-        raise httpx.HTTPError(f"Incomplete download: {path.name} contains no archive members")
 
 
 def _progress_prefix(index: int, total: int) -> str:
