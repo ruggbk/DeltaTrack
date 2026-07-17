@@ -274,7 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--billstatus-dir",
         type=Path,
         default=DEFAULT_BILLS_DIR,
-        help="Dir holding BILLSTATUS-*.zip for authoritative version dates (default: bills/)",
+        help="Dir of BILLSTATUS date ZIPs (as fetch_bill_archives.py writes them, e.g. 118-hr.zip); default bills/",
     )
     p.add_argument("--download-only", action="store_true", help="Download ZIPs, skip conversion")
     p.add_argument("--convert-only", action="store_true", help="Convert already-downloaded ZIPs")
