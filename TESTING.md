@@ -61,7 +61,8 @@ we cannot read.
 
 ### 2. Sanity checks across every bill we have
 
-These checks run automatically across every bill in the collection and confirm
+These checks run automatically across a committed, curated set of real bills
+(one per appropriations subcommittee, plus the key structural shapes) and confirm
 that nothing falls through the cracks: every dollar figure in the source text
 shows up somewhere in the parsed result, the same section is not accidentally
 listed twice, and the tool does not silently drop large chunks of text.
@@ -152,31 +153,59 @@ The rest of this is for people running the test suite.
 
 Tests split into two groups by a `slow` marker. The fast group runs on small
 built-in examples and needs no downloads. The slow group runs against real bill
-files and skips automatically if those files are not present.
+files: the correctness gates run against a committed fixture set (no download),
+and a few optional suites read larger bills you fetch on demand.
 
 ```bash
 uv run pytest -m "not slow and not browser"   # Fast group: built-in examples, no downloads
-uv run pytest                 # Everything, including checks against real bills
+uv run pytest                                  # Everything, including checks against real bills
 ```
 
-**Auto-skip cuts both ways.** The corpus property gates
-(`test_diff_validation`, `test_corpus_properties`, `test_corpus_tree_properties`)
-parametrize over the fetched bill files. When those files are absent the cases
-skip, and an empty parametrization produces *no cases at all* -- so on an
-unfetched checkout the gate runs green without asserting anything. "Skip" reads
-as "pass" (the fail-open pattern). Before relying on a corpus gate -- e.g. in a
-pre-PR run for matcher or financial-diff work -- fetch the corpus and set
-`REQUIRE_CORPUS=1`:
+### The corpus gates run against committed fixtures
+
+The corpus correctness gates -- `test_corpus_properties`,
+`test_corpus_tree_properties`, and `test_diff_validation` -- parametrize over a
+committed, curated fixture set named in `tests/corpus_manifest.toml`, not over
+whatever bills a machine happens to have fetched. So they run the same set on
+every machine and in CI, and their case counts are reproducible. Every bill the
+manifest names is committed to git (public-domain government works, 17 U.S.C. 105).
+
+Each of those modules carries a `test_manifest_fixtures_committed` floor that
+**fails closed**: if a manifested bill is missing from the checkout, the gate
+goes red rather than silently collecting fewer cases. That is what CI relies on.
+It replaces the old opt-in `REQUIRE_CORPUS=1` mode *for these three gates*, which
+existed only because they used to parametrize over a fetched glob that was empty --
+and so green, asserting nothing -- on a clean checkout (the fail-open pattern).
+(`REQUIRE_CORPUS=1` still guards a few corpus modules not yet on the manifest --
+`test_node_join_corpus`, `test_xml_subsection_nodes`, `test_pdf_subsection_recall` --
+which read larger fetched bills; see AGENTS.md.)
+
+To sweep every bill you have fetched locally -- broader than the committed set,
+and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`.
+This is exploration, not a gate; CI never runs it.
 
 ```bash
-REQUIRE_CORPUS=1 uv run pytest -m slow   # missing baseline assets now FAIL, not skip
+# The committed corpus gates (what CI runs):
+uv run pytest -m slow tests/test_corpus_properties.py tests/test_corpus_tree_properties.py tests/test_diff_validation.py
+# Sweep every locally-fetched bill (opt-in exploration):
+CORPUS_SWEEP=1 uv run pytest -m slow tests/test_corpus_properties.py
 ```
 
-In required mode each corpus module's `test_corpus_present_when_required` guard
-asserts the pinned baseline bills are present and that the gate discovered at
-least one case. Without the env var the guard skips, so a clean clone still
-skips the corpus cleanly (it was deliberately made fetch-scripted, not a hard
-dependency).
+### Adding a corpus fixture
+
+The manifest and the committed files move together:
+
+1. `git add` the bill version file(s) under `bills/<id>/`. `bills/` is
+   gitignored, so add an allowlist entry in `.gitignore` (follow the existing
+   `!bills/<id>/…` blocks) or use `git add -f`.
+2. Add a `[[bill]]` entry to `tests/corpus_manifest.toml` naming the `id`, each
+   committed version's `stage` (the filename without extension) and `formats`
+   (`xml` and/or `pdf`), and a `covers` note saying what structural situation
+   the bill uniquely exercises.
+3. Run the gates. Any per-bill baseline a gate encodes
+   (`_KNOWN_DUPLICATE_COUNTS`, `_XML_DROP_BUDGET`, ...) must be calibrated for
+   the new bill or the gate fails. Commit the calibrated baseline alongside the
+   fixture and manifest entry.
 
 Run a single area:
 
@@ -186,21 +215,25 @@ uv run pytest tests/test_diff_bill.py            # Comparing two versions
 uv run pytest tests/test_financial_diff.py       # Pulling out and comparing dollar amounts
 uv run pytest tests/test_reconcile.py            # Recognizing moved sections
 uv run pytest tests/test_format_html.py          # The HTML report
-uv run pytest tests/test_corpus_properties.py    # Sanity checks across every bill (slow)
+uv run pytest tests/test_corpus_properties.py    # Sanity checks across the committed corpus (slow)
 uv run pytest tests/test_validate_extraction.py  # Checking numbers against the spreadsheet (slow)
 uv run pytest tests/test_pdf_diff_recall.py      # Draft-bill (PDF) comparison (slow)
 uv run pytest tests/test_pdf_xml_amount_recall.py  # PDF reading vs official text, by the numbers (slow)
 uv run pytest tests/test_pdf_corpus_smoke.py     # PDF comparison soundness across every bill (slow)
 ```
 
-To run the slow group locally, download the bill files first (see the Testing
-section of the [README](README.md#testing)). The PDF comparison tests
-(`test_pdf_*`) need each bill's PDF as well as its XML; pass `--format both`
-to `fetch_bills.py download` to fetch both at once, e.g.
-`uv run python fetch_bills.py download 118 hr 4366 --format both`.
+A few slow suites still read bills beyond the committed set -- the PDF recall
+suites (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the
+provision-matching corpus modules (`test_node_join_corpus`,
+`test_xml_subsection_nodes`, `test_pdf_subsection_recall`) exercise larger
+fetched bills, and skip automatically when those bills are absent (or fail loudly
+under `REQUIRE_CORPUS=1`). To run them, download the bill files first (see the
+Testing section of the [README](README.md#testing)). The PDF suites need each
+bill's PDF as well as its XML; pass `--format both` to `fetch_bills.py download`
+to fetch both at once, e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.
 
-Some slow tests read files sourced directly from govinfo rather than the bill
-API (for example, the reported-in-Senate watermarked PDF of S.4795 that
+Some of those suites read files sourced directly from govinfo rather than the
+bill API (for example, the reported-in-Senate watermarked PDF of S.4795 that
 `test_pdf_watermark_recall.py` reads). They skip automatically if absent. Fetch
 them with:
 

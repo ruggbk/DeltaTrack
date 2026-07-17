@@ -1,8 +1,9 @@
 """Tests for the web service's XML compare wrap (server/xml_compare.py).
 
 Mirrors test_pdf_compare's slow end-to-end layer: runs the real engine on the
-committed HR4366 sample XMLs and validates the result. Skipped if the sample
-XMLs aren't present (they're gitignored / not in CI).
+committed HR4366 sample XMLs and validates the result. Those XMLs are in the
+corpus manifest (committed to git), so this runs in CI; the skip guard only
+covers a partial checkout that is missing them.
 """
 
 from __future__ import annotations

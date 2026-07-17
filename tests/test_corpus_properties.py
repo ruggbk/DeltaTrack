@@ -13,17 +13,16 @@ from pathlib import Path
 import pytest
 
 from bill_tree import _extract_appropriations_text, find_bill_body, normalize_bill
-from tests.conftest import require_corpus_or_skip
+from tests.conftest import assert_manifest_committed, manifest_xml_files
 
 pytestmark = pytest.mark.slow
 
-BILLS_DIR = Path(__file__).parent.parent / "bills"
-# Corpus bill-version files are `bills/<congress>-<chamber>-<num>/<n>_<stage>.xml`
-# (e.g. `2_engrossed-in-house.xml`). Scope to that naming rather than a recursive
-# `**/*.xml`: any other XML dropped under bills/ — e.g. govinfo BILLSTATUS metadata,
-# which is XML but not a bill document — would otherwise become thousands of failing
-# parametrized cases. bills/ is gitignored, so such strays are invisible to git.
-ALL_XML_FILES = sorted(BILLS_DIR.glob("*/[0-9]*_*.xml"))
+# The gate parametrizes over the COMMITTED corpus manifest (tests/corpus_manifest.toml),
+# not a `bills/*` glob, so the collected set is identical on every machine and in CI
+# (fail closed if a fixture is uncommitted) rather than whatever a machine fetched
+# (fail open on an empty glob). CORPUS_SWEEP=1 swaps in the broad local glob for
+# opt-in, non-CI exploration. See docs/decisions/0015-corpus-test-fixtures.md.
+ALL_XML_FILES = manifest_xml_files()
 DOLLAR_RE = re.compile(r"\$[\d,]+")
 
 # Tags whose subtrees should be excluded from raw text collection.
@@ -65,14 +64,24 @@ def _xml_id(xml_path: Path) -> str:
     return f"{xml_path.parent.name}/{xml_path.name}"
 
 
-def test_corpus_present_when_required() -> None:
-    """Fail-loud completeness floor for the corpus property gates (#167).
+def _skip_if_absent(xml_path: Path) -> None:
+    """Skip (not error) a manifest case whose fixture is absent from a partial local
+    checkout, keeping collected = passed + skipped constant. The completeness floor
+    (test_manifest_fixtures_committed) turns any such absence red in CI."""
+    if not xml_path.exists():
+        pytest.skip(f"manifest fixture not present locally: {_xml_id(xml_path)}")
 
-    These gates parametrize over ALL_XML_FILES; an unfetched checkout makes that empty,
-    so pytest emits no cases and the suite passes green. In REQUIRE_CORPUS mode this
-    asserts the pinned baselines are present and at least one case was discovered.
+
+def test_manifest_fixtures_committed() -> None:
+    """Fail-closed completeness floor for the corpus property gates (#217, ADR 0015).
+
+    These gates parametrize over the committed manifest (ALL_XML_FILES). This guard —
+    which always runs, no env var — fails (not skips) if any manifested fixture is
+    absent from the checkout, so a fresh CI checkout missing a committed bill goes red
+    instead of silently collecting fewer cases. Under CORPUS_SWEEP it still validates
+    that the committed manifest subset is present (the local glob is a superset).
     """
-    require_corpus_or_skip(ALL_XML_FILES, "corpus-properties")
+    assert_manifest_committed(ALL_XML_FILES, "corpus-properties")
 
 
 # Files with known 0-node issues. Currently empty (issue #2 fixed).
@@ -90,6 +99,7 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
     Excludes amounts inside <quote> and <header> elements (stored separately).
     Uses a 0.95 coverage ratio tolerance for deeply nested clauses (issue #4).
     """
+    _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
     if test_id in _XFAIL_ZERO_NODES:
         pytest.xfail(f"Known 0-node issue: {test_id}")
@@ -185,8 +195,8 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
     # limitation/administrative-provisions section, and general provisions), not parser
-    # errors. These bills are gitignored (fetched via scripts/build_validation.py), so CI
-    # skips them; the counts guard local runs.
+    # errors. These Senate prints are committed (bills/118-s-* allowlist) and named in
+    # the corpus manifest, so the gate runs them in CI; these counts are its baselines.
     "118-s-4795/1_reported-in-senate.xml": 2,  # CJS: DOJ general-provisions + NASA pair
     "118-s-4796/1_reported-in-senate.xml": 7,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats
     "118-s-4797/1_reported-in-senate.xml": 1,  # State-Foreign Ops: callable-capital limitation
@@ -198,7 +208,7 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # 119-hr-1 (reconciliation): two genuinely-distinct Sec. 10012 in the reported version
     # (Alien SNAP eligibility + Emergency food assistance), one renumbered to 10013 later.
     # Real source duplicate, not a parser error; exposes the matcher's reliance on body
-    # similarity over header (tracked in DeltaTrack#8). Gitignored, so CI skips it.
+    # similarity over header (tracked in DeltaTrack#8). Committed + in the manifest, so CI runs it.
     "119-hr-1/1_reported-in-house.xml": 1,
 }
 
@@ -215,6 +225,7 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     Files with known duplicates assert the count hasn't increased.
     Files with no known duplicates assert zero.
     """
+    _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
     bill_tree = normalize_bill(xml_path)
 
@@ -268,6 +279,7 @@ def test_every_appropriations_element_with_text_produces_node(xml_path: Path) ->
     Extracts text using the same function the parser uses, then checks that
     the normalized text appears in at least one node's body_text.
     """
+    _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
 
     tree = ET.parse(xml_path)
@@ -332,6 +344,7 @@ def test_character_coverage_ratio(xml_path: Path) -> None:
     Compares total characters in the body (excluding quote/header/enum subtrees)
     against total characters across all node body_text fields.
     """
+    _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
     if test_id in _XFAIL_ZERO_NODES:
         pytest.xfail(f"Known 0-node issue: {test_id}")
