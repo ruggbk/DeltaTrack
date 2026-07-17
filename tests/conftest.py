@@ -129,7 +129,7 @@ REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
 # always committed, so they are not the floor here; only the uncommitted bills are.)
 # Deliberately over-inclusive across the three modules: it is a shared floor, so a
 # missing bill any module needs fails loudly rather than passing green on a partial
-# fetch. Migrating these modules onto the manifest is the tracked follow-up.
+# fetch. Migrating these modules onto the manifest is tracked in #220.
 REQUIRED_CORPUS_BILLS = (
     # test_xml_subsection_nodes / test_pdf_subsection_recall: 117-hr-4502 is a CLEAN
     # convergence bill (exact-parity assertions); both XML and PDF are pinned.
