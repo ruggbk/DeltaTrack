@@ -10,11 +10,12 @@ Downloads the per-(congress, session, type) BILLS ZIPs from govinfo bulk data
 (no API key, no rate limit), then converts them into the corpus layout the diff
 pipeline reads: ``bills/<congress>-<type>-<number>/<index>_<version-slug>.xml``.
 
-Versions are ordered by the BILLSTATUS date alone (``gi.order_versions``) -- the
-same authority the per-bill fetch path uses, so a bill numbers identically no
-matter how it was fetched. ``--min-versions`` selects the use case: 1 (default)
-keeps every bill -- the general fetch #10 wants; 2+ keeps only bills matchable
-across versions -- the #170 test corpus.
+Versions are ordered by the BILLSTATUS date alone (``gi.order_versions``), the
+authority the per-bill fetch path (#10 step 6) will share so a bill numbers
+identically no matter how it was fetched -- that path still sorts by display
+name today, until the switch lands. ``--min-versions`` selects the use case: 1
+(default) keeps every bill -- the general fetch #10 wants; 2+ keeps only bills
+matchable across versions -- the #170 test corpus.
 """
 
 from __future__ import annotations
@@ -154,12 +155,22 @@ def convert_archives(
     single-version and get filtered: pass 1 indexes members by bill *without*
     reading their bytes; pass 2 reads bytes only for the bills that survive the
     filter. Versions order by their BILLSTATUS date via :func:`gi.order_versions`
-    (single authority; ``billstatus_dir`` supplies it -- default ``bills/``);
-    undated versions sort to the bill's latest date, tie-broken by tier then code.
+    (the single authority). ``billstatus_dir`` supplies those dates -- the CLI
+    defaults it to ``bills/``, but the function default is ``None``. With no (or
+    incomplete) BILLSTATUS ZIPs a bill has no dates and falls back to tier-then-
+    code order; that is a real mis-ordering risk, so it is COUNTED
+    (``bills_without_billstatus``) and warned on stderr rather than left silent.
+    Undated versions sort to the bill's latest date, tie-broken by tier then code.
     Returns summary stats.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     date_index = gi.build_billstatus_date_index(billstatus_dir) if billstatus_dir else {}
+    if not date_index:
+        print(
+            "  WARNING: no BILLSTATUS dates loaded -- every version orders by tier-then-code "
+            "only, not by date. Point --billstatus-dir at a dir of BILLSTATUS ZIPs.",
+            file=sys.stderr,
+        )
 
     open_zips: dict[Path, zipfile.ZipFile] = {}
     by_bill: dict[str, dict[str, tuple[Path, str]]] = defaultdict(dict)  # bill_id -> {code: (zip, member)}
@@ -203,6 +214,13 @@ def convert_archives(
 
             try:
                 bill_dates = date_index.get(bill_id, {})
+                # A bill with no BILLSTATUS entry at all (e.g. its type's ZIP was not
+                # supplied) has zero dates, so its versions order by tier-then-code
+                # only. That is a silent mis-ordering risk unless surfaced -- count it.
+                # (A dated bill's individual undated version, e.g. enrolled, is the
+                # normal null->max case and is NOT flagged here.)
+                if not bill_dates:
+                    stats["bills_without_billstatus"] += 1
                 # Read each version's bytes; ordering uses only the BILLSTATUS date
                 # (gi.order_versions), never the version's own dc:date -- so the bulk
                 # path and the per-bill fetch path (which numbers before it has bytes)
@@ -229,6 +247,12 @@ def convert_archives(
     stats["bills_seen"] = len(by_bill)
     if unknown_codes:
         print(f"  unresolved version codes (tier 0): {dict(unknown_codes)}", file=sys.stderr)
+    if stats.get("bills_without_billstatus"):
+        print(
+            f"  WARNING: {stats['bills_without_billstatus']} bill(s) had no BILLSTATUS metadata "
+            "and were ordered by tier-then-code, not date (check --billstatus-dir coverage).",
+            file=sys.stderr,
+        )
     print(f"  version-count histogram (versions -> #bills): {dict(sorted(version_hist.items()))}", file=sys.stderr)
     return dict(stats)
 

@@ -59,10 +59,13 @@ def test_url_builders():
 # ---- order_versions: the shared ordering primitive --------------------------
 
 
-def test_order_versions_sorts_by_date_then_tier_then_code():
-    # Dates out of order; codes span tiers. Result orders by date first.
-    ordered = gi.order_versions([("eh", "2025-03-01"), ("ih", "2025-01-01"), ("rh", "2025-02-01")])
-    assert [code for code, _d, _t in ordered] == ["ih", "rh", "eh"]
+def test_order_versions_sorts_by_date_over_tier():
+    # Dates deliberately CONTRADICT tier rank: eh (tier 4) is dated first, ih
+    # (tier 1) last. Date-primary yields [eh, rh, ih]; a tier-primary sort (or one
+    # that ignored the date argument) would give [ih, rh, eh]. Proves the date is
+    # the primary key.
+    ordered = gi.order_versions([("eh", "2025-01-01"), ("rh", "2025-02-01"), ("ih", "2025-03-01")])
+    assert [code for code, _d, _t in ordered] == ["eh", "rh", "ih"]
 
 
 def test_order_versions_undated_sorts_to_max_date_last():
@@ -288,7 +291,14 @@ def test_billstatus_date_places_engrossed_before_placed_on_calendar(tmp_path):
 def test_billstatus_join_survives_type_name_divergence(tmp_path):
     # BILLSTATUS spells rs "Reported to Senate" while VERSION_CODES says "Reported
     # in Senate". Keying the date join by the version code from the URL (shared
-    # verbatim) -- not the display name -- keeps rs in its true mid-sequence spot.
+    # verbatim) -- not the display name -- keeps rs at its true date.
+    #
+    # rs is deliberately dated AFTER es so the working code-join and a broken
+    # name-join produce DIFFERENT orders (else tier alone reproduces the result
+    # and the test proves nothing): a working join dates rs 2025-03-20, sorting it
+    # last (is, es, rs); a name-join leaves rs dateless -> null->max at 2025-02-05,
+    # where its tier 3 lands it BEFORE es tier 4 (is, rs, es). The assertion fails
+    # if the join regresses to matching on the divergent display name.
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
@@ -309,17 +319,17 @@ def test_billstatus_join_survives_type_name_divergence(tmp_path):
         8,
         [
             ("Introduced in Senate", "2025-01-10", "is"),
-            ("Reported to Senate", "2025-02-05", "rs"),
-            ("Engrossed in Senate", "2025-03-15", "es"),
+            ("Engrossed in Senate", "2025-02-05", "es"),
+            ("Reported to Senate", "2025-03-20", "rs"),
         ],
     )
     out = tmp_path / "bills"
     fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
-    # rs (2025-02-05) sorts between is and es, not last.
+    # Working code-join: rs's own date (2025-03-20) puts it last.
     assert sorted(p.name for p in (out / "999-s-8").glob("*.xml")) == [
         "1_introduced-in-senate.xml",
-        "2_reported-in-senate.xml",
-        "3_engrossed-in-senate.xml",
+        "2_engrossed-in-senate.xml",
+        "3_reported-in-senate.xml",
     ]
 
 
@@ -434,6 +444,9 @@ def test_convert_repeated_type_ordered_by_billstatus_date(tmp_path):
     )
     bs_dir = tmp_path / "billstatus"
     bs_dir.mkdir()
+    # eas2 is dated EARLIER than eas, so the BILLSTATUS date -- not the code
+    # tiebreak -- must decide their order. A date-blind sort would fall back to the
+    # code tiebreak ("eas" < "eas2") and put eas first, failing the assertion.
     _billstatus_zip(
         bs_dir / "999-hr.zip",
         999,
@@ -441,16 +454,17 @@ def test_convert_repeated_type_ordered_by_billstatus_date(tmp_path):
         6,
         [
             ("Introduced in House", "2025-01-01", "ih"),
-            ("Engrossed Amendment Senate", "2025-07-01", "eas"),
-            ("Engrossed Amendment Senate", "2025-07-02", "eas2"),
+            ("Engrossed Amendment Senate", "2025-07-02", "eas"),
+            ("Engrossed Amendment Senate", "2025-07-01", "eas2"),
         ],
     )
     out = tmp_path / "bills"
     fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
     d = out / "999-hr-6"
-    # Both eas versions share the slug; the earlier-dated eas gets the lower index.
-    assert b">eas<" in (d / "2_engrossed-amendment-senate.xml").read_bytes()
-    assert b">eas2<" in (d / "3_engrossed-amendment-senate.xml").read_bytes()
+    # Both share the slug; the earlier-dated eas2 gets the lower index despite
+    # sorting after eas under the code tiebreak.
+    assert b">eas2<" in (d / "2_engrossed-amendment-senate.xml").read_bytes()
+    assert b">eas<" in (d / "3_engrossed-amendment-senate.xml").read_bytes()
 
 
 # ---- byte-identity: govinfo BILLS == Congress.gov "Formatted XML" (#10 guard) ---

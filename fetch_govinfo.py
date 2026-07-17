@@ -124,6 +124,9 @@ def order_versions(codes_dates: Iterable[tuple[str, str]]) -> list[tuple[str, st
       - Ties break by tier (how final the text is), then code (deterministic for
         repeated types like eas/eas2, kept in date then code order).
 
+    Does not deduplicate: one entry out per entry in, so callers pass one pair
+    per distinct version (convert_archives keys by code, so codes are unique).
+
     Returns ``[(code, date, tier)]`` in corpus order.
     """
     resolved = [(code, (date or "")[:10], resolve_code(code)[1]) for code, date in codes_dates]
