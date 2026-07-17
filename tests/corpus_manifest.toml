@@ -59,7 +59,7 @@ versions = [
 [[bill]]
 id = "113-hr-3547"
 subcommittee = "full-year omnibus (enrolled)"
-covers = "Enrolled multi-division omnibus whose later titles spill out as orphan <title> siblings — the #146/#167 duplicate-match_path proof case (_KNOWN_DUPLICATE_COUNTS = 168, _XML_DROP_BUDGET = 1)."
+covers = "Enrolled multi-division omnibus whose later titles spill out as orphan <title> siblings — the #146/#167 duplicate-match_path proof case (its cross-division duplicate-count and money-drop baselines are pinned in test_corpus_properties / test_corpus_tree_properties)."
 versions = [
   { stage = "6_enrolled-bill", formats = ["xml"] },
 ]
@@ -67,7 +67,7 @@ versions = [
 [[bill]]
 id = "119-hr-1"
 subcommittee = "reconciliation (not appropriations)"
-covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (_XML_DROP_BUDGET = 15)."
+covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (its money-drop residue is pinned in test_corpus_tree_properties)."
 versions = [
   { stage = "1_reported-in-house", formats = ["xml"] },
 ]
@@ -105,13 +105,13 @@ versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 [[bill]]
 id = "118-s-4795"
 subcommittee = "commerce-justice-science"
-covers = "CJS Senate reported print (FY2025). DOJ general-provisions + NASA heading pair (_KNOWN_DUPLICATE_COUNTS = 2)."
+covers = "CJS Senate reported print (FY2025). DOJ general-provisions + NASA heading pair (a cross-section heading collision the gate pins as a benign baseline)."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
 id = "118-s-2321"
 subcommittee = "commerce-justice-science (FY2024)"
-covers = "CJS FY2024 reported print — the cross-year out-of-corpus guard (heading vocabulary must generalize across fiscal years; _KNOWN_DUPLICATE_COUNTS = 1)."
+covers = "CJS FY2024 reported print — the cross-year out-of-corpus guard (heading vocabulary must generalize across fiscal years)."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
@@ -123,13 +123,13 @@ versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 [[bill]]
 id = "118-s-4927"
 subcommittee = "energy-water"
-covers = "Energy-Water Senate reported print. Corps of Engineers heading repeats (_KNOWN_DUPLICATE_COUNTS = 4)."
+covers = "Energy-Water Senate reported print. Corps of Engineers heading repeats."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
 id = "118-s-4928"
 subcommittee = "financial-services"
-covers = "Financial Services and General Government Senate reported print. Treasury/OPM salaries + DC funds repeats (_KNOWN_DUPLICATE_COUNTS = 5)."
+covers = "Financial Services and General Government Senate reported print. Treasury/OPM salaries + DC funds repeats."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
@@ -141,13 +141,13 @@ versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 [[bill]]
 id = "118-s-4802"
 subcommittee = "interior-environment"
-covers = "Interior-Environment Senate reported print. Forest Service heading repeats (_KNOWN_DUPLICATE_COUNTS = 3)."
+covers = "Interior-Environment Senate reported print. Forest Service heading repeats."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
 id = "118-s-4942"
 subcommittee = "labor-hhs"
-covers = "Labor-HHS-Education Senate reported print. VETS employment-and-training lines (_KNOWN_DUPLICATE_COUNTS = 2)."
+covers = "Labor-HHS-Education Senate reported print. VETS employment-and-training lines."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
@@ -159,11 +159,11 @@ versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 [[bill]]
 id = "118-s-4797"
 subcommittee = "state-foreign-ops"
-covers = "State-Foreign Operations Senate reported print. Callable-capital limitation section (_KNOWN_DUPLICATE_COUNTS = 1)."
+covers = "State-Foreign Operations Senate reported print. Callable-capital limitation section."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
 
 [[bill]]
 id = "118-s-4796"
 subcommittee = "transportation-hud"
-covers = "Transportation-HUD Senate reported print. FAA/FHWA/NHTSA/HUD heading repeats (_KNOWN_DUPLICATE_COUNTS = 7)."
+covers = "Transportation-HUD Senate reported print. FAA/FHWA/NHTSA/HUD heading repeats."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
