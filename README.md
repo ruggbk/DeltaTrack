@@ -216,7 +216,7 @@ The reasoning behind non-obvious architectural choices (why a structured money d
 
 ```bash
 uv run pytest -m "not slow and not browser"     # Fast unit tests (~1s, no XML files needed)
-uv run pytest                                    # All tests (needs bills/ XML files)
+uv run pytest                                    # All tests (corpus gates use committed fixtures; some PDF suites need fetched bills)
 uv run pytest tests/test_bill_tree.py            # Normalization tests
 uv run pytest tests/test_diff_bill.py            # Diff/matching tests
 uv run pytest tests/test_financial_diff.py       # Financial filtering tests
@@ -226,13 +226,13 @@ uv run pytest tests/test_corpus_properties.py    # Corpus-wide property tests
 uv run pytest tests/test_validate_extraction.py  # External validation tests
 ```
 
-Tests that require real bill XML files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. Every pull request also runs the full CI gate set (lint, formatting, the fast and browser tests, and an external-validation subset) -- see [What CI checks](CONTRIBUTING.md#what-ci-checks). The slow suite adds corpus-wide property checks, cross-version diff validation, and external ground-truth validation against real bills.
+Tests that require real bill files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. The corpus correctness gates (corpus-wide property checks and cross-version diff validation) run against a committed fixture set named in `tests/corpus_manifest.toml` -- no download needed, and reproducible everywhere. Every pull request runs the full CI gate set: lint, formatting, the fast and browser tests, external ground-truth validation, and the corpus gates against that committed set -- see [What CI checks](CONTRIBUTING.md#what-ci-checks).
 
 The diff engine is fully deterministic: no LLM and no API key. The only API key (`CONGRESS_API_KEY`) is used by `fetch_bills.py` to download bills, not by the diff itself.
 
 See [TESTING.md](TESTING.md) for how the test suite is organized, how diff accuracy is validated, what each validation layer proves, and where the known gaps are.
 
-Integration tests use real XML files from `bills/` and skip if not present. To run the full suite including validation tests, download the required bills:
+The corpus correctness gates need no downloads (their fixtures are committed). A few other slow suites -- the PDF recall tests (`test_pdf_*`) and the Legislative Branch spreadsheet validation -- read larger bills beyond the committed set and skip if absent. To run those, download the bills first:
 
 ```bash
 # fetch_bills reads CONGRESS_API_KEY from .env automatically; no need to source it.
@@ -259,7 +259,7 @@ Integration tests use real XML files from `bills/` and skip if not present. To r
 
 These fetch both XML and PDF: the XML covers the XML-based tests, and the PDF rendering is what the PDF comparison tests (`test_pdf_*`) need. Drop `--format both` if you only want the XML (the default).
 
-The validation tests compare extracted line items across Legislative Branch bills (both chambers, multiple fiscal years) against amounts from a curated appropriations spreadsheet. The corpus property tests (`test_corpus_properties.py`) check dollar coverage, path uniqueness, and character coverage across all downloaded bills. See [TESTING.md](TESTING.md) for what each validation layer proves and where the gaps are.
+The validation tests compare extracted line items across Legislative Branch bills (both chambers, multiple fiscal years) against amounts from a curated appropriations spreadsheet. The corpus property tests (`test_corpus_properties.py`) check dollar coverage, path uniqueness, and character coverage across the committed corpus (`tests/corpus_manifest.toml`); `CORPUS_SWEEP=1` extends them across every locally-fetched bill. See [TESTING.md](TESTING.md) for what each validation layer proves and where the gaps are.
 
 ## Contributing
 

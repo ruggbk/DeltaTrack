@@ -109,7 +109,7 @@ Tests are split into groups by speed and dependencies:
 
 - **Fast tests** (`uv run pytest -m "not slow and not browser"`) -- unit tests on inline XML and mocked data; no bill files needed.
 - **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`.
-- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files in `bills/`. These auto-skip when their assets are absent, so a corpus gate can pass green having run nothing (fail-open). When you rely on one, fetch the corpus and run with `REQUIRE_CORPUS=1` to make missing pinned baselines fail loudly (see [TESTING.md](TESTING.md)).
+- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. The corpus correctness gates (`test_corpus_properties`, `test_corpus_tree_properties`, `test_diff_validation`) run against a committed fixture set named in `tests/corpus_manifest.toml`, so they run in CI and their counts are reproducible; each fails closed if a manifested bill is uncommitted. `CORPUS_SWEEP=1` opts into sweeping every locally-fetched bill (non-CI exploration). A few PDF/spreadsheet suites still read larger fetched bills and skip when absent (see [TESTING.md](TESTING.md)).
 
 When adding code, write tests for it. Test files live in `tests/`; mark tests that need real XML files with `@pytest.mark.slow` and front-end tests with `@pytest.mark.browser`. Shared helpers are in `tests/conftest.py`. [TESTING.md](TESTING.md) is the home for the full command catalog and what each validation layer proves.
 
@@ -126,9 +126,13 @@ uv run pytest -m slow \
   tests/test_committee_report.py \
   tests/test_validate_extraction.py::test_report_amounts_recalled \
   tests/test_validate_extraction.py::test_fixture_is_senate_reported_bill  # 5. External validation
+uv run pytest -m slow \
+  tests/test_corpus_properties.py \
+  tests/test_corpus_tree_properties.py \
+  tests/test_diff_validation.py                # 6. Corpus correctness gates (committed manifest)
 ```
 
-The pre-commit hooks cover gates 1 and 2 on each commit, but `ruff format --check` still fails CI if you committed without them. Gate 5 runs against vendored committee-report sources, so it needs no downloads or API key.
+The pre-commit hooks cover gates 1 and 2 on each commit, but `ruff format --check` still fails CI if you committed without them. Gates 5 and 6 run against vendored/committed fixtures, so they need no downloads or API key.
 
 ## Submitting a pull request
 
