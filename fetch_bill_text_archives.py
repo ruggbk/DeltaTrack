@@ -54,6 +54,28 @@ def _print_progress(downloaded: int, total: int) -> None:
         print(f"\r  {mb:.1f} MB", end="", file=sys.stderr, flush=True)
 
 
+def _verify_archive_complete(path: Path) -> None:
+    """Raise unless path is a readable ZIP archive.
+
+    The content-length check is the completeness signal only when the server sends
+    that header; a chunked response legitimately omits it, and then a truncated body
+    is indistinguishable from a whole one by byte count alone (#212). The archive's own
+    end-of-central-directory record is the fallback signal: it is written last, so a
+    short read loses it and the file no longer opens. This is the same operation
+    convert_archives performs downstream -- doing it before committing turns a silently
+    cached partial archive into a failed download that the next run retries.
+
+    Emptiness is deliberately not checked: a zero-member ZIP is structurally valid,
+    and truncation always destroys the end-of-central-directory record, so a short
+    read can only ever produce "does not open", never "opens with zero members".
+    """
+    try:
+        with zipfile.ZipFile(path):
+            pass
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise httpx.HTTPError(f"Incomplete download: {path.name} is not a readable ZIP archive ({exc})") from exc
+
+
 def download_zip(client: httpx.Client, url: str, dest: Path) -> bool:
     """Stream one BILLS ZIP to disk atomically. Returns False on a 404 (missing combo)."""
     temp = dest.with_suffix(dest.suffix + ".part")
@@ -76,6 +98,7 @@ def download_zip(client: httpx.Client, url: str, dest: Path) -> bool:
             print(file=sys.stderr)
             if total and downloaded != total:
                 raise httpx.HTTPError(f"Incomplete: {downloaded} of {total} bytes")
+        _verify_archive_complete(temp)
         temp.replace(dest)
         return True
     except Exception:
