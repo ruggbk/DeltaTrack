@@ -67,7 +67,9 @@ def manifest_version_pairs() -> list[tuple[Path, Path]]:
     if CORPUS_SWEEP:
         for bill_dir in sorted(BILLS_DIR.iterdir()):
             if bill_dir.is_dir():
-                versions = sorted(bill_dir.glob("*.xml"))
+                # Scope to the version-file naming (matches manifest_xml_files) so a stray
+                # non-bill XML (e.g. govinfo BILLSTATUS metadata) can't enter the diff pairs.
+                versions = sorted(bill_dir.glob("[0-9]*_*.xml"))
                 pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
         return pairs
     for bill in _manifest_bills():
@@ -119,24 +121,27 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 # baseline asset or empty parametrization is a loud failure instead of a silent skip.
 REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
 
-# The curated baseline floor for the REQUIRE_CORPUS modules above: bills whose
-# hand-pinned expectations those gates encode. In REQUIRE_CORPUS mode every one must be
-# on disk, else the gate that pins it against a hardcoded baseline skips silently.
-# Paths are relative to BILLS_DIR.
+# The curated baseline floor for the REQUIRE_CORPUS modules above: the bills those
+# modules hand-pin that are NOT in the committed manifest, so they are absent on an
+# unfetched checkout. In REQUIRE_CORPUS mode every one must be on disk, else the module
+# that pins it against a hardcoded baseline skips silently. Paths are relative to
+# BILLS_DIR. (Manifest bills those modules also use — 118-hr-8752, 119-hr-1 v1 — are
+# always committed, so they are not the floor here; only the uncommitted bills are.)
+# Deliberately over-inclusive across the three modules: it is a shared floor, so a
+# missing bill any module needs fails loudly rather than passing green on a partial
+# fetch. Migrating these modules onto the manifest is the tracked follow-up.
 REQUIRED_CORPUS_BILLS = (
-    # 118-hr-4366: TestControlledDiff (v1->v2) and TestStructureExpansion (v1->v6).
-    "118-hr-4366/1_reported-in-house.xml",
-    "118-hr-4366/2_engrossed-in-house.xml",
-    "118-hr-4366/4_engrossed-amendment-senate.xml",
-    "118-hr-4366/5_engrossed-amendment-house.xml",
-    "118-hr-4366/6_enrolled-bill.xml",
-    # 115-hr-5895: TestDeadZoneBaseline (v4->v5), the corpus's densest dead-zone case.
-    "115-hr-5895/4_engrossed-amendment-senate.xml",
-    "115-hr-5895/5_enrolled-bill.xml",
-    # 113-hr-3547 enrolled: the #146/#167 proof case (duplicate match_path count).
-    "113-hr-3547/6_enrolled-bill.xml",
-    # 119-hr-1 reported: the twin-Sec.-10012 collision baseline (#8).
-    "119-hr-1/1_reported-in-house.xml",
+    # test_xml_subsection_nodes / test_pdf_subsection_recall: 117-hr-4502 is a CLEAN
+    # convergence bill (exact-parity assertions); both XML and PDF are pinned.
+    "117-hr-4502/1_reported-in-house.xml",
+    "117-hr-4502/1_reported-in-house.pdf",
+    # test_node_join_corpus: 114-hr-2029 (OMNIBUS_PAIR / span-geometry) and 113-hr-3547
+    # stages 4-5 (the amendment-shape XML pairs). v6 of 113-hr-3547 is committed, but
+    # these earlier stages are not.
+    "114-hr-2029/5_engrossed-amendment-senate.xml",
+    "114-hr-2029/6_engrossed-amendment-house.xml",
+    "113-hr-3547/4_engrossed-amendment-senate.xml",
+    "113-hr-3547/5_engrossed-amendment-house.xml",
 )
 
 
