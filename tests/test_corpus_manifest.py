@@ -29,6 +29,23 @@ def test_manifest_parses_and_is_nonempty() -> None:
                 assert fmt in {"xml", "pdf"}, f"{b['id']}/{v['stage']}: unknown format {fmt!r}"
 
 
+def test_manifest_helpers_match_declared_counts() -> None:
+    """The derived file/pair lists have exactly one entry per declared (bill, version,
+    format) in the raw TOML. This is ADR 0015's "count derived from the manifest"
+    completeness check, made INDEPENDENT of the collection the gates consume: it counts
+    the raw manifest directly and compares against the path-building helpers, so a helper
+    that silently dropped or deduped entries (leaving the gates asserting over fewer cases
+    than the manifest declares) is caught here rather than passing green. Not slow, and
+    unaffected by CORPUS_SWEEP (the env var is not set in the default fast run)."""
+    bills = conftest._manifest_bills()
+    raw_xml = sum(1 for b in bills for v in b["versions"] if "xml" in v["formats"])
+    raw_pdf = sum(1 for b in bills for v in b["versions"] if "pdf" in v["formats"])
+    raw_pairs = sum(max(0, sum(1 for v in b["versions"] if "xml" in v["formats"]) - 1) for b in bills)
+    assert len(conftest.manifest_xml_files()) == raw_xml
+    assert len(conftest.manifest_pdf_files()) == raw_pdf
+    assert len(conftest.manifest_version_pairs()) == raw_pairs
+
+
 def test_real_manifest_fixtures_all_committed() -> None:
     """The fail-closed guarantee in the fast tier: every bill the manifest names is
     present in the checkout. Red here on a fresh CI checkout = an uncommitted fixture

@@ -222,8 +222,10 @@ uv run pytest tests/test_diff_bill.py            # Diff/matching tests
 uv run pytest tests/test_financial_diff.py       # Financial filtering tests
 uv run pytest tests/test_reconcile.py            # Section move detection tests
 uv run pytest tests/test_format_html.py          # HTML report formatter tests
-uv run pytest tests/test_corpus_properties.py    # Corpus-wide property tests
-uv run pytest tests/test_validate_extraction.py  # External validation tests
+uv run pytest tests/test_corpus_properties.py       # Corpus-wide property tests (committed manifest)
+uv run pytest tests/test_corpus_tree_properties.py  # Corpus tree-structure invariants (committed manifest)
+uv run pytest tests/test_diff_validation.py         # Cross-version diff validation (committed manifest)
+uv run pytest tests/test_validate_extraction.py     # External validation tests
 ```
 
 Tests that require real bill files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. The corpus correctness gates (corpus-wide property checks and cross-version diff validation) run against a committed fixture set named in `tests/corpus_manifest.toml` -- no download needed, and reproducible everywhere. Every pull request runs the full CI gate set: lint, formatting, the fast and browser tests, external ground-truth validation, and the corpus gates against that committed set -- see [What CI checks](CONTRIBUTING.md#what-ci-checks).
