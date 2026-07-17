@@ -56,12 +56,55 @@ def test_url_builders():
     assert gi.billstatus_url(119, "hr", 1).endswith("/BILLSTATUS-119hr1.xml")
 
 
-# ---- conversion: ordering + min_versions filter -----------------------------
+# ---- order_versions: the shared ordering primitive --------------------------
 
 
-def _member(congress, btype, num, code, date=None):
-    """One fake BILLS-*.xml member (name, bytes). dc:date embedded when given."""
-    date_el = f"<dublinCore><dc:date>{date}</dc:date></dublinCore>" if date else ""
+def test_order_versions_sorts_by_date_then_tier_then_code():
+    # Dates out of order; codes span tiers. Result orders by date first.
+    ordered = gi.order_versions([("eh", "2025-03-01"), ("ih", "2025-01-01"), ("rh", "2025-02-01")])
+    assert [code for code, _d, _t in ordered] == ["ih", "rh", "eh"]
+
+
+def test_order_versions_undated_sorts_to_max_date_last():
+    # enr has no date -> null->max places it at the bill's latest date, and its
+    # tier (5) then puts it last rather than first (the enrolled-bill trap).
+    ordered = gi.order_versions([("enr", ""), ("ih", "2025-01-01"), ("rh", "2025-02-01")])
+    assert [code for code, _d, _t in ordered] == ["ih", "rh", "enr"]
+
+
+def test_order_versions_truncates_datetime_to_date_for_tie_break():
+    # A BILLSTATUS full datetime and a bare date on the same day must compare equal
+    # (both truncate to YYYY-MM-DD) and fall through to the tier tie-break, not sort
+    # by string length. es (tier 4) before pap (tier 5) on the shared day.
+    ordered = gi.order_versions([("pap", "2025-03-20"), ("es", "2025-03-20T04:00:00Z")])
+    assert [code for code, _d, _t in ordered] == ["es", "pap"]
+
+
+def test_order_versions_same_date_and_tier_breaks_by_code():
+    # eas and eas2 share slug and tier; a same-date pair stays deterministic by code.
+    ordered = gi.order_versions([("eas2", "2025-07-01"), ("eas", "2025-07-01")])
+    assert [code for code, _d, _t in ordered] == ["eas", "eas2"]
+
+
+def test_order_versions_empty_input():
+    assert gi.order_versions([]) == []
+
+
+# ---- conversion: BILLSTATUS-only ordering + min_versions filter -------------
+#
+# Ordering authority is the BILLSTATUS date alone (gi.order_versions); the
+# version's own dc:date in the downloaded bytes is not read. So every ordering
+# test supplies dates via a BILLSTATUS ZIP, never via _member. _member's optional
+# govinfo_date exists only to prove dc:date is *ignored* (the disagreement test).
+
+
+def _member(congress, btype, num, code, govinfo_date=None):
+    """One fake BILLS-*.xml member (name, bytes).
+
+    ``govinfo_date`` embeds a dc:date that convert_archives no longer reads for
+    ordering; pass it only to assert BILLSTATUS overrides it.
+    """
+    date_el = f"<dublinCore><dc:date>{govinfo_date}</dc:date></dublinCore>" if govinfo_date else ""
     body = f"<bill>{date_el}<text>{code}</text></bill>".encode()
     return f"BILLS-{congress}{btype}{num}{code}.xml", body
 
@@ -95,25 +138,71 @@ def _billstatus_zip(path: Path, congress, btype, num, versions):
 def test_convert_orders_by_date_and_places_undated_last(tmp_path):
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
-    # 999hr1: ih, rh, eas2 dated; enr undated (must sort last via max_date + tier).
+    # 999hr1: ih, rh, eas2 dated in BILLSTATUS; enr absent -> undated -> sorts last
+    # via max_date + tier.
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
         [
-            _member(999, "hr", 1, "rh", "2025-02-01"),
-            _member(999, "hr", 1, "ih", "2025-01-01"),
-            _member(999, "hr", 1, "enr"),  # no date
-            _member(999, "hr", 1, "eas2", "2025-03-01"),
+            _member(999, "hr", 1, "rh"),
+            _member(999, "hr", 1, "ih"),
+            _member(999, "hr", 1, "enr"),
+            _member(999, "hr", 1, "eas2"),
+        ],
+    )
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    _billstatus_zip(
+        bs_dir / "999-hr.zip",
+        999,
+        "hr",
+        1,
+        [
+            ("Introduced in House", "2025-01-01", "ih"),
+            ("Reported in House", "2025-02-01", "rh"),
+            ("Engrossed Amendment Senate", "2025-03-01", "eas2"),
         ],
     )
     out = tmp_path / "bills"
-    stats = fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=None)
+    stats = fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
     assert stats["bills_written"] == 1
     names = sorted(p.name for p in (out / "999-hr-1").glob("*.xml"))
     assert names == [
         "1_introduced-in-house.xml",
         "2_reported-in-house.xml",
         "3_engrossed-amendment-senate.xml",  # eas2 resolved to base slug
-        "4_enrolled-bill.xml",  # undated, sorted last
+        "4_enrolled-bill.xml",  # undated (absent from BILLSTATUS), sorted last
+    ]
+
+
+def test_convert_orders_by_billstatus_not_govinfo_date(tmp_path):
+    # The split-brain guard: the version's own dc:date must NOT influence ordering.
+    # Here dc:date says rh (2025-01-01) precedes ih (2025-06-01), but BILLSTATUS
+    # says the opposite. BILLSTATUS wins, so ih sorts first. (Real 118-hr-2 case:
+    # dc:date-primary sorted pcs before ih; BILLSTATUS orders ih, eh, pcs.)
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _write_zip(
+        zip_dir / "BILLS-999-1-hr.zip",
+        [
+            _member(999, "hr", 11, "rh", govinfo_date="2025-01-01"),
+            _member(999, "hr", 11, "ih", govinfo_date="2025-06-01"),
+        ],
+    )
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    _billstatus_zip(
+        bs_dir / "999-hr.zip",
+        999,
+        "hr",
+        11,
+        [("Introduced in House", "2025-02-01", "ih"), ("Reported in House", "2025-05-01", "rh")],
+    )
+    out = tmp_path / "bills"
+    fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
+    # BILLSTATUS order (ih 2025-02 < rh 2025-05), not dc:date order (rh 2025-01 first).
+    assert sorted(p.name for p in (out / "999-hr-11").glob("*.xml")) == [
+        "1_introduced-in-house.xml",
+        "2_reported-in-house.xml",
     ]
 
 
@@ -123,9 +212,9 @@ def test_convert_min_versions_filter(tmp_path):
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
         [
-            _member(999, "hr", 2, "ih", "2025-01-01"),  # single version
-            _member(999, "hr", 3, "ih", "2025-01-01"),
-            _member(999, "hr", 3, "eh", "2025-02-01"),  # two versions
+            _member(999, "hr", 2, "ih"),  # single version
+            _member(999, "hr", 3, "ih"),
+            _member(999, "hr", 3, "eh"),  # two versions
         ],
     )
     # min_versions=1 keeps both bills (the general fetch #10 wants)...
@@ -144,7 +233,7 @@ def test_convert_skips_existing_dirs(tmp_path):
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
-        [_member(999, "hr", 4, "ih", "2025-01-01"), _member(999, "hr", 4, "eh", "2025-02-01")],
+        [_member(999, "hr", 4, "ih"), _member(999, "hr", 4, "eh")],
     )
     out = tmp_path / "bills"
     (out / "999-hr-4").mkdir(parents=True)  # pre-existing (curated) dir
@@ -153,30 +242,40 @@ def test_convert_skips_existing_dirs(tmp_path):
     assert stats.get("bills_written", 0) == 0
 
 
-def test_convert_uses_billstatus_date_when_govinfo_date_missing(tmp_path):
-    # The real 119-hr-1 bug: engrossed-in-house carries no govinfo dc:date, so
-    # without the BILLSTATUS fallback it sorts AFTER placed-on-calendar-senate.
+def test_billstatus_date_places_engrossed_before_placed_on_calendar(tmp_path):
+    # The real 119-hr-1 shape: engrossed-in-house's date puts it mid-sequence.
+    # Without BILLSTATUS (no date at all) it would sort last by tier alone, after
+    # placed-on-calendar-senate -- so BILLSTATUS is load-bearing, not cosmetic.
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
         [
-            _member(999, "hr", 5, "ih", "2025-05-20"),
-            _member(999, "hr", 5, "eh"),  # govinfo omits the date
-            _member(999, "hr", 5, "pcs", "2025-06-28"),
+            _member(999, "hr", 5, "ih"),
+            _member(999, "hr", 5, "eh"),
+            _member(999, "hr", 5, "pcs"),
         ],
     )
-    bs_dir = tmp_path / "billstatus"
-    bs_dir.mkdir()
-    _billstatus_zip(bs_dir / "999-hr.zip", 999, "hr", 5, [("Engrossed in House", "2025-05-22", "eh")])
-
-    # Without the join, eh has no date -> sorts to max_date, after pcs (wrong order).
+    # No billstatus_dir: every version is undated -> tier order puts eh (4) last.
     out_none = tmp_path / "none"
     fbt.convert_archives(zip_dir, out_none, min_versions=2, billstatus_dir=None)
     names_none = sorted(p.name for p in (out_none / "999-hr-5").glob("*.xml"))
     assert names_none.index("3_engrossed-in-house.xml") > names_none.index("2_placed-on-calendar-senate.xml")
 
-    # With the BILLSTATUS date (2025-05-22), eh sorts between ih and pcs.
+    # With BILLSTATUS dates, eh (2025-05-22) sorts between ih and pcs.
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    _billstatus_zip(
+        bs_dir / "999-hr.zip",
+        999,
+        "hr",
+        5,
+        [
+            ("Introduced in House", "2025-05-20", "ih"),
+            ("Engrossed in House", "2025-05-22", "eh"),
+            ("Placed on Calendar Senate", "2025-06-28", "pcs"),
+        ],
+    )
     out = tmp_path / "with"
     fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
     assert sorted(p.name for p in (out / "999-hr-5").glob("*.xml")) == [
@@ -187,25 +286,33 @@ def test_convert_uses_billstatus_date_when_govinfo_date_missing(tmp_path):
 
 
 def test_billstatus_join_survives_type_name_divergence(tmp_path):
-    # Real bug: BILLSTATUS spells rs "Reported to Senate" while VERSION_CODES says
-    # "Reported in Senate". A name-based join misses it, so a dateless rs sorts to
-    # max_date (last) instead of its true mid-sequence position. Keying by the
-    # version code (shared verbatim by both sources) fixes it.
+    # BILLSTATUS spells rs "Reported to Senate" while VERSION_CODES says "Reported
+    # in Senate". Keying the date join by the version code from the URL (shared
+    # verbatim) -- not the display name -- keeps rs in its true mid-sequence spot.
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-s.zip",
         [
-            _member(999, "s", 8, "is", "2025-01-10"),
-            _member(999, "s", 8, "rs"),  # govinfo omits the date
-            _member(999, "s", 8, "es", "2025-03-15"),
+            _member(999, "s", 8, "is"),
+            _member(999, "s", 8, "rs"),
+            _member(999, "s", 8, "es"),
         ],
     )
     bs_dir = tmp_path / "billstatus"
     bs_dir.mkdir()
-    # Divergent display name; the code in the URL is still "rs".
-    _billstatus_zip(bs_dir / "999-s.zip", 999, "s", 8, [("Reported to Senate", "2025-02-05", "rs")])
-
+    # rs's display name diverges; the code in its URL is still "rs".
+    _billstatus_zip(
+        bs_dir / "999-s.zip",
+        999,
+        "s",
+        8,
+        [
+            ("Introduced in Senate", "2025-01-10", "is"),
+            ("Reported to Senate", "2025-02-05", "rs"),
+            ("Engrossed in Senate", "2025-03-15", "es"),
+        ],
+    )
     out = tmp_path / "bills"
     fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
     # rs (2025-02-05) sorts between is and es, not last.
@@ -216,25 +323,33 @@ def test_billstatus_join_survives_type_name_divergence(tmp_path):
     ]
 
 
-def test_same_day_cross_source_dates_break_tie_by_tier(tmp_path):
-    # es (engrossed) and pap (printed-as-passed) fall on the same calendar day, but
-    # es's date comes from BILLSTATUS (full datetime) while pap's is the bare
-    # govinfo date. Both must normalize to the date so the tie breaks by tier
-    # (es=4 before pap=5), not by the datetime string being longer than the date.
+def test_convert_same_day_versions_break_tie_by_tier(tmp_path):
+    # es (engrossed) and pap (printed-as-passed) share a calendar day. BILLSTATUS
+    # gives es a full datetime, pap a bare date; both truncate to YYYY-MM-DD so the
+    # tie breaks by tier (es=4 before pap=5), not by the datetime string's length.
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-s.zip",
         [
-            _member(999, "s", 9, "is", "2025-01-05"),
-            _member(999, "s", 9, "es"),  # govinfo omits date -> BILLSTATUS datetime
-            _member(999, "s", 9, "pap", "2025-03-20"),  # bare govinfo date, same day as es
+            _member(999, "s", 9, "is"),
+            _member(999, "s", 9, "es"),
+            _member(999, "s", 9, "pap"),
         ],
     )
     bs_dir = tmp_path / "billstatus"
     bs_dir.mkdir()
-    _billstatus_zip(bs_dir / "999-s.zip", 999, "s", 9, [("Engrossed in Senate", "2025-03-20T04:00:00Z", "es")])
-
+    _billstatus_zip(
+        bs_dir / "999-s.zip",
+        999,
+        "s",
+        9,
+        [
+            ("Introduced in Senate", "2025-01-05", "is"),
+            ("Engrossed in Senate", "2025-03-20T04:00:00Z", "es"),
+            ("Printed as Passed", "2025-03-20", "pap"),
+        ],
+    )
     out = tmp_path / "bills"
     fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
     assert sorted(p.name for p in (out / "999-s-9").glob("*.xml")) == [
@@ -248,21 +363,30 @@ def test_billstatus_urlless_item_falls_back_to_name(tmp_path):
     # Some BILLSTATUS items carry a <type> + <date> but no format URL (govinfo
     # hasn't published one). The code must still be recovered from the display
     # name, or engrossed-in-house -- which relies on this fallback -- would drop
-    # out of the index and sort last again. Real cases: 117-hr-5705, 119-hr-6703.
+    # out of the index and sort last. Real cases: 117-hr-5705, 119-hr-6703.
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
         [
-            _member(999, "hr", 10, "ih", "2025-01-03"),
-            _member(999, "hr", 10, "eh"),  # govinfo omits the date
-            _member(999, "hr", 10, "rfs", "2025-04-01"),
+            _member(999, "hr", 10, "ih"),
+            _member(999, "hr", 10, "eh"),
+            _member(999, "hr", 10, "rfs"),
         ],
     )
     bs_dir = tmp_path / "billstatus"
     bs_dir.mkdir()
-    # eh item has a date but NO format URL -> code recovered via the name.
-    items = "<item><type>Engrossed in House</type><date>2025-02-10T05:00:00Z</date></item>"
+    # ih and rfs carry URLs; the eh item has a date but NO format URL -> its code is
+    # recovered from the display name so it still lands in the date index.
+    items = (
+        "<item><type>Introduced in House</type><date>2025-01-03T05:00:00Z</date><formats><item>"
+        "<url>https://www.govinfo.gov/content/pkg/BILLS-999hr10ih/xml/BILLS-999hr10ih.xml</url>"
+        "</item></formats></item>"
+        "<item><type>Engrossed in House</type><date>2025-02-10T05:00:00Z</date></item>"
+        "<item><type>Referred in Senate</type><date>2025-04-01T05:00:00Z</date><formats><item>"
+        "<url>https://www.govinfo.gov/content/pkg/BILLS-999hr10rfs/xml/BILLS-999hr10rfs.xml</url>"
+        "</item></formats></item>"
+    )
     xml = (
         f"<billStatus><bill><congress>999</congress><type>HR</type><number>10</number>"
         f"<textVersions>{items}</textVersions></bill></billStatus>"
@@ -285,7 +409,7 @@ def test_convert_skips_corrupt_zip_without_aborting(tmp_path):
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
-        [_member(999, "hr", 7, "ih", "2025-01-01"), _member(999, "hr", 7, "eh", "2025-02-01")],
+        [_member(999, "hr", 7, "ih"), _member(999, "hr", 7, "eh")],
     )
     (zip_dir / "BILLS-999-2-hr.zip").write_bytes(b"not a real zip file")
     out = tmp_path / "bills"
@@ -295,23 +419,36 @@ def test_convert_skips_corrupt_zip_without_aborting(tmp_path):
     assert (out / "999-hr-7").exists()
 
 
-def test_convert_repeated_type_ordered_by_own_date(tmp_path):
+def test_convert_repeated_type_ordered_by_billstatus_date(tmp_path):
     # eas and eas2 both resolve to "Engrossed Amendment Senate"; they must stay
-    # ordered by their own govinfo dates, not collapse to an arbitrary order.
+    # ordered by their BILLSTATUS dates, not collapse to an arbitrary order.
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
         zip_dir / "BILLS-999-1-hr.zip",
         [
-            _member(999, "hr", 6, "ih", "2025-01-01"),
-            _member(999, "hr", 6, "eas2", "2025-07-02"),
-            _member(999, "hr", 6, "eas", "2025-07-01"),
+            _member(999, "hr", 6, "ih"),
+            _member(999, "hr", 6, "eas2"),
+            _member(999, "hr", 6, "eas"),
+        ],
+    )
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    _billstatus_zip(
+        bs_dir / "999-hr.zip",
+        999,
+        "hr",
+        6,
+        [
+            ("Introduced in House", "2025-01-01", "ih"),
+            ("Engrossed Amendment Senate", "2025-07-01", "eas"),
+            ("Engrossed Amendment Senate", "2025-07-02", "eas2"),
         ],
     )
     out = tmp_path / "bills"
-    fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=None)
+    fbt.convert_archives(zip_dir, out, min_versions=2, billstatus_dir=bs_dir)
     d = out / "999-hr-6"
-    # Both eas versions share the slug; the earlier-dated eas must get the lower index.
+    # Both eas versions share the slug; the earlier-dated eas gets the lower index.
     assert b">eas<" in (d / "2_engrossed-amendment-senate.xml").read_bytes()
     assert b">eas2<" in (d / "3_engrossed-amendment-senate.xml").read_bytes()
 
