@@ -49,10 +49,23 @@ jobs:
         if: ${{ !cancelled() }}
         # The committee-report validation is @slow but self-contained: it runs against the
         # vendored govinfo sources (committee-report HTML + reported-bill XML), so it can gate
-        # CI. The Legislative Branch slow tests need the large enrolled-bill corpus, which is
-        # not vendored, so they stay an on-demand local guard and are not selected here.
+        # CI.
         run: >
           uv run pytest -v -m slow
           tests/test_committee_report.py
           tests/test_validate_extraction.py::test_report_amounts_recalled
           tests/test_validate_extraction.py::test_fixture_is_senate_reported_bill
+
+      - name: Run corpus correctness gates (committed manifest)
+        if: ${{ !cancelled() }}
+        # The corpus property, tree-property, and diff-validation gates parametrize over the
+        # committed fixture set in tests/corpus_manifest.toml (ADR 0015 / #217): a byte-identical
+        # offline corpus, no fetch. Each module's test_manifest_fixtures_committed floor fails
+        # CLOSED if a manifested bill is uncommitted, so a missing fixture goes red rather than
+        # silently collecting fewer cases. Before this, these @slow gates ran only locally over a
+        # fetched glob and never in CI (fail open). CORPUS_SWEEP=1 is the opt-in local superset.
+        run: >
+          uv run pytest -v -m slow
+          tests/test_corpus_properties.py
+          tests/test_corpus_tree_properties.py
+          tests/test_diff_validation.py

@@ -22,8 +22,10 @@ Four invariants per bill version:
    clickable rows or empty groups (``feedback_validate_against_hard_fixture``: the
    consumed-output form of the blank-row invariant).
 
-``bills/`` is gitignored (fetched via ``fetch_bills.py``), so every case skips
-cleanly on a clean clone / in CI; local runs gate.
+The gates parametrize over the COMMITTED corpus manifest (tests/corpus_manifest.toml),
+so the collected set is identical on every machine and runs in CI; the completeness
+floor fails closed if a manifested fixture is uncommitted (ADR 0015). CORPUS_SWEEP=1
+runs the broad local glob instead, for opt-in, non-CI exploration.
 """
 
 from __future__ import annotations
@@ -43,18 +45,19 @@ from formatters.diff_html import _build_toc_from_tree
 from formatters.text_serializer import _xml_tree_payload, serialize_tree_for_tree
 from parsers.pdf_anchors import extract_anchors
 from parsers.pdf_text import pdf_full_text
-from tests.conftest import require_corpus_or_skip
+from tests.conftest import assert_manifest_committed, manifest_pdf_files, manifest_xml_files
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow
 
-BILLS_DIR = Path(__file__).parent.parent / "bills"
 _SCHEMA_PATH = Path(__file__).parent.parent / "schema" / "canonical-diff.schema.json"
 
-# Scope to the corpus version-file naming (see test_corpus_properties for why a
-# recursive **/*.xml would sweep in non-bill metadata XML).
-ALL_XML_FILES = sorted(BILLS_DIR.glob("*/[0-9]*_*.xml"))
-ALL_PDF_FILES = sorted(BILLS_DIR.glob("*/[0-9]*_*.pdf"))
+# Both invariant gates parametrize over the COMMITTED corpus manifest
+# (tests/corpus_manifest.toml), not a `bills/*` glob — identical collected set on
+# every machine and in CI, fail closed if a fixture is uncommitted. CORPUS_SWEEP=1
+# swaps in the broad local glob for opt-in, non-CI exploration. See ADR 0015.
+ALL_XML_FILES = manifest_xml_files()
+ALL_PDF_FILES = manifest_pdf_files()
 
 _LEVELS = {
     "division",
@@ -215,16 +218,16 @@ def _assert_money_conserves(roots: list[dict], reference: Counter, max_drop: int
     assert dropped <= max_drop, f"{label}: dropped {dropped} > documented budget {max_drop}"
 
 
-def test_corpus_present_when_required() -> None:
-    """Fail-loud completeness floor for the tree property gates (#167).
+def test_manifest_fixtures_committed() -> None:
+    """Fail-closed completeness floor for the tree property gates (#217, ADR 0015).
 
-    The XML and PDF invariant gates parametrize over ALL_XML_FILES / ALL_PDF_FILES; an
-    unfetched checkout makes those empty and the suite passes green. In REQUIRE_CORPUS
-    mode this asserts the pinned XML baselines are present and both parametrizations
-    discovered at least one case.
+    The XML and PDF invariant gates parametrize over the committed manifest
+    (ALL_XML_FILES / ALL_PDF_FILES). This guard always runs (no env var) and fails —
+    not skips — if any manifested fixture is absent, so a fresh CI checkout missing a
+    committed bill goes red instead of silently collecting fewer cases.
     """
-    require_corpus_or_skip(ALL_XML_FILES, "tree-properties (XML)")
-    require_corpus_or_skip(ALL_PDF_FILES, "tree-properties (PDF)")
+    assert_manifest_committed(ALL_XML_FILES, "tree-properties (XML)")
+    assert_manifest_committed(ALL_PDF_FILES, "tree-properties (PDF)")
 
 
 # --- XML corpus ----------------------------------------------------------------
@@ -232,6 +235,8 @@ def test_corpus_present_when_required() -> None:
 
 @pytest.mark.parametrize("xml_path", ALL_XML_FILES, ids=[_corpus_id(p) for p in ALL_XML_FILES])
 def test_xml_tree_invariants_hold_corpus_wide(xml_path: Path) -> None:
+    if not xml_path.exists():
+        pytest.skip(f"manifest fixture not present locally: {_corpus_id(xml_path)}")
     test_id = _corpus_id(xml_path)
     try:
         roots, full_text = _xml_tree_payload_for(xml_path)
@@ -254,6 +259,8 @@ def test_xml_tree_invariants_hold_corpus_wide(xml_path: Path) -> None:
 
 @pytest.mark.parametrize("pdf_path", ALL_PDF_FILES, ids=[_corpus_id(p) for p in ALL_PDF_FILES])
 def test_pdf_tree_invariants_hold_corpus_wide(pdf_path: Path) -> None:
+    if not pdf_path.exists():
+        pytest.skip(f"manifest fixture not present locally: {_corpus_id(pdf_path)}")
     test_id = _corpus_id(pdf_path)
     roots, full_text = _pdf_tree_payload_for(pdf_path)
     if not roots:

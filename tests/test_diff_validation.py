@@ -24,9 +24,7 @@ from diff_bill import (
     diff_bills,
     extract_amounts,
 )
-from tests.conftest import require_corpus_or_skip
-
-BILLS_DIR = Path(__file__).parent.parent / "bills"
+from tests.conftest import assert_manifest_committed, manifest_version_pairs
 
 
 @lru_cache(maxsize=None)
@@ -392,29 +390,33 @@ class TestDeadZoneBaseline:
 
 
 @pytest.mark.slow
-def test_corpus_present_when_required():
-    """Fail-loud completeness floor for the diff-validation gates (#167).
+def test_manifest_fixtures_committed():
+    """Fail-closed completeness floor for the diff-validation gates (#217, ADR 0015).
 
-    In REQUIRE_CORPUS mode this asserts the pinned baseline bills are present and that
-    TestCorpusDiffSmoke discovered at least one version pair. Without it, an unfetched
-    checkout runs this whole module's slow assertions green without executing any of
-    them (empty parametrization + skipping fixtures). Skips outside required mode.
+    The hand-curated classes above (via conftest session fixtures) and TestCorpusDiffSmoke
+    below run against the committed manifest. This guard always runs (no env var) and
+    fails — not skips — if any manifested fixture is absent, so a fresh CI checkout
+    missing a committed bill goes red instead of running these slow assertions green
+    over an empty/partial set.
     """
-    require_corpus_or_skip(_adjacent_version_pairs(), "diff-validation")
+    assert_manifest_committed(_adjacent_version_pairs(), "diff-validation")
 
 
 def _adjacent_version_pairs():
-    """Discover all adjacent version pairs across the bill corpus."""
-    pairs = []
-    for bill_dir in sorted(BILLS_DIR.iterdir()):
-        if not bill_dir.is_dir():
-            continue
-        versions = sorted(bill_dir.glob("*.xml"))
-        for i in range(len(versions) - 1):
-            old, new = versions[i], versions[i + 1]
-            label = f"{bill_dir.name}/{old.stem}->{new.stem}"
-            pairs.append(pytest.param(old, new, id=label))
-    return pairs
+    """Adjacent committed-XML version pairs from the corpus manifest (every adjacent
+    pair across all locally-fetched bills under CORPUS_SWEEP)."""
+    return [
+        pytest.param(old, new, id=f"{old.parent.name}/{old.stem}->{new.stem}") for old, new in manifest_version_pairs()
+    ]
+
+
+def _skip_pair_if_absent(old_path: Path, new_path: Path) -> None:
+    """Skip (not error) a manifest pair whose fixture is absent from a partial local
+    checkout, keeping collected = passed + skipped constant. test_manifest_fixtures_
+    committed turns any such absence red in CI."""
+    for p in (old_path, new_path):
+        if not p.exists():
+            pytest.skip(f"manifest fixture not present locally: {p.parent.name}/{p.name}")
 
 
 @pytest.mark.slow
@@ -428,12 +430,14 @@ class TestCorpusDiffSmoke:
 
     def test_no_crash(self, old_path, new_path):
         """Diff pipeline should not crash on any version pair."""
+        _skip_pair_if_absent(old_path, new_path)
         result = _cached_diff(old_path, new_path)
         assert result is not None
         assert len(result.changes) > 0
 
     def test_no_false_matches(self, old_path, new_path):
         """No modified section should have similarity below the split threshold (0.4)."""
+        _skip_pair_if_absent(old_path, new_path)
         result = _cached_diff(old_path, new_path)
 
         for c in result.changes:
@@ -451,6 +455,7 @@ class TestCorpusDiffSmoke:
         divisions. Element IDs are always unique per XML element, so they serve
         as the correct uniqueness key for pairings.
         """
+        _skip_pair_if_absent(old_path, new_path)
         result = _cached_diff(old_path, new_path)
 
         id_pairs = Counter((c.element_id_old, c.element_id_new) for c in result.changes)
@@ -460,6 +465,7 @@ class TestCorpusDiffSmoke:
 
     def test_summary_counts_non_negative(self, old_path, new_path):
         """All summary counts should be non-negative."""
+        _skip_pair_if_absent(old_path, new_path)
         result = _cached_diff(old_path, new_path)
 
         for key, value in result.summary.items():

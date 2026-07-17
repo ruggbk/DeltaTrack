@@ -38,6 +38,27 @@ bills/118-hr-8752/*
 !bills/118-hr-8282/
 bills/118-hr-8282/*
 !bills/118-hr-8282/1_introduced-in-house.pdf
+# Committed corpus-manifest fixtures (#217 / ADR 0015): the diff-validation baselines
+# (118-hr-4366, 115-hr-5895) and structural-shape coverage (113-hr-3547 enrolled omnibus,
+# 119-hr-1 reconciliation) the CI correctness gates run against. Public domain (17 U.S.C.
+# 105), immutable, small. Single source of truth: tests/corpus_manifest.toml.
+!bills/118-hr-4366/
+bills/118-hr-4366/*
+!bills/118-hr-4366/1_reported-in-house.xml
+!bills/118-hr-4366/2_engrossed-in-house.xml
+!bills/118-hr-4366/4_engrossed-amendment-senate.xml
+!bills/118-hr-4366/5_engrossed-amendment-house.xml
+!bills/118-hr-4366/6_enrolled-bill.xml
+!bills/115-hr-5895/
+bills/115-hr-5895/*
+!bills/115-hr-5895/4_engrossed-amendment-senate.xml
+!bills/115-hr-5895/5_enrolled-bill.xml
+!bills/113-hr-3547/
+bills/113-hr-3547/*
+!bills/113-hr-3547/6_enrolled-bill.xml
+!bills/119-hr-1/
+bills/119-hr-1/*
+!bills/119-hr-1/1_reported-in-house.xml
 reports/*
 !reports/.gitkeep
 plans/

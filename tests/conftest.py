@@ -1,6 +1,8 @@
 """Shared test helpers and fixtures."""
 
+import functools
 import os
+import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,28 +13,116 @@ from diff_bill import NodeDiff, diff_bills
 
 BILLS_DIR = Path(__file__).parent.parent / "bills"
 
-# --- Corpus completeness policy (#167) -----------------------------------------
-# The corpus property gates (test_diff_validation, test_corpus_properties,
-# test_corpus_tree_properties) parametrize over bill assets that are gitignored and
-# fetch-scripted. When an asset is absent the case skips, and pytest emits nothing at
-# all for an empty parametrization — so on an unfetched checkout the whole gate runs
-# green without executing a single assertion. "Skip" reads as "pass": the fail-open
-# pattern. PR #146 merged with a red corpus gate this way (the proof case pinned below).
+# --- Committed corpus manifest (#217 / ADR 0015) -------------------------------
+# The three corpus correctness gates (test_corpus_properties, test_corpus_tree_
+# properties, test_diff_validation) parametrize over the COMMITTED fixture set named
+# in tests/corpus_manifest.toml — not a `bills/*/…` glob. Every manifested bill is in
+# git, so the collected set is byte-identical on every machine and in CI; a missing
+# fixture fails the per-module completeness floor (fail closed) instead of vanishing
+# from an empty glob (fail open). See docs/decisions/0015-corpus-test-fixtures.md.
 #
-# The deliberate design is that a clean local clone / CI skips the corpus cleanly
-# (PRs #62/#64/#66 made the corpus fetch-scripted precisely so it wouldn't be a hard
-# dependency). So the policy is NOT "always fail" — it is "never SILENTLY skip where
-# completeness is required." REQUIRE_CORPUS=1 opts into the required mode: a pre-PR
-# strict run (or CI after running the fetch scripts) sets it, and then a missing
-# baseline asset or an empty parametrization is a loud failure instead of a silent skip.
+# CORPUS_SWEEP=1 restores the old broad-glob behavior as an opt-in, non-CI exploratory
+# mode: it sweeps every locally-fetched bill (a superset of the manifest), which has
+# caught bugs a few clean bills did not (#126, #146). It is exploration, not a gate.
+CORPUS_SWEEP = os.environ.get("CORPUS_SWEEP") == "1"
+_MANIFEST_PATH = Path(__file__).parent / "corpus_manifest.toml"
+
+
+@functools.cache
+def _manifest_bills() -> tuple[dict, ...]:
+    """The [[bill]] entries from corpus_manifest.toml (cached)."""
+    return tuple(tomllib.loads(_MANIFEST_PATH.read_text())["bill"])
+
+
+def _manifest_paths(fmt: str) -> list[Path]:
+    """Committed manifest fixture paths of one format ('xml' | 'pdf'), sorted."""
+    return sorted(
+        BILLS_DIR / bill["id"] / f"{ver['stage']}.{fmt}"
+        for bill in _manifest_bills()
+        for ver in bill["versions"]
+        if fmt in ver["formats"]
+    )
+
+
+def manifest_xml_files() -> list[Path]:
+    """XML fixtures the corpus gates parametrize over (manifest, or the full local
+    glob under CORPUS_SWEEP)."""
+    if CORPUS_SWEEP:
+        return sorted(BILLS_DIR.glob("*/[0-9]*_*.xml"))
+    return _manifest_paths("xml")
+
+
+def manifest_pdf_files() -> list[Path]:
+    """PDF fixtures the corpus gates parametrize over (manifest, or the full local
+    glob under CORPUS_SWEEP)."""
+    if CORPUS_SWEEP:
+        return sorted(BILLS_DIR.glob("*/[0-9]*_*.pdf"))
+    return _manifest_paths("pdf")
+
+
+def manifest_version_pairs() -> list[tuple[Path, Path]]:
+    """Adjacent committed-XML version pairs within each bill, for the diff smoke.
+    Under CORPUS_SWEEP, every adjacent pair across all locally-fetched bills."""
+    pairs: list[tuple[Path, Path]] = []
+    if CORPUS_SWEEP:
+        for bill_dir in sorted(BILLS_DIR.iterdir()):
+            if bill_dir.is_dir():
+                versions = sorted(bill_dir.glob("*.xml"))
+                pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
+        return pairs
+    for bill in _manifest_bills():
+        versions = sorted(
+            BILLS_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]
+        )
+        pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
+    return pairs
+
+
+def missing_manifest_files() -> list[str]:
+    """Manifest fixtures (all formats) absent from the checkout. Must be empty: every
+    manifested bill is committed, so absence means an uncommitted fixture (fail closed).
+    Checks the manifest set regardless of CORPUS_SWEEP."""
+    missing = []
+    for bill in _manifest_bills():
+        for ver in bill["versions"]:
+            for fmt in ver["formats"]:
+                if not (BILLS_DIR / bill["id"] / f"{ver['stage']}.{fmt}").exists():
+                    missing.append(f"{bill['id']}/{ver['stage']}.{fmt}")
+    return missing
+
+
+def assert_manifest_committed(collected: Sequence, kind: str) -> None:
+    """Fail-closed completeness floor for a corpus gate (#217, ADR 0015).
+
+    Called from a plain (non-parametrized) guard test so it always collects and runs —
+    with no env var, unlike the retired REQUIRE_CORPUS floor. Fails (not skips) if any
+    manifested fixture is absent from the checkout, so a fresh CI checkout that is
+    missing a committed fixture goes red instead of silently collecting fewer cases.
+    ``kind`` names the gate in the failure message.
+    """
+    missing = missing_manifest_files()
+    assert not missing, (
+        f"{kind}: manifest fixtures absent from the checkout (uncommitted?): {missing}. "
+        "Every bill in tests/corpus_manifest.toml must be committed to git."
+    )
+    assert len(collected) > 0, f"{kind}: gate parametrized over zero cases despite a complete manifest."
+
+
+# --- Legacy corpus completeness policy (#167) ----------------------------------
+# REQUIRE_CORPUS predates the committed manifest. The three corpus gates above no
+# longer use it — they parametrize over the committed manifest and fail closed via
+# assert_manifest_committed. It survives only as the presence floor for the corpus
+# modules still parametrized over fetched (uncommitted) bills — test_node_join_corpus,
+# test_xml_subsection_nodes, test_pdf_subsection_recall — pending their migration to
+# the manifest. Those bills (e.g. the large 114-hr-2029 omnibus) are not yet in the
+# committed set, so REQUIRE_CORPUS=1 remains their opt-in strict mode: a missing
+# baseline asset or empty parametrization is a loud failure instead of a silent skip.
 REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
 
-# The curated baseline floor: bills whose hand-pinned expectations the corpus gates
-# encode (diff-validation class fixtures, _KNOWN_DUPLICATE_COUNTS / _KNOWN_MISSING_APPRO,
-# the tree money-drop budgets). In REQUIRE_CORPUS mode every one of these must be on
-# disk, else the gate that pins it against a hardcoded baseline skips silently. Paths
-# are relative to BILLS_DIR. Not the whole CI corpus (curation is #126) — just the floor
-# below which the regression harness is provably inert.
+# The curated baseline floor for the REQUIRE_CORPUS modules above: bills whose
+# hand-pinned expectations those gates encode. In REQUIRE_CORPUS mode every one must be
+# on disk, else the gate that pins it against a hardcoded baseline skips silently.
+# Paths are relative to BILLS_DIR.
 REQUIRED_CORPUS_BILLS = (
     # 118-hr-4366: TestControlledDiff (v1->v2) and TestStructureExpansion (v1->v6).
     "118-hr-4366/1_reported-in-house.xml",

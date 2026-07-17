@@ -1,0 +1,169 @@
+# Corpus test-fixture manifest — the single source of truth for the committed bill
+# set the CI correctness gates run against. See docs/decisions/0015-corpus-test-fixtures.md.
+#
+# WHY THIS FILE EXISTS
+# The corpus correctness gates (tests/test_corpus_properties.py,
+# tests/test_corpus_tree_properties.py, tests/test_diff_validation.py) used to
+# parametrize over `bills/*/[0-9]*_*.xml` discovered at collection time. `bills/` is
+# gitignored, so the collected set was whatever each machine had fetched: counts were
+# not reproducible, and on an unfetched checkout (including CI) the gates collected
+# zero cases and passed green with no assertions — the fail-open trap ADR 0009 exists
+# to prevent. This manifest replaces that glob: the gates parametrize over exactly the
+# bills named here, every one of which is committed to git, so the collected set is
+# byte-identical on every machine and in CI.
+#
+# HOW THE GATES READ IT
+# tests/conftest.py loads this file once (stdlib tomllib) and derives the XML-file
+# list, the PDF-file list, and the adjacent-version pairs the gates parametrize over.
+# A file `bills/<id>/<stage>.<format>` is built for every (bill, version, format)
+# below. Because those files are committed, a normal checkout always has them; the
+# per-module completeness floor (test_manifest_fixtures_committed) fails closed if any
+# is absent — that is the CI signal that a manifested fixture was not committed.
+#
+# ADDING A FIXTURE — see the "Add a corpus fixture" recipe in TESTING.md. In short:
+# `git add` the bill files under bills/<id>/, add a [[bill]] entry here, and run the
+# gates so any per-bill baseline (_KNOWN_DUPLICATE_COUNTS, _XML_DROP_BUDGET, ...) is
+# calibrated. Manifest and committed files must move together.
+#
+# SCOPE (#217 / #126): this is the initial curated floor — the bills the gates encode
+# hand-pinned baselines for, plus one bill per appropriations subcommittee and the
+# key structural shapes (omnibus, enrolled, minibus, reconciliation, Senate print).
+# Broadening the curation (e.g. per-subcommittee reported-House PDFs) is #126. The
+# opt-in `CORPUS_SWEEP=1` exploratory mode still sweeps every locally-fetched bill.
+
+# --- Diff-validation baselines -------------------------------------------------
+
+[[bill]]
+id = "118-hr-4366"
+subcommittee = "milcon-va / full-year omnibus"
+covers = "Primary diff-validation baselines: controlled small diff (v1->v2, same structure) and no-division->omnibus structure expansion (v1->v6). Hand-curated assertions live in test_diff_validation TestControlledDiff / TestStructureExpansion."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml"] },
+  { stage = "2_engrossed-in-house", formats = ["xml"] },
+  { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
+  { stage = "5_engrossed-amendment-house", formats = ["xml"] },
+  { stage = "6_enrolled-bill", formats = ["xml"] },
+]
+
+[[bill]]
+id = "115-hr-5895"
+subcommittee = "energy-water / legislative-branch / milcon-va (minibus)"
+covers = "Dead-zone similarity baseline (v4->v5, the corpus's densest 0.4-0.6 similarity gap; test_diff_validation TestDeadZoneBaseline) and multi-division minibus coverage — supplies the Legislative Branch subcommittee the Senate set omits."
+versions = [
+  { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
+  { stage = "5_enrolled-bill", formats = ["xml"] },
+]
+
+# --- Structural-shape coverage -------------------------------------------------
+
+[[bill]]
+id = "113-hr-3547"
+subcommittee = "full-year omnibus (enrolled)"
+covers = "Enrolled multi-division omnibus whose later titles spill out as orphan <title> siblings — the #146/#167 duplicate-match_path proof case (_KNOWN_DUPLICATE_COUNTS = 168, _XML_DROP_BUDGET = 1)."
+versions = [
+  { stage = "6_enrolled-bill", formats = ["xml"] },
+]
+
+[[bill]]
+id = "119-hr-1"
+subcommittee = "reconciliation (not appropriations)"
+covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (_XML_DROP_BUDGET = 15)."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml"] },
+]
+
+# --- PDF pipeline + XML/PDF diff ----------------------------------------------
+
+[[bill]]
+id = "118-hr-8752"
+subcommittee = "commerce-justice-science / homeland (reported + engrossed House)"
+covers = "The clean PDF extraction oracle (bimodal size bands, full coverage) and the XML+PDF diff-recall pair (v1->v2). Committed in both formats, so the PDF tree gate and the diff-recall suite run in CI."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+  { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
+]
+
+[[bill]]
+id = "118-hr-8282"
+subcommittee = "non-appropriations House bill"
+covers = "Introduced-in-House PDF used as the PDF-pipeline generalization case (a bill outside the appropriations shape must still extract and level without spurious accounts/majors)."
+versions = [
+  { stage = "1_introduced-in-house", formats = ["pdf"] },
+]
+
+# --- One Senate reported print per appropriations subcommittee -----------------
+# FY2025 (118th) unless noted. Reported-in-Senate prints exercise small-caps heading
+# bands and per-subcommittee department/major heading vocabulary — the overfitting
+# guard #126 asks for. Committed under the bills/118-s-*/ allowlist in .gitignore.
+
+[[bill]]
+id = "118-s-4690"
+subcommittee = "agriculture"
+covers = "Agriculture/Rural Development/FDA Senate reported print — Agriculture subcommittee heading vocabulary."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4795"
+subcommittee = "commerce-justice-science"
+covers = "CJS Senate reported print (FY2025). DOJ general-provisions + NASA heading pair (_KNOWN_DUPLICATE_COUNTS = 2)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-2321"
+subcommittee = "commerce-justice-science (FY2024)"
+covers = "CJS FY2024 reported print — the cross-year out-of-corpus guard (heading vocabulary must generalize across fiscal years; _KNOWN_DUPLICATE_COUNTS = 1)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4921"
+subcommittee = "defense"
+covers = "Department of Defense Senate reported print — Defense subcommittee heading vocabulary."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4927"
+subcommittee = "energy-water"
+covers = "Energy-Water Senate reported print. Corps of Engineers heading repeats (_KNOWN_DUPLICATE_COUNTS = 4)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4928"
+subcommittee = "financial-services"
+covers = "Financial Services and General Government Senate reported print. Treasury/OPM salaries + DC funds repeats (_KNOWN_DUPLICATE_COUNTS = 5)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-2625"
+subcommittee = "homeland-security"
+covers = "Department of Homeland Security Senate reported print — Homeland subcommittee heading vocabulary."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4802"
+subcommittee = "interior-environment"
+covers = "Interior-Environment Senate reported print. Forest Service heading repeats (_KNOWN_DUPLICATE_COUNTS = 3)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4942"
+subcommittee = "labor-hhs"
+covers = "Labor-HHS-Education Senate reported print. VETS employment-and-training lines (_KNOWN_DUPLICATE_COUNTS = 2)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4677"
+subcommittee = "milcon-va"
+covers = "Military Construction / Veterans Affairs Senate reported print — MilCon-VA subcommittee heading vocabulary."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4797"
+subcommittee = "state-foreign-ops"
+covers = "State-Foreign Operations Senate reported print. Callable-capital limitation section (_KNOWN_DUPLICATE_COUNTS = 1)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-s-4796"
+subcommittee = "transportation-hud"
+covers = "Transportation-HUD Senate reported print. FAA/FHWA/NHTSA/HUD heading repeats (_KNOWN_DUPLICATE_COUNTS = 7)."
+versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
