@@ -413,6 +413,36 @@ class TestCmdDownloadFormats:
         assert build_parser().parse_args(["download", "118", "hr", "4366"]).format == "xml"
         assert build_parser().parse_args(["download-all", "--start_year", "2024"]).format == "xml"
 
+    @respx.mock
+    def test_default_download_writes_the_xml_the_diff_consumes(self, tmp_path):
+        """A default `download` must write the .xml that `diff_bill compare` reads.
+
+        Args come from the real parser, not a hand-built Namespace: the argparse
+        default is the thing under test, so pinning it in the test would assert the
+        test author's typing rather than the shipped default. The PDF route is mocked
+        so a default of pdf/both would *succeed* and write a .pdf -- that way the
+        no-PDF assertion fails on the regression instead of erroring on an unmocked
+        request, which would pass for the wrong reason.
+
+        Complements test_parser_format_defaults_to_xml rather than repeating it: that
+        one pins the default's *value*, this one pins what a default run *produces*.
+        A regression between the flag and the file -- GPO renames a format label, say,
+        so get_xml_url stops matching -- leaves the default "xml" while writing
+        nothing and exiting 0. Only this test sees that.
+        """
+        respx.get(self.TEXT_URL).respond(200, json=self._payload())
+        respx.get(self.XML_URL).respond(200, content=b"<bill/>")
+        respx.get(self.PDF_URL).respond(200, content=b"%PDF-1.7")
+
+        args = build_parser().parse_args(["download", "118", "hr", "4366", "--output-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            cmd_download(client, args, TEST_API_KEY)
+
+        bill_dir = tmp_path / "118-hr-4366"
+        assert (bill_dir / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
+        # Fails if the default flips to pdf *or* both (#151, #131).
+        assert not (bill_dir / "1_reported-in-house.pdf").exists()
+
     def test_parser_accepts_format_both(self):
         args = build_parser().parse_args(["download", "118", "hr", "4366", "--format", "both"])
         assert args.format == "both"
