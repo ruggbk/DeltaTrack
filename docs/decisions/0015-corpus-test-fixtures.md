@@ -1,6 +1,6 @@
 # 15. Commit a curated corpus fixture set and collect the gates from a manifest
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-07-17
 
 ## Context
