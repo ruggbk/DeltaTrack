@@ -54,3 +54,4 @@ relitigated.
 | [0012](0012-pdf-heading-levels.md) | Recover PDF heading levels from deterministic geometry; accept the prose-leading agency gap |
 | [0013](0013-bill-storage-and-version-identity.md) | Bill identity is the slug; version is a per-bill ordinal, not a universal one |
 | [0014](0014-leveled-heading-tree-scope.md) | Ship the recoverable heading levels as a conservation-checked tree; defer semantic rollup |
+| [0015](0015-corpus-test-fixtures.md) | Commit a curated corpus fixture set and collect the gates from a manifest |
