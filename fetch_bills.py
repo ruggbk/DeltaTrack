@@ -383,8 +383,14 @@ def build_parser() -> argparse.ArgumentParser:
     # INVARIANT: the default is XML, always. XML is the authoritative published
     # source (ADR 0010: prefer published XML); PDF is opt-in for the
     # pre-publication / last-resort path and must be requested with --format.
-    # Do not change this default — test_parser_format_defaults_to_xml fails if it
-    # drifts (it last regressed to pdf unnoticed in a "lint" commit).
+    # Not `both` either: PDF is the source of necessity, XML the source of choice.
+    # PDF's use here is narrower (pre-publication / last resort) and its extraction
+    # lossier, so defaulting to both would make every user fetch a second, lossier
+    # artifact per version to serve the minority case.
+    # Do not change this default — test_parser_format_defaults_to_xml fails if either
+    # subcommand's default drifts (it last regressed to pdf unnoticed in a "lint"
+    # commit), and test_default_download_writes_the_xml_the_diff_consumes fails if a
+    # default `download` stops producing the .xml at all.
     p_dl.add_argument(
         "--format", choices=["xml", "pdf", "both"], default="xml", help="Format(s) to download (default: xml)"
     )
