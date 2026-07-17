@@ -24,9 +24,11 @@ catches a regression. The human-readable snapshot + attribution live in
 ``docs/decisions/0014-leveled-heading-tree-scope.md``; regenerate with
 ``pytest -k parity -s``.
 
-``bills/`` is gitignored (fetched via ``fetch_bills.py``) and the Senate PDF is
-fetched via ``scripts/fetch_test_assets.py``, so every case skips cleanly on a
-clean clone / in CI and gates on a full local run.
+The clean-bill parity case (``118-hr-8752``) is committed in both XML and PDF via
+the corpus manifest, and ``118-s-4795``'s XML is committed too, so those run on any
+checkout. The other evidence bills and the watermarked Senate PDF (fetched via
+``scripts/fetch_test_assets.py``) are uncommitted, so their cases skip when absent.
+This module is not in the CI slow selection, so it gates on a full local run.
 """
 
 from __future__ import annotations
