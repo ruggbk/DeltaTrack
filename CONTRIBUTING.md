@@ -136,8 +136,29 @@ The pre-commit hooks cover gates 1 and 2 on each commit, but `ruff format --chec
 2. Open a pull request against `develop`.
 3. In the description, link the issue it addresses ("Closes #123") and say what changed and why.
 4. For a behavior change, note how you verified it -- not just "tests pass," but what you ran or eyeballed (see [Reviewing a pull request](#reviewing-a-pull-request)).
+5. For a bug fix, show the test failing without the fix. A test that passes with or without your change doesn't prove the bug is gone.
+6. If you used an AI coding assistant, say so (see below).
 
 A maintainer reviews and merges. CI must be green.
+
+### AI-assisted contributions
+
+They're welcome, and we ask you to disclose them: one line in the pull request
+description naming the tool is enough. Disclosure tells a reviewer where to look
+harder; it isn't held against the change. The bar is the same either way, and
+it's the bar this project already had:
+
+- **You're the author.** Be ready to explain why the change is written the way it
+  is and to answer review comments yourself. "That's what the model produced"
+  isn't an answer, and a change nobody can defend can't be merged.
+- **Run it before you send it.** Generated evidence isn't evidence. A test result
+  or benchmark quoted in a description that nobody actually ran costs a reviewer
+  more than claiming nothing at all, because it looks like proof.
+- **One concern per pull request.** A model will happily fix six things at once,
+  and a reviewer can't verify that.
+
+A change that clears these is welcome however it was written. One that doesn't
+gets closed, also however it was written.
 
 ## Reviewing a pull request
 
