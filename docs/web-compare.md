@@ -19,7 +19,7 @@ before `ProxyPass` + ISPConfig **Force HTTPS**. App middleware is a backstop onl
 
 Sample without uploading: `compare.html?example=1` loads a bundled report from `webapp/sample/example.html`.
 
-The CLI path ([README](../README.md)) is separate: download Congress.gov **XML**, run `diff_bill.py compare … --format html` locally. Same HTML *renderer* family, different input pipeline (XML vs PDF).
+The CLI path ([README](../README.md)) is separate: download govinfo **XML**, run `diff_bill.py compare … --format html` locally. Same HTML *renderer* family, different input pipeline (XML vs PDF).
 
 ---
 
@@ -70,7 +70,7 @@ uv run python render_examples.py   # writes examples/hr8752_pdf_diff.html
 
 | | README quickstart (XML) | Web upload / `compare_pdfs_html` (PDF) |
 |---|---|---|
-| Input | Congress.gov XML on disk | User PDF bytes (upload) |
+| Input | govinfo XML on disk | User PDF bytes (upload) |
 | Diff engine | `diff_bill.py` | `diff_pdf.py` |
 | HTML renderer | `format_diff_html` via `view_from_canonical` | `format_diff_html` via `view_from_canonical` |
 | CLI entrypoint | `diff_bill.py compare … --format html` | `server/pdf_compare.py` (HTTP) or snippet above |

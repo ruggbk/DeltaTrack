@@ -70,6 +70,8 @@ Reported and (especially) engrossed-amendment versions carry GPO's own change ma
 | enrolled | 8/12 | | referred / received / placed-on-calendar | 1/7, 1/5, 1/4 |
 | introduced | 0/10 | | | |
 
+*The `reported-to-senate` bucket is the pre-#10 slug this 2026-07-10 snapshot was measured against; post-#10 the same versions enumerate as `reported-in-senate` (govinfo canonical `rs`). The 3/3 count is unaffected — the label is not re-run against the renamed corpus.*
+
 Caveats that shape any use:
 
 - It is **version-internal** — what this version changed relative to its *own*
