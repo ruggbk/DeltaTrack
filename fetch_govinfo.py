@@ -53,42 +53,95 @@ MIN_CONGRESS = 113
 # these from the package id in each BILLSTATUS textVersions URL.
 CONTENT_BASE = "https://www.govinfo.gov/content/pkg"
 
-# Bill version codes (govinfo "About Congressional Bills") -> (display name, tier).
-# Single source of truth; NAME_TO_CODE is derived below. The display name is
-# sanitized to the slug the corpus uses ("Reported in House" -> reported-in-house).
-# Tier ranks how final the *text* is; it only breaks date ties and places the
-# undated enrolled/engrossed versions (see fetch_bill_text_archives.convert_archives).
+# Bill version codes -> (display name, tier). Single source of truth; NAME_TO_CODE is
+# derived below. The display name is sanitized to the slug the corpus uses ("Reported
+# in House" -> reported-in-house), so a name that keys an on-disk corpus file cannot be
+# changed without renaming that file (and breaking tests/test_govinfo_corpus_parity.py).
+#
+# The full authoritative code set is govinfo's (govinfo.gov/help/bills, 53 codes; the
+# superset congress.gov's list is a subset of), inherited wholesale (#238) so no real
+# code falls through resolve_code() to a tier-0 raw-code label -- the unreadable-
+# filename bug (3_rth.xml) that #223 closed for rth/ris and #238 closes for all 53.
+# Names: the codes that key on-disk corpus files keep their existing corpus-stable
+# wording (which is also congress.gov's); the rest use authoritative wording. Where
+# govinfo and congress.gov diverge only in the chamber suffix ("(House)" vs " House"),
+# the existing table's no-parens style is used for consistency (parens sanitize away).
+#
+# Tier ranks how final the *text* is; it only breaks date ties and places the undated
+# enrolled/engrossed versions (see fetch_bill_text_archives.convert_archives). Tier is
+# our own construct (neither source publishes it), assigned by legislative stage:
+# introduce=1, refer/receive/reference/held=2, report/calendar/discharge/print=3,
+# engross/pass/agree/amend/dispose=4, enroll/print-as-passed=5. Only the ~10 codes with
+# on-disk corpus files (ih, rfs, rds, rh, rs, pcs, eh, eah, eas, enr) have load-bearing
+# tiers; the rest never appear in an appropriations bill, so their tiers are best-effort
+# stage placements (the admin/procedural codes -- ash, sas, sc, pav, pp, oph/ops, hdh/
+# hds, rhuc -- do not map cleanly to the 5 stages; see PR for the full mapping review).
 VERSION_CODES: dict[str, tuple[str, int]] = {
+    # -- tier 1: introduced (+ sponsorship admin, near introduction) --
     "ih": ("Introduced in House", 1),
     "is": ("Introduced in Senate", 1),
+    "ash": ("Additional Sponsors House", 1),
+    "sas": ("Additional Sponsors Senate", 1),
+    "sc": ("Sponsor Change", 1),
+    # -- tier 2: referral / receipt / reference / held at desk --
     "rfh": ("Referred in House", 2),
     "rfs": ("Referred in Senate", 2),
     "rdh": ("Received in House", 2),
     "rds": ("Received in Senate", 2),
     "rch": ("Reference Change House", 2),
     "rcs": ("Reference Change Senate", 2),
-    # rth/ris are real referral-stage codes that were missing, so resolve_code fell
-    # them through to tier 0 with the raw code as the label -- unreadable filenames
-    # (3_rth.xml, 3_ris.xml), violating ADR 0013's readable-label contract. Names are
-    # the bill-stage attribute from the downloaded XML (Referred-to-Committee-House,
-    # Referral-Instructions-Senate); tier 2 matches the referral family above.
+    # rth/ris were missing, so resolve_code fell them through to tier 0 with the raw
+    # code as the label -- unreadable filenames (3_rth.xml, 3_ris.xml), violating ADR
+    # 0013's readable-label contract. #238 generalizes that fix to the whole table.
     "rth": ("Referred to Committee House", 2),
+    "rts": ("Referred to Committee Senate", 2),
+    "rih": ("Referral Instructions House", 2),
     "ris": ("Referral Instructions Senate", 2),
+    "rah": ("Referred with Amendments House", 2),
+    "ras": ("Referred with Amendments Senate", 2),
+    "hdh": ("Held at Desk House", 2),
+    "hds": ("Held at Desk Senate", 2),
+    # -- tier 3: reported / calendar / committee discharged / print --
     "rh": ("Reported in House", 3),
     "rs": ("Reported in Senate", 3),
-    "pcs": ("Placed on Calendar Senate", 3),
     "pch": ("Placed on Calendar House", 3),
+    "pcs": ("Placed on Calendar Senate", 3),
+    "cdh": ("Committee Discharged House", 3),
+    "cds": ("Committee Discharged Senate", 3),
+    "oph": ("Ordered to be Printed House", 3),
+    "ops": ("Ordered to be Printed Senate", 3),
+    "pp": ("Public Print", 3),
+    "pav": ("Previous Action Vitiated", 3),
+    # -- tier 4: engrossed / passed / agreed / amended / floor disposition --
     "eh": ("Engrossed in House", 4),
     "es": ("Engrossed in Senate", 4),
     "eah": ("Engrossed Amendment House", 4),
     "eas": ("Engrossed Amendment Senate", 4),
     "reah": ("Re-engrossed Amendment House", 4),
+    "res": ("Re-engrossed Amendment Senate", 4),
+    "eph": ("Engrossed and Deemed Passed by House", 4),
     "cph": ("Considered and Passed House", 4),
     "cps": ("Considered and Passed Senate", 4),
     "ath": ("Agreed to House", 4),
     "ats": ("Agreed to Senate", 4),
+    "as": ("Amendment Ordered to be Printed Senate", 4),
+    "fah": ("Failed Amendment House", 4),
+    "fph": ("Failed Passage House", 4),
+    "fps": ("Failed Passage Senate", 4),
+    "iph": ("Indefinitely Postponed House", 4),
+    "ips": ("Indefinitely Postponed Senate", 4),
+    "lth": ("Laid on Table in House", 4),
+    "lts": ("Laid on Table in Senate", 4),
+    "pwah": ("Ordered to be Printed with House Amendment", 4),
+    # rhuc: govinfo drops "the", congress.gov keeps it. Ruled to congress.gov's wording
+    # ("Returned to the House...") -- the one added code taking congress.gov over govinfo.
+    # url-bearing, so only affects display/slug if an rhuc version is ever downloaded.
+    # Tier 4 (post-passage inter-chamber return); #238 suggested 3 -- flagged for review.
+    # Resolves #223.
+    "rhuc": ("Returned to the House by Unanimous Consent", 4),
+    # -- tier 5: enrolled / printed as passed --
     "enr": ("Enrolled Bill", 5),
-    "renr": ("Reprint of Enrolled Bill", 5),
+    "renr": ("Re-enrolled Bill", 5),
     "pap": ("Printed as Passed", 5),
 }
 
@@ -110,13 +163,11 @@ NAME_TO_CODE: dict[str, str] = {sanitize(name): code for code, (name, _tier) in 
 # bites the *name fallback* in _version_code_from_item -- i.e. url-less versions (the
 # govinfo XML-less gap, #226), where there is no URL to read the code from. Across a
 # 117-119 hr/s sweep "Reported to Senate" (canonical: "Reported in Senate") was the
-# only divergence observed -- but that scope can't exercise every code: rth/ris carry
-# the same latent risk (their canonical names are derived from the downloaded bill
-# XML's stage attribute, not from BILLSTATUS), so a url-less rth/ris with a divergent
-# BILLSTATUS spelling would drop the same way. (Public/Private Law are a different
-# collection and stay unmapped by design; rhuc "Returned to the House by Unanimous
-# Consent" is tracked separately in #223 -- it is url-bearing, so the fallback never
-# needs it.)
+# only divergence observed -- but that scope can't exercise every code: any code whose
+# canonical name here diverges from its BILLSTATUS <type> spelling carries the same
+# latent risk (a url-less version of it would drop uncoded). Public/Private Law are a
+# different collection and stay unmapped by design. rhuc is now in VERSION_CODES (#238)
+# but is url-bearing, so the name fallback never needs it.
 NAME_TO_CODE.update({"reported-to-senate": "rs"})
 
 

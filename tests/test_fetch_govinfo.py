@@ -61,6 +61,93 @@ def test_resolve_code_unknown_is_tier_zero():
     assert tier == 0 and name == "zzq"
 
 
+# The full authoritative govinfo bill-version code set (govinfo.gov/help/bills), the
+# superset congress.gov's 37-code list is a subset of. Inherited wholesale (#238) so no
+# real code can fall through resolve_code() to a tier-0 raw-code label -- the unreadable
+# filename bug the rth/ris fix (#223) closed for two codes and #238 closes for all 53.
+AUTHORITATIVE_VERSION_CODES = frozenset(
+    {
+        "as",
+        "ash",
+        "ath",
+        "ats",
+        "cdh",
+        "cds",
+        "cph",
+        "cps",
+        "eah",
+        "eas",
+        "eh",
+        "enr",
+        "eph",
+        "es",
+        "fah",
+        "fph",
+        "fps",
+        "hdh",
+        "hds",
+        "ih",
+        "iph",
+        "ips",
+        "is",
+        "lth",
+        "lts",
+        "oph",
+        "ops",
+        "pap",
+        "pav",
+        "pch",
+        "pcs",
+        "pp",
+        "pwah",
+        "rah",
+        "ras",
+        "rch",
+        "rcs",
+        "rdh",
+        "rds",
+        "reah",
+        "renr",
+        "res",
+        "rfh",
+        "rfs",
+        "rh",
+        "rhuc",
+        "rih",
+        "ris",
+        "rs",
+        "rth",
+        "rts",
+        "sas",
+        "sc",
+    }
+)
+
+
+def test_version_codes_cover_authoritative_set():
+    # Completeness gate (#238): every govinfo bill-version code must be present, so an
+    # unanticipated version resolves to a readable label rather than a tier-0 filename.
+    # A frozen set, not a count: if govinfo adds a code this fails and forces a
+    # deliberate table update rather than a silent gap reopening the rth/ris bug class.
+    assert set(gi.VERSION_CODES) == AUTHORITATIVE_VERSION_CODES
+
+
+def test_every_authoritative_code_resolves_readable_not_tier_zero():
+    # No authoritative code may fall through to tier 0 (raw code as label) -- that is
+    # the unreadable-filename contract from ADR 0013. Each carries a positive tier and
+    # a name that does not sanitize back to the bare code.
+    for code in AUTHORITATIVE_VERSION_CODES:
+        name, tier = gi.resolve_code(code)
+        assert tier > 0, f"{code} fell through to tier 0 ({name!r})"
+        assert gi.sanitize(name) != code, f"{code} has a bare-code label ({name!r})"
+
+
+def test_renr_name_corrected_to_re_enrolled():
+    # renr was derived by us as "Reprint of Enrolled Bill"; govinfo's authoritative
+    # name is "Re-enrolled Bill" (#238). Not a corpus code, so display-only.
+    assert gi.resolve_code("renr")[0] == "Re-enrolled Bill"
+
+
 def test_name_to_code_roundtrip():
     # Every code's sanitized name maps back to a code (derived reverse table).
     assert gi.NAME_TO_CODE["reported-in-senate"] == "rs"
