@@ -45,6 +45,16 @@ unfixable = ["F401"]
 testpaths = ["tests"]
 # Tests live in tests/ but import the source modules at the repo root.
 pythonpath = ["."]
+# Run in parallel by default (pytest-xdist). "auto" = one worker per CPU core.
+# The suite is dominated by a few heavy PDF/corpus cases, so wall-time collapses
+# toward the long pole instead of summing every test (#168). The session-scoped
+# fixtures re-run per worker (separate processes) but hold no cross-worker state;
+# the on-disk extraction cache writes to a per-writer temp file + atomic rename, so
+# concurrent workers can't corrupt it. addopts is prepended to every invocation,
+# including CI's explicit `pytest -m ...` commands, so they parallelize too without
+# changing which tests are selected. Override with `-n0` to run serially (e.g. for a
+# clean --pdb debugging session).
+addopts = ["-n", "auto"]
 markers = [
     "slow: tests that require real bill XML files (deselect with '-m not slow')",
     "browser: end-to-end tests that drive a real browser via Playwright (run with '-m browser'; need 'playwright install chromium')",
