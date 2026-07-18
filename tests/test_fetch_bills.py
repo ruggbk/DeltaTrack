@@ -675,6 +675,13 @@ class TestValidateDownloaded:
 
         validate_downloaded(b'<?xml version="1.0"?>\n<bill/>', "application/xml", "xml", "u")
 
+    def test_accepts_xml_with_utf8_bom(self):
+        # A future source could prepend a UTF-8 BOM; the guard must not reject
+        # otherwise-valid XML for it. (No corpus file has one today.)
+        from fetch_bills import validate_downloaded
+
+        validate_downloaded(b"\xef\xbb\xbf<?xml version='1.0'?><bill/>", "application/xml", "xml", "u")
+
     def test_accepts_bare_markup_without_declaration(self):
         # Existing corpus fixtures and the Congress.gov path emit XML without an
         # <?xml prolog; the guard must accept generic markup, only rejecting HTML.

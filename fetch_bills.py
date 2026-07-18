@@ -8,6 +8,7 @@ XML and PDF (``--format``).
 """
 
 import argparse
+import codecs
 import datetime
 import os
 import re
@@ -193,7 +194,8 @@ def validate_downloaded(content: bytes, content_type: str | None, fmt: str, url:
     fixtures omit the ``<?xml`` prolog) but rejects an HTML document; PDF requires
     the ``%PDF-`` signature.
     """
-    body = content.lstrip()
+    body = content[len(codecs.BOM_UTF8) :] if content.startswith(codecs.BOM_UTF8) else content
+    body = body.lstrip()
     ct = (content_type or "").split(";")[0].strip().lower()
 
     def fail(reason: str) -> None:
@@ -219,10 +221,11 @@ def validate_downloaded(content: bytes, content_type: str | None, fmt: str, url:
 def fetch_version(client: httpx.Client, url: str, fmt: str, timeout: int = 60) -> bytes:
     """Download one version file and validate it is really ``fmt`` before returning.
 
-    Wraps :func:`download_bill_version` with :func:`validate_downloaded` so the
-    batch downloader never writes a govinfo error page or empty redirect body
-    into the corpus (#10 trap 1). Raises ``ValueError`` on a bad body; the caller
-    turns that into an ``.error`` marker beside the target.
+    Parallels :func:`download_bill_version` but keeps the response so
+    :func:`validate_downloaded` can see the content-type header, so the batch
+    downloader never writes a govinfo error page or empty redirect body into the
+    corpus (#10 trap 1). Raises ``ValueError`` on a bad body; the caller turns
+    that into an ``.error`` marker beside the target.
     """
     resp = request_with_retry(client, url, timeout=timeout)
     content = resp.content if resp else b""
