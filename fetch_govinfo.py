@@ -100,11 +100,15 @@ NAME_TO_CODE: dict[str, str] = {sanitize(name): code for code, (name, _tier) in 
 # BILLSTATUS's textVersions <type> spells a few codes differently from VERSION_CODES'
 # canonical display name, so the derived map above misses those spellings. This only
 # bites the *name fallback* in _version_code_from_item -- i.e. url-less versions (the
-# govinfo XML-less gap, #226), where there is no URL to read the code from. Measured
-# across 117-119 hr/s, "Reported to Senate" (canonical: "Reported in Senate") is the
-# sole BILLS-collection divergence. (Public/Private Law are a different collection and
-# stay unmapped by design; rhuc "Returned to the House by Unanimous Consent" is tracked
-# separately in #223 -- it is url-bearing, so the name fallback never needs it.)
+# govinfo XML-less gap, #226), where there is no URL to read the code from. Across a
+# 117-119 hr/s sweep "Reported to Senate" (canonical: "Reported in Senate") was the
+# only divergence observed -- but that scope can't exercise every code: rth/ris carry
+# the same latent risk (their canonical names are derived from the downloaded bill
+# XML's stage attribute, not from BILLSTATUS), so a url-less rth/ris with a divergent
+# BILLSTATUS spelling would drop the same way. (Public/Private Law are a different
+# collection and stay unmapped by design; rhuc "Returned to the House by Unanimous
+# Consent" is tracked separately in #223 -- it is url-bearing, so the fallback never
+# needs it.)
 NAME_TO_CODE.update({"reported-to-senate": "rs"})
 
 
