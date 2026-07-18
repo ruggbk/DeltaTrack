@@ -1,6 +1,6 @@
 # DeltaTrack
 
-Downloads U.S. bill text from Congress.gov and compares versions structurally. Shows what changed between versions: added, removed, modified, and moved sections, with optional financial change filtering.
+Downloads U.S. bill text from official government data (GPO govinfo) and compares versions structurally. Shows what changed between versions: added, removed, modified, and moved sections, with optional financial change filtering.
 
 Works on any bill type (HR, S, HJRES, etc.), not just appropriations.
 
@@ -48,7 +48,7 @@ source init
 
 Open the HTML file in any browser to view the comparison. No additional software needed. Reports are saved to the `reports/` folder.
 
-The tool works without an API key using a free demo key (limited to 30 requests per hour). For heavier use, get a free key at https://api.congress.gov/sign-up/ and save it in a file called `.env` in the project folder:
+**No API key required.** By default the tool downloads from **govinfo bulk data** (GPO), which is keyless and has no rate limit. The Congress.gov API is available as an alternate source via `--source api`; it needs a free key — get one at https://api.congress.gov/sign-up/ and save it in a file called `.env` in the project folder. (A key is also used for `download-all` over a year range, whose bill *discovery* uses the Congress.gov committee API even when the text comes from govinfo.)
 
 ```
 CONGRESS_API_KEY=your_key_here
@@ -56,13 +56,13 @@ CONGRESS_API_KEY=your_key_here
 
 ## Command reference
 
-The product commands are wrapper scripts in the project root; run them after `source init`. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
+The product commands are wrapper scripts in the project root; run them after `source init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
 
 | Command | What it does |
 |---------|--------------|
-| `./fetch_bills versions <congress> <type> <number>` | List a bill's available text versions |
-| `./fetch_bills download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`) |
-| `./fetch_bills download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set) |
+| `./fetch_bills versions <congress> <type> <number>` | List a bill's available text versions (`--source govinfo\|api`, default govinfo) |
+| `./fetch_bills download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`, `--source govinfo\|api`) |
+| `./fetch_bills download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set; `--source govinfo\|api`) |
 | `./diff_bill compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
 | `./diff_pdf <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
 | `./fetch_bill_archives` | Bulk-build a bill-metadata index from govinfo archives — **see the warning below** |
@@ -203,7 +203,7 @@ The shared data model the whole project rests on — the bill hierarchy, the glo
 
 Four modules:
 
-- **`fetch_bills.py`** - Downloads bill XML and PDF from Congress.gov API v3 (`--format xml|pdf|both`, default `xml`). CLI commands: `versions`, `download`, `download-all`.
+- **`fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`.
 - **`bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter). Captures preamble sections that sit alongside divisions or titles.
 - **`diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
 - **`formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.
@@ -230,14 +230,15 @@ uv run pytest tests/test_validate_extraction.py     # External validation tests
 
 Tests that require real bill files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. The corpus correctness gates (corpus-wide property checks and cross-version diff validation) run against a committed fixture set named in `tests/corpus_manifest.toml` -- no download needed, and reproducible everywhere. Every pull request runs the full CI gate set: lint, formatting, the fast and browser tests, external ground-truth validation, and the corpus gates against that committed set -- see [What CI checks](CONTRIBUTING.md#what-ci-checks).
 
-The diff engine is fully deterministic: no LLM and no API key. The only API key (`CONGRESS_API_KEY`) is used by `fetch_bills.py` to download bills, not by the diff itself.
+The diff engine is fully deterministic: no LLM and no API key. `fetch_bills.py` downloads bills keyless by default (govinfo bulk data); a `CONGRESS_API_KEY` is only needed for `--source api` or `download-all` year-range discovery, never by the diff itself.
 
 See [TESTING.md](TESTING.md) for how the test suite is organized, how diff accuracy is validated, what each validation layer proves, and where the known gaps are.
 
 The corpus correctness gates need no downloads (their fixtures are committed). A few other slow suites -- the PDF recall tests (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the provision-matching corpus modules (`test_node_join_corpus`, `test_xml_subsection_nodes`, `test_pdf_subsection_recall`) -- read larger bills beyond the committed set and skip if absent (or fail loudly under `REQUIRE_CORPUS=1`). To run those, download the bills first:
 
 ```bash
-# fetch_bills reads CONGRESS_API_KEY from .env automatically; no need to source it.
+# These download from govinfo by default — no API key needed. (For --source api,
+# fetch_bills reads CONGRESS_API_KEY from .env automatically; no need to source it.)
 # --format both fetches XML and PDF together, covering both the XML tests and the
 # PDF comparison tests (test_pdf_*) in one pass.
 ./fetch_bills download 118 hr 4366 --format both

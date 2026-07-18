@@ -46,11 +46,10 @@ uv run pytest -m "not slow and not browser"
 The fast tests use inline XML and mocked data. Integration tests need real bill files: XML for the diff tests and PDF for the PDF comparison tests (`test_pdf_*`):
 
 ```bash
-# An API key is optional: the tool falls back to a rate-limited demo key
-# (~30 requests/hour). For heavier use, get a free key at
-# https://api.congress.gov/sign-up/ and put it in .env. fetch_bills.py loads
-# .env automatically, so no `source` is needed.
-cp .env.example .env   # then edit .env and paste your key
+# No API key needed: fetch_bills.py downloads from keyless govinfo bulk data by
+# default. (A key is only needed for --source api or download-all year-range
+# discovery — get a free one at https://api.congress.gov/sign-up/, put it in .env
+# via `cp .env.example .env`, and fetch_bills.py loads .env automatically.)
 
 # Download the primary test bill (--format both gets XML + PDF; default is XML only)
 uv run python fetch_bills.py download 118 hr 4366 --format both

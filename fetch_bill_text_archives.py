@@ -11,9 +11,13 @@ Downloads the per-(congress, session, type) BILLS ZIPs from govinfo bulk data
 pipeline reads: ``bills/<congress>-<type>-<number>/<index>_<version-slug>.xml``.
 
 Versions are ordered by the BILLSTATUS date alone (``gi.order_versions``), the
-authority the per-bill fetch path (#10 step 6) will share so a bill numbers
-identically no matter how it was fetched -- that path still sorts by display
-name today, until the switch lands. ``--min-versions`` selects the use case: 1
+authority the per-bill fetch path now shares via the govinfo source (#10 step 6,
+landed): ``fetch_bills.enumerate_bill_versions`` routes ``--source govinfo``
+through ``fetch_govinfo.enumerate_versions``, which uses this same ordering, so a
+bill numbers identically however it was fetched. (The ``--source api`` path,
+``fetch_text_versions``, is also date-first but breaks ties by display-name
+rather than tier+code, so cross-source numbering can still diverge on ties.)
+``--min-versions`` selects the use case: 1
 (default) keeps every bill -- the general fetch #10 wants; 2+ keeps only bills
 matchable across versions -- the #170 test corpus.
 """

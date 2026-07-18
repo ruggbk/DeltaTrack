@@ -11,10 +11,11 @@ and it does not call out to any service. The same two documents always produce
 exactly the same comparison. There is no randomness and nothing to "get lucky"
 or "get unlucky" on.
 
-The tool does need an internet connection and uses an API key for one thing only:
-downloading bills from Congress.gov in the first place. That step is separate
-from the comparison. If you already have the documents, the comparison needs 
-no key and no internet connection.
+The tool does need an internet connection for one thing only: downloading bills
+in the first place. By default that uses keyless govinfo bulk data (no API key);
+a `CONGRESS_API_KEY` is only needed with `--source api` or year-range discovery.
+That step is separate from the comparison. If you already have the documents, the
+comparison needs no key and no internet connection.
 
 ## How accuracy is checked
 

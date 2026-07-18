@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-"""Download bill text versions from Congress.gov.
+"""Download bill text versions for downstream comparison.
 
-Uses the Congress.gov API v3 to fetch bill text in XML format
-for downstream comparison between versions.
+Fetches from govinfo bulk data by default (``--source govinfo``; keyless, no rate
+limit); the Congress.gov API v3 remains available via ``--source api``. Handles
+XML and PDF (``--format``).
 """
 
 import argparse
@@ -165,7 +166,7 @@ def save_version(
 
 
 def download_bill_version(client: httpx.Client, url: str, timeout: int = 60) -> bytes:
-    """Download raw XML content from a congress.gov URL, with retry."""
+    """Download raw content from a bill-version URL (govinfo or congress.gov), with retry."""
     resp = request_with_retry(client, url, timeout=timeout)
     return resp.content if resp else b""
 
