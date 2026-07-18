@@ -318,7 +318,7 @@ def download_all_versions(
         )
 
 
-def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: str):
+def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
     """Download all appropriations bill versions for a year range."""
     if args.start_year is None and args.end_year is None and args.file is None:
         print("start_year, end_year, or file must be provided.", file=sys.stderr)
