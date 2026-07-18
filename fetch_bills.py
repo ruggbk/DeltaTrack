@@ -176,6 +176,61 @@ def download_version_xml(client: httpx.Client, url: str) -> bytes:
     return download_bill_version(client, url)
 
 
+def validate_downloaded(content: bytes, content_type: str | None, fmt: str, url: str) -> None:
+    """Raise ``ValueError`` unless ``content`` really is the expected ``fmt``.
+
+    Guards the corpus against a govinfo package that does not exist: the
+    ``/content/pkg`` URL 302-redirects to an error page, so the fetch returns
+    either an empty redirect body (``follow_redirects=False``) or ``200`` +
+    ``text/html`` + ~44 KB of markup (``follow_redirects=True``). Written into a
+    ``{n}_{label}.{ext}`` file, either one is a silently corrupt bill version
+    (#10 trap 1). This runs before :func:`save_version`, so a bad body becomes a
+    loud ``.error`` marker instead of a plausible-looking file. Checks the
+    content-type header *and* the leading magic bytes, so it holds regardless of
+    the client's redirect policy and even if a header lies.
+
+    XML accepts a bare ``<...>`` root (the Congress.gov path and older corpus
+    fixtures omit the ``<?xml`` prolog) but rejects an HTML document; PDF requires
+    the ``%PDF-`` signature.
+    """
+    body = content.lstrip()
+    ct = (content_type or "").split(";")[0].strip().lower()
+
+    def fail(reason: str) -> None:
+        raise ValueError(
+            f"Expected {fmt.upper()} from {url} but {reason} ({len(content)} bytes, starts {content[:20]!r})"
+        )
+
+    if not body:
+        fail("the response body was empty")
+    if ct == "text/html":
+        fail(f"content-type was {ct!r} (likely a govinfo error page)")
+    if fmt == "pdf":
+        if not body.startswith(b"%PDF-"):
+            fail("the body is not a PDF (no %PDF- signature)")
+    else:  # xml
+        head = body[:64].lower()
+        if head.startswith(b"<!doctype html") or head.startswith(b"<html"):
+            fail("the body is an HTML document, not XML")
+        if not body.startswith(b"<"):
+            fail("the body does not start with a markup tag")
+
+
+def fetch_version(client: httpx.Client, url: str, fmt: str, timeout: int = 60) -> bytes:
+    """Download one version file and validate it is really ``fmt`` before returning.
+
+    Wraps :func:`download_bill_version` with :func:`validate_downloaded` so the
+    batch downloader never writes a govinfo error page or empty redirect body
+    into the corpus (#10 trap 1). Raises ``ValueError`` on a bad body; the caller
+    turns that into an ``.error`` marker beside the target.
+    """
+    resp = request_with_retry(client, url, timeout=timeout)
+    content = resp.content if resp else b""
+    content_type = resp.headers.get("content-type") if resp else None
+    validate_downloaded(content, content_type, fmt, url)
+    return content
+
+
 def get_xml_url(version: dict) -> str | None:
     """Extract the XML format URL from a version's formats list."""
     for fmt in version.get("formats", []):
@@ -226,7 +281,7 @@ def download_version(
             continue
         print(f"  Downloading version {index}/{total} ({fmt}): {vtype}...", file=sys.stderr)
         try:
-            content = download_bill_version(client, url, timeout=timeout)
+            content = fetch_version(client, url, fmt, timeout=timeout)
             save_version(content, output_dir, congress, bill_type, number, index, vtype, ext=fmt)
             print(f"  Saved: {dest}", file=sys.stderr)
         except Exception as exc:

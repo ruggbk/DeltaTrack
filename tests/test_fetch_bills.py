@@ -655,3 +655,128 @@ class TestLazyApiKeyResolution:
         monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366"])
         fetch_bills.main()
         assert "DEMO_KEY" not in capsys.readouterr().err
+
+
+# --- content guard: reject govinfo error pages / empty bodies (#10 trap 1) ---
+
+# A missing govinfo package redirects to an error page. With follow_redirects the
+# response is 200 + text/html + ~44KB of markup; without it, an empty 302 body.
+# Either one, written into a {n}_{label}.{ext} file, is a corrupt bill silently
+# entering the corpus. The guard validates content-type AND magic bytes before
+# save_version, independent of redirect policy.
+_HTML_ERROR_PAGE = b'<!DOCTYPE html>\n<html lang="en"><head><title>Error</title></head><body>404</body></html>'
+
+
+class TestValidateDownloaded:
+    """Unit tests for the pure content guard."""
+
+    def test_accepts_real_xml_with_declaration(self):
+        from fetch_bills import validate_downloaded
+
+        validate_downloaded(b'<?xml version="1.0"?>\n<bill/>', "application/xml", "xml", "u")
+
+    def test_accepts_bare_markup_without_declaration(self):
+        # Existing corpus fixtures and the Congress.gov path emit XML without an
+        # <?xml prolog; the guard must accept generic markup, only rejecting HTML.
+        from fetch_bills import validate_downloaded
+
+        validate_downloaded(b"<bill/>", None, "xml", "u")
+
+    def test_accepts_real_pdf(self):
+        from fetch_bills import validate_downloaded
+
+        validate_downloaded(b"%PDF-1.4\n...", "application/pdf", "pdf", "u")
+
+    def test_rejects_html_page_as_xml(self):
+        from fetch_bills import validate_downloaded
+
+        with pytest.raises(ValueError):
+            validate_downloaded(_HTML_ERROR_PAGE, "text/html", "xml", "u")
+
+    def test_rejects_html_page_as_pdf(self):
+        from fetch_bills import validate_downloaded
+
+        with pytest.raises(ValueError):
+            validate_downloaded(_HTML_ERROR_PAGE, "text/html", "pdf", "u")
+
+    def test_rejects_html_body_even_if_content_type_lies(self):
+        # A spoofed/absent content-type must not let an HTML body through: the
+        # magic-byte check is independent of the header.
+        from fetch_bills import validate_downloaded
+
+        with pytest.raises(ValueError):
+            validate_downloaded(_HTML_ERROR_PAGE, "application/xml", "xml", "u")
+
+    def test_rejects_empty_body(self):
+        # The follow_redirects=False case: an empty 302 body must not be saved as
+        # a zero-byte bill version.
+        from fetch_bills import validate_downloaded
+
+        with pytest.raises(ValueError):
+            validate_downloaded(b"", None, "xml", "u")
+
+    def test_rejects_xml_bytes_for_pdf(self):
+        from fetch_bills import validate_downloaded
+
+        with pytest.raises(ValueError):
+            validate_downloaded(b"<?xml version='1.0'?>", "application/xml", "pdf", "u")
+
+
+class TestDownloadGuardIntegration:
+    """The guard reaches cmd_download: a bad body writes a .error marker, no data file."""
+
+    XML_URL = "https://www.congress.gov/118/bills/hr4366/rh.xml"
+    PDF_URL = "https://www.congress.gov/118/bills/hr4366/rh.pdf"
+
+    def _payload(self):
+        return {
+            "textVersions": [
+                {
+                    "date": "2023-06-27T04:00:00Z",
+                    "type": "Reported in House",
+                    "formats": [
+                        {"type": "PDF", "url": self.PDF_URL},
+                        {"type": "Formatted XML", "url": self.XML_URL},
+                    ],
+                }
+            ]
+        }
+
+    def _args(self, tmp_path, fmt):
+        return argparse.Namespace(
+            congress=118, bill_type="hr", number=4366, version=None, output_dir=tmp_path, format=fmt, source="api"
+        )
+
+    @respx.mock
+    def test_html_error_page_not_saved_as_xml(self, tmp_path):
+        respx.get("https://api.congress.gov/v3/bill/118/hr/4366/text").respond(200, json=self._payload())
+        respx.get(self.XML_URL).respond(200, content=_HTML_ERROR_PAGE, headers={"content-type": "text/html"})
+        with httpx.Client() as client:
+            cmd_download(client, self._args(tmp_path, "xml"), TEST_API_KEY)
+        bill_dir = tmp_path / "118-hr-4366"
+        assert not (bill_dir / "1_reported-in-house.xml").exists()
+        assert (bill_dir / "1_reported-in-house.xml.error").exists()
+
+    @respx.mock
+    def test_html_error_page_not_saved_as_pdf(self, tmp_path):
+        respx.get("https://api.congress.gov/v3/bill/118/hr/4366/text").respond(200, json=self._payload())
+        respx.get(self.PDF_URL).respond(200, content=_HTML_ERROR_PAGE, headers={"content-type": "text/html"})
+        with httpx.Client() as client:
+            cmd_download(client, self._args(tmp_path, "pdf"), TEST_API_KEY)
+        bill_dir = tmp_path / "118-hr-4366"
+        assert not (bill_dir / "1_reported-in-house.pdf").exists()
+        assert (bill_dir / "1_reported-in-house.pdf.error").exists()
+
+    @respx.mock
+    def test_valid_content_still_saves(self, tmp_path):
+        respx.get("https://api.congress.gov/v3/bill/118/hr/4366/text").respond(200, json=self._payload())
+        respx.get(self.XML_URL).respond(
+            200, content=b'<?xml version="1.0"?><bill/>', headers={"content-type": "application/xml"}
+        )
+        respx.get(self.PDF_URL).respond(200, content=b"%PDF-1.7\n", headers={"content-type": "application/pdf"})
+        with httpx.Client() as client:
+            cmd_download(client, self._args(tmp_path, "both"), TEST_API_KEY)
+        bill_dir = tmp_path / "118-hr-4366"
+        assert (bill_dir / "1_reported-in-house.xml").exists()
+        assert (bill_dir / "1_reported-in-house.pdf").exists()
+        assert not (bill_dir / "1_reported-in-house.xml.error").exists()
