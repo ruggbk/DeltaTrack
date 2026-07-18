@@ -39,6 +39,11 @@ from pathlib import Path
 import httpx
 
 BULK_BASE = "https://www.govinfo.gov/bulkdata"
+# govinfo bulk data's earliest Congress: 111/112 and older 404 for every file
+# (BILLS and BILLSTATUS alike), 113 forward returns 200. ADR 0004 scopes older
+# bills out of the default corpus; the Congress.gov API still serves them, so a
+# pre-113 govinfo request fails fast pointing at --source api (issue #10).
+MIN_CONGRESS = 113
 # Package-content base: per-version XML/PDF addressed by package id, e.g.
 # .../content/pkg/BILLS-118hr4366rh/xml/BILLS-118hr4366rh.xml. Byte-identical to
 # the bulkdata BILLS path and, unlike bulkdata, needs no session in the URL and no
@@ -427,6 +432,30 @@ def urlless_declared_versions(bill: ET.Element) -> list[tuple[str, str]]:
             continue  # Public/Private Law (or unmappable): expected skip
         gaps.append((code, resolve_code(code)[0]))
     return gaps
+
+
+class CongressNotAvailable(Exception):
+    """A requested Congress predates govinfo's bulk-data floor (:data:`MIN_CONGRESS`).
+
+    Raised so the caller can fail fast with an actionable message rather than
+    letting every per-file fetch 404 into a silent empty download (issue #10).
+    """
+
+
+def require_supported_congress(congress: int) -> None:
+    """Fail fast if ``congress`` predates govinfo's bulk floor.
+
+    govinfo serves the 113th Congress forward; 111/112 and earlier 404 for every
+    BILLS/BILLSTATUS file, which would otherwise surface as a bill that silently
+    "has no versions". Point the user at ``--source api``, which still serves
+    older Congresses (ADR 0004 scopes them out of the default corpus).
+    """
+    if congress < MIN_CONGRESS:
+        raise CongressNotAvailable(
+            f"govinfo bulk data starts at the {MIN_CONGRESS}th Congress; "
+            f"Congress {congress} is not available there. "
+            f"Re-run with --source api for pre-{MIN_CONGRESS} bills."
+        )
 
 
 def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:

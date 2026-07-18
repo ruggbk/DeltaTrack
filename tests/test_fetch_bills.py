@@ -15,6 +15,7 @@ from fetch_bills import (
     cmd_download_all,
     congress_for_year,
     download_version_xml,
+    enumerate_bill_versions,
     fetch_all_committee_bills,
     fetch_text_versions,
     format_version_list,
@@ -520,6 +521,54 @@ class TestSourceRouting:
         assert api.called and xml.called
         assert not gov.called
         assert (tmp_path / "118-hr-4366" / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
+
+
+class TestPre113Guard:
+    """govinfo bulk data starts at the 113th Congress; 111/112 and earlier 404
+    per file (issue #10 trap 7, ADR 0004). Under the default --source govinfo a
+    pre-113 request must fail fast with a message pointing at --source api, not
+    404 per bill or silently produce nothing. --source api serves older
+    Congresses and must be untouched by the guard.
+    """
+
+    def test_govinfo_pre113_enumeration_fails_fast(self):
+        # No respx: the guard must fire before any network call.
+        with httpx.Client() as client:
+            with pytest.raises(gi.CongressNotAvailable) as exc:
+                enumerate_bill_versions(client, 112, "hr", 1, source="govinfo", api_key=None)
+        msg = str(exc.value)
+        assert "113" in msg and "--source api" in msg
+
+    @respx.mock
+    def test_govinfo_113_is_allowed(self):
+        # The floor itself (113) passes the guard and reaches BILLSTATUS.
+        respx.get(gi.billstatus_url(113, "hr", 1)).respond(200, content=_govinfo_billstatus(113, "hr", 1, "rh"))
+        with httpx.Client() as client:
+            versions = enumerate_bill_versions(client, 113, "hr", 1, source="govinfo", api_key=None)
+        assert len(versions) == 1
+
+    @respx.mock
+    def test_api_pre113_is_unaffected(self):
+        # --source api still serves older Congresses; the guard is govinfo-only.
+        respx.get("https://api.congress.gov/v3/bill/112/hr/1/text").respond(200, json={"textVersions": []})
+        with httpx.Client() as client:
+            versions = enumerate_bill_versions(client, 112, "hr", 1, source="api", api_key=TEST_API_KEY)
+        assert versions == []
+
+    def test_download_all_pre113_year_range_fails_before_discovery(self, monkeypatch):
+        # A purely pre-113 year range under govinfo must fail fast, not run the
+        # (API) committee discovery and then silently find zero fetchable bills.
+        import fetch_bills
+
+        def _boom(*a, **k):
+            raise AssertionError("committee discovery ran before the pre-113 guard")
+
+        monkeypatch.setattr(fetch_bills, "fetch_all_committee_bills", _boom)
+        args = build_parser().parse_args(["download-all", "--start_year", "2011", "--end_year", "2012"])
+        assert args.source == "govinfo"
+        with httpx.Client() as client:
+            with pytest.raises(gi.CongressNotAvailable):
+                cmd_download_all(client, args, None)
 
 
 class TestCmdDownloadAllYearRange:
