@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
 
 import httpx
@@ -99,6 +100,38 @@ def resolve_code(code: str) -> tuple[str, int]:
         if prefix in VERSION_CODES:
             return VERSION_CODES[prefix]
     return (code, 0)
+
+
+def order_versions(codes_dates: Iterable[tuple[str, str]]) -> list[tuple[str, str, int]]:
+    """Order (version-code, BILLSTATUS-date) pairs into corpus sequence.
+
+    BILLSTATUS date is the single ordering authority (issue #10). It is complete
+    and available *before* any text is downloaded, so the per-bill fetch path --
+    which must assign indices before it has bytes -- and the bulk convert path
+    number a bill identically. The bulk path *could* read each version's own
+    dc:date from the downloaded XML, but the per-bill path cannot; keying both on
+    BILLSTATUS avoids a split-brain where the same bill numbers differently
+    depending on how it was fetched. Keyed by the govinfo version code, the one
+    identifier both sources share verbatim (BILLSTATUS's display ``<type>``
+    diverges: "Reported to Senate" vs our "Reported in Senate").
+
+    Rules:
+      - Dates truncate to YYYY-MM-DD (``[:10]``) so a BILLSTATUS full datetime and
+        a bare date on the same day compare equal and fall through to the
+        tie-break rather than sorting by string length.
+      - An undated version (empty date) sorts to the bill's latest date
+        (null->max), placing the undated enrolled text last, not first.
+      - Ties break by tier (how final the text is), then code (deterministic for
+        repeated types like eas/eas2, kept in date then code order).
+
+    Does not deduplicate: one entry out per entry in, so callers pass one pair
+    per distinct version (convert_archives keys by code, so codes are unique).
+
+    Returns ``[(code, date, tier)]`` in corpus order.
+    """
+    resolved = [(code, (date or "")[:10], resolve_code(code)[1]) for code, date in codes_dates]
+    max_date = max((d for _c, d, _t in resolved if d), default="")
+    return sorted(resolved, key=lambda r: (r[1] or max_date, r[2], r[0]))
 
 
 # ---- URL builders -----------------------------------------------------------

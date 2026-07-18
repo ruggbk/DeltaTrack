@@ -10,10 +10,12 @@ Downloads the per-(congress, session, type) BILLS ZIPs from govinfo bulk data
 (no API key, no rate limit), then converts them into the corpus layout the diff
 pipeline reads: ``bills/<congress>-<type>-<number>/<index>_<version-slug>.xml``.
 
-Versions are ordered by date (BILLSTATUS-supplied where available, else the
-govinfo dc:date), matching the curated corpus's sort. ``--min-versions`` selects
-the use case: 1 (default) keeps every bill -- the general fetch #10 wants; 2+
-keeps only bills matchable across versions -- the #170 test corpus.
+Versions are ordered by the BILLSTATUS date alone (``gi.order_versions``), the
+authority the per-bill fetch path (#10 step 6) will share so a bill numbers
+identically no matter how it was fetched -- that path still sorts by display
+name today, until the switch lands. ``--min-versions`` selects the use case: 1
+(default) keeps every bill -- the general fetch #10 wants; 2+ keeps only bills
+matchable across versions -- the #170 test corpus.
 """
 
 from __future__ import annotations
@@ -36,8 +38,6 @@ DEFAULT_BILLS_DIR = PROJECT_DIR / "bills"
 # govinfo BILLS member filename, e.g. BILLS-119hr1eh.xml, BILLS-119hconres14enr.xml.
 # Groups: congress, bill_type, number, version_code.
 _MEMBER_RE = re.compile(r"^BILLS-(\d+)([a-z]+)(\d+)([a-z0-9]+)\.xml$", re.IGNORECASE)
-# The per-version date inside the govinfo BILLS XML (namespace-agnostic fallback).
-_DATE_RE = re.compile(rb"<dc:date>([^<]+)</dc:date>", re.IGNORECASE)
 
 DEFAULT_BILL_TYPES = ("hr", "s", "hjres", "sjres", "hconres")
 
@@ -154,13 +154,23 @@ def convert_archives(
     Two passes so memory stays flat on the full corpus, where ~90% of bills are
     single-version and get filtered: pass 1 indexes members by bill *without*
     reading their bytes; pass 2 reads bytes only for the bills that survive the
-    filter. Versions order by each version's own govinfo dc:date, falling back to
-    the BILLSTATUS date for the ~26% govinfo omits (notably engrossed-in-house);
-    undated versions sort to the bill's latest date, tie-broken by tier then code.
+    filter. Versions order by their BILLSTATUS date via :func:`gi.order_versions`
+    (the single authority). ``billstatus_dir`` supplies those dates -- the CLI
+    defaults it to ``bills/``, but the function default is ``None``. With no (or
+    incomplete) BILLSTATUS ZIPs a bill has no dates and falls back to tier-then-
+    code order; that is a real mis-ordering risk, so it is COUNTED
+    (``bills_without_billstatus``) and warned on stderr rather than left silent.
+    Undated versions sort to the bill's latest date, tie-broken by tier then code.
     Returns summary stats.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     date_index = gi.build_billstatus_date_index(billstatus_dir) if billstatus_dir else {}
+    if not date_index:
+        print(
+            "  WARNING: no BILLSTATUS dates loaded -- every version orders by tier-then-code "
+            "only, not by date. Point --billstatus-dir at a dir of BILLSTATUS ZIPs.",
+            file=sys.stderr,
+        )
 
     open_zips: dict[Path, zipfile.ZipFile] = {}
     by_bill: dict[str, dict[str, tuple[Path, str]]] = defaultdict(dict)  # bill_id -> {code: (zip, member)}
@@ -204,32 +214,27 @@ def convert_archives(
 
             try:
                 bill_dates = date_index.get(bill_id, {})
-                resolved = []  # (date, tier, code, name, data)
+                # A bill with no BILLSTATUS entry at all (e.g. its type's ZIP was not
+                # supplied) has zero dates, so its versions order by tier-then-code
+                # only. That is a silent mis-ordering risk unless surfaced -- count it.
+                # (A dated bill's individual undated version, e.g. enrolled, is the
+                # normal null->max case and is NOT flagged here.)
+                if not bill_dates:
+                    stats["bills_without_billstatus"] += 1
+                # Read each version's bytes; ordering uses only the BILLSTATUS date
+                # (gi.order_versions), never the version's own dc:date -- so the bulk
+                # path and the per-bill fetch path (which numbers before it has bytes)
+                # agree. bill_dates is keyed by version code, the identifier both
+                # sources share verbatim across BILLSTATUS's divergent display names.
+                members: dict[str, tuple[str, bytes]] = {}  # code -> (display name, data)
                 for code, (zp, member) in code_refs.items():
-                    data = open_zips[zp].read(member)
-                    dm = _DATE_RE.search(data)
-                    govinfo_dt = dm.group(1).decode("utf-8", "ignore") if dm else ""
-                    name, tier = gi.resolve_code(code)
-                    # Prefer the version's own govinfo date; fall back to BILLSTATUS,
-                    # which fills versions govinfo omits (notably engrossed-in-house).
-                    # Keyed by version code -- the identifier both sides share verbatim;
-                    # a name-based join silently misses types BILLSTATUS spells
-                    # differently (e.g. "Reported to Senate" vs our "Reported in Senate").
-                    # Truncate to the date: govinfo emits YYYY-MM-DD, BILLSTATUS the full
-                    # YYYY-MM-DDThh:mm:ssZ. Left mixed, the bare date is a lexicographic
-                    # prefix of the datetime, so two same-day versions from different
-                    # sources sort by string length instead of falling through to the
-                    # tier tie-break (would put printed-as-passed before engrossed).
-                    date = (govinfo_dt or bill_dates.get(code, ""))[:10]
-                    resolved.append((date, tier, code, name, data))
-                # Undated versions (typically enrolled) sort to the bill's latest
-                # date, then by tier (final text last), then code (deterministic
-                # tie-break so repeated types like eas/eas2 stay ordered by date).
-                max_date = max((r[0] for r in resolved if r[0]), default="")
-                ordered = sorted(resolved, key=lambda r: (r[0] or max_date, r[1], r[2]))
+                    name, _tier = gi.resolve_code(code)
+                    members[code] = (name, open_zips[zp].read(member))
+                ordered = gi.order_versions((code, bill_dates.get(code, "")) for code in members)
 
                 bill_dir.mkdir(parents=True, exist_ok=True)
-                for idx, (_date, _tier, _code, name, data) in enumerate(ordered, 1):
+                for idx, (code, _date, _tier) in enumerate(ordered, 1):
+                    name, data = members[code]
                     (bill_dir / f"{idx}_{gi.sanitize(name)}.xml").write_bytes(data)
                 stats["bills_written"] += 1
             except (OSError, zipfile.BadZipFile, zlib.error) as exc:
@@ -242,6 +247,12 @@ def convert_archives(
     stats["bills_seen"] = len(by_bill)
     if unknown_codes:
         print(f"  unresolved version codes (tier 0): {dict(unknown_codes)}", file=sys.stderr)
+    if stats.get("bills_without_billstatus"):
+        print(
+            f"  WARNING: {stats['bills_without_billstatus']} bill(s) had no BILLSTATUS metadata "
+            "and were ordered by tier-then-code, not date (check --billstatus-dir coverage).",
+            file=sys.stderr,
+        )
     print(f"  version-count histogram (versions -> #bills): {dict(sorted(version_hist.items()))}", file=sys.stderr)
     return dict(stats)
 
@@ -263,7 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--billstatus-dir",
         type=Path,
         default=DEFAULT_BILLS_DIR,
-        help="Dir holding BILLSTATUS-*.zip for authoritative version dates (default: bills/)",
+        help="Dir of BILLSTATUS date ZIPs (as fetch_bill_archives.py writes them, e.g. 118-hr.zip); default bills/",
     )
     p.add_argument("--download-only", action="store_true", help="Download ZIPs, skip conversion")
     p.add_argument("--convert-only", action="store_true", help="Convert already-downloaded ZIPs")
