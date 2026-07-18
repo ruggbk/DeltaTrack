@@ -67,6 +67,51 @@ def test_name_to_code_roundtrip():
     assert gi.NAME_TO_CODE["enrolled-bill"] == "enr"
 
 
+# Corpus-derived BILLSTATUS <type> spellings for known BILLS-collection version
+# codes, observed across Congresses 113-119 and bill types hr/s/hjres/sjres/hres/
+# sres/hconres/sconres. Public/Private Law are excluded by design. The list is
+# curated to spellings whose govinfo package URL carries a VERSION_CODES code.
+_BILLSTATUS_TYPE_SPELLINGS = (
+    "Agreed to House",
+    "Agreed to Senate",
+    "Considered and Passed House",
+    "Considered and Passed Senate",
+    "Engrossed Amendment House",
+    "Engrossed Amendment Senate",
+    "Engrossed in House",
+    "Engrossed in Senate",
+    "Enrolled Bill",
+    "Introduced in House",
+    "Introduced in Senate",
+    "Placed on Calendar Senate",
+    "Printed as Passed",
+    "Received in Senate",
+    "Reference Change House",
+    "Reference Change Senate",
+    "Referral Instructions Senate",
+    "Referred in House",
+    "Referred in Senate",
+    "Referred to Committee House",
+    "Reported in House",
+    "Reported to Senate",
+)
+
+
+def test_billstatus_type_spellings_resolve_to_version_codes():
+    # Standing gate (#231): every observed BILLSTATUS <type> spelling for a known
+    # BILLS-collection version code must resolve via NAME_TO_CODE.
+    spellings = list(_BILLSTATUS_TYPE_SPELLINGS)
+    assert len(spellings) >= 20, (
+        f"fixture is unexpectedly small ({len(spellings)} spellings); a vacuous list "
+        "would let the gate pass without proving anything"
+    )
+    unresolved = [s for s in spellings if gi.sanitize(s) not in gi.NAME_TO_CODE]
+    assert not unresolved, (
+        "BILLSTATUS type spellings missing from NAME_TO_CODE; url-less gap versions "
+        f"would be dropped silently: {unresolved}"
+    )
+
+
 # ---- URL builders -----------------------------------------------------------
 
 
