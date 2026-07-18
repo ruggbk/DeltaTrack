@@ -8,12 +8,16 @@ or the curated bill are absent (e.g. clean CI checkout).
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
+import httpx
 import pytest
+import respx
 
 import fetch_bill_text_archives as fbt
+import fetch_bills as fb
 import fetch_govinfo as gi
 
 REPO = Path(__file__).resolve().parent.parent
@@ -522,3 +526,180 @@ def test_govinfo_bytes_identical_to_curated_corpus():
     assert govinfo_bytes == _CURATED.read_bytes(), (
         "govinfo BILLS text must be byte-identical to the Congress.gov-sourced corpus"
     )
+
+
+# ---- per-bill enumeration: package-id extraction ----------------------------
+
+
+def _item(xml: str) -> ET.Element:
+    return ET.fromstring(xml)
+
+
+def test_version_pkg_from_item_reads_bills_package_id():
+    it = _item(
+        "<item><formats><item><url>https://www.govinfo.gov/content/pkg/"
+        "BILLS-119s337rs/xml/BILLS-119s337rs.xml</url></item></formats></item>"
+    )
+    assert gi._version_pkg_from_item(it) == "BILLS-119s337rs"
+    assert gi._code_from_pkg("BILLS-119s337rs") == "rs"
+
+
+def test_version_pkg_from_item_handles_suffixed_code_and_multichar_type():
+    # eas2 (suffixed) on a hconres bill: the number must not swallow the code.
+    it = _item(
+        "<item><formats><item><url>https://www.govinfo.gov/content/pkg/"
+        "BILLS-118hconres5eas2/xml/BILLS-118hconres5eas2.xml</url></item></formats></item>"
+    )
+    assert gi._version_pkg_from_item(it) == "BILLS-118hconres5eas2"
+    assert gi._code_from_pkg("BILLS-118hconres5eas2") == "eas2"
+
+
+def test_version_pkg_from_item_none_for_urlless_and_non_bills_url():
+    # url-less -> None (phantom).
+    assert gi._version_pkg_from_item(_item("<item><type>Public Law</type></item>")) is None
+    # a Public-Law item carries a PLAW url (a different collection) -> None.
+    plaw = _item(
+        "<item><type>Public Law</type><formats><item><url>https://www.govinfo.gov/content/pkg/"
+        "PLAW-115publ141/xml/PLAW-115publ141.xml</url></item></formats></item>"
+    )
+    assert gi._version_pkg_from_item(plaw) is None
+
+
+def test_package_content_url_shapes():
+    assert (
+        gi.package_content_url("BILLS-118hr4366rh", "xml")
+        == "https://www.govinfo.gov/content/pkg/BILLS-118hr4366rh/xml/BILLS-118hr4366rh.xml"
+    )
+    assert (
+        gi.package_content_url("BILLS-118hr4366rh", "pdf")
+        == "https://www.govinfo.gov/content/pkg/BILLS-118hr4366rh/pdf/BILLS-118hr4366rh.pdf"
+    )
+
+
+# ---- per-bill enumeration: url-bearing-only + ordering + seam ----------------
+
+
+def _bs_item(type_name: str, date: str, code: str | None = None) -> str:
+    """One textVersions <item>. code=None -> url-less (a phantom)."""
+    url = ""
+    if code is not None:
+        pkg = f"BILLS-999hr1{code}"
+        url = f"<formats><item><url>https://www.govinfo.gov/content/pkg/{pkg}/xml/{pkg}.xml</url></item></formats>"
+    return f"<item><type>{type_name}</type><date>{date}</date>{url}</item>"
+
+
+def _billstatus_bill(items: list[str]) -> ET.Element:
+    xml = (
+        "<billStatus><bill><congress>999</congress><type>HR</type><number>1</number>"
+        f"<textVersions>{''.join(items)}</textVersions></bill></billStatus>"
+    ).encode()
+    return ET.fromstring(xml).find("bill")
+
+
+def test_enumeration_excludes_urlless_phantom_the_full_helper_would_seat():
+    # THE fail-open guard. The url-less "Engrossed Amendment House" item is exactly
+    # the phantom the shared _version_code_from_item name-fallback WOULD seat (it
+    # maps that name to a real code, eah). Enumeration must exclude it while keeping
+    # the real url-bearing versions. Fixture deliberately contains both so a pass
+    # proves inclusion of reals AND exclusion of the phantom, not a blanket drop.
+    phantom = _bs_item("Engrossed Amendment House", "2025-02-01T05:00:00Z", code=None)
+    bill = _billstatus_bill(
+        [
+            _bs_item("Introduced in House", "2025-01-01T05:00:00Z", code="ih"),
+            phantom,
+            _bs_item("Enrolled Bill", "", code="enr"),
+        ]
+    )
+    versions = gi.versions_from_billstatus(bill)
+
+    types = [v["type"] for v in versions]
+    assert types == ["Introduced in House", "Enrolled Bill"]  # reals in, ordered
+    assert "Engrossed Amendment House" not in types  # phantom out
+
+    # Prove the guard has teeth: the shared full resolver WOULD have produced a code
+    # for that same item, so the exclusion is the url-only rule at work, not an
+    # unmappable name.
+    phantom_el = bill.find("textVersions").findall("item")[1]
+    assert gi._version_code_from_item(phantom_el) == "eah"
+    assert gi._version_pkg_from_item(phantom_el) is None
+
+
+def test_enumeration_orders_by_billstatus_date_not_tier():
+    # Dates contradict tier: eh (tier 4) dated first, ih (tier 1) last. Date-primary
+    # ordering yields [eh, rh, ih]; a tier-primary or date-blind sort would not.
+    bill = _billstatus_bill(
+        [
+            _bs_item("Engrossed in House", "2025-01-01", code="eh"),
+            _bs_item("Reported in House", "2025-02-01", code="rh"),
+            _bs_item("Introduced in House", "2025-03-01", code="ih"),
+        ]
+    )
+    assert [v["type"] for v in gi.versions_from_billstatus(bill)] == [
+        "Engrossed in House",
+        "Reported in House",
+        "Introduced in House",
+    ]
+
+
+def test_enumeration_output_feeds_the_download_and_display_seam():
+    # Measure at the consumed output: the emitted dicts must satisfy the exact
+    # accessors the API path uses, so download_version / format_version_list work
+    # unchanged when --source flips to govinfo.
+    bill = _billstatus_bill([_bs_item("Reported in House", "2025-02-01", code="rh")])
+    v = gi.versions_from_billstatus(bill)[0]
+    assert fb.get_xml_url(v) == "https://www.govinfo.gov/content/pkg/BILLS-999hr1rh/xml/BILLS-999hr1rh.xml"
+    assert fb.get_pdf_url(v) == "https://www.govinfo.gov/content/pkg/BILLS-999hr1rh/pdf/BILLS-999hr1rh.pdf"
+    # format_version_list renders type + truncated date without raising.
+    assert "Reported in House (2025-02-01)" in fb.format_version_list([v])
+
+
+def test_enumeration_empty_when_no_textversions():
+    bill = ET.fromstring(
+        b"<billStatus><bill><congress>999</congress><type>HR</type><number>1</number></bill></billStatus>"
+    ).find("bill")
+    assert gi.versions_from_billstatus(bill) == []
+
+
+# ---- enumerate_versions: the BILLSTATUS fetch wrapper (hermetic respx) -------
+
+
+def _billstatus_bytes(items: list[str]) -> bytes:
+    return (
+        "<billStatus><bill><congress>999</congress><type>HR</type><number>1</number>"
+        f"<textVersions>{''.join(items)}</textVersions></bill></billStatus>"
+    ).encode()
+
+
+@respx.mock
+def test_enumerate_versions_fetches_billstatus_and_orders():
+    body = _billstatus_bytes(
+        [
+            _bs_item("Introduced in House", "2025-01-01", code="ih"),
+            _bs_item("Reported in House", "2025-02-01", code="rh"),
+        ]
+    )
+    route = respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        versions = gi.enumerate_versions(client, 999, "hr", 1)
+    assert route.called
+    assert [v["type"] for v in versions] == ["Introduced in House", "Reported in House"]
+
+
+@respx.mock
+def test_enumerate_versions_raises_on_non_200_not_silent_empty():
+    # A 5xx must be loud: a silent empty list would number a partial/absent bill as
+    # if it had no versions (issue #10 trap).
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(500))
+    with httpx.Client() as client, pytest.raises(httpx.HTTPStatusError):
+        gi.enumerate_versions(client, 999, "hr", 1)
+
+
+@respx.mock
+def test_enumerate_versions_empty_textversions_returns_empty_not_error():
+    # A bill that exists but has no published text: BILLSTATUS 200s with an empty
+    # textVersions. That is a legitimate empty result (distinct from a non-200
+    # failure), so the wrapper returns [] rather than raising.
+    body = b"<billStatus><bill><congress>999</congress><type>HR</type><number>1</number></bill></billStatus>"
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        assert gi.enumerate_versions(client, 999, "hr", 1) == []

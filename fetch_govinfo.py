@@ -38,6 +38,12 @@ from pathlib import Path
 import httpx
 
 BULK_BASE = "https://www.govinfo.gov/bulkdata"
+# Package-content base: per-version XML/PDF addressed by package id, e.g.
+# .../content/pkg/BILLS-118hr4366rh/xml/BILLS-118hr4366rh.xml. Byte-identical to
+# the bulkdata BILLS path and, unlike bulkdata, needs no session in the URL and no
+# API key (verified at corpus scale, issue #10). The per-bill fetch path builds
+# these from the package id in each BILLSTATUS textVersions URL.
+CONTENT_BASE = "https://www.govinfo.gov/content/pkg"
 
 # Bill version codes (govinfo "About Congressional Bills") -> (display name, tier).
 # Single source of truth; NAME_TO_CODE is derived below. The display name is
@@ -162,6 +168,16 @@ def billstatus_url(congress: int, bill_type: str, number: int) -> str:
     return f"{BULK_BASE}/BILLSTATUS/{congress}/{bill_type}/{fname}"
 
 
+def package_content_url(pkg: str, fmt: str) -> str:
+    """content/pkg URL for one BILLS package version. ``fmt`` is 'xml' or 'pdf'.
+
+    ``pkg`` is the package id (``BILLS-118hr4366rh``). Session-free and keyless,
+    byte-identical to the bulkdata BILLS path (issue #10). Used to build the
+    format URLs the per-bill fetch path downloads.
+    """
+    return f"{CONTENT_BASE}/{pkg}/{fmt}/{pkg}.{fmt}"
+
+
 # ---- per-bill fetch (incorporated from the @willhea prototype) ---------------
 
 
@@ -198,9 +214,36 @@ def fetch_title(client: httpx.Client, congress: int, bill_type: str, number: int
 
 # ---- BILLSTATUS version dates (authoritative ordering for bulk downloads) ----
 
-# The govinfo version code embedded in a BILLS package URL, e.g.
-# https://www.govinfo.gov/content/pkg/BILLS-119s337rs/xml/BILLS-119s337rs.xml -> "rs".
-_URL_CODE_RE = re.compile(r"/BILLS-\d+[a-z]+\d+([a-z0-9]+)\.(?:xml|htm|pdf)\b", re.IGNORECASE)
+# The BILLS package id embedded in a textVersions format URL, e.g.
+# https://www.govinfo.gov/content/pkg/BILLS-119s337rs/xml/BILLS-119s337rs.xml
+# -> "BILLS-119s337rs". Matches only the BILLS collection: a Public-Law item
+# carries a PLAW-* url, so it does not match and is treated as url-less.
+_URL_PKG_RE = re.compile(r"/(BILLS-\d+[a-z]+\d+[a-z0-9]+)\.(?:xml|htm|pdf)\b", re.IGNORECASE)
+# Split the package id back into its trailing version code: BILLS-119s337rs -> rs.
+_PKG_CODE_RE = re.compile(r"^BILLS-\d+[a-z]+\d+([a-z0-9]+)$", re.IGNORECASE)
+
+
+def _version_pkg_from_item(item: ET.Element) -> str | None:
+    """The BILLS package id from a textVersions <item>'s format URL, else None.
+
+    URL-only, no name fallback. An item that carries no BILLS format URL is a
+    phantom -- a Public Law (a different collection) or an unpublished amendment
+    (115-hr-1625's "Engrossed Amendment House") -- and returns None here so the
+    enumeration path can drop it. This is deliberately the *non*-fallback half of
+    :func:`_version_code_from_item`: reusing that function's name fallback for
+    enumeration would invent a code for these phantoms and seat them in the list.
+    """
+    for url in item.iter("url"):
+        m = _URL_PKG_RE.search(url.text or "")
+        if m:
+            return m.group(1)
+    return None
+
+
+def _code_from_pkg(pkg: str) -> str | None:
+    """'BILLS-119s337rs' -> 'rs' (the trailing version code), else None."""
+    m = _PKG_CODE_RE.match(pkg)
+    return m.group(1).lower() if m else None
 
 
 def _version_code_from_item(item: ET.Element) -> str | None:
@@ -215,11 +258,14 @@ def _version_code_from_item(item: ET.Element) -> str | None:
     in the index -- notably engrossed-in-house, whose ordering depends entirely on
     this fallback. Only the handful of names BILLSTATUS spells differently from
     VERSION_CODES stay unresolved here, which is no worse than a name-based join.
+
+    This is the *full* resolver used by :func:`build_billstatus_date_index`, where
+    the bulk ZIP already says which versions exist so the name fallback is safe.
+    The enumeration path must NOT use it (see :func:`_version_pkg_from_item`).
     """
-    for url in item.iter("url"):
-        m = _URL_CODE_RE.search(url.text or "")
-        if m:
-            return m.group(1).lower()
+    pkg = _version_pkg_from_item(item)
+    if pkg:
+        return _code_from_pkg(pkg)
     typ = item.findtext("type")
     return NAME_TO_CODE.get(sanitize(typ)) if typ else None
 
@@ -270,3 +316,83 @@ def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str
             if dates:
                 index[f"{congress}-{btype}-{number}"] = dates
     return index
+
+
+# ---- per-bill version enumeration (the API-source drop-in) -------------------
+#
+# fetch_bills.py's per-bill path (versions / download / download-all --file)
+# discovers a bill's versions from the Congress.gov API's textVersions payload:
+# a list of {type, date, formats:[{type, url}]} dicts that download_version /
+# format_version_list consume. enumerate_versions produces that *same* shape from
+# BILLSTATUS so those consumers, and their tests, are untouched when --source
+# flips to govinfo (issue #10). The seam is the dict shape, not a refactor.
+
+
+def versions_from_billstatus(bill: ET.Element) -> list[dict]:
+    """API-shaped, corpus-ordered version list from a BILLSTATUS ``<bill>`` element.
+
+    Enumerates ONLY textVersions items that carry a BILLS format URL. An item
+    without one is a phantom -- a Public Law (a different collection) or an
+    unpublished amendment (115-hr-1625's "Engrossed Amendment House") -- and is
+    excluded. The exclusion is the point: :func:`_version_code_from_item`'s name
+    fallback would invent a code for such an item and seat it in the list, so the
+    URL-only :func:`_version_pkg_from_item` is used here instead. The failure mode
+    of a name-based enumeration is fail-open (a phantom silently enters), which is
+    exactly what url-only closes.
+
+    Ordering is :func:`order_versions` -- BILLSTATUS date as the single authority,
+    identical to the bulk convert path -- so the same bill numbers the same way
+    however it was fetched.
+
+    Each returned dict is ``{"type": display-name, "date": billstatus-date,
+    "formats": [{"type": "Formatted XML", "url": ...}, {"type": "PDF", "url": ...}]}``.
+    Both format URLs are the session-free content/pkg address built from the
+    package id; the fetch step validates each on download.
+    """
+    tv = bill.find("textVersions")
+    if tv is None:
+        return []
+    # code -> (original BILLSTATUS date, package id). Codes are unique within a
+    # bill (eas vs eas2 are distinct codes), so keying by code is lossless.
+    by_code: dict[str, tuple[str, str]] = {}
+    for item in tv.findall("item"):
+        pkg = _version_pkg_from_item(item)
+        if pkg is None:
+            continue  # phantom / url-less: excluded, do not name-fallback
+        code = _code_from_pkg(pkg)
+        if code is None:
+            continue
+        by_code[code] = (item.findtext("date") or "", pkg)
+
+    versions: list[dict] = []
+    for code, _date_trunc, _tier in order_versions((c, d) for c, (d, _p) in by_code.items()):
+        orig_date, pkg = by_code[code]
+        name, _tier = resolve_code(code)
+        versions.append(
+            {
+                "type": name,
+                "date": orig_date,
+                "formats": [
+                    {"type": "Formatted XML", "url": package_content_url(pkg, "xml")},
+                    {"type": "PDF", "url": package_content_url(pkg, "pdf")},
+                ],
+            }
+        )
+    return versions
+
+
+def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
+    """Fetch one bill's BILLSTATUS and return its ordered, API-shaped versions.
+
+    Drop-in for ``fetch_bills.fetch_text_versions`` on the govinfo source. Raises
+    on a non-200 BILLSTATUS response rather than mapping it to an empty list: an
+    enumeration failure must be loud, not a silent "bill has no versions" that
+    numbers a partial download as if it were complete (issue #10). A bill that
+    genuinely exists but has no published text yields an empty list from a 200.
+    """
+    resp = client.get(billstatus_url(congress, bill_type, number))
+    resp.raise_for_status()
+    bill = ET.fromstring(resp.content).find("bill")
+    if bill is None:
+        return []
+    return versions_from_billstatus(bill)
