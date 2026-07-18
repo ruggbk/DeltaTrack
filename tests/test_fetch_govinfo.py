@@ -714,6 +714,59 @@ def test_enumerate_versions_raises_on_non_200_not_silent_empty():
         gi.enumerate_versions(client, 999, "hr", 1)
 
 
+def test_urlless_declared_versions_surfaces_gap_skips_public_law():
+    # #226 AC#1: a url-less item whose <type> resolves to a real code is a govinfo
+    # XML-less GAP version (declared, no XML to fetch) -> surfaced. A url-less item
+    # that does NOT resolve is the Public Law collection -> expected skip, omitted.
+    # url-bearing reals are never surfaced. Fixture mixes all three.
+    bill = _billstatus_bill(
+        [
+            _bs_item("Introduced in House", "2025-01-01T05:00:00Z", code="ih"),  # url-bearing real
+            _bs_item("Reported in House", "2025-02-01T05:00:00Z", code=None),  # gap (resolves to rh)
+            _bs_item("Public Law", "2025-03-01T05:00:00Z", code=None),  # law -> skip
+        ]
+    )
+    assert gi.urlless_declared_versions(bill) == [("rh", "Reported in House")]
+
+
+def test_urlless_declared_versions_empty_when_no_textversions():
+    bill = ET.fromstring(
+        b"<billStatus><bill><congress>999</congress><type>HR</type><number>1</number></bill></billStatus>"
+    ).find("bill")
+    assert gi.urlless_declared_versions(bill) == []
+
+
+@respx.mock
+def test_enumerate_versions_warns_on_xmlless_gap_but_still_returns_reals(capsys):
+    # The surfacing must reach a consumer: enumerate_versions prints a loud stderr
+    # warning naming the gap version + count, while the returned (downloadable) list
+    # contains only the url-bearing real. A silent drop is the bug #226 AC#1 closes.
+    body = _billstatus_bytes(
+        [
+            _bs_item("Introduced in House", "2025-01-01", code="ih"),
+            _bs_item("Reported in House", "2025-02-01", code=None),  # XML-less gap
+        ]
+    )
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        versions = gi.enumerate_versions(client, 999, "hr", 1)
+    assert [v["type"] for v in versions] == ["Introduced in House"]  # gap excluded from downloadable set
+    err = capsys.readouterr().err
+    assert "1 version(s) declared" in err
+    assert "rh (Reported in House)" in err
+
+
+@respx.mock
+def test_enumerate_versions_no_warning_when_all_versions_served(capsys):
+    # Negative half: an all-url-bearing bill emits no gap warning, so the warning
+    # above is a real signal, not noise printed on every enumeration.
+    body = _billstatus_bytes([_bs_item("Introduced in House", "2025-01-01", code="ih")])
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        gi.enumerate_versions(client, 999, "hr", 1)
+    assert "declared in BILLSTATUS but not available" not in capsys.readouterr().err
+
+
 @respx.mock
 def test_enumerate_versions_empty_textversions_returns_empty_not_error():
     # A bill that exists but has no published text: BILLSTATUS 200s with an empty

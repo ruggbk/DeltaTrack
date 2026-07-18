@@ -7,6 +7,7 @@ import httpx
 import pytest
 import respx
 
+import fetch_govinfo as gi
 from fetch_bills import (
     api_get,
     build_parser,
@@ -25,6 +26,24 @@ from fetch_bills import (
 )
 
 TEST_API_KEY = "test-key"
+
+
+def _govinfo_billstatus(congress: int, btype: str, number: int, *codes: str) -> bytes:
+    """A govinfo BILLSTATUS body whose textVersions carry content/pkg URLs.
+
+    Mirrors the real shape enumerate_versions parses: each item embeds a BILLS
+    package URL so the version code is read from the URL, not the display name.
+    """
+    items = "".join(
+        f"<item><type>{gi.resolve_code(c)[0]}</type><date>2023-06-2{i}T04:00:00Z</date>"
+        f"<formats><item><url>{gi.package_content_url(f'BILLS-{congress}{btype}{number}{c}', 'xml')}</url>"
+        f"</item></formats></item>"
+        for i, c in enumerate(codes, 1)
+    )
+    return (
+        f"<billStatus><bill><congress>{congress}</congress><type>{btype.upper()}</type>"
+        f"<number>{number}</number><textVersions>{items}</textVersions></bill></billStatus>"
+    ).encode()
 
 
 @pytest.fixture(autouse=True)
@@ -381,9 +400,13 @@ class TestCmdDownloadFormats:
             ]
         }
 
-    def _args(self, tmp_path, fmt):
+    def _args(self, tmp_path, fmt, source="api"):
+        # source defaults to "api" here: these tests mock the Congress.gov API
+        # URLs and exercise download_version's format handling, which is
+        # source-independent. The shipped default source (govinfo) and its host
+        # routing are pinned separately in TestSourceRouting.
         return argparse.Namespace(
-            congress=118, bill_type="hr", number=4366, version=None, output_dir=tmp_path, format=fmt
+            congress=118, bill_type="hr", number=4366, version=None, output_dir=tmp_path, format=fmt, source=source
         )
 
     @respx.mock
@@ -417,26 +440,30 @@ class TestCmdDownloadFormats:
     def test_default_download_writes_the_xml_the_diff_consumes(self, tmp_path):
         """A default `download` must write the .xml that `diff_bill compare` reads.
 
-        Args come from the real parser, not a hand-built Namespace: the argparse
-        default is the thing under test, so pinning it in the test would assert the
-        test author's typing rather than the shipped default. The PDF route is mocked
-        so a default of pdf/both would *succeed* and write a .pdf -- that way the
-        no-PDF assertion fails on the regression instead of erroring on an unmocked
-        request, which would pass for the wrong reason.
+        Args come from the real parser, not a hand-built Namespace: BOTH argparse
+        defaults under test -- --format (xml) and --source (govinfo) -- come from
+        the shipped parser, so a flip in either is caught here rather than masked by
+        a test author's typing. The run therefore goes through the govinfo path (no
+        key), the true default. The PDF route is mocked so a default of pdf/both
+        would *succeed* and write a .pdf -- that way the no-PDF assertion fails on
+        the regression instead of erroring on an unmocked request (passing for the
+        wrong reason).
 
         Complements test_parser_format_defaults_to_xml rather than repeating it: that
-        one pins the default's *value*, this one pins what a default run *produces*.
-        A regression between the flag and the file -- GPO renames a format label, say,
-        so get_xml_url stops matching -- leaves the default "xml" while writing
-        nothing and exiting 0. Only this test sees that.
+        one pins the defaults' *values*, this one pins what a default run *produces*.
+        A regression between flag and file -- GPO renames a format label so
+        get_xml_url stops matching, or the default source flips to one that yields no
+        XML -- leaves the defaults nominally correct while writing nothing and
+        exiting 0. Only this test sees that.
         """
-        respx.get(self.TEXT_URL).respond(200, json=self._payload())
-        respx.get(self.XML_URL).respond(200, content=b"<bill/>")
-        respx.get(self.PDF_URL).respond(200, content=b"%PDF-1.7")
+        respx.get(gi.billstatus_url(118, "hr", 4366)).respond(200, content=_govinfo_billstatus(118, "hr", 4366, "rh"))
+        respx.get(gi.package_content_url("BILLS-118hr4366rh", "xml")).respond(200, content=b"<bill/>")
+        respx.get(gi.package_content_url("BILLS-118hr4366rh", "pdf")).respond(200, content=b"%PDF-1.7")
 
         args = build_parser().parse_args(["download", "118", "hr", "4366", "--output-dir", str(tmp_path)])
+        assert args.source == "govinfo"  # precondition: the shipped default under test
         with httpx.Client() as client:
-            cmd_download(client, args, TEST_API_KEY)
+            cmd_download(client, args, None)  # govinfo path takes no key
 
         bill_dir = tmp_path / "118-hr-4366"
         assert (bill_dir / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
@@ -446,6 +473,53 @@ class TestCmdDownloadFormats:
     def test_parser_accepts_format_both(self):
         args = build_parser().parse_args(["download", "118", "hr", "4366", "--format", "both"])
         assert args.format == "both"
+
+
+class TestSourceRouting:
+    """--source picks which host serves a bill's versions (issue #10 step 6).
+
+    One test per source pins the host actually hit, so a wiring regression that
+    silently routes to the wrong source -- or ignores --source -- fails loudly.
+    """
+
+    def _args(self, tmp_path, source):
+        return argparse.Namespace(
+            congress=118, bill_type="hr", number=4366, version=None, output_dir=tmp_path, format="xml", source=source
+        )
+
+    @respx.mock
+    def test_source_govinfo_hits_govinfo_not_congressgov(self, tmp_path):
+        bs = respx.get(gi.billstatus_url(118, "hr", 4366)).respond(
+            200, content=_govinfo_billstatus(118, "hr", 4366, "rh")
+        )
+        xml = respx.get(gi.package_content_url("BILLS-118hr4366rh", "xml")).respond(200, content=b"<bill/>")
+        # Any Congress.gov API call must be a hard failure, not a silent fallback.
+        api = respx.get("https://api.congress.gov/v3/bill/118/hr/4366/text").respond(500)
+        with httpx.Client() as client:
+            cmd_download(client, self._args(tmp_path, "govinfo"), None)
+        assert bs.called and xml.called
+        assert not api.called
+        assert (tmp_path / "118-hr-4366" / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
+
+    @respx.mock
+    def test_source_api_hits_congressgov_not_govinfo(self, tmp_path):
+        payload = {
+            "textVersions": [
+                {
+                    "date": "2023-06-27T04:00:00Z",
+                    "type": "Reported in House",
+                    "formats": [{"type": "Formatted XML", "url": "https://www.congress.gov/118/bills/hr4366/rh.xml"}],
+                }
+            ]
+        }
+        api = respx.get("https://api.congress.gov/v3/bill/118/hr/4366/text").respond(200, json=payload)
+        xml = respx.get("https://www.congress.gov/118/bills/hr4366/rh.xml").respond(200, content=b"<bill/>")
+        gov = respx.get(gi.billstatus_url(118, "hr", 4366)).respond(500)
+        with httpx.Client() as client:
+            cmd_download(client, self._args(tmp_path, "api"), TEST_API_KEY)
+        assert api.called and xml.called
+        assert not gov.called
+        assert (tmp_path / "118-hr-4366" / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
 
 
 class TestCmdDownloadAllYearRange:
@@ -463,10 +537,11 @@ class TestCmdDownloadAllYearRange:
 
 
 class TestLazyApiKeyResolution:
-    """govinfo #10 step 5: key resolution (and its DEMO_KEY warning) must not
-    fire on paths that never call the Congress.gov API -- ``--help``, no args,
-    and argparse errors. Full lazy-per-source resolution arrives with --source
-    wiring (step 6); every real command still resolves the key today.
+    """govinfo #10 steps 5-6: key resolution (and its DEMO_KEY warning) fires only
+    on paths that actually reach the Congress.gov API. Never on ``--help`` / no
+    args / argparse errors (step 5), and -- once --source lands (step 6) -- never
+    on the default keyless govinfo path either. Only ``--source api`` and year-range
+    committee discovery resolve a key.
     """
 
     def _spy_get_api_key(self, monkeypatch):
@@ -512,14 +587,35 @@ class TestLazyApiKeyResolution:
         assert exc.value.code != 0
         assert calls == []
 
-    def test_command_path_resolves_key(self, monkeypatch):
-        # Proves the spy CAN fire: a real command still resolves the key today,
-        # so the "not resolved" assertions above cannot pass vacuously.
+    def test_api_source_command_resolves_key(self, monkeypatch):
+        # Proves the spy CAN fire: an --source api command resolves the key, so the
+        # "not resolved" assertions (default govinfo, help, no-args) can't pass vacuously.
+        import fetch_bills
+
+        calls = self._spy_get_api_key(monkeypatch)
+        monkeypatch.setattr("fetch_bills.cmd_versions", lambda *a, **k: None)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366", "--source", "api"])
+        fetch_bills.main()
+        assert calls == [True]
+
+    def test_default_govinfo_command_resolves_no_key(self, monkeypatch):
+        # The #10 payoff: the default (keyless) govinfo path must NOT resolve a key.
         import fetch_bills
 
         calls = self._spy_get_api_key(monkeypatch)
         monkeypatch.setattr("fetch_bills.cmd_versions", lambda *a, **k: None)
         monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366"])
+        fetch_bills.main()
+        assert calls == []
+
+    def test_year_range_resolves_key_even_on_default_source(self, monkeypatch):
+        # Year-range discovery is the committee endpoint (API) even under govinfo,
+        # so download-all without --file resolves a key regardless of --source.
+        import fetch_bills
+
+        calls = self._spy_get_api_key(monkeypatch)
+        monkeypatch.setattr("fetch_bills.cmd_download_all", lambda *a, **k: None)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "download-all", "--start_year", "2024"])
         fetch_bills.main()
         assert calls == [True]
 
@@ -535,9 +631,22 @@ class TestLazyApiKeyResolution:
             fetch_bills.main()
         assert "DEMO_KEY" not in capsys.readouterr().err
 
-    def test_command_path_emits_demo_key_warning(self, monkeypatch, capsys):
-        # Known-bad pairing: with no key and a real command, the warning MUST
-        # appear -- otherwise the stderr-absence test above is vacuous.
+    def test_api_source_emits_demo_key_warning(self, monkeypatch, capsys):
+        # Known-bad pairing: no key + an --source api command -> the warning MUST
+        # appear, otherwise the stderr-absence tests are vacuous.
+        import fetch_bills
+
+        monkeypatch.setattr("fetch_bills.load_dotenv", lambda *a, **k: None)
+        monkeypatch.delenv("CONGRESS_API_KEY", raising=False)
+        monkeypatch.setattr("fetch_bills.cmd_versions", lambda *a, **k: None)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366", "--source", "api"])
+        fetch_bills.main()
+        assert "DEMO_KEY" in capsys.readouterr().err
+
+    def test_default_govinfo_emits_no_demo_key_warning(self, monkeypatch, capsys):
+        # Consumer-visible payoff: with no key, the default govinfo command must not
+        # emit the DEMO_KEY barrier warning. Isolated from any real key so the
+        # absence is due to lazy-per-source resolution, not a key being present.
         import fetch_bills
 
         monkeypatch.setattr("fetch_bills.load_dotenv", lambda *a, **k: None)
@@ -545,4 +654,4 @@ class TestLazyApiKeyResolution:
         monkeypatch.setattr("fetch_bills.cmd_versions", lambda *a, **k: None)
         monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366"])
         fetch_bills.main()
-        assert "DEMO_KEY" in capsys.readouterr().err
+        assert "DEMO_KEY" not in capsys.readouterr().err

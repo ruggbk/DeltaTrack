@@ -16,11 +16,17 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
+import fetch_govinfo as gi
 from bill_index import BillIndex, parse_bill_id
 from shared.bill_types import BILL_TYPES
 from shared.http import api_get, request_with_retry
 
 BASE_URL = "https://api.congress.gov/v3"
+
+# Bill-text sources. Default is govinfo (keyless, no rate limit; issue #10); the
+# Congress.gov API path stays fully supported via --source api.
+SOURCES = ("govinfo", "api")
+DEFAULT_SOURCE = "govinfo"
 
 
 def sanitize_version_name(name: str) -> str:
@@ -108,6 +114,22 @@ def fetch_text_versions(
     max_date = max((v.get("date") for v in versions if v.get("date")), default="")
     versions.sort(key=lambda v: (v.get("date") or max_date, v.get("type", "")))
     return versions
+
+
+def enumerate_bill_versions(
+    client: httpx.Client, congress: int, bill_type: str, number: int, *, source: str, api_key: str | None
+) -> list[dict]:
+    """Return one bill's versions from the selected source, API-dict-shaped.
+
+    The seam that makes --source a one-line switch: govinfo enumeration
+    (:func:`fetch_govinfo.enumerate_versions`) emits the same
+    ``{type, date, formats:[{type, url}]}`` shape the Congress.gov API returns, so
+    :func:`download_version` and :func:`format_version_list` -- and their tests --
+    are untouched. govinfo needs no key; the API path keeps its key.
+    """
+    if source == "govinfo":
+        return gi.enumerate_versions(client, congress, bill_type, number)
+    return fetch_text_versions(client, congress, bill_type, number, api_key=api_key)
 
 
 def version_path(
@@ -215,18 +237,22 @@ def download_version(
             continue
 
 
-def cmd_versions(client: httpx.Client, args: argparse.Namespace, api_key: str):
+def cmd_versions(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
     """Show available text versions for a bill."""
-    versions = fetch_text_versions(client, args.congress, args.bill_type, args.number, api_key=api_key)
+    versions = enumerate_bill_versions(
+        client, args.congress, args.bill_type, args.number, source=args.source, api_key=api_key
+    )
     label, _ = BILL_TYPES.get(args.bill_type, (args.bill_type.upper(), ""))
     print(f"\nText versions for {label} {args.number} ({args.congress}th Congress):\n")
     print(format_version_list(versions))
     print()
 
 
-def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str):
+def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
     """Download text versions for a single bill."""
-    versions = fetch_text_versions(client, args.congress, args.bill_type, args.number, api_key=api_key)
+    versions = enumerate_bill_versions(
+        client, args.congress, args.bill_type, args.number, source=args.source, api_key=api_key
+    )
 
     if not versions:
         print("No text versions available.", file=sys.stderr)
@@ -262,7 +288,8 @@ def download_all_versions(
     congress: int,
     bill_type: str,
     number: int,
-    api_key: str,
+    source: str,
+    api_key: str | None,
     formats: list[str],
     timeout: int = 60,
 ) -> None:
@@ -270,7 +297,7 @@ def download_all_versions(
     label, _ = BILL_TYPES.get(bill_type, (bill_type.upper(), ""))
     print(f"\n{label} {number} ({congress}th Congress):", file=sys.stderr)
 
-    versions = fetch_text_versions(client, congress, bill_type, number, api_key=api_key)
+    versions = enumerate_bill_versions(client, congress, bill_type, number, source=source, api_key=api_key)
     if not versions:
         print("  No text versions available", file=sys.stderr)
         return
@@ -310,6 +337,7 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
                 congress=ident.congress,
                 bill_type=ident.bill_type,
                 number=ident.number,
+                source=args.source,
                 api_key=api_key,
                 formats=formats,
             )
@@ -355,15 +383,26 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
             congress=int(congress),
             bill_type=bill_type,
             number=int(number),
+            source=args.source,
             api_key=api_key,
             formats=formats,
         )
 
 
+def _add_source_arg(sub: argparse.ArgumentParser) -> None:
+    """Add the shared --source flag (default govinfo, keyless; issue #10)."""
+    sub.add_argument(
+        "--source",
+        choices=list(SOURCES),
+        default=DEFAULT_SOURCE,
+        help=f"Bill-text source (default: {DEFAULT_SOURCE}; govinfo needs no API key)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Download appropriations bill text versions from Congress.gov",
+        description="Download appropriations bill text versions (govinfo bulk data or Congress.gov API)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -372,6 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_ver.add_argument("congress", type=int, help="Congress number (e.g. 118)")
     p_ver.add_argument("bill_type", choices=sorted(BILL_TYPES.keys()), help="Bill type (e.g. hr, s)")
     p_ver.add_argument("number", type=int, help="Bill number")
+    _add_source_arg(p_ver)
 
     # download: download versions for a single bill
     p_dl = subparsers.add_parser("download", help="Download bill text versions")
@@ -394,6 +434,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_dl.add_argument(
         "--format", choices=["xml", "pdf", "both"], default="xml", help="Format(s) to download (default: xml)"
     )
+    _add_source_arg(p_dl)
 
     # download-all: bulk download for a year range
     p_all = subparsers.add_parser("download-all", help="Download all appropriations bill versions for a year range")
@@ -406,8 +447,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_all.add_argument(
         "--format", choices=["xml", "pdf", "both"], default="xml", help="Format(s) to download (default: xml)"
     )
+    _add_source_arg(p_all)
 
     return parser
+
+
+def requires_api_key(args: argparse.Namespace) -> bool:
+    """Whether this invocation touches the Congress.gov API (so needs a key).
+
+    The default govinfo source is keyless. Two things still hit the API:
+      - ``--source api`` (anywhere): the enumeration + text fetch use the API.
+      - ``download-all`` over a year range (no ``--file``): appropriations-bill
+        *discovery* is the committee endpoint even when the text comes from
+        govinfo (issue #10 scope: discovery=API, text=govinfo).
+    """
+    if args.source == "api":
+        return True
+    return args.command == "download-all" and args.file is None
 
 
 def main():
@@ -417,11 +473,11 @@ def main():
         parser.print_help()
         sys.exit(0)
     args = parser.parse_args()
-    # Resolve the API key only after the help / no-args / argparse-error paths
-    # have exited: those never touch the API, so they must not emit the DEMO_KEY
-    # warning. (Full lazy-per-source resolution arrives with --source wiring;
-    # every command below still hits the Congress.gov API today.)
-    api_key = get_api_key()
+    # Resolve the API key lazily: only paths that actually reach the Congress.gov
+    # API (see requires_api_key) resolve it and can emit the DEMO_KEY warning. The
+    # default keyless govinfo path must stay silent -- that warning was the barrier
+    # #10 exists to remove. help / no-args / argparse-error already exited above.
+    api_key = get_api_key() if requires_api_key(args) else None
 
     with httpx.Client(timeout=30) as client:
         if args.command == "versions":
