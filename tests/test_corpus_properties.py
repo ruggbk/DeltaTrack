@@ -164,7 +164,7 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "113-hr-83/7_enrolled-bill.xml": 128,
     "114-hr-2029/6_engrossed-amendment-house.xml": 176,
     "114-hr-2029/7_enrolled-bill.xml": 176,
-    "115-hr-1625/7_enrolled-bill.xml": 177,
+    "115-hr-1625/6_enrolled-bill.xml": 177,
     "115-hr-244/6_enrolled-bill.xml": 159,
     "115-hr-5895/2_engrossed-in-house.xml": 20,
     "115-hr-5895/3_placed-on-calendar-senate.xml": 20,

@@ -112,7 +112,7 @@ _XML_DROP_BUDGET: dict[str, int] = {
     "113-hr-3547/6_enrolled-bill.xml": 1,
     "114-hr-2029/7_enrolled-bill.xml": 4,
     "115-hr-244/6_enrolled-bill.xml": 4,
-    "115-hr-1625/7_enrolled-bill.xml": 16,
+    "115-hr-1625/6_enrolled-bill.xml": 16,
     "116-hr-133/7_enrolled-bill.xml": 21,
     "116-hr-1865/6_enrolled-bill.xml": 17,
     "117-hr-2471/6_enrolled-bill.xml": 20,
