@@ -460,3 +460,89 @@ class TestCmdDownloadAllYearRange:
         args = build_parser().parse_args(["download-all", "--start_year", "2024"])
         with httpx.Client() as client:
             cmd_download_all(client, args, TEST_API_KEY)  # must not raise
+
+
+class TestLazyApiKeyResolution:
+    """govinfo #10 step 5: key resolution (and its DEMO_KEY warning) must not
+    fire on paths that never call the Congress.gov API -- ``--help``, no args,
+    and argparse errors. Full lazy-per-source resolution arrives with --source
+    wiring (step 6); every real command still resolves the key today.
+    """
+
+    def _spy_get_api_key(self, monkeypatch):
+        """Replace get_api_key with a spy that records each invocation."""
+        calls = []
+
+        def spy():
+            calls.append(True)
+            return "spy-key"
+
+        monkeypatch.setattr("fetch_bills.get_api_key", spy)
+        return calls
+
+    def test_no_args_does_not_resolve_key(self, monkeypatch):
+        import fetch_bills
+
+        calls = self._spy_get_api_key(monkeypatch)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py"])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 0
+        assert calls == []
+
+    def test_help_does_not_resolve_key(self, monkeypatch):
+        import fetch_bills
+
+        calls = self._spy_get_api_key(monkeypatch)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "--help"])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 0
+        assert calls == []
+
+    def test_argparse_error_does_not_resolve_key(self, monkeypatch):
+        import fetch_bills
+
+        calls = self._spy_get_api_key(monkeypatch)
+        # 'versions' requires congress/bill_type/number; omitting them makes
+        # argparse exit(2) during parse_args, before any key resolution.
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions"])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code != 0
+        assert calls == []
+
+    def test_command_path_resolves_key(self, monkeypatch):
+        # Proves the spy CAN fire: a real command still resolves the key today,
+        # so the "not resolved" assertions above cannot pass vacuously.
+        import fetch_bills
+
+        calls = self._spy_get_api_key(monkeypatch)
+        monkeypatch.setattr("fetch_bills.cmd_versions", lambda *a, **k: None)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366"])
+        fetch_bills.main()
+        assert calls == [True]
+
+    def test_help_emits_no_demo_key_warning(self, monkeypatch, capsys):
+        # Consumer-visible symptom, isolated from any real key (env or .env) so
+        # the absence is due to lazy resolution, not a key being present.
+        import fetch_bills
+
+        monkeypatch.setattr("fetch_bills.load_dotenv", lambda *a, **k: None)
+        monkeypatch.delenv("CONGRESS_API_KEY", raising=False)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "--help"])
+        with pytest.raises(SystemExit):
+            fetch_bills.main()
+        assert "DEMO_KEY" not in capsys.readouterr().err
+
+    def test_command_path_emits_demo_key_warning(self, monkeypatch, capsys):
+        # Known-bad pairing: with no key and a real command, the warning MUST
+        # appear -- otherwise the stderr-absence test above is vacuous.
+        import fetch_bills
+
+        monkeypatch.setattr("fetch_bills.load_dotenv", lambda *a, **k: None)
+        monkeypatch.delenv("CONGRESS_API_KEY", raising=False)
+        monkeypatch.setattr("fetch_bills.cmd_versions", lambda *a, **k: None)
+        monkeypatch.setattr("sys.argv", ["fetch_bills.py", "versions", "118", "hr", "4366"])
+        fetch_bills.main()
+        assert "DEMO_KEY" in capsys.readouterr().err
