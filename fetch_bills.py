@@ -412,12 +412,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main():
     load_dotenv()
-    api_key = get_api_key()
     parser = build_parser()
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(0)
     args = parser.parse_args()
+    # Resolve the API key only after the help / no-args / argparse-error paths
+    # have exited: those never touch the API, so they must not emit the DEMO_KEY
+    # warning. (Full lazy-per-source resolution arrives with --source wiring;
+    # every command below still hits the Congress.gov API today.)
+    api_key = get_api_key()
 
     with httpx.Client(timeout=30) as client:
         if args.command == "versions":
