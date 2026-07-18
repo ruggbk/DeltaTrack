@@ -565,6 +565,19 @@ def test_version_pkg_from_item_none_for_urlless_and_non_bills_url():
     assert gi._version_pkg_from_item(plaw) is None
 
 
+def test_urlless_reported_to_senate_resolves_via_billstatus_alias():
+    # BILLSTATUS spells rs "Reported to Senate"; VERSION_CODES' canonical name is
+    # "Reported in Senate", so the derived NAME_TO_CODE misses the BILLSTATUS
+    # spelling. A url-less rs is exactly the govinfo XML-less gap version (#226):
+    # it has no URL to read the code from, so the name fallback must still resolve
+    # it -- else the gap version can't even be named to signal it, and is dropped
+    # uncoded. (Measured across 117-119 hr/s, "Reported to Senate" is the only
+    # BILLS-collection type whose spelling diverges from the canonical name.)
+    it = _item("<item><type>Reported to Senate</type><date>2025-03-20</date></item>")
+    assert gi._version_pkg_from_item(it) is None  # url-less by construction
+    assert gi._version_code_from_item(it) == "rs"
+
+
 def test_package_content_url_shapes():
     assert (
         gi.package_content_url("BILLS-118hr4366rh", "xml")
