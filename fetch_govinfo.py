@@ -30,6 +30,7 @@ sessions_for_congress), originally by @willhea.
 from __future__ import annotations
 
 import re
+import sys
 import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Iterable
@@ -395,6 +396,39 @@ def versions_from_billstatus(bill: ET.Element) -> list[dict]:
     return versions
 
 
+def urlless_declared_versions(bill: ET.Element) -> list[tuple[str, str]]:
+    """``[(code, display-name)]`` for versions govinfo can't serve as XML.
+
+    These are BILLSTATUS textVersions items with **no BILLS format URL** whose
+    ``<type>`` still resolves to a real version code -- the govinfo XML-less "gap"
+    versions (#226): GPO published the PDF/HTML rendition but never composed the
+    XML the diff engine reads, so the version is *declared* yet unfetchable as
+    XML. :func:`versions_from_billstatus` correctly excludes them from the
+    downloadable list (there is no XML to fetch), but they must be *surfaced*, not
+    silently dropped (#226 AC#1) -- else a bill diffs as "N versions" with a real
+    N+1th version invisibly missing.
+
+    A url-less item whose ``<type>`` does **not** resolve is the Public/Private
+    Law collection (a different collection, ``PLAW-*``), an expected skip -- it is
+    omitted here so only genuine bill-version gaps are surfaced. (The resolve step
+    reuses :func:`_version_code_from_item`'s name fallback, so a new BILLSTATUS
+    spelling divergence would misclassify a gap version as a law and re-hide it;
+    a standing gate against that is tracked in #231.)
+    """
+    tv = bill.find("textVersions")
+    if tv is None:
+        return []
+    gaps: list[tuple[str, str]] = []
+    for item in tv.findall("item"):
+        if _version_pkg_from_item(item) is not None:
+            continue  # url-bearing: a real, fetchable version
+        code = _version_code_from_item(item)  # url-less: name fallback only
+        if code is None:
+            continue  # Public/Private Law (or unmappable): expected skip
+        gaps.append((code, resolve_code(code)[0]))
+    return gaps
+
+
 def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
     """Fetch one bill's BILLSTATUS and return its ordered, API-shaped versions.
 
@@ -403,10 +437,22 @@ def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, numb
     enumeration failure must be loud, not a silent "bill has no versions" that
     numbers a partial download as if it were complete (issue #10). A bill that
     genuinely exists but has no published text yields an empty list from a 200.
+
+    Any BILLSTATUS-declared version govinfo can't serve as XML (the XML-less gap,
+    #226 AC#1) is surfaced as a stderr warning here rather than silently dropped;
+    it is still absent from the returned (downloadable) list.
     """
     resp = client.get(billstatus_url(congress, bill_type, number))
     resp.raise_for_status()
     bill = ET.fromstring(resp.content).find("bill")
     if bill is None:
         return []
+    gaps = urlless_declared_versions(bill)
+    if gaps:
+        listed = ", ".join(f"{code} ({name})" for code, name in gaps)
+        print(
+            f"WARNING: {len(gaps)} version(s) declared in BILLSTATUS but not available "
+            f"as govinfo XML (XML-less gap, #226/#228): {listed}",
+            file=sys.stderr,
+        )
     return versions_from_billstatus(bill)
