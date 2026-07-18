@@ -836,3 +836,97 @@ class TestDownloadGuardIntegration:
         assert (bill_dir / "1_reported-in-house.xml").exists()
         assert (bill_dir / "1_reported-in-house.pdf").exists()
         assert not (bill_dir / "1_reported-in-house.xml.error").exists()
+
+
+# ---- `search` subcommand: title discovery over local BILLSTATUS ZIPs (#240) --
+
+
+def _write_search_corpus(dirpath):
+    """A minimal local BILLSTATUS ZIP with one approps + one non-approps bill."""
+    import zipfile
+
+    def doc(number, title, code):
+        return (
+            f"<billStatus><bill><congress>118</congress><type>HR</type>"
+            f"<number>{number}</number><title>{title}</title>"
+            f"<committees><item><systemCode>{code}</systemCode></item></committees>"
+            f"</bill></billStatus>"
+        ).encode()
+
+    with zipfile.ZipFile(dirpath / "118-hr.zip", "w") as zf:
+        zf.writestr("BILLSTATUS-118hr4366.xml",
+                    doc(4366, "Commerce, Justice, Science Appropriations Act", "hsap00"))
+        zf.writestr("BILLSTATUS-118hr5.xml",
+                    doc(5, "Parents Bill of Rights Act", "hsed00"))
+
+
+class TestSearchCommand:
+    def test_title_search_prints_matches(self, tmp_path, capsys):
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(
+            ["search", "justice", "science", "--billstatus-dir", str(tmp_path)]
+        )
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-4366" in out
+        assert "118-hr-5" not in out
+
+    def test_appropriations_facet_filters_by_committee(self, tmp_path, capsys):
+        _write_search_corpus(tmp_path)
+        # Both titles contain "act"; the facet keeps only the approps-referred bill.
+        args = build_parser().parse_args(
+            ["search", "act", "--appropriations", "--billstatus-dir", str(tmp_path)]
+        )
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-4366" in out
+        assert "118-hr-5" not in out
+
+    def test_facet_absent_returns_non_appropriations_bills(self, tmp_path, capsys):
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(
+            ["search", "act", "--billstatus-dir", str(tmp_path)]
+        )
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-4366" in out
+        assert "118-hr-5" in out
+
+    def test_congress_and_type_filters_narrow_the_index(self, tmp_path, capsys):
+        import zipfile
+
+        def doc(congress, btype, number, title):
+            return (
+                f"<billStatus><bill><congress>{congress}</congress><type>{btype.upper()}</type>"
+                f"<number>{number}</number><title>{title}</title>"
+                f"<committees></committees></bill></billStatus>"
+            ).encode()
+
+        # Two congresses, two types; same title token in each so only the filter distinguishes.
+        with zipfile.ZipFile(tmp_path / "118-hr.zip", "w") as zf:
+            zf.writestr("BILLSTATUS-118hr1.xml", doc(118, "hr", 1, "Defense Act"))
+        with zipfile.ZipFile(tmp_path / "119-hr.zip", "w") as zf:
+            zf.writestr("BILLSTATUS-119hr1.xml", doc(119, "hr", 1, "Defense Act"))
+        with zipfile.ZipFile(tmp_path / "118-s.zip", "w") as zf:
+            zf.writestr("BILLSTATUS-118s1.xml", doc(118, "s", 1, "Defense Act"))
+
+        args = build_parser().parse_args(
+            ["search", "defense", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)]
+        )
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-1" in out
+        assert "119-hr-1" not in out  # filtered by --congress
+        assert "118-s-1" not in out  # filtered by --type
