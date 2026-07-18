@@ -155,9 +155,18 @@ def test_xml_rendered_report_neither_drops_nor_duplicates_cards(bill, v1, v2):
 
 # ---------- PDF ------------------------------------------------------------------
 
-PDF_AGREEMENT_PAIR = [("114-hr-2029", "3_referred-in-senate", "4_reported-to-senate")]
+PDF_AGREEMENT_PAIR = [("114-hr-2029", "3_referred-in-senate", "4_reported-in-senate")]
 PDF_SECTION_ONLY_PAIR = [("113-hr-3547", "3_received-in-senate", "4_engrossed-amendment-senate")]
 PDF_NULL_SPAN_PAIR = [("113-hr-3547", "1_introduced-in-house", "2_engrossed-in-house")]
+_ALL_PDF_PAIRS = PDF_AGREEMENT_PAIR + PDF_SECTION_ONLY_PAIR + PDF_NULL_SPAN_PAIR
+
+
+def test_pdf_corpus_present_when_required():
+    # Companion to test_corpus_present_when_required (XML). Each PDF pair below
+    # parametrizes a separate test; without this floor a missing PDF would drop that
+    # test to zero cases and read green (#167 fail-open). require_corpus_or_skip pairs
+    # the >0-discovered check with the per-file REQUIRED_CORPUS_BILLS presence assert.
+    require_corpus_or_skip(_available(_ALL_PDF_PAIRS, ".pdf"), "node-join-pdf")
 
 
 @pytest.mark.parametrize(("bill", "v1", "v2"), _available(PDF_AGREEMENT_PAIR, ".pdf"))

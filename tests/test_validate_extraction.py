@@ -27,6 +27,7 @@ import pytest
 
 from bill_tree import normalize_bill
 from diff_bill import extract_amounts
+from tests.conftest import BILLS_DIR, REQUIRE_CORPUS
 
 pytestmark = pytest.mark.slow
 
@@ -70,6 +71,28 @@ class TestLegBranchValidation:
                 "No Legislative Branch bill XML present; download with fetch_bills.py (see README) to run validation."
             )
         return trees
+
+    def test_fixture_bills_present_when_required(self, fixture_data):
+        """Completeness floor (#167): in REQUIRE_CORPUS mode every fixture-referenced
+        bill version must be on disk.
+
+        The bill_trees fixture loads a bill only ``if xml_path.exists()``, so a renamed
+        or unfetched version filename makes that bill silently absent — its accounts then
+        skip in test_all_nodes_found/test_all_amounts_match (``if tree is None: continue``)
+        and the only tell is test_all_bills_loaded flipping to *skip*, not fail. The #10
+        BILLSTATUS-ordering rename (115-hr-1625 enrolled 7_->6_) is exactly the class of
+        change that would drop ~40 Leg-Branch accounts unnoticed; this floor fails loud
+        instead. Outside REQUIRE_CORPUS it skips, preserving clean-clone green.
+        """
+        if not REQUIRE_CORPUS:
+            pytest.skip("corpus not required (set REQUIRE_CORPUS=1 to enforce fixture completeness)")
+        referenced = {(a["bill"], a["version"]) for a in fixture_data["accounts"]}
+        missing = sorted(f"{bill}/{ver}" for bill, ver in referenced if not (BILLS_DIR / bill / ver).exists())
+        assert not missing, (
+            f"REQUIRE_CORPUS=1 but {len(missing)} fixture-referenced bill version(s) absent "
+            f"from {BILLS_DIR} (renamed or unfetched?): {missing}. Re-download with "
+            "fetch_bills.py download <congress> <type> <number> --format both."
+        )
 
     def test_all_bills_loaded(self, fixture_data, bill_trees):
         """Every downloaded bill referenced in the fixture should parse.

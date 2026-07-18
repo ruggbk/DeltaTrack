@@ -142,6 +142,17 @@ REQUIRED_CORPUS_BILLS = (
     "114-hr-2029/6_engrossed-amendment-house.xml",
     "113-hr-3547/4_engrossed-amendment-senate.xml",
     "113-hr-3547/5_engrossed-amendment-house.xml",
+    # test_node_join_corpus PDF pairs: their own floor (test_pdf_corpus_present_when_
+    # required) only asserts >0 discovered, so a single missing PDF would silently drop
+    # one pair to zero cases. Pinning each file here makes missing_required_corpus name
+    # it. (114-hr-2029 v4 is the post-#10 govinfo name reported-in-senate, was
+    # reported-to-senate under the API source.)
+    "114-hr-2029/3_referred-in-senate.pdf",
+    "114-hr-2029/4_reported-in-senate.pdf",
+    "113-hr-3547/3_received-in-senate.pdf",
+    "113-hr-3547/4_engrossed-amendment-senate.pdf",
+    "113-hr-3547/1_introduced-in-house.pdf",
+    "113-hr-3547/2_engrossed-in-house.pdf",
 )
 
 

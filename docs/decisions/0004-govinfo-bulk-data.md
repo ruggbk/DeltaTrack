@@ -109,3 +109,21 @@ accident. Both are tracked under issue #10.
 This decision is accepted but not yet implemented. The prototype lives on the
 `worktree-govinfo-prototype` branch (`fetch_govinfo.py`, `discover.py`,
 `parity_check.py`); the migration is tracked in issue #10.
+
+## Amendment — migration shipped on the XML path (2026-07-18, #10)
+
+The present-tense framing above is decision-time (2026-06-27) context and is now
+superseded on the XML path. As of #10 steps 1-8 (merged), `fetch_bills.py` defaults
+to govinfo bulk data for both discovery and text retrieval
+(`SOURCES = ("govinfo", "api")`, `DEFAULT_SOURCE = "govinfo"`); the Congress.gov
+API v3 is now the opt-in fallback via `--source api` and the only path for pre-113
+bills. So the Context's "`fetch_bills.py` currently retrieves ... from the
+Congress.gov API v3" and the closing "accepted but not yet implemented" describe the
+state before that shipped.
+
+Still accurate as written: the **PDF retrieval** section. PDF fetch stays on the
+Congress.gov API — the govinfo package-content PDF path (steps 9-10) is in draft
+PR #235, not yet merged, so the "the PDF path still depends on the Congress.gov API
+key" split is the current state, not a hypothetical. Status stays **Accepted**
+(decision status, not implementation status, per the [README convention](README.md));
+live progress is tracked in #10.
