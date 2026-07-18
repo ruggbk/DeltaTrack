@@ -38,6 +38,8 @@ from pathlib import Path
 
 import httpx
 
+from shared.http import request_with_retry
+
 BULK_BASE = "https://www.govinfo.gov/bulkdata"
 # govinfo bulk data's earliest Congress: 111/112 and older 404 for every file
 # (BILLS and BILLSTATUS alike), 113 forward returns 200. ADR 0004 scopes older
@@ -471,7 +473,11 @@ def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, numb
     #226 AC#1) is surfaced as a stderr warning here rather than silently dropped;
     it is still absent from the returned (downloadable) list.
     """
-    resp = client.get(billstatus_url(congress, bill_type, number))
+    resp = request_with_retry(client, billstatus_url(congress, bill_type, number))
+    # request_with_retry already raises on persistent 429/5xx (and on 4xx), so this
+    # is belt-and-suspenders: it keeps a BILLSTATUS enumeration failure loud even if
+    # that helper's contract ever changes to a non-raising return (its fetch_bills
+    # callers guard with `if resp else`), never a silent "bill has no versions" (#10).
     resp.raise_for_status()
     bill = ET.fromstring(resp.content).find("bill")
     if bill is None:

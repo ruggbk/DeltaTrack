@@ -714,6 +714,33 @@ def test_enumerate_versions_raises_on_non_200_not_silent_empty():
         gi.enumerate_versions(client, 999, "hr", 1)
 
 
+@respx.mock
+def test_enumerate_versions_retries_transient_5xx_then_succeeds(monkeypatch):
+    # The BILLSTATUS fetch backs the slow parity gate's 31 live calls (#10); a lone
+    # transient 503 must not flake the whole enumeration. request_with_retry retries
+    # 5xx, so a 503-then-200 sequence returns the 200 body, not an error.
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
+    body = _billstatus_bytes([_bs_item("Introduced in House", "2025-01-01", code="ih")])
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(
+        side_effect=[httpx.Response(503), httpx.Response(200, content=body)]
+    )
+    with httpx.Client() as client:
+        versions = gi.enumerate_versions(client, 999, "hr", 1)
+    assert [v["type"] for v in versions] == ["Introduced in House"]
+
+
+@respx.mock
+def test_enumerate_versions_still_raises_when_5xx_persists(monkeypatch):
+    # Retry must not swallow a genuine failure: after exhausting attempts on a
+    # persistent 5xx, enumerate_versions still raises rather than returning a silent
+    # empty list (#10 silent-empty trap). Locks the observable contract regardless of
+    # whether the raise originates in request_with_retry or the retained guard.
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(503))
+    with httpx.Client() as client, pytest.raises(httpx.HTTPStatusError):
+        gi.enumerate_versions(client, 999, "hr", 1)
+
+
 def test_urlless_declared_versions_surfaces_gap_skips_public_law():
     # #226 AC#1: a url-less item whose <type> resolves to a real code is a govinfo
     # XML-less GAP version (declared, no XML to fetch) -> surfaced. A url-less item
