@@ -130,6 +130,7 @@ def enumerate_bill_versions(
     are untouched. govinfo needs no key; the API path keeps its key.
     """
     if source == "govinfo":
+        gi.require_supported_congress(congress)
         return gi.enumerate_versions(client, congress, bill_type, number)
     return fetch_text_versions(client, congress, bill_type, number, api_key=api_key)
 
@@ -411,6 +412,13 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
     target_congresses = sorted({congress_for_year(y) for y in range(start_year, end_year + 1)})
     print(f"Target congresses: {target_congresses}", file=sys.stderr)
 
+    # Fail fast on a pre-113 range before the (API) committee discovery: govinfo
+    # can't serve those bills, and discovery might return zero for them, turning
+    # an unsupported request into a silent "found 0 bills" (issue #10 trap 7).
+    if args.source == "govinfo":
+        for c in target_congresses:
+            gi.require_supported_congress(c)
+
     # Fetch all bills from both committees
     all_bills = []
     for chamber, code in APPROPRIATIONS_COMMITTEES:
@@ -538,13 +546,19 @@ def main():
     # #10 exists to remove. help / no-args / argparse-error already exited above.
     api_key = get_api_key() if requires_api_key(args) else None
 
-    with httpx.Client(timeout=30) as client:
-        if args.command == "versions":
-            cmd_versions(client, args, api_key)
-        elif args.command == "download":
-            cmd_download(client, args, api_key)
-        elif args.command == "download-all":
-            cmd_download_all(client, args, api_key)
+    try:
+        with httpx.Client(timeout=30) as client:
+            if args.command == "versions":
+                cmd_versions(client, args, api_key)
+            elif args.command == "download":
+                cmd_download(client, args, api_key)
+            elif args.command == "download-all":
+                cmd_download_all(client, args, api_key)
+    except gi.CongressNotAvailable as exc:
+        # Actionable one-liner, no traceback: pre-113 under the default govinfo
+        # source points the user at --source api (issue #10 trap 7).
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
