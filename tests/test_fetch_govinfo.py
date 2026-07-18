@@ -309,16 +309,23 @@ def test_billstatus_date_places_engrossed_before_placed_on_calendar(tmp_path):
 
 
 def test_billstatus_join_survives_type_name_divergence(tmp_path):
-    # BILLSTATUS spells rs "Reported to Senate" while VERSION_CODES says "Reported
-    # in Senate". Keying the date join by the version code from the URL (shared
-    # verbatim) -- not the display name -- keeps rs at its true date.
+    # Keying the date join by the version code from the URL (shared verbatim) --
+    # not the display name -- keeps a divergently-spelled version at its true date.
+    #
+    # This guard needs a <type> that does NOT resolve by name, so a name-join
+    # regression leaves rs dateless and mis-ordered. rs's real BILLSTATUS spelling
+    # "Reported to Senate" is now a NAME_TO_CODE alias (the url-less gap path must
+    # resolve it), so it would resolve under a name-join and hide the regression.
+    # Use an unmapped synthetic spelling instead, and assert that precondition so
+    # that aliasing it later trips this test loudly rather than silently defanging it.
     #
     # rs is deliberately dated AFTER es so the working code-join and a broken
-    # name-join produce DIFFERENT orders (else tier alone reproduces the result
-    # and the test proves nothing): a working join dates rs 2025-03-20, sorting it
-    # last (is, es, rs); a name-join leaves rs dateless -> null->max at 2025-02-05,
-    # where its tier 3 lands it BEFORE es tier 4 (is, rs, es). The assertion fails
-    # if the join regresses to matching on the divergent display name.
+    # name-join produce DIFFERENT orders (else tier alone reproduces the result and
+    # the test proves nothing): a working join dates rs 2025-03-20, sorting it last
+    # (is, es, rs); a name-join leaves rs dateless -> null->max at 2025-02-05, where
+    # its tier 3 lands it BEFORE es tier 4 (is, rs, es).
+    unmapped_rs_name = "Reported to Senate Calendar"  # synthetic; must stay unmapped
+    assert gi.sanitize(unmapped_rs_name) not in gi.NAME_TO_CODE
     zip_dir = tmp_path / "zips"
     zip_dir.mkdir()
     _write_zip(
@@ -340,7 +347,7 @@ def test_billstatus_join_survives_type_name_divergence(tmp_path):
         [
             ("Introduced in Senate", "2025-01-10", "is"),
             ("Engrossed in Senate", "2025-02-05", "es"),
-            ("Reported to Senate", "2025-03-20", "rs"),
+            (unmapped_rs_name, "2025-03-20", "rs"),
         ],
     )
     out = tmp_path / "bills"
@@ -563,6 +570,19 @@ def test_version_pkg_from_item_none_for_urlless_and_non_bills_url():
         "PLAW-115publ141/xml/PLAW-115publ141.xml</url></item></formats></item>"
     )
     assert gi._version_pkg_from_item(plaw) is None
+
+
+def test_urlless_reported_to_senate_resolves_via_billstatus_alias():
+    # BILLSTATUS spells rs "Reported to Senate"; VERSION_CODES' canonical name is
+    # "Reported in Senate", so the derived NAME_TO_CODE misses the BILLSTATUS
+    # spelling. A url-less rs is exactly the govinfo XML-less gap version (#226):
+    # it has no URL to read the code from, so the name fallback must still resolve
+    # it -- else the gap version can't even be named to signal it, and is dropped
+    # uncoded. (Measured across 117-119 hr/s, "Reported to Senate" is the only
+    # BILLS-collection type whose spelling diverges from the canonical name.)
+    it = _item("<item><type>Reported to Senate</type><date>2025-03-20</date></item>")
+    assert gi._version_pkg_from_item(it) is None  # url-less by construction
+    assert gi._version_code_from_item(it) == "rs"
 
 
 def test_package_content_url_shapes():
