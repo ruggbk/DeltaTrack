@@ -53,6 +53,13 @@ VERSION_CODES: dict[str, tuple[str, int]] = {
     "rds": ("Received in Senate", 2),
     "rch": ("Reference Change House", 2),
     "rcs": ("Reference Change Senate", 2),
+    # rth/ris are real referral-stage codes that were missing, so resolve_code fell
+    # them through to tier 0 with the raw code as the label -- unreadable filenames
+    # (3_rth.xml, 3_ris.xml), violating ADR 0013's readable-label contract. Names are
+    # the bill-stage attribute from the downloaded XML (Referred-to-Committee-House,
+    # Referral-Instructions-Senate); tier 2 matches the referral family above.
+    "rth": ("Referred to Committee House", 2),
+    "ris": ("Referral Instructions Senate", 2),
     "rh": ("Reported in House", 3),
     "rs": ("Reported in Senate", 3),
     "pcs": ("Placed on Calendar Senate", 3),

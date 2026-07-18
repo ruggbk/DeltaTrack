@@ -34,6 +34,22 @@ def test_resolve_code_suffixed_variant_inherits_base_tier():
     assert gi.resolve_code("eas2") == ("Engrossed Amendment Senate", 4)
     assert gi.resolve_code("rfs2") == ("Referred in Senate", 2)
     assert gi.resolve_code("eh1s")[1] == 4
+    # rth/ris are referral-stage codes too, so a repeat referral (rth2/ris2) must
+    # inherit tier 2 via the same prefix fallback, not drop to tier 0.
+    assert gi.resolve_code("rth2") == ("Referred to Committee House", 2)
+    assert gi.resolve_code("ris2") == ("Referral Instructions Senate", 2)
+
+
+def test_resolve_code_referral_stage_codes_are_readable_not_tier_zero():
+    # Regression: rth/ris are real referral-stage codes. When absent from the table
+    # they fell through to tier 0 with the raw code as the label, producing unreadable
+    # filenames (3_rth.xml, 3_ris.xml) that violate ADR 0013's readable-label contract.
+    # They must resolve to a readable name at the referral tier, and the sanitized
+    # slug the corpus uses must not be the bare code.
+    assert gi.resolve_code("rth") == ("Referred to Committee House", 2)
+    assert gi.resolve_code("ris") == ("Referral Instructions Senate", 2)
+    assert gi.sanitize(gi.resolve_code("rth")[0]) == "referred-to-committee-house"
+    assert gi.sanitize(gi.resolve_code("ris")[0]) == "referral-instructions-senate"
 
 
 def test_resolve_code_unknown_is_tier_zero():
