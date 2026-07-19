@@ -13,6 +13,7 @@ import datetime
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import httpx
@@ -134,6 +135,47 @@ def enumerate_bill_versions(
         gi.require_supported_congress(congress)
         return gi.enumerate_versions(client, congress, bill_type, number)
     return fetch_text_versions(client, congress, bill_type, number, api_key=api_key)
+
+
+def record_gap_versions(
+    client: httpx.Client, *, congress: int, bill_type: str, number: int, output_dir: Path, source: str
+) -> None:
+    """Persist (or clear) the bill's XML-less gap marker (#230).
+
+    Gaps are a govinfo *format* concept -- a version GPO never composed XML for --
+    so the API source is skipped outright rather than fetching BILLSTATUS it does
+    not otherwise need.
+
+    Called *before* the caller's "no versions" early return on purpose: a bill whose
+    every declared version is XML-less enumerates to nothing (#226's 118-hr-3496),
+    which is precisely the case the marker exists to record. Writing it only
+    alongside a successful download would miss exactly that bill.
+
+    A failed gap fetch leaves any existing marker in place as last-known state,
+    rather than clearing it. Clearing on failure would delete a *true* gap record
+    because of a transient network blip; keeping it preserves the last good answer,
+    warns, and self-heals on the next successful fetch.
+    """
+    if source != "govinfo":
+        return
+    bill_id = f"{congress}-{bill_type}-{number}"
+    # The marker is a side artifact: it must never veto the primary download. This
+    # is a SECOND BILLSTATUS request (the seam keeps enumerate_versions' API-shaped
+    # return), so without this guard a transient failure here would abort a download
+    # the first request already proved viable -- work the download itself needs
+    # nothing from. Degrade to a warning and carry on; the next fetch rewrites it.
+    #
+    # Caught narrowly, on purpose: HTTPError covers every transport/status failure
+    # and ParseError a malformed body, while a genuine programming error still
+    # propagates loudly. A bare `except Exception` would degrade a real bug into a
+    # per-bill warning and leave markers silently unwritten corpus-wide -- and with
+    # #228 deferred there is no consumer whose absence would reveal it.
+    try:
+        gaps = gi.fetch_gap_versions(client, congress, bill_type, number)
+    except (httpx.HTTPError, ET.ParseError) as exc:
+        print(f"WARNING: could not record XML-less gap versions for {bill_id}: {exc}", file=sys.stderr)
+        return
+    gi.write_gap_marker(output_dir / bill_id, bill_id, gaps)
 
 
 def version_path(
@@ -419,6 +461,14 @@ def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | 
     versions = enumerate_bill_versions(
         client, args.congress, args.bill_type, args.number, source=args.source, api_key=api_key
     )
+    record_gap_versions(
+        client,
+        congress=args.congress,
+        bill_type=args.bill_type,
+        number=args.number,
+        output_dir=args.output_dir,
+        source=args.source,
+    )
 
     if not versions:
         print("No text versions available.", file=sys.stderr)
@@ -464,6 +514,9 @@ def download_all_versions(
     print(f"\n{label} {number} ({congress}th Congress):", file=sys.stderr)
 
     versions = enumerate_bill_versions(client, congress, bill_type, number, source=source, api_key=api_key)
+    record_gap_versions(
+        client, congress=congress, bill_type=bill_type, number=number, output_dir=output_dir, source=source
+    )
     if not versions:
         print("  No text versions available", file=sys.stderr)
         return

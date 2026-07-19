@@ -1,6 +1,7 @@
 """Tests for fetch_bills.py."""
 
 import argparse
+import json
 import time
 
 import httpx
@@ -1127,3 +1128,126 @@ class TestFetchIndexCommand:
         with pytest.raises(SystemExit) as exc:
             fetch_bills.main()
         assert exc.value.code == 0
+
+
+# ---- XML-less gap markers, CLI wiring (#230) ---------------------------------
+
+
+def _gap_billstatus(items: str) -> bytes:
+    return (
+        "<billStatus><bill><congress>118</congress><type>HR</type><number>3496</number>"
+        f"<textVersions>{items}</textVersions></bill></billStatus>"
+    ).encode()
+
+
+def _gap_item(type_name: str, date: str, code: str | None = None) -> str:
+    url = ""
+    if code is not None:
+        pkg = f"BILLS-118hr3496{code}"
+        url = f"<formats><item><url>https://www.govinfo.gov/content/pkg/{pkg}/xml/{pkg}.xml</url></item></formats>"
+    return f"<item><type>{type_name}</type><date>{date}</date>{url}</item>"
+
+
+@respx.mock
+def test_download_writes_gap_marker_for_an_all_gap_bill(tmp_path, monkeypatch):
+    # #226's real evidence shape (118-hr-3496): every declared version is XML-less,
+    # so enumeration yields NO downloadable versions and cmd_download takes its
+    # "No text versions available" early return. The marker must still be written --
+    # that early return is exactly the case the marker exists to record.
+    body = _gap_billstatus(
+        _gap_item("Introduced in House", "2023-05-01") + _gap_item("Reported in House", "2023-06-01")
+    )
+    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(200, content=body))
+    args = argparse.Namespace(
+        congress=118,
+        bill_type="hr",
+        number=3496,
+        version=None,
+        format="xml",
+        output_dir=tmp_path,
+        source="govinfo",
+    )
+    with httpx.Client() as client:
+        cmd_download(client, args, None)
+    marker = tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME
+    assert marker.exists(), "all-gap bill wrote no marker"
+    payload = json.loads(marker.read_text())
+    assert [g["code"] for g in payload["gap_versions"]] == ["ih", "rh"]
+
+
+@respx.mock
+def test_download_writes_no_gap_marker_when_all_versions_served(tmp_path):
+    # Negative control: proves the marker above is a real signal, not written on
+    # every download.
+    body = _gap_billstatus(_gap_item("Introduced in House", "2023-05-01", code="ih"))
+    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(200, content=body))
+    respx.get(url__regex=r".*BILLS-118hr3496ih\.xml").mock(return_value=httpx.Response(200, content=b"<bill/>"))
+    args = argparse.Namespace(
+        congress=118,
+        bill_type="hr",
+        number=3496,
+        version=None,
+        format="xml",
+        output_dir=tmp_path,
+        source="govinfo",
+    )
+    with httpx.Client() as client:
+        cmd_download(client, args, None)
+    assert not (tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).exists()
+
+
+@respx.mock
+def test_download_skips_gap_marker_entirely_for_the_api_source(tmp_path):
+    # Gaps are a govinfo-format concept. The api source must not gain a govinfo
+    # BILLSTATUS request as a side effect of this feature; respx would raise on an
+    # unmocked govinfo call, so this asserts isolation rather than just absence.
+    respx.get(url__regex=r".*api\.congress\.gov.*").mock(return_value=httpx.Response(200, json={"textVersions": []}))
+    args = argparse.Namespace(
+        congress=118,
+        bill_type="hr",
+        number=3496,
+        version=None,
+        format="xml",
+        output_dir=tmp_path,
+        source="api",
+    )
+    with httpx.Client() as client:
+        cmd_download(client, args, "KEY")
+    assert not (tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).exists()
+
+
+@respx.mock
+def test_download_survives_a_failing_gap_fetch(tmp_path, monkeypatch, capsys):
+    # The marker is a SIDE artifact and must never veto the primary download.
+    # record_gap_versions re-fetches BILLSTATUS, so a transient failure on that
+    # second request would otherwise abort a download that the first request
+    # already proved viable -- a regression against pre-#230 behavior, since the
+    # download itself needs nothing from the gap fetch.
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
+    ok = _gap_billstatus(_gap_item("Introduced in House", "2023-05-01", code="ih"))
+    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(
+        side_effect=[
+            httpx.Response(200, content=ok),  # enumeration succeeds
+            httpx.Response(500),  # gap fetch fails, and keeps failing through retries
+            httpx.Response(500),
+            httpx.Response(500),
+            httpx.Response(500),
+            httpx.Response(500),
+        ]
+    )
+    respx.get(url__regex=r".*BILLS-118hr3496ih\.xml").mock(return_value=httpx.Response(200, content=b"<bill/>"))
+    args = argparse.Namespace(
+        congress=118,
+        bill_type="hr",
+        number=3496,
+        version=None,
+        format="xml",
+        output_dir=tmp_path,
+        source="govinfo",
+    )
+    with httpx.Client() as client:
+        cmd_download(client, args, None)  # must not raise
+    # The primary artifact still lands.
+    assert (tmp_path / "118-hr-3496" / "1_introduced-in-house.xml").exists()
+    # And the failure is reported rather than swallowed silently.
+    assert "gap" in capsys.readouterr().err.lower()

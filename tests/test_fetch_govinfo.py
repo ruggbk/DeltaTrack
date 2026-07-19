@@ -8,6 +8,7 @@ or the curated bill are absent (e.g. clean CI checkout).
 
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -1185,3 +1186,92 @@ def test_build_title_index_reads_legacy_layout(tmp_path):
     assert "113-hr-1234" in index
     assert index["113-hr-1234"]["title"] == "A Legacy-Layout Act"
     assert index["113-hr-1234"]["committee_codes"] == {"hsap00"}
+
+
+# ---- XML-less gap markers (#230) --------------------------------------------
+
+
+def test_urlless_declared_version_records_carry_the_ordering_date():
+    # The marker must let a consumer PLACE a gap in the version sequence, not just
+    # know it exists: on-disk files are numbered over the DOWNLOADABLE set, so
+    # "2_engrossed-in-house.xml" need not be BILLSTATUS's 2nd declared version.
+    # BILLSTATUS date is the single ordering authority (#10), so it is recorded.
+    bill = _billstatus_bill(
+        [
+            _bs_item("Introduced in House", "2025-01-01", code="ih"),
+            _bs_item("Reported in House", "2025-02-01", code=None),  # gap
+        ]
+    )
+    assert gi.urlless_declared_version_records(bill) == [
+        {"code": "rh", "name": "Reported in House", "date": "2025-02-01"}
+    ]
+    # The existing (code, name) view keeps working for the stderr warning.
+    assert gi.urlless_declared_versions(bill) == [("rh", "Reported in House")]
+
+
+def test_write_gap_marker_writes_json_when_gaps_exist(tmp_path):
+    records = [{"code": "rh", "name": "Reported in House", "date": "2025-02-01"}]
+    path = gi.write_gap_marker(tmp_path, "118-hr-3496", records)
+    assert path == tmp_path / gi.GAP_MARKER_NAME
+    payload = json.loads(path.read_text())
+    assert payload["bill"] == "118-hr-3496"
+    assert payload["gap_versions"] == records
+
+
+def test_write_gap_marker_removes_a_stale_marker_when_gaps_are_gone(tmp_path):
+    # If GPO later composes the missing XML, a lingering marker asserts a gap that
+    # no longer exists -- worse than no marker. Mirrors the .error convention in
+    # fetch_bill_archives, which unlinks on success.
+    stale = tmp_path / gi.GAP_MARKER_NAME
+    stale.write_text('{"bill": "118-hr-3496", "gap_versions": [{"code": "rh"}]}')
+    assert gi.write_gap_marker(tmp_path, "118-hr-3496", []) is None
+    assert not stale.exists()
+
+
+def test_write_gap_marker_is_a_noop_when_no_gaps_and_no_marker(tmp_path):
+    assert gi.write_gap_marker(tmp_path, "118-hr-3496", []) is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_gap_marker_name_cannot_collide_with_version_files():
+    # Bill dirs are enumerated by digit-prefixed globs ("[0-9]*_*.xml") and by
+    # extension ("*.xml"/"*.pdf"). A marker matching either would be picked up as a
+    # bill version by the corpus suites, so both properties are pinned here.
+    assert not gi.GAP_MARKER_NAME[0].isdigit()
+    assert not gi.GAP_MARKER_NAME.endswith((".xml", ".pdf"))
+
+
+def test_write_gap_marker_content_is_deterministic(tmp_path):
+    # No timestamp: re-running enumeration on an unchanged bill must not dirty the
+    # corpus with a churning marker file.
+    records = [{"code": "rh", "name": "Reported in House", "date": "2025-02-01"}]
+    first = gi.write_gap_marker(tmp_path, "118-hr-3496", records).read_text()
+    second = gi.write_gap_marker(tmp_path, "118-hr-3496", records).read_text()
+    assert first == second
+
+
+@respx.mock
+def test_fetch_gap_versions_returns_records_for_an_all_gap_bill():
+    # #226's real evidence shape: 118-hr-3496 declares versions, govinfo serves
+    # NONE of them, so enumerate_versions returns []. That is exactly when the
+    # marker matters most, so the gap helper must still report them.
+    body = _billstatus_bytes(
+        [
+            _bs_item("Introduced in House", "2025-01-01", code=None),
+            _bs_item("Reported in House", "2025-02-01", code=None),
+        ]
+    )
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        assert gi.enumerate_versions(client, 999, "hr", 1) == []
+        gaps = gi.fetch_gap_versions(client, 999, "hr", 1)
+    assert [g["code"] for g in gaps] == ["ih", "rh"]
+
+
+@respx.mock
+def test_fetch_gap_versions_empty_when_every_version_is_served():
+    # Negative control: proves a non-empty result above is a real signal.
+    body = _billstatus_bytes([_bs_item("Introduced in House", "2025-01-01", code="ih")])
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        assert gi.fetch_gap_versions(client, 999, "hr", 1) == []
