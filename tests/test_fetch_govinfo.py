@@ -1086,6 +1086,38 @@ def test_search_titles_matches_across_typographic_punctuation(tmp_path):
     assert index["118-hr-1"]["title"] == "David’s Law"
 
 
+def test_search_titles_folds_diacritics_but_keeps_letters(tmp_path):
+    # Accented letters are a second discoverability class (~73 occurrences over the
+    # live corpus): an ASCII query must reach "Nuñez" and "Kalākaua" (#244). The fold
+    # is canonical (NFD + drop combining marks), NOT compatibility (NFKD) -- NFKD
+    # would also rewrite modifier letters and ligatures, which is a different and
+    # unwanted transformation.
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [
+            _billstatus_doc(congress=118, btype="hr", number=1, title="Nuñez Memorial Act"),
+            _billstatus_doc(congress=118, btype="hr", number=2, title="Kalākaua Federal Building"),
+            _billstatus_doc(congress=118, btype="hr", number=3, title="Łódź Sister City Act"),
+            # A phonetic/modifier letter is NOT a diacritic on a Latin base: it has no
+            # single ASCII letter a user would predictably type, so it is left intact
+            # rather than guessed at. Such a title stays reachable by its other tokens.
+            _billstatus_doc(congress=118, btype="hr", number=4, title="Mount ʔistiqayuʔ Designation"),
+        ],
+    )
+    index = gi.build_title_index(tmp_path)
+    assert gi.search_titles(index, "nunez") == [("118-hr-1", "Nuñez Memorial Act")]
+    assert gi.search_titles(index, "kalakaua") == [("118-hr-2", "Kalākaua Federal Building")]
+    # A stroked letter has no combining mark to strip, so NFD alone would miss it;
+    # the explicit letter map covers that under-fold.
+    assert gi.search_titles(index, "lodz") == [("118-hr-3", "Łódź Sister City Act")]
+    # Accented query -> ASCII-typed title, i.e. the fold runs on both sides.
+    assert gi.search_titles(index, "nuñez") == [("118-hr-1", "Nuñez Memorial Act")]
+    # The untouched letter is preserved, and the bill remains findable by other tokens.
+    assert gi.search_titles(index, "designation") == [("118-hr-4", "Mount ʔistiqayuʔ Designation")]
+    assert index["118-hr-2"]["title"] == "Kalākaua Federal Building"
+
+
 def test_build_title_index_reads_legacy_layout(tmp_path):
     # Legacy BILLSTATUS members use <billType>/<billNumber> instead of <type>/<number>.
     # #10's scope reaches back to the 113th, where un-regenerated legacy files exist in
