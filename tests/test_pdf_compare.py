@@ -156,12 +156,25 @@ def test_numbered_layout_is_not_detected():
 
 
 def test_short_document_is_not_declined():
-    # Short amendment prints in the corpus run 0.18-0.43 numbered over 17-28
+    # Short amendment prints in the corpus run 0.18-0.43 numbered over 21-28
     # lines, so the ratio alone would decline them. The size floor is what keeps
-    # the guard scoped to whole documents; this pins that.
+    # the guard from rejecting them; this pins that.
     from server.pdf_compare import _is_unnumbered_layout
 
     assert _is_unnumbered_layout(_pages(4, 18)) is False
+
+
+def test_miss_window_stays_narrow():
+    # Everything under the floor is EXEMPT, so the floor IS the window in which
+    # the silent wrong answer survives. A 4-page unnumbered slice of a real
+    # enrolled bill diffs to one anchorless block with a 200 OK, so raising this
+    # floor re-opens the bug the guard exists to close. Pinned so a future change
+    # to _MIN_LINES_FOR_GUARD has to be deliberate.
+    from server.pdf_compare import _MIN_LINES_FOR_GUARD, _is_unnumbered_layout
+
+    assert _MIN_LINES_FOR_GUARD <= 50
+    # An unnumbered document just above the floor must still be declined.
+    assert _is_unnumbered_layout(_pages(0, _MIN_LINES_FOR_GUARD)) is True
 
 
 @pytest.mark.slow

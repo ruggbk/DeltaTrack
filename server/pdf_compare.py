@@ -61,12 +61,30 @@ class UnsupportedLayoutError(ValueError):
 # 0.5 sits in the middle of the empty gap; no real print comes near it.
 _MIN_NUMBERED_RATIO = 0.5
 
-# Floor so the guard only judges whole documents. This is load-bearing, not
-# defensive padding: short amendment prints in the corpus run 0.18 - 0.43
-# numbered over 17-28 lines (the margin numbers are simply sparse at that size),
-# and would be declined on the ratio alone. The smallest full print judged here
-# is 227 lines, so the floor separates the two cases cleanly.
-_MIN_LINES_FOR_GUARD = 200
+# Floor so the guard only judges documents big enough for the ratio to mean
+# something. Load-bearing, not defensive padding: short amendment prints in the
+# corpus run 0.18 - 0.43 numbered over 21-28 lines (margin numbers are simply
+# sparse at that size) and the ratio alone would decline them.
+#
+# Set to 50, not higher, because everything under the floor is EXEMPT and so
+# keeps the silent-wrong-answer behavior this guard exists to stop. The floor is
+# the miss window, so it should be as low as the data allows. Across the corpus:
+#
+#   floor  judged  declined  min ratio among accepted
+#     20     88      19 (5 false)   0.5517   <- declines real numbered prints
+#     29     83      14             0.5517   <- correct, but hugs the 0.5 line
+#     50     79      14             0.6607   <- same 14, comfortable margin
+#    200     60      14             0.9022   <- needlessly wide miss window
+#
+# There is a hard cliff at 28 -> 29 lines (0.4286 -> 0.5517). 50 clears it with
+# margin while declining the identical 14 documents.
+#
+# RESIDUAL: an unnumbered document under 50 lines (~1.5 pages) is still exempt
+# and will still diff to one anchorless block. Accepted deliberately — at that
+# size a single-block diff is close to the whole document anyway, so it misleads
+# far less than it would on a 400-page enrolled bill. Removing the exemption
+# entirely needs a signal that works on tiny documents (#261).
+_MIN_LINES_FOR_GUARD = 50
 
 # Describes the observation, not a guess at the document type: enrolled bills are
 # the common case a staffer will hit, but public-law and committee-report prints
