@@ -29,6 +29,7 @@ sessions_for_congress), originally by @willhea.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import unicodedata
@@ -663,18 +664,95 @@ def urlless_declared_versions(bill: ET.Element) -> list[tuple[str, str]]:
     spelling divergence would misclassify a gap version as a law and re-hide it;
     a standing gate against that is tracked in #231.)
     """
+    return [(r["code"], r["name"]) for r in urlless_declared_version_records(bill)]
+
+
+def urlless_declared_version_records(bill: ET.Element) -> list[dict]:
+    """``[{"code", "name", "date"}]`` for versions govinfo can't serve as XML.
+
+    The record form of :func:`urlless_declared_versions`, carrying the BILLSTATUS
+    date so a consumer can *place* the gap in the version sequence (#230). That
+    matters because on-disk files are numbered over the **downloadable** set, so
+    ``2_engrossed-in-house.xml`` need not be the 2nd version BILLSTATUS declared --
+    a gap between them shifts nothing on disk and is otherwise unlocatable. The
+    BILLSTATUS date is the single ordering authority (see :func:`order_versions`).
+    """
     tv = bill.find("textVersions")
     if tv is None:
         return []
-    gaps: list[tuple[str, str]] = []
+    records: list[dict] = []
     for item in tv.findall("item"):
         if _version_pkg_from_item(item) is not None:
             continue  # url-bearing: a real, fetchable version
         code = _version_code_from_item(item)  # url-less: name fallback only
         if code is None:
             continue  # Public/Private Law (or unmappable): expected skip
-        gaps.append((code, resolve_code(code)[0]))
-    return gaps
+        records.append({"code": code, "name": resolve_code(code)[0], "date": item.findtext("date") or ""})
+    return records
+
+
+# ---- XML-less gap markers (#230) --------------------------------------------
+#
+# The stderr warning from enumerate_versions (#226 AC#1) satisfies "don't silently
+# drop", but it is transient: nothing on disk records which versions govinfo could
+# not serve. The marker persists that per bill so gaps are findable across the
+# corpus without re-deriving them from BILLSTATUS, and assertable by a coverage
+# gate. Format is deliberately generic -- no consumer shapes it (#228 is deferred).
+#
+# The name must not be mistaken for a bill version by anything that enumerates a
+# bill directory. Current enumerators glob either digit-prefixed stems
+# ("[0-9]*_*.xml") or bare extensions ("*.xml"/"*.pdf"), so a leading-underscore
+# name with a .json suffix is invisible to both; the collision test pins that.
+GAP_MARKER_NAME = "_govinfo_gaps.json"
+
+
+def gap_marker_path(bill_dir: Path) -> Path:
+    """Path of the XML-less gap marker inside a bill directory."""
+    return bill_dir / GAP_MARKER_NAME
+
+
+def write_gap_marker(bill_dir: Path, bill_id: str, records: list[dict]) -> Path | None:
+    """Persist (or clear) the gap marker for one bill; returns its path, else None.
+
+    Writes when ``records`` is non-empty, and **removes an existing marker when it
+    is empty** -- mirroring the ``.error`` marker convention in
+    ``fetch_bill_archives`` (written on failure, unlinked on success). A marker
+    left behind after GPO composes the missing XML would assert a gap that no
+    longer exists, which is worse than no marker at all: a stale absence claim
+    reads exactly like a current one.
+
+    Content is deterministic (no timestamp) so re-running enumeration on an
+    unchanged bill does not dirty the corpus with a churning file.
+    """
+    path = gap_marker_path(bill_dir)
+    if not records:
+        if path.exists():
+            path.unlink()
+        return None
+    bill_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"bill": bill_id, "source": "govinfo", "gap_versions": records}
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def fetch_gap_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
+    """Gap-version records for one bill, fetched from BILLSTATUS.
+
+    A separate helper rather than a second return value from
+    :func:`enumerate_versions`, whose API-shaped list is a deliberate drop-in seam
+    for the fetch_bills consumers (see its docstring) -- widening it would break
+    that contract. Callers that need both pay one extra BILLSTATUS request.
+
+    Note this reports gaps even when :func:`enumerate_versions` returns ``[]``:
+    a bill whose every declared version is XML-less (#226's 118-hr-3496) yields no
+    downloadable versions at all, which is exactly when the marker matters most.
+    """
+    resp = request_with_retry(client, billstatus_url(congress, bill_type, number))
+    resp.raise_for_status()
+    bill = ET.fromstring(resp.content).find("bill")
+    if bill is None:
+        return []
+    return urlless_declared_version_records(bill)
 
 
 class CongressNotAvailable(Exception):

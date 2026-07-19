@@ -136,6 +136,27 @@ def enumerate_bill_versions(
     return fetch_text_versions(client, congress, bill_type, number, api_key=api_key)
 
 
+def record_gap_versions(
+    client: httpx.Client, *, congress: int, bill_type: str, number: int, output_dir: Path, source: str
+) -> None:
+    """Persist (or clear) the bill's XML-less gap marker (#230).
+
+    Gaps are a govinfo *format* concept -- a version GPO never composed XML for --
+    so the API source is skipped outright rather than fetching BILLSTATUS it does
+    not otherwise need.
+
+    Called *before* the caller's "no versions" early return on purpose: a bill whose
+    every declared version is XML-less enumerates to nothing (#226's 118-hr-3496),
+    which is precisely the case the marker exists to record. Writing it only
+    alongside a successful download would miss exactly that bill.
+    """
+    if source != "govinfo":
+        return
+    bill_id = f"{congress}-{bill_type}-{number}"
+    gaps = gi.fetch_gap_versions(client, congress, bill_type, number)
+    gi.write_gap_marker(output_dir / bill_id, bill_id, gaps)
+
+
 def version_path(
     output_dir: Path,
     congress: int,
@@ -419,6 +440,14 @@ def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | 
     versions = enumerate_bill_versions(
         client, args.congress, args.bill_type, args.number, source=args.source, api_key=api_key
     )
+    record_gap_versions(
+        client,
+        congress=args.congress,
+        bill_type=args.bill_type,
+        number=args.number,
+        output_dir=args.output_dir,
+        source=args.source,
+    )
 
     if not versions:
         print("No text versions available.", file=sys.stderr)
@@ -464,6 +493,9 @@ def download_all_versions(
     print(f"\n{label} {number} ({congress}th Congress):", file=sys.stderr)
 
     versions = enumerate_bill_versions(client, congress, bill_type, number, source=source, api_key=api_key)
+    record_gap_versions(
+        client, congress=congress, bill_type=bill_type, number=number, output_dir=output_dir, source=source
+    )
     if not versions:
         print("  No text versions available", file=sys.stderr)
         return
