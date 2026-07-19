@@ -48,10 +48,10 @@ versions = [
 [[bill]]
 id = "115-hr-5895"
 subcommittee = "energy-water / legislative-branch / milcon-va (minibus)"
-covers = "Dead-zone similarity baseline (v4->v5, the corpus's densest 0.4-0.6 similarity gap; test_diff_validation TestDeadZoneBaseline) and multi-division minibus coverage — supplies the Legislative Branch subcommittee the Senate set omits."
+covers = "Dead-zone similarity baseline (v4->v5, the corpus's densest 0.4-0.6 similarity gap; test_diff_validation TestDeadZoneBaseline) and multi-division minibus coverage — supplies the Legislative Branch subcommittee the Senate set omits. The v5 PDF is the unnumbered-enrolled-layout fixture for the decline guard (#141, tests/test_pdf_compare.py): the smallest enrolled print in the corpus. NOTE it contributes no PDF *tree* coverage — enrolled prints carry no margin line numbers, so extract_anchors returns [] and test_pdf_tree_invariants_hold_corpus_wide skips it ('no anchors / no offset table'). It is manifested so the completeness floor keeps it committed for the guard test."
 versions = [
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
-  { stage = "5_enrolled-bill", formats = ["xml"] },
+  { stage = "5_enrolled-bill", formats = ["xml", "pdf"] },
 ]
 
 # --- Structural-shape coverage -------------------------------------------------

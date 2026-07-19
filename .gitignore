@@ -53,6 +53,10 @@ bills/118-hr-4366/*
 bills/115-hr-5895/*
 !bills/115-hr-5895/4_engrossed-amendment-senate.xml
 !bills/115-hr-5895/5_enrolled-bill.xml
+# The enrolled PDF too (#141): the smallest enrolled print in the corpus, and the
+# fixture the unnumbered-layout decline guard is gated on. Enrolled bills carry no
+# GPO margin line numbers, so this is the shape that used to diff silently wrong.
+!bills/115-hr-5895/5_enrolled-bill.pdf
 !bills/113-hr-3547/
 bills/113-hr-3547/*
 !bills/113-hr-3547/6_enrolled-bill.xml
