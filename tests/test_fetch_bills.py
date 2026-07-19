@@ -997,11 +997,29 @@ class TestSearchCommand:
 # ---- `fetch-index` subcommand: lightweight scoped BILLSTATUS fetch (#242) --------
 
 
+def _fake_download_landing(*zip_names):
+    """A ``download_archives`` stub that lands the given ZIP names (simulates success).
+
+    ``cmd_fetch_index`` verifies the requested archive is on disk after the run, so a
+    stub that only returns paths without writing them reads as a *failed* fetch.
+    """
+
+    def _fake(from_congress, to_congress, *, bill_types, destination):
+        paths = []
+        for name in zip_names:
+            path = destination / name
+            path.write_bytes(b"")
+            paths.append(path)
+        return paths
+
+    return _fake
+
+
 class TestFetchIndexCommand:
     """`fetch-index`: a scoped BILLSTATUS fetch so `search` has a usable on-ramp (#242).
 
     Reuses ``fetch_bill_archives.download_archives`` (download-only, keyless) to pull
-    just the scoped ~14 MB ZIP into ``bills/``, leaving ``search`` purely offline.
+    just the scoped ZIP into ``bills/``, leaving ``search`` purely offline.
     """
 
     def test_requires_congress(self):
@@ -1022,7 +1040,8 @@ class TestFetchIndexCommand:
                 bill_types=bill_types,
                 destination=destination,
             )
-            return []
+            (destination / "118-hr.zip").write_bytes(b"")  # simulate the landed archive
+            return [destination / "118-hr.zip"]
 
         monkeypatch.setattr(fetch_bills, "download_archives", fake_download)
         args = build_parser().parse_args(
@@ -1030,11 +1049,13 @@ class TestFetchIndexCommand:
         )
         from fetch_bills import cmd_fetch_index
 
-        cmd_fetch_index(None, args, None)
+        rc = cmd_fetch_index(None, args, None)
+        assert rc == 0  # every requested archive present after the run
         assert calls["from_congress"] == 118
         assert calls["to_congress"] == 118  # single congress: the lightweight slice
         assert calls["bill_types"] == ["hr"]
-        assert calls["destination"] == tmp_path  # argparse gives --billstatus-dir as a Path
+        # Resolved against cwd so it points where `search` reads (not script-relative).
+        assert calls["destination"] == tmp_path.resolve()
 
     def test_type_omitted_fetches_all_types_for_the_congress(self, tmp_path, monkeypatch):
         import fetch_bills
@@ -1060,21 +1081,49 @@ class TestFetchIndexCommand:
         args = build_parser().parse_args(["fetch-index", "--congress", "118", "--type", "hr"])
         assert fetch_bills.requires_api_key(args) is False
 
-    def test_main_routes_to_fetch_index(self, tmp_path, monkeypatch):
-        # Lock the dispatch wiring end-to-end: main() must route `fetch-index` to the
-        # download, not silently no-op.
+    def test_exits_nonzero_when_archive_missing(self, tmp_path, monkeypatch, capsys):
+        # A 404 (bad congress/type) or network failure makes download_archives write a
+        # .error marker and return no path, leaving the requested ZIP absent. fetch-index
+        # must surface that and exit non-zero -- not print "ready" and exit 0, which would
+        # dead-end in `search` exiting 2 and telling the user to re-run fetch-index.
         import fetch_bills
 
-        called = {}
+        monkeypatch.setattr(fetch_bills, "download_archives", lambda *a, **k: [])
+        args = build_parser().parse_args(
+            ["fetch-index", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)]
+        )
+        from fetch_bills import cmd_fetch_index
 
-        def fake_download(*a, **k):
-            called["hit"] = True
-            return []
+        rc = cmd_fetch_index(None, args, None)
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "Failed to fetch" in err
+        assert "118-hr.zip" in err  # names the archive the user expected
 
-        monkeypatch.setattr(fetch_bills, "download_archives", fake_download)
+    def test_main_propagates_fetch_index_exit_code(self, tmp_path, monkeypatch):
+        # Mirror the search exit-code contract: a fetch failure must flow through
+        # main()'s sys.exit wiring so scripts/agents can branch on it.
+        import fetch_bills
+
+        monkeypatch.setattr(fetch_bills, "download_archives", lambda *a, **k: [])
         monkeypatch.setattr(
             "sys.argv",
             ["fetch_bills", "fetch-index", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)],
         )
-        fetch_bills.main()
-        assert called.get("hit") is True
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 1
+
+    def test_main_routes_and_succeeds(self, tmp_path, monkeypatch):
+        # Happy-path routing: main() dispatches `fetch-index` to the download and exits 0
+        # when the archive lands.
+        import fetch_bills
+
+        monkeypatch.setattr(fetch_bills, "download_archives", _fake_download_landing("118-hr.zip"))
+        monkeypatch.setattr(
+            "sys.argv",
+            ["fetch_bills", "fetch-index", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)],
+        )
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 0

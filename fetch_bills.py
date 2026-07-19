@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 import fetch_govinfo as gi
 from bill_index import BillIndex, parse_bill_id
-from fetch_bill_archives import download_archives
+from fetch_bill_archives import archive_destination, download_archives, enumerate_tasks
 from shared.bill_types import BILL_TYPES
 from shared.http import api_get, request_with_retry
 
@@ -357,33 +357,61 @@ def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | No
     return 0
 
 
-def cmd_fetch_index(client: httpx.Client, args: argparse.Namespace, api_key: str | None) -> None:
+def cmd_fetch_index(client: httpx.Client, args: argparse.Namespace, api_key: str | None) -> int:
     """Download the scoped BILLSTATUS ZIP(s) that keyless `search` reads (#242).
 
     The lightweight on-ramp for title search: reuses fetch_bill_archives.download_archives
-    (its download phase only -- no extract, no CSV index) to pull just
-    BILLSTATUS-{congress}-{type}.zip into ``--billstatus-dir``, where `search` finds it
-    offline. ``--type`` omitted fetches every type for the congress.
+    (its download phase only -- no extract, no CSV index) to pull just the scoped
+    BILLSTATUS archive(s) into ``--billstatus-dir``, where `search` finds them offline.
+    ``--type`` omitted fetches every type for the congress.
+
+    Returns a shell exit code: ``0`` if every requested archive is present after the
+    run (freshly downloaded or already on disk), ``1`` if any is missing.
+    download_archives swallows a failed download into a ``.error`` marker and returns
+    only successes, so a bad congress/type or a network failure would otherwise print
+    "ready" and exit 0 -- and then `search` dead-ends at exit 2. Checking the archives
+    are actually on disk turns that into a loud, branchable failure (matching search's
+    grep-style exit codes). ``--billstatus-dir`` is resolved against the current
+    directory so it names the same place `search` reads (download_archives would
+    otherwise anchor a relative path to its own script dir).
 
     Kept a separate verb from `search` on purpose: `search` never reaches the network,
     so fetching is always an explicit step. ``client``/``api_key`` are unused --
     download_archives opens its own client and govinfo bulk data needs no key.
     """
+    destination = args.billstatus_dir.resolve()
     bill_types = [args.bill_type] if args.bill_type else None
     saved = download_archives(
         args.congress,
         args.congress,
         bill_types=bill_types,
-        destination=args.billstatus_dir,
+        destination=destination,
     )
+    tasks = enumerate_tasks(args.congress, args.congress, bill_types=bill_types)
+    missing = [
+        archive_destination(destination, congress, btype)
+        for congress, btype in tasks
+        if not archive_destination(destination, congress, btype).exists()
+    ]
+    if missing:
+        names = ", ".join(path.name for path in missing)
+        print(
+            f"Failed to fetch {len(missing)} of {len(tasks)} BILLSTATUS archive(s) into "
+            f"{destination}: {names}. See the .error marker(s) beside them, and check the "
+            "congress/type exists and your network is up.",
+            file=sys.stderr,
+        )
+        return 1
     search_hint = f"fetch_bills search --congress {args.congress}"
     if args.bill_type:
         search_hint += f" --type {args.bill_type}"
     print(
-        f"BILLSTATUS archives ready in {args.billstatus_dir} ({len(saved)} newly downloaded). "
+        f"BILLSTATUS archives ready in {destination} "
+        f"({len(saved)} newly downloaded, {len(tasks) - len(saved)} already present). "
         f"Search them with: {search_hint} <terms>",
         file=sys.stderr,
     )
+    return 0
 
 
 def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
@@ -620,13 +648,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # fetch-index: the lightweight on-ramp for `search` (#242). Downloads only the
-    # scoped BILLSTATUS-{congress}-{type}.zip that search reads (~14 MB per
-    # chamber-congress), reusing fetch_bill_archives' download phase -- NOT the heavy
+    # scoped BILLSTATUS archive(s) search reads (tens of MB for one congress/type),
+    # reusing fetch_bill_archives' download phase -- NOT the heavy multi-GB
     # all-of-112-119 bulk fetch. Keyless (govinfo bulk data). Kept a separate verb so
     # `search` stays purely offline; fetching is always explicit.
     p_fetch_index = subparsers.add_parser(
         "fetch-index",
-        help="Download the scoped BILLSTATUS ZIP(s) that `search` reads (keyless, ~14 MB per chamber-congress)",
+        help="Download the scoped BILLSTATUS ZIP(s) that `search` reads (keyless; tens of MB, not the full bulk set)",
     )
     p_fetch_index.add_argument("--congress", type=int, required=True, help="Congress to fetch (e.g. 118)")
     p_fetch_index.add_argument(
@@ -684,7 +712,7 @@ def main():
             elif args.command == "search":
                 sys.exit(cmd_search(client, args, api_key))
             elif args.command == "fetch-index":
-                cmd_fetch_index(client, args, api_key)
+                sys.exit(cmd_fetch_index(client, args, api_key))
     except gi.CongressNotAvailable as exc:
         # Actionable one-liner, no traceback: pre-113 under the default govinfo
         # source points the user at --source api (issue #10 trap 7).
