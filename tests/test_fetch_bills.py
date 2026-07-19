@@ -975,7 +975,9 @@ class TestSearchCommand:
         err = capsys.readouterr().err
         assert rc == 2  # grep-style: can't search (no index)
         assert "No BILLSTATUS index found" in err
-        assert "fetch_bill_archives" in err
+        # Point a fresh-clone user at the lightweight on-ramp (#242), not the heavy
+        # all-of-112-119 fetch that was the only documented path before it.
+        assert "fetch-index" in err
 
     def test_genuine_no_match_message_when_index_present(self, tmp_path, capsys):
         # Index present but nothing matches -> the no-match message, NOT the
@@ -990,3 +992,89 @@ class TestSearchCommand:
         assert rc == 1  # grep-style: searched, nothing matched
         assert "No bills matched" in err
         assert "No BILLSTATUS index found" not in err
+
+
+# ---- `fetch-index` subcommand: lightweight scoped BILLSTATUS fetch (#242) --------
+
+
+class TestFetchIndexCommand:
+    """`fetch-index`: a scoped BILLSTATUS fetch so `search` has a usable on-ramp (#242).
+
+    Reuses ``fetch_bill_archives.download_archives`` (download-only, keyless) to pull
+    just the scoped ~14 MB ZIP into ``bills/``, leaving ``search`` purely offline.
+    """
+
+    def test_requires_congress(self):
+        # --congress is the scope; without it there is no lightweight slice to fetch,
+        # so argparse must reject the call rather than fall back to fetching everything.
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["fetch-index"])
+
+    def test_wires_scoped_single_type_download(self, tmp_path, monkeypatch):
+        import fetch_bills
+
+        calls = {}
+
+        def fake_download(from_congress, to_congress, *, bill_types, destination):
+            calls.update(
+                from_congress=from_congress,
+                to_congress=to_congress,
+                bill_types=bill_types,
+                destination=destination,
+            )
+            return []
+
+        monkeypatch.setattr(fetch_bills, "download_archives", fake_download)
+        args = build_parser().parse_args(
+            ["fetch-index", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)]
+        )
+        from fetch_bills import cmd_fetch_index
+
+        cmd_fetch_index(None, args, None)
+        assert calls["from_congress"] == 118
+        assert calls["to_congress"] == 118  # single congress: the lightweight slice
+        assert calls["bill_types"] == ["hr"]
+        assert calls["destination"] == tmp_path  # argparse gives --billstatus-dir as a Path
+
+    def test_type_omitted_fetches_all_types_for_the_congress(self, tmp_path, monkeypatch):
+        import fetch_bills
+
+        calls = {}
+
+        def fake_download(from_congress, to_congress, *, bill_types, destination):
+            calls["bill_types"] = bill_types
+            return []
+
+        monkeypatch.setattr(fetch_bills, "download_archives", fake_download)
+        args = build_parser().parse_args(["fetch-index", "--congress", "118", "--billstatus-dir", str(tmp_path)])
+        from fetch_bills import cmd_fetch_index
+
+        cmd_fetch_index(None, args, None)
+        assert calls["bill_types"] is None  # None -> download_archives fetches every type
+
+    def test_is_keyless(self):
+        # govinfo bulk data: no Congress.gov key. requires_api_key must stay False so
+        # main() never resolves a key or prints the DEMO_KEY warning for a fetch-index run.
+        import fetch_bills
+
+        args = build_parser().parse_args(["fetch-index", "--congress", "118", "--type", "hr"])
+        assert fetch_bills.requires_api_key(args) is False
+
+    def test_main_routes_to_fetch_index(self, tmp_path, monkeypatch):
+        # Lock the dispatch wiring end-to-end: main() must route `fetch-index` to the
+        # download, not silently no-op.
+        import fetch_bills
+
+        called = {}
+
+        def fake_download(*a, **k):
+            called["hit"] = True
+            return []
+
+        monkeypatch.setattr(fetch_bills, "download_archives", fake_download)
+        monkeypatch.setattr(
+            "sys.argv",
+            ["fetch_bills", "fetch-index", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)],
+        )
+        fetch_bills.main()
+        assert called.get("hit") is True

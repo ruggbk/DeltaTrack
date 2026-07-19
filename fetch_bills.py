@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 import fetch_govinfo as gi
 from bill_index import BillIndex, parse_bill_id
+from fetch_bill_archives import download_archives
 from shared.bill_types import BILL_TYPES
 from shared.http import api_get, request_with_retry
 
@@ -311,9 +312,10 @@ def cmd_versions(client: httpx.Client, args: argparse.Namespace, api_key: str | 
 def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | None) -> int:
     """Find bills by title over the local BILLSTATUS index (#10 acceptance).
 
-    Keyless: reads the BILLSTATUS ZIPs already on disk (downloaded by
-    fetch_bill_archives.py); no network, no client use. ``--congress``/``--type``
-    narrow the index; ``--appropriations`` applies the committee facet.
+    Keyless: reads the BILLSTATUS ZIPs already on disk (downloaded by the
+    ``fetch-index`` subcommand or fetch_bill_archives.py); no network, no client use.
+    ``--congress``/``--type`` narrow the index; ``--appropriations`` applies the
+    committee facet.
 
     Returns a ``grep``-style exit code so CLI/agent callers can branch without
     parsing stdout: ``0`` matches found, ``1`` searched but nothing matched, ``2``
@@ -329,8 +331,9 @@ def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | No
     # (where fetch_bill_archives writes it).
     if not index:
         print(
-            f"No BILLSTATUS index found in {args.billstatus_dir} -- build it first with "
-            "fetch_bill_archives (run from the project root). See the README.",
+            f"No BILLSTATUS index found in {args.billstatus_dir} -- fetch one first, e.g. "
+            "`fetch_bills fetch-index --congress 118 --type hr` (run from the project root). "
+            "See the README.",
             file=sys.stderr,
         )
         return 2
@@ -352,6 +355,35 @@ def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | No
     for bill_id, title in matches:
         print(f"{bill_id}\t{title}")
     return 0
+
+
+def cmd_fetch_index(client: httpx.Client, args: argparse.Namespace, api_key: str | None) -> None:
+    """Download the scoped BILLSTATUS ZIP(s) that keyless `search` reads (#242).
+
+    The lightweight on-ramp for title search: reuses fetch_bill_archives.download_archives
+    (its download phase only -- no extract, no CSV index) to pull just
+    BILLSTATUS-{congress}-{type}.zip into ``--billstatus-dir``, where `search` finds it
+    offline. ``--type`` omitted fetches every type for the congress.
+
+    Kept a separate verb from `search` on purpose: `search` never reaches the network,
+    so fetching is always an explicit step. ``client``/``api_key`` are unused --
+    download_archives opens its own client and govinfo bulk data needs no key.
+    """
+    bill_types = [args.bill_type] if args.bill_type else None
+    saved = download_archives(
+        args.congress,
+        args.congress,
+        bill_types=bill_types,
+        destination=args.billstatus_dir,
+    )
+    search_hint = f"fetch_bills search --congress {args.congress}"
+    if args.bill_type:
+        search_hint += f" --type {args.bill_type}"
+    print(
+        f"BILLSTATUS archives ready in {args.billstatus_dir} ({len(saved)} newly downloaded). "
+        f"Search them with: {search_hint} <terms>",
+        file=sys.stderr,
+    )
 
 
 def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
@@ -584,7 +616,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--billstatus-dir",
         type=Path,
         default=Path("bills"),
-        help="Directory of BILLSTATUS ZIPs (default: bills/, from fetch_bill_archives.py)",
+        help="Directory of BILLSTATUS ZIPs (default: bills/, from fetch-index or fetch_bill_archives.py)",
+    )
+
+    # fetch-index: the lightweight on-ramp for `search` (#242). Downloads only the
+    # scoped BILLSTATUS-{congress}-{type}.zip that search reads (~14 MB per
+    # chamber-congress), reusing fetch_bill_archives' download phase -- NOT the heavy
+    # all-of-112-119 bulk fetch. Keyless (govinfo bulk data). Kept a separate verb so
+    # `search` stays purely offline; fetching is always explicit.
+    p_fetch_index = subparsers.add_parser(
+        "fetch-index",
+        help="Download the scoped BILLSTATUS ZIP(s) that `search` reads (keyless, ~14 MB per chamber-congress)",
+    )
+    p_fetch_index.add_argument("--congress", type=int, required=True, help="Congress to fetch (e.g. 118)")
+    p_fetch_index.add_argument(
+        "--type",
+        dest="bill_type",
+        choices=sorted(BILL_TYPES.keys()),
+        default=None,
+        help="Bill type to fetch (e.g. hr, s); omit to fetch every type for the congress",
+    )
+    p_fetch_index.add_argument(
+        "--billstatus-dir",
+        type=Path,
+        default=Path("bills"),
+        help="Directory to write BILLSTATUS ZIPs (default: bills/, where `search` reads them)",
     )
 
     return parser
@@ -627,6 +683,8 @@ def main():
                 cmd_download_all(client, args, api_key)
             elif args.command == "search":
                 sys.exit(cmd_search(client, args, api_key))
+            elif args.command == "fetch-index":
+                cmd_fetch_index(client, args, api_key)
     except gi.CongressNotAvailable as exc:
         # Actionable one-liner, no traceback: pre-113 under the default govinfo
         # source points the user at --source api (issue #10 trap 7).
