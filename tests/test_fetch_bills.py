@@ -854,18 +854,14 @@ def _write_search_corpus(dirpath):
         ).encode()
 
     with zipfile.ZipFile(dirpath / "118-hr.zip", "w") as zf:
-        zf.writestr("BILLSTATUS-118hr4366.xml",
-                    doc(4366, "Commerce, Justice, Science Appropriations Act", "hsap00"))
-        zf.writestr("BILLSTATUS-118hr5.xml",
-                    doc(5, "Parents Bill of Rights Act", "hsed00"))
+        zf.writestr("BILLSTATUS-118hr4366.xml", doc(4366, "Commerce, Justice, Science Appropriations Act", "hsap00"))
+        zf.writestr("BILLSTATUS-118hr5.xml", doc(5, "Parents Bill of Rights Act", "hsed00"))
 
 
 class TestSearchCommand:
     def test_title_search_prints_matches(self, tmp_path, capsys):
         _write_search_corpus(tmp_path)
-        args = build_parser().parse_args(
-            ["search", "justice", "science", "--billstatus-dir", str(tmp_path)]
-        )
+        args = build_parser().parse_args(["search", "justice", "science", "--billstatus-dir", str(tmp_path)])
         with httpx.Client() as client:
             from fetch_bills import cmd_search
 
@@ -877,9 +873,7 @@ class TestSearchCommand:
     def test_appropriations_facet_filters_by_committee(self, tmp_path, capsys):
         _write_search_corpus(tmp_path)
         # Both titles contain "act"; the facet keeps only the approps-referred bill.
-        args = build_parser().parse_args(
-            ["search", "act", "--appropriations", "--billstatus-dir", str(tmp_path)]
-        )
+        args = build_parser().parse_args(["search", "act", "--appropriations", "--billstatus-dir", str(tmp_path)])
         with httpx.Client() as client:
             from fetch_bills import cmd_search
 
@@ -890,9 +884,7 @@ class TestSearchCommand:
 
     def test_facet_absent_returns_non_appropriations_bills(self, tmp_path, capsys):
         _write_search_corpus(tmp_path)
-        args = build_parser().parse_args(
-            ["search", "act", "--billstatus-dir", str(tmp_path)]
-        )
+        args = build_parser().parse_args(["search", "act", "--billstatus-dir", str(tmp_path)])
         with httpx.Client() as client:
             from fetch_bills import cmd_search
 

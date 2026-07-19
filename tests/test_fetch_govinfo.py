@@ -969,12 +969,17 @@ def test_build_title_index_reads_title_and_committee_codes(tmp_path):
         "118-hr.zip",
         [
             _billstatus_doc(
-                congress=118, btype="hr", number=4366,
+                congress=118,
+                btype="hr",
+                number=4366,
                 title="Commerce, Justice, Science Appropriations Act, 2024",
                 committee_codes=["hsap00"],
             ),
             _billstatus_doc(
-                congress=118, btype="hr", number=5, title="Parents Bill of Rights Act",
+                congress=118,
+                btype="hr",
+                number=5,
+                title="Parents Bill of Rights Act",
                 committee_codes=["hsed00"],
             ),
         ],
@@ -991,10 +996,10 @@ def test_search_titles_token_match_case_insensitive(tmp_path):
         tmp_path,
         "118-hr.zip",
         [
-            _billstatus_doc(congress=118, btype="hr", number=4366,
-                            title="Commerce, Justice, Science Appropriations Act"),
-            _billstatus_doc(congress=118, btype="hr", number=5,
-                            title="Parents Bill of Rights Act"),
+            _billstatus_doc(
+                congress=118, btype="hr", number=4366, title="Commerce, Justice, Science Appropriations Act"
+            ),
+            _billstatus_doc(congress=118, btype="hr", number=5, title="Parents Bill of Rights Act"),
         ],
     )
     index = gi.build_title_index(tmp_path)
@@ -1012,14 +1017,18 @@ def test_search_titles_appropriations_facet_is_committee_not_title(tmp_path):
         "118-hr.zip",
         [
             # Referred to Appropriations -> in the facet.
-            _billstatus_doc(congress=118, btype="hr", number=4366,
-                            title="Commerce, Justice, Science Act",
-                            committee_codes=["hsap00"]),
+            _billstatus_doc(
+                congress=118,
+                btype="hr",
+                number=4366,
+                title="Commerce, Justice, Science Act",
+                committee_codes=["hsap00"],
+            ),
             # "Appropriations" in the TITLE but NOT referred to Appropriations ->
             # excluded by the facet (facet is the committee, not the title term).
-            _billstatus_doc(congress=118, btype="hr", number=99,
-                            title="Appropriations Transparency Act",
-                            committee_codes=["hsgo00"]),
+            _billstatus_doc(
+                congress=118, btype="hr", number=99, title="Appropriations Transparency Act", committee_codes=["hsgo00"]
+            ),
         ],
     )
     index = gi.build_title_index(tmp_path)
@@ -1033,10 +1042,12 @@ def test_search_titles_facet_is_additive_not_a_gate(tmp_path):
         tmp_path,
         "118-hr.zip",
         [
-            _billstatus_doc(congress=118, btype="hr", number=4366,
-                            title="Defense Appropriations Act", committee_codes=["hsap00"]),
-            _billstatus_doc(congress=118, btype="hr", number=5,
-                            title="Parents Bill of Rights Act", committee_codes=["hsed00"]),
+            _billstatus_doc(
+                congress=118, btype="hr", number=4366, title="Defense Appropriations Act", committee_codes=["hsap00"]
+            ),
+            _billstatus_doc(
+                congress=118, btype="hr", number=5, title="Parents Bill of Rights Act", committee_codes=["hsed00"]
+            ),
         ],
     )
     index = gi.build_title_index(tmp_path)
