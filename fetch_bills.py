@@ -153,7 +153,16 @@ def record_gap_versions(
     if source != "govinfo":
         return
     bill_id = f"{congress}-{bill_type}-{number}"
-    gaps = gi.fetch_gap_versions(client, congress, bill_type, number)
+    # The marker is a side artifact: it must never veto the primary download. This
+    # is a SECOND BILLSTATUS request (the seam keeps enumerate_versions' API-shaped
+    # return), so without this guard a transient failure here would abort a download
+    # the first request already proved viable -- work the download itself needs
+    # nothing from. Degrade to a warning and carry on; the next fetch rewrites it.
+    try:
+        gaps = gi.fetch_gap_versions(client, congress, bill_type, number)
+    except Exception as exc:
+        print(f"WARNING: could not record XML-less gap versions for {bill_id}: {exc}", file=sys.stderr)
+        return
     gi.write_gap_marker(output_dir / bill_id, bill_id, gaps)
 
 
