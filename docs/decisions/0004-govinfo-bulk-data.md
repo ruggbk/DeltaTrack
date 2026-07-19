@@ -121,9 +121,14 @@ bills. So the Context's "`fetch_bills.py` currently retrieves ... from the
 Congress.gov API v3" and the closing "accepted but not yet implemented" describe the
 state before that shipped.
 
-Still accurate as written: the **PDF retrieval** section. PDF fetch stays on the
-Congress.gov API — the govinfo package-content PDF path (steps 9-10) is in draft
-PR #235, not yet merged, so the "the PDF path still depends on the Congress.gov API
-key" split is the current state, not a hypothetical. Status stays **Accepted**
-(decision status, not implementation status, per the [README convention](README.md));
-live progress is tracked in #10.
+**PDF retrieval is now keyless too.** An earlier revision of this amendment noted
+that PDF fetch still depended on the Congress.gov API key while the govinfo
+package-content path was in draft. That path has since shipped: `enumerate_versions`
+emits both format URLs from the session-free `content/pkg` address
+(`fetch_govinfo.py`, `{"type": "PDF", "url": package_content_url(pkg, "pdf")}`), and
+`requires_api_key` returns False for `download --format pdf` on the default govinfo
+source. Verified live: the `content/pkg/.../pdf/*.pdf` endpoint serves `200
+application/pdf` with no credentials. So both XML and PDF retrieval are keyless via
+govinfo; a `CONGRESS_API_KEY` is only needed for `--source api` or `download-all`
+year-range discovery. Status stays **Accepted** (decision status, not implementation
+status, per the [README convention](README.md)); live progress is tracked in #10.
