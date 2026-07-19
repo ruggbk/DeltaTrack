@@ -695,9 +695,17 @@ def urlless_declared_version_records(bill: ET.Element) -> list[dict]:
 #
 # The stderr warning from enumerate_versions (#226 AC#1) satisfies "don't silently
 # drop", but it is transient: nothing on disk records which versions govinfo could
-# not serve. The marker persists that per bill so gaps are findable across the
-# corpus without re-deriving them from BILLSTATUS, and assertable by a coverage
-# gate. Format is deliberately generic -- no consumer shapes it (#228 is deferred).
+# not serve. The marker persists that per bill, so a gap is findable without
+# re-deriving it from BILLSTATUS. Format is deliberately generic -- no consumer
+# shapes it (#228 is deferred).
+#
+# SCOPE, precisely: markers are written only by the per-bill fetch path
+# (fetch_bills' download / download-all). The bulk-convert path
+# (fetch_bill_text_archives.convert_archives) builds bill directories without
+# writing OR clearing them, so a bulk-built corpus carries none, and a marker left
+# by a per-bill fetch can outlive a bulk refresh that delivered the missing XML.
+# So this is not yet a corpus-wide coverage signal and must not be asserted on as
+# one; closing that is tracked in #254.
 #
 # The name must not be mistaken for a bill version by anything that enumerates a
 # bill directory. Current enumerators glob either digit-prefixed stems
