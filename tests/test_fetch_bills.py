@@ -955,6 +955,15 @@ class TestSearchCommand:
             fetch_bills.main()
         assert exc.value.code == 1  # searched, nothing matched
 
+        # Exit 2 (no index) must also propagate through main()'s sys.exit wiring, not
+        # just cmd_search's return -- point an empty dir at it.
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.setattr("sys.argv", ["fetch_bills", "search", "anything", "--billstatus-dir", str(empty)])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 2  # no index to search
+
     def test_missing_index_message_distinct_from_no_match(self, tmp_path, capsys):
         # A fresh clone has no BILLSTATUS index; that must not read as "your query
         # matched nothing." Empty dir -> the build-the-index message.
