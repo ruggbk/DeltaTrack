@@ -1118,6 +1118,58 @@ def test_search_titles_folds_diacritics_but_keeps_letters(tmp_path):
     assert index["118-hr-2"]["title"] == "Kalākaua Federal Building"
 
 
+def test_search_titles_fold_is_ordered_and_idempotent(tmp_path):
+    # A letter can carry BOTH an inseparable diacritic and a combining one (Ǿ =
+    # O-with-stroke + acute). The letter map must run AFTER the combining marks are
+    # dropped, or such a letter only half-folds (Ǿ -> Ø) and the fold stops being
+    # idempotent -- folding twice would keep changing the answer (#244).
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [_billstatus_doc(congress=118, btype="hr", number=1, title="Sǿren Memorial Act")],
+    )
+    index = gi.build_title_index(tmp_path)
+    assert gi.search_titles(index, "soren") == [("118-hr-1", "Sǿren Memorial Act")]
+    assert gi._fold_for_match("Ǿ") == "O"
+    for sample in ("Ǿ", "Ǣ", "Łódź", "David’s Law", "Kalākaua"):
+        assert gi._fold_for_match(gi._fold_for_match(sample)) == gi._fold_for_match(sample)
+
+
+def test_search_titles_fold_is_canonical_not_compatibility(tmp_path):
+    # Locks NFD over NFKD, which is otherwise only argued in comments: NFKD rewrites
+    # the modifier letter ʷ to "w", which would invent a match against a phonetic
+    # spelling no user typed. Swapping NFD->NFKD in _fold_for_match must fail here.
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [_billstatus_doc(congress=118, btype="hr", number=1, title="Mount qʷəɬtmayqn Designation")],
+    )
+    index = gi.build_title_index(tmp_path)
+    # Positive control: the title IS reachable, so the negative assertion below is
+    # a real check and not a query that could never match anything.
+    assert gi.search_titles(index, "designation") == [("118-hr-1", "Mount qʷəɬtmayqn Designation")]
+    # The modifier letter survives the fold, so an ASCII "qw" does not reach "qʷ".
+    assert gi.search_titles(index, "qw") == []
+    assert gi._fold_for_match("ʷ") == "ʷ"
+
+
+def test_search_titles_content_free_query_matches_nothing(tmp_path):
+    # The fold drops zero-width and invisible characters, so a query made only of
+    # them folds to no tokens at all. AND-of-tokens over an empty token list is
+    # vacuously true, which would return the ENTIRE index for a query that carries
+    # no search terms -- the loudest possible wrong answer (#244).
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [_billstatus_doc(congress=118, btype="hr", number=1, title="Defense Act")],
+    )
+    index = gi.build_title_index(tmp_path)
+    assert gi.search_titles(index, "­") == []
+    assert gi.search_titles(index, "   ") == []
+    # A real query still works, so the guard rejects only content-free input.
+    assert gi.search_titles(index, "defense") == [("118-hr-1", "Defense Act")]
+
+
 def test_build_title_index_reads_legacy_layout(tmp_path):
     # Legacy BILLSTATUS members use <billType>/<billNumber> instead of <type>/<number>.
     # #10's scope reaches back to the 113th, where un-regenerated legacy files exist in

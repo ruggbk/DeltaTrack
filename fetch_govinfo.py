@@ -531,13 +531,16 @@ def _fold_for_match(text: str) -> str:
     Never applied to a stored or displayed title -- callers keep the original
     text and fold only the key they match on.
     """
-    folded = text.translate(_PUNCT_FOLD).translate(_LETTER_FOLD)
     # NFD splits a precomposed letter into base + combining mark(s); dropping the
     # marks leaves the base ("é" -> "e"). NFD (canonical) not NFKD (compatibility)
     # -- see the note above _fold_for_match's tables. Characters that are not
     # accented Latin letters have no combining mark and pass through untouched.
-    decomposed = unicodedata.normalize("NFD", folded)
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    decomposed = unicodedata.normalize("NFD", text.translate(_PUNCT_FOLD))
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    # _LETTER_FOLD runs LAST, on the mark-stripped text. A letter can carry both an
+    # inseparable diacritic and a combining one (Ǿ = Ø + acute); folding letters
+    # first would leave that half-folded at "Ø" and make the fold non-idempotent.
+    return stripped.translate(_LETTER_FOLD)
 
 
 def _bill_id_sort_key(bill_id: str) -> tuple[int, str, int]:
@@ -554,8 +557,16 @@ def search_titles(index: dict[str, dict], query: str, *, appropriations: bool = 
     is an *additive facet*: when set, it further keeps only bills referred to the
     appropriations committee (systemCode hsap00/ssap00) -- it never gates a plain
     title search. Results are sorted by (congress, type, number) for determinism.
+
+    A query carrying no search terms matches nothing rather than everything: the
+    fold drops invisible characters, so a query of only those (or only whitespace)
+    reduces to an empty token list, and AND-of-tokens over an empty list is
+    vacuously true -- which would return the whole index for a query that asked
+    for nothing.
     """
     tokens = _fold_for_match(query).lower().split()
+    if not tokens:
+        return []
     results: list[tuple[str, str]] = []
     for bill_id, entry in index.items():
         title = entry["title"]
