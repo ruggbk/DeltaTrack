@@ -154,6 +154,118 @@ class TestFormatCsvCell:
         assert _format_csv_cell(None) == ""
 
 
+class TestExternallyAuthoredCsv:
+    """Files the module did not write itself (#258).
+
+    ``round_trip`` above only ever loads bytes that ``save()`` produced, so it cannot
+    see anything about how ``load()`` treats input from elsewhere -- which is the whole
+    class of defect #258 belongs to. README:95 documents
+    ``./fetch_bills download-all --file your_bills.csv``, so a hand-authored index is a
+    supported input, and for a non-technical audience "author a CSV" means Excel or
+    Google Sheets. Both write a UTF-8 BOM by default.
+
+    These cases therefore construct the file bytes directly rather than going through
+    ``save()``.
+    """
+
+    HEADER = "id,title\n119-hr-1,Consolidated Appropriations Act\n"
+
+    def test_bom_prefixed_csv_loads_its_records(self, tmp_path):
+        # The reported bug: the BOM binds to the first header name, so 'id' reads as
+        # '﻿id' and the required-column check rejects a file that has an id column.
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_bytes(b"\xef\xbb\xbf" + self.HEADER.encode("utf-8"))
+
+        index = BillIndex(csv_path)
+
+        assert index.get("119-hr-1")["title"] == "Consolidated Appropriations Act"
+
+    def test_bom_is_not_left_inside_the_first_column_name(self, tmp_path):
+        # Distinct from the load succeeding: a fix that only relaxed the *check* would
+        # pass the test above while leaving every record keyed by '﻿id', which
+        # would then be written back out as a corrupt header.
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_bytes(b"\xef\xbb\xbf" + self.HEADER.encode("utf-8"))
+
+        index = BillIndex(csv_path)
+
+        assert index.columns == ["id", "title"]
+        assert list(index.get("119-hr-1").keys()) == ["id", "title"]
+
+    def test_csv_without_a_bom_is_unaffected(self, tmp_path):
+        # utf-8-sig strips a BOM only when one is present; this pins that the ordinary
+        # tool-written file keeps loading identically.
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_bytes(self.HEADER.encode("utf-8"))
+
+        index = BillIndex(csv_path)
+
+        assert index.columns == ["id", "title"]
+        assert index.get("119-hr-1")["title"] == "Consolidated Appropriations Act"
+
+    @pytest.mark.parametrize(
+        "prefix",
+        [pytest.param(b"", id="no-bom"), pytest.param(b"\xef\xbb\xbf", id="bom")],
+    )
+    def test_csv_without_an_id_column_still_raises(self, tmp_path, prefix):
+        # The guard the fix must not mask. Reading as utf-8-sig makes a BOM invisible
+        # to the required-column check, so the check has to keep firing on a file that
+        # genuinely has no id column -- with or without a BOM in front of it.
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_bytes(prefix + b"slug,title\n119-hr-1,An Act\n")
+
+        with pytest.raises(ValueError, match="missing required column"):
+            BillIndex(csv_path)
+
+    def test_saved_csv_does_not_start_with_a_bom(self, tmp_path):
+        # The write path stays utf-8 deliberately: reading utf-8-sig would happily
+        # consume a BOM we emitted ourselves, so nothing else in the suite would notice
+        # if the writers drifted to utf-8-sig. Asserted on the raw bytes rather than
+        # inferred from a successful reload.
+        csv_path = tmp_path / "bills.csv"
+        index = BillIndex(csv_path)
+        index.add_bills([{"id": "119-hr-1", "title": "An Act"}], save=True)
+
+        raw = csv_path.read_bytes()
+
+        assert not raw.startswith(b"\xef\xbb\xbf")
+        assert raw.startswith(b"id,")
+
+
+class TestUndecodableCsv:
+    """A CSV that is not UTF-8 at all (#258).
+
+    Same origin as the BOM case -- a spreadsheet export -- but a different failure:
+    Excel's "CSV (Comma delimited)" writes the system codepage, so one smart quote or
+    accented sponsor name in a Windows-1252 file makes ``load()`` raise a bare
+    ``UnicodeDecodeError`` naming a byte offset and no file. Re-raised as a ValueError
+    so it matches the missing-column contract callers already see from ``load()``.
+    """
+
+    def test_non_utf8_bytes_raise_a_valueerror_naming_the_file(self, tmp_path):
+        csv_path = tmp_path / "bills.csv"
+        # 0x92 is a Windows-1252 right single quote -- invalid as a UTF-8 start byte.
+        csv_path.write_bytes(b"id,title\n119-hr-1,Nation\x92s Defense\n")
+
+        with pytest.raises(ValueError) as excinfo:
+            BillIndex(csv_path)
+
+        message = str(excinfo.value)
+        assert str(csv_path) in message
+        assert "UTF-8" in message
+
+    def test_the_original_decode_error_is_kept_as_the_cause(self, tmp_path):
+        # Re-raising for readability should not throw away the byte offset a developer
+        # would need to find the offending cell.
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_bytes(b"id,title\n119-hr-1,Nation\x92s Defense\n")
+
+        with pytest.raises(ValueError) as excinfo:
+            BillIndex(csv_path)
+
+        assert isinstance(excinfo.value.__cause__, UnicodeDecodeError)
+
+
 class TestKnownLatentDecodeDefects:
     """Values that do not survive the round-trip today (#256).
 

@@ -179,16 +179,31 @@ class BillIndex:
         if not self.csv_path.exists():
             return
 
-        with self.csv_path.open("r", encoding="utf-8", newline="") as fh:
-            reader = csv.DictReader(fh)
-            if reader.fieldnames:
-                self._columns = list(reader.fieldnames)
-                if "id" not in self._columns:
-                    raise ValueError("CSV file is missing required column: 'id'")
-            for row in reader:
-                bill = {key: _decode_value(key, row.get(key, "")) for key in self._columns}
-                self._records.append(bill)
-                self._bills_by_id[bill["id"]] = bill
+        # utf-8-sig, not utf-8: the index may be hand-authored (README documents
+        # --file), and Excel and Google Sheets both prefix a BOM. Read as utf-8 that
+        # BOM binds to the first header name, so 'id' arrives as '﻿id' and the
+        # check below rejects a file that plainly has an id column. utf-8-sig strips a
+        # BOM when present and is a no-op otherwise. The write paths stay utf-8 so we
+        # never emit one ourselves.
+        try:
+            with self.csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
+                reader = csv.DictReader(fh)
+                if reader.fieldnames:
+                    self._columns = list(reader.fieldnames)
+                    if "id" not in self._columns:
+                        raise ValueError("CSV file is missing required column: 'id'")
+                for row in reader:
+                    bill = {key: _decode_value(key, row.get(key, "")) for key in self._columns}
+                    self._records.append(bill)
+                    self._bills_by_id[bill["id"]] = bill
+        except UnicodeDecodeError as exc:
+            # Same origin as the BOM case, different symptom: a spreadsheet export in
+            # the system codepage rather than UTF-8. The bare error names a byte offset
+            # and no file, so say which file and what to do about it.
+            raise ValueError(
+                f"CSV file is not valid UTF-8: {self.csv_path}. "
+                "Re-save it as UTF-8 (in Excel: 'CSV UTF-8 (Comma delimited)')."
+            ) from exc
 
     def save(self) -> None:
         """Persist in-memory records to CSV."""
