@@ -836,3 +836,157 @@ class TestDownloadGuardIntegration:
         assert (bill_dir / "1_reported-in-house.xml").exists()
         assert (bill_dir / "1_reported-in-house.pdf").exists()
         assert not (bill_dir / "1_reported-in-house.xml.error").exists()
+
+
+# ---- `search` subcommand: title discovery over local BILLSTATUS ZIPs (#240) --
+
+
+def _write_search_corpus(dirpath):
+    """A minimal local BILLSTATUS ZIP with one approps + one non-approps bill."""
+    import zipfile
+
+    def doc(number, title, code):
+        return (
+            f"<billStatus><bill><congress>118</congress><type>HR</type>"
+            f"<number>{number}</number><title>{title}</title>"
+            f"<committees><item><systemCode>{code}</systemCode></item></committees>"
+            f"</bill></billStatus>"
+        ).encode()
+
+    with zipfile.ZipFile(dirpath / "118-hr.zip", "w") as zf:
+        zf.writestr("BILLSTATUS-118hr4366.xml", doc(4366, "Commerce, Justice, Science Appropriations Act", "hsap00"))
+        zf.writestr("BILLSTATUS-118hr5.xml", doc(5, "Parents Bill of Rights Act", "hsed00"))
+
+
+class TestSearchCommand:
+    def test_title_search_prints_matches(self, tmp_path, capsys):
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(["search", "justice", "science", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            rc = cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert rc == 0  # grep-style: matches found
+        assert "118-hr-4366" in out
+        assert "118-hr-5" not in out
+
+    def test_output_is_tab_separated_id_then_title(self, tmp_path, capsys):
+        # Locks the output contract the README documents (`<bill_id>\t<title>`), so it
+        # can't silently drift from the docs downstream consumers rely on.
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(["search", "justice", "science", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        line = capsys.readouterr().out.strip()
+        assert line == "118-hr-4366\tCommerce, Justice, Science Appropriations Act"
+
+    def test_appropriations_facet_filters_by_committee(self, tmp_path, capsys):
+        _write_search_corpus(tmp_path)
+        # Both titles contain "act"; the facet keeps only the approps-referred bill.
+        args = build_parser().parse_args(["search", "act", "--appropriations", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-4366" in out
+        assert "118-hr-5" not in out
+
+    def test_facet_absent_returns_non_appropriations_bills(self, tmp_path, capsys):
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(["search", "act", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-4366" in out
+        assert "118-hr-5" in out
+
+    def test_congress_and_type_filters_narrow_the_index(self, tmp_path, capsys):
+        import zipfile
+
+        def doc(congress, btype, number, title):
+            return (
+                f"<billStatus><bill><congress>{congress}</congress><type>{btype.upper()}</type>"
+                f"<number>{number}</number><title>{title}</title>"
+                f"<committees></committees></bill></billStatus>"
+            ).encode()
+
+        # Two congresses, two types; same title token in each so only the filter distinguishes.
+        with zipfile.ZipFile(tmp_path / "118-hr.zip", "w") as zf:
+            zf.writestr("BILLSTATUS-118hr1.xml", doc(118, "hr", 1, "Defense Act"))
+        with zipfile.ZipFile(tmp_path / "119-hr.zip", "w") as zf:
+            zf.writestr("BILLSTATUS-119hr1.xml", doc(119, "hr", 1, "Defense Act"))
+        with zipfile.ZipFile(tmp_path / "118-s.zip", "w") as zf:
+            zf.writestr("BILLSTATUS-118s1.xml", doc(118, "s", 1, "Defense Act"))
+
+        args = build_parser().parse_args(
+            ["search", "defense", "--congress", "118", "--type", "hr", "--billstatus-dir", str(tmp_path)]
+        )
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        out = capsys.readouterr().out
+        assert "118-hr-1" in out
+        assert "119-hr-1" not in out  # filtered by --congress
+        assert "118-s-1" not in out  # filtered by --type
+
+    def test_main_propagates_search_exit_code(self, tmp_path, monkeypatch):
+        # The CLI/agent-visible contract is the process exit code, which flows through
+        # main()'s sys.exit(cmd_search(...)) -- not just cmd_search's return. Lock it
+        # end-to-end so the wiring can't silently regress to always-0.
+        import fetch_bills
+
+        _write_search_corpus(tmp_path)
+        d = str(tmp_path)
+
+        monkeypatch.setattr("sys.argv", ["fetch_bills", "search", "justice", "science", "--billstatus-dir", d])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 0  # match found
+
+        monkeypatch.setattr("sys.argv", ["fetch_bills", "search", "zzz-nomatch", "--billstatus-dir", d])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 1  # searched, nothing matched
+
+        # Exit 2 (no index) must also propagate through main()'s sys.exit wiring, not
+        # just cmd_search's return -- point an empty dir at it.
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.setattr("sys.argv", ["fetch_bills", "search", "anything", "--billstatus-dir", str(empty)])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 2  # no index to search
+
+    def test_missing_index_message_distinct_from_no_match(self, tmp_path, capsys):
+        # A fresh clone has no BILLSTATUS index; that must not read as "your query
+        # matched nothing." Empty dir -> the build-the-index message.
+        args = build_parser().parse_args(["search", "anything", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            rc = cmd_search(client, args, None)
+        err = capsys.readouterr().err
+        assert rc == 2  # grep-style: can't search (no index)
+        assert "No BILLSTATUS index found" in err
+        assert "fetch_bill_archives" in err
+
+    def test_genuine_no_match_message_when_index_present(self, tmp_path, capsys):
+        # Index present but nothing matches -> the no-match message, NOT the
+        # missing-index one (the distinction the message split exists to make).
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(["search", "nonexistent-token-xyz", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            rc = cmd_search(client, args, None)
+        err = capsys.readouterr().err
+        assert rc == 1  # grep-style: searched, nothing matched
+        assert "No bills matched" in err
+        assert "No BILLSTATUS index found" not in err

@@ -935,3 +935,140 @@ def test_enumerate_versions_empty_textversions_returns_empty_not_error():
     respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
     with httpx.Client() as client:
         assert gi.enumerate_versions(client, 999, "hr", 1) == []
+
+
+# ---- title-search index over local BILLSTATUS ZIPs (#240, #10 acceptance) ----
+#
+# Discovery-by-title reads the SAME local BILLSTATUS ZIPs that build_billstatus_
+# date_index does (downloaded by fetch_bill_archives.py) -- keyless, no network.
+# Appropriations is a facet keyed on committee referral systemCode (hsap00/ssap00,
+# #10 gotcha #3: more precise than the "Appropriations" subject term), NOT a title
+# term and NOT a discovery gate.
+
+
+def _billstatus_doc(*, congress, btype, number, title, committee_codes=()):
+    committees = "".join(f"<item><systemCode>{c}</systemCode></item>" for c in committee_codes)
+    return (
+        f"<billStatus><bill><congress>{congress}</congress><type>{btype.upper()}</type>"
+        f"<number>{number}</number><title>{title}</title>"
+        f"<committees>{committees}</committees></bill></billStatus>"
+    ).encode()
+
+
+def _write_billstatus_zip(dirpath: Path, filename: str, docs: list[bytes]) -> Path:
+    zp = dirpath / filename
+    with zipfile.ZipFile(zp, "w") as zf:
+        for i, content in enumerate(docs):
+            zf.writestr(f"BILLSTATUS-doc{i}.xml", content)
+    return zp
+
+
+def test_build_title_index_reads_title_and_committee_codes(tmp_path):
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [
+            _billstatus_doc(
+                congress=118,
+                btype="hr",
+                number=4366,
+                title="Commerce, Justice, Science Appropriations Act, 2024",
+                committee_codes=["hsap00"],
+            ),
+            _billstatus_doc(
+                congress=118,
+                btype="hr",
+                number=5,
+                title="Parents Bill of Rights Act",
+                committee_codes=["hsed00"],
+            ),
+        ],
+    )
+    index = gi.build_title_index(tmp_path)
+    assert set(index) == {"118-hr-4366", "118-hr-5"}
+    assert index["118-hr-4366"]["title"] == "Commerce, Justice, Science Appropriations Act, 2024"
+    assert index["118-hr-4366"]["committee_codes"] == {"hsap00"}
+    assert index["118-hr-5"]["committee_codes"] == {"hsed00"}
+
+
+def test_search_titles_token_match_case_insensitive(tmp_path):
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [
+            _billstatus_doc(
+                congress=118, btype="hr", number=4366, title="Commerce, Justice, Science Appropriations Act"
+            ),
+            _billstatus_doc(congress=118, btype="hr", number=5, title="Parents Bill of Rights Act"),
+        ],
+    )
+    index = gi.build_title_index(tmp_path)
+    # AND-of-tokens, case-insensitive substring on the title.
+    assert gi.search_titles(index, "justice science") == [
+        ("118-hr-4366", "Commerce, Justice, Science Appropriations Act"),
+    ]
+    # A token absent from the title excludes the bill.
+    assert gi.search_titles(index, "justice parents") == []
+
+
+def test_search_titles_appropriations_facet_is_committee_not_title(tmp_path):
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [
+            # Referred to Appropriations -> in the facet.
+            _billstatus_doc(
+                congress=118,
+                btype="hr",
+                number=4366,
+                title="Commerce, Justice, Science Act",
+                committee_codes=["hsap00"],
+            ),
+            # "Appropriations" in the TITLE but NOT referred to Appropriations ->
+            # excluded by the facet (facet is the committee, not the title term).
+            _billstatus_doc(
+                congress=118, btype="hr", number=99, title="Appropriations Transparency Act", committee_codes=["hsgo00"]
+            ),
+        ],
+    )
+    index = gi.build_title_index(tmp_path)
+    assert gi.search_titles(index, "act", appropriations=True) == [
+        ("118-hr-4366", "Commerce, Justice, Science Act"),
+    ]
+
+
+def test_search_titles_facet_is_additive_not_a_gate(tmp_path):
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [
+            _billstatus_doc(
+                congress=118, btype="hr", number=4366, title="Defense Appropriations Act", committee_codes=["hsap00"]
+            ),
+            _billstatus_doc(
+                congress=118, btype="hr", number=5, title="Parents Bill of Rights Act", committee_codes=["hsed00"]
+            ),
+        ],
+    )
+    index = gi.build_title_index(tmp_path)
+    # Without the facet, a non-appropriations bill is still discoverable: appropriations
+    # is a facet, not the discovery gate it is in the committee-API pipeline (#10).
+    ids = {bid for bid, _ in gi.search_titles(index, "act")}
+    assert ids == {"118-hr-4366", "118-hr-5"}
+
+
+def test_build_title_index_reads_legacy_layout(tmp_path):
+    # Legacy BILLSTATUS members use <billType>/<billNumber> instead of <type>/<number>.
+    # #10's scope reaches back to the 113th, where un-regenerated legacy files exist in
+    # the bulk data; the index must not silently drop them (fable review of #240).
+    legacy = (
+        b"<billStatus><bill><congress>113</congress><billType>HR</billType>"
+        b"<billNumber>1234</billNumber><title>A Legacy-Layout Act</title>"
+        b"<committees><item><systemCode>hsap00</systemCode></item></committees>"
+        b"</bill></billStatus>"
+    )
+    _write_billstatus_zip(tmp_path, "113-hr.zip", [legacy])
+    index = gi.build_title_index(tmp_path)
+    assert "113-hr-1234" in index
+    assert index["113-hr-1234"]["title"] == "A Legacy-Layout Act"
+    assert index["113-hr-1234"]["committee_codes"] == {"hsap00"}

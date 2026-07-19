@@ -391,6 +391,96 @@ def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str
     return index
 
 
+# ---- title-search index (discovery by title; approps as a facet) ------------
+#
+# #10's last acceptance item: find any bill by title over an index built from the
+# local BILLSTATUS ZIPs (the same source build_billstatus_date_index reads, and
+# fetch_bill_archives.py downloads -- keyless, no network). Appropriations is a
+# facet, not the discovery gate it is in the committee-API pipeline: it keys on
+# committee referral systemCode (hsap00/ssap00), which #10 found more precise than
+# the "Appropriations" subject term, and is independent of the title text.
+
+APPROPRIATIONS_SYSTEM_CODES = frozenset({"hsap00", "ssap00"})
+
+
+def _committee_system_codes(bill: ET.Element) -> set[str]:
+    """Committee referral systemCodes for a BILLSTATUS bill (modern or legacy layout)."""
+    items = bill.findall("committees/item")
+    if not items:
+        items = bill.findall("committees/billCommittees/item")
+    codes = {(it.findtext("systemCode") or "").strip().lower() for it in items}
+    codes.discard("")
+    return codes
+
+
+def build_title_index(billstatus_dir: Path) -> dict[str, dict]:
+    """``{bill_id: {"title": str, "committee_codes": set[str]}}`` from local BILLSTATUS ZIPs.
+
+    Mirrors :func:`build_billstatus_date_index`: walks every ``*.zip`` in
+    ``billstatus_dir``, reading its ``BILLSTATUS-*`` members. Scope is whatever ZIPs
+    are present locally -- no hardcoded congress/type, and no network. ``committee_codes``
+    backs the appropriations facet (see :func:`search_titles`).
+    """
+    index: dict[str, dict] = {}
+    for zp in sorted(billstatus_dir.glob("*.zip")):
+        try:
+            zf = zipfile.ZipFile(zp)
+        except zipfile.BadZipFile:
+            continue
+        for name in zf.namelist():
+            if not Path(name).name.startswith("BILLSTATUS"):
+                continue
+            try:
+                bill = ET.fromstring(zf.read(name)).find("bill")
+            except Exception:
+                continue
+            if bill is None:
+                continue
+            congress = bill.findtext("congress")
+            btype = (bill.findtext("type") or bill.findtext("billType") or "").strip().lower()
+            # Legacy BILLSTATUS layout pairs <billType> with <billNumber> (not <number>);
+            # read both so a legacy-format member isn't silently dropped by the guard below.
+            # #10's migration scope reaches back to the 113th, where un-regenerated legacy
+            # files exist in the bulk data.
+            number = bill.findtext("number") or bill.findtext("billNumber")
+            title = (bill.findtext("title") or "").strip()
+            if not (congress and btype and number):
+                continue
+            index[f"{congress}-{btype}-{number}"] = {
+                "title": title,
+                "committee_codes": _committee_system_codes(bill),
+            }
+    return index
+
+
+def _bill_id_sort_key(bill_id: str) -> tuple[int, str, int]:
+    congress, btype, number = bill_id.split("-")
+    return (int(congress), btype, int(number))
+
+
+def search_titles(index: dict[str, dict], query: str, *, appropriations: bool = False) -> list[tuple[str, str]]:
+    """Return ``[(bill_id, title), ...]`` for bills whose title matches ``query``.
+
+    Match is case-insensitive AND-of-tokens substring on the title. ``appropriations``
+    is an *additive facet*: when set, it further keeps only bills referred to the
+    appropriations committee (systemCode hsap00/ssap00) -- it never gates a plain
+    title search. Results are sorted by (congress, type, number) for determinism.
+    """
+    tokens = query.lower().split()
+    results: list[tuple[str, str]] = []
+    for bill_id, entry in index.items():
+        title = entry["title"]
+        if not title:
+            continue
+        low = title.lower()
+        if not all(tok in low for tok in tokens):
+            continue
+        if appropriations and not (entry["committee_codes"] & APPROPRIATIONS_SYSTEM_CODES):
+            continue
+        results.append((bill_id, title))
+    return sorted(results, key=lambda r: _bill_id_sort_key(r[0]))
+
+
 # ---- per-bill version enumeration (the API-source drop-in) -------------------
 #
 # fetch_bills.py's per-bill path (versions / download / download-all --file)

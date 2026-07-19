@@ -63,6 +63,7 @@ The product commands are wrapper scripts in the project root; run them after `so
 | `./fetch_bills versions <congress> <type> <number>` | List a bill's available text versions (`--source govinfo\|api`, default govinfo) |
 | `./fetch_bills download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`, `--source govinfo\|api`) |
 | `./fetch_bills download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set; `--source govinfo\|api`) |
+| `./fetch_bills search "<terms>" [--congress N] [--type hr] [--appropriations]` | Find bills by title over a local BILLSTATUS index (keyless, offline; **requires the index** — build it first with `fetch_bill_archives`, see below) |
 | `./diff_bill compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
 | `./diff_pdf <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
 | `./fetch_bill_archives` | Bulk-build a bill-metadata index from govinfo archives — **see the warning below** |
@@ -94,6 +95,19 @@ To run the web comparison app locally: `uvicorn server.app:app --reload --port 8
 ```
 
 Files are saved to `bills/<congress>-<type>-<number>/`.
+
+### Finding a bill by title
+
+If you don't know the bill number, search bill titles over a local index (keyless, offline — no network at search time):
+
+```bash
+# Any bill type/congress; --appropriations is an optional facet, not a required filter
+./fetch_bills search "military construction" --congress 118 --appropriations
+```
+
+Each match prints as `<congress>-<type>-<number>\t<title>`; feed the number back into `download`. The exit status follows `grep`, so scripts and agents can branch without parsing output: **0** matches found, **1** searched but nothing matched, **2** no index to search.
+
+The index is built from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone — build them first with `./fetch_bill_archives` (the bulk metadata tool described below), run from the project root (`bills/` is resolved relative to the current directory). Until you do, `search` exits 2 with a "no BILLSTATUS index" message. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
 
 ## Comparing Bills
 
@@ -203,7 +217,7 @@ The shared data model the whole project rests on — the bill hierarchy, the glo
 
 Four modules:
 
-- **`fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`.
+- **`fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`, `search` (keyless title discovery over a local BILLSTATUS index).
 - **`bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter). Captures preamble sections that sit alongside divisions or titles.
 - **`diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
 - **`formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.

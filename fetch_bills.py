@@ -308,6 +308,52 @@ def cmd_versions(client: httpx.Client, args: argparse.Namespace, api_key: str | 
     print()
 
 
+def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | None) -> int:
+    """Find bills by title over the local BILLSTATUS index (#10 acceptance).
+
+    Keyless: reads the BILLSTATUS ZIPs already on disk (downloaded by
+    fetch_bill_archives.py); no network, no client use. ``--congress``/``--type``
+    narrow the index; ``--appropriations`` applies the committee facet.
+
+    Returns a ``grep``-style exit code so CLI/agent callers can branch without
+    parsing stdout: ``0`` matches found, ``1`` searched but nothing matched, ``2``
+    no index to search (can't run). ``main`` propagates it via ``sys.exit``.
+    """
+    index = gi.build_title_index(args.billstatus_dir)
+    # An empty index means no BILLSTATUS ZIPs were found (a real corpus yields
+    # thousands of bills), which is a different problem from "your query matched
+    # nothing" -- and the likely one on a fresh clone, where bills/ has no index
+    # yet. Report it distinctly (exit 2, grep's "error" code) so the user/agent isn't
+    # told to check a download that a plain no-match would also blame. Note `bills/`
+    # is resolved relative to the current directory, so run from the project root
+    # (where fetch_bill_archives writes it).
+    if not index:
+        print(
+            f"No BILLSTATUS index found in {args.billstatus_dir} -- build it first with "
+            "fetch_bill_archives (run from the project root). See the README.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.congress is not None or args.bill_type is not None:
+        index = {
+            bid: entry
+            for bid, entry in index.items()
+            for congress, btype, _number in [bid.split("-")]
+            if (args.congress is None or congress == str(args.congress))
+            and (args.bill_type is None or btype == args.bill_type)
+        }
+    query = " ".join(args.query)
+    matches = gi.search_titles(index, query, appropriations=args.appropriations)
+    if not matches:
+        # grep's "no lines selected" code: a successful search that found nothing,
+        # distinct from the exit-2 "couldn't search" case above.
+        print(f"No bills matched {query!r}.", file=sys.stderr)
+        return 1
+    for bill_id, title in matches:
+        print(f"{bill_id}\t{title}")
+    return 0
+
+
 def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
     """Download text versions for a single bill."""
     versions = enumerate_bill_versions(
@@ -516,6 +562,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_source_arg(p_all)
 
+    # search: title discovery over the local BILLSTATUS index (keyless; #10).
+    # Appropriations is a facet (--appropriations), not the discovery gate it is on
+    # the committee-API path. Scope is whatever BILLSTATUS ZIPs are present locally.
+    p_search = subparsers.add_parser("search", help="Find bills by title over the local BILLSTATUS index (keyless)")
+    p_search.add_argument("query", nargs="+", help="Title search terms (case-insensitive, all must match)")
+    p_search.add_argument("--congress", type=int, default=None, help="Restrict to a Congress (e.g. 118)")
+    p_search.add_argument(
+        "--type",
+        dest="bill_type",
+        choices=sorted(BILL_TYPES.keys()),
+        default=None,
+        help="Restrict to a bill type (e.g. hr, s)",
+    )
+    p_search.add_argument(
+        "--appropriations",
+        action="store_true",
+        help="Facet: keep only bills referred to the appropriations committee",
+    )
+    p_search.add_argument(
+        "--billstatus-dir",
+        type=Path,
+        default=Path("bills"),
+        help="Directory of BILLSTATUS ZIPs (default: bills/, from fetch_bill_archives.py)",
+    )
+
     return parser
 
 
@@ -528,7 +599,7 @@ def requires_api_key(args: argparse.Namespace) -> bool:
         *discovery* is the committee endpoint even when the text comes from
         govinfo (issue #10 scope: discovery=API, text=govinfo).
     """
-    if args.source == "api":
+    if getattr(args, "source", None) == "api":
         return True
     return args.command == "download-all" and args.file is None
 
@@ -554,6 +625,8 @@ def main():
                 cmd_download(client, args, api_key)
             elif args.command == "download-all":
                 cmd_download_all(client, args, api_key)
+            elif args.command == "search":
+                sys.exit(cmd_search(client, args, api_key))
     except gi.CongressNotAvailable as exc:
         # Actionable one-liner, no traceback: pre-113 under the default govinfo
         # source points the user at --source api (issue #10 trap 7).
