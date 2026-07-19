@@ -870,6 +870,18 @@ class TestSearchCommand:
         assert "118-hr-4366" in out
         assert "118-hr-5" not in out
 
+    def test_output_is_tab_separated_id_then_title(self, tmp_path, capsys):
+        # Locks the output contract the README documents (`<bill_id>\t<title>`), so it
+        # can't silently drift from the docs downstream consumers rely on.
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(["search", "justice", "science", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        line = capsys.readouterr().out.strip()
+        assert line == "118-hr-4366\tCommerce, Justice, Science Appropriations Act"
+
     def test_appropriations_facet_filters_by_committee(self, tmp_path, capsys):
         _write_search_corpus(tmp_path)
         # Both titles contain "act"; the facet keeps only the approps-referred bill.
