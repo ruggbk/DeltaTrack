@@ -453,6 +453,59 @@ def build_title_index(billstatus_dir: Path) -> dict[str, dict]:
     return index
 
 
+# Typographic punctuation fold for title matching (#244). BILLSTATUS titles are
+# typeset, not ASCII: over the live corpus (43,267 titles) 1,292 carry non-ASCII,
+# dominated by the curly apostrophe U+2019 (1,024) and the en dash U+2013 (217).
+# A user or agent types ASCII, so an unfolded match silently misses those bills --
+# and the miss reads exactly like "no such bill". Mapped classes are quotes,
+# dashes, and the invisible separators; the fold is applied to BOTH the query and
+# the title so it corrects either side's typography, never just one.
+#
+# Deliberately NOT folded: accented letters (é/á/ó, ~80 occurrences). Stripping
+# diacritics is a separate decision with its own failure mode -- the same NFKD
+# pass mangles the non-Latin letters that also appear here (ʔ, ə, ł, ʻokina) --
+# so it is left to a follow-up rather than smuggled in behind a punctuation fix.
+_PUNCT_FOLD = {
+    # Single quotes / apostrophes -> ASCII '
+    0x2018: "'",
+    0x2019: "'",
+    0x201A: "'",
+    0x201B: "'",
+    0x2032: "'",
+    # Double quotes -> ASCII "
+    0x201C: '"',
+    0x201D: '"',
+    0x201E: '"',
+    0x201F: '"',
+    0x2033: '"',
+    # Dash-likes -> ASCII -
+    0x2010: "-",
+    0x2011: "-",
+    0x2012: "-",
+    0x2013: "-",
+    0x2014: "-",
+    0x2015: "-",
+    0x2212: "-",
+    # Invisible/whitespace variants: the soft hyphen has no glyph, so a title
+    # containing one looks identical to the ASCII query that fails to match it.
+    # Drop it outright rather than mapping it to a visible character.
+    0x00AD: None,
+    0x00A0: " ",
+    0x2007: " ",
+    0x202F: " ",
+    0xFEFF: None,
+}
+
+
+def _fold_punct(text: str) -> str:
+    """Normalize typographic punctuation to ASCII for comparison only.
+
+    Never applied to a stored or displayed title -- callers keep the original
+    text and fold only the key they match on.
+    """
+    return text.translate(_PUNCT_FOLD)
+
+
 def _bill_id_sort_key(bill_id: str) -> tuple[int, str, int]:
     congress, btype, number = bill_id.split("-")
     return (int(congress), btype, int(number))
@@ -461,18 +514,20 @@ def _bill_id_sort_key(bill_id: str) -> tuple[int, str, int]:
 def search_titles(index: dict[str, dict], query: str, *, appropriations: bool = False) -> list[tuple[str, str]]:
     """Return ``[(bill_id, title), ...]`` for bills whose title matches ``query``.
 
-    Match is case-insensitive AND-of-tokens substring on the title. ``appropriations``
+    Match is case-insensitive AND-of-tokens substring on the title, over a
+    typographic-punctuation fold applied to both sides (see :func:`_fold_punct`),
+    so an ASCII apostrophe reaches a curly one and vice versa. ``appropriations``
     is an *additive facet*: when set, it further keeps only bills referred to the
     appropriations committee (systemCode hsap00/ssap00) -- it never gates a plain
     title search. Results are sorted by (congress, type, number) for determinism.
     """
-    tokens = query.lower().split()
+    tokens = _fold_punct(query).lower().split()
     results: list[tuple[str, str]] = []
     for bill_id, entry in index.items():
         title = entry["title"]
         if not title:
             continue
-        low = title.lower()
+        low = _fold_punct(title).lower()
         if not all(tok in low for tok in tokens):
             continue
         if appropriations and not (entry["committee_codes"] & APPROPRIATIONS_SYSTEM_CODES):

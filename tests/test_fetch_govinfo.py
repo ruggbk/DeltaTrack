@@ -1057,6 +1057,35 @@ def test_search_titles_facet_is_additive_not_a_gate(tmp_path):
     assert ids == {"118-hr-4366", "118-hr-5"}
 
 
+def test_search_titles_matches_across_typographic_punctuation(tmp_path):
+    # Real BILLSTATUS titles carry typographic punctuation: over the live corpus
+    # (43,267 titles) 1,292 hold non-ASCII, dominated by the curly apostrophe
+    # U+2019 (1,024) and the en dash U+2013 (217). An ASCII query typed by a
+    # human or agent must still reach them, and the fold runs on BOTH sides so a
+    # query typed WITH curly punctuation reaches an ASCII title too (#244).
+    _write_billstatus_zip(
+        tmp_path,
+        "118-hr.zip",
+        [
+            _billstatus_doc(congress=118, btype="hr", number=1, title="David’s Law"),
+            _billstatus_doc(congress=118, btype="hr", number=2, title="Fiscal Year 2024–2025 Act"),
+            # U+00AD is invisible when printed, so an unnormalized miss here is
+            # indistinguishable from "no such bill" -- it folds away entirely.
+            _billstatus_doc(congress=118, btype="hr", number=3, title="Anti­Fraud Act"),
+            _billstatus_doc(congress=118, btype="hr", number=4, title="Straight 'Quotes' Act"),
+        ],
+    )
+    index = gi.build_title_index(tmp_path)
+    # ASCII query -> typographic title.
+    assert gi.search_titles(index, "david's law") == [("118-hr-1", "David’s Law")]
+    assert gi.search_titles(index, "2024-2025") == [("118-hr-2", "Fiscal Year 2024–2025 Act")]
+    assert gi.search_titles(index, "antifraud") == [("118-hr-3", "Anti­Fraud Act")]
+    # Typographic query -> ASCII title (the fold is symmetric, not one-way).
+    assert gi.search_titles(index, "‘quotes’") == [("118-hr-4", "Straight 'Quotes' Act")]
+    # The displayed title is untouched: only the comparison key is normalized.
+    assert index["118-hr-1"]["title"] == "David’s Law"
+
+
 def test_build_title_index_reads_legacy_layout(tmp_path):
     # Legacy BILLSTATUS members use <billType>/<billNumber> instead of <type>/<number>.
     # #10's scope reaches back to the 113th, where un-regenerated legacy files exist in
