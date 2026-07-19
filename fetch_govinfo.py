@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import re
 import sys
+import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Iterable
@@ -453,6 +454,95 @@ def build_title_index(billstatus_dir: Path) -> dict[str, dict]:
     return index
 
 
+# ASCII fold for title matching (#244). BILLSTATUS titles are typeset, not ASCII:
+# over the live corpus (43,267 titles) 1,292 carry non-ASCII, dominated by the
+# curly apostrophe U+2019 (1,024) and the en dash U+2013 (217), with a smaller
+# accented-letter tail (~73). A user or agent types ASCII, so an unfolded match
+# silently misses those bills -- and the miss reads exactly like "no such bill".
+# The fold is applied to BOTH the query and the title, so it corrects either
+# side's typography rather than assuming which side is "clean".
+_PUNCT_FOLD = {
+    # Single quotes / apostrophes -> ASCII '
+    0x2018: "'",
+    0x2019: "'",
+    0x201A: "'",
+    0x201B: "'",
+    0x2032: "'",
+    # Double quotes -> ASCII "
+    0x201C: '"',
+    0x201D: '"',
+    0x201E: '"',
+    0x201F: '"',
+    0x2033: '"',
+    # Dash-likes -> ASCII -
+    0x2010: "-",
+    0x2011: "-",
+    0x2012: "-",
+    0x2013: "-",
+    0x2014: "-",
+    0x2015: "-",
+    0x2212: "-",
+    # Invisible/whitespace variants: the soft hyphen has no glyph, so a title
+    # containing one looks identical to the ASCII query that fails to match it.
+    # Drop it outright rather than mapping it to a visible character.
+    0x00AD: None,
+    0x00A0: " ",
+    0x2007: " ",
+    0x202F: " ",
+    0xFEFF: None,
+}
+
+
+# Latin letters carrying no combining mark, so the NFD pass below cannot reach
+# them: a stroked or ligated letter is one indivisible code point. Without these
+# the fold silently UNDER-corrects ("lodz" would still miss "Łódź", whose ó and ź
+# fold but whose Ł does not). Listed transliterations are the conventional ones.
+_LETTER_FOLD = {
+    0x0141: "L",
+    0x0142: "l",  # Ł ł
+    0x00D8: "O",
+    0x00F8: "o",  # Ø ø
+    0x0110: "D",
+    0x0111: "d",  # Đ đ
+    0x00C6: "AE",
+    0x00E6: "ae",  # Æ æ
+    0x0152: "OE",
+    0x0153: "oe",  # Œ œ
+    0x00DE: "Th",
+    0x00FE: "th",  # Þ þ
+    0x00D0: "D",
+    0x00F0: "d",  # Ð ð
+    0x00DF: "ss",  # ß
+}
+
+# Deliberately NOT folded: phonetic and modifier letters (ʔ glottal stop, ə schwa,
+# ɬ l-with-belt, ʷ modifier w) and symbols (®). These are letters in their own
+# right, not accented Latin ones, so there is no ASCII form a user would
+# predictably type -- guessing one would invent matches rather than recover them.
+# Reaching them would take NFKD (compatibility) rather than the NFD (canonical)
+# pass used here, and NFKD also rewrites ligatures, fractions and superscripts,
+# which is a broader transformation than title matching wants. Titles containing
+# them stay discoverable through their other tokens (the match is AND-of-tokens).
+
+
+def _fold_for_match(text: str) -> str:
+    """Normalize typographic punctuation and accented letters to ASCII, for comparison only.
+
+    Never applied to a stored or displayed title -- callers keep the original
+    text and fold only the key they match on.
+    """
+    # NFD splits a precomposed letter into base + combining mark(s); dropping the
+    # marks leaves the base ("é" -> "e"). NFD (canonical) not NFKD (compatibility)
+    # -- see the note above _fold_for_match's tables. Characters that are not
+    # accented Latin letters have no combining mark and pass through untouched.
+    decomposed = unicodedata.normalize("NFD", text.translate(_PUNCT_FOLD))
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    # _LETTER_FOLD runs LAST, on the mark-stripped text. A letter can carry both an
+    # inseparable diacritic and a combining one (Ǿ = Ø + acute); folding letters
+    # first would leave that half-folded at "Ø" and make the fold non-idempotent.
+    return stripped.translate(_LETTER_FOLD)
+
+
 def _bill_id_sort_key(bill_id: str) -> tuple[int, str, int]:
     congress, btype, number = bill_id.split("-")
     return (int(congress), btype, int(number))
@@ -461,18 +551,28 @@ def _bill_id_sort_key(bill_id: str) -> tuple[int, str, int]:
 def search_titles(index: dict[str, dict], query: str, *, appropriations: bool = False) -> list[tuple[str, str]]:
     """Return ``[(bill_id, title), ...]`` for bills whose title matches ``query``.
 
-    Match is case-insensitive AND-of-tokens substring on the title. ``appropriations``
+    Match is case-insensitive AND-of-tokens substring on the title, over a
+    typographic-punctuation fold applied to both sides (see :func:`_fold_for_match`),
+    so an ASCII apostrophe reaches a curly one and vice versa. ``appropriations``
     is an *additive facet*: when set, it further keeps only bills referred to the
     appropriations committee (systemCode hsap00/ssap00) -- it never gates a plain
     title search. Results are sorted by (congress, type, number) for determinism.
+
+    A query carrying no search terms matches nothing rather than everything: the
+    fold drops invisible characters, so a query of only those (or only whitespace)
+    reduces to an empty token list, and AND-of-tokens over an empty list is
+    vacuously true -- which would return the whole index for a query that asked
+    for nothing.
     """
-    tokens = query.lower().split()
+    tokens = _fold_for_match(query).lower().split()
+    if not tokens:
+        return []
     results: list[tuple[str, str]] = []
     for bill_id, entry in index.items():
         title = entry["title"]
         if not title:
             continue
-        low = title.lower()
+        low = _fold_for_match(title).lower()
         if not all(tok in low for tok in tokens):
             continue
         if appropriations and not (entry["committee_codes"] & APPROPRIATIONS_SYSTEM_CODES):
