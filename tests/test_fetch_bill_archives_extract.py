@@ -1,15 +1,17 @@
-"""Tests for extract_archives cache coherence (issue #61).
+"""Tests for archive cache coherence, download and extract sides (issue #61).
 
-``TestDownloadArchiveZip`` in tests/test_fetch_bill_archives.py already covers the
-download side -- whether a partial body is committed to disk (#63). This file covers
-the stage after it: turning a cached ZIP into an extracted folder, where the failure
-modes are about *reuse* rather than transfer.
+``TestDownloadArchiveZip`` in tests/test_fetch_bill_archives.py covers whether a
+partial *body* is committed to disk (#63) -- transfer integrity for one archive. This
+file covers the caches on either side of that: which archives a re-run decides to
+fetch at all, and turning a cached ZIP into an extracted folder. The failure modes
+here are about *reuse* rather than transfer.
 
-Two invariants carry the weight. Extraction is skipped when the destination folder
-already exists, which is what keeps a re-run cheap -- but it means the folder's mere
-existence is taken as proof of a complete extraction, so a folder left behind by a
-crashed run would be trusted forever. That is exactly why the failure path removes a
-partial folder rather than leaving it: the cleanup is what makes the skip safe.
+The same invariant shape governs both stages. Work is skipped when its output already
+exists, which is what keeps a re-run cheap -- but it means the output's mere existence
+is taken as proof that the work completed, so anything left behind by a crashed run
+would be trusted forever. What makes each skip safe is the failure path removing or
+marking its own debris: ``extract_archives`` rmtree's a partial folder, and
+``download_archives`` writes an ``.error`` marker and clears it on a later success.
 """
 
 from __future__ import annotations
@@ -18,9 +20,19 @@ import io
 import zipfile
 from pathlib import Path
 
+import httpx
 import pytest
+import respx
 
-from fetch_bill_archives import archive_extract_dir, extract_archive, extract_archives
+from fetch_bill_archives import (
+    archive_destination,
+    archive_error_path,
+    archive_extract_dir,
+    archive_url,
+    download_archives,
+    extract_archive,
+    extract_archives,
+)
 
 
 def write_archive(source: Path, name: str, members: dict[str, bytes] | None = None) -> Path:
@@ -36,6 +48,121 @@ def write_archive(source: Path, name: str, members: dict[str, bytes] | None = No
             zf.writestr(member, body)
     path.write_bytes(buf.getvalue())
     return path
+
+
+def archive_bytes(name: str = "119-hr") -> bytes:
+    """One well-formed BILLSTATUS archive ZIP, as bytes."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(f"{name}-1.xml", b"<billStatus/>")
+    return buf.getvalue()
+
+
+class TestDownloadArchivesCacheCoherence:
+    """Which archives a re-run decides to fetch, and what a failure leaves behind.
+
+    One congress and one bill type per test, so each exercises the cache decision
+    rather than the congress/type enumeration.
+    """
+
+    @respx.mock
+    def test_existing_archive_is_skipped_without_a_request(self, tmp_path):
+        # The skip is what makes a re-run over 112-119 cheap; without it the tool
+        # re-downloads hundreds of MB. Asserting the route was never called is the
+        # point -- an implementation that fetched and then discarded the body would
+        # leave the same files on disk.
+        dest = archive_destination(tmp_path, 119, "hr")
+        dest.write_bytes(b"cached, not a real zip")
+        route = respx.get(archive_url(119, "hr")).mock(return_value=httpx.Response(200))
+
+        downloaded = download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+
+        assert downloaded == []  # skipped, so not reported as newly downloaded
+        assert not route.called
+        assert dest.read_bytes() == b"cached, not a real zip"
+
+    @respx.mock
+    def test_successful_download_is_committed_and_reported(self, tmp_path):
+        body = archive_bytes()
+        respx.get(archive_url(119, "hr")).mock(return_value=httpx.Response(200, content=body))
+
+        downloaded = download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+
+        dest = archive_destination(tmp_path, 119, "hr")
+        assert downloaded == [dest]
+        assert dest.read_bytes() == body
+        assert not archive_error_path(tmp_path, 119, "hr").exists()
+
+    @respx.mock
+    def test_failed_download_writes_an_error_marker_and_commits_no_archive(self, tmp_path):
+        respx.get(archive_url(119, "hr")).mock(return_value=httpx.Response(404))
+
+        downloaded = download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+
+        assert downloaded == []
+        # No .zip: a committed-but-failed archive would be skipped forever by the
+        # test above, permanently caching the failure as if it were data.
+        assert not archive_destination(tmp_path, 119, "hr").exists()
+        error_path = archive_error_path(tmp_path, 119, "hr")
+        assert error_path.exists()
+        assert error_path.read_text(encoding="utf-8")  # carries the reason, not empty
+
+    @respx.mock
+    def test_a_later_success_clears_a_stale_error_marker(self, tmp_path):
+        # The coherence half: without the clear, a marker from a transient outage
+        # would keep describing a failure for an archive that is now present, and
+        # anything reading markers to decide what is missing would be wrong forever.
+        error_path = archive_error_path(tmp_path, 119, "hr")
+        error_path.parent.mkdir(parents=True, exist_ok=True)
+        error_path.write_text("earlier failure", encoding="utf-8")
+        respx.get(archive_url(119, "hr")).mock(return_value=httpx.Response(200, content=archive_bytes()))
+
+        download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+
+        assert not error_path.exists()
+        assert archive_destination(tmp_path, 119, "hr").exists()
+
+    @respx.mock
+    def test_a_failing_archive_does_not_abort_the_batch(self, tmp_path):
+        # Tasks are newest-first, so 119 is attempted before 118.
+        respx.get(archive_url(119, "hr")).mock(return_value=httpx.Response(500))
+        respx.get(archive_url(118, "hr")).mock(return_value=httpx.Response(200, content=archive_bytes("118-hr")))
+
+        downloaded = download_archives(118, 119, bill_types=["hr"], destination=tmp_path)
+
+        assert downloaded == [archive_destination(tmp_path, 118, "hr")]
+        assert archive_error_path(tmp_path, 119, "hr").exists()
+        assert not archive_error_path(tmp_path, 118, "hr").exists()
+
+    @respx.mock
+    def test_a_stale_error_marker_alone_does_not_prevent_a_retry(self, tmp_path):
+        # A marker records that a download failed, not that it should stop being
+        # attempted; only a present .zip suppresses the request. Pinning this keeps a
+        # future "skip anything with an .error marker" optimization from silently
+        # making transient failures permanent.
+        error_path = archive_error_path(tmp_path, 119, "hr")
+        error_path.parent.mkdir(parents=True, exist_ok=True)
+        error_path.write_text("earlier failure", encoding="utf-8")
+        route = respx.get(archive_url(119, "hr")).mock(return_value=httpx.Response(200, content=archive_bytes()))
+
+        download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+
+        assert route.called
+
+    @respx.mock
+    def test_a_cached_archive_leaves_a_stale_marker_in_place(self, tmp_path):
+        # Current behavior, pinned rather than endorsed: the skip returns before the
+        # marker-clearing line, so an archive that is already present keeps any
+        # stale .error marker beside it. Harmless while nothing consumes the markers
+        # programmatically, and worth knowing before anything starts to. See #259.
+        dest = archive_destination(tmp_path, 119, "hr")
+        dest.write_bytes(archive_bytes())
+        error_path = archive_error_path(tmp_path, 119, "hr")
+        error_path.write_text("earlier failure", encoding="utf-8")
+
+        download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+
+        assert error_path.exists()
 
 
 class TestExtractArchive:
