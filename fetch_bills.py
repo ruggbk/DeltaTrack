@@ -316,6 +316,19 @@ def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | No
     narrow the index; ``--appropriations`` applies the committee facet.
     """
     index = gi.build_title_index(args.billstatus_dir)
+    # An empty index means no BILLSTATUS ZIPs were found (a real corpus yields
+    # thousands of bills), which is a different problem from "your query matched
+    # nothing" -- and the likely one on a fresh clone, where bills/ has no index
+    # yet. Say so distinctly so the user isn't told to check a download that a plain
+    # no-match would also blame. Note `bills/` is resolved relative to the current
+    # directory, so run from the project root (where fetch_bill_archives writes it).
+    if not index:
+        print(
+            f"No BILLSTATUS index found in {args.billstatus_dir} -- build it first with "
+            "fetch_bill_archives (run from the project root). See the README.",
+            file=sys.stderr,
+        )
+        return
     if args.congress is not None or args.bill_type is not None:
         index = {
             bid: entry
@@ -327,11 +340,7 @@ def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | No
     query = " ".join(args.query)
     matches = gi.search_titles(index, query, appropriations=args.appropriations)
     if not matches:
-        print(
-            f"No bills matched {query!r} in {args.billstatus_dir} "
-            "(is the BILLSTATUS index downloaded? see fetch_bill_archives.py).",
-            file=sys.stderr,
-        )
+        print(f"No bills matched {query!r}.", file=sys.stderr)
         return
     for bill_id, title in matches:
         print(f"{bill_id}\t{title}")

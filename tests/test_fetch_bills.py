@@ -934,3 +934,28 @@ class TestSearchCommand:
         assert "118-hr-1" in out
         assert "119-hr-1" not in out  # filtered by --congress
         assert "118-s-1" not in out  # filtered by --type
+
+    def test_missing_index_message_distinct_from_no_match(self, tmp_path, capsys):
+        # A fresh clone has no BILLSTATUS index; that must not read as "your query
+        # matched nothing." Empty dir -> the build-the-index message.
+        args = build_parser().parse_args(["search", "anything", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        err = capsys.readouterr().err
+        assert "No BILLSTATUS index found" in err
+        assert "fetch_bill_archives" in err
+
+    def test_genuine_no_match_message_when_index_present(self, tmp_path, capsys):
+        # Index present but nothing matches -> the no-match message, NOT the
+        # missing-index one (the distinction the message split exists to make).
+        _write_search_corpus(tmp_path)
+        args = build_parser().parse_args(["search", "nonexistent-token-xyz", "--billstatus-dir", str(tmp_path)])
+        with httpx.Client() as client:
+            from fetch_bills import cmd_search
+
+            cmd_search(client, args, None)
+        err = capsys.readouterr().err
+        assert "No bills matched" in err
+        assert "No BILLSTATUS index found" not in err
