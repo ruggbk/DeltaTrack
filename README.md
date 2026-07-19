@@ -105,9 +105,9 @@ If you don't know the bill number, search bill titles over a local index (keyles
 ./fetch_bills search "military construction" --congress 118 --appropriations
 ```
 
-Each match prints as `<congress>-<type>-<number>\t<title>`; feed the number back into `download`.
+Each match prints as `<congress>-<type>-<number>\t<title>`; feed the number back into `download`. The exit status follows `grep`, so scripts and agents can branch without parsing output: **0** matches found, **1** searched but nothing matched, **2** no index to search.
 
-The index is built from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone — build them first with `./fetch_bill_archives` (the bulk metadata tool described below). Until you do, `search` reports no matches. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
+The index is built from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone — build them first with `./fetch_bill_archives` (the bulk metadata tool described below), run from the project root (`bills/` is resolved relative to the current directory). Until you do, `search` exits 2 with a "no BILLSTATUS index" message. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
 
 ## Comparing Bills
 

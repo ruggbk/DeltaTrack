@@ -865,8 +865,9 @@ class TestSearchCommand:
         with httpx.Client() as client:
             from fetch_bills import cmd_search
 
-            cmd_search(client, args, None)
+            rc = cmd_search(client, args, None)
         out = capsys.readouterr().out
+        assert rc == 0  # grep-style: matches found
         assert "118-hr-4366" in out
         assert "118-hr-5" not in out
 
@@ -935,6 +936,25 @@ class TestSearchCommand:
         assert "119-hr-1" not in out  # filtered by --congress
         assert "118-s-1" not in out  # filtered by --type
 
+    def test_main_propagates_search_exit_code(self, tmp_path, monkeypatch):
+        # The CLI/agent-visible contract is the process exit code, which flows through
+        # main()'s sys.exit(cmd_search(...)) -- not just cmd_search's return. Lock it
+        # end-to-end so the wiring can't silently regress to always-0.
+        import fetch_bills
+
+        _write_search_corpus(tmp_path)
+        d = str(tmp_path)
+
+        monkeypatch.setattr("sys.argv", ["fetch_bills", "search", "justice", "science", "--billstatus-dir", d])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 0  # match found
+
+        monkeypatch.setattr("sys.argv", ["fetch_bills", "search", "zzz-nomatch", "--billstatus-dir", d])
+        with pytest.raises(SystemExit) as exc:
+            fetch_bills.main()
+        assert exc.value.code == 1  # searched, nothing matched
+
     def test_missing_index_message_distinct_from_no_match(self, tmp_path, capsys):
         # A fresh clone has no BILLSTATUS index; that must not read as "your query
         # matched nothing." Empty dir -> the build-the-index message.
@@ -942,8 +962,9 @@ class TestSearchCommand:
         with httpx.Client() as client:
             from fetch_bills import cmd_search
 
-            cmd_search(client, args, None)
+            rc = cmd_search(client, args, None)
         err = capsys.readouterr().err
+        assert rc == 2  # grep-style: can't search (no index)
         assert "No BILLSTATUS index found" in err
         assert "fetch_bill_archives" in err
 
@@ -955,7 +976,8 @@ class TestSearchCommand:
         with httpx.Client() as client:
             from fetch_bills import cmd_search
 
-            cmd_search(client, args, None)
+            rc = cmd_search(client, args, None)
         err = capsys.readouterr().err
+        assert rc == 1  # grep-style: searched, nothing matched
         assert "No bills matched" in err
         assert "No BILLSTATUS index found" not in err

@@ -308,27 +308,32 @@ def cmd_versions(client: httpx.Client, args: argparse.Namespace, api_key: str | 
     print()
 
 
-def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
+def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | None) -> int:
     """Find bills by title over the local BILLSTATUS index (#10 acceptance).
 
     Keyless: reads the BILLSTATUS ZIPs already on disk (downloaded by
     fetch_bill_archives.py); no network, no client use. ``--congress``/``--type``
     narrow the index; ``--appropriations`` applies the committee facet.
+
+    Returns a ``grep``-style exit code so CLI/agent callers can branch without
+    parsing stdout: ``0`` matches found, ``1`` searched but nothing matched, ``2``
+    no index to search (can't run). ``main`` propagates it via ``sys.exit``.
     """
     index = gi.build_title_index(args.billstatus_dir)
     # An empty index means no BILLSTATUS ZIPs were found (a real corpus yields
     # thousands of bills), which is a different problem from "your query matched
     # nothing" -- and the likely one on a fresh clone, where bills/ has no index
-    # yet. Say so distinctly so the user isn't told to check a download that a plain
-    # no-match would also blame. Note `bills/` is resolved relative to the current
-    # directory, so run from the project root (where fetch_bill_archives writes it).
+    # yet. Report it distinctly (exit 2, grep's "error" code) so the user/agent isn't
+    # told to check a download that a plain no-match would also blame. Note `bills/`
+    # is resolved relative to the current directory, so run from the project root
+    # (where fetch_bill_archives writes it).
     if not index:
         print(
             f"No BILLSTATUS index found in {args.billstatus_dir} -- build it first with "
             "fetch_bill_archives (run from the project root). See the README.",
             file=sys.stderr,
         )
-        return
+        return 2
     if args.congress is not None or args.bill_type is not None:
         index = {
             bid: entry
@@ -340,10 +345,13 @@ def cmd_search(client: httpx.Client, args: argparse.Namespace, api_key: str | No
     query = " ".join(args.query)
     matches = gi.search_titles(index, query, appropriations=args.appropriations)
     if not matches:
+        # grep's "no lines selected" code: a successful search that found nothing,
+        # distinct from the exit-2 "couldn't search" case above.
         print(f"No bills matched {query!r}.", file=sys.stderr)
-        return
+        return 1
     for bill_id, title in matches:
         print(f"{bill_id}\t{title}")
+    return 0
 
 
 def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
@@ -618,7 +626,7 @@ def main():
             elif args.command == "download-all":
                 cmd_download_all(client, args, api_key)
             elif args.command == "search":
-                cmd_search(client, args, api_key)
+                sys.exit(cmd_search(client, args, api_key))
     except gi.CongressNotAvailable as exc:
         # Actionable one-liner, no traceback: pre-113 under the default govinfo
         # source points the user at --source api (issue #10 trap 7).
