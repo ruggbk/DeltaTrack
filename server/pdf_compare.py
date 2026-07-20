@@ -27,6 +27,84 @@ from parsers.pdf_anchors import Anchor
 from parsers.pdf_text import Page, extract_clean_pages, pdf_full_text, pdf_full_text_print
 
 
+class UnsupportedLayoutError(ValueError):
+    """The document's layout can't be diffed accurately, so we decline it.
+
+    Raised instead of returning a confidently wrong answer. Callers map this to
+    a 4xx carrying `message` verbatim — it is written for the end user and
+    leaks no engine internals.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+# Enrolled prints (the final `*_enrolled-bill.pdf`) are typeset WITHOUT the GPO
+# left-margin line numbers. Every anchor path in `parsers.pdf_anchors` gates on
+# `line.line_number is not None`, so `extract_anchors` returns [] and the whole
+# bill collapses into one anchorless block. Nothing raises: the diff "succeeds"
+# and returns a confident wrong answer. Until a line-number-independent anchor
+# pass exists (#141), detect that layout up front and decline.
+#
+# The signal is the share of lines carrying a printed number. Swept over the 60
+# local corpus PDFs long enough to be judged (>= _MIN_LINES_FOR_GUARD), the two
+# populations are ~50x apart with nothing in between:
+#
+#   unnumbered  0.0016 - 0.0176   14 docs: all 12 enrolled bills, plus a
+#                                 public-law print and a committee report
+#   numbered    0.90   - 0.999    the other 46
+#
+# A handful of numbered lines is expected even in an unnumbered print: they are
+# body-prose lines whose first token happens to be a digit ("25 percent of such
+# amount…"), 14 of 3,808 in 115-hr-5895. So the test is a LOW RATIO, not zero.
+# 0.5 sits in the middle of the empty gap; no real print comes near it.
+_MIN_NUMBERED_RATIO = 0.5
+
+# Floor so the guard only judges documents big enough for the ratio to mean
+# something. Load-bearing, not defensive padding: short amendment prints in the
+# corpus run 0.18 - 0.43 numbered over 21-28 lines (margin numbers are simply
+# sparse at that size) and the ratio alone would decline them.
+#
+# Set to 50, not higher, because everything under the floor is EXEMPT and so
+# keeps the silent-wrong-answer behavior this guard exists to stop. The floor is
+# the miss window, so it should be as low as the data allows. Across the corpus:
+#
+#   floor  judged  declined  min ratio among accepted
+#     20     88      19 (5 false)   0.5517   <- declines real numbered prints
+#     29     83      14             0.5517   <- correct, but hugs the 0.5 line
+#     50     79      14             0.6607   <- same 14, comfortable margin
+#    200     60      14             0.9022   <- needlessly wide miss window
+#
+# There is a hard cliff at 28 -> 29 lines (0.4286 -> 0.5517). 50 clears it with
+# margin while declining the identical 14 documents.
+#
+# RESIDUAL: an unnumbered document under 50 lines (~1.5 pages) is still exempt
+# and will still diff to one anchorless block. Accepted deliberately — at that
+# size a single-block diff is close to the whole document anyway, so it misleads
+# far less than it would on a 400-page enrolled bill. Removing the exemption
+# entirely needs a signal that works on tiny documents (#261).
+_MIN_LINES_FOR_GUARD = 50
+
+# Describes the observation, not a guess at the document type: enrolled bills are
+# the common case a staffer will hit, but public-law and committee-report prints
+# are typeset the same way and this message has to stay true for them too.
+_DECLINE_MESSAGE = (
+    "This document has no printed line numbers, so DeltaTrack can't diff it accurately "
+    "yet — enrolled bills and public-law prints are typeset this way. Use the XML "
+    "version of the bill instead."
+)
+
+
+def _is_unnumbered_layout(pages: list[Page]) -> bool:
+    """True when a non-trivial document has essentially no printed line numbers."""
+    lines = [ln for page in pages for ln in page.lines]
+    if len(lines) < _MIN_LINES_FOR_GUARD:
+        return False
+    numbered = sum(1 for ln in lines if ln.line_number is not None)
+    return (numbered / len(lines)) < _MIN_NUMBERED_RATIO
+
+
 def _extract_and_diff(
     start_bytes: bytes,
     end_bytes: bytes,
@@ -34,6 +112,8 @@ def _extract_and_diff(
     """Parse both PDFs, diff them, return pages for downstream serializers.
 
     Temp files are deleted before return; callers work on in-memory Page lists.
+    Declines an unnumbered (enrolled) layout on either side before diffing, so
+    the refusal costs no diff work on a document we can't answer for.
     """
     with tempfile.TemporaryDirectory(prefix="deltatrack-") as tmp:
         start_path = Path(tmp) / "start.pdf"
@@ -43,6 +123,10 @@ def _extract_and_diff(
 
         old_pages = extract_clean_pages(start_path)
         new_pages = extract_clean_pages(end_path)
+
+    if _is_unnumbered_layout(old_pages) or _is_unnumbered_layout(new_pages):
+        raise UnsupportedLayoutError(_DECLINE_MESSAGE)
+
     return diff_pdfs(old_pages, new_pages), old_pages, new_pages
 
 

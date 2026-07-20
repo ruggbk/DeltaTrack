@@ -19,7 +19,7 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from server.pdf_compare import compare_pdfs, compare_pdfs_html
+from server.pdf_compare import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
 from server.xml_compare import compare_xml, compare_xml_html
 
 # The static front-end (webapp/) ships alongside this package and is served by
@@ -176,6 +176,12 @@ async def compare(
         raise HTTPException(status_code=504, detail="Diff timed out. Try smaller documents.")
     except HTTPException:
         raise
+    except UnsupportedLayoutError as exc:
+        # A layout the engine can detect but can't diff accurately (#141). Its
+        # message is written for the end user, so it is surfaced verbatim rather
+        # than folded into the generic wording below — declining explicitly is
+        # the point, and "invalid file" would misdescribe a perfectly valid one.
+        raise HTTPException(status_code=422, detail=exc.message)
     except Exception:
         # Never leak engine internals or filesystem paths to the caller.
         raise HTTPException(

@@ -114,6 +114,129 @@ def test_compare_pdf_bytes_rejected_when_format_xml():
     assert resp.status_code == 415
 
 
+# ---------- Enrolled-layout decline guard (#141) ---------------------------
+#
+# Enrolled prints carry no GPO margin line numbers, so every anchor path returns
+# nothing and the diff silently degrades to one giant block instead of raising.
+# The guard must decline; these tests pin both the refusal and the happy path.
+
+ENROLLED_PDF = ROOT / "bills" / "115-hr-5895" / "5_enrolled-bill.pdf"
+NUMBERED_PDF = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.pdf"
+
+
+def _line(n):
+    from parsers.pdf_text import Line
+
+    return Line(n, "text")
+
+
+def _pages(numbered: int, unnumbered: int, *, per_page: int = 50):
+    """One synthetic doc with the given mix of numbered/unnumbered lines."""
+    from parsers.pdf_text import Page
+
+    lines = [_line(i + 1) for i in range(numbered)] + [_line(None) for _ in range(unnumbered)]
+    return [
+        Page(p + 1, tuple(lines[p * per_page : (p + 1) * per_page]))
+        for p in range((len(lines) + per_page - 1) // per_page)
+    ]
+
+
+def test_unnumbered_layout_is_detected():
+    # Enrolled shape: 14 stray numbered lines out of 3,808 (115-hr-5895 v5).
+    from server.pdf_compare import _is_unnumbered_layout
+
+    assert _is_unnumbered_layout(_pages(14, 3794)) is True
+
+
+def test_numbered_layout_is_not_detected():
+    # Lowest ratio among real numbered prints in the corpus is ~0.90.
+    from server.pdf_compare import _is_unnumbered_layout
+
+    assert _is_unnumbered_layout(_pages(900, 100)) is False
+
+
+def test_short_document_is_not_declined():
+    # Short amendment prints in the corpus run 0.18-0.43 numbered over 21-28
+    # lines, so the ratio alone would decline them. The size floor is what keeps
+    # the guard from rejecting them; this pins that.
+    from server.pdf_compare import _is_unnumbered_layout
+
+    assert _is_unnumbered_layout(_pages(4, 18)) is False
+
+
+def test_miss_window_stays_narrow():
+    # Everything under the floor is EXEMPT, so the floor IS the window in which
+    # the silent wrong answer survives. A 4-page unnumbered slice of a real
+    # enrolled bill diffs to one anchorless block with a 200 OK, so raising this
+    # floor re-opens the bug the guard exists to close. Pinned so a future change
+    # to _MIN_LINES_FOR_GUARD has to be deliberate.
+    from server.pdf_compare import _MIN_LINES_FOR_GUARD, _is_unnumbered_layout
+
+    assert _MIN_LINES_FOR_GUARD <= 50
+    # An unnumbered document just above the floor must still be declined.
+    assert _is_unnumbered_layout(_pages(0, _MIN_LINES_FOR_GUARD)) is True
+
+
+@pytest.mark.slow
+def test_enrolled_pdf_is_declined_not_silently_diffed():
+    if not ENROLLED_PDF.exists():
+        pytest.skip("enrolled sample PDF not present (bills/115-hr-5895/)")
+
+    from server.pdf_compare import UnsupportedLayoutError, compare_pdfs
+
+    with pytest.raises(UnsupportedLayoutError):
+        compare_pdfs(ENROLLED_PDF.read_bytes(), ENROLLED_PDF.read_bytes())
+
+
+@pytest.mark.slow
+def test_enrolled_pdf_declined_when_only_one_side_is_enrolled():
+    # The real staffer gesture: diff a numbered version against the enrolled one.
+    if not ENROLLED_PDF.exists() or not NUMBERED_PDF.exists():
+        pytest.skip("sample PDFs not present")
+
+    from server.pdf_compare import UnsupportedLayoutError, compare_pdfs
+
+    with pytest.raises(UnsupportedLayoutError):
+        compare_pdfs(NUMBERED_PDF.read_bytes(), ENROLLED_PDF.read_bytes())
+
+
+@pytest.mark.slow
+def test_enrolled_upload_returns_specific_message_not_generic_422():
+    if not ENROLLED_PDF.exists():
+        pytest.skip("enrolled sample PDF not present (bills/115-hr-5895/)")
+
+    pdf = ENROLLED_PDF.read_bytes()
+    resp = _client().post(
+        "/api/compare",
+        files={
+            "start_file": ("start.pdf", pdf, "application/pdf"),
+            "end_file": ("end.pdf", pdf, "application/pdf"),
+        },
+    )
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "enrolled" in detail.lower()
+    assert "XML" in detail
+    # Must not fall through to the catch-all's generic wording.
+    assert "Are both valid bill-text" not in detail
+
+
+@pytest.mark.slow
+def test_numbered_pdfs_still_diff_after_guard():
+    # The guard must not fire on the happy path.
+    if not NUMBERED_PDF.exists():
+        pytest.skip("sample PDF not present (bills/118-hr-8752/)")
+
+    end = ROOT / "bills" / "118-hr-8752" / "2_engrossed-in-house.pdf"
+    if not end.exists():
+        pytest.skip("sample PDF not present (bills/118-hr-8752/)")
+
+    from server.pdf_compare import compare_pdfs
+
+    canonical = compare_pdfs(NUMBERED_PDF.read_bytes(), end.read_bytes())
+    assert canonical["changes"]
+
+
 # ---------- Slow end-to-end engine test ------------------------------------
 
 
