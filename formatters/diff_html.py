@@ -965,7 +965,7 @@ def _export_button_html(canonical: dict | None) -> str:
     pipeline that supplies it — XML and PDF alike, not PDF-only."""
     if not _has_full_bill(canonical):
         return ""
-    return '<button id="export-open" class="export-btn" type="button">Export and Share</button>'
+    return '<button id="export-open" class="export-btn" type="button">Export and share</button>'
 
 
 def _nav_controls_html(canonical: dict | None) -> str:
