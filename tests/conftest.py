@@ -60,6 +60,14 @@ def manifest_pdf_files() -> list[Path]:
     return _manifest_paths("pdf")
 
 
+def _stage_num(path: Path) -> int:
+    """Leading integer of a version filename (``4_engrossed-... -> 4``). Adjacency for
+    the diff pairs must sort NUMERICALLY, not lexicographically: a string sort puts
+    ``10_`` before ``2_`` and would silently mis-pair a 10+-stage bill. No corpus bill
+    reaches stage 10 today, so this is a latent guard, not a live fix."""
+    return int(path.name.split("_", 1)[0])
+
+
 def manifest_version_pairs() -> list[tuple[Path, Path]]:
     """Adjacent committed-XML version pairs within each bill, for the diff smoke.
     Under CORPUS_SWEEP, every adjacent pair across all locally-fetched bills."""
@@ -69,12 +77,13 @@ def manifest_version_pairs() -> list[tuple[Path, Path]]:
             if bill_dir.is_dir():
                 # Scope to the version-file naming (matches manifest_xml_files) so a stray
                 # non-bill XML (e.g. govinfo BILLSTATUS metadata) can't enter the diff pairs.
-                versions = sorted(bill_dir.glob("[0-9]*_*.xml"))
+                versions = sorted(bill_dir.glob("[0-9]*_*.xml"), key=_stage_num)
                 pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
         return pairs
     for bill in _manifest_bills():
         versions = sorted(
-            BILLS_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]
+            (BILLS_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]),
+            key=_stage_num,
         )
         pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
     return pairs
@@ -110,30 +119,13 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
     assert len(collected) > 0, f"{kind}: gate parametrized over zero cases despite a complete manifest."
 
 
-# --- REQUIRE_CORPUS: what is left of it (#167, narrowed by #220) ---------------
-# REQUIRE_CORPUS predates the committed manifest. It is no longer a corpus-gate
-# mechanism at all: #220 moved the last three modules that used it
-# (test_node_join_corpus, test_xml_subsection_nodes, test_pdf_subsection_recall) onto
-# the committed manifest and the fail-closed assert_manifest_committed floor, and
-# deleted require_corpus_or_skip / REQUIRED_CORPUS_BILLS / missing_required_corpus
-# with them. Every gate that parametrizes over corpus fixtures now fails closed with
-# no env var, on every machine and in CI.
-#
-# Two consumers remain, and neither is about the committed manifest — which is why
-# the flag survives rather than being deleted outright:
-#
-#   test_govinfo_corpus_parity  — a LIVE-NETWORK gate (a BILLSTATUS fetch per bill).
-#       It cannot run in CI or offline, so it needs an opt-in by nature, not because
-#       of how fixtures are stored. It is also the only check on the documented
-#       corpus-setup path in the README staying in step with the code (#271), so
-#       deleting it silently would remove a real guard.
-#   test_validate_extraction    — a completeness floor over FETCHED bills that are
-#       deliberately not in the committed manifest (the Legislative Branch
-#       spreadsheet validation set).
-#
-# So read REQUIRE_CORPUS=1 now as "I have a fully fetched corpus and a network:
-# enforce the things that need one", not as "make the corpus gates strict".
-# Renaming it to say that is deferred rather than bundled into #220.
+# --- REQUIRE_CORPUS: narrowed by #220 ------------------------------------------
+# No longer a corpus-gate mechanism: #220 put every corpus gate on the committed
+# manifest, so they fail closed with no env var. Two non-manifest consumers keep the
+# flag alive: test_govinfo_corpus_parity (a live-network gate) and
+# test_validate_extraction's fetched-bill floor. Read it now as "I have a fetched
+# corpus and a network", not "make the corpus gates strict". Full rationale, and the
+# retirement plan, are in ADR 0015 (its #220 amendment) and issue #278.
 REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
 
 # Paths to commonly used bill versions (118-hr-4366).

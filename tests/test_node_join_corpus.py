@@ -55,14 +55,6 @@ def _xml_paths(bill: str, v1: str, v2: str) -> tuple[Path, Path]:
     return BILLS / bill / f"{v1}.xml", BILLS / bill / f"{v2}.xml"
 
 
-def _available(pairs, suffix: str) -> list:
-    """Historical name, kept for call-site readability: every pinned pair is now a
-    committed manifest fixture, so this is the identity. It is no longer an existence
-    filter -- that filter was the #167 fail-open (a missing fetch silently emptied the
-    parametrization). A missing fixture now fails the manifest floor below instead."""
-    return list(pairs)
-
-
 @lru_cache(maxsize=None)
 def _xml_view(bill: str, v1: str, v2: str):
     a, b = _xml_paths(bill, v1, v2)
@@ -83,13 +75,13 @@ def test_manifest_fixtures_committed():
     """Fail-closed floor (#220, ADR 0015). Every pair below is a committed manifest
     fixture, so this always collects and runs with no env var: a fixture that was not
     committed fails here instead of silently emptying the parametrization (#167)."""
-    assert_manifest_committed(_available(XML_PAIRS, ".xml"), "node-join")
+    assert_manifest_committed(XML_PAIRS, "node-join")
 
 
 # ---------- XML: join agrees with the structural path ---------------------------
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available(XML_PAIRS, ".xml"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), XML_PAIRS)
 def test_xml_join_matches_structural_path(bill, v1, v2):
     canonical, view = _xml_view(bill, v1, v2)
     checked = mismatched = 0
@@ -116,7 +108,7 @@ def test_xml_join_matches_structural_path(bill, v1, v2):
     assert mismatched == 0, f"join disagrees with structural path: {examples}"
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available([XML_PAIRS[1]], ".xml"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), [XML_PAIRS[1]])
 def test_xml_front_matter_changes_file_under_children_not_the_hull(bill, v1, v2):
     # 113-hr-3547 4->5 changes its leading sections. Their positions sit inside
     # BOTH the Front Matter hull span and its children's own spans, and the
@@ -132,7 +124,7 @@ def test_xml_front_matter_changes_file_under_children_not_the_hull(bill, v1, v2)
     assert {"Short title", "Table of contents"} <= fm_leaves, fm_leaves
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available([XML_PAIRS[2]], ".xml"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), [XML_PAIRS[2]])
 def test_xml_removed_changes_place_into_v2_groups(bill, v1, v2):
     # 114-hr-2029 5->6 removes whole sections. Every removal with a v1 span
     # must file somewhere (v2 remap or v1-derived group), never drop to
@@ -148,7 +140,7 @@ def test_xml_removed_changes_place_into_v2_groups(bill, v1, v2):
     assert not unplaced, f"{len(unplaced)} removals unplaced: {unplaced[:3]}"
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available([XML_PAIRS[0]], ".xml"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), [XML_PAIRS[0]])
 def test_xml_rendered_report_neither_drops_nor_duplicates_cards(bill, v1, v2):
     canonical, view = _xml_view(bill, v1, v2)
     html = format_diff_html(view, canonical=canonical)
@@ -169,10 +161,10 @@ def test_pdf_manifest_fixtures_committed():
     # Companion to test_manifest_fixtures_committed (XML). Each PDF pair below
     # parametrizes a separate test; without this floor a missing PDF would drop that
     # test to zero cases and read green (#167 fail-open).
-    assert_manifest_committed(_available(_ALL_PDF_PAIRS, ".pdf"), "node-join-pdf")
+    assert_manifest_committed(_ALL_PDF_PAIRS, "node-join-pdf")
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available(PDF_AGREEMENT_PAIR, ".pdf"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), PDF_AGREEMENT_PAIR)
 def test_pdf_join_consistent_with_anchor_breadcrumb(bill, v1, v2):
     # Change spans and anchor blocks derive from the same line-offset table,
     # so every placed change's joined ancestry must contain its structural
@@ -193,7 +185,7 @@ def test_pdf_join_consistent_with_anchor_breadcrumb(bill, v1, v2):
     assert disagreed == 0
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available(PDF_SECTION_ONLY_PAIR, ".pdf"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), PDF_SECTION_ONLY_PAIR)
 def test_pdf_without_account_level_lands_at_section_level(bill, v1, v2):
     # ADR 0012: early/simple PDFs surface no agency/account anchors. The join
     # landing at SECTION level is the correct degraded outcome, not a failure.
@@ -222,7 +214,7 @@ def test_pdf_without_account_level_lands_at_section_level(bill, v1, v2):
     assert {cv.node_path[-1][1] for cv in placed} == {"section"}
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available(PDF_NULL_SPAN_PAIR, ".pdf"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), PDF_NULL_SPAN_PAIR)
 def test_pdf_null_span_changes_degrade_to_group_label(bill, v1, v2):
     # Small early versions resolve no usable v2 offsets for their changes:
     # node_path stays empty and the card keeps its group_label — degrade,
@@ -245,7 +237,7 @@ def test_pdf_null_span_changes_degrade_to_group_label(bill, v1, v2):
 OMNIBUS_PAIR = [("114-hr-2029", "5_engrossed-amendment-senate", "6_engrossed-amendment-house")]
 
 
-@pytest.mark.parametrize(("bill", "v1", "v2"), _available(OMNIBUS_PAIR, ".xml"))
+@pytest.mark.parametrize(("bill", "v1", "v2"), OMNIBUS_PAIR)
 def test_join_at_omnibus_scale_stays_fast(bill, v1, v2):
     # ~2.2k changes x ~2.4k tree nodes. The index is built once per side and
     # each lookup is O(log N); an accidental O(changes x nodes) regression

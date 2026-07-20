@@ -150,11 +150,39 @@ describes a partial rollout.
 - **`REQUIRED_CORPUS_BILLS` is gone**, along with `require_corpus_or_skip`. The body
   calls it "the embryonic version of this manifest"; the manifest has now fully
   replaced it.
+- **No hand-calibrated baseline needed editing, but three inert ones came alive.**
+  `_XML_DROP_BUDGET` and `_KNOWN_DUPLICATE_COUNTS` already carried entries for
+  `113-hr-3547/5`, `114-hr-2029/5` and `114-hr-2029/6` — dead keys, because those files
+  were not manifested and so were never collected. Manifesting the files makes those
+  three calibrations *live*, and they pass at their existing pinned values. So the gates
+  went from 166 passed / 2 skipped to 208 passed / 4 skipped with no threshold change,
+  and three budgets that documented an expectation now actually enforce it.
 - **The `REQUIRE_CORPUS` env var is not fully subsumed.** The body predicted it would
   be, and for every corpus gate it is. Two non-manifest consumers keep it: the
   live-network `test_govinfo_corpus_parity` (which cannot run in CI at all, and is the
   only check that the documented setup path still matches the code — see
   [#271](https://github.com/AgoraDMV/DeltaTrack/issues/271)) and the fetched Legislative
   Branch validation floor in `test_validate_extraction`. The flag now means "I have a
-  fetched corpus and a network", not "make the corpus gates strict". Renaming it to say
-  so was deliberately not bundled into #220.
+  fetched corpus and a network", not "make the corpus gates strict". Fully retiring it
+  (commit the five Legislative Branch bills the floor needs, ~4 MB compressed, and give
+  the live gate a `network` marker) is filed as
+  [#278](https://github.com/AgoraDMV/DeltaTrack/issues/278).
+
+### A size bar for future additions
+
+Committing fixtures trades repository weight for CI coverage, and git keeps blobs in
+history permanently — a fixture added is a fixture the clone carries forever, even if
+later removed. To keep [#126](https://github.com/AgoraDMV/DeltaTrack/issues/126)
+curation from growing the pack by precedent, a fixture addition should:
+
+- **Prefer XML over PDF** wherever the gate under test accepts either. XML compresses
+  ~4.5x; the PDFs here are near-incompressible and dominate the on-disk cost.
+- **Carry a stated reason in the PR** for anything above ~1 MB compressed per bill, and
+  name the specific gate that needs *that* document (not a smaller or synthetic stand-in).
+  The 113-hr-3547 4->5 pair clears this bar because diffing a 2.6 KB shell against a
+  3 MB omnibus is the property under test; a second omnibus "for coverage" would not.
+- **Prefer a single stage** over a whole version history unless adjacent-version diffing
+  is the thing being gated.
+
+This is a guideline for reviewers, not a hard cap; the point is that each addition is a
+deliberate, justified choice rather than a default.
