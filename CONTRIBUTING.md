@@ -193,6 +193,39 @@ For bug reports, include:
 
 That's enough. The team fleshes out the rest when grooming the issue for pickup.
 
+### Filing from the command line
+
+`gh issue create --body-file` and `--body` **bypass the templates above entirely**,
+along with the `type:` they set. Templates apply only in the web UI or when you
+pass `--template <file>`. So an issue filed from the CLI silently matches none of
+the repo's structure and carries no issue type.
+
+If you file from the CLI (or have an AI assistant do it), read the template file
+in `.github/ISSUE_TEMPLATE/` and fill its sections yourself, then set the type
+explicitly with `--type Bug` / `--type Feature` / `--type Task`.
+
+For a defect you found from inside the codebase, or anything you've already
+analyzed, use the fill-in skeleton in
+**[docs/issue-analysis-template.md](docs/issue-analysis-template.md)**. It covers
+what's wrong / how it surfaced / why it matters / what to do, plus the evidence
+rules, and trims down for tasks and features.
+
+### Writing an issue others can read
+
+Whatever you file and however you file it, two habits do most of the work. Both
+are about the reader who wasn't there when you found the problem:
+
+- **Open with the observable problem, not the artifact that surfaced it.** State
+  what's wrong before naming a file, test, or function. Someone without the repo
+  open should finish your first sentence knowing what's broken and why it matters.
+- **Make cross-references self-describing.** `#141 (enrolled PDFs yield no anchors)`,
+  not a bare `#141`. If a sentence stops making sense when you delete the number,
+  the number was doing the explaining. Same for decision records and for jargon:
+  define project terms inline the first time you use them.
+
+[docs/issue-analysis-template.md](docs/issue-analysis-template.md) has the full
+shape and the reasoning behind it.
+
 ## Grooming an issue for pickup
 
 Reporting and picking-up are two different jobs. Filing should be low-friction;
