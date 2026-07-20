@@ -154,9 +154,10 @@ describes a partial rollout.
   `_XML_DROP_BUDGET` and `_KNOWN_DUPLICATE_COUNTS` already carried entries for
   `113-hr-3547/5`, `114-hr-2029/5` and `114-hr-2029/6` — dead keys, because those files
   were not manifested and so were never collected. Manifesting the files makes those
-  three calibrations *live*, and they pass at their existing pinned values. So the gates
-  went from 166 passed / 2 skipped to 208 passed / 4 skipped with no threshold change,
-  and three budgets that documented an expectation now actually enforce it.
+  three calibrations *live*, and they pass at their existing pinned values. The gates
+  collect more cases (the added fixtures) and skip two more (113-hr-3547 v4, a shell
+  amendment with no dollar amounts) with no threshold change, and three budgets that
+  documented an expectation now actually enforce it.
 - **The `REQUIRE_CORPUS` env var is not fully subsumed.** The body predicted it would
   be, and for every corpus gate it is. Two non-manifest consumers keep it: the
   live-network `test_govinfo_corpus_parity` (which cannot run in CI at all, and is the

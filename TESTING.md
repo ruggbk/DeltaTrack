@@ -225,15 +225,15 @@ uv run pytest tests/test_pdf_xml_amount_recall.py  # PDF reading vs official tex
 uv run pytest tests/test_pdf_corpus_smoke.py     # PDF comparison soundness across every bill (slow)
 ```
 
-A few slow suites still read bills beyond the committed set -- the PDF recall
-suites (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the
-live-network `test_govinfo_corpus_parity` -- exercise larger fetched bills, and skip
-automatically when those bills are absent (or fail loudly under `REQUIRE_CORPUS=1`).
 The provision-matching corpus modules no longer need a download: #220 committed their
-fixtures, so they run everywhere. To run them, download the bill files first (see the
-Testing section of the [README](README.md#testing)). The PDF suites need each
-bill's PDF as well as its XML; pass `--format both` to `fetch_bills.py download`
-to fetch both at once, e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.
+fixtures, so they run everywhere. A few other slow suites still read bills beyond the
+committed set -- the PDF recall suites (`test_pdf_*`), the Legislative Branch
+spreadsheet validation, and the live-network `test_govinfo_corpus_parity` -- exercise
+larger fetched bills, and skip automatically when those bills are absent (or fail loudly
+under `REQUIRE_CORPUS=1`). To run those, download the bill files first (see the Testing
+section of the [README](README.md#testing)). The PDF suites need each bill's PDF as well
+as its XML; pass `--format both` to `fetch_bills.py download` to fetch both at once,
+e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.
 
 Some of those suites read files sourced directly from govinfo rather than the
 bill API (for example, the reported-in-Senate watermarked PDF of S.4795 that
