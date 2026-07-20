@@ -67,6 +67,56 @@ def test_no_redirect_without_forwarded_proto():
     assert resp.status_code == 200
 
 
+def test_security_headers_on_served_page():
+    """Every response carries the baseline security headers (#64).
+
+    `nosniff` stops a browser second-guessing a declared Content-Type, and
+    `DENY` stops the site being framed. Nothing here is served for framing:
+    the sample report and generated reports both open in a new tab
+    (webapp/index.html, webapp/js/compare.js), so DENY costs nothing.
+    """
+    resp = _client().get("/", follow_redirects=False)
+    assert resp.status_code == 200
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+
+def test_security_headers_on_rejected_upload():
+    """The headers wrap the API too, not just the static mount.
+
+    A rejection is the response most likely to render attacker-influenced
+    content, so it is the one that most needs `nosniff`.
+    """
+    resp = _client().post(
+        "/api/compare",
+        files={
+            "start_file": ("a.pdf", b"not a pdf at all", "application/pdf"),
+            "end_file": ("b.pdf", b"%PDF-1.4 whatever", "application/pdf"),
+        },
+    )
+    assert resp.status_code == 415
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+
+def test_security_headers_survive_the_https_redirect():
+    """The headers reach a response that short-circuits the chain (#64).
+
+    The https redirect returns without calling the rest of the stack, so it
+    only carries these headers if the header middleware wraps the redirect
+    one. That depends on registration order, which is easy to change without
+    noticing; this pins it.
+    """
+    resp = _client().get(
+        "/",
+        headers={"X-Forwarded-Proto": "http", "Host": "deltatrack.agoradmv.org"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 301
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+
 def test_compare_rejects_non_pdf():
     # start_file lacks the %PDF magic → 415 before any diffing happens.
     resp = _client().post(
