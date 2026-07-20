@@ -1633,6 +1633,34 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.key === 'ArrowRight') { goTo(current + 1); }
     else if (e.key === 'ArrowLeft') { goTo(current - 1); }
   });
+  // Explicit navigation to a card moves the position to that card, so the next
+  // arrow step continues from what the reader is looking at rather than from
+  // wherever the arrows last were (#185). indexOf runs against navTargets(),
+  // which is view- and filter-dependent and recomputed on every call, so the
+  // index is always against the currently visible set.
+  function syncCurrentTo(el) {
+    if (!el) return;
+    var idx = navTargets().indexOf(el);
+    if (idx < 0) return;  // filtered out or not a nav target: leave position alone
+    current = idx;
+    refreshNav();
+  }
+  // Delegated so it covers all three entry points at once: sidebar nav links,
+  // financial-table row links, and a click on the card itself (which is what
+  // makes the scroll-and-read flow work). The sidebar's own handler above runs
+  // first (it is bound on the anchor), so the view is already switched and the
+  // group already revealed by the time this resolves the index.
+  document.addEventListener('click', function(e) {
+    if (!e.target || !e.target.closest) return;
+    var link = e.target.closest('a[href^="#change-"]');
+    if (link) {
+      var card = document.getElementById(link.getAttribute('href').slice(1));
+      revealCard(card);
+      syncCurrentTo(card);
+      return;
+    }
+    syncCurrentTo(e.target.closest('.change-card'));
+  });
   // Recompute targets (and reset position) when the view or filter changes.
   function resetNav() { current = -1; refreshNav(); }
   toggleBtns.forEach(function(b) { b.addEventListener('click', resetNav); });

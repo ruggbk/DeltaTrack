@@ -292,6 +292,64 @@ def test_prev_next_steps_into_nested_groups_and_reveals_collapsed(chromium, tmp_
     page.close()
 
 
+def test_counter_follows_explicit_card_navigation(chromium, tmp_path):
+    """Jumping to a card by any explicit gesture sets the prev/next position to
+    that card, so the next arrow step continues from what the reader is looking
+    at rather than from wherever the arrows last were (#185).
+
+    Three entry points: sidebar nav links, Financial Summary row links, and a
+    click on the card itself (which is what makes the scroll-and-read flow
+    work). The index is taken against the currently visible targets, so it has
+    to stay correct with the type filter active. Browser-level because the
+    contract is the runtime index lookup, which string assertions can't prove.
+    """
+    report = tmp_path / "grouped_sync.html"
+    report.write_text(_render_grouped_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")
+
+    counter = page.locator("#nav-counter")
+    assert counter.inner_text() == "0 / 3"
+
+    # Sidebar nav groups are collapsed by default; expand down to the link.
+    page.locator(".sidebar .nav-group > summary").first.click()
+    page.locator(".sidebar .nav-group .nav-group > summary").first.click()
+
+    # 1. Sidebar link into a nested group: counter lands on that card, and the
+    # next arrow step continues from it (pre-#185 this read "0 / 3" then "1 / 3").
+    page.locator('.sidebar a[href="#change-1"]').click()
+    assert counter.inner_text() == "2 / 3"
+    page.locator("#btn-next").click()
+    assert counter.inner_text() == "3 / 3"
+
+    # 2. Financial Summary row link (only change-0 carries amounts).
+    page.locator('.financial-table a[href="#change-0"]').first.click()
+    assert counter.inner_text() == "1 / 3"
+
+    # 3. A click on the card body itself, then keyboard stepping from there.
+    page.locator("#change-1").click(position={"x": 5, "y": 5})
+    assert counter.inner_text() == "2 / 3"
+    page.keyboard.press("ArrowRight")
+    assert counter.inner_text() == "3 / 3"
+
+    # The index is against the *visible* targets: with the financial filter on,
+    # change-0 is the only target, so jumping to it is 1 / 1, not 1 / 3.
+    page.locator('input[name="change-filter"][value="financial"]').check()
+    assert counter.inner_text() == "0 / 1"
+    page.locator('.financial-table a[href="#change-0"]').first.click()
+    assert counter.inner_text() == "1 / 1"
+
+    # A jump into a collapsed group still resolves to the right index: the card
+    # is revealed first, so it is a visible target when indexOf runs.
+    page.locator('input[name="change-filter"][value="all"]').check()
+    salaries = page.locator(".card-group .card-group").first
+    salaries.evaluate("el => el.open = false")
+    page.locator('.sidebar a[href="#change-1"]').click()
+    assert salaries.evaluate("el => el.open") is True
+    assert counter.inner_text() == "2 / 3"
+    page.close()
+
+
 def test_sample_report_opens_in_new_tab(live_url, chromium):
     """Clicking "View a sample report" opens the report in a new tab (#41).
 
