@@ -204,23 +204,27 @@ If you file from the CLI (or have an AI assistant do it), read the template file
 in `.github/ISSUE_TEMPLATE/` and fill its sections yourself, then set the type
 explicitly with `--type Bug` / `--type Feature` / `--type Task`.
 
+For a defect you found from inside the codebase, or anything you've already
+analyzed, use the fill-in skeleton in
+**[docs/issue-analysis-template.md](docs/issue-analysis-template.md)**. It covers
+what's wrong / how it surfaced / why it matters / what to do, plus the evidence
+rules, and trims down for tasks and features.
+
 ### Writing an issue others can read
 
-Most of what lands here is the team reporting a defect it found in the codebase,
-often with analysis attached. Those are the issues most likely to become
-unreadable to everyone who wasn't in the investigation. Two habits fix most of it:
+Whatever you file and however you file it, two habits do most of the work. Both
+are about the reader who wasn't there when you found the problem:
 
 - **Open with the observable problem, not the artifact that surfaced it.** State
   what's wrong before naming a file, test, or function. Someone without the repo
   open should finish your first sentence knowing what's broken and why it matters.
 - **Make cross-references self-describing.** `#141 (enrolled PDFs yield no anchors)`,
   not a bare `#141`. If a sentence stops making sense when you delete the number,
-  the number was doing the explaining. Same for decision records and jargon: define
-  project terms inline the first time you use them.
+  the number was doing the explaining. Same for decision records and for jargon:
+  define project terms inline the first time you use them.
 
-Keeping *what's wrong*, *how it surfaced*, *why it matters*, and *what to do* as
-separate thoughts is most of the rest. Fusing the first two is what makes an issue
-read as lab notes.
+[docs/issue-analysis-template.md](docs/issue-analysis-template.md) has the full
+shape and the reasoning behind it.
 
 ## Grooming an issue for pickup
 
