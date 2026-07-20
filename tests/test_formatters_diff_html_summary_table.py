@@ -126,6 +126,34 @@ def test_zero_old_amount_yields_em_dash_percent():
     assert "—" in html
 
 
+def test_removed_entry_row_is_negative_and_decrease():
+    """#86 whole-item removal: money leaving the bill must read as -$X on a
+    decrease row, never as a positive change.
+
+    Only `amount_entries` reaches the added/removed branches — `amount_pairs`
+    maps to kind="changed" — so these two branches carried no coverage at all
+    while the changed-kind rows were well tested. Cells are asserted whole
+    because a substring check cannot see text added around the value.
+    """
+    html = _build_financial_summary(_view([_change(amount_entries=((500000, None, "removed"),))]))
+    assert '<tr class="decrease"' in html
+    assert '<td class="amount">$500,000</td>' in html  # old
+    assert '<td class="amount">—</td>' in html  # new: gone
+    assert '<td class="amount change-amount">-$500,000</td>' in html
+    assert '<td class="amount change-amount">-100.0%</td>' in html
+
+
+def test_added_entry_row_is_positive_with_no_percent_baseline():
+    """#86 whole-item addition: +$X on an increase row, and an em-dash percent
+    because there is no old amount to compute a change against."""
+    html = _build_financial_summary(_view([_change(amount_entries=((None, 500000, "added"),))]))
+    assert '<tr class="increase"' in html
+    assert '<td class="amount">—</td>' in html  # old: absent
+    assert '<td class="amount">$500,000</td>' in html  # new
+    assert '<td class="amount change-amount">+$500,000</td>' in html
+    assert '<td class="amount change-amount">—</td>' in html
+
+
 def test_increase_decrease_css_class_on_row():
     html = _build_financial_summary(
         _view(
