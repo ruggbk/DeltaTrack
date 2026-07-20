@@ -177,9 +177,11 @@ goes red rather than silently collecting fewer cases. That is what CI relies on.
 It replaces the old opt-in `REQUIRE_CORPUS=1` mode *for these three gates*, which
 existed only because they used to parametrize over a fetched glob that was empty --
 and so green, asserting nothing -- on a clean checkout (the fail-open pattern).
-(`REQUIRE_CORPUS=1` still guards a few corpus modules not yet on the manifest --
-`test_node_join_corpus`, `test_xml_subsection_nodes`, `test_pdf_subsection_recall` --
-which read larger fetched bills; see AGENTS.md.)
+(#220 brought the last three modules -- `test_node_join_corpus`,
+`test_xml_subsection_nodes`, `test_pdf_subsection_recall` -- onto the same manifest
+and the same fail-closed floor, and deleted `require_corpus_or_skip` /
+`REQUIRED_CORPUS_BILLS` with them. `REQUIRE_CORPUS=1` now gates only what needs a
+network or the fetched non-manifest set; see AGENTS.md.)
 
 To sweep every bill you have fetched locally -- broader than the committed set,
 and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`.
@@ -225,10 +227,10 @@ uv run pytest tests/test_pdf_corpus_smoke.py     # PDF comparison soundness acro
 
 A few slow suites still read bills beyond the committed set -- the PDF recall
 suites (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the
-provision-matching corpus modules (`test_node_join_corpus`,
-`test_xml_subsection_nodes`, `test_pdf_subsection_recall`) exercise larger
-fetched bills, and skip automatically when those bills are absent (or fail loudly
-under `REQUIRE_CORPUS=1`). To run them, download the bill files first (see the
+live-network `test_govinfo_corpus_parity` -- exercise larger fetched bills, and skip
+automatically when those bills are absent (or fail loudly under `REQUIRE_CORPUS=1`).
+The provision-matching corpus modules no longer need a download: #220 committed their
+fixtures, so they run everywhere. To run them, download the bill files first (see the
 Testing section of the [README](README.md#testing)). The PDF suites need each
 bill's PDF as well as its XML; pass `--format both` to `fetch_bills.py download`
 to fetch both at once, e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.

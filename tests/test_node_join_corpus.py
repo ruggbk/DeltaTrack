@@ -16,9 +16,11 @@ deepest-wins live (a naive bisect files these under "Front Matter" itself).
 PDF ground truth: the anchor breadcrumb (``path``), resolved structurally from
 the same anchor stream that builds the tree.
 
-``bills/`` is gitignored (fetched via ``fetch_bills.py``), so every case skips
-cleanly on a clean clone; ``test_corpus_present_when_required`` fails loud in
-REQUIRE_CORPUS mode instead (#167).
+Every fixture these gates pin is committed to git and named in
+``tests/corpus_manifest.toml`` (#220), so they collect the same cases on every
+machine and in CI. ``test_manifest_fixtures_committed`` fails closed if one is
+absent, replacing the old REQUIRE_CORPUS env-var opt-in under which these gates
+collected zero cases and passed green on an unfetched checkout (#167).
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from formatters.canonical import view_from_canonical
 from formatters.diff_html import format_diff_html
 from server.pdf_compare import _build_canonical
 from server.xml_compare import compare_xml
-from tests.conftest import require_corpus_or_skip
+from tests.conftest import assert_manifest_committed
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow
@@ -54,12 +56,11 @@ def _xml_paths(bill: str, v1: str, v2: str) -> tuple[Path, Path]:
 
 
 def _available(pairs, suffix: str) -> list:
-    out = []
-    for bill, v1, v2 in pairs:
-        a, b = BILLS / bill / f"{v1}{suffix}", BILLS / bill / f"{v2}{suffix}"
-        if a.exists() and b.exists():
-            out.append((bill, v1, v2))
-    return out
+    """Historical name, kept for call-site readability: every pinned pair is now a
+    committed manifest fixture, so this is the identity. It is no longer an existence
+    filter -- that filter was the #167 fail-open (a missing fetch silently emptied the
+    parametrization). A missing fixture now fails the manifest floor below instead."""
+    return list(pairs)
 
 
 @lru_cache(maxsize=None)
@@ -78,8 +79,11 @@ def _pdf_view(bill: str, v1: str, v2: str):
     return canonical, view_from_canonical(canonical)
 
 
-def test_corpus_present_when_required():
-    require_corpus_or_skip(_available(XML_PAIRS, ".xml"), "node-join")
+def test_manifest_fixtures_committed():
+    """Fail-closed floor (#220, ADR 0015). Every pair below is a committed manifest
+    fixture, so this always collects and runs with no env var: a fixture that was not
+    committed fails here instead of silently emptying the parametrization (#167)."""
+    assert_manifest_committed(_available(XML_PAIRS, ".xml"), "node-join")
 
 
 # ---------- XML: join agrees with the structural path ---------------------------
@@ -161,12 +165,11 @@ PDF_NULL_SPAN_PAIR = [("113-hr-3547", "1_introduced-in-house", "2_engrossed-in-h
 _ALL_PDF_PAIRS = PDF_AGREEMENT_PAIR + PDF_SECTION_ONLY_PAIR + PDF_NULL_SPAN_PAIR
 
 
-def test_pdf_corpus_present_when_required():
-    # Companion to test_corpus_present_when_required (XML). Each PDF pair below
+def test_pdf_manifest_fixtures_committed():
+    # Companion to test_manifest_fixtures_committed (XML). Each PDF pair below
     # parametrizes a separate test; without this floor a missing PDF would drop that
-    # test to zero cases and read green (#167 fail-open). require_corpus_or_skip pairs
-    # the >0-discovered check with the per-file REQUIRED_CORPUS_BILLS presence assert.
-    require_corpus_or_skip(_available(_ALL_PDF_PAIRS, ".pdf"), "node-join-pdf")
+    # test to zero cases and read green (#167 fail-open).
+    assert_manifest_committed(_available(_ALL_PDF_PAIRS, ".pdf"), "node-join-pdf")
 
 
 @pytest.mark.parametrize(("bill", "v1", "v2"), _available(PDF_AGREEMENT_PAIR, ".pdf"))

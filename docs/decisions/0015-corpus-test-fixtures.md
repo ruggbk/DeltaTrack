@@ -129,3 +129,32 @@ Alternatives considered:
   (manifest-driven collection and the CI completeness floor) and
   [#126](https://github.com/AgoraDMV/DeltaTrack/issues/126) (curating which bills);
   this record is the *why*, not the build status.
+
+## Amendment (#220, 2026-07-20)
+
+The decision above is unchanged; this records how far it now reaches, since the body
+describes a partial rollout.
+
+- **All corpus gates are now manifest-collected**, not just the three named in #217.
+  `test_node_join_corpus`, `test_xml_subsection_nodes` and `test_pdf_subsection_recall`
+  were left on the fetched-glob model because they pinned larger uncommitted bills;
+  their fixtures are now committed and manifested, and they carry the same fail-closed
+  floor. Measured before the change on a clean checkout, those three collected 19 cases
+  and finished in 0.15s (7 trivial passes, 12 skips, no document parsed); after, 32
+  cases in 16.7s.
+- **The predicted cost was high.** The body targets "on the order of tens of MB". The
+  committed set after this change adds 13 files: 11.9 MB on disk, roughly 5.2 MB
+  compressed, against a repository pack of about 7 MB. #220's own estimate for the
+  first twelve (20-25 MB) was high by about 2.5x, because bill XML compresses ~4.5x
+  and git stores objects compressed.
+- **`REQUIRED_CORPUS_BILLS` is gone**, along with `require_corpus_or_skip`. The body
+  calls it "the embryonic version of this manifest"; the manifest has now fully
+  replaced it.
+- **The `REQUIRE_CORPUS` env var is not fully subsumed.** The body predicted it would
+  be, and for every corpus gate it is. Two non-manifest consumers keep it: the
+  live-network `test_govinfo_corpus_parity` (which cannot run in CI at all, and is the
+  only check that the documented setup path still matches the code — see
+  [#271](https://github.com/AgoraDMV/DeltaTrack/issues/271)) and the fetched Legislative
+  Branch validation floor in `test_validate_extraction`. The flag now means "I have a
+  fetched corpus and a network", not "make the corpus gates strict". Renaming it to say
+  so was deliberately not bundled into #220.

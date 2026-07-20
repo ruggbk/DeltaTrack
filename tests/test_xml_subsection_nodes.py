@@ -39,7 +39,7 @@ import pytest
 
 from bill_tree import normalize_bill
 from parsers.pdf_anchors import _valid_subsection_enum
-from tests.conftest import require_corpus_or_skip
+from tests.conftest import assert_manifest_committed
 from tests.test_pdf_subsection_recall import (
     FIXTURES,
     _norm_enum,
@@ -64,7 +64,12 @@ _CATCHLINE_LABEL = re.compile(r"^\(([A-Za-z]{1,2})\)\s+\S")
 
 
 def _available() -> list[tuple[str, str, str]]:
-    return [f for f in FIXTURES if (BILLS / f[1]).exists() and (BILLS / f[2]).exists()]
+    """Historical name, kept for call-site readability: every fixture below is now a
+    committed manifest fixture, so this is the identity. It used to filter on
+    existence, which was the #167 fail-open -- an unfetched checkout silently emptied
+    the parametrization and the gate passed green. A missing fixture now fails the
+    manifest floor instead."""
+    return list(FIXTURES)
 
 
 def _subsection_nodes(xml_rel: str):
@@ -98,8 +103,10 @@ def _xml_catchline_pairs(xml_rel: str) -> frozenset:
     return frozenset(pairs)
 
 
-def test_corpus_present_when_required():
-    require_corpus_or_skip(_available(), "xml-subsection-nodes")
+def test_manifest_fixtures_committed():
+    """Fail-closed floor (#220, ADR 0015): always collects and runs with no env var, so
+    an uncommitted fixture fails here instead of emptying the parametrization."""
+    assert_manifest_committed(_available(), "xml-subsection-nodes")
 
 
 @pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), _available(), ids=[f[0] for f in _available()])

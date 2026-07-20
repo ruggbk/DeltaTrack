@@ -252,7 +252,7 @@ The diff engine is fully deterministic: no LLM and no API key. `fetch_bills.py` 
 
 See [TESTING.md](TESTING.md) for how the test suite is organized, how diff accuracy is validated, what each validation layer proves, and where the known gaps are.
 
-The corpus correctness gates need no downloads (their fixtures are committed). A few other slow suites -- the PDF recall tests (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the provision-matching corpus modules (`test_node_join_corpus`, `test_xml_subsection_nodes`, `test_pdf_subsection_recall`) -- read larger bills beyond the committed set and skip if absent (or fail loudly under `REQUIRE_CORPUS=1`). To run those, download the bills first:
+The corpus correctness gates need no downloads (their fixtures are committed, including the provision-matching modules' as of #220). A few other slow suites -- the PDF recall tests (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the live-network `test_govinfo_corpus_parity` -- read larger bills beyond the committed set and skip if absent (or fail loudly under `REQUIRE_CORPUS=1`). To run those, download the bills first:
 
 ```bash
 # These download from govinfo by default — no API key needed. (For --source api,
