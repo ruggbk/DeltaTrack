@@ -59,17 +59,41 @@ versions = [
 [[bill]]
 id = "113-hr-3547"
 subcommittee = "full-year omnibus (enrolled)"
-covers = "Enrolled multi-division omnibus whose later titles spill out as orphan <title> siblings — the #146/#167 duplicate-match_path proof case (its cross-division duplicate-count and money-drop baselines are pinned in test_corpus_properties / test_corpus_tree_properties)."
+covers = "Enrolled multi-division omnibus whose later titles spill out as orphan <title> siblings — the #146/#167 duplicate-match_path proof case (its cross-division duplicate-count and money-drop baselines are pinned in test_corpus_properties / test_corpus_tree_properties). Stages 1-5 added in #220: the node-join gates pin 4->5 and 5->6 as XML amendment-shape pairs and 1->2 / 3->4 as PDF pairs."
 versions = [
+  { stage = "1_introduced-in-house", formats = ["pdf"] },
+  { stage = "2_engrossed-in-house", formats = ["pdf"] },
+  { stage = "3_received-in-senate", formats = ["pdf"] },
+  { stage = "4_engrossed-amendment-senate", formats = ["xml", "pdf"] },
+  { stage = "5_engrossed-amendment-house", formats = ["xml"] },
   { stage = "6_enrolled-bill", formats = ["xml"] },
+]
+
+[[bill]]
+id = "114-hr-2029"
+subcommittee = "full-year omnibus"
+covers = "Omnibus span-geometry case (#172/#175). The 5->6 XML pair is the node-join amendment-shape gate; the 3->4 PDF pair is its anchor-agreement gate. Committed in #220 to retire REQUIRE_CORPUS; also a #126 curation candidate."
+versions = [
+  { stage = "3_referred-in-senate", formats = ["pdf"] },
+  { stage = "4_reported-in-senate", formats = ["pdf"] },
+  { stage = "5_engrossed-amendment-senate", formats = ["xml"] },
+  { stage = "6_engrossed-amendment-house", formats = ["xml"] },
+]
+
+[[bill]]
+id = "117-hr-4502"
+subcommittee = "full-year omnibus (reported House)"
+covers = "A CLEAN convergence bill: the XML and PDF subsection gates assert exact parity against it, so both formats of the one stage are committed (#220)."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
 ]
 
 [[bill]]
 id = "119-hr-1"
 subcommittee = "reconciliation (not appropriations)"
-covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (its money-drop residue is pinned in test_corpus_tree_properties)."
+covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (its money-drop residue is pinned in test_corpus_tree_properties). The PDF was added in #220: the subsection gates pair the CLEAN exact-parity bills against this messy print, and without it committed they silently ran on two bills instead of three."
 versions = [
-  { stage = "1_reported-in-house", formats = ["xml"] },
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
 ]
 
 # --- PDF pipeline + XML/PDF diff ----------------------------------------------

@@ -54,7 +54,7 @@ from parsers.pdf_anchors import (
     breadcrumb_for,
     extract_anchors,
 )
-from tests.conftest import require_corpus_or_skip
+from tests.conftest import assert_manifest_committed
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow
@@ -73,10 +73,6 @@ PRECISION_FLOOR = 0.99
 RECALL_FLOOR = 0.98
 # Denominator sanity so a broken extractor can't make the ratios vacuously pass (#167).
 MIN_CATCHLINES = 3
-
-
-def _available() -> list[tuple[str, str, str]]:
-    return [f for f in FIXTURES if (BILLS / f[1]).exists() and (BILLS / f[2]).exists()]
 
 
 def _norm_sec(text: str | None) -> str | None:
@@ -144,11 +140,13 @@ def _pdf_pairs(pdf_path: str) -> frozenset:
     return frozenset(pairs)
 
 
-def test_corpus_present_when_required():
-    require_corpus_or_skip(_available(), "pdf-subsection-parity")
+def test_manifest_fixtures_committed():
+    """Fail-closed floor (#220, ADR 0015): always collects and runs with no env var, so
+    an uncommitted fixture fails here instead of emptying the parametrization."""
+    assert_manifest_committed(FIXTURES, "pdf-subsection-parity")
 
 
-@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), _available(), ids=[f[0] for f in _available()])
+@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
 def test_precision_no_false_subsections(bill, pdf_rel, xml_rel):
     all_pairs, _catch, _quoted = _xml_index(xml_rel)
     pp = _pdf_pairs(pdf_rel)
@@ -163,7 +161,7 @@ def test_precision_no_false_subsections(bill, pdf_rel, xml_rel):
     )
 
 
-@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), _available(), ids=[f[0] for f in _available()])
+@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
 def test_recall_floor(bill, pdf_rel, xml_rel):
     _all, catchlines, _quoted = _xml_index(xml_rel)
     assert len(catchlines) >= MIN_CATCHLINES, f"{bill}: catchline denominator {len(catchlines)} too small (fail-open)"
@@ -174,7 +172,7 @@ def test_recall_floor(bill, pdf_rel, xml_rel):
     assert recall >= RECALL_FLOOR, f"{bill} recall {recall:.3f}, missed {missed[:10]}"
 
 
-@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), _available(), ids=[f[0] for f in _available()])
+@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
 def test_no_quoted_block_leak(bill, pdf_rel, xml_rel):
     # The PDF must detect ZERO subsections living inside a <quoted-block> amendment.
     # 119-hr-1 is the meaningful case (177 quoted subsections); the appropriations

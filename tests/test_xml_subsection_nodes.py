@@ -39,7 +39,7 @@ import pytest
 
 from bill_tree import normalize_bill
 from parsers.pdf_anchors import _valid_subsection_enum
-from tests.conftest import require_corpus_or_skip
+from tests.conftest import assert_manifest_committed
 from tests.test_pdf_subsection_recall import (
     FIXTURES,
     _norm_enum,
@@ -61,10 +61,6 @@ CLEAN = {"118-hr-8752", "117-hr-4502"}
 MIN_ALL_PAIRS = {"118-hr-8752": 100, "117-hr-4502": 50, "119-hr-1": 900}
 
 _CATCHLINE_LABEL = re.compile(r"^\(([A-Za-z]{1,2})\)\s+\S")
-
-
-def _available() -> list[tuple[str, str, str]]:
-    return [f for f in FIXTURES if (BILLS / f[1]).exists() and (BILLS / f[2]).exists()]
 
 
 def _subsection_nodes(xml_rel: str):
@@ -98,11 +94,13 @@ def _xml_catchline_pairs(xml_rel: str) -> frozenset:
     return frozenset(pairs)
 
 
-def test_corpus_present_when_required():
-    require_corpus_or_skip(_available(), "xml-subsection-nodes")
+def test_manifest_fixtures_committed():
+    """Fail-closed floor (#220, ADR 0015): always collects and runs with no env var, so
+    an uncommitted fixture fails here instead of emptying the parametrization."""
+    assert_manifest_committed(FIXTURES, "xml-subsection-nodes")
 
 
-@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), _available(), ids=[f[0] for f in _available()])
+@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
 def test_xml_emits_every_oracle_subsection(bill, pdf_rel, xml_rel):
     all_pairs, _catch, _quoted = _xml_index(xml_rel)
     assert len(all_pairs) >= MIN_ALL_PAIRS[bill], f"{bill}: oracle shrank to {len(all_pairs)} (fail-open)"
@@ -123,7 +121,7 @@ def test_xml_emits_every_oracle_subsection(bill, pdf_rel, xml_rel):
         assert stray == frozenset(), f"{bill}: subsections missing under WALKED sections: {sorted(stray)[:10]}"
 
 
-@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), _available(), ids=[f[0] for f in _available()])
+@pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
 def test_no_quoted_block_leak(bill, pdf_rel, xml_rel):
     root = ET.parse(BILLS / xml_rel).getroot()
     quoted_ids = {e.get("id") for qb in root.iter("quoted-block") for e in qb.iter("subsection") if e.get("id")}
@@ -136,8 +134,8 @@ def test_no_quoted_block_leak(bill, pdf_rel, xml_rel):
 
 @pytest.mark.parametrize(
     ("bill", "pdf_rel", "xml_rel"),
-    [f for f in _available() if f[0] in CLEAN],
-    ids=[f[0] for f in _available() if f[0] in CLEAN],
+    [f for f in FIXTURES if f[0] in CLEAN],
+    ids=[f[0] for f in FIXTURES if f[0] in CLEAN],
 )
 def test_pdf_and_xml_converge_on_catchline_subsections(bill, pdf_rel, xml_rel):
     """The #96-deferred assertion: both pipelines emit the SAME (section, enum)
@@ -158,10 +156,10 @@ def test_pdf_and_xml_converge_on_catchline_subsections(bill, pdf_rel, xml_rel):
 
 
 def test_sec_547_emits_its_three_subsections():
-    """The #188 headline example, asserted directly for readability."""
-    xml = BILLS / "118-hr-8752/1_reported-in-house.xml"
-    if not xml.exists():
-        pytest.skip("bill corpus not present (fetch_bills.py)")
+    """The #188 headline example, asserted directly for readability.
+
+    118-hr-8752 is a committed manifest fixture, so this runs unconditionally -- no
+    .exists() skip (that was the #167 fail-open shape #220 removes)."""
     labels = [
         n.display_path[-1]
         for n in _subsection_nodes("118-hr-8752/1_reported-in-house.xml")

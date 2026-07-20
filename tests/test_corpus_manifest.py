@@ -74,3 +74,46 @@ def test_assert_manifest_committed_fails_closed_on_zero_cases(monkeypatch) -> No
     monkeypatch.setattr(conftest, "missing_manifest_files", lambda: [])
     with pytest.raises(AssertionError, match="zero cases"):
         conftest.assert_manifest_committed([], "unit")
+
+
+def _manifest_rel_paths() -> set[str]:
+    """Every fixture the manifest declares, as ``<id>/<stage>.<fmt>`` strings."""
+    return {
+        f"{bill['id']}/{ver['stage']}.{fmt}"
+        for bill in conftest._manifest_bills()
+        for ver in bill["versions"]
+        for fmt in ver["formats"]
+    }
+
+
+def test_migrated_modules_pin_only_manifested_fixtures() -> None:
+    """The #220 modules' fail-closed floor calls ``assert_manifest_committed``, which
+    checks the manifest GLOBALLY, not the specific files the module pins. That is sound
+    only while every pinned fixture is IN the manifest -- otherwise a module could pin a
+    fetched-but-unmanifested bill, its floor would stay green (the rest of the manifest
+    is present), and the parametrized test would ``FileNotFoundError`` on a clean
+    checkout. This test locks the coupling the floor assumes: every fixture the three
+    migrated modules pin must be manifested. (Caught by review of #220.)"""
+    from tests import test_node_join_corpus as nj
+    from tests import test_pdf_subsection_recall as pr
+
+    manifest = _manifest_rel_paths()
+
+    pinned: set[str] = set()
+    # node-join: (bill, v1_stem, v2_stem) pairs, XML or PDF by which list they live in.
+    for bill, v1, v2 in nj.XML_PAIRS + nj.OMNIBUS_PAIR:
+        pinned |= {f"{bill}/{v1}.xml", f"{bill}/{v2}.xml"}
+    for bill, v1, v2 in nj._ALL_PDF_PAIRS:
+        pinned |= {f"{bill}/{v1}.pdf", f"{bill}/{v2}.pdf"}
+    # subsection gates: (bill, pdf_rel, xml_rel), already relative paths.
+    for _bill, pdf_rel, xml_rel in pr.FIXTURES:
+        pinned |= {pdf_rel, xml_rel}
+
+    unmanifested = sorted(pinned - manifest)
+    assert not unmanifested, (
+        f"{len(unmanifested)} fixture(s) pinned by a migrated corpus module but NOT in "
+        f"tests/corpus_manifest.toml: {unmanifested}. The module's fail-closed floor "
+        "checks the manifest globally, so an unmanifested pin fails open (its floor stays "
+        "green while the test FileNotFoundErrors on a clean checkout). Add it to the "
+        "manifest and .gitignore, or stop pinning it."
+    )

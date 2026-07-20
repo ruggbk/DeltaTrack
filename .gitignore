@@ -60,9 +60,36 @@ bills/115-hr-5895/*
 !bills/113-hr-3547/
 bills/113-hr-3547/*
 !bills/113-hr-3547/6_enrolled-bill.xml
+# Stages 1-5 too (#220): the node-join gates pin the 4->5 and 5->6 XML amendment
+# pairs and the 1->2 / 3->4 PDF pairs. Committing them retires REQUIRE_CORPUS, whose
+# fetched-corpus gating let these gates collect zero cases and pass green.
+!bills/113-hr-3547/1_introduced-in-house.pdf
+!bills/113-hr-3547/2_engrossed-in-house.pdf
+!bills/113-hr-3547/3_received-in-senate.pdf
+!bills/113-hr-3547/4_engrossed-amendment-senate.pdf
+!bills/113-hr-3547/4_engrossed-amendment-senate.xml
+!bills/113-hr-3547/5_engrossed-amendment-house.xml
+# 114-hr-2029 (#220): the omnibus span-geometry pair. The 5->6 XML pair is the
+# node-join amendment-shape case; the 3->4 PDF pair is its anchor-agreement case.
+!bills/114-hr-2029/
+bills/114-hr-2029/*
+!bills/114-hr-2029/3_referred-in-senate.pdf
+!bills/114-hr-2029/4_reported-in-senate.pdf
+!bills/114-hr-2029/5_engrossed-amendment-senate.xml
+!bills/114-hr-2029/6_engrossed-amendment-house.xml
+# 117-hr-4502 (#220): a CLEAN convergence bill — the XML/PDF subsection gates assert
+# exact parity against it, so both formats of the one stage are committed.
+!bills/117-hr-4502/
+bills/117-hr-4502/*
+!bills/117-hr-4502/1_reported-in-house.pdf
+!bills/117-hr-4502/1_reported-in-house.xml
 !bills/119-hr-1/
 bills/119-hr-1/*
 !bills/119-hr-1/1_reported-in-house.xml
+# The PDF too (#220): the subsection gates pair the CLEAN exact-parity fixtures
+# (118-hr-8752, 117-hr-4502) against this one, the messy reconciliation print with the
+# largest oracle. Without it committed those gates silently dropped to two bills.
+!bills/119-hr-1/1_reported-in-house.pdf
 reports/*
 !reports/.gitkeep
 plans/

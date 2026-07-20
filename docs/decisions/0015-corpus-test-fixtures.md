@@ -129,3 +129,61 @@ Alternatives considered:
   (manifest-driven collection and the CI completeness floor) and
   [#126](https://github.com/AgoraDMV/DeltaTrack/issues/126) (curating which bills);
   this record is the *why*, not the build status.
+
+## Amendment (#220, 2026-07-20)
+
+The decision above is unchanged; this records how far it now reaches, since the body
+describes a partial rollout.
+
+- **All corpus gates are now manifest-collected**, not just the three named in #217.
+  `test_node_join_corpus`, `test_xml_subsection_nodes` and `test_pdf_subsection_recall`
+  were left on the fetched-glob model because they pinned larger uncommitted bills;
+  their fixtures are now committed and manifested, and they carry the same fail-closed
+  floor. Measured before the change on a clean checkout, those three collected 19 cases
+  and finished in 0.15s (7 trivial passes, 12 skips, no document parsed); after, 32
+  cases in 16.7s.
+- **The predicted cost was high.** The body targets "on the order of tens of MB". The
+  committed set after this change adds 13 files: 11.9 MB on disk, roughly 5.2 MB
+  compressed, against a repository pack of about 7 MB. #220's own estimate for the
+  first twelve (20-25 MB) was high by about 2.5x, because bill XML compresses ~4.5x
+  and git stores objects compressed.
+- **`REQUIRED_CORPUS_BILLS` is gone**, along with `require_corpus_or_skip`. The body
+  calls it "the embryonic version of this manifest"; the manifest has now fully
+  replaced it.
+- **No hand-calibrated baseline needed editing, but three inert ones came alive.**
+  `_XML_DROP_BUDGET` and `_KNOWN_DUPLICATE_COUNTS` already carried entries for
+  `113-hr-3547/5`, `114-hr-2029/5` and `114-hr-2029/6` — dead keys, because those files
+  were not manifested and so were never collected. Manifesting the files makes those
+  three calibrations *live*, and they pass at their existing pinned values. The gates
+  collect more cases (the added fixtures) and skip two more (113-hr-3547 v4, a shell
+  amendment with no dollar amounts) with no threshold change, and three budgets that
+  documented an expectation now actually enforce it.
+- **The `REQUIRE_CORPUS` env var is not fully subsumed.** The body predicted it would
+  be, and for every corpus gate it is. Two non-manifest consumers keep it: the
+  live-network `test_govinfo_corpus_parity` (which cannot run in CI at all, and is the
+  only check that the documented setup path still matches the code — see
+  [#271](https://github.com/AgoraDMV/DeltaTrack/issues/271)) and the fetched Legislative
+  Branch validation floor in `test_validate_extraction`. The flag now means "I have a
+  fetched corpus and a network", not "make the corpus gates strict". Fully retiring it
+  (commit the five Legislative Branch bills the floor needs, ~4 MB compressed, and give
+  the live gate a `network` marker) is filed as
+  [#278](https://github.com/AgoraDMV/DeltaTrack/issues/278).
+
+### A size bar for future additions
+
+Committing fixtures trades repository weight for CI coverage, and git keeps blobs in
+history permanently — a fixture added is a fixture the clone carries forever, even if
+later removed. To keep [#126](https://github.com/AgoraDMV/DeltaTrack/issues/126)
+curation from growing the pack by precedent, a fixture addition should:
+
+- **Prefer XML over PDF** wherever the gate under test accepts either. XML compresses
+  ~4.5x; the PDFs here are near-incompressible and dominate the on-disk cost.
+- **Carry a stated reason in the PR** for anything above ~1 MB compressed per bill, and
+  name the specific gate that needs *that* document (not a smaller or synthetic stand-in).
+  The 113-hr-3547 4->5 pair clears this bar because diffing a 2.6 KB shell against a
+  3 MB omnibus is the property under test; a second omnibus "for coverage" would not.
+- **Prefer a single stage** over a whole version history unless adjacent-version diffing
+  is the thing being gated.
+
+This is a guideline for reviewers, not a hard cap; the point is that each addition is a
+deliberate, justified choice rather than a default.

@@ -60,6 +60,14 @@ def manifest_pdf_files() -> list[Path]:
     return _manifest_paths("pdf")
 
 
+def _stage_num(path: Path) -> int:
+    """Leading integer of a version filename (``4_engrossed-... -> 4``). Adjacency for
+    the diff pairs must sort NUMERICALLY, not lexicographically: a string sort puts
+    ``10_`` before ``2_`` and would silently mis-pair a 10+-stage bill. No corpus bill
+    reaches stage 10 today, so this is a latent guard, not a live fix."""
+    return int(path.name.split("_", 1)[0])
+
+
 def manifest_version_pairs() -> list[tuple[Path, Path]]:
     """Adjacent committed-XML version pairs within each bill, for the diff smoke.
     Under CORPUS_SWEEP, every adjacent pair across all locally-fetched bills."""
@@ -69,12 +77,13 @@ def manifest_version_pairs() -> list[tuple[Path, Path]]:
             if bill_dir.is_dir():
                 # Scope to the version-file naming (matches manifest_xml_files) so a stray
                 # non-bill XML (e.g. govinfo BILLSTATUS metadata) can't enter the diff pairs.
-                versions = sorted(bill_dir.glob("[0-9]*_*.xml"))
+                versions = sorted(bill_dir.glob("[0-9]*_*.xml"), key=_stage_num)
                 pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
         return pairs
     for bill in _manifest_bills():
         versions = sorted(
-            BILLS_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]
+            (BILLS_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]),
+            key=_stage_num,
         )
         pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
     return pairs
@@ -110,82 +119,14 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
     assert len(collected) > 0, f"{kind}: gate parametrized over zero cases despite a complete manifest."
 
 
-# --- Legacy corpus completeness policy (#167) ----------------------------------
-# REQUIRE_CORPUS predates the committed manifest. The three corpus gates above no
-# longer use it — they parametrize over the committed manifest and fail closed via
-# assert_manifest_committed. It survives only as the presence floor for the corpus
-# modules still parametrized over fetched (uncommitted) bills — test_node_join_corpus,
-# test_xml_subsection_nodes, test_pdf_subsection_recall — pending their migration to
-# the manifest. Those bills (e.g. the large 114-hr-2029 omnibus) are not yet in the
-# committed set, so REQUIRE_CORPUS=1 remains their opt-in strict mode: a missing
-# baseline asset or empty parametrization is a loud failure instead of a silent skip.
+# --- REQUIRE_CORPUS: narrowed by #220 ------------------------------------------
+# No longer a corpus-gate mechanism: #220 put every corpus gate on the committed
+# manifest, so they fail closed with no env var. Two non-manifest consumers keep the
+# flag alive: test_govinfo_corpus_parity (a live-network gate) and
+# test_validate_extraction's fetched-bill floor. Read it now as "I have a fetched
+# corpus and a network", not "make the corpus gates strict". Full rationale, and the
+# retirement plan, are in ADR 0015 (its #220 amendment) and issue #278.
 REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
-
-# The curated baseline floor for the REQUIRE_CORPUS modules above: the bills those
-# modules hand-pin that are NOT in the committed manifest, so they are absent on an
-# unfetched checkout. In REQUIRE_CORPUS mode every one must be on disk, else the module
-# that pins it against a hardcoded baseline skips silently. Paths are relative to
-# BILLS_DIR. (Manifest bills those modules also use — 118-hr-8752, 119-hr-1 v1 — are
-# always committed, so they are not the floor here; only the uncommitted bills are.)
-# Deliberately over-inclusive across the three modules: it is a shared floor, so a
-# missing bill any module needs fails loudly rather than passing green on a partial
-# fetch. Migrating these modules onto the manifest is tracked in #220.
-REQUIRED_CORPUS_BILLS = (
-    # test_xml_subsection_nodes / test_pdf_subsection_recall: 117-hr-4502 is a CLEAN
-    # convergence bill (exact-parity assertions); both XML and PDF are pinned.
-    "117-hr-4502/1_reported-in-house.xml",
-    "117-hr-4502/1_reported-in-house.pdf",
-    # test_node_join_corpus: 114-hr-2029 (OMNIBUS_PAIR / span-geometry) and 113-hr-3547
-    # stages 4-5 (the amendment-shape XML pairs). v6 of 113-hr-3547 is committed, but
-    # these earlier stages are not.
-    "114-hr-2029/5_engrossed-amendment-senate.xml",
-    "114-hr-2029/6_engrossed-amendment-house.xml",
-    "113-hr-3547/4_engrossed-amendment-senate.xml",
-    "113-hr-3547/5_engrossed-amendment-house.xml",
-    # test_node_join_corpus PDF pairs: their own floor (test_pdf_corpus_present_when_
-    # required) only asserts >0 discovered, so a single missing PDF would silently drop
-    # one pair to zero cases. Pinning each file here makes missing_required_corpus name
-    # it. (114-hr-2029 v4 is the post-#10 govinfo name reported-in-senate, was
-    # reported-to-senate under the API source.)
-    "114-hr-2029/3_referred-in-senate.pdf",
-    "114-hr-2029/4_reported-in-senate.pdf",
-    "113-hr-3547/3_received-in-senate.pdf",
-    "113-hr-3547/4_engrossed-amendment-senate.pdf",
-    "113-hr-3547/1_introduced-in-house.pdf",
-    "113-hr-3547/2_engrossed-in-house.pdf",
-)
-
-
-def missing_required_corpus() -> list[str]:
-    """Baseline bills (relative paths) absent from BILLS_DIR."""
-    return [rel for rel in REQUIRED_CORPUS_BILLS if not (BILLS_DIR / rel).exists()]
-
-
-def require_corpus_or_skip(discovered: Sequence, kind: str) -> None:
-    """Completeness floor for a corpus property gate (#167).
-
-    Call from a plain (non-parametrized) guard test so it always collects and runs.
-    Outside REQUIRE_CORPUS mode it skips, preserving clean-clone behavior. In
-    REQUIRE_CORPUS mode it asserts the pinned baseline assets are present AND that the
-    module actually discovered at least one parametrized case — turning a silently
-    inert suite into a loud failure.
-
-    ``discovered`` is the module's parametrization source (the file list or the pair
-    list); ``kind`` names the gate in failure messages.
-    """
-    if not REQUIRE_CORPUS:
-        pytest.skip("corpus not required (set REQUIRE_CORPUS=1 to enforce completeness)")
-    missing = missing_required_corpus()
-    assert not missing, (
-        f"REQUIRE_CORPUS=1 but pinned baseline assets are missing: {missing}. "
-        "Fetch them (fetch_bills.py download ... --format both / "
-        "scripts/fetch_test_assets.py) before enforcing this module in strict mode."
-    )
-    assert len(discovered) > 0, (
-        f"REQUIRE_CORPUS=1 but the {kind} gate discovered zero cases under {BILLS_DIR} — "
-        "the gate would run green without asserting anything (fail-open, #167)."
-    )
-
 
 # Paths to commonly used bill versions (118-hr-4366).
 HR4366_V1_PATH = BILLS_DIR / "118-hr-4366" / "1_reported-in-house.xml"
