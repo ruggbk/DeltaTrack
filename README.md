@@ -272,6 +272,7 @@ The corpus correctness gates need no downloads (their fixtures are committed). A
 ./fetch_bills download 116 hr 133 --format both
 ./fetch_bills download 115 hr 5895 --format both
 ./fetch_bills download 115 hr 1625 --format both
+./fetch_bills download 115 hr 880 --format both
 ./fetch_bills download 115 hr 244 --format both
 ./fetch_bills download 114 hr 2029 --format both
 ./fetch_bills download 113 hr 83 --format both

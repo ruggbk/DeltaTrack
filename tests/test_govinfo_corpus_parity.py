@@ -74,8 +74,10 @@ def test_govinfo_enumeration_reproduces_corpus_filenames():
     # "0 compared, 0 stale" (#167 fail-open).
     assert len(dirs) >= _MIN_CORPUS_DIRS, (
         f"parity gate found {len(dirs)} corpus dirs under {BILLS_DIR}, expected >= "
-        f"{_MIN_CORPUS_DIRS}. An incomplete corpus would pass without comparing — fetch "
-        "the full corpus (scripts/fetch_test_assets.py) before enforcing this gate."
+        f"{_MIN_CORPUS_DIRS}. An incomplete corpus would pass without comparing — run the "
+        "bill downloads in the README 'corpus setup' block before enforcing this gate. "
+        "(scripts/fetch_test_assets.py does not help here: it only adds files to bill "
+        "directories those downloads already create.)"
     )
 
     client = httpx.Client(timeout=30, follow_redirects=True)
