@@ -1600,10 +1600,14 @@ document.addEventListener('DOMContentLoaded', function() {
   var nextBtn = document.getElementById('btn-next');
   var counter = document.getElementById('nav-counter');
   var current = -1;
+  // The full-bill view's targets are the inline marks themselves plus the
+  // removed-text appendix blocks. Named once: the click handler resolves a
+  // clicked highlight against the same set navTargets() steps through.
+  var FULL_TARGET_SEL = '[id^="attr-"], .removed-block';
   function navTargets() {
     var full = document.querySelector('.view-full');
     if (full && !full.hidden) {
-      return [].slice.call(full.querySelectorAll('[id^="attr-"], .removed-block'));
+      return [].slice.call(full.querySelectorAll(FULL_TARGET_SEL));
     }
     // Changes view: only cards the active filter leaves visible.
     return [].slice.call(document.querySelectorAll('.view-changes .change-card'))
@@ -1645,13 +1649,43 @@ document.addEventListener('DOMContentLoaded', function() {
     current = idx;
     refreshNav();
   }
-  // Delegated so it covers all three entry points at once: sidebar nav links,
+  // Same intent, for an anchor that is not itself a change. Full-bill TOC links
+  // point at heading rows, which are never nav targets, so there is no exact
+  // index to look up: resolve to the first change at or after the row ("the next
+  // change from here down"). Targets come back in document order and a
+  // descendant reports as FOLLOWING too, so the first hit is the nearest one. A
+  // heading with no change below it leaves the position alone rather than
+  // guessing, matching syncCurrentTo's conservatism.
+  function syncCurrentFrom(el) {
+    if (!el) return;
+    var targets = navTargets();
+    for (var i = 0; i < targets.length; i++) {
+      var after = el === targets[i] ||
+        (el.compareDocumentPosition(targets[i]) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (after) { current = i; refreshNav(); return; }
+    }
+  }
+  // Delegated so it covers every entry point at once, branching on the active
+  // view the same way navTargets() does. Changes view: sidebar nav links,
   // financial-table row links, and a click on the card itself (which is what
-  // makes the scroll-and-read flow work). The sidebar's own handler above runs
-  // first (it is bound on the anchor), so the view is already switched and the
-  // group already revealed by the time this resolves the index.
+  // makes the scroll-and-read flow work) — all exact-match, since a #change-N
+  // anchor points straight at a target. Full-bill view: TOC links (resolved
+  // at-or-after) and a click on an inline highlight (exact). The sidebar's own
+  // handler above runs first (it is bound on the anchor), so the view is already
+  // switched and the group already revealed by the time this resolves the index.
   document.addEventListener('click', function(e) {
     if (!e.target || !e.target.closest) return;
+    var full = document.querySelector('.view-full');
+    if (full && !full.hidden) {
+      var toc = e.target.closest('.sidebar-toc a[href^="#"]');
+      if (toc) {
+        syncCurrentFrom(document.getElementById(toc.getAttribute('href').slice(1)));
+        return;
+      }
+      // Full-bill content is not inside <details>, so nothing to reveal here.
+      syncCurrentTo(e.target.closest(FULL_TARGET_SEL));
+      return;
+    }
     var link = e.target.closest('a[href^="#change-"]');
     if (link) {
       var card = document.getElementById(link.getAttribute('href').slice(1));

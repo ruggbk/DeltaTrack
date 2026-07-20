@@ -213,6 +213,139 @@ def _render_grouped_report() -> str:
     return format_diff_html(view_from_canonical(canonical), canonical=canonical)
 
 
+def _render_full_bill_report() -> str:
+    """A standalone report whose full-bill view interleaves headings and changes.
+
+    ``_render_grouped_report``'s full text is two lines, so every tree node
+    anchors to the same row — too coarse to say which change follows which
+    heading. Here each TITLE is its own row with one change in the body row
+    below it, and TITLE IV deliberately has no change after it, which is the
+    case where "first change at or after this heading" has no answer.
+    """
+    from formatters.canonical import view_from_canonical
+    from formatters.diff_html import format_diff_html
+
+    lines = [
+        "TITLE I",
+        "alpha aaa",
+        "TITLE II",
+        "beta bbb",
+        "TITLE III",
+        "gamma ccc",
+        "TITLE IV",
+        "delta ddd",
+    ]
+    v2_text = "\n".join(lines)
+    offsets = []
+    pos = 0
+    for line in lines:
+        offsets.append(pos)
+        pos += len(line) + 1
+
+    def title_node(label, i):
+        # Span starts on the heading row itself, so _node_anchor_offset resolves
+        # the TOC link to that row. No children: renders as a clickable leaf.
+        return {
+            "label": label,
+            "level": "title",
+            "own_amounts": [],
+            "full_text_span": {"start": offsets[i], "end": offsets[i] + len(lines[i])},
+            "children": [],
+        }
+
+    def change(i, line_index):
+        start = offsets[line_index]
+        return {
+            "id": f"c{i}",
+            "change_type": "modified",
+            "section_number": "",
+            "path": {"v1": ["TITLE I"], "v2": ["TITLE I"]},
+            "location": None,
+            "anchor_resolution": "resolved",
+            "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
+            "amounts": [],
+            "move": None,
+            "full_text_span": {
+                "v1": None,
+                "v2": {"start": start, "end": start + len(lines[line_index])},
+            },
+        }
+
+    canonical = {
+        "schema_version": "1.3",
+        "bill": {"type": "hr", "number": 1, "congress": 119},
+        "versions": {
+            "v1": {"label": "v1", "version_number": 1, "source": "xml"},
+            "v2": {"label": "v2", "version_number": 2, "source": "xml"},
+        },
+        "summary": {"added": 0, "removed": 0, "modified": 3, "moved": 0},
+        # One change in each of the first three titles' body rows; none under
+        # TITLE IV.
+        "changes": [change(0, 1), change(1, 3), change(2, 5)],
+        "full_text": {"v1": "x" * len(v2_text), "v2": v2_text},
+        "tree": {
+            "v1": [],
+            "v2": [title_node(label, i) for i, label in enumerate(lines) if i % 2 == 0],
+        },
+    }
+    return format_diff_html(view_from_canonical(canonical), canonical=canonical)
+
+
+def test_counter_follows_full_bill_navigation(chromium, tmp_path):
+    """In the full-bill view, an explicit jump sets the prev/next position the
+    same way it does in the changes view (#185).
+
+    The two entry points differ from the changes view and need different
+    resolution. An inline highlight IS a nav target, so it resolves exactly, as
+    a card does. A TOC link points at a heading row, which is never a target, so
+    it resolves to the first change at or after that row ("the next change from
+    here down"); a heading with nothing below it leaves the position alone
+    rather than guessing.
+    """
+    report = tmp_path / "full_bill_nav.html"
+    report.write_text(_render_full_bill_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")
+
+    page.locator('.view-toggle__btn[data-view="full"]').click()
+    counter = page.locator("#nav-counter")
+    assert counter.inner_text() == "0 / 3"
+
+    # 1. TOC jump to a heading resolves to the first change below it, and the
+    # arrow steps on from there (pre-fix this read "0 / 3" then "1 / 3").
+    # TITLE II is row 18; the next change is c1 at 27, the 2nd of 3.
+    page.locator('.sidebar-toc a[href="#fb-off-18"]').click()
+    assert counter.inner_text() == "2 / 3"
+    page.locator("#btn-next").click()
+    assert counter.inner_text() == "3 / 3"
+
+    # Resolution is "at or after", not "the nearest": TITLE I is row 0 and the
+    # first change is c0 at row 8, so it lands on 1 rather than staying put.
+    page.locator('.sidebar-toc a[href="#fb-off-0"]').click()
+    assert counter.inner_text() == "1 / 3"
+
+    # 2. A click on an inline highlight is itself a target, so it resolves
+    # exactly, the way a change card does.
+    page.locator("#attr-c2").click()
+    assert counter.inner_text() == "3 / 3"
+    page.keyboard.press("ArrowLeft")
+    assert counter.inner_text() == "2 / 3"
+
+    # 3. A heading with no change below it has no answer: the position is left
+    # where it was rather than being reset or clamped. TITLE IV is the last row
+    # and every change sits above it.
+    page.locator('.sidebar-toc a[href="#fb-off-56"]').click()
+    assert counter.inner_text() == "2 / 3"
+
+    # The changes view keeps its own exact-match resolution: switching views
+    # resets, and a card jump still lands on that card and not a neighbour.
+    page.locator('.view-toggle__btn[data-view="changes"]').click()
+    assert counter.inner_text() == "0 / 3"
+    page.locator("#change-2").click(position={"x": 5, "y": 5})
+    assert counter.inner_text() == "3 / 3"
+    page.close()
+
+
 def test_filtering_hides_empty_card_groups_and_updates_nav_counts(chromium, tmp_path):
     """Financial filter empties the account groups: their card-group headings
     hide, and the TITLE I nav-group count recounts to the visible subtree (#172).
@@ -346,6 +479,16 @@ def test_counter_follows_explicit_card_navigation(chromium, tmp_path):
     salaries.evaluate("el => el.open = false")
     page.locator('.sidebar a[href="#change-1"]').click()
     assert salaries.evaluate("el => el.open") is True
+    assert counter.inner_text() == "2 / 3"
+
+    # A jump whose target is not in the visible set leaves the position alone
+    # rather than resetting it. applyFilters hides cards and their sidebar nav
+    # items, but not Financial Summary rows, so a row can outlive its card and
+    # stay clickable: on a real report (HR 4366 reported-vs-enrolled) the
+    # Structural filter leaves 28 such links. Hiding the card directly puts the
+    # DOM in that state without needing a change type this fixture lacks.
+    page.locator("#change-0").evaluate("el => el.style.display = 'none'")
+    page.locator('.financial-table a[href="#change-0"]').first.click()
     assert counter.inner_text() == "2 / 3"
     page.close()
 
