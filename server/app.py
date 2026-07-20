@@ -100,6 +100,25 @@ async def force_https_behind_proxy(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline security headers on every response (#64).
+
+    ``nosniff`` keeps a browser from second-guessing a declared Content-Type,
+    and ``DENY`` keeps the site out of a frame. Framing costs nothing here: the
+    sample report and every generated report open in a new tab, never an
+    iframe. Registered after the redirect middleware, so it wraps it and the
+    headers reach redirects and error responses too, not only 200s.
+
+    Rate limiting, the other half of the issue, is deliberately not here: it
+    needs a dependency that is not in the lock file today.
+    """
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 def _looks_like_xml(data: bytes) -> bool:
     """A bill XML starts with the prolog or a root element (after any BOM/space)."""
     head = data.lstrip(b"\xef\xbb\xbf \t\r\n")
