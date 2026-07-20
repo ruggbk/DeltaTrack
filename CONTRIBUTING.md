@@ -193,6 +193,35 @@ For bug reports, include:
 
 That's enough. The team fleshes out the rest when grooming the issue for pickup.
 
+### Filing from the command line
+
+`gh issue create --body-file` and `--body` **bypass the templates above entirely**,
+along with the `type:` they set. Templates apply only in the web UI or when you
+pass `--template <file>`. So an issue filed from the CLI silently matches none of
+the repo's structure and carries no issue type.
+
+If you file from the CLI (or have an AI assistant do it), read the template file
+in `.github/ISSUE_TEMPLATE/` and fill its sections yourself, then set the type
+explicitly with `--type Bug` / `--type Feature` / `--type Task`.
+
+### Writing an issue others can read
+
+Most of what lands here is the team reporting a defect it found in the codebase,
+often with analysis attached. Those are the issues most likely to become
+unreadable to everyone who wasn't in the investigation. Two habits fix most of it:
+
+- **Open with the observable problem, not the artifact that surfaced it.** State
+  what's wrong before naming a file, test, or function. Someone without the repo
+  open should finish your first sentence knowing what's broken and why it matters.
+- **Make cross-references self-describing.** `#141 (enrolled PDFs yield no anchors)`,
+  not a bare `#141`. If a sentence stops making sense when you delete the number,
+  the number was doing the explaining. Same for decision records and jargon: define
+  project terms inline the first time you use them.
+
+Keeping *what's wrong*, *how it surfaced*, *why it matters*, and *what to do* as
+separate thoughts is most of the rest. Fusing the first two is what makes an issue
+read as lab notes.
+
 ## Grooming an issue for pickup
 
 Reporting and picking-up are two different jobs. Filing should be low-friction;
