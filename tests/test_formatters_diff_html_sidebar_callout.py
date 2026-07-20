@@ -137,6 +137,20 @@ def test_callout_multiple_pairs_emit_multiple_rows():
     assert "$2,000 &rarr; $3,000" in callout
 
 
+def test_callout_net_zero_renders_neutral():
+    """An added amount cancelled by an equal removal nets to $0, and that Net row
+    must read neutral rather than coloured as an increase or a decrease.
+
+    The behaviour is otherwise only exercised by a slow, corpus-gated case
+    (test_financial_callout_whole_item.py::test_sec_20004_callout_nets_to_zero),
+    which also asserts the amount but not the class. Assert both here so the
+    neutral styling is pinned without needing the bill corpus.
+    """
+    callout = _build_callout(_change(amount_entries=((None, 500000, "added"), (500000, None, "removed"))))
+    assert '<div class="row net">' in callout
+    assert '<span class="delta neutral">$0</span>' in callout
+
+
 def test_card_includes_callout_when_amounts_present():
     """The card builder integrates the callout below the body."""
     from formatters.diff_html import _build_card
