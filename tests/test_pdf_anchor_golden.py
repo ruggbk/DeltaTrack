@@ -528,9 +528,22 @@ class TestCorpusAccountPrecision:
     """
 
     # Appropriations bills with a paired XML; (bill id, pdf rel path, xml rel path).
+    # A directory entry (xml=None) resolves to the FIRST PDF with an XML sibling, so
+    # which version it lands on depends on what the checkout happens to contain — a
+    # locally-fetched corpus and a clean CI checkout can disagree. Name the pair
+    # explicitly for any bill whose committed set would resolve to the wrong version.
     BILLS = [
         ("114-hr-2029", "bills/114-hr-2029", None),
-        ("115-hr-5895", "bills/115-hr-5895", None),
+        # Explicit (#141): this bill's only COMMITTED pdf/xml pair is the enrolled
+        # version, which carries no printed line numbers and so has no size-detected
+        # account vocabulary at all — the directory form would measure 0.000 recall in
+        # CI while quietly measuring v1 locally. This gate is about account detection on
+        # a numbered print, so it names v1 and skips where v1 isn't fetched.
+        (
+            "115-hr-5895",
+            "bills/115-hr-5895/1_reported-in-house.pdf",
+            "bills/115-hr-5895/1_reported-in-house.xml",
+        ),
         ("117-hr-4432", "bills/117-hr-4432", None),
         ("117-hr-4502", "bills/117-hr-4502", None),
         ("118-hr-4366", "bills/118-hr-4366", None),
