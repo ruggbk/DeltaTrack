@@ -1,9 +1,11 @@
 /* ----------------------------------------------------------------------
    DeltaTrack — production web app
    Government-tool aesthetic: high contrast, narrow palette, no animation.
-   Diff/renderer rules are carried over verbatim from the now-retired prototype
-   demo so the canonical-JSON renderer (js/renderer.js) styles identically; the layout
-   (landing, upload, result) is new.
+   Diff/renderer rules were carried over verbatim from the now-retired prototype
+   demo, to style a browser-side renderer that has since been removed. Nothing emits
+   that markup today, so those rules are unused and are being cleaned up separately.
+   The layout rules (landing, upload) are live. Note the standalone report ships its
+   own embedded stylesheet from formatters/diff_html.py and does not use this file.
    ---------------------------------------------------------------------- */
 
 :root {
