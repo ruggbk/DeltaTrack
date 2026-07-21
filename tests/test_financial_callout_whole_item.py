@@ -51,8 +51,9 @@ def _sec_20004_a_callout() -> str:
 def test_sec_20004_callout_surfaces_removal():
     """The removed $250M appropriation shows as a removed row (previously silent)."""
     callout = _sec_20004_a_callout()
-    assert "Removed:" in callout
-    assert "$250,000,000" in callout
+    # Whole row cell, not a bare substring: "$250,000,000" is a prefix of
+    # "$250,000,000,000", so a magnitude error would read green here (#264).
+    assert '<span class="label">Removed:</span><span>$250,000,000</span>' in callout
 
 
 @pytest.mark.slow
@@ -85,6 +86,5 @@ def test_pdf_added_account_callout_shows_amount():
     canonical = pdf_diff_to_canonical(diff, bill_type="hr", bill_number=1, congress=119)
     assert canonical["changes"][0]["amount_entries"] == [{"old": None, "new": 5000000, "kind": "added"}]
     callout = _build_callout(view_from_canonical(canonical).changes[0])
-    assert "Added:" in callout
-    assert "$5,000,000" in callout
+    assert '<span class="label">Added:</span><span>$5,000,000</span>' in callout
     assert ">+$5,000,000</span>" in callout  # net row present too
