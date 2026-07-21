@@ -186,6 +186,10 @@ def download_archives(
 
             if dest.exists():
                 print(f"{prefix} Skipping existing archive: {dest.name}", file=sys.stderr)
+                # The archive beside it disproves the marker, so clear it here too and
+                # not only on the download path (#259). Leaving it would let the two
+                # states contradict each other for as long as the cache survives.
+                error_path.unlink(missing_ok=True)
                 continue
 
             url = archive_url(congress, bill_type)
