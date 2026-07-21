@@ -12,10 +12,14 @@ corpus. The index stores free text from bill XML (``title``, ``status``,
 contain no title that would exercise the quote-decoding edges -- so corpus-derived
 cases would bound only the observed input space, not the space the code accepts.
 
-The known-latent decode defects are recorded as ``xfail(strict=True)``: they assert
-the behavior the round-trip *should* have, so they neither pin the current mangling as
-correct nor go silently stale. When the decode is fixed they xpass, and strict mode
-turns that into a failure that prompts removing the marker. Tracked in #256.
+#256 is fixed in both halves, and the round trip is now lossless for every case here.
+``_decode_value`` no longer unquotes a second time (``TestQuoteWrappedTextRoundTrips``)
+and no longer coerces digits to ``int`` (``TestNumericLookingTextSurvives``). Both
+fixes removed a guess: what a cell means is no longer inferred from its shape, so a
+value comes back as the text that was stored.
+
+That makes the counting columns (``actionCount`` and peers) read back as text too,
+which ``TestNumericColumns`` pins deliberately rather than by omission.
 """
 
 from __future__ import annotations
@@ -86,36 +90,36 @@ class TestFreeTextRoundTrip:
 
 
 class TestNumericColumns:
-    """Count columns are stored as ints and must come back as ints.
+    """Count columns come back as their exact text, not as ints (#256).
 
     ``historySize``, ``actionCount``, ``versionCount`` and friends are produced by
-    ``len()`` / ``stat()``, and getting them back as ints is what keeps a reloaded
-    index sortable and comparable without callers re-parsing every cell.
+    ``len()`` / ``stat()``, so they are written as digits. They are read back as
+    text, because a CSV cell *is* text and the reader cannot tell a counting column
+    from a free-text one that happens to hold digits.
 
-    Note this is the *motivation* for the int coercion, not its implementation.
-    ``_decode_value`` takes a ``column`` argument and never reads it
-    (``bill_index.py:280``), so the coercion is applied to every column including the
-    free-text ones -- which is why a digits-only title does not survive the round
-    trip. That case is recorded in ``TestKnownLatentDecodeDefects``.
+    The rejected alternative was to keep coercing so a reloaded index stays sortable
+    without callers re-parsing. Nothing in the project reads these columns back out,
+    so that convenience was unused, while the same coercion turned a digits-only
+    ``id`` into an int and crashed the ``--file <csv>`` download path
+    (``TestDigitsOnlyIdIsUsable``). A caller that wants a number converts at the
+    point of use.
     """
 
     @pytest.mark.parametrize("value", [0, 1, 42, 1000, 12345678901234567890])
-    def test_int_round_trips_as_int(self, tmp_path, value):
+    def test_int_round_trips_as_its_exact_text(self, tmp_path, value):
         result = round_trip(tmp_path, value, column="actionCount")
-        assert result == value
-        assert isinstance(result, int)
+        assert result == str(value)
+        assert isinstance(result, str)
 
     def test_negative_int_round_trips(self, tmp_path):
         # daysActive is a date subtraction and can legitimately be negative.
         result = round_trip(tmp_path, -3, column="daysActive")
-        assert result == -3
-        assert isinstance(result, int)
+        assert result == "-3"
 
     def test_zero_is_not_confused_with_empty(self, tmp_path):
-        # 0 and "" are different facts: no actions recorded vs field absent. The
-        # empty-string short-circuit in _decode_value runs before the int parse, so
-        # this pins that 0 does not fall into it.
-        assert round_trip(tmp_path, 0, column="actionCount") == 0
+        # 0 and "" are still different facts: no actions recorded vs field absent.
+        # The empty-string short-circuit must not swallow a stored zero.
+        assert round_trip(tmp_path, 0, column="actionCount") == "0"
         assert round_trip(tmp_path, "", column="actionCount") == ""
 
 
@@ -126,8 +130,10 @@ class TestDecodeValueUnit:
     def test_missing_values_decode_to_empty_string(self, value):
         assert _decode_value("title", value) == ""
 
-    def test_digits_decode_to_int(self):
-        assert _decode_value("actionCount", "42") == 42
+    def test_digits_decode_to_text(self):
+        result = _decode_value("actionCount", "42")
+        assert result == "42"
+        assert isinstance(result, str)
 
     def test_non_numeric_text_is_returned_as_is(self):
         assert _decode_value("title", "An Act") == "An Act"
@@ -266,67 +272,60 @@ class TestUndecodableCsv:
         assert isinstance(excinfo.value.__cause__, UnicodeDecodeError)
 
 
-class TestKnownLatentDecodeDefects:
-    """Values that do not survive the round-trip today (#256).
+class TestQuoteWrappedTextRoundTrips:
+    """Stored text that itself begins and ends with a straight quote (#256).
 
-    The quote cases below reach ``_decode_value`` with a string that starts and ends
-    with a straight double quote -- which happens whenever the stored text itself
-    begins and ends with one, because ``csv.DictReader`` has already removed the
-    CSV-level quoting by then. The decode cannot distinguish "CSV quoting" from "the
-    text contains quotes", and strips them either way. The remaining cases come from
-    ``int()`` being used as a type sniffer, which accepts Python literal syntax.
+    These reach ``_decode_value`` with a string that starts and ends with a double
+    quote -- not because of CSV syntax, but because ``csv.DictReader`` has already
+    removed the CSV-level quoting and handed back the content. A decode that unquotes
+    again cannot tell the two apart, and used to strip them either way.
 
-    Not currently reachable from real data: no title in the committed corpus starts
-    with a straight quote, and legislative short titles use curly quotes. These are
-    latent (#256), which is why they are xfail rather than a fix inside a test-coverage
-    change -- altering decode semantics would also change how existing bills.csv
-    files are read.
+    They were xfail(strict=True) while that second unquoting branch existed. It is
+    gone: it was never the inverse of anything the module wrote (``_format_csv_cell``
+    has never JSON-encoded a cell in any revision), so it could only ever damage these
+    values. Kept as ordinary round-trip tests so the branch cannot come back unnoticed.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: json.loads succeeds on the quoted text and silently unwraps it",
-    )
     def test_text_wrapped_in_straight_quotes_keeps_its_quotes(self, tmp_path):
-        # '"hello"' -> written as '"""hello"""' -> DictReader -> '"hello"' ->
-        # json.loads('"hello"') -> 'hello'. The quotes are content, not syntax.
+        # '"hello"' -> written as '"""hello"""' -> DictReader -> '"hello"'. The old
+        # decode ran json.loads on that and got 'hello'; the quotes are content.
         value = '"hello"'
         assert round_trip(tmp_path, value) == value
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: JSONDecodeError fallback strips the outer quotes and unescapes",
-    )
     def test_quote_wrapped_text_that_is_not_valid_json_keeps_its_quotes(self, tmp_path):
-        # The fallback at bill_index.py:291-293. '"a"b"' -> DictReader -> '"a"b"' ->
-        # not valid JSON -> value[1:-1].replace('""', '"') -> 'a"b'.
+        # The old JSONDecodeError fallback: '"a"b"' -> value[1:-1].replace('""', '"')
+        # -> 'a"b'. Distinct from the branch above, and it mangled a different shape.
         value = '"a"b"'
         assert round_trip(tmp_path, value) == value
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: json.loads also interprets backslash escapes inside the quotes",
-    )
     @pytest.mark.parametrize(
         "value",
         [
-            pytest.param('"a\\nb"', id="literal-backslash-n-becomes-a-newline"),
-            pytest.param('"\\u00e9"', id="unicode-escape-becomes-a-character"),
+            pytest.param('"a\\nb"', id="literal-backslash-n-stays-two-characters"),
+            pytest.param('"\\u00e9"', id="unicode-escape-stays-literal"),
         ],
     )
     def test_escape_sequences_inside_quotes_are_not_interpreted(self, tmp_path, value):
-        # A second, distinct corruption mode: where the quoted text happens to parse
-        # as JSON, the decode does not merely unwrap it, it also resolves any escape
-        # sequence inside. '"a\\nb"' comes back holding a real newline rather than the
-        # two literal characters that were stored. This is the branch the
-        # JSONDecodeError fallback does *not* share -- the fallback leaves escapes
-        # alone -- so the two paths disagree on the same input shape.
+        # The second corruption mode: where the quoted text happened to parse as JSON,
+        # the old decode did not merely unwrap it, it also resolved escape sequences
+        # inside -- so '"a\\nb"' came back holding a real newline instead of the two
+        # literal characters stored. The fallback branch did not share that behaviour,
+        # so the two paths disagreed on the same input shape.
         assert round_trip(tmp_path, value) == value
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: _decode_value ignores its column arg, so digits-only text becomes int",
-    )
+
+class TestNumericLookingTextSurvives:
+    """Text that looks numeric keeps its exact form (#256).
+
+    These were ``xfail(strict=True)`` while ``int()`` was used as a type sniffer: it
+    ran on every column, because ``_decode_value`` took a ``column`` argument and never
+    read it, and it accepted Python literal syntax rather than a plain run of digits.
+    Both are gone now that the decode returns text.
+
+    Kept as ordinary round-trip tests, since each names a distinct way the sniff got it
+    wrong and they are what stops one being reintroduced.
+    """
+
     @pytest.mark.parametrize(
         "value",
         [
@@ -336,27 +335,38 @@ class TestKnownLatentDecodeDefects:
         ],
     )
     def test_digits_only_text_stays_text(self, tmp_path, value):
-        # The reachable member of this family, and the reason it is listed here
-        # rather than among the round-trip cases above: the coercion is column-blind,
-        # so a *title* that happens to be all digits comes back as an int. Unlike the
-        # quote and underscore cases, this needs no exotic input at all -- any
-        # free-text field holding a bare year or number trips it.
+        # The reachable member of this family: any free-text field holding a bare year
+        # or number tripped the old coercion, with no exotic input required at all.
         result = round_trip(tmp_path, value)
         assert result == value
         assert isinstance(result, str)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: int() accepts underscore separators, so '1_000' becomes 1000",
-    )
     def test_underscore_separated_digits_stay_text(self, tmp_path):
-        # int('1_000') == 1000 is Python literal syntax leaking into a data decoder.
+        # int('1_000') == 1000 was Python literal syntax leaking into a data decoder.
         assert round_trip(tmp_path, "1_000") == "1_000"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: int() drops leading zeros, sign prefixes and surrounding space",
-    )
     @pytest.mark.parametrize("value", ["007", "+5", " 12 "])
     def test_numeric_looking_text_keeps_its_exact_form(self, tmp_path, value):
+        # int() dropped leading zeros, sign prefixes and surrounding space.
         assert round_trip(tmp_path, value) == value
+
+
+class TestDigitsOnlyIdIsUsable:
+    """A digits-only ``id`` must not crash the caller that reads it (#256).
+
+    This is the case that made the coercion more than latent. ``fetch_bills
+    download-all --file <csv>`` reads a user-supplied index and does
+    ``record["id"].strip()``. A hand-written CSV whose ``id`` is all digits decoded to
+    an ``int``, and the download aborted with ``AttributeError: 'int' object has no
+    attribute 'strip'`` -- a stack trace on a user-facing command, not a wrong answer.
+    """
+
+    def test_digits_only_id_survives_as_text(self, tmp_path):
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_text("id,title\n12345,Some Act\n119-hr-1,2024\n", encoding="utf-8")
+        records = BillIndex(csv_path).bills
+
+        # The exact expression the --file download path uses.
+        assert [r["id"].strip() for r in records] == ["12345", "119-hr-1"]
+        # And the digits-only title on the second row is untouched too.
+        assert records[1]["title"] == "2024"
