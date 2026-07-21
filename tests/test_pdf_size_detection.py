@@ -977,6 +977,26 @@ class TestFallbackWhenNoBands:
         accounts = _accounts(extract_anchors(pages))
         assert any(a.text == "OPERATIONS AND SUPPORT" for a in accounts)
 
+    def test_two_triggers_under_one_heading_emit_one_account(self):
+        # Two `For necessary expenses of` lines inside the 3-position backwalk of the
+        # same heading resolve to the same account anchor. Only one is emitted -- the
+        # legacy path dedupes, and without that every consumer walking anchors sees the
+        # account twice. Pinned because the dedup was covered but its *duplicate*
+        # branch was not, so a change to how it is done had nothing holding it (#19).
+        pages = [
+            Page(
+                1,
+                (
+                    Line(1, "OPERATIONS AND SUPPORT"),
+                    Line(2, "For necessary expenses of the agency, $1,000."),
+                    Line(3, "For necessary expenses of the same agency, $2,000."),
+                ),
+            )
+        ]
+        assert derive_size_bands(pages) is None  # no sizes -> legacy path
+        accounts = _accounts(extract_anchors(pages))
+        assert [a.text for a in accounts] == ["OPERATIONS AND SUPPORT"]
+
     def test_legacy_path_emits_no_major(self):
         # Majors are a size-band-path feature: a no-glyph-size doc (legacy fallback)
         # emits the account but NO major, and the account breadcrumb has no major
