@@ -153,23 +153,12 @@ ALLOWED_CORPUS_SKIPS = {
     # genuine property of the fixture, not a parser gap.
     "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
     "[119-hr-1/1_reported-in-house.xml]": "No appropriations elements with text",
-    # 115-hr-5895 v5 is an ENROLLED print, which carries no GPO margin line numbers
-    # (14 numbered lines out of 3808). Anchors are keyed to those line numbers, so the
-    # tree comes back empty. This is the layout the product deliberately DECLINES rather
-    # than diffing (#141: _is_unnumbered_layout in server/pdf_compare.py raises
-    # UnsupportedLayoutError; this very file is the fixture that guard is gated on).
-    # So the skip is the expected consequence of a knowingly unsupported layout, not a
-    # parser gap. The gap itself (this whole document class runs no assertions) is
-    # tracked in #262 — which this ceiling partly addresses by making the skip explicit
-    # and fail-closed. Remove this entry when #261 (a line-number-independent anchor
-    # pass) lands: at that point the gate produces a tree and this case should assert
-    # instead of skip.
-    #
-    # Caveat worth knowing: the skip reason here is generic ("no anchors / no offset
-    # table"), so this entry, not the gate, is what records that the cause is the #141
-    # enrolled-layout decline (server/pdf_compare.py:_is_unnumbered_layout).
-    "tests/test_corpus_tree_properties.py::test_pdf_tree_invariants_hold_corpus_wide"
-    "[115-hr-5895/5_enrolled-bill.pdf]": "no anchors / no offset table",
+    # 115-hr-5895 v5 (the ENROLLED print, no GPO margin line numbers) used to live here:
+    # its tree comes back empty, so the PDF gate skipped it and this entry recorded why.
+    # #262 closed that — the gate now ASSERTS on a zero-anchor document instead of
+    # skipping it (_assert_zero_anchor_layout in test_corpus_tree_properties.py), so
+    # there is no skip left to allow. The layout reason it used to carry lives in
+    # _PDF_NO_ANCHOR_LAYOUTS, next to the assertions that now check it.
     # --- 113-hr-3547 v4 (added to the manifest by #220 Part 1 / #277) -----------
     # 113-hr-3547 v4 is the Senate's FIRST engrossed amendment to what was then a
     # shell bill: a single section extending commercial space-launch liability (2.6 KB,

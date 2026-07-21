@@ -45,7 +45,7 @@ from formatters.diff_html import _build_toc_from_tree
 from formatters.text_serializer import _xml_tree_payload, serialize_tree_for_tree
 from parsers.pdf_anchors import extract_anchors
 from parsers.pdf_text import pdf_full_text
-from tests.conftest import assert_manifest_committed, manifest_pdf_files, manifest_xml_files
+from tests.conftest import CORPUS_SWEEP, assert_manifest_committed, manifest_pdf_files, manifest_xml_files
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow
@@ -139,6 +139,23 @@ _PDF_DROP_BUDGET: dict[str, int] = {}
 # only, with this reason, rather than carrying a meaningless ~3,500 budget.
 _PDF_MONEY_SKIP: set[str] = {"116-hr-133/7_enrolled-bill.pdf"}
 
+# --- Zero-anchor document class (#141, gated by #262) ---------------------------
+# Enrolled prints, public-law prints, and committee prints carry no GPO margin line
+# numbers, so `extract_anchors` returns () and the contract tree is empty. That is
+# by-design degradation (#141), not a parser fault — but the PDF gate used to
+# `pytest.skip("no anchors / no offset table")` on it, which made the whole class
+# indistinguishable from a pass: an extraction regression that killed anchors on a
+# NUMBERED print would have skipped just as quietly (#262).
+#
+# A zero-root PDF is now GATED, not skipped. It must be a documented member of this
+# class, it must classify as the unnumbered layout, and its text layer must still be
+# intact — only the anchor layer is allowed to decline. A member that starts
+# producing anchors fails too, so the registry cannot go stale in the quiet
+# direction. Value is the reason the layout carries no anchors.
+_PDF_NO_ANCHOR_LAYOUTS: dict[str, str] = {
+    "115-hr-5895/5_enrolled-bill.pdf": "enrolled print — no GPO margin line numbers (#141)",
+}
+
 
 def _xml_tree_payload_for(path: Path) -> tuple[list[dict], str]:
     """The contract-shaped XML tree for one version, plus its full_text — built the
@@ -148,18 +165,22 @@ def _xml_tree_payload_for(path: Path) -> tuple[list[dict], str]:
     return _xml_tree_payload(bill, spans, heading_offsets), text
 
 
-def _pdf_tree_payload_for(path: Path) -> tuple[list[dict], str]:
+def _pdf_tree_payload_for(path: Path) -> tuple[list[dict], str, tuple, dict]:
     """The contract-shaped PDF tree for one version, plus its full_text — built the
     way the shipped canonical does. Uses ``pdf_full_text`` (the merged whole-word
     variant), NOT ``pdf_full_text_print``: ``compare_pdfs`` builds the contract tree
     from the non-print text (``_build_canonical(printed=False)``); the print variant
     is display-only, and a dollar amount broken across a printed line would extract
     differently there — so the print variant would measure a tree the consumer never
-    sees (feedback_measure_at_consumed_output)."""
+    sees (feedback_measure_at_consumed_output).
+
+    Also returns the anchors and the offset table: the zero-anchor gate needs them to
+    tell "this layout carries no margin line numbers" (#141) apart from "anchor
+    extraction regressed" (#262)."""
     pages = cached_pages(path)
     full_text, offsets = pdf_full_text(pages)
     anchors = tuple(extract_anchors(pages))
-    return _pdf_tree_payload(anchors, offsets, full_text), full_text
+    return _pdf_tree_payload(anchors, offsets, full_text), full_text, anchors, offsets
 
 
 def _walk(nodes: list[dict]):
@@ -206,6 +227,55 @@ def _assert_no_blank_toc_rows(roots: list[dict], full_text: str) -> None:
     # carries any labeled node, the TOC must render at least one entry.
     if any((n["label"] or "").strip() for n in _walk(roots)):
         assert "toc-child" in html or "toc-group" in html, "labeled tree rendered an empty TOC"
+
+
+def _assert_zero_anchor_layout(path: Path, test_id: str, full_text: str, anchors: tuple, offsets: dict) -> None:
+    """Gate (not skip) a PDF whose contract tree is empty (#262).
+
+    An empty tree has no nodes to run invariants 1-4 against, so this asserts the
+    document-level facts that must hold for the emptiness to be the documented #141
+    degradation rather than a regression:
+
+    * the version is a documented member of the zero-anchor class;
+    * it classifies as the unnumbered layout — the same classifier the server's
+      decline guard uses, so a NUMBERED print that stopped yielding anchors fails
+      here instead of skipping;
+    * the offset table resolves only a negligible fraction of lines, which is the
+      mechanism (no margin numbers to key on), not a coincidence;
+    * the TEXT layer is intact. Only the anchor layer is allowed to decline: the
+      body still extracts, and it still carries the section enumerators a reader
+      (and the downstream text pipeline) needs.
+    """
+    from server.pdf_compare import _is_unnumbered_layout  # test-only import; see test_pdf_compare
+
+    # The registry is calibrated to the committed manifest. CORPUS_SWEEP is an
+    # uncalibrated superset (every locally-fetched bill, ten enrolled prints among
+    # them), so membership is not required there — but the layout assertions below
+    # still run, so exploration is checked, just not enrolment-gated.
+    if not CORPUS_SWEEP:
+        assert test_id in _PDF_NO_ANCHOR_LAYOUTS, (
+            f"{test_id}: produced no tree nodes but is not a documented zero-anchor layout. "
+            "A numbered print that stops producing anchors is an extraction regression — "
+            "add it to _PDF_NO_ANCHOR_LAYOUTS only with a reason."
+        )
+    assert not anchors, f"{test_id}: empty tree despite {len(anchors)} anchor(s) — anchors resolved to no nodes"
+
+    pages = cached_pages(path)
+    assert _is_unnumbered_layout(pages), (
+        f"{test_id}: registered as a zero-anchor layout but classifies as NUMBERED — "
+        "the anchor pipeline, not the layout, is why the tree is empty"
+    )
+    total_lines = sum(len(p.lines) for p in pages)
+    assert len(offsets) < total_lines * 0.05, (
+        f"{test_id}: {len(offsets)} of {total_lines} lines carry numbers — too many for "
+        "an unnumbered print; the empty tree is not explained by the layout"
+    )
+
+    # Text layer intact. The anchor layer declining must not mean the document is
+    # unreadable — a PDF that extracted to nothing would otherwise land here and pass.
+    assert len(full_text.strip()) > 10_000, f"{test_id}: text layer extracted only {len(full_text.strip())} chars"
+    sections = re.findall(r"\bSEC\. \d+", full_text)
+    assert len(sections) >= 10, f"{test_id}: text layer carries only {len(sections)} section enumerator(s)"
 
 
 def _assert_money_conserves(roots: list[dict], reference: Counter, max_drop: int, label: str) -> None:
@@ -263,9 +333,15 @@ def test_pdf_tree_invariants_hold_corpus_wide(pdf_path: Path) -> None:
     if not pdf_path.exists():
         pytest.skip(f"manifest fixture not present locally: {_corpus_id(pdf_path)}")
     test_id = _corpus_id(pdf_path)
-    roots, full_text = _pdf_tree_payload_for(pdf_path)
+    roots, full_text, anchors, offsets = _pdf_tree_payload_for(pdf_path)
     if not roots:
-        pytest.skip("no anchors / no offset table")
+        # Gated, never skipped: see _assert_zero_anchor_layout (#262).
+        _assert_zero_anchor_layout(pdf_path, test_id, full_text, anchors, offsets)
+        return
+    assert test_id not in _PDF_NO_ANCHOR_LAYOUTS, (
+        f"{test_id}: registered as a zero-anchor layout but now yields {len(roots)} root(s) — "
+        "drop it from _PDF_NO_ANCHOR_LAYOUTS so it gets the full structural gate"
+    )
 
     _assert_schema_and_levels(roots)
     _assert_no_blank_toc_rows(roots, full_text)
@@ -275,3 +351,29 @@ def test_pdf_tree_invariants_hold_corpus_wide(pdf_path: Path) -> None:
         return  # known degraded extraction — see _PDF_MONEY_SKIP for the reason
     reference = Counter(extract_amounts(full_text))
     _assert_money_conserves(roots, reference, _PDF_DROP_BUDGET.get(test_id, 0), test_id)
+
+
+_ENROLLED_PDF = Path(__file__).parent.parent / "bills" / "115-hr-5895" / "5_enrolled-bill.pdf"
+
+
+def test_enrolled_pdf_text_layer_is_whole_though_its_tree_is_empty() -> None:
+    """Hard fixture for the zero-anchor class (#262), the committed enrolled print.
+
+    The corpus gate's text-layer floors are deliberately generic, so they hold for
+    any future member of the class and would survive a large extraction regression
+    on this 84-page document. This pins the shape that is actually true of the
+    enrolled layout: the anchor layer yields nothing, while the text layer still
+    carries the enacting clause and every division, title, and section enumerator
+    the downstream text pipeline reads. Empty tree, whole document.
+    """
+    if not _ENROLLED_PDF.exists():
+        pytest.skip("manifest fixture not present locally: 115-hr-5895/5_enrolled-bill.pdf")
+    roots, full_text, anchors, _offsets = _pdf_tree_payload_for(_ENROLLED_PDF)
+    assert roots == [] and anchors == ()  # the premise: this layout anchors nothing
+
+    assert "Be it enacted by the Senate and House of Representatives" in full_text
+    # Observed 6 / 12 / 166 in the committed fixture; floors sit well under those so
+    # ordinary extraction drift does not trip them but a collapse does.
+    assert len(re.findall(r"\bDIVISION [A-Z]\b", full_text)) >= 5
+    assert len(re.findall(r"\bTITLE [IVXL]+\b", full_text)) >= 10
+    assert len(re.findall(r"\bSEC\. \d+", full_text)) >= 100
