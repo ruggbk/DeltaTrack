@@ -118,7 +118,9 @@ def test_callout_real_change_uses_flex_row_with_delta_class():
     assert callout.rstrip().endswith("</div>")
     assert '<div class="row">' in callout
     assert '<span class="label">Amount:</span>' in callout
-    assert "$1,000 &rarr; $1,500" in callout
+    # Closing </span>: an unterminated pair still matches when only the new side
+    # is off by a magnitude ("$1,000 &rarr; $1,500,000" contains it) — #264.
+    assert "<span>$1,000 &rarr; $1,500</span>" in callout
     # Delta has a semantic class for color.
     assert '<span class="delta increase">' in callout
     assert "(+$500)" in callout
@@ -133,8 +135,8 @@ def test_callout_decrease_uses_decrease_class_and_negative_sign():
 def test_callout_multiple_pairs_emit_multiple_rows():
     callout = _build_callout(_change(amount_pairs=((1000, 1500), (2000, 3000))))
     assert callout.count('<div class="row">') == 2
-    assert "$1,000 &rarr; $1,500" in callout
-    assert "$2,000 &rarr; $3,000" in callout
+    assert "<span>$1,000 &rarr; $1,500</span>" in callout
+    assert "<span>$2,000 &rarr; $3,000</span>" in callout
 
 
 def test_callout_net_zero_renders_neutral():

@@ -172,7 +172,10 @@ class TestFormatHtml:
     def test_contains_financial_table(self):
         html = format_html(_sample_diff_dict())
         assert "financial-table" in html
-        assert "$1,000,000" in html
+        # Whole cells (#264): a bare "$1,000,000" also matches the prose body of
+        # the card, and is a prefix of "$1,000,000,000" if the table is wrong.
+        assert '<td class="amount">$1,000,000</td>' in html
+        assert '<td class="amount">$2,000,000</td>' in html
 
     def test_contains_sidebar(self):
         html = format_html(_sample_diff_dict())

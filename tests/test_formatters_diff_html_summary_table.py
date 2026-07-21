@@ -4,6 +4,11 @@ Layout: rowspan groups multiple amount pairs from one change under a single
 section cell; each row carries a data-group index for the JS column sort.
 Headers are "Old Amount" / "New Amount". Only "real" amount changes (both
 sides present and differing) appear — adapters pre-filter amount_pairs.
+
+Money is asserted as a whole cell, never as a bare substring (#264). Comma
+grouping makes every amount a prefix of a larger one, so `"$1,000" in html`
+is satisfied by "$1,000,000" and a magnitude error renders green. The closing
+`</td>` is what makes the assertion able to fail.
 """
 
 from __future__ import annotations
@@ -67,16 +72,16 @@ def test_single_pair_row_has_no_rowspan_attribute():
 
 def test_amounts_and_change_columns_formatted():
     html = _build_financial_summary(_view([_change(amount_pairs=((1000, 1500),))]))
-    assert "$1,000" in html
-    assert "$1,500" in html
-    assert "+$500" in html
-    assert "+50.0%" in html
+    assert '<td class="amount">$1,000</td>' in html
+    assert '<td class="amount">$1,500</td>' in html
+    assert '<td class="amount change-amount">+$500</td>' in html
+    assert '<td class="amount change-amount">+50.0%</td>' in html
 
 
 def test_decrease_uses_negative_sign_outside_dollar():
     html = _build_financial_summary(_view([_change(amount_pairs=((2000, 1500),))]))
-    assert "-$500" in html  # sign outside the dollar formatter
-    assert "-25.0%" in html
+    assert '<td class="amount change-amount">-$500</td>' in html  # sign outside the dollar formatter
+    assert '<td class="amount change-amount">-25.0%</td>' in html
 
 
 def test_multi_pair_change_uses_rowspan_for_section_cell():
@@ -122,8 +127,10 @@ def test_changes_without_amount_pairs_are_skipped():
 def test_zero_old_amount_yields_em_dash_percent():
     html = _build_financial_summary(_view([_change(amount_pairs=((0, 500),))]))
     # Avoids divide-by-zero; em-dash signals "n/a" for percent.
-    assert "+$500" in html
-    assert "—" in html
+    assert '<td class="amount">$0</td>' in html
+    assert '<td class="amount">$500</td>' in html
+    assert '<td class="amount change-amount">+$500</td>' in html
+    assert '<td class="amount change-amount">—</td>' in html
 
 
 def test_removed_entry_row_is_negative_and_decrease():
