@@ -117,3 +117,120 @@ def test_migrated_modules_pin_only_manifested_fixtures() -> None:
         "green while the test FileNotFoundErrors on a clean checkout). Add it to the "
         "manifest and .gitignore, or stop pinning it."
     )
+
+
+# --- Content-skip ceiling (#220) -----------------------------------------------
+# Same rationale as the #217 helper tests above: the ceiling exists to turn a
+# corpus-wide content-skip regression into a red build, so the classifier itself gets
+# a regression test. A refactor that made it always return {} would silently reopen
+# the fail-open channel #220 closed, and nothing else would catch it.
+
+
+def test_classify_corpus_skips_passes_the_documented_allowlist() -> None:
+    """Every allowlisted skip is accepted -- the ceiling does not fire on a clean run."""
+    assert conftest.classify_corpus_skips(dict(conftest.ALLOWED_CORPUS_SKIPS)) == {}
+
+
+def test_classify_corpus_skips_flags_an_unlisted_skip() -> None:
+    """An unlisted content-skip is reported (the regression case the ceiling exists for)."""
+    observed = {"tests/test_corpus_properties.py::test_x[118-hr-4366/1_reported-in-house.xml]": "No bill body found"}
+    assert conftest.classify_corpus_skips(observed) == observed
+
+
+def test_classify_corpus_skips_flags_a_different_case_at_constant_total() -> None:
+    """A bare skip COUNT would miss this: one allowlisted case stops skipping while a
+    different case starts, leaving the total unchanged. Keying on nodeid catches it."""
+    allowed = list(conftest.ALLOWED_CORPUS_SKIPS)
+    observed = dict(conftest.ALLOWED_CORPUS_SKIPS)
+    observed.pop(allowed[0])
+    observed["tests/test_diff_validation.py::test_y[118-hr-4366/1_reported-in-house.xml]"] = "No bill body found"
+    assert len(observed) == len(conftest.ALLOWED_CORPUS_SKIPS)
+    assert list(conftest.classify_corpus_skips(observed)) == [
+        "tests/test_diff_validation.py::test_y[118-hr-4366/1_reported-in-house.xml]"
+    ]
+
+
+def test_classify_corpus_skips_flags_an_allowlisted_nodeid_with_a_new_reason() -> None:
+    """The regression that a nodeid-only allowlist would wave through: a case that is
+    allowlisted for reason A starts skipping for reason B (e.g. the enrolled PDF stops
+    yielding "no anchors" because the parser broke on it). Matching on reason catches
+    it; the entry is not a blanket exemption for that nodeid."""
+    nodeid, orig_reason = next(iter(conftest.ALLOWED_CORPUS_SKIPS.items()))
+    observed = {nodeid: orig_reason + " -- PARSER REGRESSION"}
+    assert conftest.classify_corpus_skips(observed) == observed
+
+
+def test_allowlisted_skips_name_real_corpus_gate_modules() -> None:
+    """Each allowlist key targets one of the gate MODULES the hook actually watches.
+
+    This catches a module rename/move that stranded an entry — NOT a test rename or a
+    parametrize-id change (those leave the module prefix intact and are not detectable
+    here; a stranded such entry silently widens the allowlist until the case it named
+    reappears with a new id). A full stale-entry check would require collecting the
+    gates, which this fast-tier guard deliberately does not do."""
+    for nodeid in conftest.ALLOWED_CORPUS_SKIPS:
+        assert nodeid.startswith(conftest.CORPUS_GATE_MODULES), f"stale allowlist entry: {nodeid}"
+
+
+# --- End-to-end hook behavior (#220) -------------------------------------------
+# The unit tests above cover classify_corpus_skips (a dict comprehension). The parts
+# that can fail OPEN — the skipped-outcome/xfail filter, the longrepr extraction, the
+# session.exitstatus mutation, xdist aggregation — live in the pytest hooks, which a
+# unit test cannot exercise. These run a real child pytest session that re-registers the
+# actual hooks (imported from tests.conftest, so a regression in them is caught here) and
+# assert on the child's PROCESS EXIT CODE, which is the thing that ultimately reddens CI.
+
+_CHILD_CONFTEST = """
+import sys
+sys.path.insert(0, {repo!r})
+from tests.conftest import pytest_runtest_logreport, pytest_sessionfinish  # noqa: F401
+"""
+
+
+def _run_child_session(tmp_path, test_body: str, *, xdist: bool):
+    """Write a one-file gate-module test under tmp_path/tests and run a child pytest.
+
+    The file is named test_corpus_properties.py so its nodeid carries the watched module
+    prefix. Runs in a subprocess (fresh _observed_corpus_skips, real exit code). Returns
+    the CompletedProcess."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo = str(Path(conftest.__file__).parent.parent)
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_text(_CHILD_CONFTEST.format(repo=repo))
+    (tests_dir / "test_corpus_properties.py").write_text(test_body)
+    (tmp_path / "pyproject.toml").write_text('[tool.pytest.ini_options]\ntestpaths = ["tests"]\n')
+    cmd = [sys.executable, "-m", "pytest", "-p", "no:randomly", "-q"]
+    if xdist:
+        cmd += ["-n", "2"]
+    return subprocess.run(cmd, cwd=tmp_path, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("xdist", [False, True], ids=["serial", "xdist"])
+def test_ceiling_fails_session_on_unlisted_skip_end_to_end(tmp_path, xdist) -> None:
+    """An unlisted content-skip in a gate module fails the child session (exit 1) and
+    prints the banner — verified for both serial and xdist, since the xdist controller
+    must aggregate a worker's skip for the gate to work at all."""
+    body = "import pytest\ndef test_x():\n    pytest.skip('No bill body found')\n"
+    r = _run_child_session(tmp_path, body, xdist=xdist)
+    assert r.returncode == 1, f"expected exit 1, got {r.returncode}\n{r.stdout}\n{r.stderr}"
+    assert "content-skip ceiling exceeded" in r.stdout, r.stdout
+
+
+def test_ceiling_ignores_xfail_end_to_end(tmp_path) -> None:
+    """pytest.xfail() reports outcome=='skipped' but is a tracked known-failure, not a
+    content-skip. The child session must exit 0, not redden on a blank-reason skip."""
+    body = "import pytest\ndef test_x():\n    pytest.xfail('Known 0-node issue')\n"
+    r = _run_child_session(tmp_path, body, xdist=False)
+    assert r.returncode == 0, f"xfail wrongly treated as content-skip\n{r.stdout}\n{r.stderr}"
+
+
+def test_ceiling_stays_green_on_a_passing_gate_end_to_end(tmp_path) -> None:
+    """A gate module with no content-skips does not fire the ceiling (guards against the
+    hook reddening a clean run — the false-positive direction)."""
+    body = "def test_x():\n    assert True\n"
+    r = _run_child_session(tmp_path, body, xdist=False)
+    assert r.returncode == 0, f"ceiling fired on a clean gate run\n{r.stdout}\n{r.stderr}"

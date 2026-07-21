@@ -119,6 +119,140 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
     assert len(collected) > 0, f"{kind}: gate parametrized over zero cases despite a complete manifest."
 
 
+# --- Content-skip ceiling (#220) -----------------------------------------------
+# The #217 manifest floor proves fixtures are committed and cases collected, but not
+# that any ASSERTION ran. The corpus gates skip per-case on content conditions ("no
+# bill body", "no dollar amounts", "no anchors / no offset table"), so a corpus-wide
+# parser regression that turned every case into a content-skip would keep CI green
+# while asserting nothing — the one structural fail-open left after #217.
+#
+# This closes that channel: every content-skip in the three corpus gate modules must
+# be named in ALLOWED_CORPUS_SKIPS below, AND skip for the reason recorded there. An
+# unlisted skip fails the session; so does an allowlisted nodeid that starts skipping
+# for a different reason (a bare count, or a nodeid-only match, would miss both — the
+# second is precisely a regression on a case already known to be fragile).
+#
+# Adding an entry is a deliberate act: it records a fixture the gates cannot assert
+# on, which is a coverage gap, not a neutral fact. Say why in the comment.
+#
+# Scope: only the three gates that skip per-case on content. The other corpus modules
+# migrated onto the manifest in #220 Part 1 (test_node_join_corpus,
+# test_xml_subsection_nodes, test_pdf_subsection_recall) hard-assert denominators
+# instead of skipping, so they have no content-skip channel to watch — they are left
+# out deliberately rather than by oversight. Add one here if it ever grows a
+# content-skip.
+CORPUS_GATE_MODULES = (
+    "tests/test_corpus_properties.py",
+    "tests/test_corpus_tree_properties.py",
+    "tests/test_diff_validation.py",
+)
+
+ALLOWED_CORPUS_SKIPS = {
+    # 119-hr-1 v1 is a reconciliation shell: it carries no <appropriations-*> elements
+    # with text at all, so the element->node gate has nothing to assert against. A
+    # genuine property of the fixture, not a parser gap.
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[119-hr-1/1_reported-in-house.xml]": "No appropriations elements with text",
+    # 115-hr-5895 v5 is an ENROLLED print, which carries no GPO margin line numbers
+    # (14 numbered lines out of 3808). Anchors are keyed to those line numbers, so the
+    # tree comes back empty. This is the layout the product deliberately DECLINES rather
+    # than diffing (#141: _is_unnumbered_layout in server/pdf_compare.py raises
+    # UnsupportedLayoutError; this very file is the fixture that guard is gated on).
+    # So the skip is the expected consequence of a knowingly unsupported layout, not a
+    # parser gap. The gap itself (this whole document class runs no assertions) is
+    # tracked in #262 — which this ceiling partly addresses by making the skip explicit
+    # and fail-closed. Remove this entry when #261 (a line-number-independent anchor
+    # pass) lands: at that point the gate produces a tree and this case should assert
+    # instead of skip.
+    #
+    # Caveat worth knowing: the skip reason here is generic ("no anchors / no offset
+    # table"), so this entry, not the gate, is what records that the cause is the #141
+    # enrolled-layout decline (server/pdf_compare.py:_is_unnumbered_layout).
+    "tests/test_corpus_tree_properties.py::test_pdf_tree_invariants_hold_corpus_wide"
+    "[115-hr-5895/5_enrolled-bill.pdf]": "no anchors / no offset table",
+    # --- 113-hr-3547 v4 (added to the manifest by #220 Part 1 / #277) -----------
+    # 113-hr-3547 v4 is the Senate's FIRST engrossed amendment to what was then a
+    # shell bill: a single section extending commercial space-launch liability (2.6 KB,
+    # 1 parsed node, no dollar amounts, no appropriations elements). HR 3547 only became
+    # the FY2014 omnibus at v5. So both skips are true properties of the document, not
+    # a parser gap — and the v4->v5 pair is worth keeping precisely because diffing a
+    # one-section shell against a 3 MB omnibus is the amendment-shape extreme.
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
+}
+
+# Populated by pytest_runtest_logreport; read in pytest_sessionfinish.
+_observed_corpus_skips: dict[str, str] = {}
+
+
+def classify_corpus_skips(observed: dict[str, str]) -> dict[str, str]:
+    """Corpus-gate skips that are not in the documented allowlist (i.e. failures).
+
+    Matches on nodeid AND reason: an allowlisted case that starts skipping for a
+    DIFFERENT reason (e.g. the enrolled PDF stops yielding "no anchors" and starts
+    failing to parse) is exactly the regression this gate exists to catch, so it must
+    not be waved through just because the nodeid is known.
+
+    Split out from the hooks so it is directly unit-testable — a ceiling that has
+    never been shown to fire cannot distinguish "nothing regressed" from "the check
+    is broken".
+    """
+    return {nodeid: reason for nodeid, reason in observed.items() if ALLOWED_CORPUS_SKIPS.get(nodeid) != reason}
+
+
+def pytest_runtest_logreport(report) -> None:
+    """Record content-skips originating in the corpus gate modules.
+
+    Runs on the xdist controller as well as inline, because xdist re-emits worker
+    reports through this hook — so the count aggregates correctly under -n N.
+    """
+    # xfail is reported as outcome == "skipped" but carries `wasxfail`; it is a tracked
+    # known-failure, not a content-skip, so it must not enter the ceiling (else adding a
+    # bill to _XFAIL_ZERO_NODES would redden CI on a blank-reason "skip").
+    if report.outcome != "skipped" or hasattr(report, "wasxfail"):
+        return
+    if not report.nodeid.startswith(CORPUS_GATE_MODULES):
+        return
+    reason = ""
+    if isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
+        reason = str(report.longrepr[2]).removeprefix("Skipped: ")
+    _observed_corpus_skips[report.nodeid] = reason
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    """Fail the session if any corpus gate content-skipped outside the allowlist."""
+    # CORPUS_SWEEP sweeps every locally-fetched bill (a superset of the manifest) as
+    # exploration, not a gate; its skips are expected and uncalibrated.
+    if CORPUS_SWEEP or hasattr(session.config, "workerinput"):
+        return
+    # Only escalate a clean run. If the session already failed or was interrupted/
+    # aborted, leave its exit code alone — relabeling an INTERRUPTED run as TESTS_FAILED
+    # would mask why it actually stopped.
+    if exitstatus not in (0, pytest.ExitCode.OK):
+        return
+    unexpected = classify_corpus_skips(_observed_corpus_skips)
+    if not unexpected:
+        return
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is None:
+        return
+    reporter.write_sep("=", "corpus content-skip ceiling exceeded (#220)", red=True, bold=True)
+    reporter.write_line(
+        f"{len(unexpected)} corpus gate case(s) skipped on content conditions without being "
+        "listed in ALLOWED_CORPUS_SKIPS (tests/conftest.py). A gate that skips asserts "
+        "nothing, so this fails closed rather than passing green:"
+    )
+    for nodeid, reason in sorted(unexpected.items()):
+        reporter.write_line(f"  {nodeid}\n      reason: {reason}")
+    reporter.write_line(
+        "If this is a parser regression, fix it. If the fixture genuinely cannot be "
+        "asserted on, add it to ALLOWED_CORPUS_SKIPS with a comment saying why."
+    )
+
+
 # --- REQUIRE_CORPUS: narrowed by #220 ------------------------------------------
 # No longer a corpus-gate mechanism: #220 put every corpus gate on the committed
 # manifest, so they fail closed with no env var. Two non-manifest consumers keep the
