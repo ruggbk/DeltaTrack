@@ -29,6 +29,7 @@ sessions_for_congress), originally by @willhea.
 
 from __future__ import annotations
 
+import html as _html
 import json
 import re
 import sys
@@ -243,14 +244,22 @@ def billstatus_url(congress: int, bill_type: str, number: int) -> str:
     return f"{BULK_BASE}/BILLSTATUS/{congress}/{bill_type}/{fname}"
 
 
+# Directory segment per format. It matches the extension for xml and pdf, but the HTML
+# rendition is served from /html/ with a .htm extension (#249) — the symmetric
+# .../{pkg}/htm/{pkg}.htm redirects to govinfo's error page, so deriving the directory
+# from the extension would build a URL that resolves to an error document rather than
+# to nothing. An unknown format raises KeyError instead of composing a plausible URL.
+_CONTENT_DIR = {"xml": "xml", "pdf": "pdf", "htm": "html"}
+
+
 def package_content_url(pkg: str, fmt: str) -> str:
-    """content/pkg URL for one BILLS package version. ``fmt`` is 'xml' or 'pdf'.
+    """content/pkg URL for one BILLS package version. ``fmt`` is 'xml', 'pdf' or 'htm'.
 
     ``pkg`` is the package id (``BILLS-118hr4366rh``). Session-free and keyless,
     byte-identical to the bulkdata BILLS path (issue #10). Used to build the
     format URLs the per-bill fetch path downloads.
     """
-    return f"{CONTENT_BASE}/{pkg}/{fmt}/{pkg}.{fmt}"
+    return f"{CONTENT_BASE}/{pkg}/{_CONTENT_DIR[fmt]}/{pkg}.{fmt}"
 
 
 # ---- per-bill fetch (incorporated from the @willhea prototype) ---------------
@@ -285,6 +294,69 @@ def fetch_title(client: httpx.Client, congress: int, bill_type: str, number: int
     root = ET.fromstring(resp.content)
     el = root.find(".//bill/title")
     return el.text if el is not None else None
+
+
+# ---- HTML rendition (plain-text body) ---------------------------------------
+#
+# govinfo publishes each version as a third rendition beside the XML and the PDF: an
+# HTML page whose entire body is one <pre> block holding GPO's authoritative ASCII
+# layout. It exists for versions the XML does not cover, and its text is the same
+# composition the PDF prints, without the PDF extraction step in between.
+#
+# The <pre> contents are the document; everything around them is chrome. Line structure
+# inside it is LOAD-BEARING and is returned untouched apart from HTML unescaping: the
+# downstream parser reads structure off `SEC. N.` enumerators at column 0 and off
+# centered headers, both of which are expressed purely in leading whitespace and line
+# breaks. Normalizing whitespace here would erase the signal the caller needs.
+
+_RENDITION_PRE_RE = re.compile(r"<pre>(.*?)</pre>", re.DOTALL | re.IGNORECASE)
+
+
+class RenditionNotAvailable(Exception):
+    """No usable HTML rendition for a version.
+
+    Raised rather than returning empty text, for the same reason
+    :class:`CongressNotAvailable` exists: a version with no rendition and a version
+    whose rendition is an empty page are both failures, and an empty string would
+    reach the caller as a bill that legitimately says nothing.
+    """
+
+
+def bill_text_from_htm(html: str, *, source: str = "") -> str:
+    """The plain-text bill body from one govinfo HTML rendition.
+
+    Returns the <pre> contents HTML-unescaped and otherwise verbatim -- no stripping,
+    dedenting, or blank-line collapsing (see the note above on line structure). The
+    GPO provenance header inside the <pre> ("[Congressional Bills 118th Congress]",
+    "<DOC>") is part of the published document, so it is kept; deciding whether a
+    consumer wants it is that consumer's call, not this reader's.
+
+    Raises RenditionNotAvailable when there is no <pre> block or it holds only
+    whitespace -- which is also what govinfo's error page looks like to this parser.
+    """
+    where = f" ({source})" if source else ""
+    match = _RENDITION_PRE_RE.search(html)
+    if match is None:
+        raise RenditionNotAvailable(f"no <pre> block in the HTML rendition{where}; not a govinfo bill rendition")
+    text = _html.unescape(match.group(1))
+    if not text.strip():
+        raise RenditionNotAvailable(f"the HTML rendition{where} carries an empty <pre> block")
+    return text
+
+
+def fetch_bill_htm(client: httpx.Client, pkg: str) -> str:
+    """Download one version's HTML rendition and return its plain-text body.
+
+    ``pkg`` is the package id (``BILLS-118hr8282ih``). Keyless and session-free, like
+    the XML and PDF renditions. Raises RenditionNotAvailable on any non-200, which
+    includes the redirect govinfo issues for a package that has no HTML rendition
+    (the client does not follow redirects).
+    """
+    url = package_content_url(pkg, "htm")
+    resp = client.get(url)
+    if resp.status_code != 200:
+        raise RenditionNotAvailable(f"govinfo returned HTTP {resp.status_code} for the HTML rendition ({url})")
+    return bill_text_from_htm(resp.text, source=url)
 
 
 # ---- BILLSTATUS version dates (authoritative ordering for bulk downloads) ----
