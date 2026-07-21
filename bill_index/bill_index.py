@@ -306,17 +306,21 @@ def _decode_value(column: str, value: str | None) -> Any:
     a cell, so no on-disk index has ever needed JSON decoding. Removing it changes how
     a stored value reads only in the case it was corrupting.
 
-    Still column-blind on the int coercion below, so digits-only free text ("2024" as a
-    title) still comes back as an int. Fixing that needs an explicit per-column type
-    model rather than a sniff, so it is left for #256 to resolve; the round-trip tests
-    for it stay xfail(strict=True).
+    It no longer coerces digits to ``int`` either (#256). A CSV cell is text, and the
+    reader guessed a type from the value's *shape* while ignoring which column it was
+    reading, so any text that happened to be all digits came back as a number: a title
+    of ``2024``, or worse, an ``id`` of ``12345``, which then crashed the
+    ``--file <csv>`` download path on ``.strip()``.
+
+    The alternative -- declaring a type per column -- was considered and rejected. This
+    index is documented to carry *arbitrary* metadata, so a type registry would need
+    every producer to register its columns and would still need a rule for the ones that
+    did not. Returning text is also what the file actually holds. Callers that want a
+    number convert at the point of use; nothing in the project reads the writer's
+    counting columns (``actionCount``, ``daysActive``, ``historySize`` and peers) back
+    out, so no caller loses anything here.
     """
     if value is None or value == "":
         return ""
-
-    try:
-        return int(value)
-    except ValueError:
-        pass
 
     return value
