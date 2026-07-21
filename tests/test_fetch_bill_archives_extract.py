@@ -17,6 +17,7 @@ marking its own debris: ``extract_archives`` rmtree's a partial folder, and
 from __future__ import annotations
 
 import io
+import struct
 import zipfile
 from pathlib import Path
 
@@ -25,6 +26,7 @@ import pytest
 import respx
 
 from fetch_bill_archives import (
+    MAX_UNCOMPRESSED_BYTES,
     archive_destination,
     archive_error_path,
     archive_extract_dir,
@@ -47,6 +49,33 @@ def write_archive(source: Path, name: str, members: dict[str, bytes] | None = No
         for member, body in members.items():
             zf.writestr(member, body)
     path.write_bytes(buf.getvalue())
+    return path
+
+
+def write_oversized_archive(source: Path, name: str, declared_sizes: list[int]) -> Path:
+    """A ZIP whose central directory DECLARES ``declared_sizes`` uncompressed bytes
+    per member while actually holding a few.
+
+    A decompression bomb has exactly this shape at scale: a small archive whose
+    members expand enormously on disk. Materializing a real multi-gigabyte expansion
+    in a test would spend the disk the ceiling exists to protect, so the declaration
+    is patched instead -- and the declaration is what the ceiling reads, because
+    ``zipfile`` takes member sizes from the central directory.
+    """
+    path = source / f"{name}.zip"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i in range(len(declared_sizes)):
+            zf.writestr(f"{name}-{i}.xml", b"<billStatus/>")
+    raw = bytearray(buf.getvalue())
+    # Central directory file header: uncompressed size is a 4-byte LE field at +24.
+    offset = 0
+    for declared in declared_sizes:
+        offset = raw.find(b"PK\x01\x02", offset)
+        assert offset != -1, "central directory record not found -- the craft is broken"
+        struct.pack_into("<I", raw, offset + 24, declared)
+        offset += 4
+    path.write_bytes(bytes(raw))
     return path
 
 
@@ -209,6 +238,44 @@ class TestExtractArchive:
             assert dest.resolve() in path.resolve().parents
         # Nothing escaped one level up into the directory holding the archive.
         assert not (tmp_path / "escaped.xml").exists()
+
+    def test_archive_declaring_more_than_the_ceiling_is_refused(self, tmp_path):
+        # #279: zipfile.extractall applies no bound, so a crafted archive could fill
+        # the disk. The refusal must land BEFORE anything is written -- a ceiling
+        # checked while extracting would already have spent the disk it protects.
+        archive = write_oversized_archive(tmp_path, "119-hr", [MAX_UNCOMPRESSED_BYTES + 1])
+        dest = tmp_path / "out"
+
+        with pytest.raises(ValueError, match="uncompressed"):
+            extract_archive(archive, dest)
+
+        assert not dest.exists()
+
+    def test_the_ceiling_counts_every_member_not_just_the_largest(self, tmp_path):
+        # A bomb split across members would slip a per-member check: each part sits
+        # comfortably under the ceiling and only the total is ruinous. Four members at
+        # 40% each are individually fine and collectively 1.6x over.
+        part = int(MAX_UNCOMPRESSED_BYTES * 0.4)
+        archive = write_oversized_archive(tmp_path, "119-hr", [part] * 4)
+        dest = tmp_path / "out"
+
+        with pytest.raises(ValueError, match="uncompressed"):
+            extract_archive(archive, dest)
+
+        assert not dest.exists()
+
+    def test_an_archive_at_the_ceiling_is_still_extracted(self, tmp_path):
+        # The boundary is inclusive, and more to the point the ceiling must not be so
+        # eager that it refuses work: a real archive is ~162 MiB expanded, three
+        # orders of magnitude under this, and must extract untouched. A test that only
+        # ever saw the refusal could not tell a working ceiling from one wired to
+        # reject everything.
+        archive = write_oversized_archive(tmp_path, "119-hr", [MAX_UNCOMPRESSED_BYTES])
+        dest = tmp_path / "out"
+
+        extract_archive(archive, dest)
+
+        assert (dest / "119-hr-0.xml").read_bytes() == b"<billStatus/>"
 
     def test_raises_on_a_corrupt_archive(self, tmp_path):
         archive = tmp_path / "119-hr.zip"

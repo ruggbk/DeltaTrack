@@ -37,6 +37,18 @@ GOVINFO_BILLSTATUS_ZIP_URL = (
     "https://www.govinfo.gov/bulkdata/BILLSTATUS/{congress}/{bill_type}/BILLSTATUS-{congress}-{bill_type}.zip"
 )
 
+# Ceiling on what one archive may expand to on disk (#279). `zipfile.extractall`
+# applies no bound of its own, so a crafted archive -- a few MB of highly repetitive
+# data that inflates to terabytes -- would fill the disk before anything noticed.
+#
+# Calibrated against the real bulk data rather than guessed: on 2026-07-21 the largest
+# BILLSTATUS archive is 118-hr, 34 MB compressed expanding to 162 MiB across 10,564
+# members, a 5.0x ratio; every member is XML. 2 GiB leaves better than an order of
+# magnitude of headroom for corpus growth while still refusing anything that could
+# plausibly exhaust a disk. Raise it deliberately if real archives ever approach it;
+# the failure mode of a too-low ceiling is a loud refusal, not a silent truncation.
+MAX_UNCOMPRESSED_BYTES = 2 * 1024**3
+
 _POPULAR_TITLE_RE = re.compile(r"^popular\s+titles?\b", re.IGNORECASE)
 _BILLSTATUS_XML_GLOB = "BILLSTATUS*.xml"
 _BILLSTATUS_XML_NAME_RE = re.compile(r"^BILLSTATUS-(\d+)([a-z]+)(\d+)\.xml$", re.IGNORECASE)
@@ -214,9 +226,25 @@ def archive_extract_dir(source: Path, archive: Path) -> Path:
 
 
 def extract_archive(archive: Path, dest_dir: Path) -> None:
-    """Extract one archive ZIP into dest_dir."""
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    """Extract one archive ZIP into dest_dir, refusing an oversized expansion.
+
+    The size ceiling is the only guard added here. Member *paths* are untrusted too,
+    but `zipfile.extractall` already sanitizes traversal and absolute paths (see
+    test_members_cannot_escape_the_destination_directory), so re-implementing the
+    walk to add filtering would reintroduce that escape to solve a problem the
+    stdlib has handled.
+
+    The total is read from the central directory before a single byte is written: a
+    ceiling enforced during extraction has already spent the disk it protects.
+    """
     with zipfile.ZipFile(archive) as zf:
+        declared = sum(info.file_size for info in zf.infolist())
+        if declared > MAX_UNCOMPRESSED_BYTES:
+            raise ValueError(
+                f"{archive.name} declares {declared} uncompressed bytes, over the "
+                f"{MAX_UNCOMPRESSED_BYTES} ceiling; refusing to extract"
+            )
+        dest_dir.mkdir(parents=True, exist_ok=True)
         zf.extractall(dest_dir)
 
 
