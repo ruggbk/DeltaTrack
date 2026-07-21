@@ -92,6 +92,21 @@ work targets `develop`, not `main`.
 2. Make your changes in small, focused commits
 3. Push your branch and open a pull request against `develop`
 
+**Branch from `develop`, not from another feature branch.** Even when one piece
+of work logically follows another, don't stack pull requests. GitHub retargets a
+stacked pull request at `develop` only when its parent branch is *deleted* on
+merge, and this repo has "Automatically delete head branches" turned off
+([#88](https://github.com/AgoraDMV/DeltaTrack/issues/88)). Without that
+retargeting, "merged" means merged into the parent branch: the child pull request
+shows **MERGED** in the UI while its content sits in a now-stale branch and never
+reaches `develop`. The badge cannot tell you the difference. If you do stack one,
+confirm the content actually landed rather than trusting the badge:
+
+```bash
+git fetch origin develop
+git cat-file -e origin/develop:path/to/changed/file && echo "reached develop"
+```
+
 ### Code style
 
 This project uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting. If you installed the pre-commit hooks, this runs automatically on each commit. You can also run it manually:
@@ -176,7 +191,7 @@ What to look at, roughly in priority order:
   - **Parser accuracy** (`bill_tree.py`, `parsers/`) -- does the bill's structure come through intact? A missing or mis-nested section corrupts everything downstream. See [docs/parser-validation.md](docs/parser-validation.md).
   - **Financial diff** (`diff_bill.py` and its financial filtering) -- dollar amounts and their changes must be exact.
   - **The canonical schema contract** (`formatters/canonical.py`) -- both pipelines and the renderer depend on it, so a breaking change there ripples everywhere.
-- **Tests for the change.** New behavior should come with a test that would fail without the fix.
+- **Tests for the change.** New behavior should come with a test that would fail without the fix. Judge that by the red-green delta on your own machine, not by the totals the author reported — test counts legitimately differ between machines here, and [TESTING.md](TESTING.md#test-counts-are-not-comparable-between-machines) explains why.
 - **Docs and decisions.** A non-obvious choice belongs in a code comment or a [decision record](docs/decisions/); a user-facing change belongs in the README.
 
 Leave specific comments, then approve or request changes. A maintainer does the actual merge.
