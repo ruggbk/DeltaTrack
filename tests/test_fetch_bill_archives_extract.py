@@ -179,19 +179,24 @@ class TestDownloadArchivesCacheCoherence:
         assert route.called
 
     @respx.mock
-    def test_a_cached_archive_leaves_a_stale_marker_in_place(self, tmp_path):
-        # Current behavior, pinned rather than endorsed: the skip returns before the
-        # marker-clearing line, so an archive that is already present keeps any
-        # stale .error marker beside it. Harmless while nothing consumes the markers
-        # programmatically, and worth knowing before anything starts to. See #259.
+    def test_a_cached_archive_clears_a_stale_marker(self, tmp_path):
+        # #259: the skip-if-exists branch used to return before the marker-clearing
+        # line, so an archive that was already present kept an .error marker beside it
+        # describing a failure that the archive itself disproves. The two states
+        # together are contradictory, so whichever a future consumer reads, it reads a
+        # wrong answer for one of them.
         dest = archive_destination(tmp_path, 119, "hr")
         dest.write_bytes(archive_bytes())
         error_path = archive_error_path(tmp_path, 119, "hr")
         error_path.write_text("earlier failure", encoding="utf-8")
 
-        download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
+        downloaded = download_archives(119, 119, bill_types=["hr"], destination=tmp_path)
 
-        assert error_path.exists()
+        assert not error_path.exists()
+        # Still skipped, not re-fetched: clearing the marker must not cost the cache.
+        # respx is mocking with no route registered, so any request would raise.
+        assert downloaded == []
+        assert dest.read_bytes() == archive_bytes()
 
 
 class TestExtractArchive:
