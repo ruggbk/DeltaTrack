@@ -500,6 +500,12 @@ def _account_anchors_legacy(pages: list[Page]) -> list[Anchor]:
     skipped). Used when size bands aren't derivable or attachment coverage is too
     low. Per-page and 3-position to match the pre-#89 behavior exactly."""
     anchors: list[Anchor] = []
+    # `seen` mirrors `anchors` purely for the membership test: several `For necessary
+    # expenses of` triggers can walk back to the same heading, and scanning the list
+    # made that check cost O(n) per hit on a document with thousands of accounts.
+    # Anchor is a frozen dataclass, so set membership is the same equality the list
+    # scan used, and the list still fixes the output order.
+    seen: set[Anchor] = set()
     for page in pages:
         lines = page.lines
         for idx, line in enumerate(lines):
@@ -511,7 +517,8 @@ def _account_anchors_legacy(pages: list[Page]) -> list[Anchor]:
                     continue
                 if _is_uppercase_heading(bline.text):
                     candidate = Anchor(page.page_number, bline.line_number, "account", bline.text.strip())
-                    if candidate not in anchors:
+                    if candidate not in seen:
+                        seen.add(candidate)
                         anchors.append(candidate)
                     break
     return anchors
