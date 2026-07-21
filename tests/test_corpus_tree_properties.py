@@ -143,9 +143,13 @@ _PDF_MONEY_SKIP: set[str] = {"116-hr-133/7_enrolled-bill.pdf"}
 # Enrolled prints, public-law prints, and committee prints carry no GPO margin line
 # numbers, so `extract_anchors` returns () and the contract tree is empty. That is
 # by-design degradation (#141), not a parser fault — but the PDF gate used to
-# `pytest.skip("no anchors / no offset table")` on it, which made the whole class
-# indistinguishable from a pass: an extraction regression that killed anchors on a
-# NUMBERED print would have skipped just as quietly (#262).
+# `pytest.skip("no anchors / no offset table")` on it, and an ALLOWLISTED skip
+# asserts nothing: every fact about this document class went unchecked (#262).
+#
+# Scope, precisely: a NUMBERED print that stopped producing anchors was already
+# caught, because its skip is unexpected and the #220 content-skip ceiling
+# (tests/conftest.py) fails the session on it. The hole was this entry itself —
+# the one skip the ceiling permits by name, and so the one nothing measured.
 #
 # A zero-root PDF is now GATED, not skipped. It must be a documented member of this
 # class, it must classify as the unnumbered layout, and its text layer must still be
