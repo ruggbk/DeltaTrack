@@ -12,10 +12,11 @@ corpus. The index stores free text from bill XML (``title``, ``status``,
 contain no title that would exercise the quote-decoding edges -- so corpus-derived
 cases would bound only the observed input space, not the space the code accepts.
 
-The known-latent decode defects are recorded as ``xfail(strict=True)``: they assert
-the behavior the round-trip *should* have, so they neither pin the current mangling as
-correct nor go silently stale. When the decode is fixed they xpass, and strict mode
-turns that into a failure that prompts removing the marker. Tracked in #256.
+The quote-stripping half of #256 is fixed: ``_decode_value`` no longer unquotes a
+second time, so ``TestQuoteWrappedTextRoundTrips`` holds. The column-blind int
+coercion remains, recorded as ``xfail(strict=True)`` in
+``TestKnownLatentDecodeDefects`` -- asserting the behavior the round-trip *should*
+have, so it neither pins the current coercion as correct nor goes silently stale.
 """
 
 from __future__ import annotations
@@ -266,62 +267,61 @@ class TestUndecodableCsv:
         assert isinstance(excinfo.value.__cause__, UnicodeDecodeError)
 
 
-class TestKnownLatentDecodeDefects:
-    """Values that do not survive the round-trip today (#256).
+class TestQuoteWrappedTextRoundTrips:
+    """Stored text that itself begins and ends with a straight quote (#256).
 
-    The quote cases below reach ``_decode_value`` with a string that starts and ends
-    with a straight double quote -- which happens whenever the stored text itself
-    begins and ends with one, because ``csv.DictReader`` has already removed the
-    CSV-level quoting by then. The decode cannot distinguish "CSV quoting" from "the
-    text contains quotes", and strips them either way. The remaining cases come from
-    ``int()`` being used as a type sniffer, which accepts Python literal syntax.
+    These reach ``_decode_value`` with a string that starts and ends with a double
+    quote -- not because of CSV syntax, but because ``csv.DictReader`` has already
+    removed the CSV-level quoting and handed back the content. A decode that unquotes
+    again cannot tell the two apart, and used to strip them either way.
 
-    Not currently reachable from real data: no title in the committed corpus starts
-    with a straight quote, and legislative short titles use curly quotes. These are
-    latent (#256), which is why they are xfail rather than a fix inside a test-coverage
-    change -- altering decode semantics would also change how existing bills.csv
-    files are read.
+    They were xfail(strict=True) while that second unquoting branch existed. It is
+    gone: it was never the inverse of anything the module wrote (``_format_csv_cell``
+    has never JSON-encoded a cell in any revision), so it could only ever damage these
+    values. Kept as ordinary round-trip tests so the branch cannot come back unnoticed.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: json.loads succeeds on the quoted text and silently unwraps it",
-    )
     def test_text_wrapped_in_straight_quotes_keeps_its_quotes(self, tmp_path):
-        # '"hello"' -> written as '"""hello"""' -> DictReader -> '"hello"' ->
-        # json.loads('"hello"') -> 'hello'. The quotes are content, not syntax.
+        # '"hello"' -> written as '"""hello"""' -> DictReader -> '"hello"'. The old
+        # decode ran json.loads on that and got 'hello'; the quotes are content.
         value = '"hello"'
         assert round_trip(tmp_path, value) == value
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: JSONDecodeError fallback strips the outer quotes and unescapes",
-    )
     def test_quote_wrapped_text_that_is_not_valid_json_keeps_its_quotes(self, tmp_path):
-        # The fallback at bill_index.py:291-293. '"a"b"' -> DictReader -> '"a"b"' ->
-        # not valid JSON -> value[1:-1].replace('""', '"') -> 'a"b'.
+        # The old JSONDecodeError fallback: '"a"b"' -> value[1:-1].replace('""', '"')
+        # -> 'a"b'. Distinct from the branch above, and it mangled a different shape.
         value = '"a"b"'
         assert round_trip(tmp_path, value) == value
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#256: json.loads also interprets backslash escapes inside the quotes",
-    )
     @pytest.mark.parametrize(
         "value",
         [
-            pytest.param('"a\\nb"', id="literal-backslash-n-becomes-a-newline"),
-            pytest.param('"\\u00e9"', id="unicode-escape-becomes-a-character"),
+            pytest.param('"a\\nb"', id="literal-backslash-n-stays-two-characters"),
+            pytest.param('"\\u00e9"', id="unicode-escape-stays-literal"),
         ],
     )
     def test_escape_sequences_inside_quotes_are_not_interpreted(self, tmp_path, value):
-        # A second, distinct corruption mode: where the quoted text happens to parse
-        # as JSON, the decode does not merely unwrap it, it also resolves any escape
-        # sequence inside. '"a\\nb"' comes back holding a real newline rather than the
-        # two literal characters that were stored. This is the branch the
-        # JSONDecodeError fallback does *not* share -- the fallback leaves escapes
-        # alone -- so the two paths disagree on the same input shape.
+        # The second corruption mode: where the quoted text happened to parse as JSON,
+        # the old decode did not merely unwrap it, it also resolved escape sequences
+        # inside -- so '"a\\nb"' came back holding a real newline instead of the two
+        # literal characters stored. The fallback branch did not share that behaviour,
+        # so the two paths disagreed on the same input shape.
         assert round_trip(tmp_path, value) == value
+
+
+class TestKnownLatentDecodeDefects:
+    """Values that still do not survive the round-trip (#256).
+
+    What remains is ``int()`` used as a type sniffer: it is applied to every column
+    because ``_decode_value`` takes a ``column`` argument and never reads it, and it
+    accepts Python literal syntax rather than a plain run of digits. Fixing it needs an
+    explicit per-column type model rather than a different sniff, which is a schema
+    decision, so these stay recorded rather than guessed at.
+
+    xfail(strict=True) so they neither pin the current coercion as correct nor go
+    silently stale: when the decode is fixed they xpass, and strict mode turns that
+    into a failure that prompts removing the marker.
+    """
 
     @pytest.mark.xfail(
         strict=True,

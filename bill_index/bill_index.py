@@ -23,7 +23,6 @@ for senate, bill_type, bill_number, doc_version in map(parse_bill_id, bill_ids):
 from __future__ import annotations
 
 import csv
-import json
 from collections import namedtuple
 from pathlib import Path
 from typing import Any, Iterable, Literal, Tuple
@@ -293,6 +292,25 @@ def _format_csv_row(columns: list[str], record: BillRecord) -> str:
 
 
 def _decode_value(column: str, value: str | None) -> Any:
+    """Decode one CSV cell back into a record value.
+
+    ``csv.DictReader`` has already removed CSV quoting by the time this runs, so the
+    text arriving here is the stored text, and unquoting it again can only damage it.
+    A second unquoting branch used to live here (``json.loads``, falling back to
+    stripping the outer quotes and collapsing ``""``), which is why text that itself
+    began and ended with a straight quote lost those quotes, and why the two branches
+    disagreed about backslash escapes (#256).
+
+    It was never the inverse of anything this module wrote: ``_format_csv_cell`` has
+    emitted plain CSV quoting in every revision of this file and has never JSON-encoded
+    a cell, so no on-disk index has ever needed JSON decoding. Removing it changes how
+    a stored value reads only in the case it was corrupting.
+
+    Still column-blind on the int coercion below, so digits-only free text ("2024" as a
+    title) still comes back as an int. Fixing that needs an explicit per-column type
+    model rather than a sniff, so it is left for #256 to resolve; the round-trip tests
+    for it stay xfail(strict=True).
+    """
     if value is None or value == "":
         return ""
 
@@ -300,11 +318,5 @@ def _decode_value(column: str, value: str | None) -> Any:
         return int(value)
     except ValueError:
         pass
-
-    if value.startswith('"') and value.endswith('"'):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            return value[1:-1].replace('""', '"')
 
     return value
