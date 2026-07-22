@@ -6,6 +6,7 @@ no markers and run in the default fast suite.
 
 import argparse
 import importlib
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -158,12 +159,32 @@ def test_the_sourced_command_gate_actually_read_a_command():
 
 
 def _wrapper_scripts() -> list[str]:
-    """Every product command wrapper: the symlinks in the project root.
+    """Every product command wrapper: root symlinks that point at a FILE.
 
     `init` is absent for free -- it is a regular file, sourced to set up the
     environment rather than run, and the README says so where it appears.
+
+    The target must resolve to a file (#319). Being a symlink in the root used to be
+    the whole test, which is true of the wrappers but is not a property of commands,
+    so anything else linked into the root was reported as an undocumented command.
+    That collides with something the project actively encourages: AGENTS.md notes a
+    git worktree is fail-open for the fetched-bill suites, and linking `bills_corpus`
+    / `bills_bulk_text` into the root is the direct way to make those gates run. Doing
+    so made this gate demand README rows for two data directories -- so the more
+    completely you arranged for the corpus gates to run, the more certainly this one
+    failed, naming a file the branch never touched.
+
+    It failed quietly rather than loudly: `_cli_commands` imports each discovered name,
+    and a directory with no `__init__.py` still imports as a namespace package, so
+    `build_parser` was simply absent and the directory was recorded as a bare command.
+
+    Every wrapper today resolves to a `.py` file in the repo root, so requiring a file
+    costs nothing and keeps discovery automatic (a hand-listed roster would reintroduce
+    the drift #135 exists to prevent). A linked non-command *file* would still be
+    picked up; nothing does that today, and it would be a much stranger thing to do
+    than linking a data directory.
     """
-    return sorted(p.name for p in ROOT.iterdir() if p.is_symlink())
+    return sorted(p.name for p in ROOT.iterdir() if p.is_symlink() and p.resolve().is_file())
 
 
 def _cli_commands() -> dict[str, list[str]]:
@@ -269,3 +290,26 @@ def test_the_command_gate_actually_found_commands():
 
     section = _command_reference_section()
     assert "| Command | What it does |" in section, "README 'Command reference' table not found"
+
+
+def test_a_linked_data_directory_is_not_discovered_as_a_command(tmp_path, monkeypatch):
+    """#319: a symlinked DIRECTORY in the root is not a CLI command.
+
+    The real trigger is linking the shared bill corpus into a git worktree so the
+    corpus-gated suites run instead of skipping -- which AGENTS.md asks for. Before
+    the fix, discovery reported `bills_corpus` and `bills_bulk_text` as undocumented
+    commands and told the reader to add README rows for two data directories.
+
+    Builds a fake root rather than writing symlinks into the real one, so the test
+    is isolated from whatever the developer has linked in and cannot corrupt the
+    checkout it runs from.
+    """
+    (tmp_path / "real_wrapper.py").write_text("def build_parser():\n    pass\n")
+    (tmp_path / "real_wrapper").symlink_to(tmp_path / "real_wrapper.py")
+    (tmp_path / "corpus_data").mkdir()
+    (tmp_path / "bills_corpus").symlink_to(tmp_path / "corpus_data", target_is_directory=True)
+    (tmp_path / "init").write_text("# sourced, not run\n")
+
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert _wrapper_scripts() == ["real_wrapper"]
