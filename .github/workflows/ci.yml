@@ -74,3 +74,37 @@ jobs:
           tests/test_node_join_corpus.py
           tests/test_xml_subsection_nodes.py
           tests/test_pdf_subsection_recall.py
+
+      - name: Run remaining slow suites (committed fixtures)
+        if: ${{ !cancelled() }}
+        # These @slow modules already passed on any fresh clone, in ~20s, against
+        # committed fixtures — and were named by no CI step, so they never ran here.
+        # Committing a fixture makes a gate RUNNABLE; naming its module is what makes it
+        # RUN (the distinction #220 drew for the corpus gates). ~95 assertions, free.
+        #
+        # Their skips are not free: a skip asserts nothing, so every one is declared in
+        # ALLOWED_CI_SLOW_SKIPS (tests/conftest.py) and a NEW one fails the session. Each
+        # entry is a fixture this repo does not commit, i.e. a coverage gap #126 should
+        # shrink — kept separate from the corpus content-skip allowlist for that reason.
+        #
+        # Deliberately excluded: test_govinfo_corpus_parity.py (fetches BILLSTATUS live,
+        # so it is not an offline gate) and test_financial_callout_whole_item.py (its
+        # fixture is committed by a separate change; add it here once that lands).
+        run: >
+          uv run pytest -v -m slow
+          tests/test_pdf_corpus_smoke.py
+          tests/test_bill_tree.py
+          tests/test_structure_tree.py
+          tests/test_diff_bill.py
+          tests/test_pdf_compare.py
+          tests/test_financial_diff.py
+          tests/test_pipeline_parity.py
+          tests/test_pdf_xml_amount_recall.py
+          tests/test_front_matter_parity.py
+          tests/test_xml_compare.py
+          tests/test_toc_tree.py
+          tests/test_format_html.py
+          tests/test_canonical_tree.py
+          tests/test_reconcile.py
+          tests/test_pdf_watermark_recall.py
+          tests/test_formatters_text_serializer.py

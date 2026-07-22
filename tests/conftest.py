@@ -172,6 +172,82 @@ ALLOWED_CORPUS_SKIPS = {
     "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
 }
 
+# --- The CI slow suite (#288) ---------------------------------------------------
+# These @slow modules run against committed fixtures and were named by no CI step, so
+# ~95 real assertions passed on any fresh clone in about 20 seconds and never once ran
+# in CI. Committing a fixture makes a gate RUNNABLE; only naming its module in the
+# workflow makes it RUN — the same distinction #220 called out for the corpus gates.
+#
+# They are watched here for the same reason the corpus gates are: adding a module to CI
+# also adds its skip channel to CI, and a skip asserts nothing. Kept as a SEPARATE
+# allowlist from ALLOWED_CORPUS_SKIPS deliberately. Those entries are content
+# properties — permanent, correct facts about a fixture. Every entry below is instead a
+# fixture this repo does not commit, so each one is a coverage gap that should SHRINK as
+# #126 curates the corpus. Merging the two dicts would lose exactly that distinction and
+# make the temporary look permanent.
+CI_SLOW_MODULES = (
+    "tests/test_pdf_corpus_smoke.py",
+    "tests/test_bill_tree.py",
+    "tests/test_structure_tree.py",
+    "tests/test_diff_bill.py",
+    "tests/test_pdf_compare.py",
+    "tests/test_financial_diff.py",
+    "tests/test_pipeline_parity.py",
+    "tests/test_pdf_xml_amount_recall.py",
+    "tests/test_front_matter_parity.py",
+    "tests/test_xml_compare.py",
+    "tests/test_toc_tree.py",
+    "tests/test_format_html.py",
+    "tests/test_canonical_tree.py",
+    "tests/test_reconcile.py",
+    "tests/test_pdf_watermark_recall.py",
+    "tests/test_formatters_text_serializer.py",
+)
+
+ALLOWED_CI_SLOW_SKIPS = {
+    # --- Uncommitted fixtures: real coverage gaps, tracked by #126 ---------------
+    # Each of these needs a bill version this repo does not commit, so the case cannot
+    # assert in CI. Listed (not silently skipped) so the gap is enforced and countable:
+    # a NEW skip fails the session, and committing any fixture below should delete its
+    # line here. None of these are properties of the documents; they are absences.
+    "tests/test_pdf_compare.py::test_compare_api_returns_html": "sample bill PDFs not present (bills/118-hr-4366/)",
+    "tests/test_pdf_compare.py::test_compare_pdfs_html_returns_standalone_report": (
+        "sample bill PDFs not present (bills/118-hr-4366/)"
+    ),
+    "tests/test_pdf_compare.py::test_compare_pdfs_returns_valid_canonical": (
+        "sample bill PDFs not present (bills/118-hr-4366/)"
+    ),
+    "tests/test_pipeline_parity.py::test_pipeline_change_parity[115-hr-5895]": "115-hr-5895 v1/v2 not fetched locally",
+    "tests/test_pipeline_parity.py::test_pipeline_change_parity[117-hr-4502]": "117-hr-4502 v1/v2 not fetched locally",
+    "tests/test_pipeline_parity.py::test_pipeline_change_parity[118-hr-8774]": "118-hr-8774 v1/v2 not fetched locally",
+    "tests/test_financial_diff.py::TestCliFinancial::test_financial_flag_filters_output": "Real XML not present",
+    "tests/test_financial_diff.py::TestCliFinancial::test_no_financial_flag_no_filtering": "Real XML not present",
+    "tests/test_canonical_tree.py::test_pdf_tree_conserves_money_no_overcount_on_real_bill": "sample PDFs absent",
+    "tests/test_front_matter_parity.py::test_omnibus_leading_sections_group_under_front_matter": (
+        "117-hr-2471 enrolled omnibus not fetched locally"
+    ),
+    "tests/test_reconcile.py::TestReconcileIntegration::test_udall_sections_moved": (
+        "Test XML not found: bills/118-hr-2882/4_engrossed-amendment-senate.xml"
+    ),
+    "tests/test_structure_tree.py::test_money_conservation_no_overcount_bounded_drops[113-hr-83]": (
+        "bill corpus not present (fetch_bills.py)"
+    ),
+    # --- Content property, not an absence ----------------------------------------
+    # 113-hr-3547 v4 is a one-section shell (see the note in ALLOWED_CORPUS_SKIPS): it
+    # genuinely carries no dollar amounts, so there is nothing for the recall case to
+    # assert. This one will not go away by committing anything.
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[113-hr-3547/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
+}
+
+# (label, modules, allowlist) — each group's skips are watched and must be declared.
+_SKIP_WATCH_GROUPS = (
+    ("corpus content-skip ceiling (#220)", CORPUS_GATE_MODULES, ALLOWED_CORPUS_SKIPS),
+    ("CI slow-suite skip ceiling (#288)", CI_SLOW_MODULES, ALLOWED_CI_SLOW_SKIPS),
+)
+
+_WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES
+
 # Populated by pytest_runtest_logreport; read in pytest_sessionfinish.
 _observed_corpus_skips: dict[str, str] = {}
 
@@ -188,7 +264,14 @@ def classify_corpus_skips(observed: dict[str, str]) -> dict[str, str]:
     never been shown to fire cannot distinguish "nothing regressed" from "the check
     is broken".
     """
-    return {nodeid: reason for nodeid, reason in observed.items() if ALLOWED_CORPUS_SKIPS.get(nodeid) != reason}
+    unexpected = {}
+    for nodeid, reason in observed.items():
+        for _label, modules, allowed in _SKIP_WATCH_GROUPS:
+            if nodeid.startswith(modules):
+                if allowed.get(nodeid) != reason:
+                    unexpected[nodeid] = reason
+                break
+    return unexpected
 
 
 def pytest_runtest_logreport(report) -> None:
@@ -202,7 +285,7 @@ def pytest_runtest_logreport(report) -> None:
     # bill to _XFAIL_ZERO_NODES would redden CI on a blank-reason "skip").
     if report.outcome != "skipped" or hasattr(report, "wasxfail"):
         return
-    if not report.nodeid.startswith(CORPUS_GATE_MODULES):
+    if not report.nodeid.startswith(_WATCHED_SKIP_MODULES):
         return
     reason = ""
     if isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
@@ -228,17 +311,19 @@ def pytest_sessionfinish(session, exitstatus) -> None:
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     if reporter is None:
         return
-    reporter.write_sep("=", "corpus content-skip ceiling exceeded (#220)", red=True, bold=True)
+    reporter.write_sep("=", "undeclared skip ceiling exceeded", red=True, bold=True)
     reporter.write_line(
-        f"{len(unexpected)} corpus gate case(s) skipped on content conditions without being "
-        "listed in ALLOWED_CORPUS_SKIPS (tests/conftest.py). A gate that skips asserts "
-        "nothing, so this fails closed rather than passing green:"
+        f"{len(unexpected)} watched case(s) skipped without being listed in the matching "
+        "allowlist (tests/conftest.py). A gate that skips asserts nothing, so this fails "
+        "closed rather than passing green:"
     )
     for nodeid, reason in sorted(unexpected.items()):
-        reporter.write_line(f"  {nodeid}\n      reason: {reason}")
+        group = next((label for label, mods, _ in _SKIP_WATCH_GROUPS if nodeid.startswith(mods)), "?")
+        reporter.write_line(f"  {nodeid}\n      reason: {reason}\n      ceiling: {group}")
     reporter.write_line(
-        "If this is a parser regression, fix it. If the fixture genuinely cannot be "
-        "asserted on, add it to ALLOWED_CORPUS_SKIPS with a comment saying why."
+        "If this is a regression, fix it. If the case genuinely cannot assert, add it to "
+        "ALLOWED_CORPUS_SKIPS (a content property) or ALLOWED_CI_SLOW_SKIPS (an "
+        "uncommitted fixture) with a comment saying why."
     )
 
 

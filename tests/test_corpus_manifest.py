@@ -187,12 +187,13 @@ from tests.conftest import pytest_runtest_logreport, pytest_sessionfinish  # noq
 """
 
 
-def _run_child_session(tmp_path, test_body: str, *, xdist: bool):
+def _run_child_session(tmp_path, test_body: str, *, xdist: bool, module: str = "test_corpus_properties.py"):
     """Write a one-file gate-module test under tmp_path/tests and run a child pytest.
 
-    The file is named test_corpus_properties.py so its nodeid carries the watched module
-    prefix. Runs in a subprocess (fresh _observed_corpus_skips, real exit code). Returns
-    the CompletedProcess."""
+    `module` names the file, which is what puts the nodeid under a watched prefix —
+    test_corpus_properties.py for the content-skip ceiling, test_pipeline_parity.py for
+    the CI slow-suite ceiling. Runs in a subprocess (fresh _observed_corpus_skips, real
+    exit code). Returns the CompletedProcess."""
     import subprocess
     import sys
     from pathlib import Path
@@ -201,7 +202,7 @@ def _run_child_session(tmp_path, test_body: str, *, xdist: bool):
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
     (tests_dir / "conftest.py").write_text(_CHILD_CONFTEST.format(repo=repo))
-    (tests_dir / "test_corpus_properties.py").write_text(test_body)
+    (tests_dir / module).write_text(test_body)
     (tmp_path / "pyproject.toml").write_text('[tool.pytest.ini_options]\ntestpaths = ["tests"]\n')
     cmd = [sys.executable, "-m", "pytest", "-p", "no:randomly", "-q"]
     if xdist:
@@ -217,7 +218,43 @@ def test_ceiling_fails_session_on_unlisted_skip_end_to_end(tmp_path, xdist) -> N
     body = "import pytest\ndef test_x():\n    pytest.skip('No bill body found')\n"
     r = _run_child_session(tmp_path, body, xdist=xdist)
     assert r.returncode == 1, f"expected exit 1, got {r.returncode}\n{r.stdout}\n{r.stderr}"
-    assert "content-skip ceiling exceeded" in r.stdout, r.stdout
+    assert "undeclared skip ceiling exceeded" in r.stdout, r.stdout
+    assert "corpus content-skip ceiling (#220)" in r.stdout, f"wrong ceiling named\n{r.stdout}"
+
+
+@pytest.mark.parametrize("xdist", [False, True], ids=["serial", "xdist"])
+def test_ci_slow_ceiling_fails_session_on_unlisted_skip_end_to_end(tmp_path, xdist) -> None:
+    """The CI slow-suite ceiling (#288) fails the child session on an undeclared skip.
+
+    The modules added to CI bring their skip channels with them, and a skip asserts
+    nothing — so this ceiling is what stops the new step being a fresh fail-open surface.
+    A ceiling that has never been shown to fire cannot distinguish "nothing regressed"
+    from "the check is broken", so it gets the same end-to-end proof as the #220 one,
+    including under xdist (the controller must aggregate a worker's skip).
+    """
+    body = "import pytest\ndef test_x():\n    pytest.skip('118-hr-9999 v1/v2 not fetched locally')\n"
+    r = _run_child_session(tmp_path, body, xdist=xdist, module="test_pipeline_parity.py")
+    assert r.returncode == 1, f"expected exit 1, got {r.returncode}\n{r.stdout}\n{r.stderr}"
+    assert "undeclared skip ceiling exceeded" in r.stdout, r.stdout
+    assert "CI slow-suite skip ceiling (#288)" in r.stdout, f"wrong ceiling named\n{r.stdout}"
+
+
+def test_ci_slow_ceiling_allows_a_declared_skip_end_to_end(tmp_path) -> None:
+    """The complement: a skip that IS declared, with its recorded reason, exits 0.
+
+    Without this, the test above would also pass if the ceiling reddened on every skip,
+    which would make the allowlist meaningless and the CI step unusable.
+    """
+    # An UNparametrized entry, so the generated function's nodeid reproduces the key
+    # exactly. Picking the first entry blindly would silently break the day a
+    # parametrized one sorts first, since `def test_x[a]()` is not valid Python.
+    nodeid, reason = next(
+        (n, r) for n, r in sorted(conftest.ALLOWED_CI_SLOW_SKIPS.items()) if "[" not in n and "::" in n
+    )
+    module, _, test_part = nodeid.rpartition("::")
+    body = f"import pytest\ndef {test_part}():\n    pytest.skip({reason!r})\n"
+    r = _run_child_session(tmp_path, body, xdist=False, module=module.split("/")[-1].split("::")[0])
+    assert r.returncode == 0, f"declared skip wrongly reddened the session\n{r.stdout}\n{r.stderr}"
 
 
 def test_ceiling_ignores_xfail_end_to_end(tmp_path) -> None:
