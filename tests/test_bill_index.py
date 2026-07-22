@@ -419,6 +419,14 @@ class TestParseBillId:
 
         assert "12345" in str(excinfo.value)
 
+    def test_non_ascii_digits_are_rejected(self):
+        """``str.isdigit`` alone accepts these, and no govinfo URL resolves them."""
+        with pytest.raises(ValueError):
+            parse_bill_id("١١٨-hr-٤٣٦٦")
+
+        with pytest.raises(ValueError):
+            parse_bill_id("118-hr-4³")
+
     def test_unknown_bill_type_is_rejected(self):
         with pytest.raises(ValueError) as excinfo:
             parse_bill_id("118-xx-4366")

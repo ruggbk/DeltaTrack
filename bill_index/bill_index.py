@@ -45,6 +45,10 @@ def make_bill_id(congress: int | str, bill_type: str, number: int | str) -> str:
 BillIdentifier = namedtuple("BillIdentifier", ["congress", "bill_type", "number"])
 
 
+def _is_ascii_digits(part: str) -> bool:
+    return part.isascii() and part.isdigit()
+
+
 def parse_bill_id(slug: str) -> BillIdentifier:
     """Parse `congress-type-number` into a typed identifier.
 
@@ -57,7 +61,8 @@ def parse_bill_id(slug: str) -> BillIdentifier:
     Congress and number are checked for digits rather than only counting the parts: a
     `:version` suffix rides along on the number (`118-sconres-12:2` splits into three
     parts under a valid type), so a part count alone would readmit the exact form
-    ADR 0013 retired.
+    ADR 0013 retired. The digit check is ASCII-only: `str.isdigit` alone also accepts
+    Arabic-Indic digits and superscripts, which no govinfo URL will ever resolve.
     """
     shape = "{congress}-{type}-{number}"
     parts = slug.split("-")
@@ -67,7 +72,7 @@ def parse_bill_id(slug: str) -> BillIdentifier:
     congress, bill_type, number = parts
     if bill_type not in BILL_TYPES:
         raise ValueError(f"Unknown bill type '{bill_type}' in slug: {slug}")
-    if not congress.isdigit() or not number.isdigit():
+    if not _is_ascii_digits(congress) or not _is_ascii_digits(number):
         raise ValueError(f"Expected a bill slug of the form '{shape}', got: {slug}")
 
     return BillIdentifier(congress=congress, bill_type=bill_type, number=number)

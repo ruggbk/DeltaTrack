@@ -551,9 +551,17 @@ def identify_csv_row(raw_slug: str) -> BillIdentifier | None:
     - Anything genuinely unidentifiable is reported and skipped, so one bad row cannot
       abort a long run partway through and leave a half-downloaded corpus behind.
     """
-    slug = raw_slug
-    if ":" in slug:
-        slug = slug.split(":", 1)[0]
+    slug = raw_slug.split(":", 1)[0]
+
+    try:
+        ident = parse_bill_id(slug)
+    except ValueError as exc:
+        print(f"Skipping unusable row '{raw_slug}': {exc}", file=sys.stderr)
+        return None
+
+    # Only after the row is known to name a bill: a note about the suffix on a row that
+    # is being skipped anyway reads as if the suffix were the problem.
+    if slug != raw_slug:
         print(
             f"Note: ignoring the version suffix on '{raw_slug}'. A bill's identity is the "
             f"slug '{slug}' and a version is a separate per-bill ordinal (ADR 0013); "
@@ -561,11 +569,7 @@ def identify_csv_row(raw_slug: str) -> BillIdentifier | None:
             file=sys.stderr,
         )
 
-    try:
-        return parse_bill_id(slug)
-    except ValueError as exc:
-        print(f"Skipping unusable row '{raw_slug}': {exc}", file=sys.stderr)
-        return None
+    return ident
 
 
 def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
@@ -579,7 +583,7 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
         bill_ids = [b["id"].strip() for b in index.bills if b.get("id", "").strip()]
 
         print(f"Downloading {len(bill_ids)} bills from {args.file}", file=sys.stderr)
-        downloaded = 0
+        processed = 0
         skipped = 0
         for raw_slug in bill_ids:
             ident = identify_csv_row(raw_slug)
@@ -597,12 +601,18 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
                 api_key=api_key,
                 formats=formats,
             )
-            downloaded += 1
+            processed += 1
 
         # Skipped rows are reported here as well as inline: on a long run the per-row
         # warnings scroll past, and a partial result that looks like a complete one is
-        # the failure worth surfacing.
-        print(f"Downloaded {downloaded} bills, skipped {skipped} rows.", file=sys.stderr)
+        # the failure worth surfacing. "Processed" rather than "downloaded" because a
+        # bill with no text versions available is attempted and counted here too.
+        print(f"Processed {processed} bills, skipped {skipped} unusable rows.", file=sys.stderr)
+        if skipped:
+            # A malformed row is bad input, and this file's other input errors exit 1.
+            # The whole run still completes first, so one typo neither aborts the run
+            # nor lets `download-all ... && <next step>` proceed on a partial corpus.
+            sys.exit(1)
         return
 
     start_year = args.start_year or 1789
