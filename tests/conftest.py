@@ -135,16 +135,24 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 # Adding an entry is a deliberate act: it records a fixture the gates cannot assert
 # on, which is a coverage gap, not a neutral fact. Say why in the comment.
 #
-# Scope: only the three gates that skip per-case on content. The other corpus modules
-# migrated onto the manifest in #220 Part 1 (test_node_join_corpus,
-# test_xml_subsection_nodes, test_pdf_subsection_recall) hard-assert denominators
-# instead of skipping, so they have no content-skip channel to watch — they are left
-# out deliberately rather than by oversight. Add one here if it ever grows a
-# content-skip.
+# Scope: the three gates that skip per-case on content, plus
+# test_financial_callout_whole_item, whose channel is fixture ABSENCE rather than
+# content: its three XML cases carry skipif(not (_V1.exists() and _V2.exists())). That
+# skip used to be routine, because v2 was uncommitted; now that both versions are
+# committed and manifested, an absent fixture means someone deleted it, and the #86
+# headline gate going quiet is exactly what this ceiling exists to catch. It is not a
+# manifest-parametrized module, so the #217 fixture floor does not cover it.
+#
+# The other corpus modules migrated onto the manifest in #220 Part 1
+# (test_node_join_corpus, test_xml_subsection_nodes, test_pdf_subsection_recall)
+# hard-assert denominators instead of skipping, so they have no content-skip channel to
+# watch — they are left out deliberately rather than by oversight. Add one here if it
+# ever grows a content-skip.
 CORPUS_GATE_MODULES = (
     "tests/test_corpus_properties.py",
     "tests/test_corpus_tree_properties.py",
     "tests/test_diff_validation.py",
+    "tests/test_financial_callout_whole_item.py",
 )
 
 ALLOWED_CORPUS_SKIPS = {
