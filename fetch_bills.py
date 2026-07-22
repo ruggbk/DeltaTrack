@@ -20,7 +20,7 @@ import httpx
 from dotenv import load_dotenv
 
 import fetch_govinfo as gi
-from bill_index import BillIndex, parse_bill_id
+from bill_index import BillIdentifier, BillIndex, parse_bill_id
 from fetch_bill_archives import archive_destination, download_archives, enumerate_tasks
 from shared.bill_types import BILL_TYPES
 from shared.http import api_get, request_with_retry
@@ -537,6 +537,41 @@ def download_all_versions(
         )
 
 
+def identify_csv_row(raw_slug: str) -> BillIdentifier | None:
+    """Resolve one `--file` row to a bill identity, or None if the row is unusable.
+
+    This is the boundary where a user-supplied CSV meets the strict slug codec, so it
+    is also where compatibility is spent deliberately rather than by accident:
+
+    - A legacy `:version` suffix is stripped with a warning, not refused. The bill is
+      fully identifiable, and `bill_index` itself documented that form before ADR 0013
+      retired it, so a CSV written against those docs is a reasonable artifact. This
+      command downloads every version regardless, which is what the suffixed row
+      already got.
+    - Anything genuinely unidentifiable is reported and skipped, so one bad row cannot
+      abort a long run partway through and leave a half-downloaded corpus behind.
+    """
+    slug = raw_slug.split(":", 1)[0]
+
+    try:
+        ident = parse_bill_id(slug)
+    except ValueError as exc:
+        print(f"Skipping unusable row '{raw_slug}': {exc}", file=sys.stderr)
+        return None
+
+    # Only after the row is known to name a bill: a note about the suffix on a row that
+    # is being skipped anyway reads as if the suffix were the problem.
+    if slug != raw_slug:
+        print(
+            f"Note: ignoring the version suffix on '{raw_slug}'. A bill's identity is the "
+            f"slug '{slug}' and a version is a separate per-bill ordinal (ADR 0013); "
+            "this command downloads every version anyway.",
+            file=sys.stderr,
+        )
+
+    return ident
+
+
 def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
     """Download all appropriations bill versions for a year range."""
     if args.start_year is None and args.end_year is None and args.file is None:
@@ -548,8 +583,14 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
         bill_ids = [b["id"].strip() for b in index.bills if b.get("id", "").strip()]
 
         print(f"Downloading {len(bill_ids)} bills from {args.file}", file=sys.stderr)
+        processed = 0
+        skipped = 0
         for raw_slug in bill_ids:
-            ident = parse_bill_id(raw_slug)
+            ident = identify_csv_row(raw_slug)
+            if ident is None:
+                skipped += 1
+                continue
+
             download_all_versions(
                 client,
                 output_dir=args.output_dir,
@@ -560,7 +601,18 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
                 api_key=api_key,
                 formats=formats,
             )
+            processed += 1
 
+        # Skipped rows are reported here as well as inline: on a long run the per-row
+        # warnings scroll past, and a partial result that looks like a complete one is
+        # the failure worth surfacing. "Processed" rather than "downloaded" because a
+        # bill with no text versions available is attempted and counted here too.
+        print(f"Processed {processed} bills, skipped {skipped} unusable rows.", file=sys.stderr)
+        if skipped:
+            # A malformed row is bad input, and this file's other input errors exit 1.
+            # The whole run still completes first, so one typo neither aborts the run
+            # nor lets `download-all ... && <next step>` proceed on a partial corpus.
+            sys.exit(1)
         return
 
     start_year = args.start_year or 1789
