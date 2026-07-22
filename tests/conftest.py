@@ -153,6 +153,13 @@ ALLOWED_CORPUS_SKIPS = {
     # genuine property of the fixture, not a parser gap.
     "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
     "[119-hr-1/1_reported-in-house.xml]": "No appropriations elements with text",
+    # 119-hr-1 v2 is the same reconciliation shell one stage on: the file contains zero
+    # <appropriations-*> elements of any kind (verified by grep on the committed
+    # fixture), so this gate again has nothing to assert. Its money lives in provision
+    # body text, which the DOLLAR gate above does cover on this fixture -- v2 is not
+    # uncovered, only outside this one gate's channel.
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[119-hr-1/2_engrossed-in-house.xml]": "No appropriations elements with text",
     # 115-hr-5895 v5 (the ENROLLED print, no GPO margin line numbers) used to live here:
     # its tree comes back empty, so the PDF gate skipped it and this entry recorded why.
     # #262 closed that — the gate now ASSERTS on a zero-anchor document instead of
