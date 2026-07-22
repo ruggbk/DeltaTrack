@@ -80,15 +80,32 @@ def _shell_blocks(text: str) -> list[str]:
 
 
 def _sourced_commands() -> list[tuple[str, str]]:
-    """Every `source <arg>` / `. <arg>` line a reader would copy out of the docs."""
+    """Every `source <arg>` / `. <arg>` line a reader would copy out of the docs.
+
+    Matched on the split words rather than a literal `"source "` prefix, so a tab
+    between the builtin and its argument is read rather than skipped, and a leading
+    `$ ` prompt is dropped first, which is how a `console` block writes a command.
+    Both are ways for a line to be copyable by a reader and invisible to the gate.
+    """
     found = []
     for rel in _DOCS_WITH_RUN_COMMANDS:
         for block in _shell_blocks((ROOT / rel).read_text()):
             for line in block.splitlines():
-                stripped = line.strip()
-                if stripped.startswith(("source ", ". ")):
+                stripped = line.strip().removeprefix("$ ").strip()
+                words = stripped.split()
+                if len(words) >= 2 and words[0] in ("source", "."):
                     found.append((rel, stripped))
     return found
+
+
+def _sourced_argument(line: str) -> str:
+    """The path a `source`/`.` line names, with any quoting removed.
+
+    `source "./init"` is correct and must not be reported: the quotes are the
+    reader's, not part of the path, and bash strips them before the PATH search
+    decision that this gate is about.
+    """
+    return line.split()[1].strip("\"'")
 
 
 def test_sourced_setup_commands_use_an_explicit_path():
@@ -100,7 +117,7 @@ def test_sourced_setup_commands_use_an_explicit_path():
     offenders = [
         f"{rel}: {line}"
         for rel, line in _sourced_commands()
-        if not line.split(None, 1)[1].startswith(("./", "../", "/", "$", "~"))
+        if not _sourced_argument(line).startswith(("./", "../", "/", "$", "~"))
     ]
 
     assert not offenders, (
