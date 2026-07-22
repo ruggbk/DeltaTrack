@@ -1,4 +1,16 @@
 #!/bin/bash
-# Chained with && rather than `set -e`: this script is sourced, so `set -e` would
+# Guarded with `if` rather than `set -e`: this script is sourced, so `set -e` would
 # leave errexit switched on in the caller's own shell after it returns.
-uv sync && source .venv/bin/activate
+#
+# Activation is gated on the venv existing, not on `uv sync` succeeding. A failed
+# sync must not activate a venv it never created -- that reported a consequence
+# ("no such file or directory") over the cause. But this is also the per-shell
+# activate command, so a sync that fails with a working venv already on disk
+# (uv missing from PATH, a network hiccup) must still leave the caller activated.
+uv sync
+if [ -f .venv/bin/activate ]; then
+    source .venv/bin/activate
+else
+    echo "init: no .venv to activate -- fix the error above and re-run \`source ./init\`" >&2
+    false
+fi
