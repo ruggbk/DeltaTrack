@@ -115,6 +115,27 @@ versions = [
   { stage = "1_introduced-in-house", formats = ["pdf"] },
 ]
 
+# --- PDF-golden SEC.-catchline false-positive repros (#89, committed by #287) ---
+# Introduced-in-House PDFs pinned by test_pdf_anchor_golden: a wrapped SEC. catchline
+# rendered in the heading band must NOT surface as a false `account`/`major`. Committed
+# and manifested so that gate fails closed rather than skipping on a CI checkout (#287).
+
+[[bill]]
+id = "117-hr-2471"
+subcommittee = "non-appropriations House bill (catchline repro)"
+covers = "SEC.-catchline continuation repro (#89): the wrapped catchline 'AND ASSEMBLY IN HAITI.' must not become a false account/major (test_pdf_anchor_golden)."
+versions = [
+  { stage = "1_introduced-in-house", formats = ["pdf"] },
+]
+
+[[bill]]
+id = "118-hr-2882"
+subcommittee = "non-appropriations House bill (catchline repro)"
+covers = "SEC.-catchline continuation repro (#89): the wrapped catchline 'TRUST FUND.' must not become a false account/major (test_pdf_anchor_golden)."
+versions = [
+  { stage = "1_introduced-in-house", formats = ["pdf"] },
+]
+
 # --- One Senate reported print per appropriations subcommittee -----------------
 # FY2025 (118th) unless noted. Reported-in-Senate prints exercise small-caps heading
 # bands and per-subcommittee department/major heading vocabulary — the overfitting

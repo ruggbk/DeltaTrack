@@ -5,6 +5,14 @@ the deterministic regression guard the tolerant diff-recall suite can't provide:
 they catch BOTH over-emission (spurious accounts) and under-emission (dropped
 accounts) when the size-detection swap lands. Regenerate ONLY when a change is
 intended, and prove the delta with the set-diff assertion in the swap commit.
+
+Fixture policy (#287): every fixture this module pins is committed, so the gate runs
+in CI instead of silently skipping (the fail-open shape #287 removes). The bills/
+fixtures are in tests/corpus_manifest.toml; the test_data/ fixtures (subcommittee
+prints, the CJS Senate print) sit outside the bills/-layout manifest and are floored
+directly by test_manifest_fixtures_committed. The ONE fetched-only case left is
+TestCorpusAccountPrecision, a tolerant net over the larger appropriations corpus that
+is not committed — it keeps an explicit, visible skip, like the other slow PDF suites.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ import pytest
 
 from parsers.pdf_anchors import extract_anchors
 from parsers.pdf_text import extract_clean_pages
+from tests.conftest import assert_manifest_committed
 
 ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_DIR = ROOT / "test_data" / "pdf" / "anchors_golden"
@@ -36,8 +45,6 @@ def _current_anchors(pdf_path: Path) -> list[list]:
 @pytest.mark.parametrize("name", sorted(FIXTURES))
 def test_anchors_match_golden(name: str):
     pdf_path = FIXTURES[name]
-    if not pdf_path.exists():
-        pytest.skip(f"{name} PDF not present")
     golden = json.loads((GOLDEN_DIR / f"{name}.json").read_text())
     # JSON has no tuples; compare as lists.
     assert _current_anchors(pdf_path) == golden
@@ -56,10 +63,6 @@ _PRE_AGENCY_KINDS = frozenset({"title", "section", "account", "grouping", "pream
 def test_agency_addition_is_purely_additive(name: str):
     pdf_path = FIXTURES[name]
     baseline_path = GOLDEN_DIR / f"{name}.pre-agency-anchors.json"
-    if not pdf_path.exists():
-        pytest.skip(f"{name} PDF not present")
-    if not baseline_path.exists():
-        pytest.skip(f"{name} pre-agency baseline not present")
     frozen = json.loads(baseline_path.read_text())
     live_non_agency = [a for a in _current_anchors(pdf_path) if a[0] in _PRE_AGENCY_KINDS]
     assert live_non_agency == frozen
@@ -83,14 +86,10 @@ class TestSizeDetectionEndToEnd:
 
     def test_fps_account_now_detected(self):
         pdf = FIXTURES["118-hr-8752"]
-        if not pdf.exists():
-            pytest.skip("HR 8752 PDF not present")
         assert "FEDERAL PROTECTIVE SERVICE" in _account_names(pdf)
 
     def test_no_account_regressions_vs_legacy_baseline(self):
         pdf = FIXTURES["118-hr-8752"]
-        if not pdf.exists():
-            pytest.skip("HR 8752 PDF not present")
         new = _account_names(pdf)
         legacy = _legacy_account_names("118-hr-8752")
         # The only accounts dropped vs the legacy baseline are parenthetical
@@ -112,8 +111,6 @@ class TestNonAppropsGeneralization:
     def test_sections_detected(self):
         # new-true-positive (red-first claim): the universal SEC level is found.
         pdf = FIXTURES["118-hr-8282"]
-        if not pdf.exists():
-            pytest.skip("HR 8282 PDF not present")
         anchors = extract_anchors(extract_clean_pages(pdf))
         assert any(a.kind == "section" for a in anchors)
 
@@ -121,8 +118,6 @@ class TestNonAppropsGeneralization:
         # precision-characterization: a non-appropriations bill has no accounts, so
         # size detection (incl. the run-in-enumerator reject) must emit none.
         pdf = FIXTURES["118-hr-8282"]
-        if not pdf.exists():
-            pytest.skip("HR 8282 PDF not present")
         anchors = extract_anchors(extract_clean_pages(pdf))
         assert [a.text for a in anchors if a.kind == "account"] == []
 
@@ -139,8 +134,6 @@ class TestSectionCatchlineContinuation:
 
     @pytest.mark.parametrize("pdf", sorted(REPROS), ids=lambda p: p.parent.name)
     def test_no_catchline_continuation_account(self, pdf: Path):
-        if not pdf.exists():
-            pytest.skip(f"{pdf.parent.name} PDF not present")
         assert self.REPROS[pdf] not in _account_names(pdf)
 
 
@@ -233,16 +226,12 @@ class TestMajorLevelEndToEnd:
         # "(8 U.S.C. 1448)." citation false positives.
         pdf = FIXTURES["118-hr-8752"]
         xml = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.xml"
-        if not pdf.exists():
-            pytest.skip("HR 8752 PDF not present")
         assert _pdf_major_vocab(pdf) == _xml_major_vocab(xml)
 
     def test_zero_majors_on_non_approps(self):
         # Negative control: a non-appropriations bill has no department headings under
         # its titles, so the major rule must emit zero.
         pdf = FIXTURES["118-hr-8282"]
-        if not pdf.exists():
-            pytest.skip("HR 8282 PDF not present")
         anchors = extract_anchors(extract_clean_pages(pdf))
         assert [a.text for a in anchors if a.kind == "major"] == []
 
@@ -254,8 +243,6 @@ class TestMajorLevelEndToEnd:
         # the semantic floor, not a brittle hand-coded literal.
         pdf = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
         xml = ROOT / "bills" / "118-s-4795" / "1_reported-in-senate.xml"
-        if not pdf.exists() or not xml.exists():
-            pytest.skip("118-s-4795 pdf/xml pair not present")
         xm = _xml_major_vocab(xml)
         pm = _pdf_major_vocab(pdf)
         assert xm, "XML major oracle is empty — derivation broke"
@@ -274,8 +261,6 @@ class TestMajorLevelEndToEnd:
     def test_no_catchline_fragment_major(self, pdf: Path):
         # The 117-hr-2471 / 118-hr-2882 catchline class must not leak into the major
         # level either (the structural "after TITLE" gate excludes mid-section frags).
-        if not pdf.exists():
-            pytest.skip(f"{pdf.parent.name} PDF not present")
         majors = {a.text for a in extract_anchors(extract_clean_pages(pdf)) if a.kind == "major"}
         assert self._MAJOR_FP_REPROS[pdf] not in majors
 
@@ -304,6 +289,21 @@ SUBCOMMITTEE_FIXTURES = {
 
 
 MAJOR_VOCAB_GOLDEN = GOLDEN_DIR / "major_vocab.json"
+
+
+def test_manifest_fixtures_committed():
+    """Fail-closed floor (#287, ADR 0015): a plain, always-collected guard, so a missing
+    committed fixture fails HERE naming it, instead of the fail-open shape #287 removes
+    (a case silently skipping in CI). The bills/ fixtures (117-hr-2471, 118-hr-2882, and
+    the already-manifested 118-hr-8752 / 118-hr-8282 / 118-s-4795) are checked via the
+    shared manifest helper; the test_data/ golden fixtures (the 10 subcommittee prints and
+    the CJS Senate print) sit outside the bills/-layout manifest (ADR 0015), so they are
+    floored here directly. TestCorpusAccountPrecision's larger corpus stays fetched-only
+    and is deliberately NOT floored — it keeps a visible per-case skip."""
+    assert_manifest_committed(sorted(FIXTURES), "pdf-anchor-golden")
+    committed = set(FIXTURES.values()) | set(SUBCOMMITTEE_FIXTURES.values())
+    absent = sorted(str(p.relative_to(ROOT)) for p in committed if not p.exists())
+    assert not absent, f"committed pdf-anchor-golden fixtures absent from checkout: {absent}"
 
 
 class TestMajorLevelAcrossSubcommittees:
@@ -364,8 +364,6 @@ class TestMajorLevelAcrossSubcommittees:
     @pytest.mark.parametrize("subc", sorted(SIGNATURE_MAJORS))
     def test_signature_major_recovered_intact(self, subc: str):
         pdf = SUBCOMMITTEE_FIXTURES[subc]
-        if not pdf.exists():
-            pytest.skip(f"{subc} fixture not present (run scripts/fetch_test_assets.py)")
         assert self.SIGNATURE_MAJORS[subc] in _pdf_major_texts(pdf)
 
     @pytest.mark.parametrize("subc", sorted(STACKED_HEADER_SPLITS))
@@ -375,8 +373,6 @@ class TestMajorLevelAcrossSubcommittees:
         # was dropped. (Was test_stacked_header_residue_pinned, asserting the mash;
         # flipped when the geometric split landed.)
         pdf = SUBCOMMITTEE_FIXTURES[subc]
-        if not pdf.exists():
-            pytest.skip(f"{subc} fixture not present")
         a, b = self.STACKED_HEADER_SPLITS[subc]
         majors = _pdf_major_texts(pdf)
         assert any(a in m for m in majors) and any(b in m for m in majors), (
@@ -393,13 +389,8 @@ class TestMajorLevelAcrossSubcommittees:
     @pytest.mark.parametrize("subc", sorted(SUBCOMMITTEE_FIXTURES))
     def test_major_vocab_matches_golden(self, subc: str):
         # Exhaustive over/under-emission gate per subcommittee. The golden is generated
-        # from the implementation and reviewed (mirrors test_anchors_match_golden);
-        # skipped until it exists so the red scaffold stays clean.
+        # from the implementation and reviewed (mirrors test_anchors_match_golden).
         pdf = SUBCOMMITTEE_FIXTURES[subc]
-        if not pdf.exists():
-            pytest.skip(f"{subc} fixture not present")
-        if not MAJOR_VOCAB_GOLDEN.exists():
-            pytest.skip("major_vocab golden not generated yet (created during implementation)")
         golden = json.loads(MAJOR_VOCAB_GOLDEN.read_text())
         assert sorted(_pdf_major_texts(pdf)) == golden[subc]
 
@@ -413,8 +404,6 @@ def test_no_value_equal_duplicate_anchors(name: str):
     # still resolves each distinctly. A FULLY value-equal duplicate would break it;
     # pin its absence. Guards every fixture, all kinds.
     pdf_path = FIXTURES[name]
-    if not pdf_path.exists():
-        pytest.skip(f"{name} PDF not present")
     anchors = extract_anchors(extract_clean_pages(pdf_path))
     values = [(a.page_number, a.line_number, a.kind, a.text, a.division) for a in anchors]
     assert len(values) == len(set(values)), "value-equal duplicate anchors break breadcrumb .index()"
@@ -446,16 +435,12 @@ class TestCarryoverAgenciesEndToEnd:
         # fixture's casing must be eyeballed before trusting this `==`.
         pdf = FIXTURES["118-hr-8752"]
         xml = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.xml"
-        if not pdf.exists():
-            pytest.skip("HR 8752 PDF not present")
         assert _pdf_agency_vocab(pdf) == _xml_agency_vocab(xml)
 
     def test_zero_false_agencies_on_non_approps(self):
         # Generalization guard (fresh-eyes C5): a non-appropriations bill has no
         # agency level, so the carry-over rule must emit zero agency anchors.
         pdf = FIXTURES["118-hr-8282"]
-        if not pdf.exists():
-            pytest.skip("HR 8282 PDF not present")
         anchors = extract_anchors(extract_clean_pages(pdf))
         assert [a.text for a in anchors if a.kind == "agency"] == []
 
@@ -492,8 +477,6 @@ class TestCarryoverAgencyVocabFloors:
     def test_s4795_agency_vocab_floors(self):
         pdf = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
         xml = ROOT / "bills" / "118-s-4795" / "1_reported-in-senate.xml"
-        if not pdf.exists() or not xml.exists():
-            pytest.skip("118-s-4795 pdf/xml pair not present")
         xa = _xml_agency_vocab(xml)
         pa = _pdf_agency_vocab(pdf)
         assert len(xa) >= self.MIN_VOCAB, f"XML agency oracle shrank to {len(xa)}"
@@ -512,6 +495,11 @@ class TestCorpusAccountPrecision:
     net over the appropriations corpus, so a future change can't silently flood
     false accounts or drop real ones without tripping a gate. The floors sit below
     today's measured values (see scripts/heading_precision.py for the live numbers).
+
+    Unlike the golden/subcommittee fixtures above, this corpus is FETCHED-ONLY and not
+    committed (larger omnibus PDFs, out of the #287 committed set), so it keeps an
+    explicit per-case skip when a pair is absent — a visible skip, like the other slow
+    PDF suites (TESTING.md), not the empty-parametrization fail-open #287 removes.
 
     Why precision is well under 1.0 even when correct — the residual misses are
     KNOWN and accepted, deferred to #54, NOT bugs to chase here:
@@ -574,7 +562,7 @@ class TestCorpusAccountPrecision:
     def test_account_vocab_floors(self, spec):
         pair = self._pair(spec)
         if pair is None:
-            pytest.skip(f"{spec[0]} pdf/xml pair not present")
+            pytest.skip(f"{spec[0]} pdf/xml pair not present (fetched-only corpus)")
         from scripts.heading_precision import measure
 
         m = measure(*pair)
@@ -588,8 +576,6 @@ class TestPrecisionHarnessOracle:
     def test_measure_arithmetic_and_stable_xml_counts(self):
         pdf = FIXTURES["118-hr-8752"]
         xml = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.xml"
-        if not pdf.exists():
-            pytest.skip("HR 8752 PDF not present")
         from scripts.heading_precision import measure
 
         m = measure(pdf, xml)

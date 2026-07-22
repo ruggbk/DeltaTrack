@@ -38,6 +38,15 @@ bills/118-hr-8752/*
 !bills/118-hr-8282/
 bills/118-hr-8282/*
 !bills/118-hr-8282/1_introduced-in-house.pdf
+# 117-hr-2471 / 118-hr-2882 (#287): introduced-in-House PDFs, the SEC.-catchline
+# continuation false-positive repros pinned by test_pdf_anchor_golden (#89). PDF only;
+# committed + manifested so the golden gate fails closed instead of skipping in CI.
+!bills/117-hr-2471/
+bills/117-hr-2471/*
+!bills/117-hr-2471/1_introduced-in-house.pdf
+!bills/118-hr-2882/
+bills/118-hr-2882/*
+!bills/118-hr-2882/1_introduced-in-house.pdf
 # Committed corpus-manifest fixtures (#217 / ADR 0015): the diff-validation baselines
 # (118-hr-4366, 115-hr-5895) and structural-shape coverage (113-hr-3547 enrolled omnibus,
 # 119-hr-1 reconciliation) the CI correctness gates run against. Public domain (17 U.S.C.
@@ -100,6 +109,18 @@ test_data/*
 !test_data/pdf/
 # Vendored committee-report HTML (public domain) — the external-validation ground-truth source.
 !test_data/CRPT-*.htm
+# Vendored public-domain (17 U.S.C. 105) PDF fixtures for the PDF golden + cross-subcommittee
+# gates (#287). These are golden-module fixtures (like the test_data/pdf/*.json goldens they
+# pair with), committed so the gates run in CI instead of skipping — not bill-corpus fixtures,
+# so they are NOT in tests/corpus_manifest.toml (which is bills/-layout only, ADR 0015):
+#   - subcommittee/: one reported-in-House print per approps subcommittee
+#     (test_pdf_anchor_golden::TestMajorLevelAcrossSubcommittees).
+#   - BILLS-118s4795rs.pdf: the CJS Senate reported print (anchor golden + subcommittee gate).
+#   - CRPT-118srpt198.pdf: the committee-report comparison-table page the extraction golden
+#     reads; committing it also resolves the fetchability half of #296.
+!test_data/subcommittee/
+!test_data/BILLS-118s4795rs.pdf
+!test_data/CRPT-118srpt198.pdf
 # Persistent PDF extraction cache (developer test-loop speedup; see tests/pdf_corpus.py)
 test_data/extract_cache/
 *.csv
