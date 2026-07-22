@@ -759,7 +759,7 @@ def _process_section_element(
             _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division_label, nodes)
 
 
-_STRUCTURAL_TAGS = {"subtitle", "part", "chapter", "subchapter"}
+_STRUCTURAL_TAGS = {"subtitle", "part", "chapter", "subchapter", "subpart"}
 
 
 def _walk_structural_children(
@@ -776,7 +776,8 @@ def _walk_structural_children(
     """Walk children of a structural element, dispatching by tag.
 
     Handles appropriations-*, section, and structural containers
-    (subtitle, part, chapter, subchapter). Structural containers
+    (subtitle, part, chapter, subchapter, subpart — the HOLC higher-unit
+    ladder below title). Structural containers
     recurse with scoped context and their header mapped into the path:
     - First container level: header -> current_major
     - Deeper levels: header -> current_intermediate
