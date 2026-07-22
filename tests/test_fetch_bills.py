@@ -586,6 +586,62 @@ class TestCmdDownloadAllYearRange:
             cmd_download_all(client, args, TEST_API_KEY)  # must not raise
 
 
+class TestCmdDownloadAllFromFile:
+    """`download-all --file` against a hand-written CSV (#156).
+
+    This path reads a user-supplied index, so it meets rows the strict slug codec
+    rejects. ADR 0013 made identity the bare slug, but it did not ask this command to
+    stop serving a CSV that works today: a `:version` suffix identifies a bill perfectly
+    well and used to download it, so it still does, with a warning. Only a row that
+    names no bill at all is skipped, and a skip never aborts the run.
+    """
+
+    def _run(self, tmp_path, monkeypatch, rows):
+        import fetch_bills
+
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_text("id\n" + "".join(f"{row}\n" for row in rows), encoding="utf-8")
+
+        downloaded = []
+        monkeypatch.setattr(
+            fetch_bills,
+            "download_all_versions",
+            lambda client, **kwargs: downloaded.append((kwargs["congress"], kwargs["bill_type"], kwargs["number"])),
+        )
+
+        args = build_parser().parse_args(
+            ["download-all", "--file", str(csv_path), "--output-dir", str(tmp_path / "out")]
+        )
+        with httpx.Client() as client:
+            cmd_download_all(client, args, TEST_API_KEY)
+        return downloaded
+
+    def test_legacy_version_suffix_still_downloads_the_bill(self, tmp_path, monkeypatch, capsys):
+        downloaded = self._run(tmp_path, monkeypatch, ["118-sconres-12:2"])
+
+        assert downloaded == [("118", "sconres", "12")]
+        err = capsys.readouterr().err
+        assert "118-sconres-12:2" in err
+        assert "ADR 0013" in err
+
+    def test_unusable_row_is_skipped_without_aborting_the_run(self, tmp_path, monkeypatch, capsys):
+        """The good row after the bad one must still download.
+
+        A bare raise here would abort mid-run, after earlier bills had already been
+        written -- a partial corpus that looks like a complete one.
+        """
+        downloaded = self._run(tmp_path, monkeypatch, ["12345", "119-hr-1"])
+
+        assert downloaded == [("119", "hr", "1")]
+        assert "Skipping unusable row '12345'" in capsys.readouterr().err
+
+    def test_run_summarizes_what_it_downloaded_and_skipped(self, tmp_path, monkeypatch, capsys):
+        downloaded = self._run(tmp_path, monkeypatch, ["119-hr-1", "118-sconres-12:2", "12345", "not-a-bill-9"])
+
+        assert downloaded == [("119", "hr", "1"), ("118", "sconres", "12")]
+        assert "Downloaded 2 bills, skipped 2 rows." in capsys.readouterr().err
+
+
 class TestLazyApiKeyResolution:
     """govinfo #10 steps 5-6: key resolution (and its DEMO_KEY warning) fires only
     on paths that actually reach the Congress.gov API. Never on ``--help`` / no
