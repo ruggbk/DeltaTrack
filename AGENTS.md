@@ -5,15 +5,15 @@ Guidelines for AI coding agents working on this repository.
 ## Quick reference
 
 ```bash
-source init                      # Install deps + activate the venv (use `source`, not ./init)
-uv sync                          # (what init runs to install dependencies)
+source ./init                    # Install deps + activate the venv (source it; ./init alone runs in a subshell and the activation is lost)
+uv sync                          # (what ./init runs to install dependencies)
 uv run pytest -m "not slow and not browser"  # Fast tests only (~1s)
 uv run pytest                    # All tests (needs bills/ XML files)
 uv run pytest tests/test_diff_bill.py::TestMatchNodesIntegration  # Single test
 uv run python scripts/serve_compare.py 118-hr-8752  # PDF vs XML diff side by side (see TESTING.md)
 ```
 
-After `source init`, the top-level CLIs run via bare-name symlinks (`./fetch_bills`,
+After `source ./init`, the top-level CLIs run via bare-name symlinks (`./fetch_bills`,
 `./diff_bill`, `./diff_pdf`, `./fetch_bill_archives` → their `.py` files); the
 `uv run python <script>.py` form still works either way.
 
