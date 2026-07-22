@@ -31,9 +31,10 @@ Generate an HTML report comparing two versions of a bill:
 
 ```bash
 # 1. Install dependencies and activate environment (run this once, from the project folder)
-# This runs the init script. The script needs to be run indirectly using source so that the change in 
-# Python environment sticks
-source init
+# Source the script rather than running it, so the Python environment change sticks.
+# Keep the leading ./: a bare `source init` searches PATH before the current
+# directory, so wherever /usr/sbin is on PATH it finds the system init instead.
+source ./init
 
 # 2. Download all versions of a bill
 #    Example: HR 4366 from the 118th Congress (2023-2024)
@@ -56,7 +57,7 @@ CONGRESS_API_KEY=your_key_here
 
 ## Command reference
 
-The product commands are wrapper scripts in the project root; run them after `source init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
+The product commands are wrapper scripts in the project root; run them after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
 
 | Command | What it does |
 |---------|--------------|
@@ -70,7 +71,7 @@ The product commands are wrapper scripts in the project root; run them after `so
 | `./fetch_bill_archives` | Bulk-build a full bill-metadata index (all of 112–119) from govinfo archives — **see the warning below** |
 | `./fetch_bill_text_archives --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
 
-Environment setup is `source init` (installs dependencies and activates the virtualenv). Use `source` so the environment change sticks; it is not a runnable command.
+Environment setup is `source ./init` (installs dependencies and activates the virtualenv). Use `source` so the environment change sticks; it is not a runnable command. Keep the leading `./`: a bare `source init` searches `PATH` before the current directory, so wherever `/usr/sbin` is on `PATH` (most Linux distributions) it finds the system `init` and fails.
 
 > **`fetch_bill_archives` is an advanced bulk tool.** Run with no arguments it immediately downloads every GovInfo BILLSTATUS archive for congresses 112–119 (hundreds of MB) with no prompt, extracts them, and writes a `bills/bills.csv` metadata index. The congress range is hardcoded and there are no CLI flags yet (tracked in [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)). Reach for it only when you specifically need a bulk bill index.
 
