@@ -1,9 +1,19 @@
-"""Fetch external test assets that fetch_bills.py cannot produce.
+"""Re-fetch, from govinfo, the PDF test assets that fetch_bills.py cannot produce.
 
-A few slow tests read large PDF files fetched directly from govinfo (rather than
-via fetch_bills.py, whose default format is XML). They are public domain
-(17 U.S.C. 105) but large binaries, so they are gitignored and fetched on demand
-here, keeping the test corpus reproducible without committing PDFs.
+These are PDFs pulled straight from govinfo rather than via fetch_bills.py, whose
+default format is XML. They are public domain (17 U.S.C. 105).
+
+**Every asset listed below is now committed to the repository**, so a fresh clone
+already has them and running this script prints "already present" for all of them.
+That reverses the original design, in which they were gitignored and fetched on
+demand: ADR 0015 committed the curated fixture set instead, because gates that
+parametrized over "whatever this machine happened to have downloaded" ran on
+different sets per machine and passed green in CI while asserting nothing.
+
+What this script is still for: re-obtaining an asset that was deleted locally, and
+recording where each one came from, so the committed corpus stays reproducible from
+its upstream source rather than being a set of binaries with no provenance. Adding a
+new asset here does NOT commit it; it also needs a .gitignore allowlist entry (#308).
 
 Currently:
 - test_data/BILLS-118s4795rs.pdf - the reported-in-Senate (watermarked) print
