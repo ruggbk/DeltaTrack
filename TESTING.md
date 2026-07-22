@@ -162,6 +162,23 @@ uv run pytest -m "not slow and not browser"   # Fast group: built-in examples, n
 uv run pytest                                  # Everything, including checks against real bills
 ```
 
+### Test counts are not comparable between machines
+
+A large share of the suite is data-driven, parametrized over real bill files that
+live in gitignored directories (`bills/`'s downloaded tier, `bills_corpus/`,
+`bills_govinfo_staging/`). How many tests collect, pass, or skip therefore depends
+on how much bill data that particular machine has fetched — a full working
+checkout and a fresh clone legitimately report very different totals for the same
+commit.
+
+So an absolute count proves nothing on its own, and comparing one across machines
+proves less than nothing: a reviewer who measures a contributor's reported total
+against their own is reading corpus difference as a defect. The signal that does
+carry is the **red-green delta on a single machine**: revert the change and
+confirm the tests it added go red. Within one machine, a change in the *skip*
+count is worth reading too — `-rs` prints the reasons, and a category that
+quietly started skipping is coverage disappearing with no failure to show for it.
+
 ### The corpus gates run against committed fixtures
 
 The corpus correctness gates -- `test_corpus_properties`,
@@ -209,6 +226,16 @@ The manifest and the committed files move together:
    (`_KNOWN_DUPLICATE_COUNTS`, `_XML_DROP_BUDGET`, ...) must be calibrated for
    the new bill or the gate fails. Commit the calibrated baseline alongside the
    fixture and manifest entry.
+
+**Because of step 1, `bills/` is part tracked and part ignored — never `rm -rf`
+it.** The allowlist means committed fixtures sit in the same directory tree as
+downloaded bills that git knows nothing about, so the directory looks disposable
+and is not: deleting it (to reclaim space, or to swap in a symlink to another
+checkout's corpus) takes the committed fixtures with it, and the corpus gates
+then fail closed on missing manifest bills. Move it aside instead of deleting
+it. If you already deleted it, `git restore bills/` brings the tracked files
+back; only the downloaded tier is actually lost, and `fetch_bills.py` refetches
+that.
 
 Run a single area:
 
