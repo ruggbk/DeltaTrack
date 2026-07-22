@@ -14,12 +14,16 @@ this golden is the lasting guard against extraction drift.
 
 To regenerate after an INTENTIONAL extraction change, then review the JSON diff:
     UPDATE_GOLDEN=1 uv run pytest tests/test_pdf_extraction_golden.py
+
+Regeneration MERGES (#296): cases whose fixture is absent keep their recorded
+expectations instead of being dropped from the file. See _regenerated_golden.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -102,12 +106,75 @@ def test_manifest_fixtures_committed():
     assert not absent, f"committed pdf-extraction-golden fixtures absent from checkout: {absent}"
 
 
+def _regenerated_golden(existing: dict) -> dict:
+    """The merged golden: regenerate present cases, PRESERVE entries for absent ones (#296).
+
+    The pre-#296 body rebuilt the file from only the present cases and overwrote, so a
+    contributor on a checkout without the fetched-only omnibus PDFs (see _COMMITTED_RELS)
+    deleted those cases' expectations as an ordinary-looking diff. A skipped case comes
+    back when someone fetches the file; a deleted golden entry does not, and the case then
+    fails closed with "no golden entry" for a reason unrelated to what it tests.
+
+    Fail-closed where it should be: a *committed* fixture being absent means the checkout
+    is broken, not that the case is optional, so refuse to write at all rather than
+    silently rebuild from a partial set.
+
+    Entries for keys no longer in _CASES are dropped — retiring a case should clean up
+    after itself. Output follows _CASES order for a stable, reviewable diff.
+    """
+    absent_committed = sorted(rel for rel in _COMMITTED_RELS if not _present(rel))
+    assert not absent_committed, (
+        f"refusing to regenerate: committed fixtures absent from the checkout: {absent_committed}. "
+        "Restore them before regenerating (#296)."
+    )
+    merged: dict[str, list] = {}
+    preserved: list[str] = []
+    for key, rel, pg, _ in _CASES:
+        if _present(rel):
+            merged[key] = _page_lines(_ROOT / rel, pg)
+        elif key in existing:
+            merged[key] = existing[key]
+            preserved.append(key)
+    if preserved:
+        print(f"[golden] fixture absent, entry preserved not regenerated: {', '.join(preserved)}")
+    return merged
+
+
 @pytest.mark.skipif(os.environ.get("UPDATE_GOLDEN") != "1", reason="not in golden-update mode")
 def test_regenerate_golden():
     """Rewrite the golden from current extraction. Skipped unless UPDATE_GOLDEN=1."""
-    data = {key: _page_lines(_ROOT / rel, pg) for key, rel, pg, _ in _CASES if _present(rel)}
+    existing = json.loads(_GOLDEN.read_text()) if _GOLDEN.exists() else {}
+    data = _regenerated_golden(existing)
     _GOLDEN.parent.mkdir(parents=True, exist_ok=True)
     _GOLDEN.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+def test_regeneration_preserves_entries_for_absent_fixtures(monkeypatch):
+    """#296: regenerating on a checkout missing a fetched-only fixture keeps that case's
+    recorded expectations. Simulates the absent fixture rather than moving the real PDF,
+    so this runs on any checkout."""
+    module = sys.modules[__name__]
+    absent_rel = "bills/118-hr-4366/1_reported-in-house.pdf"
+    monkeypatch.setattr(module, "_present", lambda rel: rel != absent_rel)
+    monkeypatch.setattr(module, "_page_lines", lambda path, pg: [[1, "regenerated"]])
+
+    existing = {key: [[1, f"recorded {key}"]] for key, *_ in _CASES}
+    merged = _regenerated_golden(existing)
+
+    assert set(merged) == {key for key, *_ in _CASES}, "no case may drop out of the golden"
+    assert merged["hr4366_reported_p5"] == [[1, "recorded hr4366_reported_p5"]]
+    assert merged["crpt198_compare_p220"] == [[1, "regenerated"]]
+
+
+def test_regeneration_refuses_when_a_committed_fixture_is_absent(monkeypatch):
+    """#296: a missing committed fixture is a broken checkout, not an optional case, so
+    regeneration must not write a partial golden."""
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "_present", lambda rel: rel not in _COMMITTED_RELS)
+    monkeypatch.setattr(module, "_page_lines", lambda path, pg: [[1, "regenerated"]])
+
+    with pytest.raises(AssertionError, match="refusing to regenerate"):
+        _regenerated_golden({})
 
 
 @pytest.mark.parametrize("key,rel,page,why", _CASES, ids=[c[0] for c in _CASES])
