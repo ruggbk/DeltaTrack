@@ -3,8 +3,11 @@
 Each Jurisdiction pairs a Senate appropriations committee report with the reported bill
 it explains. The builder (scripts/build_validation.py) reads the report and writes
 test_data/validation_<slug>.json; tests/test_validate_extraction.py validates the bill
-XML against it. Report HTML and bill XML are fetched from govinfo and gitignored; the
-JSON fixtures are committed.
+XML against it. All three tiers are committed: the report HTML (test_data/CRPT-*.htm),
+the reported bill XML (bills/118-s-*/1_reported-in-senate.xml), and the JSON fixtures.
+The `--fetch` flag re-obtains the upstream sources rather than supplying anything a
+fresh clone lacks (ADR 0015 committed them so the gate runs on the same set everywhere
+instead of on whatever each machine had downloaded).
 
 To add a jurisdiction: find its FY2025 Senate report (CRPT-118srptNNN) and reported bill
 (BILLS-118sNNNNrs), add an entry, then `uv run python scripts/build_validation.py --fetch`.

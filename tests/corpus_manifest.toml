@@ -91,9 +91,10 @@ versions = [
 [[bill]]
 id = "119-hr-1"
 subcommittee = "reconciliation (not appropriations)"
-covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (its money-drop residue is pinned in test_corpus_tree_properties). The PDF was added in #220: the subsection gates pair the CLEAN exact-parity bills against this messy print, and without it committed they silently ran on two bills instead of three."
+covers = "Reconciliation bill carried as an overfitting smoke case: twin genuinely-distinct Sec. 10012 (real source duplicate, not a parser bug) and provision-body amounts an appropriations parser does not node-ize (its money-drop residue is pinned in test_corpus_tree_properties). The PDF was added in #220: the subsection gates pair the CLEAN exact-parity bills against this messy print, and without it committed they silently ran on two bills instead of three. The v2 XML carries the v1 -> v2 pair the headline #86 financial-callout gate diffs, proving a wholly-removed appropriation is not rendered silently; scripts/build_similarity_labels.py re-derives the committed similarity answer key from the same pair."
 versions = [
   { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+  { stage = "2_engrossed-in-house", formats = ["xml"] },
 ]
 
 # --- PDF pipeline + XML/PDF diff ----------------------------------------------
