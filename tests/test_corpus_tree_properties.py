@@ -116,11 +116,11 @@ _XML_DROP_BUDGET: dict[str, int] = {
     "116-hr-133/7_enrolled-bill.xml": 21,
     "116-hr-1865/6_enrolled-bill.xml": 17,
     "117-hr-2471/6_enrolled-bill.xml": 20,
-    # 119-hr-1 reconciliation (not appropriations; corpus smoke bill) — amounts in
-    # provision body text the appropriations-focused parser doesn't node-ize.
-    "119-hr-1/1_reported-in-house.xml": 15,
-    "119-hr-1/2_engrossed-in-house.xml": 15,
-    "119-hr-1/3_placed-on-calendar-senate.xml": 15,
+    # 119-hr-1 reconciliation (v1/v2/v3) conserved EXACTLY once #190 added `subpart` to
+    # _STRUCTURAL_TAGS: its 15-amount residue was entirely in the <subpart> SEC.s the walk
+    # skipped (SEC. 44103/44107/44109/44110, 44122-44126, 44133-44134, 44141-44142). Walking
+    # them dropped 15 -> 0, so the entries are removed (default 0 = conserve exactly), keeping
+    # the file's shape: working diff-target versions carry no budget.
 }
 
 # PDF: union(own_amounts) vs the rendered full_text (the carve-out reference — PDF

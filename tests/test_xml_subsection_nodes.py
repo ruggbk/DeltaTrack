@@ -8,11 +8,11 @@ and asserts the convergence #96 could not yet assert:
 
 - **Completeness** (``test_xml_emits_every_oracle_subsection``): the emitted
   ``(section, enum)`` set equals the oracle's ``all_pairs`` — every real,
-  non-quoted subsection is a node, and nothing else is. Exact on the clean
-  fixtures; on 119-hr-1 the misses are characterized, not counted: each must sit
-  under a section ``normalize_bill`` never walks (``<subpart>`` containers — a
-  pre-existing coverage gap on the reconciliation shape, not a #188 regression),
-  and a miss under a walked section fails loud.
+  non-quoted subsection is a node, and nothing else is. Exact on every fixture,
+  119-hr-1 included: it used to carry a documented residue because
+  ``normalize_bill`` did not walk ``<subpart>`` containers, so its subpart SEC.s
+  were never nodes; #190 added ``subpart`` to ``_STRUCTURAL_TAGS`` and closed that
+  gap (missing 44 -> 0), so the gate is now exact everywhere.
 - **Quoted-block zero leak** (``test_no_quoted_block_leak``): checked by element
   identity (``element_id`` vs the quoted elements' ``id`` attrs), not by
   ``(section, enum)`` pairs — a bill can legitimately carry the same pair both
@@ -108,17 +108,14 @@ def test_xml_emits_every_oracle_subsection(bill, pdf_rel, xml_rel):
     extra = emitted - all_pairs
     assert extra == frozenset(), f"{bill}: emitted pairs outside the oracle: {sorted(extra)[:10]}"
     missing = all_pairs - emitted
-    if bill in CLEAN:
-        assert missing == frozenset(), f"{bill}: missing {sorted(missing)[:10]}"
-    else:
-        # 119-hr-1 residue characterization: the oracle iterates the raw XML, but
-        # normalize_bill does not walk <subpart> containers (a PRE-EXISTING section
-        # coverage gap on this reconciliation bill — those SEC.s were never nodes
-        # before #188 either). Every miss must be under such an un-walked section;
-        # a miss under an EMITTED section would be a #188 emission bug — fail loud.
-        walked_secs = {_norm_sec(n.section_number) for n in normalize_bill(BILLS / xml_rel).nodes if n.tag == "section"}
-        stray = {p for p in missing if p[0] in walked_secs}
-        assert stray == frozenset(), f"{bill}: subsections missing under WALKED sections: {sorted(stray)[:10]}"
+    # Exact equality on every fixture, including 119-hr-1. This branch used to allow a
+    # documented residue on 119-hr-1: normalize_bill did not walk <subpart> containers,
+    # so its subpart SEC.s (44103/44107/44109/44110, 44122-44126, 44133-44134, 44141-44142)
+    # were never nodes and their 44 subsections were legitimately missing. #190 added
+    # `subpart` to _STRUCTURAL_TAGS, so every real subsection is now emitted and the residue
+    # is gone (missing 44 -> 0). If this ever fails on 119-hr-1 again, the fix regressed —
+    # do not restore a residue allowance to make it pass.
+    assert missing == frozenset(), f"{bill}: missing {sorted(missing)[:10]}"
 
 
 @pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])

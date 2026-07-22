@@ -222,7 +222,7 @@ The shared data model the whole project rests on — the bill hierarchy, the glo
 Four modules:
 
 - **`fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`, `search` (keyless title discovery over a local BILLSTATUS index), `fetch-index` (download just the scoped BILLSTATUS ZIP `search` reads).
-- **`bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter). Captures preamble sections that sit alongside divisions or titles.
+- **`bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter, subpart). Captures preamble sections that sit alongside divisions or titles.
 - **`diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
 - **`formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.
 
