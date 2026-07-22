@@ -28,9 +28,10 @@ from formatters.canonical import (
 )
 from parsers.pdf_anchors import Anchor
 
-# Local pin (guard against unintended bumps). 1.4 added the optional `amount_entries`
-# field (#86); 1.3 added the optional `tree` field (#108).
-SCHEMA_VERSION = "1.4"
+# Local pin (guard against unintended bumps). 2.0 removed the deprecated `amounts`
+# field (#274), leaving `amount_entries` (added in 1.4, #86) as the only money field;
+# 1.3 added the optional `tree` field (#108).
+SCHEMA_VERSION = "2.0"
 
 
 # ---------- XML producer ------------------------------------------------------
@@ -88,7 +89,8 @@ def test_xml_modified_change_canonical_fields():
     assert c["location"] is None
     assert c["anchor_resolution"] == "resolved"
     assert c["text"] == {"old": "old prose", "new": "new prose"}
-    assert c["amounts"] == []
+    assert c["amount_entries"] == []
+    assert "amounts" not in c, "the deprecated changed-only money field was removed in 2.0 (#274)"
     assert c["move"] is None
 
 
@@ -160,7 +162,13 @@ def test_xml_same_parent_label_change_emits_renumbered_move():
     }
 
 
-def test_xml_amounts_filtered_to_real_changes():
+def test_xml_amount_entries_drop_unchanged_and_keep_whole_item_moves():
+    """Unchanged (2000, 2000) is dropped; whole-item added/removed are kept (#86).
+
+    Pre-#274 this asserted the changed-only `amounts` field, which by construction
+    reported ONLY the (1000, 1500) pair and silently lost the other two — the
+    incompleteness 2.0 removed the field over.
+    """
     change = {
         "change_type": "modified",
         "display_path_old": ["X"],
@@ -173,7 +181,12 @@ def test_xml_amounts_filtered_to_real_changes():
         },
     }
     canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[change]))
-    assert canonical["changes"][0]["amounts"] == [{"old": 1000, "new": 1500}]
+    assert canonical["changes"][0]["amount_entries"] == [
+        {"old": 1000, "new": 1500, "kind": "changed"},
+        {"old": 5000, "new": None, "kind": "removed"},
+        {"old": None, "new": 500, "kind": "added"},
+    ]
+    assert "amounts" not in canonical["changes"][0]
 
 
 def test_xml_zeroing_surfaces_as_real_amount_change():
@@ -195,7 +208,10 @@ def test_xml_zeroing_surfaces_as_real_amount_change():
         },
     }
     canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[change]))
-    assert canonical["changes"][0]["amounts"] == [{"old": 5000, "new": 0}, {"old": 0, "new": 7500}]
+    assert canonical["changes"][0]["amount_entries"] == [
+        {"old": 5000, "new": 0, "kind": "changed"},
+        {"old": 0, "new": 7500, "kind": "changed"},
+    ]
 
 
 def test_xml_unchanged_changes_are_dropped():
@@ -504,7 +520,10 @@ def test_pdf_relocated_move_when_anchor_text_unchanged():
     assert canonical["changes"][0]["move"] == {"kind": "relocated", "body_unchanged": True}
 
 
-def test_pdf_amounts_filtered_to_real_changes():
+def test_pdf_change_carries_no_deprecated_amounts_field():
+    """#274: the export has exactly one money field. A second, changed-only list with
+    nothing saying which is authoritative is what let a consumer read a fraction of
+    the money and report it confidently."""
     hunk = PdfHunk(
         change_type="modified",
         v1_anchor=SEC_101,
@@ -517,12 +536,14 @@ def test_pdf_amounts_filtered_to_real_changes():
     )
     diff = PdfDiff(hunks=(hunk,), v1_anchors=(SEC_101,), v2_anchors=(SEC_101,))
     canonical = pdf_diff_to_canonical(diff, **_pdf_meta())
-    assert canonical["changes"][0]["amounts"] == [{"old": 1000, "new": 1500}]
+    change = canonical["changes"][0]
+    money_fields = sorted(k for k in change if "amount" in k)
+    assert money_fields == ["amount_entries"], f"expected one money field, got {money_fields}"
 
 
 def test_pdf_amount_entries_categorize_added_removed():
     """#86: amount_entries carries the full categorized set (changed/added/removed),
-    losslessly, while `amounts` stays the deprecated changed-only subset."""
+    losslessly. Since #274 it is the only money field on a change."""
     hunk = PdfHunk(
         change_type="modified",
         v1_anchor=SEC_101,
@@ -541,8 +562,7 @@ def test_pdf_amount_entries_categorize_added_removed():
         {"old": None, "new": 500, "kind": "added"},
         {"old": 5000, "new": None, "kind": "removed"},
     ]
-    # Back-compat: `amounts` == the changed-kind subset.
-    assert change["amounts"] == [{"old": 1000, "new": 1500}]
+    assert "amounts" not in change, "removed in 2.0 (#274)"
 
 
 # ---------- Schema validation -------------------------------------------------

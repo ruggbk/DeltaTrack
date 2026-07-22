@@ -323,10 +323,10 @@ def _extract_amount_pairs(v1_text: str, v2_text: str) -> tuple[tuple[int | None,
     """All amount pairs from match_amounts as a tuple, including unchanged pairs.
 
     The full pair list (changed / added / removed / unchanged) is carried on the
-    hunk. The canonical producer categorizes it into `amount_entries` and drops
-    unchanged (`old == new`) pairs there; the deprecated `amounts` field keeps only
-    the changed subset (`formatters/canonical.py:_amount_entries`). Preserving the
-    unchanged pairs here keeps this function a lossless view of match_amounts.
+    hunk. The canonical producer categorizes it into `amount_entries` — the export's
+    only money field since v2.0 (#274) — dropping unchanged (`old == new`) pairs
+    there (`formatters/canonical.py:_amount_entries`). Preserving the unchanged
+    pairs here keeps this function a lossless view of match_amounts.
     """
     return tuple(match_amounts(v1_text, v2_text))
 

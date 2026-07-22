@@ -87,7 +87,7 @@ def _change(change_type="modified", *, v1=None, v2=None, span_missing=False, pat
         "location": None,
         "anchor_resolution": "resolved",
         "text": {"old": "old text", "new": "new text"},
-        "amounts": [],
+        "amount_entries": [],
         "move": {"kind": "relocated", "body_unchanged": False} if change_type == "moved" else None,
         "full_text_span": span,
     }
@@ -95,7 +95,7 @@ def _change(change_type="modified", *, v1=None, v2=None, span_missing=False, pat
 
 def _canonical(changes, *, tree="default", full_text="default"):
     c = {
-        "schema_version": "1.3",
+        "schema_version": "2.0",
         "bill": {"type": "hr", "number": 1, "congress": 119},
         "versions": {
             "v1": {"label": "v1", "version_number": 1, "source": "xml"},

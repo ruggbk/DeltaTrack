@@ -70,7 +70,7 @@ def compare_xml(
     start_label: str = "Start version",
     end_label: str = "End version",
 ) -> dict:
-    """Diff two bill XML documents and return canonical diff JSON (schema v1.2)."""
+    """Diff two bill XML documents and return canonical diff JSON (see schema/canonical-diff.md)."""
     return _build(start_bytes, end_bytes, start_label, end_label)[0]
 
 

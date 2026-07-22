@@ -167,7 +167,7 @@ def _render_grouped_report() -> str:
             "children": list(children),
         }
 
-    def change(i, start, end, amounts):
+    def change(i, start, end, amount_entries):
         return {
             "id": f"c{i}",
             "change_type": "modified",
@@ -178,7 +178,7 @@ def _render_grouped_report() -> str:
             # The appended token survives word_diff as ONE contiguous <ins>
             # text node, so the find bar (which scans text nodes) can hit it.
             "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
-            "amounts": amounts,
+            "amount_entries": amount_entries,
             "move": None,
             "full_text_span": {"v1": None, "v2": {"start": start, "end": end}},
         }
@@ -195,7 +195,7 @@ def _render_grouped_report() -> str:
         ),
     ]
     canonical = {
-        "schema_version": "1.3",
+        "schema_version": "2.0",
         "bill": {"type": "hr", "number": 1, "congress": 119},
         "versions": {
             "v1": {"label": "v1", "version_number": 1, "source": "xml"},
@@ -203,7 +203,7 @@ def _render_grouped_report() -> str:
         },
         "summary": {"added": 0, "removed": 0, "modified": 3, "moved": 0},
         "changes": [
-            change(0, 2, 5, [{"old": 100, "new": 200}]),  # TITLE I direct, financial
+            change(0, 2, 5, [{"old": 100, "new": 200, "kind": "changed"}]),  # TITLE I direct, financial
             change(1, 20, 30, []),  # SALARIES
             change(2, 70, 80, []),  # OPERATIONS
         ],
@@ -263,7 +263,7 @@ def _render_full_bill_report() -> str:
             "location": None,
             "anchor_resolution": "resolved",
             "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
-            "amounts": [],
+            "amount_entries": [],
             "move": None,
             "full_text_span": {
                 "v1": None,
@@ -272,7 +272,7 @@ def _render_full_bill_report() -> str:
         }
 
     canonical = {
-        "schema_version": "1.3",
+        "schema_version": "2.0",
         "bill": {"type": "hr", "number": 1, "congress": 119},
         "versions": {
             "v1": {"label": "v1", "version_number": 1, "source": "xml"},
