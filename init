@@ -1,3 +1,4 @@
 #!/bin/bash
-uv sync
-source .venv/bin/activate
+# Chained with && rather than `set -e`: this script is sourced, so `set -e` would
+# leave errexit switched on in the caller's own shell after it returns.
+uv sync && source .venv/bin/activate
