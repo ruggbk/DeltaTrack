@@ -44,6 +44,79 @@ def test_docs_use_current_fast_test_marker():
     )
 
 
+# --- Sourced setup commands name an explicit path (#313) ------------------------
+# Given a bare word, bash's `source` searches PATH before the current directory.
+# On most Linux distributions /usr/sbin is on PATH and holds systemd's `init`, so
+# `source init` reads that instead of this repo's script and setup dies on step one
+# with "cannot execute binary file". macOS has no /usr/sbin/init, so the search
+# falls through to the current directory and the same instruction works -- which is
+# why the broken form survived in the docs: it cannot reproduce on a Mac, and not
+# from an established checkout on any OS. `source ./init` skips the PATH search.
+#
+# Read out of the fenced bash blocks, never as a substring over the whole file: the
+# surrounding prose deliberately quotes the broken `source init` to explain the
+# hazard, so a substring check would fail on the very docs that get this right.
+
+
+def _bash_blocks(text: str) -> list[str]:
+    """The contents of every ```bash fenced block, without the fence lines."""
+    blocks, current = [], None
+    for line in text.splitlines():
+        if current is None:
+            if line.strip() == "```bash":
+                current = []
+        elif line.strip() == "```":
+            blocks.append("\n".join(current))
+            current = None
+        else:
+            current.append(line)
+    return blocks
+
+
+def _sourced_commands() -> list[tuple[str, str]]:
+    """Every `source <arg>` / `. <arg>` line a reader would copy out of the docs."""
+    found = []
+    for rel in _DOCS_WITH_RUN_COMMANDS:
+        for block in _bash_blocks((ROOT / rel).read_text()):
+            for line in block.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(("source ", ". ")):
+                    found.append((rel, stripped))
+    return found
+
+
+def test_sourced_setup_commands_use_an_explicit_path():
+    """A sourced script must be named by path, so PATH is never consulted.
+
+    Fails on `source init`, passes on `source ./init` -- and equally covers any
+    future setup script the same collision would reach.
+    """
+    offenders = [
+        f"{rel}: {line}"
+        for rel, line in _sourced_commands()
+        if not line.split(None, 1)[1].startswith(("./", "../", "/", "$", "~"))
+    ]
+
+    assert not offenders, (
+        "Docs source a script by bare name, which searches PATH first and on Linux "
+        "finds the system /usr/sbin/init instead (#313). Add a leading `./`:\n" + "\n".join(offenders)
+    )
+
+
+def test_the_sourced_command_gate_actually_read_a_command():
+    """Completeness floor for the gate above.
+
+    The gate is a parse, and a parse that quietly matches nothing passes green over
+    docs that are entirely wrong. Floor both steps: that some bash block was read at
+    all, and that the specific setup command this exists to protect was among them.
+    """
+    commands = _sourced_commands()
+    assert commands, "no `source` line found in any documented bash block -- the block parse is broken, not the docs"
+
+    setup = [line for rel, line in commands if rel == "README.md" and line.endswith("init")]
+    assert setup == ["source ./init"], f"README quickstart setup command not read as expected: {setup}"
+
+
 # --- CLI surface vs the README command reference (#135) -------------------------
 # The product commands are wrapper scripts in the project root, and the README's
 # "Command reference" table is where a user finds them. Nothing tied the two
