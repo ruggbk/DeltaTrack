@@ -3,9 +3,13 @@ A cache for bill metadata intended to accumulate information about large volumes
 
 The guiding idea behind the cache is that each bill has an identifying slug of the form:
 
-{congress}-{type}-{number}[:{version}]
+{congress}-{type}-{number}
 
 e.g. `119-hr-1` for the 1st House Resolution bill of the 119th Congress.
+
+Version is deliberately not part of the slug. A version is a per-bill ordinal addressed
+as a separate token next to the bill, so its number and meaning are only defined under
+one bill (ADR 0013). `shared/version_stems.py` resolves a slug + ordinal to a file.
 
 Aside from a uniquely identifying slug, each bill can have arbitrary metadata.
 The index automatically syncs with a CSV file. It can be used to prevent duplicate downloads
@@ -16,7 +20,7 @@ index = BillIndex(csv_path)
 records: list[dict] = index.bills
 bill_ids: list[str] = [record["id"] for record in records]
 latest_hr_bills = index.fetch_all(119, "hr")
-for senate, bill_type, bill_number, doc_version in map(parse_bill_id, bill_ids):
+for congress, bill_type, bill_number in map(parse_bill_id, bill_ids):
     ...
 """
 
@@ -38,18 +42,35 @@ def make_bill_id(congress: int | str, bill_type: str, number: int | str) -> str:
     return f"{congress}-{bill_type}-{number}"
 
 
-BillIdentifier = namedtuple("BillIdentifier", ["congress", "bill_type", "number", "version"])
+BillIdentifier = namedtuple("BillIdentifier", ["congress", "bill_type", "number"])
 
 
 def parse_bill_id(slug: str) -> BillIdentifier:
-    """Parse `congress-type-number[:version]` into a typed identifier."""
-    id_version = slug.split(":")
-    id, version = id_version[0], None if len(id_version) == 1 else id_version[1]
-    congress, bill_type, number = id.split("-")
+    """Parse `congress-type-number` into a typed identifier.
+
+    Raises ValueError on anything else, including the retired `:version` suffix. No
+    bill type contains a hyphen, so a well-formed slug always splits into exactly three
+    parts. Callers that need to accept legacy or hand-written input do that at their own
+    boundary, where they can say what compatibility they are providing -- see
+    `fetch_bills download-all --file`.
+
+    Congress and number are checked for digits rather than only counting the parts: a
+    `:version` suffix rides along on the number (`118-sconres-12:2` splits into three
+    parts under a valid type), so a part count alone would readmit the exact form
+    ADR 0013 retired.
+    """
+    shape = "{congress}-{type}-{number}"
+    parts = slug.split("-")
+    if len(parts) != 3:
+        raise ValueError(f"Expected a bill slug of the form '{shape}', got: {slug}")
+
+    congress, bill_type, number = parts
     if bill_type not in BILL_TYPES:
         raise ValueError(f"Unknown bill type '{bill_type}' in slug: {slug}")
+    if not congress.isdigit() or not number.isdigit():
+        raise ValueError(f"Expected a bill slug of the form '{shape}', got: {slug}")
 
-    return BillIdentifier(congress=congress, bill_type=bill_type, number=number, version=version)
+    return BillIdentifier(congress=congress, bill_type=bill_type, number=number)
 
 
 class BillIndex:

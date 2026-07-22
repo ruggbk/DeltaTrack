@@ -28,7 +28,14 @@ from pathlib import Path
 
 import pytest
 
-from bill_index.bill_index import BillIndex, _decode_value, _format_csv_cell
+from bill_index.bill_index import (
+    BillIdentifier,
+    BillIndex,
+    _decode_value,
+    _format_csv_cell,
+    make_bill_id,
+    parse_bill_id,
+)
 
 
 def round_trip(tmp_path: Path, value: object, column: str = "title") -> object:
@@ -370,3 +377,53 @@ class TestDigitsOnlyIdIsUsable:
         assert [r["id"].strip() for r in records] == ["12345", "119-hr-1"]
         # And the digits-only title on the second row is untouched too.
         assert records[1]["title"] == "2024"
+
+
+class TestParseBillId:
+    """The slug codec: identity is ``{congress}-{type}-{number}`` and nothing else (#156).
+
+    ADR 0013 settled that a bill's identity is the bare slug and that a version is a
+    per-bill ordinal addressed as a separate token, so the ``:version`` suffix this
+    module once documented is not part of the identity. ``parse_bill_id`` is the place
+    that decides what an identity *is*, so it rejects anything else rather than
+    quietly carrying a field no caller reads.
+
+    Rejection is the parser's contract, not the CLI's behavior: ``fetch_bills
+    download-all --file`` keeps accepting a legacy colon-suffixed row by stripping the
+    suffix at the boundary (see ``tests/test_fetch_bills.py``). Strictness here is what
+    lets that boundary be explicit about the compatibility it is providing.
+    """
+
+    def test_valid_slug_parses_to_its_three_parts(self):
+        assert parse_bill_id("118-hr-4366") == ("118", "hr", "4366")
+
+    def test_identifier_carries_no_version_field(self):
+        """A permanently-empty ``version`` field would keep the retired model in the type."""
+        assert BillIdentifier._fields == ("congress", "bill_type", "number")
+
+    def test_version_suffix_is_rejected(self):
+        """The case ADR 0013 retired: ``118-sconres-12:2`` is not an identity."""
+        with pytest.raises(ValueError) as excinfo:
+            parse_bill_id("118-sconres-12:2")
+
+        assert "118-sconres-12:2" in str(excinfo.value)
+
+    def test_non_slug_id_is_rejected_with_the_slug_named(self):
+        """A digits-only id reaches this parser from a hand-written CSV (#256).
+
+        It used to reach ``"12345".split("-")`` and die on a tuple unpack, which says
+        nothing about what was wrong with the input.
+        """
+        with pytest.raises(ValueError) as excinfo:
+            parse_bill_id("12345")
+
+        assert "12345" in str(excinfo.value)
+
+    def test_unknown_bill_type_is_rejected(self):
+        with pytest.raises(ValueError) as excinfo:
+            parse_bill_id("118-xx-4366")
+
+        assert "xx" in str(excinfo.value)
+
+    def test_make_bill_id_round_trips(self):
+        assert parse_bill_id(make_bill_id(118, "hr", 4366)) == ("118", "hr", "4366")
