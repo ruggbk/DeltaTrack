@@ -235,7 +235,7 @@ The reasoning behind non-obvious architectural choices (why a structured money d
 
 ```bash
 uv run pytest -m "not slow and not browser"     # Fast unit tests (~1s, no XML files needed)
-uv run pytest                                    # All tests (corpus gates use committed fixtures; some PDF suites need fetched bills)
+uv run pytest                                    # All tests (nearly all run on committed fixtures; see TESTING.md)
 uv run pytest tests/test_bill_tree.py            # Normalization tests
 uv run pytest tests/test_diff_bill.py            # Diff/matching tests
 uv run pytest tests/test_financial_diff.py       # Financial filtering tests
@@ -247,40 +247,13 @@ uv run pytest tests/test_diff_validation.py         # Cross-version diff validat
 uv run pytest tests/test_validate_extraction.py     # External validation tests
 ```
 
-Tests that require real bill files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. The corpus correctness gates (corpus-wide property checks and cross-version diff validation) run against a committed fixture set named in `tests/corpus_manifest.toml` -- no download needed, and reproducible everywhere. Every pull request runs the full CI gate set: lint, formatting, the fast and browser tests, external ground-truth validation, and the corpus gates against that committed set -- see [What CI checks](CONTRIBUTING.md#what-ci-checks).
+Tests that require real bill files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. The corpus correctness gates (corpus-wide property checks and cross-version diff validation) run against a committed fixture set named in `tests/corpus_manifest.toml` -- no download needed, and reproducible everywhere. Every pull request runs the full CI gate set: lint, formatting, the fast and browser tests, external ground-truth validation, and every slow gate that can run offline -- see [What CI checks](CONTRIBUTING.md#what-ci-checks).
 
 The diff engine is fully deterministic: no LLM and no API key. `fetch_bills.py` downloads bills keyless by default (govinfo bulk data); a `CONGRESS_API_KEY` is only needed for `--source api` or `download-all` year-range discovery, never by the diff itself.
 
 See [TESTING.md](TESTING.md) for how the test suite is organized, how diff accuracy is validated, what each validation layer proves, and where the known gaps are.
 
-The corpus correctness gates need no downloads (their fixtures are committed, including the provision-matching modules' as of #220). A few other slow suites -- the PDF recall tests (`test_pdf_*`), the Legislative Branch spreadsheet validation, and the live-network `test_govinfo_corpus_parity` -- read larger bills beyond the committed set and skip if absent (or fail loudly under `REQUIRE_CORPUS=1`). To run those, download the bills first:
-
-```bash
-# These download from govinfo by default — no API key needed. (For --source api,
-# fetch_bills.py reads CONGRESS_API_KEY from .env automatically; no need to source it.)
-# --format both fetches XML and PDF together, covering both the XML tests and the
-# PDF comparison tests (test_pdf_*) in one pass.
-./fetch_bills.py download 118 hr 4366 --format both
-./fetch_bills.py download 118 hr 2882 --format both
-./fetch_bills.py download 118 hr 8282 --format both
-./fetch_bills.py download 118 hr 8752 --format both
-./fetch_bills.py download 118 hr 8774 --format both
-./fetch_bills.py download 118 hr 4820 --format both
-./fetch_bills.py download 117 hr 2471 --format both
-./fetch_bills.py download 117 hr 4432 --format both
-./fetch_bills.py download 117 hr 4502 --format both
-./fetch_bills.py download 116 hr 1865 --format both
-./fetch_bills.py download 116 hr 133 --format both
-./fetch_bills.py download 115 hr 5895 --format both
-./fetch_bills.py download 115 hr 1625 --format both
-./fetch_bills.py download 115 hr 880 --format both
-./fetch_bills.py download 115 hr 244 --format both
-./fetch_bills.py download 114 hr 2029 --format both
-./fetch_bills.py download 113 hr 83 --format both
-./fetch_bills.py download 113 hr 3547 --format both
-```
-
-These fetch both XML and PDF: the XML covers the XML-based tests, and the PDF rendering is what the PDF comparison tests (`test_pdf_*`) need. Drop `--format both` if you only want the XML (the default).
+Nearly every slow suite asserts against fixtures committed to the repo, so a fresh clone needs no downloads. A few checks do want fetched bills -- one PDF comparison case, the Legislative Branch completeness floor, and the live-network parity gate -- and [TESTING.md](TESTING.md#what-still-wants-a-download) lists them with the fetch commands. That list moves whenever fixture coverage changes, so it lives in one place rather than being mirrored here.
 
 The validation tests compare extracted line items across Legislative Branch bills (both chambers, multiple fiscal years) against amounts from a curated appropriations spreadsheet. The corpus property tests (`test_corpus_properties.py`) check dollar coverage, path uniqueness, and character coverage across the committed corpus (`tests/corpus_manifest.toml`); `CORPUS_SWEEP=1` extends them across every locally-fetched bill. See [TESTING.md](TESTING.md) for what each validation layer proves and where the gaps are.
 

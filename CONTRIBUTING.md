@@ -167,7 +167,7 @@ Tests are split into groups by speed and dependencies:
 
 - **Fast tests** (`uv run pytest -m "not slow and not browser"`) -- unit tests on inline XML and mocked data; no bill files needed.
 - **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`.
-- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. The corpus correctness gates (`test_corpus_properties`, `test_corpus_tree_properties`, `test_diff_validation`) run against a committed fixture set named in `tests/corpus_manifest.toml`, so they run in CI and their counts are reproducible; each fails closed if a manifested bill is uncommitted. `CORPUS_SWEEP=1` opts into sweeping every locally-fetched bill (non-CI exploration). A few other slow suites (the PDF recall tests, the Legislative Branch spreadsheet validation, and the live-network govinfo parity gate) still read larger fetched bills and skip when absent, or fail loudly under `REQUIRE_CORPUS=1` (see [TESTING.md](TESTING.md)). 
+- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. Nearly all of them run in CI against fixtures committed to the repo, so they need no downloads and their counts are reproducible; the corpus correctness gates additionally fail closed if a manifested bill is uncommitted. The exception is the live-network govinfo parity gate. `CORPUS_SWEEP=1` opts into sweeping every locally-fetched bill (non-CI exploration), and `REQUIRE_CORPUS=1` makes the remaining fetched-corpus checks fail rather than skip. [TESTING.md](TESTING.md) has the details and says which suites still want a download.
 
 Adding or renaming a CLI subcommand? Add its row to the README "Command reference" table in the same change -- `tests/test_docs_consistency.py` introspects each root command script's parser and fails if a command has no row. Adding a whole new command? See ["Adding a CLI command"](#adding-a-cli-command) above for the convention the gate enforces.
 
@@ -175,7 +175,7 @@ When adding code, write tests for it. Test files live in `tests/`; mark tests th
 
 ### What CI checks
 
-Every pull request runs these gates (defined in `.github/workflows/ci.yml`). Run them locally before pushing to avoid a surprise red CI:
+Every pull request runs the gates defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which is the source of truth. Run the equivalent locally before pushing:
 
 ```bash
 uv run ruff check .                          # 1. Lint
@@ -183,16 +183,16 @@ uv run ruff format --check .                 # 2. Formatting (run `ruff format .
 uv run pytest -m "not slow and not browser"  # 3. Fast tests
 uv run pytest -m browser                     # 4. Browser tests (needs `playwright install chromium`)
 uv run pytest -m slow \
-  tests/test_committee_report.py \
-  tests/test_validate_extraction.py::test_report_amounts_recalled \
-  tests/test_validate_extraction.py::test_fixture_is_senate_reported_bill  # 5. External validation
-uv run pytest -m slow \
-  tests/test_corpus_properties.py \
-  tests/test_corpus_tree_properties.py \
-  tests/test_diff_validation.py                # 6. Corpus correctness gates (committed manifest)
+  --deselect tests/test_govinfo_corpus_parity.py   # 5. Every slow gate CI runs
 ```
 
-The pre-commit hooks cover gates 1 and 2 on each commit, but `ruff format --check` still fails CI if you committed without them. Gates 5 and 6 run against vendored/committed fixtures, so they need no downloads or API key.
+CI splits gate 5 across three steps so a red build names the area it came from; run whole it covers all of them, against vendored and committed fixtures, with no downloads or API key. The deselection is CI's one deliberate omission: a live-network gate that cannot run offline.
+
+This used to enumerate each step's modules, and it fell out of date every time one was added, because nothing ties prose to the workflow. Selecting by marker instead means a module joining a CI step is covered here automatically.
+
+The pre-commit hooks cover gates 1 and 2 on each commit, but `ruff format --check` still fails CI if you committed without them.
+
+If a slow run ends in `undeclared skip ceiling exceeded`, that is not a flake: a watched gate skipped instead of asserting, and the skip is not declared. [TESTING.md](TESTING.md#when-a-skip-has-to-be-declared) says which allowlist it belongs in.
 
 ## Submitting a pull request
 

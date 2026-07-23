@@ -39,7 +39,7 @@ subcommittee = "milcon-va / full-year omnibus"
 covers = "Primary diff-validation baselines: controlled small diff (v1->v2, same structure) and no-division->omnibus structure expansion (v1->v6). Hand-curated assertions live in test_diff_validation TestControlledDiff / TestStructureExpansion."
 versions = [
   { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
-  { stage = "2_engrossed-in-house", formats = ["xml"] },
+  { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
   { stage = "3_placed-on-calendar-senate", formats = ["pdf"] },
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "5_engrossed-amendment-house", formats = ["xml"] },
@@ -53,6 +53,8 @@ covers = "Dead-zone similarity baseline (v4->v5, the corpus's densest 0.4-0.6 si
 versions = [
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "5_enrolled-bill", formats = ["xml", "pdf"] },
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+  { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
 ]
 
 # --- Structural-shape coverage -------------------------------------------------
@@ -88,6 +90,7 @@ subcommittee = "full-year omnibus (reported House)"
 covers = "A CLEAN convergence bill: the XML and PDF subsection gates assert exact parity against it, so both formats of the one stage are committed (#220)."
 versions = [
   { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+  { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
 ]
 
 [[bill]]
@@ -129,6 +132,7 @@ subcommittee = "non-appropriations House bill (catchline repro)"
 covers = "SEC.-catchline continuation repro (#89): the wrapped catchline 'AND ASSEMBLY IN HAITI.' must not become a false account/major (test_pdf_anchor_golden)."
 versions = [
   { stage = "1_introduced-in-house", formats = ["pdf"] },
+  { stage = "6_enrolled-bill", formats = ["xml"] },
 ]
 
 [[bill]]
@@ -137,6 +141,8 @@ subcommittee = "non-appropriations House bill (catchline repro)"
 covers = "SEC.-catchline continuation repro (#89): the wrapped catchline 'TRUST FUND.' must not become a false account/major (test_pdf_anchor_golden)."
 versions = [
   { stage = "1_introduced-in-house", formats = ["pdf"] },
+  { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
+  { stage = "5_engrossed-amendment-house", formats = ["xml"] },
 ]
 
 # --- One Senate reported print per appropriations subcommittee -----------------
@@ -215,3 +221,21 @@ id = "118-s-4796"
 subcommittee = "transportation-hud"
 covers = "Transportation-HUD Senate reported print. FAA/FHWA/NHTSA/HUD heading repeats."
 versions = [{ stage = "1_reported-in-senate", formats = ["xml"] }]
+
+[[bill]]
+id = "118-hr-8774"
+subcommittee = "financial-services (reported House)"
+covers = "Controlled financial-diff and pipeline-parity pair (v1->v2): the CLI --financial filter and the PDF/XML pipeline are asserted against this diff (test_financial_diff, test_pipeline_parity). Both stages committed as XML for those gates."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+  { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
+]
+
+[[bill]]
+id = "113-hr-83"
+subcommittee = "full-year omnibus (FY2015 CRomnibus)"
+covers = "Money-conservation bounded-drop baseline: the engrossed House amendment is the structure-tree overcount guard's real-bill case (test_structure_tree test_money_conservation_no_overcount_bounded_drops)."
+versions = [
+  { stage = "6_engrossed-amendment-house", formats = ["xml"] },
+]
+

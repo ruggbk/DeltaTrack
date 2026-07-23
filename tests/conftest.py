@@ -2,6 +2,7 @@
 
 import functools
 import os
+import re
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -185,7 +186,189 @@ ALLOWED_CORPUS_SKIPS = {
     "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
     "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
     "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
+    # 118-hr-2882 v4 is a 4 KB engrossed Senate amendment that strikes and inserts a
+    # short procedural passage: it carries zero <appropriations-*> elements and no
+    # dollar amounts (verified on the committed fixture). A genuine property of the
+    # document, committed as the v4->v5 base for test_reconcile's Udall-move case.
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
 }
+
+# --- The CI slow suite (#288) ---------------------------------------------------
+# These @slow modules run against committed fixtures and were named by no CI step, so
+# ~95 real assertions passed on any fresh clone in about 20 seconds and never once ran
+# in CI. Committing a fixture makes a gate RUNNABLE; only naming its module in the
+# workflow makes it RUN — the same distinction #220 called out for the corpus gates.
+#
+# They are watched here for the same reason the corpus gates are: adding a module to CI
+# also adds its skip channel to CI, and a skip asserts nothing. Kept as a SEPARATE
+# allowlist from ALLOWED_CORPUS_SKIPS deliberately. Those entries are content
+# properties — permanent, correct facts about a fixture. Every entry below is instead a
+# fixture this repo does not commit, so each one is a coverage gap that should SHRINK as
+# #126 curates the corpus. Merging the two dicts would lose exactly that distinction and
+# make the temporary look permanent.
+#
+# NOTE on blast radius: this tuple is read by pytest_runtest_logreport, which runs in
+# EVERY session, not only the slow step that gates these modules. So listing a module
+# here also watches its NON-slow cases in the fast run. That is the intended reach (a
+# skip asserts nothing wherever it happens), but it means a module's whole skip surface
+# has to be declared, not just the part the slow step collects — see the
+# test_bill_tree.py entry below, which skips in the fast tier.
+CI_SLOW_MODULES = (
+    "tests/test_pdf_corpus_smoke.py",
+    "tests/test_bill_tree.py",
+    "tests/test_structure_tree.py",
+    "tests/test_diff_bill.py",
+    "tests/test_pdf_compare.py",
+    "tests/test_financial_diff.py",
+    "tests/test_pipeline_parity.py",
+    "tests/test_pdf_xml_amount_recall.py",
+    "tests/test_front_matter_parity.py",
+    "tests/test_xml_compare.py",
+    "tests/test_toc_tree.py",
+    "tests/test_format_html.py",
+    "tests/test_canonical_tree.py",
+    "tests/test_reconcile.py",
+    "tests/test_pdf_watermark_recall.py",
+    "tests/test_formatters_text_serializer.py",
+    "tests/test_validate_extraction.py",
+)
+
+ALLOWED_CI_SLOW_SKIPS = {
+    # --- Uncommitted fixtures: real coverage gaps, tracked by #126 ---------------
+    # Each of these needs a bill version this repo does not commit, so the case cannot
+    # assert in CI. Listed (not silently skipped) so the gap is enforced and countable:
+    # a NEW skip fails the session, and committing any fixture below should delete its
+    # line here. None of these are properties of the documents; they are absences.
+    # Not slow-marked, so this one skips in the FAST tier, not the slow step — the reach
+    # noted above. 115-hr-244 is present in a fetched local corpus but not committed, so
+    # it is the same kind of gap as the entries around it.
+    # The Leg-Branch fixture references five bills this repo does not commit, so the
+    # parse floor cannot run. One entry standing for five gaps: the reason enumerates
+    # them, so committing ANY of the five changes the message and reddens the session
+    # until this line is updated. That is the allowlist working as designed (the gap
+    # shrank, so the record of it must change), not a flake — see #126.
+    "tests/test_validate_extraction.py::TestLegBranchValidation::test_all_bills_loaded": (
+        "5 bill(s) not downloaded: ['113-hr-83', '114-hr-2029', '115-hr-1625', "
+        "'115-hr-244', '116-hr-1865']. Run fetch_bills.py download for each (see README)."
+    ),
+    # --- Environment-gated, not a fixture gap -------------------------------------
+    # A third flavour, called out so it is not mistaken for one of the absences above.
+    # This floor only asserts under REQUIRE_CORPUS=1 (a fetched corpus + network), which
+    # CI deliberately never sets, so it skips on every CI run by construction.
+    # Committing fixtures will NOT retire this line; only changing the gate would.
+    "tests/test_validate_extraction.py::TestLegBranchValidation::test_fixture_bills_present_when_required": (
+        "corpus not required (set REQUIRE_CORPUS=1 to enforce fixture completeness)"
+    ),
+    # --- Content property, not an absence ----------------------------------------
+    # 113-hr-3547 v4 is a one-section shell (see the note in ALLOWED_CORPUS_SKIPS): it
+    # genuinely carries no dollar amounts, so there is nothing for the recall case to
+    # assert. This one will not go away by committing anything.
+    # 115-hr-244 v5 is an engrossed-amendment-house doc whose appropriations are not
+    # surfaced by the corpus gate's body extraction (the #11 amendment-doc class), so
+    # committing it would force allowlisting a known-bug skip. Left uncommitted; this
+    # bill_tree case asserts against the fetched copy locally and is declared here.
+    "tests/test_bill_tree.py::TestFindBillBody::test_amendment_doc_115_hr_244_v5_produces_nodes": (
+        "Bill XML not available locally"
+    ),
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[113-hr-3547/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
+}
+
+# (label, modules, allowlist) — each group's skips are watched and must be declared.
+_SKIP_WATCH_GROUPS = (
+    ("corpus content-skip ceiling (#220)", CORPUS_GATE_MODULES, ALLOWED_CORPUS_SKIPS),
+    ("CI slow-suite skip ceiling (#288)", CI_SLOW_MODULES, ALLOWED_CI_SLOW_SKIPS),
+)
+
+_WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES
+
+# --- Cases CI can never collect ------------------------------------------------
+# Every watched module parametrizes over the committed manifest EXCEPT these two, which
+# glob bills/ directly (tests/pdf_corpus.py: dual_format_versions, adjacent_pdf_pairs).
+# Their case list therefore grows with whatever a machine has fetched: 6 and 30 cases in
+# CI, 90 and 432 on a full working checkout.
+#
+# That breaks the assumption the allowlist rests on. An allowlist calibrated against the
+# committed corpus cannot name cases that only exist on one developer's disk, so those
+# skips read as undeclared and the session fails — locally red while CI is green, on a
+# branch where nothing is wrong. A ceiling that cries wolf on every maintainer's machine
+# gets muted, which costs more than the channel it guards.
+#
+# So for these two modules a case is watched only if the manifest declares every FILE the
+# case reads. A case CI cannot collect cannot regress in CI, and there is nothing
+# meaningful to declare about it. Cases that ARE manifested stay watched exactly as
+# before, so the channel is narrowed to what CI runs, not switched off. This is the same
+# reasoning that already exempts CORPUS_SWEEP: a superset sweep is uncalibrated by
+# construction.
+#
+# Format matters, and collapsing it is the trap here. The manifest declares (bill, stage,
+# FORMAT), and a stage is often committed in one format only -- 113-hr-3547 v1 is
+# pdf-only. The amount-recall gate reads the xml AND the pdf of a stage, so a pdf-only
+# stage yields no case in CI even though the manifest names it. Each module therefore
+# declares which formats its cases actually need.
+_CORPUS_EXPANDING_MODULES = {
+    # adjacent_pdf_pairs(): consecutive PDFs within a bill.
+    "tests/test_pdf_corpus_smoke.py": ("pdf",),
+    # dual_format_versions(): a stage present in BOTH formats.
+    "tests/test_pdf_xml_amount_recall.py": ("xml", "pdf"),
+}
+
+# The two id shapes these modules generate: "<bill>/<stem>" and, for a pair case,
+# "<bill>/<stem>-><stem>" -- the second stem carries no bill prefix, so it is resolved
+# against the one most recently seen.
+_BILL_STEM = re.compile(r"(\d+-[a-z]+-\d+)/(.+)")
+_VERSION_SUFFIX = re.compile(r"\.(xml|pdf)$")
+
+
+@functools.cache
+def _manifest_case_refs() -> frozenset[str]:
+    """Every "<bill>/<stage>.<fmt>" the manifest declares, for membership tests."""
+    return frozenset(
+        f"{bill['id']}/{ver['stage']}.{fmt}"
+        for bill in _manifest_bills()
+        for ver in bill["versions"]
+        for fmt in ver["formats"]
+    )
+
+
+def _referenced_versions(param: str) -> list[tuple[str, str]]:
+    """(bill, stem) for each version a parametrize id names, left to right."""
+    out: list[tuple[str, str]] = []
+    bill = None
+    for chunk in param.split("->"):
+        match = _BILL_STEM.search(chunk)
+        if match:
+            bill, stem = match.group(1), match.group(2)
+        else:
+            stem = chunk
+        stem = _VERSION_SUFFIX.sub("", stem.strip())
+        if bill and stem:
+            out.append((bill, stem))
+    return out
+
+
+def is_watched_case(nodeid: str) -> bool:
+    """Whether a skip in a watched module is one CI could also produce.
+
+    True for everything outside the two corpus-expanding modules — those parametrize
+    over the manifest, so their case list is identical everywhere and every skip is
+    calibrated. Also true when a nodeid carries no recognizable version reference, so an
+    id shape this does not understand fails CLOSED (watched) rather than silently
+    escaping the ceiling.
+    """
+    formats = next((f for mod, f in _CORPUS_EXPANDING_MODULES.items() if nodeid.startswith(mod)), None)
+    if formats is None:
+        return True
+    _, _, param = nodeid.partition("[")
+    referenced = _referenced_versions(param.rstrip("]"))
+    if not referenced:
+        return True
+    manifested = _manifest_case_refs()
+    return all(f"{bill}/{stem}.{fmt}" in manifested for bill, stem in referenced for fmt in formats)
+
 
 # Populated by pytest_runtest_logreport; read in pytest_sessionfinish.
 _observed_corpus_skips: dict[str, str] = {}
@@ -199,11 +382,23 @@ def classify_corpus_skips(observed: dict[str, str]) -> dict[str, str]:
     failing to parse) is exactly the regression this gate exists to catch, so it must
     not be waved through just because the nodeid is known.
 
+    Cases the committed corpus cannot produce are ignored (see is_watched_case): they
+    exist only on a machine with a fetched corpus, so no allowlist could name them.
+
     Split out from the hooks so it is directly unit-testable — a ceiling that has
     never been shown to fire cannot distinguish "nothing regressed" from "the check
     is broken".
     """
-    return {nodeid: reason for nodeid, reason in observed.items() if ALLOWED_CORPUS_SKIPS.get(nodeid) != reason}
+    unexpected = {}
+    for nodeid, reason in observed.items():
+        if not is_watched_case(nodeid):
+            continue
+        for _label, modules, allowed in _SKIP_WATCH_GROUPS:
+            if nodeid.startswith(modules):
+                if allowed.get(nodeid) != reason:
+                    unexpected[nodeid] = reason
+                break
+    return unexpected
 
 
 def pytest_runtest_logreport(report) -> None:
@@ -217,7 +412,7 @@ def pytest_runtest_logreport(report) -> None:
     # bill to _XFAIL_ZERO_NODES would redden CI on a blank-reason "skip").
     if report.outcome != "skipped" or hasattr(report, "wasxfail"):
         return
-    if not report.nodeid.startswith(CORPUS_GATE_MODULES):
+    if not report.nodeid.startswith(_WATCHED_SKIP_MODULES):
         return
     reason = ""
     if isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
@@ -243,17 +438,19 @@ def pytest_sessionfinish(session, exitstatus) -> None:
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     if reporter is None:
         return
-    reporter.write_sep("=", "corpus content-skip ceiling exceeded (#220)", red=True, bold=True)
+    reporter.write_sep("=", "undeclared skip ceiling exceeded", red=True, bold=True)
     reporter.write_line(
-        f"{len(unexpected)} corpus gate case(s) skipped on content conditions without being "
-        "listed in ALLOWED_CORPUS_SKIPS (tests/conftest.py). A gate that skips asserts "
-        "nothing, so this fails closed rather than passing green:"
+        f"{len(unexpected)} watched case(s) skipped without being listed in the matching "
+        "allowlist (tests/conftest.py). A gate that skips asserts nothing, so this fails "
+        "closed rather than passing green:"
     )
     for nodeid, reason in sorted(unexpected.items()):
-        reporter.write_line(f"  {nodeid}\n      reason: {reason}")
+        group = next((label for label, mods, _ in _SKIP_WATCH_GROUPS if nodeid.startswith(mods)), "?")
+        reporter.write_line(f"  {nodeid}\n      reason: {reason}\n      ceiling: {group}")
     reporter.write_line(
-        "If this is a parser regression, fix it. If the fixture genuinely cannot be "
-        "asserted on, add it to ALLOWED_CORPUS_SKIPS with a comment saying why."
+        "If this is a regression, fix it. If the case genuinely cannot assert, add it to "
+        "ALLOWED_CORPUS_SKIPS (a content property) or ALLOWED_CI_SLOW_SKIPS (an "
+        "uncommitted fixture) with a comment saying why."
     )
 
 

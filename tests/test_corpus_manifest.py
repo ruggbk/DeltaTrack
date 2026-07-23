@@ -172,6 +172,109 @@ def test_allowlisted_skips_name_real_corpus_gate_modules() -> None:
         assert nodeid.startswith(conftest.CORPUS_GATE_MODULES), f"stale allowlist entry: {nodeid}"
 
 
+def test_ci_slow_allowlisted_skips_name_watched_modules() -> None:
+    """Same guard for the #288 allowlist: every key targets a watched module.
+
+    A stranded key here fails CLOSED (its real skip becomes undeclared and reddens the
+    session), so this is not covering a fail-open channel — it names the cause at the
+    point of the rename instead of surfacing it as an unexplained ceiling hit later."""
+    for nodeid in conftest.ALLOWED_CI_SLOW_SKIPS:
+        assert nodeid.startswith(conftest.CI_SLOW_MODULES), f"stale allowlist entry: {nodeid}"
+
+
+# --- Narrowing the watch to cases CI can collect --------------------------------
+# The two corpus-expanding modules glob bills/, so a fetched corpus adds cases CI never
+# sees (6 -> 90 and 30 -> 432). Those extra cases legitimately content-skip, and no
+# allowlist can name them, so before this filter a full local run exited 1 with 36
+# undeclared skips while CI was green. These tests pin the narrowing in BOTH directions:
+# the uncollectable cases are ignored, and everything the committed corpus can produce is
+# still watched. A filter that only proved the first half would be indistinguishable from
+# switching the ceiling off for those modules.
+
+
+def test_unmanifested_expanding_case_is_not_watched() -> None:
+    """A glob-only case (its bill version is not committed) is ignored.
+
+    This is the exact shape that reddened a local full run: 113-hr-3547 v1 is fetch-only,
+    so CI never collects it and there is nothing to declare."""
+    nodeid = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/1_introduced-in-house]"
+    assert not conftest.is_watched_case(nodeid)
+    assert conftest.classify_corpus_skips({nodeid: "No amounts in XML (shell / procedural version)"}) == {}
+
+
+def test_manifested_expanding_case_is_still_watched() -> None:
+    """The complement, and the one that matters most: a case CI DOES collect, in the same
+    module, is still watched. Without this the filter could be a blanket exemption for
+    those two modules and every test above would still pass."""
+    nodeid = (
+        "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/4_engrossed-amendment-senate]"
+    )
+    assert conftest.is_watched_case(nodeid)
+    assert conftest.classify_corpus_skips({nodeid: "some new reason"}) == {nodeid: "some new reason"}
+
+
+def test_expanding_case_resolves_per_version_and_per_format() -> None:
+    """A bill id alone is not enough, and neither is a stage.
+
+    113-hr-3547 v1 IS manifested -- as pdf only. The amount-recall gate reads the xml and
+    the pdf of a stage, so CI collects no case for it; a check that collapsed format would
+    wave through the exact ids that reddened a local run. v4 is the stage committed in
+    both formats, and is the one real case."""
+    one = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/{}]"
+    assert not conftest.is_watched_case(one.format("1_introduced-in-house"))  # pdf only
+    assert not conftest.is_watched_case(one.format("6_enrolled-bill"))  # xml only
+    assert conftest.is_watched_case(one.format("4_engrossed-amendment-senate"))  # both
+
+
+def test_pair_case_resolves_both_sides() -> None:
+    """A smoke-gate id names two stages as "<bill>/<a>-><b>", and the second carries no
+    bill prefix. Both sides must be manifested as pdf; parsing only the first would keep
+    watching half the uncollectable pairs."""
+    pair = "tests/test_pdf_corpus_smoke.py::TestPdfCorpusSmoke::test_no_crash[113-hr-3547/{}->{}]"
+    assert conftest.is_watched_case(pair.format("1_introduced-in-house", "2_engrossed-in-house"))
+    assert not conftest.is_watched_case(pair.format("5_engrossed-amendment-house", "6_enrolled-bill"))
+
+
+def test_filter_does_not_touch_non_expanding_modules() -> None:
+    """Only the two globbing modules are narrowed. test_pipeline_parity parametrizes over a
+    hardcoded list, so CI collects 115-hr-5895 and skips it whether or not it is
+    manifested — that skip is real, declarable, and must stay watched."""
+    nodeid = "tests/test_pipeline_parity.py::test_pipeline_change_parity[115-hr-5895]"
+    assert nodeid not in conftest._manifest_case_refs()
+    assert conftest.is_watched_case(nodeid)
+
+
+def test_every_allowlist_entry_is_still_watched() -> None:
+    """No declared entry may be silently dropped by the filter.
+
+    An entry that stopped being watched would be dead weight AND a reopened channel, with
+    nothing to show for it. This is the guard that catches an over-broad filter or a
+    regex that stops parsing a nodeid shape."""
+    for allowlist in (conftest.ALLOWED_CORPUS_SKIPS, conftest.ALLOWED_CI_SLOW_SKIPS):
+        for nodeid in allowlist:
+            assert conftest.is_watched_case(nodeid), f"allowlist entry no longer watched: {nodeid}"
+
+
+def test_unparsable_nodeid_fails_closed() -> None:
+    """A nodeid with no recognizable bill reference stays watched.
+
+    If the id shape ever changes, the ceiling must keep firing rather than quietly
+    exempting a whole module -- fail closed, not open."""
+    assert conftest.is_watched_case("tests/test_pdf_corpus_smoke.py::test_no_crash[something-else]")
+
+
+def test_skip_watch_groups_do_not_overlap() -> None:
+    """No module belongs to two watch groups.
+
+    classify_corpus_skips ``break``s on the first group whose prefix matches, so a module
+    in both would be judged against one allowlist and silently exempt from the other."""
+    seen: set[str] = set()
+    for _label, modules, _allowed in conftest._SKIP_WATCH_GROUPS:
+        overlap = seen & set(modules)
+        assert not overlap, f"module watched by two ceilings: {sorted(overlap)}"
+        seen |= set(modules)
+
+
 # --- End-to-end hook behavior (#220) -------------------------------------------
 # The unit tests above cover classify_corpus_skips (a dict comprehension). The parts
 # that can fail OPEN — the skipped-outcome/xfail filter, the longrepr extraction, the
@@ -187,12 +290,13 @@ from tests.conftest import pytest_runtest_logreport, pytest_sessionfinish  # noq
 """
 
 
-def _run_child_session(tmp_path, test_body: str, *, xdist: bool):
+def _run_child_session(tmp_path, test_body: str, *, xdist: bool, module: str = "test_corpus_properties.py"):
     """Write a one-file gate-module test under tmp_path/tests and run a child pytest.
 
-    The file is named test_corpus_properties.py so its nodeid carries the watched module
-    prefix. Runs in a subprocess (fresh _observed_corpus_skips, real exit code). Returns
-    the CompletedProcess."""
+    `module` names the file, which is what puts the nodeid under a watched prefix —
+    test_corpus_properties.py for the content-skip ceiling, test_pipeline_parity.py for
+    the CI slow-suite ceiling. Runs in a subprocess (fresh _observed_corpus_skips, real
+    exit code). Returns the CompletedProcess."""
     import subprocess
     import sys
     from pathlib import Path
@@ -201,7 +305,7 @@ def _run_child_session(tmp_path, test_body: str, *, xdist: bool):
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
     (tests_dir / "conftest.py").write_text(_CHILD_CONFTEST.format(repo=repo))
-    (tests_dir / "test_corpus_properties.py").write_text(test_body)
+    (tests_dir / module).write_text(test_body)
     (tmp_path / "pyproject.toml").write_text('[tool.pytest.ini_options]\ntestpaths = ["tests"]\n')
     cmd = [sys.executable, "-m", "pytest", "-p", "no:randomly", "-q"]
     if xdist:
@@ -217,7 +321,53 @@ def test_ceiling_fails_session_on_unlisted_skip_end_to_end(tmp_path, xdist) -> N
     body = "import pytest\ndef test_x():\n    pytest.skip('No bill body found')\n"
     r = _run_child_session(tmp_path, body, xdist=xdist)
     assert r.returncode == 1, f"expected exit 1, got {r.returncode}\n{r.stdout}\n{r.stderr}"
-    assert "content-skip ceiling exceeded" in r.stdout, r.stdout
+    assert "undeclared skip ceiling exceeded" in r.stdout, r.stdout
+    assert "corpus content-skip ceiling (#220)" in r.stdout, f"wrong ceiling named\n{r.stdout}"
+
+
+@pytest.mark.parametrize("xdist", [False, True], ids=["serial", "xdist"])
+def test_ci_slow_ceiling_fails_session_on_unlisted_skip_end_to_end(tmp_path, xdist) -> None:
+    """The CI slow-suite ceiling (#288) fails the child session on an undeclared skip.
+
+    The modules added to CI bring their skip channels with them, and a skip asserts
+    nothing — so this ceiling is what stops the new step being a fresh fail-open surface.
+    A ceiling that has never been shown to fire cannot distinguish "nothing regressed"
+    from "the check is broken", so it gets the same end-to-end proof as the #220 one,
+    including under xdist (the controller must aggregate a worker's skip).
+    """
+    body = "import pytest\ndef test_x():\n    pytest.skip('118-hr-9999 v1/v2 not fetched locally')\n"
+    r = _run_child_session(tmp_path, body, xdist=xdist, module="test_pipeline_parity.py")
+    assert r.returncode == 1, f"expected exit 1, got {r.returncode}\n{r.stdout}\n{r.stderr}"
+    assert "undeclared skip ceiling exceeded" in r.stdout, r.stdout
+    assert "CI slow-suite skip ceiling (#288)" in r.stdout, f"wrong ceiling named\n{r.stdout}"
+
+
+def test_ci_slow_ceiling_allows_a_declared_skip_end_to_end(tmp_path) -> None:
+    """The complement: a skip that IS declared, with its recorded reason, exits 0.
+
+    Without this, the test above would also pass if the ceiling reddened on every skip,
+    which would make the allowlist meaningless and the CI step unusable.
+    """
+    # An UNparametrized entry, so the generated function's nodeid reproduces the key
+    # exactly. Picking the first entry blindly would silently break the day a
+    # parametrized one sorts first, since `def test_x[a]()` is not valid Python.
+    nodeid, reason = next(
+        (n, r) for n, r in sorted(conftest.ALLOWED_CI_SLOW_SKIPS.items()) if "[" not in n and "::" in n
+    )
+    # The nodeid may be module::test OR module::Class::test, and the class segment is
+    # part of the key — emitting a bare function for the latter produces a DIFFERENT
+    # nodeid, which then reads as an undeclared skip and reddens the child for the wrong
+    # reason (i.e. this test would fail while the ceiling was working correctly).
+    path, *parts = nodeid.split("::")
+    assert len(parts) in (1, 2), f"unhandled nodeid shape: {nodeid}"
+    skip = f"pytest.skip({reason!r})"
+    if len(parts) == 2:
+        cls, func = parts
+        body = f"import pytest\n\n\nclass {cls}:\n    def {func}(self):\n        {skip}\n"
+    else:
+        body = f"import pytest\n\n\ndef {parts[0]}():\n    {skip}\n"
+    r = _run_child_session(tmp_path, body, xdist=False, module=path.split("/")[-1])
+    assert r.returncode == 0, f"declared skip wrongly reddened the session\n{r.stdout}\n{r.stderr}"
 
 
 def test_ceiling_ignores_xfail_end_to_end(tmp_path) -> None:

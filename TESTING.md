@@ -154,8 +154,10 @@ The rest of this is for people running the test suite.
 
 Tests split into two groups by a `slow` marker. The fast group runs on small
 built-in examples and needs no downloads. The slow group runs against real bill
-files: the correctness gates run against a committed fixture set (no download),
-and a few optional suites read larger bills you fetch on demand.
+files, and nearly all of it also needs no downloads: the fixtures are committed,
+and CI runs every slow module except the live-network parity gate. A download
+buys you extra cases in the two suites that sweep your local `bills/`, plus the
+handful of checks listed under [What still wants a download](#what-still-wants-a-download).
 
 ```bash
 uv run pytest -m "not slow and not browser"   # Fast group: built-in examples, no downloads
@@ -181,12 +183,12 @@ quietly started skipping is coverage disappearing with no failure to show for it
 
 ### The corpus gates run against committed fixtures
 
-The corpus correctness gates -- `test_corpus_properties`,
-`test_corpus_tree_properties`, and `test_diff_validation` -- parametrize over a
-committed, curated fixture set named in `tests/corpus_manifest.toml`, not over
-whatever bills a machine happens to have fetched. So they run the same set on
-every machine and in CI, and their case counts are reproducible. Every bill the
-manifest names is committed to git (public-domain government works, 17 U.S.C. 105).
+The corpus correctness gates -- listed in `CORPUS_GATE_MODULES` in
+`tests/conftest.py` -- parametrize over a committed, curated fixture set named in
+`tests/corpus_manifest.toml`, not over whatever bills a machine happens to have
+fetched. So they run the same set on every machine and in CI, and their case
+counts are reproducible. Every bill the manifest names is committed to git
+(public-domain government works, 17 U.S.C. 105).
 
 Each of those modules carries a `test_manifest_fixtures_committed` floor that
 **fails closed**: if a manifested bill is missing from the checkout, the gate
@@ -210,6 +212,51 @@ uv run pytest -m slow tests/test_corpus_properties.py tests/test_corpus_tree_pro
 # Sweep every locally-fetched bill (opt-in exploration):
 CORPUS_SWEEP=1 uv run pytest -m slow tests/test_corpus_properties.py
 ```
+
+### The rest of the slow suite runs in CI too
+
+A further CI step runs the remaining slow modules (`CI_SLOW_MODULES` in
+`tests/conftest.py`) against what they can already assert on from the committed
+corpus. Only the live-network `test_govinfo_corpus_parity` is left out.
+
+The distinction worth keeping straight is that committing a fixture makes a gate
+**runnable**; naming its module in the workflow is what makes it **run**. Several
+of these modules passed on any fresh clone for months while no CI step named
+them, so they asserted nothing where it counted.
+
+### When a skip has to be declared
+
+A skip asserts nothing, so a suite that quietly starts skipping is
+indistinguishable from one that is passing. Both watched groups therefore fail
+the session on a skip that is not written down, and the failure banner names
+which ceiling fired:
+
+| Allowlist | Records | Retired by |
+|---|---|---|
+| `ALLOWED_CORPUS_SKIPS` | A permanent property of a document, e.g. a shell bill that genuinely carries no dollar amounts | Nothing; it is a fact about the fixture |
+| `ALLOWED_CI_SLOW_SKIPS` | Mostly a bill version this repo does not commit -- a coverage gap, so the list doubles as a count of what the corpus is missing | Committing that fixture, which should delete the line |
+
+They are kept apart on purpose: merged, a temporary gap would be
+indistinguishable from a permanent fact. A third kind exists and is commented as
+such where it appears: a check gated on `REQUIRE_CORPUS=1`, which CI never sets.
+
+Matching is on nodeid **and** reason, so an allowlisted case that starts skipping
+for a *different* reason still fails. Add an entry only with a comment saying
+why, and treat adding one as recording a gap rather than clearing an error.
+
+### Why a local run can collect more than CI
+
+Most watched modules parametrize over the manifest, so their case list is
+identical everywhere. Two do not: `test_pdf_corpus_smoke` and
+`test_pdf_xml_amount_recall` sweep whatever pairs exist under `bills/`, so a
+machine with a fetched corpus collects many more cases than CI ever sees.
+
+Those extra cases are excluded from the skip ceiling (`is_watched_case` in
+`tests/conftest.py`). No allowlist calibrated on the committed corpus could name
+a case that exists only on one machine, and a case CI cannot collect cannot
+regress in CI -- so watching them would turn a full local run red while CI was
+green, on a branch where nothing is wrong. Cases the committed corpus *can*
+produce stay watched, in those modules as in every other.
 
 ### Adding a corpus fixture
 
@@ -252,20 +299,30 @@ uv run pytest tests/test_pdf_xml_amount_recall.py  # PDF reading vs official tex
 uv run pytest tests/test_pdf_corpus_smoke.py     # PDF comparison soundness across every bill (slow)
 ```
 
-The provision-matching corpus modules no longer need a download: #220 committed their
-fixtures, so they run everywhere. A few other slow suites still read bills beyond the
-committed set -- the PDF recall suites (`test_pdf_*`), the Legislative Branch
-spreadsheet validation, and the live-network `test_govinfo_corpus_parity` -- exercise
-larger fetched bills, and skip automatically when those bills are absent (or fail loudly
-under `REQUIRE_CORPUS=1`). To run those, download the bill files first (see the Testing
-section of the [README](README.md#testing)). The PDF suites need each bill's PDF as well
-as its XML; pass `--format both` to `fetch_bills.py download` to fetch both at once,
-e.g. `uv run python fetch_bills.py download 118 hr 4366 --format both`.
+### What still wants a download
 
-Some of those suites read files sourced directly from govinfo rather than the
-bill API (for example, the reported-in-Senate watermarked PDF of S.4795 that
-`test_pdf_watermark_recall.py` reads). They skip automatically if absent. Fetch
-them with:
+Less than the `test_pdf_*` naming suggests. Most of those suites assert against
+committed fixtures and are CI gates; a download only adds cases:
+
+| Still needs fetched bills | Why |
+|---|---|
+| `test_pdf_compare`'s end-to-end cases | Read `bills/118-hr-4366/` PDFs, which are not committed |
+| The Legislative Branch completeness floor | Covers a fetched validation set; gated on `REQUIRE_CORPUS=1`, which CI never sets |
+| `test_govinfo_corpus_parity` | Live BILLSTATUS fetch, so it cannot be an offline gate |
+
+Everything else in the slow group asserts on a clean clone. The two sweeping
+suites above simply widen their case list when you have more bills.
+
+When you do download, the PDF suites need each bill's PDF as well as its XML;
+pass `--format both`, e.g.
+`uv run python fetch_bills.py download 118 hr 4366 --format both`. See the
+Testing section of the [README](README.md#testing).
+
+Assets sourced directly from govinfo rather than the bill API -- such as the
+reported-in-Senate watermarked PDF of S.4795 that `test_pdf_watermark_recall.py`
+reads -- are committed, so a fresh clone already has them.
+`scripts/fetch_test_assets.py` re-fetches one you deleted locally and records its
+provenance:
 
 ```bash
 uv run python scripts/fetch_test_assets.py
