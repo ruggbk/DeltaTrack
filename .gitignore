@@ -88,8 +88,9 @@ bills/115-hr-5895/*
 bills/113-hr-3547/*
 !bills/113-hr-3547/6_enrolled-bill.xml
 # Stages 1-5 too (#220): the node-join gates pin the 4->5 and 5->6 XML amendment
-# pairs and the 1->2 / 3->4 PDF pairs. Committing them retires REQUIRE_CORPUS, whose
-# fetched-corpus gating let these gates collect zero cases and pass green.
+# pairs and the 1->2 / 3->4 PDF pairs. Committing them took these gates off the
+# REQUIRE_CORPUS fetched-corpus gating that let them collect zero cases and pass green.
+# (That variable is fully retired as of #278.)
 !bills/113-hr-3547/1_introduced-in-house.pdf
 !bills/113-hr-3547/2_engrossed-in-house.pdf
 !bills/113-hr-3547/3_received-in-senate.pdf
