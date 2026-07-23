@@ -217,7 +217,33 @@ _MAX_UNVALIDATED = {
     "homeland_security": 5,
 }
 
-_REPORT_JURISDICTIONS = [j for j in JURISDICTIONS if j.fixture_path.exists()]
+# Parameterize over the registry directly, NOT `[j for j in JURISDICTIONS if
+# j.fixture_path.exists()]`. Filtering by existence dropped a subcommittee from the run when
+# its committed fixture went missing (a .gitignore edit, a cleanup, a rename in
+# validation_sources.py) — no error, no skip, just one fewer collected case (#294). The
+# registry is the declared source of truth, so a missing fixture now fails loudly under its
+# own slug rather than vanishing; test_all_report_fixtures_committed names them all at once.
+_REPORT_JURISDICTIONS = list(JURISDICTIONS)
+
+
+@pytest.mark.slow
+def test_all_report_fixtures_committed():
+    """Fail-closed completeness floor (#294): every jurisdiction in the registry must have its
+    committed ground-truth fixture on disk.
+
+    Mirrors the corpus gates' ``test_manifest_fixtures_committed`` (#217, ADR 0015). The
+    fixtures are committed (``test_data/validation_*.json`` is re-included in .gitignore), so a
+    normal checkout has all of them and this is green; it turns red — naming every absent
+    subcommittee — only when a rename/cleanup/.gitignore change drops one, instead of silently
+    shrinking external validation.
+    """
+    missing = sorted(j.slug for j in JURISDICTIONS if not j.fixture_path.exists())
+    assert not missing, (
+        f"{len(missing)} committee-report validation fixture(s) registered in "
+        f"validation_sources.py but absent from test_data/: {missing}. Each missing fixture "
+        "silently removes its subcommittee from external validation. Restore the committed "
+        "file(s) or rebuild with `uv run python scripts/build_validation.py --fetch`."
+    )
 
 
 @pytest.mark.slow
@@ -240,8 +266,17 @@ def test_report_amounts_recalled(jur):
 @pytest.mark.parametrize("jur", _REPORT_JURISDICTIONS, ids=lambda j: j.slug)
 def test_fixture_is_senate_reported_bill(jur):
     accounts = json.loads(jur.fixture_path.read_text())["accounts"]
-    # Floor guards against a trivially-empty fixture. MilCon-VA is the smallest jurisdiction
-    # (19 summary-block accounts), so the floor sits below that.
-    assert len(accounts) >= 15
+    # Per-jurisdiction truncation floor (#294), from the registry rather than a flat >= 15.
+    # The old shared floor was sized for the smallest jurisdiction (MilCon-VA, 19 accounts),
+    # so Labor-HHS could lose 108 of its 123 and still pass — and a truncated fixture passes
+    # the recall test *more* easily (fewer accounts => fewer possible failures). The declared
+    # count fails loud on any shrink; refresh Jurisdiction.expected_accounts when a rebuild
+    # legitimately changes it.
+    assert jur.expected_accounts > 0, f"{jur.slug}: expected_accounts unset in validation_sources.py"
+    assert len(accounts) >= jur.expected_accounts, (
+        f"{jur.slug}: fixture has {len(accounts)} accounts, below the declared floor of "
+        f"{jur.expected_accounts} (truncated fixture?). If the shrink is intentional, lower "
+        "expected_accounts in validation_sources.py."
+    )
     assert {a["chamber"] for a in accounts} == {"senate"}
     assert {(a["bill"], a["version"]) for a in accounts} == {(jur.bill_id, jur.version)}
