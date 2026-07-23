@@ -23,7 +23,9 @@ A command is an **executable `.py` file in the project root**. That is the whole
 definition, and it is what the docs gate keys on, so a new command is discovered
 automatically and is required to be documented. To add one:
 
-1. Create `<name>.py` in the project root with a `#!/usr/bin/env python3` shebang.
+1. Create `<name>.py` in the project root with a shebang. `#!/usr/bin/env python3` is
+   the common form; the two bulk fetchers use `#!/usr/bin/env -S uv run --quiet python`,
+   which resolves the environment itself rather than relying on `source ./init`.
 2. `chmod +x <name>.py`, and commit the bit (`git update-index --chmod=+x <name>.py`
    if it did not survive). Without it the file reads as a module and is not a command.
 3. Expose the argument parser as `build_parser()` returning an `argparse.ArgumentParser`.
@@ -31,11 +33,26 @@ automatically and is required to be documented. To add one:
    individually rather than the script as a whole.
 4. Add a row to the README's **Command reference** table for the script (or one per
    subcommand), spelled exactly as a user types it: `./<name>.py <subcommand>`.
+5. Add `<name>` to the completeness floor in `tests/test_docs_consistency.py`
+   (`test_the_command_gate_actually_found_commands`). The floor names every command
+   rather than counting them, so an unnamed command that later loses its executable
+   bit drops out of discovery with the suite still green. The step-2 check catches
+   that only for a script carrying a `__main__` block; for one that parses at module
+   level, this floor is the only thing standing between it and a silent exit.
 
-`tests/test_docs_consistency.py` enforces all of this and names what is missing. A
-command that skips step 4 fails with the exact row to add; one that skips step 2 fails
-with `Root scripts look runnable but are not executable`. Root `.py` files that are
-*not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply carry no executable bit.
+`tests/test_docs_consistency.py` names what is missing where it can: skip step 4 and it
+fails with the exact row to add, skip step 2 and it fails with `Root scripts look
+runnable but are not executable`. Steps 1, 3 and 5 it cannot check for you:
+
+- A shebang is never required on its own. Paired with a `__main__` block on a file
+  that lacks the executable bit, it is what raises that step-2 failure.
+- A command with no `build_parser` is documented under its bare script name rather
+  than rejected (`fetch_bill_archives.py`, #10).
+- Nothing ties the floor's list back to what discovery found, which is why step 5 is
+  a step and not an assertion.
+
+Root `.py` files that are *not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply
+carry no executable bit.
 
 Root scripts once shipped a bare-name symlink beside them (`fetch_bills` →
 `fetch_bills.py`) so the `.py` could be dropped. Those are gone (#319): the symlink was
