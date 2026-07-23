@@ -3,6 +3,7 @@
 import functools
 import os
 import re
+import subprocess
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -90,16 +91,62 @@ def manifest_version_pairs() -> list[tuple[Path, Path]]:
     return pairs
 
 
+def _git_tracked_paths(repo: Path, subdir: str) -> frozenset[str] | None:
+    """POSIX paths (relative to ``repo``) that git tracks under ``subdir``, or ``None``
+    if ``repo`` is not a git work tree. One ``git ls-files`` call.
+
+    Split out from ``_tracked_bills`` / ``missing_manifest_files`` so the git query is
+    directly unit-testable against a throwaway repo (a floor that has never been shown
+    to fire on an untracked-but-present file cannot distinguish "committed" from "the
+    check is broken"). ``None`` — a repo with no ``.git`` — is distinct from an empty
+    set — a valid repo tracking nothing under ``subdir``: the first means "git cannot
+    answer", the second means "git answered: nothing tracked here"."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "-z", "--", subdir],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return frozenset(p for p in out.stdout.split("\0") if p)
+
+
+@functools.cache
+def _tracked_bills() -> frozenset[str] | None:
+    """``bills/…``-prefixed paths git tracks (cached), or ``None`` outside a work tree.
+    The corpus does not change mid-session, so one ``git ls-files`` serves every gate's
+    floor."""
+    return _git_tracked_paths(BILLS_DIR.parent, "bills")
+
+
 def missing_manifest_files() -> list[str]:
-    """Manifest fixtures (all formats) absent from the checkout. Must be empty: every
-    manifested bill is committed, so absence means an uncommitted fixture (fail closed).
-    Checks the manifest set regardless of CORPUS_SWEEP."""
+    """Manifest fixtures (all formats) that are not committed to git. Must be empty.
+
+    A fixture counts as committed only if git TRACKS it *and* it is on disk — not merely
+    that it exists. That distinction is the whole point (#308): a contributor who adds a
+    fixture but forgets its per-file ``bills/`` ``.gitignore`` allowlist line still has
+    the file locally, so ``git add`` silently no-ops and the file is never tracked. A
+    bare ``Path.exists()`` check passes on that author's machine and the gap surfaces
+    only on a fresh CI checkout, where the file is genuinely gone and the gate quietly
+    collects fewer cases (fail-open). Asking git instead fails on the author's machine,
+    before the push.
+
+    Outside a git work tree (e.g. tests run from an unpacked sdist) git cannot answer,
+    so we fall back to the presence check alone — the forgotten-``.gitignore`` failure
+    mode only exists inside a working checkout. Checks the manifest set regardless of
+    CORPUS_SWEEP."""
+    tracked = _tracked_bills()
     missing = []
     for bill in _manifest_bills():
         for ver in bill["versions"]:
             for fmt in ver["formats"]:
-                if not (BILLS_DIR / bill["id"] / f"{ver['stage']}.{fmt}").exists():
-                    missing.append(f"{bill['id']}/{ver['stage']}.{fmt}")
+                rel = f"{bill['id']}/{ver['stage']}.{fmt}"
+                on_disk = (BILLS_DIR / bill["id"] / f"{ver['stage']}.{fmt}").exists()
+                is_tracked = tracked is None or f"bills/{rel}" in tracked
+                if not (on_disk and is_tracked):
+                    missing.append(rel)
     return missing
 
 
@@ -108,14 +155,17 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 
     Called from a plain (non-parametrized) guard test so it always collects and runs —
     with no env var, unlike the retired REQUIRE_CORPUS floor. Fails (not skips) if any
-    manifested fixture is absent from the checkout, so a fresh CI checkout that is
-    missing a committed fixture goes red instead of silently collecting fewer cases.
-    ``kind`` names the gate in the failure message.
+    manifested fixture is not committed to git — missing on disk OR present-but-untracked
+    (a forgotten ``bills/`` ``.gitignore`` allowlist line, #308) — so the gap goes red on
+    the author's machine before the push, not silently on a fresh CI checkout that
+    collects fewer cases. ``kind`` names the gate in the failure message.
     """
     missing = missing_manifest_files()
     assert not missing, (
-        f"{kind}: manifest fixtures absent from the checkout (uncommitted?): {missing}. "
-        "Every bill in tests/corpus_manifest.toml must be committed to git."
+        f"{kind}: manifest fixtures not committed to git (missing on disk or untracked): "
+        f"{missing}. Every bill in tests/corpus_manifest.toml must be `git add`ed and "
+        "committed — a fixture present on your disk but untracked (a forgotten bills/ "
+        ".gitignore allowlist line) passes locally and then silently skips in CI (#308)."
     )
     assert len(collected) > 0, f"{kind}: gate parametrized over zero cases despite a complete manifest."
 
