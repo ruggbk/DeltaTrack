@@ -64,18 +64,14 @@ _CASES = [
     ),
 ]
 
-# The cases whose fixtures are committed, so their absence is a fail-closed error
-# (floored by test_manifest_fixtures_committed), never a silent skip — the fail-open
-# shape #287 removes. hr8752 v1 was already committed; CRPT-118srpt198 is committed by
-# #287 (which also resolves the fetchability half of #296). The other three read large
-# omnibus PDFs kept FETCHED-ONLY (not in the #287 committed set), so they skip visibly
-# when absent, like the other slow PDF suites (TESTING.md).
-_COMMITTED_RELS = frozenset(
-    {
-        "bills/118-hr-8752/1_reported-in-house.pdf",
-        "test_data/CRPT-118srpt198.pdf",
-    }
-)
+# Every case's fixture is committed, so absence is always a fail-closed error (floored by
+# test_manifest_fixtures_committed), never a silent skip — the fail-open shape #287 removes.
+# The last three were committed by #296: they were held out as "large omnibus PDFs", but the
+# pages this module reads are 314-351 KB prints, inside the 240-360 KB band ADR 0015 already
+# accepts, and no script fetched them. So those three goldens ran only on machines where
+# someone had fetched the bill by hand, and never in CI — three of the five tripwires here
+# were dark (epic #288). Committing them costs ~1 MB and turns them on.
+_COMMITTED_RELS = frozenset(rel for _, rel, _, _ in _CASES)
 
 
 def _page_lines(path: Path, page_number: int) -> list[list]:
@@ -92,11 +88,10 @@ def _present(rel: str) -> bool:
 
 def test_manifest_fixtures_committed():
     """Fail-closed floor (#287, ADR 0015): a plain, always-collected guard, so a missing
-    committed fixture fails HERE naming it, instead of the fail-open shape #287 removes (a
-    case silently skipping in CI). hr8752 v1 is in the bills/-layout manifest (checked via
-    the shared helper); CRPT-118srpt198 sits outside it (ADR 0015), so it is floored
-    directly. The three fetched-only omnibus cases are deliberately NOT floored — they keep
-    a visible per-case skip (see _COMMITTED_RELS)."""
+    fixture fails HERE naming it, instead of the fail-open shape #287 removes (a case
+    silently skipping in CI). Every case is floored, because every fixture is committed
+    (#296). The bills/-layout ones are checked via the shared manifest helper;
+    CRPT-118srpt198 sits outside the manifest (ADR 0015), so it is floored directly."""
     assert_manifest_committed(sorted(_COMMITTED_RELS), "pdf-extraction-golden")
     absent = sorted(rel for rel in _COMMITTED_RELS if not _present(rel))
     assert not absent, f"committed pdf-extraction-golden fixtures absent from checkout: {absent}"
@@ -114,11 +109,8 @@ def test_regenerate_golden():
 def test_extraction_matches_golden(key, rel, page, why):
     if os.environ.get("UPDATE_GOLDEN") == "1":
         pytest.skip("golden-update mode")
-    # Committed cases (_COMMITTED_RELS) run unconditionally: a missing fixture is a
-    # fail-closed error, floored by test_manifest_fixtures_committed. The fetched-only
-    # omnibus cases skip visibly when absent (not committed, out of the #287 set).
-    if rel not in _COMMITTED_RELS and not _present(rel):
-        pytest.skip(f"{rel} not present (fetched-only omnibus PDF)")
+    # Every case runs unconditionally: all five fixtures are committed (#296), so a missing
+    # one is a fail-closed error floored by test_manifest_fixtures_committed, never a skip.
     golden = json.loads(_GOLDEN.read_text())
     assert key in golden, f"no golden entry for {key}; regenerate with UPDATE_GOLDEN=1"
     actual = _page_lines(_ROOT / rel, page)
