@@ -57,7 +57,7 @@ CONGRESS_API_KEY=your_key_here
 
 ## Command reference
 
-The product commands are the executable scripts in the project root; run them after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
+The product commands are the executable `.py` scripts in the project root; run them after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
 
 | Command | What it does |
 |---------|--------------|
@@ -73,7 +73,7 @@ The product commands are the executable scripts in the project root; run them af
 
 Environment setup is `source ./init` (installs dependencies and activates the virtualenv). Use `source` so the environment change sticks; it is not a runnable command. Keep the leading `./`: a bare `source init` searches `PATH` before the current directory, so wherever `/usr/sbin` is on `PATH` (most Linux distributions) it finds the system `init` and fails.
 
-> **`fetch_bill_archives` is an advanced bulk tool.** Run with no arguments it immediately downloads every GovInfo BILLSTATUS archive for congresses 112–119 (hundreds of MB) with no prompt, extracts them, and writes a `bills/bills.csv` metadata index. The congress range is hardcoded and there are no CLI flags yet (tracked in [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)). Reach for it only when you specifically need a bulk bill index.
+> **`fetch_bill_archives.py` is an advanced bulk tool.** Run with no arguments it immediately downloads every GovInfo BILLSTATUS archive for congresses 112–119 (hundreds of MB) with no prompt, extracts them, and writes a `bills/bills.csv` metadata index. The congress range is hardcoded and there are no CLI flags yet (tracked in [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)). Reach for it only when you specifically need a bulk bill index.
 
 To run the web comparison app locally: `uvicorn server.app:app --reload --port 8077` (see [docs/web-compare.md](docs/web-compare.md)).
 
@@ -175,7 +175,7 @@ Floor amendment annotations like "(increased by $2,000,000)" appear in engrossed
 
 ## Comparing PDF versions
 
-Some bill versions are only available as PDF — pre-publication committee prints, chair's marks, and markup amendments are posted as PDF before the authoritative XML exists (see [ADR 0010](docs/decisions/0010-pdf-pipeline-pre-publication.md)). For those, use `diff_pdf`, the PDF-native counterpart to `diff_bill`:
+Some bill versions are only available as PDF — pre-publication committee prints, chair's marks, and markup amendments are posted as PDF before the authoritative XML exists (see [ADR 0010](docs/decisions/0010-pdf-pipeline-pre-publication.md)). For those, use `diff_pdf.py`, the PDF-native counterpart to `diff_bill.py`:
 
 ```bash
 # download defaults to XML, so request the PDFs explicitly
@@ -185,7 +185,7 @@ Some bill versions are only available as PDF — pre-publication committee print
 ./diff_pdf.py bills/118-hr-4366/1_reported-in-house.pdf bills/118-hr-4366/2_engrossed-in-house.pdf -o reports/hr4366.html
 ```
 
-`diff_pdf` runs the same pipeline as the web app (full-bill view, in-page search, section navigation, embedded export) and writes the same HTML report described above. Output goes to stdout unless `-o` is given. Prefer `diff_bill` on XML whenever the published XML exists; it extracts structure and amounts exactly rather than reconstructing them from a rendered page.
+`diff_pdf.py` runs the same pipeline as the web app (full-bill view, in-page search, section navigation, embedded export) and writes the same HTML report described above. Output goes to stdout unless `-o` is given. Prefer `diff_bill.py` on XML whenever the published XML exists; it extracts structure and amounts exactly rather than reconstructing them from a rendered page.
 
 ## Output Structure
 
@@ -257,7 +257,7 @@ The corpus correctness gates need no downloads (their fixtures are committed, in
 
 ```bash
 # These download from govinfo by default — no API key needed. (For --source api,
-# fetch_bills reads CONGRESS_API_KEY from .env automatically; no need to source it.)
+# fetch_bills.py reads CONGRESS_API_KEY from .env automatically; no need to source it.)
 # --format both fetches XML and PDF together, covering both the XML tests and the
 # PDF comparison tests (test_pdf_*) in one pass.
 ./fetch_bills.py download 118 hr 4366 --format both
