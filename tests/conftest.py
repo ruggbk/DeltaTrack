@@ -2,6 +2,7 @@
 
 import functools
 import os
+import re
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -294,6 +295,91 @@ _SKIP_WATCH_GROUPS = (
 
 _WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES
 
+# --- Cases CI can never collect ------------------------------------------------
+# Every watched module parametrizes over the committed manifest EXCEPT these two, which
+# glob bills/ directly (tests/pdf_corpus.py: dual_format_versions, adjacent_pdf_pairs).
+# Their case list therefore grows with whatever a machine has fetched: 6 and 30 cases in
+# CI, 90 and 432 on a full working checkout.
+#
+# That breaks the assumption the allowlist rests on. An allowlist calibrated against the
+# committed corpus cannot name cases that only exist on one developer's disk, so those
+# skips read as undeclared and the session fails — locally red while CI is green, on a
+# branch where nothing is wrong. A ceiling that cries wolf on every maintainer's machine
+# gets muted, which costs more than the channel it guards.
+#
+# So for these two modules a case is watched only if the manifest declares every FILE the
+# case reads. A case CI cannot collect cannot regress in CI, and there is nothing
+# meaningful to declare about it. Cases that ARE manifested stay watched exactly as
+# before, so the channel is narrowed to what CI runs, not switched off. This is the same
+# reasoning that already exempts CORPUS_SWEEP: a superset sweep is uncalibrated by
+# construction.
+#
+# Format matters, and collapsing it is the trap here. The manifest declares (bill, stage,
+# FORMAT), and a stage is often committed in one format only -- 113-hr-3547 v1 is
+# pdf-only. The amount-recall gate reads the xml AND the pdf of a stage, so a pdf-only
+# stage yields no case in CI even though the manifest names it. Each module therefore
+# declares which formats its cases actually need.
+_CORPUS_EXPANDING_MODULES = {
+    # adjacent_pdf_pairs(): consecutive PDFs within a bill.
+    "tests/test_pdf_corpus_smoke.py": ("pdf",),
+    # dual_format_versions(): a stage present in BOTH formats.
+    "tests/test_pdf_xml_amount_recall.py": ("xml", "pdf"),
+}
+
+# The two id shapes these modules generate: "<bill>/<stem>" and, for a pair case,
+# "<bill>/<stem>-><stem>" -- the second stem carries no bill prefix, so it is resolved
+# against the one most recently seen.
+_BILL_STEM = re.compile(r"(\d+-[a-z]+-\d+)/(.+)")
+_VERSION_SUFFIX = re.compile(r"\.(xml|pdf)$")
+
+
+@functools.cache
+def _manifest_case_refs() -> frozenset[str]:
+    """Every "<bill>/<stage>.<fmt>" the manifest declares, for membership tests."""
+    return frozenset(
+        f"{bill['id']}/{ver['stage']}.{fmt}"
+        for bill in _manifest_bills()
+        for ver in bill["versions"]
+        for fmt in ver["formats"]
+    )
+
+
+def _referenced_versions(param: str) -> list[tuple[str, str]]:
+    """(bill, stem) for each version a parametrize id names, left to right."""
+    out: list[tuple[str, str]] = []
+    bill = None
+    for chunk in param.split("->"):
+        match = _BILL_STEM.search(chunk)
+        if match:
+            bill, stem = match.group(1), match.group(2)
+        else:
+            stem = chunk
+        stem = _VERSION_SUFFIX.sub("", stem.strip())
+        if bill and stem:
+            out.append((bill, stem))
+    return out
+
+
+def is_watched_case(nodeid: str) -> bool:
+    """Whether a skip in a watched module is one CI could also produce.
+
+    True for everything outside the two corpus-expanding modules — those parametrize
+    over the manifest, so their case list is identical everywhere and every skip is
+    calibrated. Also true when a nodeid carries no recognizable version reference, so an
+    id shape this does not understand fails CLOSED (watched) rather than silently
+    escaping the ceiling.
+    """
+    formats = next((f for mod, f in _CORPUS_EXPANDING_MODULES.items() if nodeid.startswith(mod)), None)
+    if formats is None:
+        return True
+    _, _, param = nodeid.partition("[")
+    referenced = _referenced_versions(param.rstrip("]"))
+    if not referenced:
+        return True
+    manifested = _manifest_case_refs()
+    return all(f"{bill}/{stem}.{fmt}" in manifested for bill, stem in referenced for fmt in formats)
+
+
 # Populated by pytest_runtest_logreport; read in pytest_sessionfinish.
 _observed_corpus_skips: dict[str, str] = {}
 
@@ -306,12 +392,17 @@ def classify_corpus_skips(observed: dict[str, str]) -> dict[str, str]:
     failing to parse) is exactly the regression this gate exists to catch, so it must
     not be waved through just because the nodeid is known.
 
+    Cases the committed corpus cannot produce are ignored (see is_watched_case): they
+    exist only on a machine with a fetched corpus, so no allowlist could name them.
+
     Split out from the hooks so it is directly unit-testable — a ceiling that has
     never been shown to fire cannot distinguish "nothing regressed" from "the check
     is broken".
     """
     unexpected = {}
     for nodeid, reason in observed.items():
+        if not is_watched_case(nodeid):
+            continue
         for _label, modules, allowed in _SKIP_WATCH_GROUPS:
             if nodeid.startswith(modules):
                 if allowed.get(nodeid) != reason:

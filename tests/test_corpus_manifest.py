@@ -182,6 +182,87 @@ def test_ci_slow_allowlisted_skips_name_watched_modules() -> None:
         assert nodeid.startswith(conftest.CI_SLOW_MODULES), f"stale allowlist entry: {nodeid}"
 
 
+# --- Narrowing the watch to cases CI can collect --------------------------------
+# The two corpus-expanding modules glob bills/, so a fetched corpus adds cases CI never
+# sees (6 -> 90 and 30 -> 432). Those extra cases legitimately content-skip, and no
+# allowlist can name them, so before this filter a full local run exited 1 with 36
+# undeclared skips while CI was green. These tests pin the narrowing in BOTH directions:
+# the uncollectable cases are ignored, and everything the committed corpus can produce is
+# still watched. A filter that only proved the first half would be indistinguishable from
+# switching the ceiling off for those modules.
+
+
+def test_unmanifested_expanding_case_is_not_watched() -> None:
+    """A glob-only case (its bill version is not committed) is ignored.
+
+    This is the exact shape that reddened a local full run: 113-hr-3547 v1 is fetch-only,
+    so CI never collects it and there is nothing to declare."""
+    nodeid = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/1_introduced-in-house]"
+    assert not conftest.is_watched_case(nodeid)
+    assert conftest.classify_corpus_skips({nodeid: "No amounts in XML (shell / procedural version)"}) == {}
+
+
+def test_manifested_expanding_case_is_still_watched() -> None:
+    """The complement, and the one that matters most: a case CI DOES collect, in the same
+    module, is still watched. Without this the filter could be a blanket exemption for
+    those two modules and every test above would still pass."""
+    nodeid = (
+        "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/4_engrossed-amendment-senate]"
+    )
+    assert conftest.is_watched_case(nodeid)
+    assert conftest.classify_corpus_skips({nodeid: "some new reason"}) == {nodeid: "some new reason"}
+
+
+def test_expanding_case_resolves_per_version_and_per_format() -> None:
+    """A bill id alone is not enough, and neither is a stage.
+
+    113-hr-3547 v1 IS manifested -- as pdf only. The amount-recall gate reads the xml and
+    the pdf of a stage, so CI collects no case for it; a check that collapsed format would
+    wave through the exact ids that reddened a local run. v4 is the stage committed in
+    both formats, and is the one real case."""
+    one = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/{}]"
+    assert not conftest.is_watched_case(one.format("1_introduced-in-house"))  # pdf only
+    assert not conftest.is_watched_case(one.format("6_enrolled-bill"))  # xml only
+    assert conftest.is_watched_case(one.format("4_engrossed-amendment-senate"))  # both
+
+
+def test_pair_case_resolves_both_sides() -> None:
+    """A smoke-gate id names two stages as "<bill>/<a>-><b>", and the second carries no
+    bill prefix. Both sides must be manifested as pdf; parsing only the first would keep
+    watching half the uncollectable pairs."""
+    pair = "tests/test_pdf_corpus_smoke.py::TestPdfCorpusSmoke::test_no_crash[113-hr-3547/{}->{}]"
+    assert conftest.is_watched_case(pair.format("1_introduced-in-house", "2_engrossed-in-house"))
+    assert not conftest.is_watched_case(pair.format("5_engrossed-amendment-house", "6_enrolled-bill"))
+
+
+def test_filter_does_not_touch_non_expanding_modules() -> None:
+    """Only the two globbing modules are narrowed. test_pipeline_parity parametrizes over a
+    hardcoded list, so CI collects 115-hr-5895 and skips it whether or not it is
+    manifested — that skip is real, declarable, and must stay watched."""
+    nodeid = "tests/test_pipeline_parity.py::test_pipeline_change_parity[115-hr-5895]"
+    assert nodeid not in conftest._manifest_case_refs()
+    assert conftest.is_watched_case(nodeid)
+
+
+def test_every_allowlist_entry_is_still_watched() -> None:
+    """No declared entry may be silently dropped by the filter.
+
+    An entry that stopped being watched would be dead weight AND a reopened channel, with
+    nothing to show for it. This is the guard that catches an over-broad filter or a
+    regex that stops parsing a nodeid shape."""
+    for allowlist in (conftest.ALLOWED_CORPUS_SKIPS, conftest.ALLOWED_CI_SLOW_SKIPS):
+        for nodeid in allowlist:
+            assert conftest.is_watched_case(nodeid), f"allowlist entry no longer watched: {nodeid}"
+
+
+def test_unparsable_nodeid_fails_closed() -> None:
+    """A nodeid with no recognizable bill reference stays watched.
+
+    If the id shape ever changes, the ceiling must keep firing rather than quietly
+    exempting a whole module -- fail closed, not open."""
+    assert conftest.is_watched_case("tests/test_pdf_corpus_smoke.py::test_no_crash[something-else]")
+
+
 def test_skip_watch_groups_do_not_overlap() -> None:
     """No module belongs to two watch groups.
 

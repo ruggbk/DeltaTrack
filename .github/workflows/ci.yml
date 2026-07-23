@@ -106,6 +106,12 @@ jobs:
         # collects: the hook runs in every session, so a non-slow case in one of these
         # modules (test_bill_tree.py has one) is watched in the fast step too.
         #
+        # Every case CI collects here is watched. Two of these modules glob bills/ instead
+        # of the manifest, so a developer with a fetched corpus collects cases CI never
+        # sees (6 -> 90, 30 -> 432); those are excluded from the ceiling, because no
+        # allowlist calibrated on the committed corpus could name them and the session
+        # would go red locally while CI was green. See is_watched_case in tests/conftest.py.
+        #
         # Deliberately excluded: test_govinfo_corpus_parity.py, which fetches BILLSTATUS
         # live and so is not an offline gate. test_financial_callout_whole_item.py was the
         # other exclusion pending its fixture; that landed in #320, which put it in the
