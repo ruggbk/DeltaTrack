@@ -72,6 +72,14 @@ jobs:
         # fetched glob and never in CI (fail open). The last three were migrated in #220 --
         # listing them here is what actually gives them CI coverage; committing their
         # fixtures only made them runnable. CORPUS_SWEEP=1 is the opt-in local superset.
+        #
+        # test_financial_callout_whole_item is the seventh, and the odd one out: it is not
+        # manifest-parametrized, it diffs one committed pair (119-hr-1 v1 -> v2) to prove a
+        # wholly-removed appropriation is not rendered silently (#86). It is @slow, so
+        # every other step skipped it and it had never run in CI at all. Committing v2 made
+        # it runnable; naming it here is what makes it run. Its skipif channel is watched by
+        # the content-skip ceiling (CORPUS_GATE_MODULES in tests/conftest.py), so deleting
+        # the fixture goes red instead of quiet.
         run: >
           uv run pytest -v -m slow
           tests/test_corpus_properties.py
@@ -80,6 +88,7 @@ jobs:
           tests/test_node_join_corpus.py
           tests/test_xml_subsection_nodes.py
           tests/test_pdf_subsection_recall.py
+          tests/test_financial_callout_whole_item.py
 
       - name: Run remaining slow suites (committed fixtures)
         if: ${{ !cancelled() }}
@@ -97,9 +106,11 @@ jobs:
         # collects: the hook runs in every session, so a non-slow case in one of these
         # modules (test_bill_tree.py has one) is watched in the fast step too.
         #
-        # Deliberately excluded: test_govinfo_corpus_parity.py (fetches BILLSTATUS live,
-        # so it is not an offline gate) and test_financial_callout_whole_item.py (its
-        # fixture is committed by a separate change; add it here once that lands).
+        # Deliberately excluded: test_govinfo_corpus_parity.py, which fetches BILLSTATUS
+        # live and so is not an offline gate. test_financial_callout_whole_item.py was the
+        # other exclusion pending its fixture; that landed in #320, which put it in the
+        # corpus-gate step above and under the #220 ceiling, so it is covered there rather
+        # than here.
         run: >
           uv run pytest -v -m slow
           tests/test_pdf_corpus_smoke.py

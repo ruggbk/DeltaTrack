@@ -99,6 +99,12 @@ bills/119-hr-1/*
 # (118-hr-8752, 117-hr-4502) against this one, the messy reconciliation print with the
 # largest oracle. Without it committed those gates silently dropped to two bills.
 !bills/119-hr-1/1_reported-in-house.pdf
+# v2 XML: the headline #86 gate (test_financial_callout_whole_item) diffs v1 -> v2 to
+# prove a wholly-removed appropriation is not rendered silently, and
+# scripts/build_similarity_labels.py re-derives the committed answer key from the same
+# pair. Neither was reproducible: v2 was uncommitted AND absent from the README corpus
+# block, so the gate skipped on every fresh clone including CI.
+!bills/119-hr-1/2_engrossed-in-house.xml
 reports/*
 !reports/.gitkeep
 plans/

@@ -586,6 +586,97 @@ class TestCmdDownloadAllYearRange:
             cmd_download_all(client, args, TEST_API_KEY)  # must not raise
 
 
+class TestCmdDownloadAllFromFile:
+    """`download-all --file` against a hand-written CSV (#156).
+
+    This path reads a user-supplied index, so it meets rows the strict slug codec
+    rejects. ADR 0013 made identity the bare slug, but it did not ask this command to
+    stop serving a CSV that works today: a `:version` suffix identifies a bill perfectly
+    well and used to download it, so it still does, with a warning. Only a row that
+    names no bill at all is skipped, and a skip never aborts the run: every remaining
+    row is still attempted, and the malformed input is reported at the end by an exit
+    status, the way this file's other input errors are.
+    """
+
+    def _run(self, tmp_path, monkeypatch, rows):
+        """Run the command over `rows`; return the attempted bills and the exit status."""
+        import fetch_bills
+
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_text("id\n" + "".join(f"{row}\n" for row in rows), encoding="utf-8")
+
+        downloaded = []
+        monkeypatch.setattr(
+            fetch_bills,
+            "download_all_versions",
+            lambda client, **kwargs: downloaded.append((kwargs["congress"], kwargs["bill_type"], kwargs["number"])),
+        )
+
+        args = build_parser().parse_args(
+            ["download-all", "--file", str(csv_path), "--output-dir", str(tmp_path / "out")]
+        )
+        status = 0
+        with httpx.Client() as client:
+            try:
+                cmd_download_all(client, args, TEST_API_KEY)
+            except SystemExit as exc:
+                status = exc.code
+        return downloaded, status
+
+    def test_legacy_version_suffix_still_downloads_the_bill(self, tmp_path, monkeypatch, capsys):
+        downloaded, status = self._run(tmp_path, monkeypatch, ["118-sconres-12:2"])
+
+        assert downloaded == [("118", "sconres", "12")]
+        # A served legacy row is not an error: the run is clean and exits clean.
+        assert status == 0
+        err = capsys.readouterr().err
+        assert "118-sconres-12:2" in err
+        assert "ADR 0013" in err
+
+    def test_unusable_row_is_skipped_without_aborting_the_run(self, tmp_path, monkeypatch, capsys):
+        """The good row after the bad one must still download.
+
+        A bare raise here would abort mid-run, after earlier bills had already been
+        written -- a partial corpus that looks like a complete one.
+        """
+        downloaded, _ = self._run(tmp_path, monkeypatch, ["12345", "119-hr-1"])
+
+        assert downloaded == [("119", "hr", "1")]
+        assert "Skipping unusable row '12345'" in capsys.readouterr().err
+
+    def test_skipped_row_makes_the_whole_run_exit_nonzero(self, tmp_path, monkeypatch):
+        """A partial corpus must not look like a complete one to a script.
+
+        Before the row-level skip existed, an unparseable row crashed the command and
+        `download-all ... && <next step>` stopped there. Skipping keeps the run going,
+        so the exit status is what still tells a scripted caller the input was bad.
+        """
+        _, status = self._run(tmp_path, monkeypatch, ["12345", "119-hr-1"])
+
+        assert status == 1
+
+    def test_run_summarizes_what_it_processed_and_skipped(self, tmp_path, monkeypatch, capsys):
+        downloaded, _ = self._run(tmp_path, monkeypatch, ["119-hr-1", "118-sconres-12:2", "12345", "not-a-bill-9"])
+
+        assert downloaded == [("119", "hr", "1"), ("118", "sconres", "12")]
+        # "Processed", not "downloaded": a bill with no text versions available is
+        # attempted and counted here too, so the stronger word would overclaim.
+        assert "Processed 2 bills, skipped 2 unusable rows." in capsys.readouterr().err
+
+    def test_unusable_row_is_not_blamed_on_its_version_suffix(self, tmp_path, monkeypatch, capsys):
+        """A row that names no bill is skipped, with no note about the suffix.
+
+        `12345:2` is unusable for reasons the suffix has nothing to do with, so the
+        compatibility note would point at the wrong part of the row.
+        """
+        downloaded, _ = self._run(tmp_path, monkeypatch, ["12345:2"])
+
+        assert downloaded == []
+        err = capsys.readouterr().err
+        assert "Skipping unusable row '12345:2'" in err
+        assert "ADR 0013" not in err
+
+
 class TestLazyApiKeyResolution:
     """govinfo #10 steps 5-6: key resolution (and its DEMO_KEY warning) fires only
     on paths that actually reach the Congress.gov API. Never on ``--help`` / no
