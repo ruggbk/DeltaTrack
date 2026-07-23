@@ -11,7 +11,7 @@ root.
 |--------|--------------|
 | `build_validation.py` | Build `test_data/validation_<slug>.json` for each committee-report jurisdiction (the ground-truth fixtures). `--fetch` downloads the upstream sources first. |
 | `generate_validation_report.py` | Generate `docs/parser-validation.md`, the team-facing parser-accuracy report, from those fixtures. |
-| `fetch_test_assets.py` | Fetch external test assets that `fetch_bills.py` cannot produce (e.g. committee-report PDFs the slow suite needs). |
+| `fetch_test_assets.py` | Fetch the large gitignored bill-print PDFs the slow suite needs, which `fetch_bills.py` cannot produce (it defaults to XML). Committee-report PDFs are **not** fetched here — the ones the gates read are committed fixtures ([ADR 0015](../docs/decisions/0015-corpus-test-fixtures.md)). |
 | `compare_differs.py <a> <b>` | Compare DeltaTrack against off-the-shelf differs on the same bill pair (evidence for [ADR 0001](../docs/decisions/0001-structured-money-diff.md)). |
 
 ## PDF / rendering
