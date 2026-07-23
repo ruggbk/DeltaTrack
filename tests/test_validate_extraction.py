@@ -217,7 +217,14 @@ _MAX_UNVALIDATED = {
     "homeland_security": 5,
 }
 
-_REPORT_JURISDICTIONS = [j for j in JURISDICTIONS if j.fixture_path.exists()]
+# Parameterize over the registry directly, NOT `[j for j in JURISDICTIONS if
+# j.fixture_path.exists()]`. Filtering by existence dropped a subcommittee from the run when
+# its committed fixture went missing (a .gitignore edit, a cleanup, a rename in
+# validation_sources.py) — no error, no skip, just one fewer collected case (#294). The
+# registry is the declared source of truth, so a missing fixture now fails loudly under its
+# own slug rather than vanishing; the fast-tier floor
+# tests/test_corpus_manifest.py::test_all_report_fixtures_committed names them all at once.
+_REPORT_JURISDICTIONS = list(JURISDICTIONS)
 
 
 @pytest.mark.slow
@@ -240,8 +247,17 @@ def test_report_amounts_recalled(jur):
 @pytest.mark.parametrize("jur", _REPORT_JURISDICTIONS, ids=lambda j: j.slug)
 def test_fixture_is_senate_reported_bill(jur):
     accounts = json.loads(jur.fixture_path.read_text())["accounts"]
-    # Floor guards against a trivially-empty fixture. MilCon-VA is the smallest jurisdiction
-    # (19 summary-block accounts), so the floor sits below that.
-    assert len(accounts) >= 15
+    # Per-jurisdiction truncation floor (#294), from the registry rather than a flat >= 15.
+    # The old shared floor was sized for the smallest jurisdiction (MilCon-VA, 19 accounts),
+    # so Labor-HHS could lose 108 of its 123 and still pass — and a truncated fixture passes
+    # the recall test *more* easily (fewer accounts => fewer possible failures). The declared
+    # count fails loud on any shrink; refresh Jurisdiction.min_accounts when a rebuild
+    # legitimately changes it.
+    assert jur.min_accounts > 0, f"{jur.slug}: min_accounts unset in validation_sources.py"
+    assert len(accounts) >= jur.min_accounts, (
+        f"{jur.slug}: fixture has {len(accounts)} accounts, below the declared floor of "
+        f"{jur.min_accounts} (truncated fixture?). If the shrink is intentional, lower "
+        "min_accounts in validation_sources.py."
+    )
     assert {a["chamber"] for a in accounts} == {"senate"}
     assert {(a["bill"], a["version"]) for a in accounts} == {(jur.bill_id, jur.version)}

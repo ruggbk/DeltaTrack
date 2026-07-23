@@ -29,6 +29,11 @@ class Jurisdiction:
     version: str  # bill version filename, e.g. "1_reported-in-senate.xml"
     fy: str  # "FY 2025"
     chamber: str  # "senate"
+    # Minimum number of accounts the committed fixture must carry — a `>=` truncation floor
+    # (tests/test_validate_extraction.py::test_fixture_is_senate_reported_bill): a fixture that
+    # shrinks below it fails loudly instead of passing more easily (fewer accounts => fewer
+    # possible recall failures). Refresh it here when a rebuild legitimately changes the count.
+    min_accounts: int
     # Which report table the builder reads. Most jurisdictions carry account amounts in the
     # narrative's 3-line summary blocks ("summary"). "Tabular" jurisdictions (Defense) print
     # accounts only in the wide comparative statement, so the builder reads that instead
@@ -48,7 +53,7 @@ class Jurisdiction:
         return Path("bills") / self.bill_id / self.version
 
 
-def _senate_fy25(slug, display, srpt, s_num, bill_id, source="summary", fy="FY 2025"):
+def _senate_fy25(slug, display, srpt, s_num, bill_id, accounts, source="summary", fy="FY 2025"):
     return Jurisdiction(
         slug=slug,
         display=display,
@@ -58,6 +63,7 @@ def _senate_fy25(slug, display, srpt, s_num, bill_id, source="summary", fy="FY 2
         version="1_reported-in-senate.xml",
         fy=fy,
         chamber="senate",
+        min_accounts=accounts,
         source=source,
     )
 
@@ -65,31 +71,31 @@ def _senate_fy25(slug, display, srpt, s_num, bill_id, source="summary", fy="FY 2
 # FY2025 Senate Appropriations Committee reports + their reported bills (govinfo).
 # These present account amounts in the 3-line summary-block form the reader targets.
 JURISDICTIONS = [
-    _senate_fy25("cjs", "Commerce-Justice-Science", "198", "4795", "118-s-4795"),
-    _senate_fy25("agriculture", "Agriculture-Rural Development-FDA", "193", "4690", "118-s-4690"),
-    _senate_fy25("transportation_hud", "Transportation-HUD", "199", "4796", "118-s-4796"),
-    _senate_fy25("state_foreign_ops", "State-Foreign Operations", "200", "4797", "118-s-4797"),
-    _senate_fy25("interior_environment", "Interior-Environment", "201", "4802", "118-s-4802"),
-    _senate_fy25("financial_services", "Financial Services-General Government", "206", "4928", "118-s-4928"),
+    _senate_fy25("cjs", "Commerce-Justice-Science", "198", "4795", "118-s-4795", 75),
+    _senate_fy25("agriculture", "Agriculture-Rural Development-FDA", "193", "4690", "118-s-4690", 44),
+    _senate_fy25("transportation_hud", "Transportation-HUD", "199", "4796", "118-s-4796", 67),
+    _senate_fy25("state_foreign_ops", "State-Foreign Operations", "200", "4797", "118-s-4797", 68),
+    _senate_fy25("interior_environment", "Interior-Environment", "201", "4802", "118-s-4802", 72),
+    _senate_fy25("financial_services", "Financial Services-General Government", "206", "4928", "118-s-4928", 100),
     # Labor-HHS carries 123 summary blocks in its narrative, so it uses the summary source
     # like the rest despite being a large bill; its comparative statement is over-decomposed.
-    _senate_fy25("labor_hhs", "Labor-HHS-Education", "207", "4942", "118-s-4942"),
-    _senate_fy25("milcon_va", "Military Construction-VA", "191", "4677", "118-s-4677"),
+    _senate_fy25("labor_hhs", "Labor-HHS-Education", "207", "4942", "118-s-4942", 123),
+    _senate_fy25("milcon_va", "Military Construction-VA", "191", "4677", "118-s-4677", 19),
     # Tabular jurisdictions: accounts appear only in the comparative statement (in thousands).
-    _senate_fy25("defense", "Defense", "204", "4921", "118-s-4921", source="comparative"),
+    _senate_fy25("defense", "Defense", "204", "4921", "118-s-4921", 77, source="comparative"),
     # Energy-Water nests accounts below the TITLE (e.g. Corps of Engineers--Civil under
     # DEPARTMENT OF DEFENSE--CIVIL); the comparative reader tracks that section as `bureau`
     # so agency-scoped recall matches whichever level is the bill's top-level agency.
-    _senate_fy25("energy_water", "Energy-Water", "205", "4927", "118-s-4927", source="comparative"),
+    _senate_fy25("energy_water", "Energy-Water", "205", "4927", "118-s-4927", 67, source="comparative"),
     # Out-of-corpus overfitting guard: a DIFFERENT fiscal year (FY2024) of an already-covered
     # jurisdiction. The bill (S.2321) and report (srpt62) are not otherwise in our corpus, so
     # comparable recall here is evidence the parser is not overfit to FY2025 formatting.
-    _senate_fy25("cjs_fy2024", "Commerce-Justice-Science (FY2024)", "62", "2321", "118-s-2321", fy="FY 2024"),
+    _senate_fy25("cjs_fy2024", "Commerce-Justice-Science (FY2024)", "62", "2321", "118-s-2321", 75, fy="FY 2024"),
     # Homeland Security: the Senate did NOT report an FY2025 DHS bill (committee draft only,
     # no S. number / numbered report), so coverage uses the FY2024 reported bill (S.2625,
     # srpt85) — another out-of-corpus year. The House FY2025 DHS bill exists but House reports
     # render their account tables as images, so they can't be read.
-    _senate_fy25("homeland_security", "Homeland Security (FY2024)", "85", "2625", "118-s-2625", fy="FY 2024"),
+    _senate_fy25("homeland_security", "Homeland Security (FY2024)", "85", "2625", "118-s-2625", 35, fy="FY 2024"),
 ]
 
 # Coverage note: with MilCon-VA and Homeland Security, all 12 regular Senate appropriations
