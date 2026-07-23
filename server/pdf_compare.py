@@ -156,7 +156,7 @@ def _build_canonical(
     congress: str = "",
     printed: bool = False,
 ) -> dict:
-    """Canonical diff JSON (schema v1.2) with full text + per-change spans.
+    """Canonical diff JSON (see schema/canonical-diff.md) with full text + per-change spans.
 
     Shared by both entry points: it is the JSON response on the JSON path and
     the embedded ``diff.json`` (driving export) on the HTML path. With
@@ -224,7 +224,7 @@ def compare_pdfs(
     start_label: str = "Start version",
     end_label: str = "End version",
 ) -> dict:
-    """Diff two PDF documents and return canonical diff JSON (schema v1.2)."""
+    """Diff two PDF documents and return canonical diff JSON (see schema/canonical-diff.md)."""
     pdf_diff, old_pages, new_pages = _extract_and_diff(start_bytes, end_bytes)
     congress = _derive_congress(new_pages)
     return _build_canonical(pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress)

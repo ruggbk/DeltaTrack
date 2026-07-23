@@ -14,8 +14,13 @@ bills/*
 !bills/.gitkeep
 !bills/large_bills.csv
 # govinfo BILLS bulk-text downloads + staging (fetch_bill_text_archives.py); large, re-fetchable
-bills_bulk_text/
-bills_govinfo_staging/
+# No trailing slash (#319): a trailing slash matches only a real directory, and the
+# documented way to make the corpus gates run in a git worktree is to SYMLINK these in
+# from the main checkout. A symlink is not a directory to git, so `bills_bulk_text/`
+# left the link untracked and offered for commit -- and committing it would record an
+# absolute path from one developer's machine. Matching without the slash covers both.
+bills_bulk_text
+bills_govinfo_staging
 # Vendored public-domain (17 U.S.C. 105) govinfo sources for the external-validation suite:
 # the Senate reported-bill XML each validation jurisdiction checks. Pinning the exact bytes
 # keeps the committed validation_*.json fixtures reproducible and lets the suite run in CI.
@@ -58,6 +63,11 @@ bills/118-hr-4366/*
 !bills/118-hr-4366/4_engrossed-amendment-senate.xml
 !bills/118-hr-4366/5_engrossed-amendment-house.xml
 !bills/118-hr-4366/6_enrolled-bill.xml
+# The v1 and v3 PDF prints too (#296): the pdf-extraction golden pins one page of each
+# (soft-hyphen reconstruction; VerDate footer glued across a page boundary). Committed
+# so regenerating the golden can never drop their recorded expectations.
+!bills/118-hr-4366/1_reported-in-house.pdf
+!bills/118-hr-4366/3_placed-on-calendar-senate.pdf
 !bills/115-hr-5895/
 bills/115-hr-5895/*
 !bills/115-hr-5895/4_engrossed-amendment-senate.xml
@@ -82,6 +92,9 @@ bills/113-hr-3547/*
 # node-join amendment-shape case; the 3->4 PDF pair is its anchor-agreement case.
 !bills/114-hr-2029/
 bills/114-hr-2029/*
+# The v1 PDF print too (#296): the pdf-extraction golden pins its page 2 (DSK watermark
+# glued across a page boundary). Committed so regeneration cannot drop that expectation.
+!bills/114-hr-2029/1_reported-in-house.pdf
 !bills/114-hr-2029/3_referred-in-senate.pdf
 !bills/114-hr-2029/4_reported-in-senate.pdf
 !bills/114-hr-2029/5_engrossed-amendment-senate.xml
@@ -133,8 +146,9 @@ test_data/extract_cache/
 # Vendored GPO render chain (public domain, ~2.2MB incl. binary JPGs) — local reference only.
 # Mined into docs/gpo-render-conventions.md; re-fetch from govinfo bulkdata when needed. See DeltaTrack#40.
 reference/
-# govinfo-derived test corpus for provision-matching research (#170); large, re-derivable
-bills_corpus/
+# govinfo-derived test corpus for provision-matching research (#170); large, re-derivable.
+# No trailing slash: it is commonly symlinked into a worktree root (see #319 above).
+bills_corpus
 
 # Generated research render (regenerate via probes/build_artifact.py)
 docs/research/provision-matching/paper.html

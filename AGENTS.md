@@ -13,9 +13,21 @@ uv run pytest tests/test_diff_bill.py::TestMatchNodesIntegration  # Single test
 uv run python scripts/serve_compare.py 118-hr-8752  # PDF vs XML diff side by side (see TESTING.md)
 ```
 
-After `source ./init`, the top-level CLIs run via bare-name symlinks (`./fetch_bills`,
-`./diff_bill`, `./diff_pdf`, `./fetch_bill_archives` → their `.py` files); the
-`uv run python <script>.py` form still works either way.
+After `source ./init`, the top-level CLIs run directly (`./fetch_bills.py`,
+`./diff_bill.py`, `./diff_pdf.py`, `./fetch_bill_archives.py`,
+`./fetch_bill_text_archives.py`); the `uv run python <script>.py` form still works.
+
+### Adding a CLI command
+
+A command is an **executable `.py` file in the project root**. That is the whole
+definition, and it is what the docs gate keys on: a new command is discovered
+automatically and is then required to carry a README row. Root `.py` files that are
+*not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply carry no executable bit, so
+do not "tidy up" a file mode you did not set, in either direction.
+
+The steps for adding one, including the single step the gate cannot check for you, are
+in [CONTRIBUTING](CONTRIBUTING.md#adding-a-cli-command). They apply to any contributor,
+not just an agent, which is why they live there.
 
 ## Workflow
 

@@ -1,4 +1,4 @@
-# Canonical Diff JSON — v1.4
+# Canonical Diff JSON — v2.0
 
 This document specifies the canonical JSON shape produced when comparing two
 versions of a bill. It is the public contract between the diff engine and any
@@ -8,10 +8,23 @@ XML inputs and a diff produced from PDF inputs share this shape.
 
 ## Versioning
 
-Top-level field: `schema_version: "1.4"`.
+Top-level field: `schema_version: "2.0"`.
 
 ## Changelog
 
+- **2.0** — **Breaking:** removed the deprecated `amounts` field from each change
+  object and from its `required` list (#274). `amount_entries` fully supersedes it.
+  `amounts` held only the `changed`-kind subset, so it structurally could not
+  represent an appropriation that was wholly added or removed; a document carried
+  both lists with nothing saying which was authoritative, and a consumer reading the
+  wrong one saw a fraction of the money and no indication anything was missing. That
+  matters because the export is built to be read by a machine — the report ships
+  prompts telling a staffer to upload `diff.json` to an AI assistant. There is now
+  exactly one money field. Producers no longer write `amounts`; consumers MUST read
+  `amount_entries`, which becomes **required** in the same break — an empty array
+  when a change carries no money, so there is no absent-key case to handle. The
+  pre-1.4 reader fallback is removed with it: diff reports are generated on demand
+  rather than stored, so there are no older documents to read.
 - **1.4** — Added optional `amount_entries` array on each change object (#86):
   self-describing base-amount changes with an explicit `kind`
   (`changed`/`added`/`removed`) and a nullable absent side, so whole-item
@@ -20,7 +33,8 @@ Top-level field: `schema_version: "1.4"`.
   `changed`-kind subset of `amount_entries`, kept for back-compat until the next
   major. No consumer reads `schema_version`, so a consumer reading `amount_entries`
   MUST fall back to `amounts` when the field is absent (pre-1.4 documents).
-  Additive, backward compatible.
+  Additive, backward compatible. *(Superseded by 2.0: `amounts` and the fallback
+  rule are both gone — this entry is history, not a live rule.)*
 - **1.3** — Added optional top-level `tree: { v1, v2 } | null` field: the
   per-side leveled structure tree (#108). Each side is an ordered list of
   root `TreeNode`s; each node carries `label`, `level` (the shared GPO
@@ -46,12 +60,13 @@ Top-level field: `schema_version: "1.4"`.
 - Additive, backward-compatible changes (new optional fields) bump the minor:
   `1.0 → 1.1`.
 - Breaking changes (renamed/removed/restructured fields) bump the major:
-  `1.0 → 2.0`. N-way comparison support is planned as a v2.0 break.
+  `1.0 → 2.0`. N-way comparison support is planned as a later major break (it was
+  once earmarked for 2.0; 2.0 went to the `amounts` removal instead).
 
 ## Scope
 
 - **Binary only.** v1.0 represents a single comparison of two bill versions
-  (`v1` and `v2`). N-way comparison is out of scope and will be a v2.0 break.
+  (`v1` and `v2`). N-way comparison is out of scope and will be a later major break.
 - **Read-only diff data.** No edit instructions, comments, or annotations.
 - **Semantic, not presentational.** The JSON does not carry pre-rendered
   HTML; renderers are pure functions over this shape.
@@ -60,7 +75,7 @@ Top-level field: `schema_version: "1.4"`.
 
 ```jsonc
 {
-  "schema_version": "1.1",
+  "schema_version": "2.0",
   "generator": { "name": "deltatrack", "version": "0.x" },
   "bill":      { "type": "HR", "number": 4366, "congress": 118 },
   "versions": {
@@ -162,7 +177,7 @@ that need a different order MUST resort.
   },
   "anchor_resolution": "resolved",
   "text":    { "old": "...", "new": "..." },
-  "amounts": [ { "old": 5000000, "new": 5500000 } ],
+  "amount_entries": [ { "old": 5000000, "new": 5500000, "kind": "changed" } ],
   "move":    null,
   "full_text_span": {                            // optional, v1.2+
     "v1": { "start": 4823, "end": 4961 },
@@ -256,25 +271,7 @@ Plain text bodies. `null` on the side that doesn't exist (`added`: `old=null`;
 `removed`: `new=null`). Word-level inline diffs are NOT carried in the JSON;
 renderers compute them at render time.
 
-### `amounts` (deprecated, v1.4)
-
-Pre-filtered list of `(old, new)` integer pairs representing meaningful base
-amount changes. Filter rule (guaranteed by the producer):
-
-- Both `old` and `new` are present (non-null).
-- `old != new`.
-
-**Deprecated as of v1.4**: this is exactly the `changed`-kind subset of
-`amount_entries` (below). It drops whole-item additions and removals, so it
-cannot answer "what money moved here" on its own. New consumers should read
-`amount_entries` and fall back to `amounts` only for pre-1.4 documents. Kept for
-back-compat; slated for removal at the next major.
-
-```jsonc
-"amounts": [ { "old": 5000000, "new": 5500000 }, ... ]
-```
-
-### `amount_entries` (optional, v1.4+)
+### `amount_entries` (v1.4+; the only money field as of v2.0)
 
 Self-describing base-amount changes: every changed, added, or removed amount the
 diff found, in document order, **losslessly**.
@@ -301,10 +298,11 @@ consumer. A cross-version consumer (e.g. BillTrax) may apply its own alignment
 policy; any presentation-side collapse is a consumer concern, not baked into the
 contract.
 
-Producer invariant: `amounts` equals the `changed`-kind subset of `amount_entries`.
-
-- `null` (or absent) — pre-1.4 document. A consumer reading `amount_entries` MUST
-  fall back to `amounts` (mapped to `kind: "changed"`).
+As of v2.0 this is a change object's **only** money field, so there is exactly one
+list to read and no subset to confuse it with. It is also **required**: a change
+with no money carries an empty array rather than omitting the key, so a consumer
+reads it unconditionally and never has to distinguish "no money here" from "this
+producer didn't write the field".
 
 ### `full_text_span` (optional, v1.2+)
 
