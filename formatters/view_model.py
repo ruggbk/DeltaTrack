@@ -68,10 +68,11 @@ class ChangeView:
     amount_entries: tuple[tuple[int | None, int | None, str], ...] = ()
     """Self-describing base-amount changes (#86): (old, new, kind) with kind in
     {"changed", "added", "removed"}. Lossless — added/removed whole items included,
-    no reorder cancellation (that is #87). Defaulted so pre-#86 constructions and
-    pre-1.4 canonicals (fallback to `amount_pairs` as all-"changed") still build.
-    The callout and financial summary read this; `amount_pairs` stays the
-    changed-only back-compat view."""
+    no reorder cancellation (that is #87). Defaulted so pre-#86 constructions (which
+    set only `amount_pairs`) still build. The callout and financial summary read this;
+    `amount_pairs` is the changed-only in-memory view, derived from these entries when
+    building from a canonical. It is internal — the export field of the same shape was
+    removed in schema v2.0 (#274) for being silently incomplete."""
 
 
 @dataclass(frozen=True)

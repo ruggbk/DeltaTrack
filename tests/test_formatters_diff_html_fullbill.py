@@ -38,7 +38,7 @@ def _canonical() -> dict:
     v2 = "    1  ADD0\n    2  MOD1\n    3  KEEP"
     v1 = "    1  OLD0\n    2  OLD1\n    3  GONE"  # "GONE" content at 31..35
     return {
-        "schema_version": "1.2",
+        "schema_version": "2.0",
         "full_text": {"v1": v1, "v2": v2},
         "changes": [
             {
@@ -194,7 +194,7 @@ def _xml_canonical() -> dict:
     v2 = "DEPARTMENT OF DEFENSE\n\nMilitary construction, army"
     v1 = "DEPARTMENT OF DEFENSE\n\narmy construction"
     return {
-        "schema_version": "1.2",
+        "schema_version": "2.0",
         "versions": {"v1": {"source": "xml"}, "v2": {"source": "xml"}},
         "full_text": {"v1": v1, "v2": v2},
         "changes": [
@@ -291,5 +291,5 @@ def test_canonical_json_embedded_and_valid():
     m = re.search(r'<script type="application/json" id="diff-data">(.*?)</script>', html, re.DOTALL)
     assert m, "embed missing"
     data = json.loads(m.group(1).replace("<\\/", "</"))
-    assert data["schema_version"] == "1.2"
+    assert data["schema_version"] == "2.0"
     assert len(data["changes"]) == 3

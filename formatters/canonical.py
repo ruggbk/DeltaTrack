@@ -28,24 +28,11 @@ from formatters.view_model import ChangeView, DiffView
 from parsers.pdf_anchors import Anchor, breadcrumb_for
 from structure_tree import TreeNode, build_pdf_tree
 
-SCHEMA_VERSION = "1.4"
+SCHEMA_VERSION = "2.0"
 GENERATOR_NAME = "deltatrack"
 
 
 # ---------- Shared helpers ---------------------------------------------------
-
-
-def _real_amount_pairs(
-    pairs: tuple[tuple[int | None, int | None], ...] | list,
-) -> list[dict]:
-    """Filter pairs to "real" changes and emit canonical dict form.
-
-    Keep pairs where both sides are present and old != new. The producer
-    guarantees this filter so a consumer reading the JSON doesn't have to
-    reimplement it. Deprecated (v1.4): the changed-only subset of the richer
-    `amount_entries` field; kept for back-compat, to be removed at the next major.
-    """
-    return [{"old": old, "new": new} for old, new in pairs if old is not None and new is not None and old != new]
 
 
 def _amount_entries(
@@ -82,21 +69,6 @@ def _amount_entries(
     return entries
 
 
-def _amounts_and_entries(
-    pairs: tuple[tuple[int | None, int | None], ...] | list,
-) -> tuple[list[dict], list[dict]]:
-    """Dual-write ``amounts`` (deprecated) and ``amount_entries`` from one source.
-
-    Asserts ``amounts`` equals the ``changed``-kind subset of ``amount_entries`` so
-    the two fields cannot drift (cheap drift-insurance; both derive from ``pairs``).
-    """
-    amounts = _real_amount_pairs(pairs)
-    entries = _amount_entries(pairs)
-    changed_subset = [{"old": e["old"], "new": e["new"]} for e in entries if e["kind"] == "changed"]
-    assert amounts == changed_subset, "amounts must equal the changed-kind subset of amount_entries"
-    return amounts, entries
-
-
 def _make_id(index: int) -> str:
     return f"c-{index + 1:04d}"
 
@@ -118,7 +90,7 @@ def _xml_change_to_canonical(
     text_new = change.get("new_text")
     id_old = change.get("element_id_old")
     id_new = change.get("element_id_new")
-    amounts, amount_entries = _amounts_and_entries((change.get("financial") or {}).get("paired_amounts", ()))
+    amount_entries = _amount_entries((change.get("financial") or {}).get("paired_amounts", ()))
     return {
         "id": _make_id(index),
         "change_type": change_type,
@@ -130,7 +102,6 @@ def _xml_change_to_canonical(
         "location": None,  # XML carries no source coordinates
         "anchor_resolution": "resolved",  # XML pipeline always resolves structurally
         "text": {"old": text_old, "new": text_new},
-        "amounts": amounts,
         "amount_entries": amount_entries,
         "move": _xml_move(change) if change_type == "moved" else None,
         "full_text_span": _search_span(full_text, full_text_spans, text_old, text_new, id_old, id_new, search_state),
@@ -352,7 +323,7 @@ def _pdf_hunk_to_canonical(
     expected_v1 = hunk.v1_range is not None
     expected_v2 = hunk.v2_range is not None
     resolved = (path_v1 is not None) or (path_v2 is not None) or not (expected_v1 or expected_v2)
-    amounts, amount_entries = _amounts_and_entries(hunk.amount_pairs)
+    amount_entries = _amount_entries(hunk.amount_pairs)
     return {
         "id": _make_id(index),
         "change_type": hunk.change_type,
@@ -367,7 +338,6 @@ def _pdf_hunk_to_canonical(
             "old": hunk.v1_text if hunk.v1_range is not None else None,
             "new": hunk.v2_text if hunk.v2_range is not None else None,
         },
-        "amounts": amounts,
         "amount_entries": amount_entries,
         "move": _pdf_move(hunk) if hunk.change_type == "moved" else None,
         "full_text_span": _pdf_span(hunk, line_offsets_v1, line_offsets_v2),
@@ -780,16 +750,14 @@ def _card_texts(canonical_change: dict, source: str, full_text: dict | None) -> 
 
 
 def _amount_entries_from_canonical(canonical_change: dict) -> tuple[tuple[int | None, int | None, str], ...]:
-    """Read `amount_entries` (v1.4+), falling back to the deprecated `amounts`.
+    """Read `amount_entries` — the one money field on a change (v2.0, #274).
 
-    No consumer checks `schema_version`, so a pre-1.4 document (or a hand-built
-    test canonical) simply lacks `amount_entries`; its `amounts` are all changed
-    pairs, mapped to kind "changed".
+    The pre-1.4 fallback to `amounts` is gone with the field itself. Diff reports are
+    generated on demand rather than stored, so there are no older documents to stay
+    compatible with, and keeping the fallback would have left the incomplete
+    changed-only field a live read path. A change with no money simply omits the key.
     """
-    entries = canonical_change.get("amount_entries")
-    if entries is not None:
-        return tuple((e["old"], e["new"], e["kind"]) for e in entries)
-    return tuple((p["old"], p["new"], "changed") for p in canonical_change.get("amounts") or ())
+    return tuple((e["old"], e["new"], e["kind"]) for e in canonical_change.get("amount_entries") or ())
 
 
 def _change_view_from_canonical(
@@ -797,6 +765,7 @@ def _change_view_from_canonical(
 ) -> ChangeView:
     heading_html, nav_label_html, degraded = _heading_and_nav(canonical_change, source)
     old_text, new_text = _card_texts(canonical_change, source, full_text)
+    amount_entries = _amount_entries_from_canonical(canonical_change)
     return ChangeView(
         change_type=canonical_change["change_type"],
         heading_html=heading_html,
@@ -807,14 +776,41 @@ def _change_view_from_canonical(
         move_info_html=_move_info_html(canonical_change),
         old_text=old_text,
         new_text=new_text,
-        amount_pairs=tuple((p["old"], p["new"]) for p in canonical_change.get("amounts") or ()),
+        amount_pairs=tuple((old, new) for old, new, kind in amount_entries if kind == "changed"),
         group_label=_group_label_from_path(canonical_change),
         node_path=_node_path_for_change(canonical_change, join_index, v2_lookup),
-        amount_entries=_amount_entries_from_canonical(canonical_change),
+        amount_entries=amount_entries,
     )
 
 
+def _reject_unknown_major(canonical: dict) -> None:
+    """Refuse a document from a schema major this reader cannot read (#274).
+
+    The contract says consumers reject unknown majors; before this, nothing did.
+    That mattered once v2.0 removed `amounts`: a 1.x document still parses here,
+    but every change reads as having no money at all — silently, which is the
+    failure mode the 2.0 break exists to remove, not one to leave on a side path.
+
+    A missing `schema_version` is accepted. Every in-repo caller builds the dict
+    in-process and hands it straight over (so does a hand-built test canonical);
+    a document that came from anywhere else has the field, because the schema
+    requires it at the top level. The guard is aimed at foreign documents.
+    """
+    version = canonical.get("schema_version")
+    if version is None:
+        return
+    major = str(version).split(".", 1)[0]
+    if major != SCHEMA_VERSION.split(".", 1)[0]:
+        raise ValueError(
+            f"canonical diff schema_version {version!r} is not readable by this "
+            f"version of DeltaTrack (expects {SCHEMA_VERSION.split('.', 1)[0]}.x). "
+            "A pre-2.0 document carries the removed `amounts` field, which this "
+            "reader ignores, so its money would render as empty rather than wrong-looking."
+        )
+
+
 def view_from_canonical(canonical: dict) -> DiffView:
+    _reject_unknown_major(canonical)
     source = canonical["versions"]["v1"]["source"]
     full_text = canonical.get("full_text")
     # The join reads only THIS canonical's tree — on PDF the caller also builds a
