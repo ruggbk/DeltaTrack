@@ -65,7 +65,7 @@ def test_missing_manifest_files_detects_absent(monkeypatch) -> None:
 def test_assert_manifest_committed_fails_closed_on_absent(monkeypatch) -> None:
     """An absent manifested fixture raises (does not skip) -- the fail-open case #217 closes."""
     monkeypatch.setattr(conftest, "_manifest_bills", lambda: _FAKE_MANIFEST)
-    with pytest.raises(AssertionError, match="absent from the checkout"):
+    with pytest.raises(AssertionError, match="not committed to git"):
         conftest.assert_manifest_committed(["a case"], "unit")
 
 
@@ -74,6 +74,68 @@ def test_assert_manifest_committed_fails_closed_on_zero_cases(monkeypatch) -> No
     monkeypatch.setattr(conftest, "missing_manifest_files", lambda: [])
     with pytest.raises(AssertionError, match="zero cases"):
         conftest.assert_manifest_committed([], "unit")
+
+
+# --- git-tracked floor (#308) --------------------------------------------------
+# The floor asks git whether each manifested fixture is TRACKED, not merely that it
+# exists on disk. Those differ exactly on the author's machine, where a fixture added
+# without its bills/ .gitignore allowlist line is present locally but never tracked --
+# so `git add` no-ops, the author's suite passes, and CI (a fresh checkout without the
+# file) silently collects fewer cases. A pre-#308 Path.exists() floor could not see
+# this. The git query is split out (`_git_tracked_paths`) so it is directly testable.
+
+
+def test_git_tracked_paths_lists_added_not_untracked(tmp_path) -> None:
+    """The git query, exercised directly against a throwaway repo: a file `git add`ed
+    under the subdir is reported; a sibling present on disk but never added is not. This
+    is the present-but-untracked distinction #308 turns on -- staged is enough (no commit
+    and thus no git identity needed, since `git ls-files` reads the index)."""
+    import subprocess
+
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    billdir = tmp_path / "bills" / "118-hr-4366"
+    billdir.mkdir(parents=True)
+    (billdir / "1_reported-in-house.xml").write_text("<bill/>")
+    (billdir / "2_engrossed-in-house.xml").write_text("<bill/>")  # on disk, never added
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", "bills/118-hr-4366/1_reported-in-house.xml"],
+        check=True,
+    )
+    assert conftest._git_tracked_paths(tmp_path, "bills") == frozenset({"bills/118-hr-4366/1_reported-in-house.xml"})
+
+
+def test_git_tracked_paths_none_outside_work_tree(tmp_path) -> None:
+    """No .git -> git cannot answer -> None (distinct from an empty set: 'git cannot
+    answer' vs 'git answered, nothing tracked'), so the floor can fall back to a presence
+    check in a non-git context such as an unpacked sdist."""
+    assert conftest._git_tracked_paths(tmp_path, "bills") is None
+
+
+def test_missing_manifest_files_flags_present_but_untracked(monkeypatch) -> None:
+    """#308 headline, proven both ways: a manifested fixture that EXISTS on disk but git
+    does not track is reported missing (the forgotten-.gitignore bug a Path.exists() floor
+    passed green); when git tracks it, it is not reported."""
+    first = conftest.manifest_xml_files()[0]
+    assert first.exists(), "precondition: the picked fixture is on disk"
+    rel = f"{first.parent.name}/{first.name}"
+    fake = ({"id": first.parent.name, "versions": [{"stage": first.stem, "formats": ["xml"]}]},)
+    monkeypatch.setattr(conftest, "_manifest_bills", lambda: fake)
+
+    # present on disk but git tracks nothing -> reported (the fail-open #308 closes)
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset())
+    assert conftest.missing_manifest_files() == [rel]
+
+    # git tracks it -> committed -> not reported (the clean-tree pass direction)
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset({f"bills/{rel}"}))
+    assert conftest.missing_manifest_files() == []
+
+
+def test_missing_manifest_files_falls_back_to_presence_without_git(monkeypatch) -> None:
+    """Outside a git work tree (_tracked_bills -> None) the floor uses presence alone: the
+    real, on-disk manifest passes, since the forgotten-.gitignore mode cannot exist
+    without a repo to have an ignore rule."""
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: None)
+    assert conftest.missing_manifest_files() == []
 
 
 def _manifest_rel_paths() -> set[str]:
