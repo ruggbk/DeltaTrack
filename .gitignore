@@ -67,6 +67,7 @@ bills/118-hr-4366/*
 # (soft-hyphen reconstruction; VerDate footer glued across a page boundary). Committed
 # so regenerating the golden can never drop their recorded expectations.
 !bills/118-hr-4366/1_reported-in-house.pdf
+!bills/118-hr-4366/2_engrossed-in-house.pdf
 !bills/118-hr-4366/3_placed-on-calendar-senate.pdf
 !bills/115-hr-5895/
 bills/115-hr-5895/*

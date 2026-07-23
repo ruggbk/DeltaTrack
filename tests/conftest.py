@@ -234,19 +234,11 @@ ALLOWED_CI_SLOW_SKIPS = {
     # assert in CI. Listed (not silently skipped) so the gap is enforced and countable:
     # a NEW skip fails the session, and committing any fixture below should delete its
     # line here. None of these are properties of the documents; they are absences.
-    "tests/test_pdf_compare.py::test_compare_api_returns_html": "sample bill PDFs not present (bills/118-hr-4366/)",
-    "tests/test_pdf_compare.py::test_compare_pdfs_html_returns_standalone_report": (
-        "sample bill PDFs not present (bills/118-hr-4366/)"
-    ),
-    "tests/test_pdf_compare.py::test_compare_pdfs_returns_valid_canonical": (
-        "sample bill PDFs not present (bills/118-hr-4366/)"
-    ),
     "tests/test_pipeline_parity.py::test_pipeline_change_parity[115-hr-5895]": "115-hr-5895 v1/v2 not fetched locally",
     "tests/test_pipeline_parity.py::test_pipeline_change_parity[117-hr-4502]": "117-hr-4502 v1/v2 not fetched locally",
     "tests/test_pipeline_parity.py::test_pipeline_change_parity[118-hr-8774]": "118-hr-8774 v1/v2 not fetched locally",
     "tests/test_financial_diff.py::TestCliFinancial::test_financial_flag_filters_output": "Real XML not present",
     "tests/test_financial_diff.py::TestCliFinancial::test_no_financial_flag_no_filtering": "Real XML not present",
-    "tests/test_canonical_tree.py::test_pdf_tree_conserves_money_no_overcount_on_real_bill": "sample PDFs absent",
     "tests/test_front_matter_parity.py::test_omnibus_leading_sections_group_under_front_matter": (
         "117-hr-2471 enrolled omnibus not fetched locally"
     ),

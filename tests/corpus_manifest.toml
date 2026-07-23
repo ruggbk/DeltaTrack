@@ -39,7 +39,7 @@ subcommittee = "milcon-va / full-year omnibus"
 covers = "Primary diff-validation baselines: controlled small diff (v1->v2, same structure) and no-division->omnibus structure expansion (v1->v6). Hand-curated assertions live in test_diff_validation TestControlledDiff / TestStructureExpansion."
 versions = [
   { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
-  { stage = "2_engrossed-in-house", formats = ["xml"] },
+  { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
   { stage = "3_placed-on-calendar-senate", formats = ["pdf"] },
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "5_engrossed-amendment-house", formats = ["xml"] },
