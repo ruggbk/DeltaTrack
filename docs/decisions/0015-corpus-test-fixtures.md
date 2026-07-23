@@ -37,7 +37,7 @@ This decision reverses a documented earlier stance, so the reversal is stated op
 rather than left to be rediscovered. PRs #62/#64/#66 deliberately made the corpus
 fetch-scripted and gitignored — `scripts/fetch_test_assets.py` keeps its PDFs out of
 git as "large binaries," `conftest.py` calls clean-clone skipping "the deliberate
-design," and `AGENTS.md` records the intended path as *CI fetches* a curated corpus
+design," and `AGENTS.md` recorded the intended path as *CI fetches* a curated corpus
 and sets `REQUIRE_CORPUS=1` itself (tracked in [#126](https://github.com/AgoraDMV/DeltaTrack/issues/126)).
 That design solved a real problem — a clean clone should not need a large download —
 but it left the parser's most important gates with no CI signal and made counts
@@ -112,7 +112,8 @@ Alternatives considered:
   the collection reads; adding a fixture without the manifest, or the reverse, must
   be prevented. `AGENTS.md` guidance on the worktree fail-open and the pre-PR
   `REQUIRE_CORPUS=1` step, and `TESTING.md`, are updated; the opt-in `REQUIRE_CORPUS`
-  env var is subsumed by the CI completeness floor.
+  env var is subsumed by the CI completeness floor. (Not fully, as it turned out — see
+  the #220 amendment below, and #278, which finished the job.)
 - CI runtime rises: the corpus gates are `slow` and PDF extraction has no CI cache,
   so the curated set is sized against a CI time budget. The PR-blocking completeness
   floor always runs on every PR; implementation may additionally run a larger slice
@@ -158,16 +159,27 @@ describes a partial rollout.
   collect more cases (the added fixtures) and skip two more (113-hr-3547 v4, a shell
   amendment with no dollar amounts) with no threshold change, and three budgets that
   documented an expectation now actually enforce it.
-- **The `REQUIRE_CORPUS` env var is not fully subsumed.** The body predicted it would
-  be, and for every corpus gate it is. Two non-manifest consumers keep it: the
-  live-network `test_govinfo_corpus_parity` (which cannot run in CI at all, and is the
-  only check that the documented setup path still matches the code — see
-  [#271](https://github.com/AgoraDMV/DeltaTrack/issues/271)) and the fetched Legislative
-  Branch validation floor in `test_validate_extraction`. The flag now means "I have a
-  fetched corpus and a network", not "make the corpus gates strict". Fully retiring it
-  (commit the five Legislative Branch bills the floor needs, ~4 MB compressed, and give
-  the live gate a `network` marker) is filed as
-  [#278](https://github.com/AgoraDMV/DeltaTrack/issues/278).
+- **The `REQUIRE_CORPUS` env var was not fully subsumed by #220, and is now gone
+  ([#278](https://github.com/AgoraDMV/DeltaTrack/issues/278)).** The body predicted #220
+  would subsume it, and for every corpus gate it did. Two non-manifest consumers kept it
+  alive, needing different things — a network, and five uncommitted bills — under one
+  name that described neither. #278 separated them:
+  - The five Legislative Branch validation bills are committed (18.1 MB raw; 5.1 MB as
+    git stores them today, narrowing toward the ~4 MB gzip figure once repacked). Its
+    completeness floor is now an ordinary fail-closed check, asking git whether each
+    file is TRACKED (#308/#327) rather than merely present. CI validates all seven of
+    the fixture's bills instead of the two that happened to be committed.
+  - `test_govinfo_corpus_parity` — a live BILLSTATUS fetch per bill, and the only check
+    that the documented setup path still matches the code (see
+    [#271](https://github.com/AgoraDMV/DeltaTrack/issues/271)) — carries
+    `@pytest.mark.network`, skipped unless `--run-network` is passed. It still needs a
+    fully fetched corpus for its own >= 31-dir floor, so it stays maintainer-run; a
+    marker states that requirement where an env var did not.
+
+  The general lesson, recorded because it is the reusable part: express "this test needs
+  something extra" as a marker, not an environment variable. A marker is registered in
+  `pyproject.toml`, discoverable via `-m`, and names one requirement, so two unrelated
+  requirements cannot silently fuse behind it.
 
 ### A size bar for future additions
 

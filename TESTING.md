@@ -162,7 +162,15 @@ handful of checks listed under [What still wants a download](#what-still-wants-a
 ```bash
 uv run pytest -m "not slow and not browser"   # Fast group: built-in examples, no downloads
 uv run pytest                                  # Everything, including checks against real bills
+uv run pytest --run-network -m slow            # ...plus the live-network parity gate (maintainer, needs a fetched corpus)
 ```
+
+Three markers say what a test needs beyond a clean clone: `slow` (real bill files,
+committed), `browser` (`playwright install chromium`), and `network` (a live external
+fetch). `network` is the only one skipped by default -- pass `--run-network` to opt in,
+or `-m "not network"` to deselect it outright. It replaced the `REQUIRE_CORPUS=1`
+environment variable in #278, whose name described neither of the two unrelated things
+it had come to gate.
 
 ### Test counts are not comparable between machines
 
@@ -199,8 +207,9 @@ and so green, asserting nothing -- on a clean checkout (the fail-open pattern).
 (#220 brought the last three modules -- `test_node_join_corpus`,
 `test_xml_subsection_nodes`, `test_pdf_subsection_recall` -- onto the same manifest
 and the same fail-closed floor, and deleted `require_corpus_or_skip` /
-`REQUIRED_CORPUS_BILLS` with them. `REQUIRE_CORPUS=1` now gates only what needs a
-network or the fetched non-manifest set; see AGENTS.md.)
+`REQUIRED_CORPUS_BILLS` with them. #278 committed the Legislative Branch validation
+set and retired `REQUIRE_CORPUS` outright; the one requirement no fixture can supply
+is a live network, and that is now the `network` marker.)
 
 To sweep every bill you have fetched locally -- broader than the committed set,
 and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`.
@@ -237,8 +246,7 @@ which ceiling fired:
 | `ALLOWED_CI_SLOW_SKIPS` | Mostly a bill version this repo does not commit -- a coverage gap, so the list doubles as a count of what the corpus is missing | Committing that fixture, which should delete the line |
 
 They are kept apart on purpose: merged, a temporary gap would be
-indistinguishable from a permanent fact. A third kind exists and is commented as
-such where it appears: a check gated on `REQUIRE_CORPUS=1`, which CI never sets.
+indistinguishable from a permanent fact.
 
 Matching is on nodeid **and** reason, so an allowlisted case that starts skipping
 for a *different* reason still fails. Add an entry only with a comment saying
@@ -307,8 +315,12 @@ committed fixtures and are CI gates; a download only adds cases:
 | Still needs fetched bills | Why |
 |---|---|
 | `test_pdf_compare`'s end-to-end cases | Read `bills/118-hr-4366/` PDFs, which are not committed |
-| The Legislative Branch completeness floor | Covers a fetched validation set; gated on `REQUIRE_CORPUS=1`, which CI never sets |
-| `test_govinfo_corpus_parity` | Live BILLSTATUS fetch, so it cannot be an offline gate |
+| `test_govinfo_corpus_parity` | Live BILLSTATUS fetch **and** a fully fetched corpus (its own >= 31-dir floor), so it cannot be an offline gate. Marked `network`: skipped unless you pass `--run-network` |
+
+The Legislative Branch validation set used to be on that list. #278 committed its
+five remaining bills, so its completeness floor is now an ordinary fail-closed
+check that runs everywhere, and CI validates all seven of the fixture's bills
+instead of the two that happened to be committed.
 
 Everything else in the slow group asserts on a clean clone. The two sweeping
 suites above simply widen their case list when you have more bills.

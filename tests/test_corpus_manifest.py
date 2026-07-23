@@ -12,6 +12,9 @@ These are fast (non-slow) on purpose, for two reasons:
    nothing would catch it.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
 from tests import conftest
@@ -146,6 +149,51 @@ def test_tracked_bills_uses_git_in_this_repo() -> None:
     assert conftest._tracked_bills() is not None, (
         "git could not answer in a real checkout, so the manifest floor silently fell "
         "back to a presence check — the #308 fail-open."
+    )
+
+
+# --- uncommitted_bill_files: the same committed-ness question, arbitrary path list ----
+# The Legislative Branch validation floor (#278) asks it of the bills
+# test_data/validation_leg_branch.json references, which is not a manifest question. It
+# shares an implementation with missing_manifest_files precisely so the git-vs-presence
+# semantics cannot drift apart between the two callers.
+
+
+def test_uncommitted_bill_files_flags_absent_and_untracked(monkeypatch) -> None:
+    """Both failure modes, against a real committed fixture: gone from disk, and present
+    but untracked (the forgotten-.gitignore #308 case a presence check waves through)."""
+    first = conftest.manifest_xml_files()[0]
+    rel = f"{first.parent.name}/{first.name}"
+    assert first.exists(), "precondition: the picked fixture is on disk"
+
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset({f"bills/{rel}"}))
+    assert conftest.uncommitted_bill_files([rel]) == []
+    assert conftest.uncommitted_bill_files(["999-hr-9999/1_nonexistent.xml"]) == ["999-hr-9999/1_nonexistent.xml"]
+
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset())
+    assert conftest.uncommitted_bill_files([rel]) == [rel], "present but untracked must be reported"
+
+
+def test_uncommitted_bill_files_falls_back_to_presence_without_git(monkeypatch) -> None:
+    """Outside a git work tree git cannot answer, so presence alone decides — the
+    forgotten-.gitignore mode needs a repo to have an ignore rule in the first place."""
+    first = conftest.manifest_xml_files()[0]
+    rel = f"{first.parent.name}/{first.name}"
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: None)
+    assert conftest.uncommitted_bill_files([rel]) == []
+    assert conftest.uncommitted_bill_files(["999-hr-9999/1_nonexistent.xml"]) == ["999-hr-9999/1_nonexistent.xml"]
+
+
+def test_leg_branch_validation_bills_are_committed() -> None:
+    """Fast mirror of TestLegBranchValidation's floor (#278). That floor is @slow, so a
+    fresh clone missing one of the seven bills would only go red in the slow step; the
+    committed-fixture guarantee is checked on EVERY run for the same reason the manifest
+    floor is (see this module's docstring)."""
+    fixture = json.loads(Path("test_data/validation_leg_branch.json").read_text())
+    referenced = {f"{a['bill']}/{a['version']}" for a in fixture["accounts"]}
+    assert conftest.uncommitted_bill_files(referenced) == [], (
+        "Legislative Branch validation references bill versions that are not committed; "
+        "their accounts would silently drop out of validation."
     )
 
 

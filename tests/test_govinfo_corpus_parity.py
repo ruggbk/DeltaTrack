@@ -8,11 +8,14 @@ This gate locks that alignment: every version filename already on disk must be o
 govinfo enumeration would produce *today*, so a future ordering/naming change can't
 leave the corpus pinned to stale names that then silently mis-key the property gates.
 
-Live BILLSTATUS fetch per bill, so it is ``slow`` + REQUIRE_CORPUS-gated: it skips on a
-clean clone (``bills/`` is gitignored) and runs only in the maintainer's strict corpus
-gate, which already has network to fetch the corpus. It fetches BILLSTATUS directly
-rather than reading a cache so it validates the *current* live enumeration, not a
-snapshot that could drift with it.
+Live BILLSTATUS fetch per bill, so it is ``slow`` + ``network``: skipped by default, run
+with ``pytest --run-network -m slow``. It needs both a network and a fully fetched corpus
+(the >= 31-dir floor below), so it stays maintainer-run rather than a CI gate. It fetches
+BILLSTATUS directly rather than reading a cache so it validates the *current* live
+enumeration, not a snapshot that could drift with it.
+
+The ``network`` marker replaced REQUIRE_CORPUS=1 in #278: the requirement is a network,
+which no fixture scheme can supply, and the marker says that where the env var did not.
 """
 
 from __future__ import annotations
@@ -24,9 +27,9 @@ import pytest
 
 import fetch_govinfo as gi
 from fetch_bills import sanitize_version_name
-from tests.conftest import BILLS_DIR, REQUIRE_CORPUS
+from tests.conftest import BILLS_DIR
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.network]
 
 # bills/<congress>-<type>-<number>. Non-matching entries (bulk .zip archives, .error
 # markers) are not per-bill corpus dirs and are skipped.
@@ -66,9 +69,6 @@ def test_govinfo_enumeration_reproduces_corpus_filenames():
     so enumeration may list stems absent from disk (fine — just not fetched). The failure
     is the reverse — a stem ON disk that enumeration does NOT produce, i.e. a stale name.
     """
-    if not REQUIRE_CORPUS:
-        pytest.skip("corpus not required (set REQUIRE_CORPUS=1 to run the live parity gate)")
-
     dirs = _corpus_dirs()
     # Completeness floor: without it an empty/partial corpus would pass as
     # "0 compared, 0 stale" (#167 fail-open).
