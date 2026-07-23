@@ -24,11 +24,10 @@ import json
 import sys
 from pathlib import Path
 
+from blindness import FORBIDDEN, breadcrumb, leaks_in, mask_corpus
+
 _HERE = Path(__file__).parent
 _TEMPLATE = _HERE / "form_template.html"
-
-# fields that must never reach a card — the scores under test + mining artifacts (§5)
-_FORBIDDEN = {"measures", "containment", "cosine", "word_overlap", "stratum", "change_type", "extra"}
 
 # neutral question + option labels per stratum (never the mining stratum name)
 _QUESTION = {
@@ -117,6 +116,71 @@ _EXAMPLES = [
 ]
 
 
+def _build_card(entry: dict) -> dict:
+    """The blind card one reviewer sees. Counterpart of label_llm._build_card: same field
+    selection (§5), differing only in carrying the neutral question/options the HTML renders
+    instead of the stratum the prompt builder needs."""
+    q, opts = _QUESTION[entry["stratum"]]
+    return {
+        "id": entry["id"],
+        "question": q,
+        "options": opts,
+        "bill_old": entry["bill_old"],
+        "bill_new": entry["bill_new"],
+        "version_old": entry["version_old"],
+        "version_new": entry["version_new"],
+        "bc_old": entry.get("display_path_old") or [],
+        "bc_new": entry.get("display_path_new") or [],
+        "text_old": entry["text_old"],
+        "text_new": entry["text_new"],
+    }
+
+
+def _reviewer_view(card: dict) -> str:
+    """Everything the rendered card puts in front of the reviewer, as plain text.
+
+    Not the HTML: scanning that would false-positive on the stylesheet, where `font: 15px/1.5`
+    is a score-shaped float and nothing is a leak. This is the content the template interpolates,
+    which is the only place a leak can arrive from.
+    """
+    return "\n".join(
+        [
+            card["question"],
+            *(label for _value, label in card["options"]),
+            str(card["bill_old"]),
+            str(card["bill_new"]),
+            str(card["version_old"]),
+            str(card["version_new"]),
+            breadcrumb(card["bc_old"]),
+            breadcrumb(card["bc_new"]),
+            card["text_old"],
+            card["text_new"],
+        ]
+    )
+
+
+def _assert_blind(data: dict) -> None:
+    """Refuse to write a form that would show the reviewer something the protocol blinds (§5).
+
+    Covers the rubric, confidence scale and worked examples as well as the cards. The reviewer
+    reads all three before answering, so a stratum name there primes every label in the shard —
+    and they are authored text, carrying no corpus content to mask.
+    """
+    rubric = "\n".join(
+        [text for row in data["standard"] for text in row]
+        + [text for row in data["confidence"] for text in row]
+        + [f"{ex['verdict']} {ex['kind']} {ex['old']} {ex['new']} {ex['why']}" for ex in data["examples"]]
+    )
+    leaked = set(leaks_in(rubric, _QUESTION))
+    for card in data["entries"]:
+        leaked |= set(leaks_in(mask_corpus(_reviewer_view(card), card), _QUESTION))
+        # structural check too: a refactor that copied the whole worklist entry onto the card
+        # would re-attach the scores under test, where no rendered text would show them yet.
+        leaked |= {k for k in card if k in FORBIDDEN}
+    if leaked:
+        sys.exit(f"§5 blindness leak: {sorted(leaked)} would reach the reviewer — refusing to write the form")
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         sys.exit("usage: make_form.py <reviewer>")
@@ -136,25 +200,7 @@ def main() -> None:
         e = entries[cid]
         if e["stratum"] not in _QUESTION:
             sys.exit(f"unknown stratum {e['stratum']!r} for {cid} — no neutral question defined (§5)")
-        q, opts = _QUESTION[e["stratum"]]
-        payload.append(
-            {
-                "id": cid,
-                "question": q,
-                "options": opts,
-                "bill_old": e["bill_old"],
-                "bill_new": e["bill_new"],
-                "version_old": e["version_old"],
-                "version_new": e["version_new"],
-                "bc_old": e.get("display_path_old") or [],
-                "bc_new": e.get("display_path_new") or [],
-                "text_old": e["text_old"],
-                "text_new": e["text_new"],
-            }
-        )
-    leaked = {k for card in payload for k in card if k in _FORBIDDEN}
-    if leaked:
-        sys.exit(f"score/mining fields leaked into the form: {leaked} — refusing to write (§5)")
+        payload.append(_build_card(e))
     data = {
         "reviewer": reviewer,
         "standard": _STANDARD,
@@ -162,6 +208,7 @@ def main() -> None:
         "examples": _EXAMPLES,
         "entries": payload,
     }
+    _assert_blind(data)
     # </ breaks out of <script>; U+2028/U+2029 are legal JSON but JS line terminators that
     # would make the whole embedded blob fail to parse — escape all three.
     injected = (

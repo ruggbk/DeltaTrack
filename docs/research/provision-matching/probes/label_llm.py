@@ -59,7 +59,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -67,8 +66,15 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Parity with the human form: same neutral questions, same §5 rubric, same leak-guard field set.
-from make_form import _CONFIDENCE, _EXAMPLES, _FORBIDDEN, _QUESTION, _STANDARD
+# Parity with the human form: same neutral questions and §5 rubric from make_form, and the same
+# leak-guard implementation both paths share (#332).
+from blindness import BlindnessError, breadcrumb, leaks_in, mask_corpus
+from make_form import _CONFIDENCE, _EXAMPLES, _QUESTION, _STANDARD
+
+# Module-local names kept for the existing call sites and their regression tests.
+_BlindnessError = BlindnessError
+_mask_corpus = mask_corpus
+_bc = breadcrumb
 
 _HERE = Path(__file__).parent
 _LABELS = _HERE / "labels"
@@ -79,11 +85,6 @@ _CLI_TIMEOUT = 240  # seconds per candidate; one labeling call, but Opus can thi
 # Empty MCP config + --strict-mcp-config => the project's MCP servers do NOT load into the
 # subprocess (lean, fast, no auth/LuLu prompts). Tools are irrelevant to a text-only labeling call.
 _MCP_EMPTY = '{"mcpServers":{}}'
-
-# A score-shaped float (containment/cosine/word_overlap all live in [0,1]); used by the blindness
-# scan AFTER the corpus-derived spans (texts + breadcrumbs) are masked out — nothing we author
-# contains a decimal, so a surviving one means a measure score leaked into the prompt.
-_SCORE_RE = re.compile(r"\d\.\d+")
 
 _REASK = (
     "\n\nYour previous reply was not a single valid JSON object matching the contract. Reply with "
@@ -133,10 +134,6 @@ def _system_prompt() -> str:
 _INSTRUCTION = (
     "Decide per the standard, then give a one- or two-sentence rationale citing the specific evidence for your choice."
 )
-
-
-def _bc(path: list[str]) -> str:
-    return " > ".join(path) if path else "(no breadcrumb)"
 
 
 def _question(card: dict) -> tuple[str, list[tuple[str, str]]]:
@@ -193,47 +190,6 @@ def _build_card(entry: dict) -> dict:
     }
 
 
-class _BlindnessError(Exception):
-    """A forbidden field / stratum name / score-shaped float reached the assembled prompt (§5).
-
-    Raised (not sys.exit) so the caller decides: the dry-run pre-flight hard-fails on it, but a real
-    run skips that one card and keeps going rather than nuking a multi-hour batch."""
-
-
-def _mask_corpus(prompt: str, card: dict) -> str:
-    """Blank every corpus-derived span shown verbatim to the human too — the two texts, the two
-    breadcrumbs, and the bill/version metadata. Ranges are computed on the PRISTINE prompt and
-    blanked in one pass: a sequential str.replace corrupts overlapping spans (on the
-    high-containment stratum text_old is a substring of text_new, so replacing text_old first
-    breaks the text_new match and leaks its residue — e.g. a legitimate 'measures' in the bill
-    text). Computing ranges on the original avoids that entirely."""
-    spans = [
-        card["text_old"],
-        card["text_new"],
-        _bc(card["bc_old"]),
-        _bc(card["bc_new"]),
-        str(card["bill_old"]),
-        str(card["bill_new"]),
-        str(card["version_old"]),
-        str(card["version_new"]),
-    ]
-    chars = list(prompt)
-    for span in spans:
-        # Skip empty AND pathologically short spans: a 1-2 char corpus value (e.g. a degenerate
-        # version code) would blank that letter everywhere and could over-mask authored text, hiding
-        # a real leak (fail-open). A <3-char span can't itself be a forbidden word / stratum name /
-        # score float, so never masking it can't cause a false positive. Real texts/breadcrumbs/
-        # bill-ids/versions are all >= 3 chars.
-        if len(span) < 3:
-            continue
-        start = 0
-        while (i := prompt.find(span, start)) >= 0:
-            for j in range(i, i + len(span)):
-                chars[j] = " "
-            start = i + 1  # +1 (not +len) so overlapping occurrences are all found
-    return "".join(chars)
-
-
 def _assert_blind(card: dict) -> None:
     """Raise _BlindnessError if a score-under-test, the matcher decision, or the mining stratum name
     reached the ACTUAL assembled prompt (§5).
@@ -245,14 +201,9 @@ def _assert_blind(card: dict) -> None:
     being interpolated into the template (a stray card["stratum"], a re-attached score) — exactly
     what this catches, including a bare score-shaped float."""
     prompt = "\n".join([_system_prompt(), _user_prompt(card), _output_contract(card["label_options"])])
-    masked = _mask_corpus(prompt, card)
-    low = masked.lower()
-    leaked = [k for k in _FORBIDDEN if k != "extra" and k.lower() in low]
-    leaked += [s for s in _QUESTION if s.lower() in low]  # a raw stratum name in the framing
-    if _SCORE_RE.search(masked):
-        leaked.append("score-shaped-float")
+    leaked = leaks_in(mask_corpus(prompt, card), _QUESTION)
     if leaked:
-        raise _BlindnessError(f"blindness leak-guard tripped: {sorted(set(leaked))} in assembled prompt (§5)")
+        raise BlindnessError(f"blindness leak-guard tripped: {leaked} in assembled prompt (§5)")
 
 
 def _select(entries: list[dict], per_stratum: int | None, do_all: bool, ids: list[str] | None) -> list[dict]:
