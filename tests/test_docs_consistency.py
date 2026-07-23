@@ -159,48 +159,62 @@ def test_the_sourced_command_gate_actually_read_a_command():
 
 
 def _wrapper_scripts() -> list[str]:
-    """Every product command wrapper: root symlinks that point at a FILE.
+    """Every product command, as an importable module name: executable root `.py` files.
 
-    `init` is absent for free -- it is a regular file, sourced to set up the
-    environment rather than run, and the README says so where it appears.
+    Discovery keys on the executable bit because that is a property of *commands*: a
+    file carrying the bit has a shebang and is meant to be run directly. The previous
+    rule -- "is a symlink in the project root" -- was a property of how the commands
+    happened to be laid out, since each shipped a bare-name symlink beside it purely to
+    drop the `.py` from the invocation (#319). Anything else linked into the root was
+    therefore reported as an undocumented command, and it failed quietly rather than
+    loudly: `_cli_commands` imports each name it discovers, and a directory with no
+    `__init__.py` still imports as a namespace package, so `build_parser` was simply
+    absent and the directory was recorded as a bare command name.
 
-    The target must resolve to a file (#319). Being a symlink in the root used to be
-    the whole test, which is true of the wrappers but is not a property of commands,
-    so anything else linked into the root was reported as an undocumented command.
-    That collides with something the project actively encourages: AGENTS.md notes a
-    git worktree is fail-open for the fetched-bill suites, and linking `bills_corpus`
-    / `bills_bulk_text` into the root is the direct way to make those gates run. Doing
-    so made this gate demand README rows for two data directories -- so the more
-    completely you arranged for the corpus gates to run, the more certainly this one
-    failed, naming a file the branch never touched.
+    That collided with something the project actively encourages. AGENTS.md notes a git
+    worktree is fail-open for the fetched-bill suites, and linking `bills_corpus` /
+    `bills_bulk_text` into the root is the direct way to make those gates run. Doing so
+    made this gate demand README rows for two data directories, so the more completely
+    you arranged for the corpus gates to run, the more certainly this one failed,
+    naming a file the branch never touched. The alias symlinks are gone as of that fix,
+    which removes the collision at its source rather than teaching discovery to
+    tolerate it.
 
-    It failed quietly rather than loudly: `_cli_commands` imports each discovered name,
-    and a directory with no `__init__.py` still imports as a namespace package, so
-    `build_parser` was simply absent and the directory was recorded as a bare command.
+    A shebang alone would not discriminate: `fetch_govinfo.py` carries one but is a
+    module, not a command. The bit is tracked in git (mode 100755 vs 100644), so it
+    travels with a clone and shows up in review.
 
-    Every wrapper today resolves to a `.py` file in the repo root, so requiring a file
-    costs nothing and keeps discovery automatic (a hand-listed roster would reintroduce
-    the drift #135 exists to prevent). A linked non-command *file* would still be
-    picked up; nothing does that today, and it would be a much stranger thing to do
-    than linking a data directory.
+    `init` is absent for free -- it is extensionless, and is sourced to set up the
+    environment rather than run. So are the root modules (`bill_tree.py`,
+    `fetch_govinfo.py`, ...), which are imported, carry no bit, and are not commands.
+
+    Returns module names rather than filenames because `_cli_commands` imports each one;
+    the `.py` is re-added there, where the command is spelled the way a user types it.
+
+    Filesystems that do not carry an executable bit (a Windows checkout) yield an empty
+    roster, which the completeness floor below turns into a loud failure rather than a
+    silently passing gate.
     """
-    return sorted(p.name for p in ROOT.iterdir() if p.is_symlink() and p.resolve().is_file())
+    return sorted(p.stem for p in ROOT.glob("*.py") if p.stat().st_mode & 0o111)
 
 
 def _cli_commands() -> dict[str, list[str]]:
     """Every documentable command, keyed by the wrapper script that provides it.
 
-    A parser with subcommands contributes one entry per subcommand (`./fetch_bills
+    A parser with subcommands contributes one entry per subcommand (`./fetch_bills.py
     search`); a parser that takes only options contributes the bare script name,
     which is how the README names it. A wrapper with no `build_parser` at all
     (fetch_bill_archives runs a hardcoded congress range with no flags and has no
     argparse yet, #10) contributes the bare script name for the same reason.
+
+    Spelled `./name.py`, the way a user actually types it. The bare-name alias
+    symlinks that once made `./name` work are gone (#319).
     """
     commands: dict[str, list[str]] = {}
     for script in _wrapper_scripts():
         build_parser = getattr(importlib.import_module(script), "build_parser", None)
         if build_parser is None:
-            commands[script] = [f"./{script}"]
+            commands[script] = [f"./{script}.py"]
             continue
         parser = build_parser()
         subcommands = [
@@ -209,7 +223,7 @@ def _cli_commands() -> dict[str, list[str]]:
             if isinstance(action, argparse._SubParsersAction)
             for name in action.choices
         ]
-        commands[script] = [f"./{script} {name}" for name in subcommands] if subcommands else [f"./{script}"]
+        commands[script] = [f"./{script}.py {name}" for name in subcommands] if subcommands else [f"./{script}.py"]
     return commands
 
 
@@ -224,7 +238,7 @@ def _command_reference_section() -> str:
 def _documented_commands() -> list[str]:
     """The command each "Command reference" row documents, from its leading cell.
 
-    A row reads ``| `./fetch_bills download <congress> …` | What it does |``, so the
+    A row reads ``| `./fetch_bills.py download <congress> …` | What it does |``, so the
     first backticked span of the first cell is the command plus its arguments.
     """
     return [line.split("`")[1] for line in _command_reference_section().splitlines() if line.startswith("| `./")]
@@ -233,7 +247,7 @@ def _documented_commands() -> list[str]:
 def _is_documented(command: str, rows: list[str]) -> bool:
     """Whether a row documents `command` -- matched on a whole-token boundary.
 
-    Never a bare substring. `./fetch_bills download` is a prefix of the
+    Never a bare substring. `./fetch_bills.py download` is a prefix of the
     `download-all` row, so a plain `in` test reports the download row as present
     after it has been deleted -- the same defect this change removes from the money
     assertions (#264), which this gate must not reintroduce. Requiring the row to be
@@ -272,14 +286,23 @@ def test_the_command_gate_actually_found_commands():
     """
     scripts = _wrapper_scripts()
     # Named wrappers, not a count: a count passes while discovery returns the wrong set.
-    for expected in ("fetch_bills", "diff_bill", "fetch_bill_archives"):
+    # Every shipped command is named, not a sample: an unnamed one can lose its
+    # executable bit and vanish from discovery while this floor still passes, which is
+    # the silent direction. A new command joins this list along with its README row.
+    for expected in (
+        "fetch_bills",
+        "diff_bill",
+        "diff_pdf",
+        "fetch_bill_archives",
+        "fetch_bill_text_archives",
+    ):
         assert expected in scripts, f"wrapper discovery missed {expected!r} -- found {scripts}"
 
     commands = _cli_commands()
     empty = sorted(script for script, cmds in commands.items() if not cmds)
     assert not empty, f"no commands discovered for {empty} -- introspection is broken, not the docs"
 
-    # fetch_bills is the multi-subcommand script; a bare "./fetch_bills" from it would
+    # fetch_bills is the multi-subcommand script; a bare "./fetch_bills.py" from it would
     # mean the subparser walk found nothing while still returning a plausible answer.
     assert len(commands["fetch_bills"]) > 1, "fetch_bills subcommands were not discovered"
 
@@ -292,24 +315,59 @@ def test_the_command_gate_actually_found_commands():
     assert "| Command | What it does |" in section, "README 'Command reference' table not found"
 
 
-def test_a_linked_data_directory_is_not_discovered_as_a_command(tmp_path, monkeypatch):
-    """#319: a symlinked DIRECTORY in the root is not a CLI command.
+def test_only_executable_root_scripts_are_discovered_as_commands(tmp_path, monkeypatch):
+    """#319: discovery keys on the executable bit, not on the shape of the root.
 
-    The real trigger is linking the shared bill corpus into a git worktree so the
-    corpus-gated suites run instead of skipping -- which AGENTS.md asks for. Before
-    the fix, discovery reported `bills_corpus` and `bills_bulk_text` as undocumented
-    commands and told the reader to add README rows for two data directories.
+    Pins both directions at once, because each is a way the gate goes wrong:
 
-    Builds a fake root rather than writing symlinks into the real one, so the test
-    is isolated from whatever the developer has linked in and cannot corrupt the
-    checkout it runs from.
+    * A linked data directory is not a command. The real trigger is linking the shared
+      bill corpus into a git worktree so the corpus-gated suites run instead of
+      skipping, which AGENTS.md asks for. Under the old "any root symlink" rule,
+      discovery reported `bills_corpus` as an undocumented command and told the reader
+      to add a README row for a data directory.
+    * A root module is not a command either. `fetch_govinfo.py` carries a shebang but
+      no executable bit, so a shebang test would over-discover where the bit does not.
+
+    Builds a fake root rather than writing into the real one, so the test is isolated
+    from whatever a given developer has linked in and cannot alter the checkout it
+    runs from.
     """
-    (tmp_path / "real_wrapper.py").write_text("def build_parser():\n    pass\n")
-    (tmp_path / "real_wrapper").symlink_to(tmp_path / "real_wrapper.py")
+    (tmp_path / "real_command.py").write_text("#!/usr/bin/env python3\ndef build_parser():\n    pass\n")
+    (tmp_path / "real_command.py").chmod(0o755)
+    (tmp_path / "a_module.py").write_text("#!/usr/bin/env python3\n# shebang, but imported, not run\n")
+    (tmp_path / "a_module.py").chmod(0o644)
     (tmp_path / "corpus_data").mkdir()
     (tmp_path / "bills_corpus").symlink_to(tmp_path / "corpus_data", target_is_directory=True)
     (tmp_path / "init").write_text("# sourced, not run\n")
 
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
 
-    assert _wrapper_scripts() == ["real_wrapper"]
+    assert _wrapper_scripts() == ["real_command"]
+
+
+def test_a_runnable_root_script_carries_the_executable_bit():
+    """A new command that forgets `chmod +x` must fail loudly, not vanish quietly.
+
+    Keying discovery on the executable bit means a command without it is not a command
+    as far as the gate is concerned, so it ships with no README row and nothing
+    complains -- the same silent-omission failure #135 exists to prevent, relocated.
+
+    A root `.py` that both declares a shebang and runs a `__main__` block is asking to
+    be executed directly, so it is a command missing its bit rather than a module.
+    Neither half alone is enough to say that: `fetch_govinfo.py` has a shebang and no
+    `__main__` (a library whose interpreter line is vestigial), and `render_examples.py`
+    has a `__main__` and no shebang (a dev script run as `python render_examples.py`).
+    Both halves together is the shape only a command has.
+    """
+    offenders = []
+    for path in sorted(ROOT.glob("*.py")):
+        text = path.read_text()
+        runnable = text.startswith("#!") and "__main__" in text
+        if runnable and not path.stat().st_mode & 0o111:
+            offenders.append(path.name)
+
+    assert not offenders, (
+        f"Root scripts look runnable but are not executable: {offenders}. A product command "
+        "needs `chmod +x` to be discovered by the README gate above; if it is not a command, "
+        "drop the shebang or the `__main__` block so it reads as a module."
+    )

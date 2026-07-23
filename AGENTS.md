@@ -13,9 +13,35 @@ uv run pytest tests/test_diff_bill.py::TestMatchNodesIntegration  # Single test
 uv run python scripts/serve_compare.py 118-hr-8752  # PDF vs XML diff side by side (see TESTING.md)
 ```
 
-After `source ./init`, the top-level CLIs run via bare-name symlinks (`./fetch_bills`,
-`./diff_bill`, `./diff_pdf`, `./fetch_bill_archives` → their `.py` files); the
-`uv run python <script>.py` form still works either way.
+After `source ./init`, the top-level CLIs run directly (`./fetch_bills.py`,
+`./diff_bill.py`, `./diff_pdf.py`, `./fetch_bill_archives.py`,
+`./fetch_bill_text_archives.py`); the `uv run python <script>.py` form still works.
+
+### Adding a CLI command
+
+A command is an **executable `.py` file in the project root**. That is the whole
+definition, and it is what the docs gate keys on, so a new command is discovered
+automatically and is required to be documented. To add one:
+
+1. Create `<name>.py` in the project root with a `#!/usr/bin/env python3` shebang.
+2. `chmod +x <name>.py`, and commit the bit (`git update-index --chmod=+x <name>.py`
+   if it did not survive). Without it the file reads as a module and is not a command.
+3. Expose the argument parser as `build_parser()` returning an `argparse.ArgumentParser`.
+   The gate calls it to enumerate subcommands, so each subcommand is documented
+   individually rather than the script as a whole.
+4. Add a row to the README's **Command reference** table for the script (or one per
+   subcommand), spelled exactly as a user types it: `./<name>.py <subcommand>`.
+
+`tests/test_docs_consistency.py` enforces all of this and names what is missing. A
+command that skips step 4 fails with the exact row to add; one that skips step 2 fails
+with `Root scripts look runnable but are not executable`. Root `.py` files that are
+*not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply carry no executable bit.
+
+Root scripts once shipped a bare-name symlink beside them (`fetch_bills` →
+`fetch_bills.py`) so the `.py` could be dropped. Those are gone (#319): the symlink was
+cosmetic, and making "is a root symlink" the definition of a command meant anything else
+linked into the root, such as a `bills_corpus` worktree link, was reported as an
+undocumented command.
 
 ## Workflow
 

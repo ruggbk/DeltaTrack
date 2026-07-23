@@ -38,10 +38,10 @@ source ./init
 
 # 2. Download all versions of a bill
 #    Example: HR 4366 from the 118th Congress (2023-2024)
-./fetch_bills download 118 hr 4366
+./fetch_bills.py download 118 hr 4366
 
 # 3. Generate an HTML report comparing two versions
-./diff_bill compare \
+./diff_bill.py compare \
   bills/118-hr-4366/1_reported-in-house.xml \
   bills/118-hr-4366/2_engrossed-in-house.xml \
   --format html -o reports/hr4366_v1_vs_v2.html
@@ -57,19 +57,19 @@ CONGRESS_API_KEY=your_key_here
 
 ## Command reference
 
-The product commands are wrapper scripts in the project root; run them after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
+The product commands are the executable scripts in the project root; run them after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
 
 | Command | What it does |
 |---------|--------------|
-| `./fetch_bills versions <congress> <type> <number>` | List a bill's available text versions (`--source govinfo\|api`, default govinfo) |
-| `./fetch_bills download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`, `--source govinfo\|api`) |
-| `./fetch_bills download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set; `--source govinfo\|api`) |
-| `./fetch_bills search "<terms>" [--congress N] [--type hr] [--appropriations]` | Find bills by title over a local BILLSTATUS index (keyless, offline; **requires the index** — fetch it first with `fetch-index`, see below) |
-| `./fetch_bills fetch-index --congress <N> [--type hr]` | Download just the scoped BILLSTATUS ZIP(s) that `search` reads (keyless; tens of MB, not the multi-GB full bulk set) — the lightweight on-ramp for `search` |
-| `./diff_bill compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
-| `./diff_pdf <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
-| `./fetch_bill_archives` | Bulk-build a full bill-metadata index (all of 112–119) from govinfo archives — **see the warning below** |
-| `./fetch_bill_text_archives --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
+| `./fetch_bills.py versions <congress> <type> <number>` | List a bill's available text versions (`--source govinfo\|api`, default govinfo) |
+| `./fetch_bills.py download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`, `--source govinfo\|api`) |
+| `./fetch_bills.py download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set; `--source govinfo\|api`) |
+| `./fetch_bills.py search "<terms>" [--congress N] [--type hr] [--appropriations]` | Find bills by title over a local BILLSTATUS index (keyless, offline; **requires the index** — fetch it first with `fetch-index`, see below) |
+| `./fetch_bills.py fetch-index --congress <N> [--type hr]` | Download just the scoped BILLSTATUS ZIP(s) that `search` reads (keyless; tens of MB, not the multi-GB full bulk set) — the lightweight on-ramp for `search` |
+| `./diff_bill.py compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
+| `./diff_pdf.py <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
+| `./fetch_bill_archives.py` | Bulk-build a full bill-metadata index (all of 112–119) from govinfo archives — **see the warning below** |
+| `./fetch_bill_text_archives.py --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
 
 Environment setup is `source ./init` (installs dependencies and activates the virtualenv). Use `source` so the environment change sticks; it is not a runnable command. Keep the leading `./`: a bare `source init` searches `PATH` before the current directory, so wherever `/usr/sbin` is on `PATH` (most Linux distributions) it finds the system `init` and fails.
 
@@ -81,19 +81,19 @@ To run the web comparison app locally: `uvicorn server.app:app --reload --port 8
 
 ```bash
 # List available text versions
-./fetch_bills versions 118 hr 4366
+./fetch_bills.py versions 118 hr 4366
 
 # Download all versions of a bill (XML by default; add --format pdf or --format both for PDFs)
-./fetch_bills download 118 hr 4366
+./fetch_bills.py download 118 hr 4366
 
 # Download a specific version (1-indexed)
-./fetch_bills download 118 hr 4366 --version 2
+./fetch_bills.py download 118 hr 4366 --version 2
 
 # Download all appropriations bills for a year range
-./fetch_bills download-all --start_year 2024 --end_year 2026
+./fetch_bills.py download-all --start_year 2024 --end_year 2026
 
 # Or batch-download a specific set of bills from a CSV you create with an 'id' column
-./fetch_bills download-all --file your_bills.csv
+./fetch_bills.py download-all --file your_bills.csv
 ```
 
 Files are saved to `bills/<congress>-<type>-<number>/`.
@@ -104,36 +104,36 @@ If you don't know the bill number, search bill titles over a local index (keyles
 
 ```bash
 # 1. Fetch just the BILLSTATUS ZIP for the congress (and optionally type) you want (tens of MB)
-./fetch_bills fetch-index --congress 118 --type hr
+./fetch_bills.py fetch-index --congress 118 --type hr
 
 # 2. Search it — any bill type/congress; --appropriations is an optional facet, not a required filter
-./fetch_bills search "military construction" --congress 118 --appropriations
+./fetch_bills.py search "military construction" --congress 118 --appropriations
 ```
 
 Each match prints as `<congress>-<type>-<number>\t<title>`; feed the number back into `download`. The exit status follows `grep`, so scripts and agents can branch without parsing output: **0** matches found, **1** searched but nothing matched, **2** no index to search.
 
-The index is read from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone. Fetch just the slice you need with `./fetch_bills fetch-index --congress <N> [--type <hr>]` (keyless; tens of MB for one congress/type, vs the multi-GB full set; omit `--type` to pull every type for the congress); for a full multi-congress metadata index there is the heavier `./fetch_bill_archives` (described below). Both resolve `--billstatus-dir` (default `bills/`) relative to the current directory, so run either from the project root. Until an index exists, `search` exits 2 with a "no BILLSTATUS index" message. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
+The index is read from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone. Fetch just the slice you need with `./fetch_bills.py fetch-index --congress <N> [--type <hr>]` (keyless; tens of MB for one congress/type, vs the multi-GB full set; omit `--type` to pull every type for the congress); for a full multi-congress metadata index there is the heavier `./fetch_bill_archives.py` (described below). Both resolve `--billstatus-dir` (default `bills/`) relative to the current directory, so run either from the project root. Until an index exists, `search` exits 2 with a "no BILLSTATUS index" message. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
 
 ## Comparing Bills
 
 ```bash
 # Compare two versions (prints an HTML report to stdout by default)
-./diff_bill compare bills/118-hr-4366/1_reported-in-house.xml bills/118-hr-4366/6_enrolled-bill.xml
+./diff_bill.py compare bills/118-hr-4366/1_reported-in-house.xml bills/118-hr-4366/6_enrolled-bill.xml
 
 # Only sections with dollar amount changes
-./diff_bill compare old.xml new.xml --financial
+./diff_bill.py compare old.xml new.xml --financial
 
 # Filter to a specific section
-./diff_bill compare old.xml new.xml --filter "military construction"
+./diff_bill.py compare old.xml new.xml --filter "military construction"
 
 # Include unchanged sections
-./diff_bill compare old.xml new.xml --include-unchanged
+./diff_bill.py compare old.xml new.xml --include-unchanged
 
 # Save machine-readable JSON to a file (output defaults to HTML, so request json explicitly)
-./diff_bill compare old.xml new.xml --format json -o diff.json
+./diff_bill.py compare old.xml new.xml --format json -o diff.json
 
 # Generate a standalone HTML report
-./diff_bill compare old.xml new.xml --format html -o reports/report.html
+./diff_bill.py compare old.xml new.xml --format html -o reports/report.html
 ```
 
 ### HTML report
@@ -179,10 +179,10 @@ Some bill versions are only available as PDF — pre-publication committee print
 
 ```bash
 # download defaults to XML, so request the PDFs explicitly
-./fetch_bills download 118 hr 4366 --format pdf
+./fetch_bills.py download 118 hr 4366 --format pdf
 
 # Generate the same standalone HTML report from two PDFs
-./diff_pdf bills/118-hr-4366/1_reported-in-house.pdf bills/118-hr-4366/2_engrossed-in-house.pdf -o reports/hr4366.html
+./diff_pdf.py bills/118-hr-4366/1_reported-in-house.pdf bills/118-hr-4366/2_engrossed-in-house.pdf -o reports/hr4366.html
 ```
 
 `diff_pdf` runs the same pipeline as the web app (full-bill view, in-page search, section navigation, embedded export) and writes the same HTML report described above. Output goes to stdout unless `-o` is given. Prefer `diff_bill` on XML whenever the published XML exists; it extracts structure and amounts exactly rather than reconstructing them from a rendered page.
@@ -260,24 +260,24 @@ The corpus correctness gates need no downloads (their fixtures are committed, in
 # fetch_bills reads CONGRESS_API_KEY from .env automatically; no need to source it.)
 # --format both fetches XML and PDF together, covering both the XML tests and the
 # PDF comparison tests (test_pdf_*) in one pass.
-./fetch_bills download 118 hr 4366 --format both
-./fetch_bills download 118 hr 2882 --format both
-./fetch_bills download 118 hr 8282 --format both
-./fetch_bills download 118 hr 8752 --format both
-./fetch_bills download 118 hr 8774 --format both
-./fetch_bills download 118 hr 4820 --format both
-./fetch_bills download 117 hr 2471 --format both
-./fetch_bills download 117 hr 4432 --format both
-./fetch_bills download 117 hr 4502 --format both
-./fetch_bills download 116 hr 1865 --format both
-./fetch_bills download 116 hr 133 --format both
-./fetch_bills download 115 hr 5895 --format both
-./fetch_bills download 115 hr 1625 --format both
-./fetch_bills download 115 hr 880 --format both
-./fetch_bills download 115 hr 244 --format both
-./fetch_bills download 114 hr 2029 --format both
-./fetch_bills download 113 hr 83 --format both
-./fetch_bills download 113 hr 3547 --format both
+./fetch_bills.py download 118 hr 4366 --format both
+./fetch_bills.py download 118 hr 2882 --format both
+./fetch_bills.py download 118 hr 8282 --format both
+./fetch_bills.py download 118 hr 8752 --format both
+./fetch_bills.py download 118 hr 8774 --format both
+./fetch_bills.py download 118 hr 4820 --format both
+./fetch_bills.py download 117 hr 2471 --format both
+./fetch_bills.py download 117 hr 4432 --format both
+./fetch_bills.py download 117 hr 4502 --format both
+./fetch_bills.py download 116 hr 1865 --format both
+./fetch_bills.py download 116 hr 133 --format both
+./fetch_bills.py download 115 hr 5895 --format both
+./fetch_bills.py download 115 hr 1625 --format both
+./fetch_bills.py download 115 hr 880 --format both
+./fetch_bills.py download 115 hr 244 --format both
+./fetch_bills.py download 114 hr 2029 --format both
+./fetch_bills.py download 113 hr 83 --format both
+./fetch_bills.py download 113 hr 3547 --format both
 ```
 
 These fetch both XML and PDF: the XML covers the XML-based tests, and the PDF rendering is what the PDF comparison tests (`test_pdf_*`) need. Drop `--format both` if you only want the XML (the default).
