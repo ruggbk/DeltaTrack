@@ -15,6 +15,7 @@ These are fast (non-slow) on purpose, for two reasons:
 import pytest
 
 from tests import conftest
+from validation_sources import JURISDICTIONS
 
 
 def test_manifest_parses_and_is_nonempty() -> None:
@@ -384,3 +385,33 @@ def test_ceiling_stays_green_on_a_passing_gate_end_to_end(tmp_path) -> None:
     body = "def test_x():\n    assert True\n"
     r = _run_child_session(tmp_path, body, xdist=False)
     assert r.returncode == 0, f"ceiling fired on a clean gate run\n{r.stdout}\n{r.stderr}"
+
+
+# --- Committee-report validation fixtures: committed-fixture floor (#294) ----------------
+# This floor moved here from tests/test_validate_extraction.py, whose module-level
+# ``pytestmark = pytest.mark.slow`` meant the committed-fixture guarantee only ran in the
+# slow tier. The guarantee belongs in the FAST tier on every CI run, for the same reason
+# as the manifest guards above: the fixtures are committed, so a normal checkout has all
+# of them and this is green; a rename/cleanup/.gitignore change that drops one must redden
+# the fast job too, not wait for the slow validation step. Moved per maintainer review of
+# #328. (Placed at the end of the file to minimize overlap with other in-flight work on
+# this module.)
+
+
+def test_all_report_fixtures_committed() -> None:
+    """Fail-closed completeness floor (#294): every jurisdiction in the registry must have
+    its committed ground-truth fixture on disk.
+
+    Mirrors the corpus gates' ``test_manifest_fixtures_committed`` (#217, ADR 0015). The
+    fixtures are committed (``test_data/validation_*.json`` is re-included in .gitignore),
+    so a normal checkout has all of them and this is green; it turns red — naming every
+    absent subcommittee — only when a rename/cleanup/.gitignore change drops one, instead
+    of silently shrinking external validation.
+    """
+    missing = sorted(j.slug for j in JURISDICTIONS if not j.fixture_path.exists())
+    assert not missing, (
+        f"{len(missing)} committee-report validation fixture(s) registered in "
+        f"validation_sources.py but absent from test_data/: {missing}. Each missing fixture "
+        "silently removes its subcommittee from external validation. Restore the committed "
+        "file(s) or rebuild with `uv run python scripts/build_validation.py --fetch`."
+    )

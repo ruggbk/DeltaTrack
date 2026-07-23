@@ -29,11 +29,11 @@ class Jurisdiction:
     version: str  # bill version filename, e.g. "1_reported-in-senate.xml"
     fy: str  # "FY 2025"
     chamber: str  # "senate"
-    # Number of committed accounts in the fixture. The declared count is the truncation floor
+    # Minimum number of accounts the committed fixture must carry — a `>=` truncation floor
     # (tests/test_validate_extraction.py::test_fixture_is_senate_reported_bill): a fixture that
     # shrinks below it fails loudly instead of passing more easily (fewer accounts => fewer
     # possible recall failures). Refresh it here when a rebuild legitimately changes the count.
-    expected_accounts: int
+    min_accounts: int
     # Which report table the builder reads. Most jurisdictions carry account amounts in the
     # narrative's 3-line summary blocks ("summary"). "Tabular" jurisdictions (Defense) print
     # accounts only in the wide comparative statement, so the builder reads that instead
@@ -63,7 +63,7 @@ def _senate_fy25(slug, display, srpt, s_num, bill_id, accounts, source="summary"
         version="1_reported-in-senate.xml",
         fy=fy,
         chamber="senate",
-        expected_accounts=accounts,
+        min_accounts=accounts,
         source=source,
     )
 
