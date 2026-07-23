@@ -272,6 +272,25 @@ def test_every_cli_command_appears_in_the_readme_command_reference():
     )
 
 
+def test_a_row_documents_only_its_own_command():
+    """The row match is a whole-token boundary, asserted on literals (#264).
+
+    The only part of this gate a mutation survives. Every other step has a
+    completeness floor below, but `_is_documented` is exercised solely through the
+    live README, where every command currently has a row -- so relaxing it to a bare
+    `in` test passes the whole suite while silently restoring the pre-#264 defect:
+    the surviving `download-all` row would report `download` as documented after the
+    download row was deleted, which is exactly the deletion this gate exists to catch.
+    """
+    rows = ["./fetch_bills.py download-all --start_year <Y>"]
+
+    assert not _is_documented("./fetch_bills.py download", rows), (
+        "a longer command's row must not document the shorter command it starts with"
+    )
+    assert _is_documented("./fetch_bills.py download-all", rows), "the row's own command, plus arguments"
+    assert _is_documented("./diff_pdf.py", ["./diff_pdf.py"]), "a bare command matched exactly"
+
+
 def test_the_command_gate_actually_found_commands():
     """Completeness floor for the gate above.
 
