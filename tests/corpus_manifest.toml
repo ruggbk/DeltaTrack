@@ -38,8 +38,9 @@ id = "118-hr-4366"
 subcommittee = "milcon-va / full-year omnibus"
 covers = "Primary diff-validation baselines: controlled small diff (v1->v2, same structure) and no-division->omnibus structure expansion (v1->v6). Hand-curated assertions live in test_diff_validation TestControlledDiff / TestStructureExpansion."
 versions = [
-  { stage = "1_reported-in-house", formats = ["xml"] },
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
   { stage = "2_engrossed-in-house", formats = ["xml"] },
+  { stage = "3_placed-on-calendar-senate", formats = ["pdf"] },
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "5_engrossed-amendment-house", formats = ["xml"] },
   { stage = "6_enrolled-bill", formats = ["xml"] },
@@ -74,6 +75,7 @@ id = "114-hr-2029"
 subcommittee = "full-year omnibus"
 covers = "Omnibus span-geometry case (#172/#175). The 5->6 XML pair is the node-join amendment-shape gate; the 3->4 PDF pair is its anchor-agreement gate. Committed in #220 to retire REQUIRE_CORPUS; also a #126 curation candidate."
 versions = [
+  { stage = "1_reported-in-house", formats = ["pdf"] },
   { stage = "3_referred-in-senate", formats = ["pdf"] },
   { stage = "4_reported-in-senate", formats = ["pdf"] },
   { stage = "5_engrossed-amendment-senate", formats = ["xml"] },
