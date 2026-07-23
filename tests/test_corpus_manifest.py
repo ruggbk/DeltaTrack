@@ -138,6 +138,16 @@ def test_missing_manifest_files_falls_back_to_presence_without_git(monkeypatch) 
     assert conftest.missing_manifest_files() == []
 
 
+def test_tracked_bills_uses_git_in_this_repo() -> None:
+    """The repo's own suite must exercise the STRICT path, not the presence fallback.
+    Without this, a refactor returning None everywhere reverts the floor to .exists()
+    with every other test still green."""
+    assert conftest._tracked_bills() is not None, (
+        "git could not answer in a real checkout, so the manifest floor silently fell "
+        "back to a presence check — the #308 fail-open."
+    )
+
+
 def _manifest_rel_paths() -> set[str]:
     """Every fixture the manifest declares, as ``<id>/<stage>.<fmt>`` strings."""
     return {
