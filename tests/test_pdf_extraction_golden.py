@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,15 @@ _COMMITTED_RELS = frozenset(
 )
 
 
+class GoldenEntryPreserved(UserWarning):
+    """Raised by regeneration when a case's fixture is absent and its entry was kept.
+
+    A warning, not a print: pytest captures stdout for passing tests and this repo runs
+    xdist by default (addopts), so a printed notice never reaches the contributor running
+    the documented UPDATE_GOLDEN=1 command. Warnings survive both and land in the summary.
+    """
+
+
 def _page_lines(path: Path, page_number: int) -> list[list]:
     """The cleaned page's lines as JSON-friendly [line_number, text] pairs."""
     pages = extract_clean_pages(path)
@@ -115,6 +125,12 @@ def _regenerated_golden(existing: dict) -> dict:
     back when someone fetches the file; a deleted golden entry does not, and the case then
     fails closed with "no golden entry" for a reason unrelated to what it tests.
 
+    Preservation trades a deletion for a possibly-STALE entry: regenerating after a real
+    extraction change on a partial checkout leaves those cases recorded in the old format,
+    and CI cannot catch it because they skip when the PDF is absent. So the preserved cases
+    are named in a GoldenEntryPreserved warning — the only control for that residue, which
+    is why it must not be a print (see that class).
+
     Fail-closed where it should be: a *committed* fixture being absent means the checkout
     is broken, not that the case is optional, so refuse to write at all rather than
     silently rebuild from a partial set.
@@ -136,7 +152,12 @@ def _regenerated_golden(existing: dict) -> dict:
             merged[key] = existing[key]
             preserved.append(key)
     if preserved:
-        print(f"[golden] fixture absent, entry preserved not regenerated: {', '.join(preserved)}")
+        warnings.warn(
+            f"[golden] fixture absent, entry preserved not regenerated: {', '.join(preserved)}. "
+            "Fetch those PDFs and regenerate again if the extraction change affects them.",
+            GoldenEntryPreserved,
+            stacklevel=2,
+        )
     return merged
 
 
@@ -151,19 +172,34 @@ def test_regenerate_golden():
 
 def test_regeneration_preserves_entries_for_absent_fixtures(monkeypatch):
     """#296: regenerating on a checkout missing a fetched-only fixture keeps that case's
-    recorded expectations. Simulates the absent fixture rather than moving the real PDF,
-    so this runs on any checkout."""
+    recorded expectations, and NAMES it so the contributor knows the entry may be stale.
+    Simulates the absent fixture rather than moving the real PDF, so this runs on any
+    checkout."""
     module = sys.modules[__name__]
     absent_rel = "bills/118-hr-4366/1_reported-in-house.pdf"
     monkeypatch.setattr(module, "_present", lambda rel: rel != absent_rel)
     monkeypatch.setattr(module, "_page_lines", lambda path, pg: [[1, "regenerated"]])
 
     existing = {key: [[1, f"recorded {key}"]] for key, *_ in _CASES}
-    merged = _regenerated_golden(existing)
+    with pytest.warns(GoldenEntryPreserved, match="hr4366_reported_p5"):
+        merged = _regenerated_golden(existing)
 
     assert set(merged) == {key for key, *_ in _CASES}, "no case may drop out of the golden"
     assert merged["hr4366_reported_p5"] == [[1, "recorded hr4366_reported_p5"]]
     assert merged["crpt198_compare_p220"] == [[1, "regenerated"]]
+
+
+def test_regeneration_is_silent_when_every_fixture_is_present(monkeypatch, recwarn):
+    """The notice must fire only on a real preservation: a warning on every regeneration
+    would be trained past, and then the stale-entry case it exists to flag reads as noise."""
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "_present", lambda rel: True)
+    monkeypatch.setattr(module, "_page_lines", lambda path, pg: [[1, "regenerated"]])
+
+    merged = _regenerated_golden({})
+
+    assert set(merged) == {key for key, *_ in _CASES}
+    assert not [w for w in recwarn if issubclass(w.category, GoldenEntryPreserved)]
 
 
 def test_regeneration_refuses_when_a_committed_fixture_is_absent(monkeypatch):
