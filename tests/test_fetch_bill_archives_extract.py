@@ -25,7 +25,9 @@ import httpx
 import pytest
 import respx
 
+import fetch_bill_archives
 from fetch_bill_archives import (
+    MAX_MEMBER_COUNT,
     MAX_UNCOMPRESSED_BYTES,
     archive_destination,
     archive_error_path,
@@ -281,6 +283,53 @@ class TestExtractArchive:
         extract_archive(archive, dest)
 
         assert (dest / "119-hr-0.xml").read_bytes() == b"<billStatus/>"
+
+    def test_archive_with_more_members_than_the_ceiling_is_refused(self, tmp_path, monkeypatch):
+        # #306: the byte ceiling sums declared uncompressed sizes, so an archive of
+        # empty members declares zero bytes and sails past it no matter how many
+        # members it holds -- 200,000 empty files weigh nothing yet exhaust inodes.
+        # The member ceiling is what catches it. Members are empty on purpose (declared
+        # size 0), so this archive passes the byte ceiling and only the count refuses
+        # it, proving the gap the issue describes is actually closed. The ceiling is
+        # lowered rather than materializing 100,001 members, whose sole cost is build
+        # time -- the check reads len(infolist()), which needs that many real central
+        # directory records, so the real bound cannot be faked cheaply the way the byte
+        # bomb's declared sizes can.
+        monkeypatch.setattr(fetch_bill_archives, "MAX_MEMBER_COUNT", 3)
+        archive = write_archive(tmp_path, "119-hr", {f"119-hr-{i}.xml": b"" for i in range(4)})
+        dest = tmp_path / "out"
+
+        with pytest.raises(ValueError, match="4 members, over the 3 ceiling"):
+            extract_archive(archive, dest)
+
+        assert not dest.exists()
+
+    def test_an_archive_at_the_member_ceiling_is_still_extracted(self, tmp_path, monkeypatch):
+        # The boundary is inclusive, and the point mirrors the byte ceiling's: a bound
+        # wired to reject everything would pass a refusal test while breaking real
+        # extraction. A real archive is ~10,564 members, an order of magnitude under
+        # the true ceiling, and must extract untouched.
+        monkeypatch.setattr(fetch_bill_archives, "MAX_MEMBER_COUNT", 3)
+        archive = write_archive(tmp_path, "119-hr", {f"119-hr-{i}.xml": b"<billStatus/>" for i in range(3)})
+        dest = tmp_path / "out"
+
+        extract_archive(archive, dest)
+
+        assert (dest / "119-hr-0.xml").read_bytes() == b"<billStatus/>"
+        assert len([p for p in dest.rglob("*") if p.is_file()]) == 3
+
+    def test_the_real_member_ceiling_clears_the_largest_known_archive(self, tmp_path):
+        # Calibration guard against the real default, no monkeypatch: the largest real
+        # BILLSTATUS archive is 10,564 members (#300). The ceiling must stay well above
+        # that so it never refuses legitimate data -- a change that lowered it under the
+        # real corpus would fail here loudly rather than start silently rejecting bills.
+        assert MAX_MEMBER_COUNT > 10_564
+        archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
+        dest = tmp_path / "out"
+
+        extract_archive(archive, dest)
+
+        assert (dest / "a.xml").exists()
 
     def test_raises_on_a_corrupt_archive(self, tmp_path):
         archive = tmp_path / "119-hr.zip"
