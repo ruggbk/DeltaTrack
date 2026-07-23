@@ -117,6 +117,50 @@ uv run ruff check --fix .    # Lint and auto-fix
 uv run ruff format .         # Format
 ```
 
+### Adding a CLI command
+
+A command is an **executable `.py` file in the project root**. That is the whole
+definition, and it is what the documentation gate keys on, so a new command is
+discovered automatically and is required to be documented. To add one:
+
+1. Create `<name>.py` in the project root with a shebang. `#!/usr/bin/env python3` is
+   the common form; the two bulk fetchers use `#!/usr/bin/env -S uv run --quiet python`,
+   which resolves the environment itself rather than relying on `source ./init`.
+2. `chmod +x <name>.py`, and commit the bit (`git update-index --chmod=+x <name>.py`
+   if it did not survive). Without it the file reads as a module and is not a command.
+3. Expose the argument parser as `build_parser()` returning an `argparse.ArgumentParser`.
+   The gate calls it to enumerate subcommands, so each subcommand is documented
+   individually rather than the script as a whole.
+4. Add a row to the README's **Command reference** table for the script (or one per
+   subcommand), spelled exactly as a user types it: `./<name>.py <subcommand>`.
+5. Add `<name>` to the completeness floor in `tests/test_docs_consistency.py`
+   (`test_the_command_gate_actually_found_commands`). The floor names every command
+   rather than counting them, so an unnamed command that later loses its executable
+   bit drops out of discovery with the suite still green. The step-2 check catches
+   that only for a script carrying a `__main__` block; for one that parses at module
+   level, this floor is the only thing standing between it and a silent exit.
+
+`tests/test_docs_consistency.py` names what is missing where it can: skip step 4 and it
+fails with the exact row to add, skip step 2 and it fails with `Root scripts look
+runnable but are not executable`. Steps 1, 3 and 5 it cannot check for you:
+
+- A shebang is never required on its own. Paired with a `__main__` block on a file
+  that lacks the executable bit, it is what raises that step-2 failure.
+- A command with no `build_parser` is documented under its bare script name rather
+  than rejected (`fetch_bill_archives.py`, [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)).
+- Nothing ties the floor's list back to what discovery found, which is why step 5 is
+  a step and not an assertion.
+
+Root `.py` files that are *not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply
+carry no executable bit.
+
+Root scripts once shipped a bare-name symlink beside them (`fetch_bills` pointing at
+`fetch_bills.py`) so the `.py` could be dropped from the invocation. Those are gone
+([#319](https://github.com/AgoraDMV/DeltaTrack/issues/319)): the symlink was cosmetic,
+and making "is a root symlink" the definition of a command meant anything else linked
+into the root, such as a corpus directory linked in from another checkout, was reported
+as an undocumented command.
+
 ### Testing
 
 Tests are split into groups by speed and dependencies:
@@ -125,7 +169,7 @@ Tests are split into groups by speed and dependencies:
 - **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`.
 - **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. The corpus correctness gates (`test_corpus_properties`, `test_corpus_tree_properties`, `test_diff_validation`) run against a committed fixture set named in `tests/corpus_manifest.toml`, so they run in CI and their counts are reproducible; each fails closed if a manifested bill is uncommitted. `CORPUS_SWEEP=1` opts into sweeping every locally-fetched bill (non-CI exploration). A few other slow suites (the PDF recall tests, the Legislative Branch spreadsheet validation, and the live-network govinfo parity gate) still read larger fetched bills and skip when absent, or fail loudly under `REQUIRE_CORPUS=1` (see [TESTING.md](TESTING.md)). 
 
-Adding or renaming a CLI subcommand? Add its row to the README "Command reference" table in the same change -- `tests/test_docs_consistency.py` introspects each wrapper script's parser and fails if a command has no row.
+Adding or renaming a CLI subcommand? Add its row to the README "Command reference" table in the same change -- `tests/test_docs_consistency.py` introspects each root command script's parser and fails if a command has no row. Adding a whole new command? See ["Adding a CLI command"](#adding-a-cli-command) above for the convention the gate enforces.
 
 When adding code, write tests for it. Test files live in `tests/`; mark tests that need real XML files with `@pytest.mark.slow` and front-end tests with `@pytest.mark.browser`. Shared helpers are in `tests/conftest.py`. [TESTING.md](TESTING.md) is the home for the full command catalog and what each validation layer proves.
 

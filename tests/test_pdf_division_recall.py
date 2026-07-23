@@ -1,7 +1,7 @@
 """Corpus + golden validation for the PDF division level (DeltaTrack#107).
 
 Pins three things across every division-bearing version present (fetch with
-`./fetch_bills download <congress> <type> <number> --format both`; absent bills
+`./fetch_bills.py download <congress> <type> <number> --format both`; absent bills
 skip, matching the other corpus suites):
   1. Division COUNT == the XML division count on every parseable version (hard) —
      the 33-division FY22 omnibus included.
