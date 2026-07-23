@@ -21,8 +21,7 @@ Reliability != validity: high LLM agreement is weak evidence (it may be two corr
 low agreement is the informative signal. Never read agreement as "the label is correct."
 
 Run (from repo root, repo venv):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/merge_labels.py
+    .venv/bin/python docs/research/provision-matching/probes/merge_labels.py
 """
 
 from __future__ import annotations

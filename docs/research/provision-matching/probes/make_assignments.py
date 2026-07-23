@@ -12,8 +12,7 @@ re-running after miners add examples never reshuffles work already handed out. W
 reviewer the overlap is skipped (no agreement possible) and everything goes to them.
 
 Run (reviewers as args; default ["will"]):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/make_assignments.py will alice bob
+    .venv/bin/python docs/research/provision-matching/probes/make_assignments.py will alice bob
 """
 
 from __future__ import annotations

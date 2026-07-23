@@ -13,8 +13,7 @@ The HTML/CSS/JS lives in `form_template.html` (edit it there); this script only 
 reviewer's assigned, blinded candidates as JSON.
 
 Run (per reviewer; the reviewer must exist in assignments.json):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/make_form.py will
+    .venv/bin/python docs/research/provision-matching/probes/make_form.py will
 """
 
 from __future__ import annotations
@@ -24,7 +23,11 @@ import json
 import sys
 from pathlib import Path
 
-from blindness import FORBIDDEN, breadcrumb, leaks_in, mask_corpus
+# Resolve sibling modules without a PYTHONPATH prefix on every invocation (#336). Appended, not
+# inserted, so a research module here can never shadow a repo-root or standard-library module.
+sys.path.append(str(Path(__file__).resolve().parent))
+
+from blindness import FORBIDDEN, breadcrumb, leaks_in, mask_corpus  # noqa: E402
 
 _HERE = Path(__file__).parent
 _TEMPLATE = _HERE / "form_template.html"

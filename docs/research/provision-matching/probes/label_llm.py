@@ -36,8 +36,7 @@ Blindness (§5), enforced here exactly as `make_form.py` enforces it for the hum
     content). The per-call input-token count is printed; a jump toward ~30K signals a regression.
 
 Run (from repo root, repo venv). A sample is required — never the full 211 by accident:
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/label_llm.py --sample 2        # 2 per stratum (N>=1)
+    .venv/bin/python docs/research/provision-matching/probes/label_llm.py --sample 2        # 2 per stratum (N>=1)
     ...                                                       label_llm.py --all   # all 211 (gated)
     ...                                          label_llm.py --sample 2 --dry-run # assemble only
 
@@ -66,10 +65,14 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Resolve sibling modules without a PYTHONPATH prefix on every invocation (#336). Appended, not
+# inserted, so a research module here can never shadow a repo-root or standard-library module.
+sys.path.append(str(Path(__file__).resolve().parent))
+
 # Parity with the human form: same neutral questions and §5 rubric from make_form, and the same
 # leak-guard implementation both paths share (#332).
-from blindness import BlindnessError, breadcrumb, leaks_in, mask_corpus
-from make_form import _CONFIDENCE, _EXAMPLES, _QUESTION, _STANDARD
+from blindness import BlindnessError, breadcrumb, leaks_in, mask_corpus  # noqa: E402
+from make_form import _CONFIDENCE, _EXAMPLES, _QUESTION, _STANDARD  # noqa: E402
 
 # Module-local names kept for the existing call sites and their regression tests.
 _BlindnessError = BlindnessError
