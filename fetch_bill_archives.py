@@ -49,6 +49,20 @@ GOVINFO_BILLSTATUS_ZIP_URL = (
 # the failure mode of a too-low ceiling is a loud refusal, not a silent truncation.
 MAX_UNCOMPRESSED_BYTES = 2 * 1024**3
 
+# Companion ceiling on member *count* (#306). The byte ceiling above sums declared
+# uncompressed sizes, but empty members declare zero bytes: 200,000 empty files weigh
+# nothing against MAX_UNCOMPRESSED_BYTES yet still consume 200,000 inodes and directory
+# entries, exhausting the filesystem the byte ceiling was meant to protect. Inode
+# exhaustion degrades worse than a full disk -- it affects the whole machine and is
+# harder to diagnose, since free space still reads as available.
+#
+# Calibrated the same way as the byte ceiling: the largest real BILLSTATUS archive is
+# 118-hr at 10,564 members (the figure #300 measured), so 100,000 keeps better than a
+# 9x margin for corpus growth while refusing the 200,000-member archive #306 demonstrated
+# by a factor of two. As with the byte ceiling, a too-low bound fails loud (a refusal),
+# never silent -- raise it deliberately if real archives ever approach it.
+MAX_MEMBER_COUNT = 100_000
+
 _POPULAR_TITLE_RE = re.compile(r"^popular\s+titles?\b", re.IGNORECASE)
 _BILLSTATUS_XML_GLOB = "BILLSTATUS*.xml"
 _BILLSTATUS_XML_NAME_RE = re.compile(r"^BILLSTATUS-(\d+)([a-z]+)(\d+)\.xml$", re.IGNORECASE)
@@ -232,17 +246,24 @@ def archive_extract_dir(source: Path, archive: Path) -> Path:
 def extract_archive(archive: Path, dest_dir: Path) -> None:
     """Extract one archive ZIP into dest_dir, refusing an oversized expansion.
 
-    The size ceiling is the only guard added here. Member *paths* are untrusted too,
-    but `zipfile.extractall` already sanitizes traversal and absolute paths (see
-    test_members_cannot_escape_the_destination_directory), so re-implementing the
-    walk to add filtering would reintroduce that escape to solve a problem the
-    stdlib has handled.
-
-    The total is read from the central directory before a single byte is written: a
-    ceiling enforced during extraction has already spent the disk it protects.
+    Two ceilings guard extraction, both read from the central directory before a
+    single byte is written -- a ceiling enforced during extraction has already spent
+    the disk it protects. The byte ceiling bounds total uncompressed size; the member
+    ceiling bounds file *count*, because empty members declare zero bytes and so slip
+    the byte ceiling entirely while still consuming inodes (#306). Member *paths* are
+    untrusted too, but `zipfile.extractall` already sanitizes traversal and absolute
+    paths (see test_members_cannot_escape_the_destination_directory), so
+    re-implementing the walk to add filtering would reintroduce that escape to solve a
+    problem the stdlib has handled.
     """
     with zipfile.ZipFile(archive) as zf:
-        declared = sum(info.file_size for info in zf.infolist())
+        infos = zf.infolist()
+        member_count = len(infos)
+        if member_count > MAX_MEMBER_COUNT:
+            raise ValueError(
+                f"{archive.name} holds {member_count} members, over the {MAX_MEMBER_COUNT} ceiling; refusing to extract"
+            )
+        declared = sum(info.file_size for info in infos)
         if declared > MAX_UNCOMPRESSED_BYTES:
             raise ValueError(
                 f"{archive.name} declares {declared} uncompressed bytes, over the "
