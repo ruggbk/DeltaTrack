@@ -118,6 +118,7 @@
         "location",
         "anchor_resolution",
         "text",
+        "amount_entries",
         "move"
       ],
       "additionalProperties": false,
@@ -174,7 +175,7 @@
         },
         "amount_entries": {
           "type": "array",
-          "description": "The change's base-amount changes, and the only money field (v2.0 removed the deprecated changed-only `amounts`, #274). Self-describing and lossless: every changed/added/removed amount, with no reorder cancellation (that is #87/consumer policy). `added` has null old, `removed` has null new, `changed` has both present and differing. Unchanged (old == new) pairs are dropped. Absent or empty on a change with no money.",
+          "description": "The change's base-amount changes, and the only money field (v2.0 removed the deprecated changed-only `amounts`, #274). Self-describing and lossless: every changed/added/removed amount, with no reorder cancellation (that is #87/consumer policy). `added` has null old, `removed` has null new, `changed` has both present and differing. Unchanged (old == new) pairs are dropped. Required, so a consumer never has to test for the key: an empty array on a change with no money.",
           "items": {
             "type": "object",
             "required": ["old", "new", "kind"],

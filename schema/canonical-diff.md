@@ -21,8 +21,10 @@ Top-level field: `schema_version: "2.0"`.
   matters because the export is built to be read by a machine — the report ships
   prompts telling a staffer to upload `diff.json` to an AI assistant. There is now
   exactly one money field. Producers no longer write `amounts`; consumers MUST read
-  `amount_entries`. The pre-1.4 reader fallback is removed with it: diff reports are
-  generated on demand rather than stored, so there are no older documents to read.
+  `amount_entries`, which becomes **required** in the same break — an empty array
+  when a change carries no money, so there is no absent-key case to handle. The
+  pre-1.4 reader fallback is removed with it: diff reports are generated on demand
+  rather than stored, so there are no older documents to read.
 - **1.4** — Added optional `amount_entries` array on each change object (#86):
   self-describing base-amount changes with an explicit `kind`
   (`changed`/`added`/`removed`) and a nullable absent side, so whole-item
@@ -31,7 +33,8 @@ Top-level field: `schema_version: "2.0"`.
   `changed`-kind subset of `amount_entries`, kept for back-compat until the next
   major. No consumer reads `schema_version`, so a consumer reading `amount_entries`
   MUST fall back to `amounts` when the field is absent (pre-1.4 documents).
-  Additive, backward compatible.
+  Additive, backward compatible. *(Superseded by 2.0: `amounts` and the fallback
+  rule are both gone — this entry is history, not a live rule.)*
 - **1.3** — Added optional top-level `tree: { v1, v2 } | null` field: the
   per-side leveled structure tree (#108). Each side is an ordered list of
   root `TreeNode`s; each node carries `label`, `level` (the shared GPO
@@ -295,9 +298,11 @@ consumer. A cross-version consumer (e.g. BillTrax) may apply its own alignment
 policy; any presentation-side collapse is a consumer concern, not baked into the
 contract.
 
-Absent or empty on a change with no money. As of v2.0 this is a change object's
-**only** money field, so there is exactly one list to read and no subset to confuse
-it with.
+As of v2.0 this is a change object's **only** money field, so there is exactly one
+list to read and no subset to confuse it with. It is also **required**: a change
+with no money carries an empty array rather than omitting the key, so a consumer
+reads it unconditionally and never has to distinguish "no money here" from "this
+producer didn't write the field".
 
 ### `full_text_span` (optional, v1.2+)
 

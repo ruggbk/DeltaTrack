@@ -82,9 +82,10 @@ Alternatives:
   lives here; anything spanning many comparisons lives one layer up.
 - Whether the format should ever grow beyond two versions is left open. The schema
   notes N-way comparison (more than two versions in one document) as a possible
-  future v2.0 change, but cross-version analysis may belong in BillTrax while
+  future major break, but cross-version analysis may belong in BillTrax while
   DeltaTrack stays strictly two-at-a-time. That call is not made here, and when it
-  is, the question is the format's scope, not whether to keep JSON.
+  is, the question is the format's scope, not whether to keep JSON. (This was once
+  earmarked as the v2.0 break; 2.0 went to the `amounts` removal below.)
 
 ## Amendment — v1.4: `amount_entries` (2026-07-09, #86)
 
@@ -92,7 +93,8 @@ An additive minor bump (1.3 → 1.4) adds an optional `amount_entries` array on 
 change: self-describing base-amount changes with an explicit `kind`
 (`changed`/`added`/`removed`) and a nullable absent side, so whole-item additions
 and removals — not just changed-value pairs — are representable. The prior `amounts`
-field is deprecated as its `changed`-kind subset. Two decisions worth recording:
+field is deprecated as its `changed`-kind subset (and removed in v2.0 below). Two
+decisions worth recording:
 
 - **The contract stays lossless.** `amount_entries` carries every entry the pairing
   found, with no value-symmetric cancellation. On a renumbered list the word-diff
@@ -108,3 +110,35 @@ field is deprecated as its `changed`-kind subset. Two decisions worth recording:
   added/removed hunks (`amount_pairs=()`), so an XML demo could look done while PDF
   stayed silent on exactly the "what money moved" case. #86 closes that: PDF
   added/removed hunks now run `match_amounts` against the empty other side.
+
+## Amendment — v2.0: `amounts` removed (2026-07-23, #274)
+
+A breaking bump (1.4 → 2.0) removes `amounts` from each change object and makes
+`amount_entries` required in its place, leaving exactly one money field. The v1.4
+deprecation above kept both written, so every exported document carried two lists of
+dollar amounts, one of them structurally incomplete, with nothing in the document
+saying which to read. Three decisions worth recording:
+
+- **The contract is read by machines, so an ambiguous field is a correctness bug,
+  not untidiness.** The report ships prompts telling a staffer to upload `diff.json`
+  to an AI assistant. An assistant seeing two plausible money fields and no
+  authority marker can read the changed-only one and answer questions about a bill's
+  appropriations while seeing a fraction of them — confidently, with every newly
+  funded or wholly defunded program invisible, and those are usually the changes a
+  staffer most wants. Deprecation notes live in this repo's docs, not in the
+  artifact the consumer actually holds.
+- **Remove rather than document which one wins.** A note leaves the incomplete field
+  readable and the failure mode intact. Same reasoning retires the pre-1.4 reader
+  fallback: diff reports are generated on demand rather than stored, so there are no
+  older documents to stay compatible with, and keeping the fallback would have
+  preserved the incomplete read path it existed to serve.
+- **`amount_entries` becomes required, not merely sole.** Optional-and-sole still
+  leaves a consumer distinguishing "no money on this change" from "field absent". It
+  is now always present, empty when there is no money. The standing guard against
+  `amounts` returning is the schema's `additionalProperties: false` on a change
+  object, exercised against real produced output by the canonical schema-validation
+  tests.
+
+`ChangeView.amount_pairs`, an internal Python attribute of similar shape, is
+unrelated to the exported field and unchanged; it stays a changed-only in-memory
+view, now derived from the entries.
