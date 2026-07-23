@@ -186,6 +186,14 @@ ALLOWED_CORPUS_SKIPS = {
     "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
     "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
     "[113-hr-3547/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
+    # 118-hr-2882 v4 is a 4 KB engrossed Senate amendment that strikes and inserts a
+    # short procedural passage: it carries zero <appropriations-*> elements and no
+    # dollar amounts (verified on the committed fixture). A genuine property of the
+    # document, committed as the v4->v5 base for test_reconcile's Udall-move case.
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
 }
 
 # --- The CI slow suite (#288) ---------------------------------------------------
@@ -234,26 +242,9 @@ ALLOWED_CI_SLOW_SKIPS = {
     # assert in CI. Listed (not silently skipped) so the gap is enforced and countable:
     # a NEW skip fails the session, and committing any fixture below should delete its
     # line here. None of these are properties of the documents; they are absences.
-    "tests/test_pipeline_parity.py::test_pipeline_change_parity[115-hr-5895]": "115-hr-5895 v1/v2 not fetched locally",
-    "tests/test_pipeline_parity.py::test_pipeline_change_parity[117-hr-4502]": "117-hr-4502 v1/v2 not fetched locally",
-    "tests/test_pipeline_parity.py::test_pipeline_change_parity[118-hr-8774]": "118-hr-8774 v1/v2 not fetched locally",
-    "tests/test_financial_diff.py::TestCliFinancial::test_financial_flag_filters_output": "Real XML not present",
-    "tests/test_financial_diff.py::TestCliFinancial::test_no_financial_flag_no_filtering": "Real XML not present",
-    "tests/test_front_matter_parity.py::test_omnibus_leading_sections_group_under_front_matter": (
-        "117-hr-2471 enrolled omnibus not fetched locally"
-    ),
-    "tests/test_reconcile.py::TestReconcileIntegration::test_udall_sections_moved": (
-        "Test XML not found: bills/118-hr-2882/4_engrossed-amendment-senate.xml"
-    ),
-    "tests/test_structure_tree.py::test_money_conservation_no_overcount_bounded_drops[113-hr-83]": (
-        "bill corpus not present (fetch_bills.py)"
-    ),
     # Not slow-marked, so this one skips in the FAST tier, not the slow step — the reach
     # noted above. 115-hr-244 is present in a fetched local corpus but not committed, so
     # it is the same kind of gap as the entries around it.
-    "tests/test_bill_tree.py::TestFindBillBody::test_amendment_doc_115_hr_244_v5_produces_nodes": (
-        "Bill XML not available locally"
-    ),
     # The Leg-Branch fixture references five bills this repo does not commit, so the
     # parse floor cannot run. One entry standing for five gaps: the reason enumerates
     # them, so committing ANY of the five changes the message and reddens the session
@@ -275,6 +266,13 @@ ALLOWED_CI_SLOW_SKIPS = {
     # 113-hr-3547 v4 is a one-section shell (see the note in ALLOWED_CORPUS_SKIPS): it
     # genuinely carries no dollar amounts, so there is nothing for the recall case to
     # assert. This one will not go away by committing anything.
+    # 115-hr-244 v5 is an engrossed-amendment-house doc whose appropriations are not
+    # surfaced by the corpus gate's body extraction (the #11 amendment-doc class), so
+    # committing it would force allowlisting a known-bug skip. Left uncommitted; this
+    # bill_tree case asserts against the fetched copy locally and is declared here.
+    "tests/test_bill_tree.py::TestFindBillBody::test_amendment_doc_115_hr_244_v5_produces_nodes": (
+        "Bill XML not available locally"
+    ),
     "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
     "[113-hr-3547/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
 }
