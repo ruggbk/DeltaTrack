@@ -185,6 +185,13 @@ ALLOWED_CORPUS_SKIPS = {
 # fixture this repo does not commit, so each one is a coverage gap that should SHRINK as
 # #126 curates the corpus. Merging the two dicts would lose exactly that distinction and
 # make the temporary look permanent.
+#
+# NOTE on blast radius: this tuple is read by pytest_runtest_logreport, which runs in
+# EVERY session, not only the slow step that gates these modules. So listing a module
+# here also watches its NON-slow cases in the fast run. That is the intended reach (a
+# skip asserts nothing wherever it happens), but it means a module's whole skip surface
+# has to be declared, not just the part the slow step collects — see the
+# test_bill_tree.py entry below, which skips in the fast tier.
 CI_SLOW_MODULES = (
     "tests/test_pdf_corpus_smoke.py",
     "tests/test_bill_tree.py",
@@ -202,6 +209,7 @@ CI_SLOW_MODULES = (
     "tests/test_reconcile.py",
     "tests/test_pdf_watermark_recall.py",
     "tests/test_formatters_text_serializer.py",
+    "tests/test_validate_extraction.py",
 )
 
 ALLOWED_CI_SLOW_SKIPS = {
@@ -231,6 +239,29 @@ ALLOWED_CI_SLOW_SKIPS = {
     ),
     "tests/test_structure_tree.py::test_money_conservation_no_overcount_bounded_drops[113-hr-83]": (
         "bill corpus not present (fetch_bills.py)"
+    ),
+    # Not slow-marked, so this one skips in the FAST tier, not the slow step — the reach
+    # noted above. 115-hr-244 is present in a fetched local corpus but not committed, so
+    # it is the same kind of gap as the entries around it.
+    "tests/test_bill_tree.py::TestFindBillBody::test_amendment_doc_115_hr_244_v5_produces_nodes": (
+        "Bill XML not available locally"
+    ),
+    # The Leg-Branch fixture references five bills this repo does not commit, so the
+    # parse floor cannot run. One entry standing for five gaps: the reason enumerates
+    # them, so committing ANY of the five changes the message and reddens the session
+    # until this line is updated. That is the allowlist working as designed (the gap
+    # shrank, so the record of it must change), not a flake — see #126.
+    "tests/test_validate_extraction.py::TestLegBranchValidation::test_all_bills_loaded": (
+        "5 bill(s) not downloaded: ['113-hr-83', '114-hr-2029', '115-hr-1625', "
+        "'115-hr-244', '116-hr-1865']. Run fetch_bills.py download for each (see README)."
+    ),
+    # --- Environment-gated, not a fixture gap -------------------------------------
+    # A third flavour, called out so it is not mistaken for one of the absences above.
+    # This floor only asserts under REQUIRE_CORPUS=1 (a fetched corpus + network), which
+    # CI deliberately never sets, so it skips on every CI run by construction.
+    # Committing fixtures will NOT retire this line; only changing the gate would.
+    "tests/test_validate_extraction.py::TestLegBranchValidation::test_fixture_bills_present_when_required": (
+        "corpus not required (set REQUIRE_CORPUS=1 to enforce fixture completeness)"
     ),
     # --- Content property, not an absence ----------------------------------------
     # 113-hr-3547 v4 is a one-section shell (see the note in ALLOWED_CORPUS_SKIPS): it

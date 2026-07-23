@@ -172,6 +172,28 @@ def test_allowlisted_skips_name_real_corpus_gate_modules() -> None:
         assert nodeid.startswith(conftest.CORPUS_GATE_MODULES), f"stale allowlist entry: {nodeid}"
 
 
+def test_ci_slow_allowlisted_skips_name_watched_modules() -> None:
+    """Same guard for the #288 allowlist: every key targets a watched module.
+
+    A stranded key here fails CLOSED (its real skip becomes undeclared and reddens the
+    session), so this is not covering a fail-open channel — it names the cause at the
+    point of the rename instead of surfacing it as an unexplained ceiling hit later."""
+    for nodeid in conftest.ALLOWED_CI_SLOW_SKIPS:
+        assert nodeid.startswith(conftest.CI_SLOW_MODULES), f"stale allowlist entry: {nodeid}"
+
+
+def test_skip_watch_groups_do_not_overlap() -> None:
+    """No module belongs to two watch groups.
+
+    classify_corpus_skips ``break``s on the first group whose prefix matches, so a module
+    in both would be judged against one allowlist and silently exempt from the other."""
+    seen: set[str] = set()
+    for _label, modules, _allowed in conftest._SKIP_WATCH_GROUPS:
+        overlap = seen & set(modules)
+        assert not overlap, f"module watched by two ceilings: {sorted(overlap)}"
+        seen |= set(modules)
+
+
 # --- End-to-end hook behavior (#220) -------------------------------------------
 # The unit tests above cover classify_corpus_skips (a dict comprehension). The parts
 # that can fail OPEN — the skipped-outcome/xfail filter, the longrepr extraction, the
@@ -251,9 +273,19 @@ def test_ci_slow_ceiling_allows_a_declared_skip_end_to_end(tmp_path) -> None:
     nodeid, reason = next(
         (n, r) for n, r in sorted(conftest.ALLOWED_CI_SLOW_SKIPS.items()) if "[" not in n and "::" in n
     )
-    module, _, test_part = nodeid.rpartition("::")
-    body = f"import pytest\ndef {test_part}():\n    pytest.skip({reason!r})\n"
-    r = _run_child_session(tmp_path, body, xdist=False, module=module.split("/")[-1].split("::")[0])
+    # The nodeid may be module::test OR module::Class::test, and the class segment is
+    # part of the key — emitting a bare function for the latter produces a DIFFERENT
+    # nodeid, which then reads as an undeclared skip and reddens the child for the wrong
+    # reason (i.e. this test would fail while the ceiling was working correctly).
+    path, *parts = nodeid.split("::")
+    assert len(parts) in (1, 2), f"unhandled nodeid shape: {nodeid}"
+    skip = f"pytest.skip({reason!r})"
+    if len(parts) == 2:
+        cls, func = parts
+        body = f"import pytest\n\n\nclass {cls}:\n    def {func}(self):\n        {skip}\n"
+    else:
+        body = f"import pytest\n\n\ndef {parts[0]}():\n    {skip}\n"
+    r = _run_child_session(tmp_path, body, xdist=False, module=path.split("/")[-1])
     assert r.returncode == 0, f"declared skip wrongly reddened the session\n{r.stdout}\n{r.stderr}"
 
 

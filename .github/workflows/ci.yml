@@ -50,11 +50,17 @@ jobs:
         # The committee-report validation is @slow but self-contained: it runs against the
         # vendored govinfo sources (committee-report HTML + reported-bill XML), so it can gate
         # CI.
+        #
+        # test_validate_extraction.py runs WHOLE rather than by nodeid. The two names it
+        # used to be selected by are parametrized, so they already pulled in most of the
+        # module -- but seven cases (the TestLegBranchValidation class) were collected by
+        # no CI step. Five assert on a fresh clone; the other two skip, and are declared in
+        # ALLOWED_CI_SLOW_SKIPS so they are watched rather than silent. Selecting a module
+        # by nodeid is what let the gap open, so it is selected by path now.
         run: >
           uv run pytest -v -m slow
           tests/test_committee_report.py
-          tests/test_validate_extraction.py::test_report_amounts_recalled
-          tests/test_validate_extraction.py::test_fixture_is_senate_reported_bill
+          tests/test_validate_extraction.py
 
       - name: Run corpus correctness gates (committed manifest)
         if: ${{ !cancelled() }}
@@ -83,9 +89,13 @@ jobs:
         # RUN (the distinction #220 drew for the corpus gates). ~95 assertions, free.
         #
         # Their skips are not free: a skip asserts nothing, so every one is declared in
-        # ALLOWED_CI_SLOW_SKIPS (tests/conftest.py) and a NEW one fails the session. Each
-        # entry is a fixture this repo does not commit, i.e. a coverage gap #126 should
+        # ALLOWED_CI_SLOW_SKIPS (tests/conftest.py) and a NEW one fails the session. Most
+        # entries are a fixture this repo does not commit, i.e. a coverage gap #126 should
         # shrink — kept separate from the corpus content-skip allowlist for that reason.
+        #
+        # The allowlist covers a module's WHOLE skip surface, not just what this step
+        # collects: the hook runs in every session, so a non-slow case in one of these
+        # modules (test_bill_tree.py has one) is watched in the fast step too.
         #
         # Deliberately excluded: test_govinfo_corpus_parity.py (fetches BILLSTATUS live,
         # so it is not an offline gate) and test_financial_callout_whole_item.py (its
