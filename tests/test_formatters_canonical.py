@@ -608,6 +608,55 @@ def test_xml_canonical_validates_against_json_schema():
     jsonschema.validate(canonical, _load_schema())
 
 
+def _schema_probe_change() -> dict:
+    """One financial change, for the schema rejection tests below."""
+    return {
+        "change_type": "modified",
+        "display_path_old": ["A"],
+        "display_path_new": ["A"],
+        "old_text": "x",
+        "new_text": "y",
+        "section_number": "",
+        "financial": {"paired_amounts": [(100, 200)]},
+    }
+
+
+def test_schema_rejects_a_change_carrying_the_removed_amounts_field():
+    """The 2.0 guard, tested in the direction that can actually regress (#274).
+
+    Validating produced output only proves the producer is well behaved: if the
+    schema file silently lost `additionalProperties: false`, every other test here
+    would stay green while the field it removes became legal again. This asserts
+    the rejection itself.
+    """
+    jsonschema = pytest.importorskip("jsonschema")
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
+    canonical["changes"][0]["amounts"] = [{"old": 100, "new": 200}]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(canonical, _load_schema())
+
+
+def test_schema_requires_amount_entries_on_every_change():
+    """Counterpart to the above: `amount_entries` is required, not merely allowed.
+
+    Optional-and-sole would still leave a consumer distinguishing "no money on this
+    change" from "field absent"; the producer always writes it, so the schema says so.
+    """
+    jsonschema = pytest.importorskip("jsonschema")
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
+    del canonical["changes"][0]["amount_entries"]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(canonical, _load_schema())
+
+
+def test_schema_accepts_the_unmodified_producer_output():
+    """Both rejections above must come from the specific defect, not a schema that
+    rejects everything: the same probe document validates untouched."""
+    jsonschema = pytest.importorskip("jsonschema")
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
+    jsonschema.validate(canonical, _load_schema())
+
+
 def test_xml_full_text_default_null():
     canonical = xml_diff_to_canonical(_xml_diff_dict())
     assert canonical["full_text"] is None
@@ -751,6 +800,28 @@ def _modified_change_with_id(**overrides) -> dict:
 # v1/v2 readable full_text with element_id spans pointing at the readable body.
 _READABLE_FULL_TEXT = {"v1": "SEC. 1.  (a) The old", "v2": "SEC. 1.  (a) The new"}
 _READABLE_SPANS = {"v1": {"E1": (9, 20)}, "v2": {"E1": (9, 20)}}
+
+
+def test_reader_rejects_a_pre_2_0_document_instead_of_rendering_it_moneyless():
+    """A 1.x document parses fine here but has no `amount_entries` at all (#274).
+
+    Without this guard the reader degrades to "every change has no money" — silently,
+    which is exactly the failure the 2.0 break removes. The schema has always said
+    consumers reject unknown majors; nothing enforced it until now.
+    """
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
+    canonical["schema_version"] = "1.4"
+    canonical["changes"][0]["amounts"] = [{"old": 100, "new": 200}]
+    del canonical["changes"][0]["amount_entries"]
+    with pytest.raises(ValueError, match="schema_version"):
+        view_from_canonical(canonical)
+
+
+def test_reader_accepts_a_current_document():
+    """The guard must not reject everything: current output still reads, with money."""
+    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
+    assert canonical["schema_version"] == SCHEMA_VERSION
+    assert view_from_canonical(canonical).changes[0].amount_entries == ((100, 200, "changed"),)
 
 
 def test_card_prefers_readable_full_text_slice():

@@ -783,7 +783,34 @@ def _change_view_from_canonical(
     )
 
 
+def _reject_unknown_major(canonical: dict) -> None:
+    """Refuse a document from a schema major this reader cannot read (#274).
+
+    The contract says consumers reject unknown majors; before this, nothing did.
+    That mattered once v2.0 removed `amounts`: a 1.x document still parses here,
+    but every change reads as having no money at all — silently, which is the
+    failure mode the 2.0 break exists to remove, not one to leave on a side path.
+
+    A missing `schema_version` is accepted. Every in-repo caller builds the dict
+    in-process and hands it straight over (so does a hand-built test canonical);
+    a document that came from anywhere else has the field, because the schema
+    requires it at the top level. The guard is aimed at foreign documents.
+    """
+    version = canonical.get("schema_version")
+    if version is None:
+        return
+    major = str(version).split(".", 1)[0]
+    if major != SCHEMA_VERSION.split(".", 1)[0]:
+        raise ValueError(
+            f"canonical diff schema_version {version!r} is not readable by this "
+            f"version of DeltaTrack (expects {SCHEMA_VERSION.split('.', 1)[0]}.x). "
+            "A pre-2.0 document carries the removed `amounts` field, which this "
+            "reader ignores, so its money would render as empty rather than wrong-looking."
+        )
+
+
 def view_from_canonical(canonical: dict) -> DiffView:
+    _reject_unknown_major(canonical)
     source = canonical["versions"]["v1"]["source"]
     full_text = canonical.get("full_text")
     # The join reads only THIS canonical's tree — on PDF the caller also builds a

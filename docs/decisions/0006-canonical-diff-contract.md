@@ -129,15 +129,32 @@ saying which to read. Three decisions worth recording:
   artifact the consumer actually holds.
 - **Remove rather than document which one wins.** A note leaves the incomplete field
   readable and the failure mode intact. Same reasoning retires the pre-1.4 reader
-  fallback: diff reports are generated on demand rather than stored, so there are no
-  older documents to stay compatible with, and keeping the fallback would have
-  preserved the incomplete read path it existed to serve.
+  fallback: nothing in this codebase ever re-reads a stored diff document — every
+  caller builds the canonical in-process and views it immediately — so there is no
+  older document on any live path, and keeping the fallback would have preserved the
+  incomplete read path it existed to serve. (Reports *are* written to disk, and the
+  export button hands the user a `diff.json`; the claim is about what this code
+  reads back, not about what exists in the world.)
 - **`amount_entries` becomes required, not merely sole.** Optional-and-sole still
   leaves a consumer distinguishing "no money on this change" from "field absent". It
-  is now always present, empty when there is no money. The standing guard against
+  is now always present, empty when there is no money.
+- **The guard is tested in the direction that can regress.** The standing block on
   `amounts` returning is the schema's `additionalProperties: false` on a change
-  object, exercised against real produced output by the canonical schema-validation
-  tests.
+  object, plus `amount_entries` being required. Validating *produced output* against
+  the schema — which is what the existing tests do — only ever proves the producer is
+  well behaved: if the schema file itself lost either rule, every one of those tests
+  would stay green while the removed field became legal again. So the rejection
+  direction is asserted directly (a change carrying `amounts`, and one missing
+  `amount_entries`, must both fail validation), alongside a positive case so the
+  probe cannot pass by rejecting everything.
+- **The reader rejects unknown majors, which is new.** The contract has said
+  consumers reject unknown majors since v1.0, but no consumer implemented it. That
+  was harmless while every field was additive; at a removal it stops being harmless,
+  because a 1.x document still parses and simply reads as having no money anywhere.
+  `view_from_canonical` now refuses a non-2.x `schema_version` rather than degrading
+  silently. No in-repo path feeds it a foreign document today — every caller builds
+  the canonical in-process — so this guards the seam a future stored-diff or
+  re-upload feature would open, and turns a stated rule into an enforced one.
 
 `ChangeView.amount_pairs`, an internal Python attribute of similar shape, is
 unrelated to the exported field and unchanged; it stays a changed-only in-memory
