@@ -17,16 +17,19 @@ htmlcov/
 # meant every committed fixture needed a hand-written re-admit line here; that list had
 # grown to 80 rules, duplicated tests/corpus_manifest.toml, and failed silently when a
 # contributor forgot an entry.
-# No trailing slash (#319): a trailing slash matches only a real directory, and this is
+# No TRAILING slash (#319): a trailing slash matches only a real directory, and this is
 # commonly SYMLINKED in from another checkout to reuse a downloaded corpus. A symlink is
 # not a directory to git, so `bills/` would leave the link untracked and offered for
-# commit — recording an absolute path from one developer's machine. Matching without the
-# slash covers both.
-bills
+# commit — recording an absolute path from one developer's machine.
+# LEADING slash, though: a pattern with no slash at all is unanchored and matches a path
+# component at ANY depth, so a bare `bills` would silently swallow a future `docs/bills/`
+# or `webapp/bills/` — reintroducing the silent-`git add` failure #308 exists to remove,
+# just somewhere else. `/bills` is anchored to the repo root AND still matches a symlink.
+/bills
 # govinfo BILLS bulk-text downloads + staging (fetch_bill_text_archives.py); large,
-# re-fetchable. Same no-trailing-slash reasoning as above (#319).
-bills_bulk_text
-bills_govinfo_staging
+# re-fetchable. Same anchoring reasoning as above (#319, #308).
+/bills_bulk_text
+/bills_govinfo_staging
 reports/*
 !reports/.gitkeep
 plans/

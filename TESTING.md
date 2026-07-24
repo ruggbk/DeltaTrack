@@ -257,16 +257,20 @@ why, and treat adding one as recording a gap rather than clearing an error.
 ### Why a local run can collect more than CI
 
 Most watched modules parametrize over the manifest, so their case list is
-identical everywhere. Two do not: `test_pdf_corpus_smoke` and
-`test_pdf_xml_amount_recall` sweep whatever pairs exist under `bills/`, so a
-machine with a fetched corpus collects many more cases than CI ever sees.
+identical everywhere. Two sweep instead: `test_pdf_corpus_smoke` and
+`test_pdf_xml_amount_recall` iterate whatever version pairs the bill trees hold.
+Since #308 they sweep `tests/corpus/` by default, so an ordinary local run, a
+worktree and CI now collect the *same* cases. Only `CORPUS_SWEEP=1` widens them to
+`bills/` as well, and that mode disables the skip ceiling outright.
 
-Those extra cases are excluded from the skip ceiling (`is_watched_case` in
-`tests/conftest.py`). No allowlist calibrated on the committed corpus could name
-a case that exists only on one machine, and a case CI cannot collect cannot
-regress in CI -- so watching them would turn a full local run red while CI was
-green, on a branch where nothing is wrong. Cases the committed corpus *can*
-produce stay watched, in those modules as in every other.
+Cases the committed corpus cannot produce are excluded from the ceiling anyway
+(`is_watched_case` in `tests/conftest.py`): no allowlist calibrated on the
+committed corpus could name a case that exists only on one machine, and a case CI
+cannot collect cannot regress in CI -- so watching them would turn a full local run
+red while CI was green, on a branch where nothing is wrong. With both sweeping
+suites now pinned to the fixture tree, that carve-out exempts nothing in practice;
+it is kept so a future sweeping module inherits the right behaviour rather than
+having to rediscover it.
 
 ### Adding a corpus fixture
 
@@ -323,9 +327,10 @@ check that runs everywhere, and CI validates all seven of the fixture's bills
 instead of the two that happened to be committed.
 
 Everything else in the slow group asserts on a clean clone, against
-`tests/corpus/`. A download never changes what those gates assert; it only widens
-the case list of the two sweeping suites (`test_pdf_corpus_smoke`,
-`test_pdf_xml_amount_recall`) and of anything run under `CORPUS_SWEEP=1`.
+`tests/corpus/`. A download never changes what those gates assert, and since #308
+it does not change what they *collect* either: the two sweeping suites
+(`test_pdf_corpus_smoke`, `test_pdf_xml_amount_recall`) read `tests/corpus/` like
+everything else. A download only widens what `CORPUS_SWEEP=1` reaches.
 
 When you do download, the PDF suites need each bill's PDF as well as its XML;
 pass `--format both`, e.g.
@@ -378,9 +383,10 @@ uv run python scripts/serve_compare.py path/to/bill-dir --port 8765 --no-browser
 ```
 
 With no `--v1`/`--v2` it picks the two lowest-numbered versions that have both a
-`.pdf` and an `.xml`, so the bill must be fetched with `--format both` (the
-vendored `bills/` corpus is XML-only). Rendered HTML goes to a temp dir, nothing
-committed. The panes reflect the current checkout, so run it on the branch whose
+`.pdf` and an `.xml`. A bare bill id resolves against the committed fixtures in
+`tests/corpus/`, many of which carry both formats; to view a bill you downloaded
+into `bills/` instead, pass its directory path (and fetch it with `--format
+both`). Rendered HTML goes to a temp dir, nothing committed. The panes reflect the current checkout, so run it on the branch whose
 diff output you're inspecting. This is a manual debugging aid, not a test.
 
 ## Measuring coverage

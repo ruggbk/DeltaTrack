@@ -48,16 +48,35 @@ def fixture_path(bill_id: str, filename: str) -> Path:
 def resolve_bill_file(bill_id: str, filename: str) -> Path:
     """The committed fixture if there is one, else the downloaded copy.
 
-    For the one consumer whose inputs are legitimately mixed: the committee-report
-    validation fixtures reference nineteen bill versions, fourteen committed and five
-    still download-only (#278). Returns the ``bills/`` path when no fixture exists, so
-    the caller's own ``.exists()`` check reports on the file it would actually read.
+    For the consumers whose inputs are legitimately mixed at the *version* level: a bill
+    can be committed for the stages a gate pins and download-only for the rest, e.g.
+    ``115-hr-5895`` (stages 1/2/4/5 committed, stage 3 not) and ``115-hr-244`` (enrolled
+    committed, its engrossed-amendment doc deliberately withheld per #11/#322). Returns
+    the ``bills/`` path when no fixture exists, so the caller's own ``.exists()`` check
+    reports on the file it would actually read — every such caller skips when absent.
+
+    Prefer :func:`fixture_path` anywhere the file *is* committed: this fallback resolves
+    on a machine that downloaded the bill and is simply absent in CI, which is the
+    fail-open shape ADR 0015 exists to remove. ``tests/test_fixture_layout.py`` cannot
+    see through this function, so reaching for it is a deliberate choice.
     """
     committed = fixture_path(bill_id, filename)
     return committed if committed.exists() else DOWNLOADS_DIR / bill_id / filename
 
 
-def sweep_bill_dirs() -> list[Path]:
+def bill_trees(root: Path | None = None) -> tuple[Path, Path]:
+    """``(fixtures, downloads)`` for a checkout root; this checkout when ``root`` is None.
+
+    The ``root`` form exists for cross-checkout probes (``--repo /path/to/main``), which
+    must not respell either directory name themselves — that is the duplication #308
+    removed.
+    """
+    if root is None:
+        return FIXTURES_DIR, DOWNLOADS_DIR
+    return root / "tests" / "corpus", root / "bills"
+
+
+def sweep_bill_dirs(root: Path | None = None) -> list[Path]:
     """Every bill directory in either tree, fixtures first, one entry per bill id.
 
     Backs ``CORPUS_SWEEP=1`` (the opt-in, non-CI exploratory mode). It must span both
@@ -68,10 +87,10 @@ def sweep_bill_dirs() -> list[Path]:
     committed bytes.
     """
     by_id: dict[str, Path] = {}
-    for root in (FIXTURES_DIR, DOWNLOADS_DIR):
-        if not root.is_dir():
+    for tree in bill_trees(root):
+        if not tree.is_dir():
             continue
-        for d in sorted(root.iterdir()):
+        for d in sorted(tree.iterdir()):
             if d.is_dir() and d.name not in by_id:
                 by_id[d.name] = d
     return [by_id[k] for k in sorted(by_id)]

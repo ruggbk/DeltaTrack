@@ -4,7 +4,8 @@ Pulls each labeled pair's exact body text straight from the real corpus diffs so
 frozen fixture text is byte-identical to what the matcher sees, then freezes text + the
 human SAME/DIFFERENT labels + the current-threshold finding (which pairs today's 0.40/0.60
 cutoffs misclassify). The committed JSON is self-contained; this script only exists to
-re-freeze it if the corpus text or the threshold constants change. Requires bills/.
+re-freeze it if the corpus text or the threshold constants change. Reads the committed
+fixtures under tests/corpus/, so it needs no download.
 
 The five human-ruled dead-zone pairs and their labels come from DeltaTrack #8 (Will's
 rulings, 2026-07-10); the four clear-cut anchors are mined from the corpus to keep
@@ -25,6 +26,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
 from bill_tree import normalize_bill  # noqa: E402
+from corpus_paths import fixture_path  # noqa: E402
 from diff_bill import (  # noqa: E402
     _MOVE_THRESHOLD,
     _SIMILARITY_THRESHOLD,
@@ -33,12 +35,11 @@ from diff_bill import (  # noqa: E402
     diff_bills,
 )
 
-_BILLS = _ROOT / "bills"
 _OUT = _ROOT / "test_data" / "similarity_labels.json"
 
 
 def _diff(bill: str, v_old: str, v_new: str):
-    return diff_bills(normalize_bill(_BILLS / bill / v_old), normalize_bill(_BILLS / bill / v_new))
+    return diff_bills(normalize_bill(fixture_path(bill, v_old)), normalize_bill(fixture_path(bill, v_new)))
 
 
 def _find(d, match_path, change_type):

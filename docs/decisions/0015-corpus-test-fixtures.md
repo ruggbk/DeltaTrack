@@ -230,18 +230,36 @@ Consequences worth recording:
   reason and with the same effect: adding a golden required an ignore edit. It is now
   tracked by default with two local-only artifacts listed.
 - **`corpus_paths.py` is the single home for the layout**, so a future move is one edit
-  rather than thirty. `resolve_bill_file` is the one concession to a genuinely mixed
-  consumer: the committee-report validation fixtures reference fourteen committed bills
-  and five that remain download-only until [#278](https://github.com/AgoraDMV/DeltaTrack/issues/278).
+  rather than thirty. `resolve_bill_file` is the concession to consumers whose inputs are
+  mixed at the *version* level — a bill committed for the stages a gate pins and
+  download-only for the rest, e.g. `115-hr-5895` (stage 3 not committed) and `115-hr-244`
+  (enrolled committed, engrossed-amendment doc withheld per #11/#322). It is a deliberate
+  fallback into `bills/`, and the layout guard cannot see through it, so prefer
+  `fixture_path` wherever the file is committed.
 - **Three new silent-failure channels open, and are closed by
   `tests/test_fixture_layout.py`**: a committed fixture addressed through `bills/`
   (resolves on a machine that downloaded it, absent in CI, where the skip-if-absent
   guard keeps the run green); a `CORPUS_SWEEP` that stops spanning both trees (nothing
   asserts its case count, so narrowing it loses coverage silently); and a fixture
   written into `tests/corpus/` but never staged (the manifest floor covers manifested
-  bills, but the golden modules pin files the manifest does not name). Each test proves
-  it can fire against a synthetic bad input.
+  bills, but the golden modules pin files the manifest does not name). Each rule proves
+  it can fire against a synthetic bad input, except the tracking one, whose fault has to
+  be injected on disk (an unstaged file) and so is verified by hand.
+- **The first channel has two spellings, and the composed one is the dangerous half.**
+  A bill id beside the word `bills` is greppable per bill; a download root bound once
+  and combined with a bill id hundreds of lines away (`_BILLS = _ROOT / "bills"`) is not,
+  because the two never appear together. `scripts/build_similarity_labels.py` came
+  through the move in exactly that shape and stopped resolving — caught in review of
+  #345, not by the first version of the guard. Hence a second rule: outside
+  `corpus_paths.py` and the fetchers, no module spells the download root at all.
+- **The judgement is per version, not per bill.** A bill-level allowlist cannot express
+  a partly committed bill, so exempting `115-hr-244` (for its withheld amendment doc)
+  silently exempted its committed enrolled text too. The guard derives the committed set
+  from the tree instead of keeping a list, which removes both the drift and the hole.
 - **Repository size is unchanged.** The files move; git already stores their blobs, and
   history keeps them at the old paths regardless. The size bar for future additions
   above still applies unchanged.
-- **The `.gitignore` shrinks from 191 lines to 66**, and stops growing with each fixture.
+- **The `.gitignore` loses its ~80-rule re-admit list**, roughly a two-thirds cut, and
+  stops growing with each fixture. (Deliberately not a line count: the file keeps
+  changing for unrelated reasons, and a number here would be wrong within a release
+  while still reading as measured.)

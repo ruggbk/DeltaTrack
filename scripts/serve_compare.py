@@ -46,15 +46,19 @@ from formatters.text_serializer import build_xml_full_text  # noqa: E402
 from shared.version_stems import label_from_stem, version_number_from_stem  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-BILLS = FIXTURES_DIR
 
 
 def _resolve_bill_dir(arg: str) -> Path:
-    """Accept either a path to a bill dir or a name under ``bills/``."""
+    """Accept either a path to a bill dir, or a bill id among the committed fixtures.
+
+    A bare id resolves against ``tests/corpus/`` only (#308). To view a bill you have
+    downloaded into ``bills/``, pass its directory path -- that tree is scratch, so a
+    bare id must not silently resolve to a copy only your machine has.
+    """
     direct = Path(arg)
     if direct.is_dir():
         return direct
-    under_bills = BILLS / arg
+    under_bills = FIXTURES_DIR / arg
     if under_bills.is_dir():
         return under_bills
     raise SystemExit(f"Bill directory not found: tried ./{arg} and {under_bills}")

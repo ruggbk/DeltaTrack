@@ -8,15 +8,24 @@ by raising:
 
 1. **A stale ``bills/<id>`` path for a committed fixture.** It resolves on a developer
    machine that has downloaded that bill, and is simply absent in CI — where the test
-   skips (most of these guards are skip-if-absent) and the run stays green.
+   skips (most of these guards are skip-if-absent) and the run stays green. This comes
+   in two spellings, and the second is the one that bites: the bill id beside the word
+   ``bills``, and a download ROOT bound once and composed with a bill id far away
+   (``_BILLS = _ROOT / "bills"``). Only the first is greppable per bill, so each has its
+   own rule.
 2. **A sweep that no longer spans both trees.** ``CORPUS_SWEEP=1`` is exploratory, so
    nothing asserts its case count; narrowing it to one tree loses coverage silently.
 3. **A fixture written into ``tests/corpus/`` but never staged.** The manifest floor
    catches manifested bills; the golden modules pin files the manifest does not name.
 
-Each test below therefore also proves it can fire, against a synthetic bad input — a
-layout gate that has never once gone red cannot distinguish "the layout is right" from
-"the check is broken".
+The judgement throughout is per VERSION, not per bill: a bill is routinely committed for
+the stages a gate pins and download-only for the rest, so a bill-level waiver silently
+waives its committed siblings too.
+
+Each rule below also proves it can fire, against a synthetic bad input — a layout gate
+that has never once gone red cannot distinguish "the layout is right" from "the check is
+broken". ``test_every_fixture_file_is_tracked_by_git`` is the exception: its fault has to
+be injected on disk (an unstaged file), so it is verified by hand rather than in-process.
 """
 
 from __future__ import annotations
@@ -49,26 +58,38 @@ _DOWNLOAD_TIER_FILES = {
     "tests/test_fixture_layout.py",
 }
 
-# Bill ids referenced from tests but deliberately NOT committed. A path under bills/ is
-# correct for these; the tests that use them skip when the bill is not downloaded.
-# Keep the reason with the id — an entry here records a gate that cannot run in CI.
-_DOWNLOAD_ONLY_BILLS = {
-    # Amendment-doc class whose appropriations tags the body extraction does not surface
-    # (#11). Withheld rather than allowlisted as a content-skip, per #330.
-    "115-hr-244",
-    # Cross-bill recall probes over large omnibus prints; too big to commit for the value.
-    "116-hr-133",
-    "117-hr-4432",
-    "118-hr-4820",
-}
+_BILL_ID = r"\d{3}-[a-z]+-\d+"
 
 # Both spellings of "reach into the download tree for this bill": the literal path, and
 # the constant. The second matters more now — DOWNLOADS_DIR is the form a contributor
-# will reach for, and it reads as deliberate even when it is a mistake.
+# will reach for, and it reads as deliberate even when it is a mistake. The filename is
+# captured when present, because the question is per-VERSION (see committed_fixture_refs).
 _BILLS_PATH_RES = (
-    re.compile(r"""bills/(\d{3}-[a-z]+-\d+)"""),
-    re.compile(r"""DOWNLOADS_DIR\s*/\s*["'](\d{3}-[a-z]+-\d+)["']"""),
+    re.compile(rf"""bills/({_BILL_ID})(?:/([\w.\-]+))?"""),
+    re.compile(rf"""DOWNLOADS_DIR\s*/\s*["']({_BILL_ID})["'](?:\s*/\s*["']([\w.\-]+)["'])?"""),
 )
+
+# Spelling the download ROOT rather than a bill under it: ``_BILLS = _ROOT / "bills"``,
+# ``Path("bills")``, ``(repo / "bills").glob(...)``. This is the shape that composes a
+# path one segment at a time, so the per-bill patterns above cannot see it — and it is
+# how scripts/build_similarity_labels.py silently stopped resolving after the #308 move.
+# corpus_paths.py is the one home for these names; everything else imports from it.
+_DOWNLOAD_ROOT_LITERAL = re.compile(r"""(?:Path\(\s*["']bills["']\s*\)|/\s*["']bills["'])""")
+
+
+def committed_fixture_refs() -> set[str]:
+    """``"<bill id>/<filename>"`` for every file committed under ``tests/corpus/``.
+
+    Derived from the tree rather than from a hand-kept exemption list. An id-granular
+    list cannot express the real shape of the corpus, where a bill is routinely committed
+    for the stages a gate pins and download-only for the rest (``115-hr-244`` is
+    manifested for its enrolled text while its engrossed-amendment doc is deliberately
+    withheld, #11/#322) — so an id-level waiver for that bill silently waives its
+    committed fixture too, which is failure mode 1 exactly.
+    """
+    if not FIXTURES_DIR.is_dir():
+        return set()
+    return {f"{f.parent.name}/{f.name}" for f in FIXTURES_DIR.rglob("*") if f.is_file()}
 
 
 def _python_sources() -> list[Path]:
@@ -78,21 +99,67 @@ def _python_sources() -> list[Path]:
     return files
 
 
-def find_stale_fixture_paths(sources: dict[str, str], download_only: set[str]) -> dict[str, list[str]]:
-    """``{relative path: [offending bill ids]}`` for sources that reach into ``bills/``
-    for a bill that is not download-only.
+def find_stale_fixture_paths(sources: dict[str, str], committed: set[str]) -> dict[str, list[str]]:
+    """``{relative path: [offending "<id>/<file>" refs]}`` for sources that address a
+    COMMITTED fixture through ``bills/``.
+
+    ``committed`` is the set :func:`committed_fixture_refs` returns. The judgement is
+    per version, not per bill: ``bills/115-hr-244/5_engrossed-amendment-house.xml`` is
+    correct (that doc is deliberately withheld) while
+    ``bills/115-hr-244/6_enrolled-bill.xml`` is an offence (that one is committed).
+
+    A reference naming a bill but no file is ambiguous, so it fails CLOSED whenever the
+    bill has any committed file at all.
 
     Takes its input as a dict so the rule is testable on synthetic sources rather than
     only on the tree it polices.
     """
+    committed_ids = {ref.split("/", 1)[0] for ref in committed}
     offenders: dict[str, list[str]] = {}
     for rel, text in sources.items():
         if rel in _DOWNLOAD_TIER_FILES:
             continue
-        found = {m for rx in _BILLS_PATH_RES for m in rx.findall(text)}
-        bad = sorted(m for m in found if m not in download_only)
+        bad: set[str] = set()
+        for rx in _BILLS_PATH_RES:
+            for bill, filename in rx.findall(text):
+                if filename:
+                    if f"{bill}/{filename}" in committed:
+                        bad.add(f"{bill}/{filename}")
+                elif bill in committed_ids:
+                    bad.add(bill)
         if bad:
-            offenders[rel] = bad
+            offenders[rel] = sorted(bad)
+    return offenders
+
+
+def find_download_root_literals(sources: dict[str, str]) -> dict[str, list[int]]:
+    """``{relative path: [line numbers]}`` for sources that spell the download root.
+
+    Catches the composed form the per-bill patterns structurally cannot see, because the
+    bill id never appears beside the word ``bills``::
+
+        _BILLS = _ROOT / "bills"
+        normalize_bill(_BILLS / bill / version)   # ...300 lines later
+
+    That is not hypothetical: it is how ``scripts/build_similarity_labels.py`` came
+    through the #308 move still pointing at the download tree, raising FileNotFoundError
+    on four bills that had just become committed fixtures. ``corpus_paths`` is the one
+    home for these names, so everything outside it imports rather than respells.
+
+    Lines mentioning ``tmp_path`` are skipped: a synthetic ``tmp_path / "bills"`` tree in
+    a test is not the real directory.
+    """
+    offenders: dict[str, list[int]] = {}
+    for rel, text in sources.items():
+        if rel in _DOWNLOAD_TIER_FILES or rel == "corpus_paths.py":
+            continue
+        lines = [
+            n
+            for n, line in enumerate(text.splitlines(), 1)
+            if _DOWNLOAD_ROOT_LITERAL.search(line) and "tmp_path" not in line
+        ]
+        if lines:
+            offenders[rel] = lines
     return offenders
 
 
@@ -104,35 +171,103 @@ def test_no_source_reaches_into_bills_for_a_committed_fixture() -> None:
     reports green — the exact fail-open shape ADR 0015 exists to remove.
     """
     sources = {str(f.relative_to(PROJECT_ROOT)): f.read_text() for f in _python_sources()}
-    offenders = find_stale_fixture_paths(sources, _DOWNLOAD_ONLY_BILLS)
+    offenders = find_stale_fixture_paths(sources, committed_fixture_refs())
     assert not offenders, (
-        f"{len(offenders)} source file(s) address a bill through bills/ that is not "
-        f"download-only: {offenders}. Committed fixtures live in tests/corpus/ — use "
-        "corpus_paths.fixture_path(). If the bill genuinely is not committed, add its id "
-        "to _DOWNLOAD_ONLY_BILLS here with the reason it stays downloaded."
+        f"{len(offenders)} source file(s) address a COMMITTED fixture through bills/: "
+        f"{offenders}. Committed fixtures live in tests/corpus/ — use "
+        "corpus_paths.fixture_path(). For a version that genuinely is not committed, "
+        "bills/ is correct, or use corpus_paths.resolve_bill_file()."
+    )
+
+
+def test_no_source_spells_the_download_root_itself() -> None:
+    """The composed form of failure mode 1, which the per-bill patterns cannot see."""
+    sources = {str(f.relative_to(PROJECT_ROOT)): f.read_text() for f in _python_sources()}
+    offenders = find_download_root_literals(sources)
+    assert not offenders, (
+        f"{len(offenders)} source file(s) spell the download directory themselves: "
+        f"{offenders}. Import DOWNLOADS_DIR (or better, FIXTURES_DIR / fixture_path / "
+        "sweep_bill_dirs) from corpus_paths, so a future move is one edit and this "
+        "guard can see which tree you meant."
     )
 
 
 def test_stale_fixture_path_rule_can_fire() -> None:
-    """The rule above, proven against a known-bad source (and a known-good one)."""
+    """The rule above, proven against known-bad sources (and known-good ones)."""
+    committed = {"118-hr-4366/1_reported-in-house.xml", "115-hr-244/6_enrolled-bill.xml"}
+
     bad = {"tests/test_thing.py": 'X = Path("bills/118-hr-4366/1_reported-in-house.xml")'}
-    assert find_stale_fixture_paths(bad, _DOWNLOAD_ONLY_BILLS) == {"tests/test_thing.py": ["118-hr-4366"]}
+    expect = {"tests/test_thing.py": ["118-hr-4366/1_reported-in-house.xml"]}
+    assert find_stale_fixture_paths(bad, committed) == expect
 
     good = {"tests/test_thing.py": 'X = fixture_path("118-hr-4366", "1_reported-in-house.xml")'}
-    assert find_stale_fixture_paths(good, _DOWNLOAD_ONLY_BILLS) == {}
+    assert find_stale_fixture_paths(good, committed) == {}
 
-    # A download-only bill under bills/ is correct, not an offence.
+    # A download-only VERSION under bills/ is correct, even though its bill is committed
+    # for another stage. The id-granular rule this replaced could not express that, and
+    # waived the committed sibling along with it.
     allowed = {"tests/test_thing.py": 'X = DOWNLOADS_DIR / "115-hr-244" / "5_engrossed-amendment-house.xml"'}
-    assert find_stale_fixture_paths(allowed, _DOWNLOAD_ONLY_BILLS) == {}
+    assert find_stale_fixture_paths(allowed, committed) == {}
 
-    # ...but the same constant pointed at a COMMITTED bill is caught, which the literal
-    # path pattern alone would miss.
-    via_const = {"tests/test_thing.py": 'X = DOWNLOADS_DIR / "118-hr-4366" / "6_enrolled-bill.xml"'}
-    assert find_stale_fixture_paths(via_const, _DOWNLOAD_ONLY_BILLS) == {"tests/test_thing.py": ["118-hr-4366"]}
+    # ...while the COMMITTED version of that same bill is caught.
+    sibling = {"tests/test_thing.py": 'X = DOWNLOADS_DIR / "115-hr-244" / "6_enrolled-bill.xml"'}
+    assert find_stale_fixture_paths(sibling, committed) == {"tests/test_thing.py": ["115-hr-244/6_enrolled-bill.xml"]}
+
+    # A bare bill directory is ambiguous, so it fails closed when anything is committed.
+    bare = {"tests/test_thing.py": 'X = Path("bills/118-hr-4366")'}
+    assert find_stale_fixture_paths(bare, committed) == {"tests/test_thing.py": ["118-hr-4366"]}
+
+    # A bill with nothing committed is free to live under bills/.
+    uncommitted = {"tests/test_thing.py": 'X = Path("bills/116-hr-133/1_introduced-in-house.xml")'}
+    assert find_stale_fixture_paths(uncommitted, committed) == {}
 
     # An exempt module may name bills/ freely.
     exempt = {"fetch_bills.py": 'default = Path("bills/118-hr-4366")'}
-    assert find_stale_fixture_paths(exempt, _DOWNLOAD_ONLY_BILLS) == {}
+    assert find_stale_fixture_paths(exempt, committed) == {}
+
+
+def test_download_root_literal_rule_can_fire() -> None:
+    """The composed-path rule, proven on the exact shape that escaped it (#345 review)."""
+    composed = {"scripts/thing.py": '_BILLS = _ROOT / "bills"\nX = _BILLS / bill / version'}
+    assert find_download_root_literals(composed) == {"scripts/thing.py": [1]}
+
+    glob_form = {"scripts/thing.py": 'for x in (repo / "bills").glob("*/*.xml"):\n    pass'}
+    assert find_download_root_literals(glob_form) == {"scripts/thing.py": [1]}
+
+    bare_path = {"scripts/thing.py": 'D = Path("bills")'}
+    assert find_download_root_literals(bare_path) == {"scripts/thing.py": [1]}
+
+    # A synthetic tree in a temp dir is not the real download directory.
+    synthetic = {"tests/test_thing.py": 'downloads = tmp_path / "bills"'}
+    assert find_download_root_literals(synthetic) == {}
+
+    # Importing the constant is the sanctioned form.
+    good = {"scripts/thing.py": "from corpus_paths import DOWNLOADS_DIR\nX = DOWNLOADS_DIR / bill"}
+    assert find_download_root_literals(good) == {}
+
+    # corpus_paths.py itself defines them, and the fetchers own the directory.
+    assert find_download_root_literals({"corpus_paths.py": 'DOWNLOADS_DIR = PROJECT_ROOT / "bills"'}) == {}
+    assert find_download_root_literals({"fetch_bills.py": 'default=Path("bills")'}) == {}
+
+
+def test_download_only_versions_are_genuinely_uncommitted() -> None:
+    """The rule's own input, checked: every ``bills/`` reference the guard tolerates must
+    name a version that really is absent from ``tests/corpus/``.
+
+    Without this, the guard could be satisfied by a committed set that quietly shrank.
+    """
+    sources = {str(f.relative_to(PROJECT_ROOT)): f.read_text() for f in _python_sources()}
+    committed = committed_fixture_refs()
+    tolerated: set[str] = set()
+    for rel, text in sources.items():
+        if rel in _DOWNLOAD_TIER_FILES:
+            continue
+        for rx in _BILLS_PATH_RES:
+            for bill, filename in rx.findall(text):
+                if filename:
+                    tolerated.add(f"{bill}/{filename}")
+    still_committed = sorted(ref for ref in tolerated if ref in committed)
+    assert not still_committed, f"tolerated bills/ refs that ARE committed: {still_committed}"
 
 
 def test_sweep_spans_both_trees() -> None:
@@ -190,14 +325,21 @@ def test_fixture_tree_is_not_gitignored() -> None:
     """
     probe = FIXTURES_DIR / "118-hr-4366" / "1_reported-in-house.xml"
     assert probe.exists(), "precondition: the probed fixture exists"
+
+    # git check-ignore answers 0 (ignored) / 1 (not ignored), but 128 for "not a git
+    # work tree" — which tests run from an unpacked sdist would hit. That is git
+    # declining to answer, not a verdict, so skip as the tracking gate above does
+    # rather than reporting a layout failure the checkout cannot possibly have.
+    ignored = subprocess.run(
+        ["git", "-C", str(PROJECT_ROOT), "check-ignore", "-q", str(DOWNLOADS_DIR / "118-hr-4366" / "x.xml")],
+        capture_output=True,
+    )
+    if ignored.returncode not in (0, 1):
+        pytest.skip("not a git work tree — git cannot answer whether a path is ignored")
+    assert ignored.returncode == 0, "probe is broken: bills/ should be ignored, so a real result is meaningful"
+
     result = subprocess.run(
         ["git", "-C", str(PROJECT_ROOT), "check-ignore", "-q", str(probe)],
         capture_output=True,
     )
     assert result.returncode == 1, f"{probe} is gitignored — committed fixtures must be storable"
-
-    ignored = subprocess.run(
-        ["git", "-C", str(PROJECT_ROOT), "check-ignore", "-q", str(DOWNLOADS_DIR / "118-hr-4366" / "x.xml")],
-        capture_output=True,
-    )
-    assert ignored.returncode == 0, "probe is broken: bills/ should be ignored, so a real result is meaningful"

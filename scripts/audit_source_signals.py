@@ -1,8 +1,10 @@
 """Audit which signals in the source PDFs and XMLs we could use but don't.
 
 Reproduces the corpus measurements behind docs/source-signal-inventory.md. This is
-an on-demand audit probe, not a CI gate: it needs the full fetched corpus under
-``bills/`` (see scripts/fetch_test_assets.py), which a clean clone does not carry.
+an on-demand audit probe, not a CI gate. It reads BOTH bill trees (#308): the committed
+fixtures in ``tests/corpus/``, which a clean clone carries, plus whatever that checkout
+has downloaded into ``bills/``. The published numbers came from a full fetched corpus,
+so a clean clone reproduces the shape but smaller counts.
 
 Run against a checkout that has the corpus + deps:
 
@@ -22,6 +24,22 @@ import functools
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
+
+from corpus_paths import sweep_bill_dirs  # noqa: E402
+
+
+def _bill_files(repo: Path, pattern: str) -> list[Path]:
+    """Every matching file across BOTH bill trees of ``repo``, committed fixtures first.
+
+    Not a glob of the download tree alone: since #308 the curated fixtures live in
+    ``tests/corpus/`` and ``bills/`` holds only what that checkout happened to download,
+    so globbing one tree silently narrows the audit — and an audit reports a count, so
+    the narrowing reads as a finding rather than as missing input.
+    """
+    return sorted(f for d in sweep_bill_dirs(repo) for f in d.glob(pattern))
 
 
 def chamber(label: str) -> str:
@@ -92,7 +110,7 @@ def _normalized(p: Path):
 
 def _consecutive_pairs(repo: Path):
     """Yield (bill, la, lb, transition, xml_a, xml_b) for each consecutive version pair."""
-    for bd in sorted(p for p in (repo / "bills").iterdir() if p.is_dir()):
+    for bd in sweep_bill_dirs(repo):
         vs = versions(bd)
         for i in range(len(vs) - 1):
             (_na, la, xa), (_nb, lb, xb) = vs[i], vs[i + 1]
@@ -135,7 +153,7 @@ def section_id_stability(repo: Path):
     # element_id loss, scanned over EVERY file (not just pair a-sides): a file whose
     # raw XML carries structural ids but whose normalized tree yields none.
     id_loss = []
-    for xml in sorted((repo / "bills").glob("*/*.xml")):
+    for xml in _bill_files(repo, "*.xml"):
         try:
             if _raw_ids(xml) and not norm_ids(xml):
                 id_loss.append((xml.parent.name, xml.name))
@@ -254,7 +272,7 @@ def change_markup(repo: Path):
     empty_added = tot_added = empty_deleted = tot_deleted = 0
     parsed = failed = 0
 
-    for xml in sorted((repo / "bills").glob("*/*.xml")):
+    for xml in _bill_files(repo, "*.xml"):
         try:
             root = etree.parse(str(xml)).getroot()
         except Exception:  # noqa: BLE001
@@ -326,7 +344,7 @@ def structured_amounts(repo: Path):
     elem_hits: Counter = Counter()
     attr_hits: Counter = Counter()
     parsed = 0
-    for xml in sorted((repo / "bills").glob("*/*.xml")):
+    for xml in _bill_files(repo, "*.xml"):
         try:
             root = etree.parse(str(xml)).getroot()
         except Exception:  # noqa: BLE001
@@ -358,7 +376,7 @@ def toc_levels(repo: Path):
     occ: Counter = Counter()
     per_carrier: dict[str, Counter] = defaultdict(Counter)
     parsed = 0
-    for xml in sorted((repo / "bills").glob("*/*.xml")):
+    for xml in _bill_files(repo, "*.xml"):
         try:
             root = etree.parse(str(xml)).getroot()
         except Exception:  # noqa: BLE001
@@ -411,7 +429,7 @@ def pdf_signals(repo: Path, pages_per_file: int = 8):
         return
     import ctypes
 
-    pdfs = sorted((repo / "bills").glob("*/*.pdf"))
+    pdfs = _bill_files(repo, "*.pdf")
     with_bookmark = with_structtree = 0
     margin_ne = margin_lines = 0
     italic_files = 0
@@ -560,14 +578,14 @@ def main():
     ap.add_argument(
         "--repo",
         type=Path,
-        default=Path(__file__).resolve().parents[1],
-        help="repo root holding bills/ (default: this script's repo)",
+        default=_ROOT,
+        help="repo root holding tests/corpus/ + bills/ (default: this script's repo)",
     )
     ap.add_argument("--pdf-pages", type=int, default=8, help="body pages sampled per PDF (default 8)")
     ap.add_argument("--skip-pdf", action="store_true")
     args = ap.parse_args()
     sys.path.insert(0, str(args.repo))
-    print(f"Auditing corpus under: {args.repo}/bills")
+    print(f"Auditing corpus under: {args.repo} (tests/corpus/ + bills/)")
     section_id_stability(args.repo)
     id_matcher_lift(args.repo)
     change_markup(args.repo)
