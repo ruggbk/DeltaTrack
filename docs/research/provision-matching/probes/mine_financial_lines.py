@@ -23,8 +23,7 @@ amounts are masked) — the cleanest word-overlap-only regime. Emits an UNLABELE
 `measures` is analysis-only, stripped before labeling (§5).
 
 Run (from repo root, repo venv; needs idf_cache.json from mine_idf.py):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/mine_financial_lines.py
+    .venv/bin/python docs/research/provision-matching/probes/mine_financial_lines.py
 """
 
 from __future__ import annotations

@@ -20,8 +20,7 @@ Corpus constraints this encodes (protocol §6, updated for the bills_corpus pool
     validated (NDAA candidates flagged by the census, not yet mined).
 
 Run (from repo root, repo venv):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/assign_split.py
+    .venv/bin/python docs/research/provision-matching/probes/assign_split.py
 Writes `split_assignment.json` and prints the partition per stratum.
 """
 

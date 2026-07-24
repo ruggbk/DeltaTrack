@@ -23,6 +23,7 @@ if str(_PROBES) not in sys.path:
 
 import label_llm as L  # noqa: E402  (import after sys.path bootstrap above)
 import make_assignments as A  # noqa: E402
+import make_form as MF  # noqa: E402
 import merge_labels as M  # noqa: E402
 
 # --------------------------------------------------------------------------- helpers
@@ -136,6 +137,81 @@ def test_build_card_drops_score_and_mining_fields():
     # kept out of prompts by _assert_blind), but the SCORE / mining-artifact fields never get copied.
     card = L._build_card(_entry(*_HCD, measures={"containment": 0.9}, change_type="x", cosine=0.5))
     for field in ("measures", "containment", "cosine", "word_overlap", "change_type", "extra"):
+        assert field not in card
+
+
+# ------------------------------------------------- blindness leak-guard: the HUMAN form (#332)
+# The human form is the path that produces the ground truth, so its guard has to be at least as
+# strong as the LLM's. These mirror the label_llm cases above, including the false-positive ones.
+
+
+def _form_data(*cards: dict, **over) -> dict:
+    """The object make_form injects into the HTML, built the way main() builds it."""
+    data = {
+        "reviewer": "tester",
+        "standard": MF._STANDARD,
+        "confidence": MF._CONFIDENCE,
+        "examples": MF._EXAMPLES,
+        "entries": list(cards) or [MF._build_card(_entry(*_HCD))],
+    }
+    data.update(over)
+    return data
+
+
+def test_form_leak_guard_passes_the_real_rubric():
+    # the shipped rubric + one card per stratum must generate cleanly, or the guard is unusable
+    cards = [MF._build_card(_entry(s, o)) for s, o in (_HCD, _CONS, _FIN)]
+    MF._assert_blind(_form_data(*cards))  # must not raise
+
+
+def test_form_leak_guard_trips_on_stratum_name_in_the_rubric():
+    # The reviewer reads `standard` before labeling, so a mining stratum named there primes every
+    # answer. "financial-line" contains no _FORBIDDEN word, so ONLY the stratum-name scan can
+    # report it — the assertion pins that detector rather than an incidental catch.
+    leaky = [*MF._STANDARD, ("Same line", "Use this for the financial-line cases.")]
+    with pytest.raises(SystemExit) as ex:
+        MF._assert_blind(_form_data(standard=leaky))
+    assert "financial-line" in str(ex.value)
+
+
+def test_form_leak_guard_trips_on_score_in_the_worked_examples():
+    # a bare score-shaped float with no forbidden token, so only the score scan can trip
+    leaky = [*MF._EXAMPLES, {**MF._EXAMPLES[0], "why": "These score 0.87 on the measure."}]
+    with pytest.raises(SystemExit) as ex:
+        MF._assert_blind(_form_data(examples=leaky))
+    assert "score-shaped-float" in str(ex.value)
+
+
+def test_form_leak_guard_trips_on_forbidden_field_in_the_question():
+    card = MF._build_card(_entry(*_CONS))
+    card["question"] = "Do these have high cosine similarity?"
+    with pytest.raises(SystemExit) as ex:
+        MF._assert_blind(_form_data(card))
+    assert "cosine" in str(ex.value)
+
+
+def test_form_leak_guard_no_false_positive_on_forbidden_word_in_bill_text():
+    # Same trap as the LLM path: text_old is a SUBSTRING of text_new on the high-containment
+    # stratum, and the bill's own text legitimately says "measures". Masking must blank both.
+    text_old = "The Secretary shall carry out the program described in section 1182."
+    text_new = text_old + " The program shall use certain measures in coverage determinations."
+    assert text_old in text_new and "measures" in text_new  # the trap shape
+    card = MF._build_card(_entry(*_HCD, text_old=text_old, text_new=text_new))
+    MF._assert_blind(_form_data(card))  # must not raise
+
+
+def test_form_leak_guard_masks_bill_and_version_fields():
+    # bill/version are corpus data shown to the reviewer on purpose; a forbidden word there is
+    # masked, not tripped (they come from fixed entry keys, never from a score).
+    card = MF._build_card(_entry(*_HCD, version_new="cosine-draft.xml"))
+    MF._assert_blind(_form_data(card))  # must not raise
+
+
+def test_form_build_card_drops_score_and_mining_fields():
+    # the original key-level check, kept: a refactor that copied the whole entry onto the card
+    # would re-attach the scores under test.
+    card = MF._build_card(_entry(*_HCD, measures={"containment": 0.9}, change_type="x", cosine=0.5))
+    for field in ("measures", "containment", "cosine", "word_overlap", "change_type", "extra", "stratum"):
         assert field not in card
 
 

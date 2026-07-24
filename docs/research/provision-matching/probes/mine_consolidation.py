@@ -24,8 +24,7 @@ second consolidation-bearing bill; that is flagged for follow-up, not mined here
 Emits an UNLABELED pool; `measures` is analysis-only and stripped before labeling (§5).
 
 Run (from repo root, repo venv; needs idf_cache.json from mine_idf.py):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/mine_consolidation.py
+    .venv/bin/python docs/research/provision-matching/probes/mine_consolidation.py
 """
 
 from __future__ import annotations

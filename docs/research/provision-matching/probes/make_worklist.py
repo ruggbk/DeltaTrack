@@ -20,8 +20,7 @@ Outputs:
   - worklist_sample.md    — a few entries per stratum, human-readable, for the §10.3 pre-review
 
 Run (from repo root, repo venv; needs the candidate pools + split_assignment.json):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/make_worklist.py
+    .venv/bin/python docs/research/provision-matching/probes/make_worklist.py
 """
 
 from __future__ import annotations

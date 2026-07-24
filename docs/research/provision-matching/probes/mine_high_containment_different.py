@@ -20,8 +20,7 @@ step (§7 leading hypothesis), not a shortcut that changes the result.
 Emits an UNLABELED pool; `measures` is analysis-only and stripped before labeling (§5).
 
 Run (from repo root, repo venv; needs idf_cache.json from mine_idf.py):
-    PYTHONPATH=docs/research/provision-matching/probes .venv/bin/python \
-        docs/research/provision-matching/probes/mine_high_containment_different.py
+    .venv/bin/python docs/research/provision-matching/probes/mine_high_containment_different.py
 """
 
 from __future__ import annotations
