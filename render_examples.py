@@ -34,7 +34,7 @@ from pathlib import Path
 from corpus_paths import FIXTURES_DIR
 from server.pdf_compare import compare_pdfs_html
 from server.xml_compare import compare_xml_files_html
-from shared.version_stems import label_from_stem
+from shared.version_stems import label_from_stem, version_number_from_stem
 
 PROJECT_ROOT = Path(__file__).parent
 BILLS = FIXTURES_DIR
@@ -135,6 +135,10 @@ def render_pdf_diff(spec: ExampleSpec) -> Path:
         (bill_dir / f"{spec.v2_filename_stem}.pdf").read_bytes(),
         start_label=label_from_stem(spec.v1_filename_stem),
         end_label=label_from_stem(spec.v2_filename_stem),
+        # Known here because the corpus filenames are numbered; an upload has no
+        # equivalent, which is why the parameter exists rather than being derived.
+        start_version_number=version_number_from_stem(spec.v1_filename_stem),
+        end_version_number=version_number_from_stem(spec.v2_filename_stem),
     )
     out = EXAMPLES / spec.output_name("pdf")
     out.write_text(html_out)

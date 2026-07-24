@@ -145,6 +145,31 @@ def test_index_page_tokens_match_the_report_tokens():
     )
 
 
+_VERSIONS_LINE = re.compile(r'<div class="versions">(.*?)</div>', re.S)
+
+
+def test_both_pipelines_head_the_same_pair_identically():
+    """The XML and PDF reports for HR 8752 label their versions the same way (#42).
+
+    `index.html` invites a reader to open both and see that the pipelines agree, so a
+    header that reads `v1: reported-in-house → v2: engrossed-in-house` on one and
+    `reported-in-house → engrossed-in-house` on the other undercuts the demo's whole
+    claim. Asserted on the rendered files rather than the builders, because the
+    version line is assembled from three separate inputs (labels, ordinals, congress)
+    and only the end output shows what a reader actually gets.
+    """
+    heads = {}
+    for fmt in ("xml", "pdf"):
+        match = _VERSIONS_LINE.search((EXAMPLES / f"hr8752_{fmt}_diff.html").read_text())
+        assert match, f"no versions line found in hr8752_{fmt}_diff.html; this check would vacuously pass"
+        heads[fmt] = match.group(1).strip()
+
+    assert heads["xml"] == heads["pdf"], (
+        f"the two HR 8752 examples label the same version pair differently: "
+        f"XML {heads['xml']!r} vs PDF {heads['pdf']!r}. {REGENERATE}"
+    )
+
+
 def test_served_sample_matches_the_pdf_example():
     """The sample the web app serves is a copy of the committed PDF example.
 
