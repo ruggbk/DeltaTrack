@@ -173,8 +173,9 @@ describes a partial rollout.
     that the documented setup path still matches the code (see
     [#271](https://github.com/AgoraDMV/DeltaTrack/issues/271)) — carries
     `@pytest.mark.network`, skipped unless `--run-network` is passed. It still needs a
-    fully fetched corpus for its own >= 31-dir floor, so it stays maintainer-run; a
-    marker states that requirement where an env var did not.
+    marker states that requirement where an env var did not. #342 later derived its
+    completeness floor from the committed manifest and put it on a weekly schedule, so it
+    no longer needs a fetched corpus either.
 
   The general lesson, recorded because it is the reusable part: express "this test needs
   something extra" as a marker, not an environment variable. A marker is registered in

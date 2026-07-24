@@ -197,6 +197,39 @@ def test_leg_branch_validation_bills_are_committed() -> None:
     )
 
 
+# --- Parity-gate completeness floor (#342) -------------------------------------------
+# The govinfo filename parity gate only runs under --run-network, so its floor would
+# otherwise be exercised on one maintainer's machine and nowhere else. These run offline.
+
+
+def test_parity_floor_passes_on_the_real_corpus() -> None:
+    """Every manifested bill has a directory in this checkout, so the floor does not fire
+    spuriously. Uses the gate's own directory scan, not a reimplementation of it."""
+    from tests import test_govinfo_corpus_parity as parity
+
+    assert parity.missing_manifest_dirs(parity._corpus_dirs()) == []
+
+
+def test_parity_floor_fires_on_a_missing_manifested_bill() -> None:
+    """The floor names a manifested bill whose directory is absent. Without this, a
+    partial corpus would pass the gate as "0 compared, 0 stale" (#167 fail-open), and a
+    floor that has never been seen to fire proves nothing.
+
+    Drops a MANIFESTED directory specifically. A machine with bills downloaded also has
+    unmanifested directories in the scan, and dropping one of those would correctly report
+    nothing missing — so picking positionally would pass in CI and fail on a maintainer's
+    machine, on a branch where nothing is wrong."""
+    from tests import test_govinfo_corpus_parity as parity
+
+    manifested = set(conftest.manifest_bill_ids())
+    present = parity._corpus_dirs()
+    target = next((d for d in present if d.name in manifested), None)
+    assert target is not None, "precondition: this checkout has a manifested corpus dir"
+
+    assert parity.missing_manifest_dirs([d for d in present if d != target]) == [target.name]
+    assert parity.missing_manifest_dirs([]) == conftest.manifest_bill_ids()
+
+
 def _manifest_rel_paths() -> set[str]:
     """Every fixture the manifest declares, as ``<id>/<stage>.<fmt>`` strings."""
     return {
