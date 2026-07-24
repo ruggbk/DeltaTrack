@@ -2,7 +2,10 @@
 
 import argparse
 import json
+import re
+import shlex
 import time
+from pathlib import Path
 
 import httpx
 import pytest
@@ -20,6 +23,7 @@ from fetch_bills import (
     fetch_all_committee_bills,
     fetch_text_versions,
     format_version_list,
+    formats_from_arg,
     get_pdf_url,
     get_xml_url,
     sanitize_version_name,
@@ -472,9 +476,82 @@ class TestCmdDownloadFormats:
         # Fails if the default flips to pdf *or* both (#151, #131).
         assert not (bill_dir / "1_reported-in-house.pdf").exists()
 
+    @respx.mock
+    def test_default_download_all_writes_the_xml_the_diff_consumes(self, tmp_path):
+        """The bulk path carries its own `--format` default, so it needs its own gate.
+
+        `download` and `download-all` read the flag from separate subparsers (two
+        `add_argument("--format", ...)` calls), so a flip in one is invisible to the
+        other's test. Same construction as the single-bill case above: real parser
+        args, real govinfo path, PDF route mocked so a default of pdf/both would
+        succeed and be caught by the assertion rather than erroring on an unmocked
+        request. Runs the `--file` form because it reaches `download_all_versions`
+        without the API-side committee discovery a year range needs (#151).
+        """
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_text("id\n118-hr-4366\n", encoding="utf-8")
+        out = tmp_path / "out"
+        respx.get(gi.billstatus_url(118, "hr", 4366)).respond(200, content=_govinfo_billstatus(118, "hr", 4366, "rh"))
+        respx.get(gi.package_content_url("BILLS-118hr4366rh", "xml")).respond(200, content=b"<bill/>")
+        respx.get(gi.package_content_url("BILLS-118hr4366rh", "pdf")).respond(200, content=b"%PDF-1.7")
+
+        args = build_parser().parse_args(["download-all", "--file", str(csv_path), "--output-dir", str(out)])
+        assert args.source == "govinfo"  # precondition: the shipped default under test
+        with httpx.Client() as client:
+            cmd_download_all(client, args, None)
+
+        bill_dir = out / "118-hr-4366"
+        assert (bill_dir / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
+        # Fails if download-all's default flips to pdf *or* both (#151, #131).
+        assert not (bill_dir / "1_reported-in-house.pdf").exists()
+
     def test_parser_accepts_format_both(self):
         args = build_parser().parse_args(["download", "118", "hr", "4366", "--format", "both"])
         assert args.format == "both"
+
+
+class TestUpdateExamplesWorkflowFormat:
+    """The published-examples workflow downloads and diffs in two separate steps.
+
+    Nothing but agreement between them makes the second step's inputs exist, and the
+    workflow runs on `push: main` only, so a disagreement is latent on develop and
+    invisible to every PR -- the exact way the #131 `--format` regression shipped
+    green (#151). These read the workflow as text rather than adding a YAML
+    dependency, in the style of tests/test_docs_consistency.py.
+    """
+
+    WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "update-examples.yml"
+    # `uv run python fetch_bills.py <args>` inside a step's `run:` block.
+    _DOWNLOAD_RE = re.compile(r"python\s+fetch_bills\.py\s+(?P<args>[^\n]+)")
+    # A bill file the diff step reads out of the download step's output tree.
+    _CONSUMED_RE = re.compile(r"bills/(?P<bill>\d+-[a-z]+-\d+)/\S+?\.(?P<ext>xml|pdf)\b")
+
+    def _workflow(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_download_step_supplies_every_format_the_diff_step_reads(self):
+        text = self._workflow()
+
+        commands = self._DOWNLOAD_RE.findall(text)
+        assert len(commands) == 1, f"expected exactly one fetch_bills.py step, found {len(commands)}"
+        # Through the shipped parser, so the effective format is whatever the workflow
+        # would really get -- including when it passes no --format at all.
+        args = build_parser().parse_args(shlex.split(commands[0]))
+        produced = set(formats_from_arg(args.format))
+        downloaded_bill = f"{args.congress}-{args.bill_type}-{args.number}"
+
+        consumed = set(self._CONSUMED_RE.findall(text))
+        assert consumed, "no bills/<id>/<version>.<ext> inputs found; the regex or the workflow moved"
+
+        mismatched = sorted(
+            f"{bill}/*.{ext}" for bill, ext in consumed if bill != downloaded_bill or ext not in produced
+        )
+        assert not mismatched, (
+            f"update-examples.yml diffs inputs its download step does not produce: {mismatched}. "
+            f"The step downloads {downloaded_bill} as {sorted(produced)} "
+            f"(--format {args.format}, --source {args.source}). Change both steps together, or the "
+            "workflow fails on main only -- which is how #131 shipped."
+        )
 
 
 class TestSourceRouting:
@@ -599,7 +676,15 @@ class TestCmdDownloadAllFromFile:
     """
 
     def _run(self, tmp_path, monkeypatch, rows):
-        """Run the command over `rows`; return the attempted bills and the exit status."""
+        """Run the command over `rows`; return the attempted bills and the exit status.
+
+        The attempted bills carry `congress` and `number` as ints, the type
+        `download_all_versions` declares. They used to be the strings `parse_bill_id`
+        returns, and this stub is why nothing noticed: it replaces the one function
+        that would have used them, so the whole class asserted on a call that never
+        happened for real. Under the real callee the govinfo floor check compared a
+        str to an int and the command died on its first row (#151).
+        """
         import fetch_bills
 
         csv_path = tmp_path / "bills.csv"
@@ -626,7 +711,7 @@ class TestCmdDownloadAllFromFile:
     def test_legacy_version_suffix_still_downloads_the_bill(self, tmp_path, monkeypatch, capsys):
         downloaded, status = self._run(tmp_path, monkeypatch, ["118-sconres-12:2"])
 
-        assert downloaded == [("118", "sconres", "12")]
+        assert downloaded == [(118, "sconres", 12)]
         # A served legacy row is not an error: the run is clean and exits clean.
         assert status == 0
         err = capsys.readouterr().err
@@ -641,7 +726,7 @@ class TestCmdDownloadAllFromFile:
         """
         downloaded, _ = self._run(tmp_path, monkeypatch, ["12345", "119-hr-1"])
 
-        assert downloaded == [("119", "hr", "1")]
+        assert downloaded == [(119, "hr", 1)]
         assert "Skipping unusable row '12345'" in capsys.readouterr().err
 
     def test_skipped_row_makes_the_whole_run_exit_nonzero(self, tmp_path, monkeypatch):
@@ -658,7 +743,7 @@ class TestCmdDownloadAllFromFile:
     def test_run_summarizes_what_it_processed_and_skipped(self, tmp_path, monkeypatch, capsys):
         downloaded, _ = self._run(tmp_path, monkeypatch, ["119-hr-1", "118-sconres-12:2", "12345", "not-a-bill-9"])
 
-        assert downloaded == [("119", "hr", "1"), ("118", "sconres", "12")]
+        assert downloaded == [(119, "hr", 1), (118, "sconres", 12)]
         # "Processed", not "downloaded": a bill with no text versions available is
         # attempted and counted here too, so the stronger word would overclaim.
         assert "Processed 2 bills, skipped 2 unusable rows." in capsys.readouterr().err

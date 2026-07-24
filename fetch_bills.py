@@ -591,12 +591,16 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
                 skipped += 1
                 continue
 
+            # parse_bill_id returns the slug's parts as strings; download_all_versions
+            # is typed for ints and the govinfo floor check compares numerically, so a
+            # bare str raised TypeError on the first row (#151). The year-range path
+            # below has always coerced -- this boundary is the one that did not.
             download_all_versions(
                 client,
                 output_dir=args.output_dir,
-                congress=ident.congress,
+                congress=int(ident.congress),
                 bill_type=ident.bill_type,
-                number=ident.number,
+                number=int(ident.number),
                 source=args.source,
                 api_key=api_key,
                 formats=formats,
