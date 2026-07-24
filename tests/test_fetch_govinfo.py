@@ -1252,27 +1252,40 @@ def test_write_gap_marker_content_is_deterministic(tmp_path):
 
 
 @respx.mock
-def test_fetch_gap_versions_returns_records_for_an_all_gap_bill():
+def test_one_fetch_yields_both_versions_and_gap_records():
     # #226's real evidence shape: 118-hr-3496 declares versions, govinfo serves
-    # NONE of them, so enumerate_versions returns []. That is exactly when the
-    # marker matters most, so the gap helper must still report them.
+    # NONE of them, so the downloadable list is empty. That is exactly when the
+    # marker matters most, so the gap records must still be derivable -- and from
+    # the SAME parsed element, not a second request (#253).
     body = _billstatus_bytes(
         [
             _bs_item("Introduced in House", "2025-01-01", code=None),
             _bs_item("Reported in House", "2025-02-01", code=None),
         ]
     )
-    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
+    route = respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
     with httpx.Client() as client:
-        assert gi.enumerate_versions(client, 999, "hr", 1) == []
-        gaps = gi.fetch_gap_versions(client, 999, "hr", 1)
-    assert [g["code"] for g in gaps] == ["ih", "rh"]
+        bill = gi.fetch_billstatus_bill(client, 999, "hr", 1)
+    assert gi.versions_from_billstatus(bill) == []
+    assert [g["code"] for g in gi.urlless_declared_version_records(bill)] == ["ih", "rh"]
+    assert route.call_count == 1
 
 
 @respx.mock
-def test_fetch_gap_versions_empty_when_every_version_is_served():
+def test_gap_records_empty_when_every_version_is_served():
     # Negative control: proves a non-empty result above is a real signal.
     body = _billstatus_bytes([_bs_item("Introduced in House", "2025-01-01", code="ih")])
     respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(200, content=body))
     with httpx.Client() as client:
-        assert gi.fetch_gap_versions(client, 999, "hr", 1) == []
+        bill = gi.fetch_billstatus_bill(client, 999, "hr", 1)
+    assert gi.urlless_declared_version_records(bill) == []
+
+
+@respx.mock
+def test_fetch_billstatus_bill_raises_on_a_failed_response(monkeypatch):
+    # The loud-failure contract enumerate_versions used to own directly: a bad
+    # BILLSTATUS must never degrade into a silent "bill has no versions" (#10).
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)
+    respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(500))
+    with httpx.Client() as client, pytest.raises(httpx.HTTPError):
+        gi.fetch_billstatus_bill(client, 999, "hr", 1)
