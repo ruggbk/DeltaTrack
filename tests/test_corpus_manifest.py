@@ -82,10 +82,9 @@ def test_assert_manifest_committed_fails_closed_on_zero_cases(monkeypatch) -> No
 
 # --- git-tracked floor (#308) --------------------------------------------------
 # The floor asks git whether each manifested fixture is TRACKED, not merely that it
-# exists on disk. Those differ exactly on the author's machine, where a fixture added
-# without its bills/ .gitignore allowlist line is present locally but never tracked --
-# so `git add` no-ops, the author's suite passes, and CI (a fresh checkout without the
-# file) silently collects fewer cases. A pre-#308 Path.exists() floor could not see
+# exists on disk. Those differ exactly on the author's machine, where a fixture written
+# into tests/corpus/ but never staged is present locally and absent from a fresh CI
+# checkout, which then silently collects fewer cases. A Path.exists() floor cannot see
 # this. The git query is split out (`_git_tracked_paths`) so it is directly testable.
 
 
@@ -97,27 +96,28 @@ def test_git_tracked_paths_lists_added_not_untracked(tmp_path) -> None:
     import subprocess
 
     subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
-    billdir = tmp_path / "bills" / "118-hr-4366"
+    billdir = tmp_path / "tests" / "corpus" / "118-hr-4366"
     billdir.mkdir(parents=True)
     (billdir / "1_reported-in-house.xml").write_text("<bill/>")
     (billdir / "2_engrossed-in-house.xml").write_text("<bill/>")  # on disk, never added
     subprocess.run(
-        ["git", "-C", str(tmp_path), "add", "bills/118-hr-4366/1_reported-in-house.xml"],
+        ["git", "-C", str(tmp_path), "add", "tests/corpus/118-hr-4366/1_reported-in-house.xml"],
         check=True,
     )
-    assert conftest._git_tracked_paths(tmp_path, "bills") == frozenset({"bills/118-hr-4366/1_reported-in-house.xml"})
+    tracked = conftest._git_tracked_paths(tmp_path, "tests/corpus")
+    assert tracked == frozenset({"tests/corpus/118-hr-4366/1_reported-in-house.xml"})
 
 
 def test_git_tracked_paths_none_outside_work_tree(tmp_path) -> None:
     """No .git -> git cannot answer -> None (distinct from an empty set: 'git cannot
     answer' vs 'git answered, nothing tracked'), so the floor can fall back to a presence
     check in a non-git context such as an unpacked sdist."""
-    assert conftest._git_tracked_paths(tmp_path, "bills") is None
+    assert conftest._git_tracked_paths(tmp_path, "tests/corpus") is None
 
 
 def test_missing_manifest_files_flags_present_but_untracked(monkeypatch) -> None:
     """#308 headline, proven both ways: a manifested fixture that EXISTS on disk but git
-    does not track is reported missing (the forgotten-.gitignore bug a Path.exists() floor
+    does not track is reported missing (the unstaged-fixture case a Path.exists() floor
     passed green); when git tracks it, it is not reported."""
     first = conftest.manifest_xml_files()[0]
     assert first.exists(), "precondition: the picked fixture is on disk"
@@ -130,14 +130,14 @@ def test_missing_manifest_files_flags_present_but_untracked(monkeypatch) -> None
     assert conftest.missing_manifest_files() == [rel]
 
     # git tracks it -> committed -> not reported (the clean-tree pass direction)
-    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset({f"bills/{rel}"}))
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset({f"tests/corpus/{rel}"}))
     assert conftest.missing_manifest_files() == []
 
 
 def test_missing_manifest_files_falls_back_to_presence_without_git(monkeypatch) -> None:
     """Outside a git work tree (_tracked_bills -> None) the floor uses presence alone: the
-    real, on-disk manifest passes, since the forgotten-.gitignore mode cannot exist
-    without a repo to have an ignore rule."""
+    real, on-disk manifest passes, since the untracked-fixture mode cannot exist without
+    a repo to have an index."""
     monkeypatch.setattr(conftest, "_tracked_bills", lambda: None)
     assert conftest.missing_manifest_files() == []
 
@@ -166,7 +166,7 @@ def test_uncommitted_bill_files_flags_absent_and_untracked(monkeypatch) -> None:
     rel = f"{first.parent.name}/{first.name}"
     assert first.exists(), "precondition: the picked fixture is on disk"
 
-    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset({f"bills/{rel}"}))
+    monkeypatch.setattr(conftest, "_tracked_bills", lambda: frozenset({f"tests/corpus/{rel}"}))
     assert conftest.uncommitted_bill_files([rel]) == []
     assert conftest.uncommitted_bill_files(["999-hr-9999/1_nonexistent.xml"]) == ["999-hr-9999/1_nonexistent.xml"]
 
@@ -337,7 +337,7 @@ def test_ci_slow_allowlisted_skips_name_watched_modules() -> None:
 
 
 # --- Narrowing the watch to cases CI can collect --------------------------------
-# The two corpus-expanding modules glob bills/, so a fetched corpus adds cases CI never
+# The two corpus-expanding modules sweep both trees, so a fetched corpus adds cases CI never
 # sees (6 -> 90 and 30 -> 432). Those extra cases legitimately content-skip, and no
 # allowlist can name them, so before this filter a full local run exited 1 with 36
 # undeclared skips while CI was green. These tests pin the narrowing in BOTH directions:

@@ -33,8 +33,9 @@ import httpx
 import pytest
 
 import fetch_govinfo as gi
+from corpus_paths import sweep_bill_dirs
 from fetch_bills import sanitize_version_name
-from tests.conftest import BILLS_DIR, manifest_bill_ids
+from tests.conftest import manifest_bill_ids
 
 pytestmark = [pytest.mark.slow, pytest.mark.network]
 
@@ -60,15 +61,16 @@ _ACCEPTED_EXTRA_STEMS: dict[str, set[str]] = {
 # reporting a count that shrank. It still fails closed on a partial corpus, which is the
 # point (#167: an empty corpus would otherwise pass as "0 compared, 0 stale").
 #
-# The COMPARISON still walks everything in bills/, not just the manifest. In automation
+# The COMPARISON walks both trees (tests/corpus/ + bills/), not just the manifest. In automation
 # that is exactly the committed set; on a machine with bills downloaded it also checks
 # those, so scheduling this loses no local coverage.
 
 
 def _corpus_dirs():
-    if not BILLS_DIR.exists():
-        return []
-    return sorted(d for d in BILLS_DIR.iterdir() if d.is_dir() and _DIR_RE.match(d.name))
+    # Both trees (#308): the committed fixtures in tests/corpus/ AND any bills downloaded
+    # into bills/. In automation that is exactly the committed set (which satisfies the
+    # manifest floor below); on a maintainer's machine it also checks downloaded bills.
+    return [d for d in sweep_bill_dirs() if _DIR_RE.match(d.name)]
 
 
 def missing_manifest_dirs(dirs) -> list[str]:

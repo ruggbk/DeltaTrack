@@ -1,5 +1,4 @@
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import pytest
 
@@ -19,6 +18,7 @@ from bill_tree import (
     walk_body_sections,
     walk_title,
 )
+from corpus_paths import fixture_path, resolve_bill_file
 
 
 def _content(tree):
@@ -132,7 +132,7 @@ class TestExtractDisplayText:
         assert by_marker["A"] == 8
 
 
-_HR8752_V1 = Path("bills/118-hr-8752/1_reported-in-house.xml")
+_HR8752_V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
 
 
 @pytest.mark.slow
@@ -149,7 +149,7 @@ def test_real_bill_body_nodes_have_display_text():
 # 115-hr-5895 enrolled has BOTH <division> children and top-level <title> children
 # directly under <legis-body> — the structural shape that exposed the normalize_bill
 # div+title drop (#146). It is the conservation/regression fixture for that fix.
-_HR5895_ENROLLED = Path("bills/115-hr-5895/5_enrolled-bill.xml")
+_HR5895_ENROLLED = fixture_path("115-hr-5895", "5_enrolled-bill.xml")
 
 
 @pytest.mark.slow
@@ -201,7 +201,7 @@ def test_orphan_titles_attributed_to_a_division():
 # 113-hr-3547 enrolled (FY2014 omnibus): 12 divisions, each with later titles
 # spilled out as orphan <title> siblings INTERLEAVED between divisions. Exercises
 # document-order attribution (each orphan cluster belongs to its preceding division).
-_HR3547_ENROLLED = Path("bills/113-hr-3547/6_enrolled-bill.xml")
+_HR3547_ENROLLED = fixture_path("113-hr-3547", "6_enrolled-bill.xml")
 
 
 @pytest.mark.slow
@@ -538,7 +538,7 @@ class TestFindBillBody:
 
     def test_amendment_doc_115_hr_244_v5_produces_nodes(self):
         """Real bill 115-hr-244 v5 should produce nodes (was 0 before fix)."""
-        xml_path = Path("bills/115-hr-244/5_engrossed-amendment-house.xml")
+        xml_path = resolve_bill_file("115-hr-244", "5_engrossed-amendment-house.xml")
         if not xml_path.exists():
             pytest.skip("Bill XML not available locally")
         tree = normalize_bill(xml_path)

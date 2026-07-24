@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 import render_examples
+from corpus_paths import FIXTURES_DIR
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
@@ -36,7 +37,7 @@ def _corpus_files() -> list[Path]:
     for spec in render_examples.EXAMPLES_TO_RENDER:
         for stem in (spec.v1_filename_stem, spec.v2_filename_stem):
             for suffix in ("xml", "pdf"):
-                files.append(ROOT / "bills" / spec.bill_dir / f"{stem}.{suffix}")
+                files.append(FIXTURES_DIR / spec.bill_dir / f"{stem}.{suffix}")
     return files
 
 

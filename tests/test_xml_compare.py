@@ -13,8 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR
+
 ROOT = Path(__file__).resolve().parent.parent
-BILL_DIR = ROOT / "bills" / "118-hr-4366"
+BILL_DIR = FIXTURES_DIR / "118-hr-4366"
 SCHEMA = ROOT / "schema" / "canonical-diff.schema.json"
 
 
@@ -23,7 +25,7 @@ def test_compare_xml_returns_valid_canonical():
     start = BILL_DIR / "1_reported-in-house.xml"
     end = BILL_DIR / "2_engrossed-in-house.xml"
     if not start.exists() or not end.exists():
-        pytest.skip("sample bill XMLs not present (bills/118-hr-4366/)")
+        pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
     from server.xml_compare import compare_xml
 
@@ -51,7 +53,7 @@ def test_compare_xml_html_gutterless_fullbill():
     start = BILL_DIR / "1_reported-in-house.xml"
     end = BILL_DIR / "2_engrossed-in-house.xml"
     if not start.exists() or not end.exists():
-        pytest.skip("sample bill XMLs not present (bills/118-hr-4366/)")
+        pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
     from server.xml_compare import compare_xml_html
 
@@ -88,7 +90,7 @@ def test_xml_changes_resolve_spans_structurally_on_real_bill():
     start = BILL_DIR / "1_reported-in-house.xml"
     end = BILL_DIR / "2_engrossed-in-house.xml"
     if not start.exists() or not end.exists():
-        pytest.skip("sample bill XMLs not present (bills/118-hr-4366/)")
+        pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
     from server.xml_compare import compare_xml
 

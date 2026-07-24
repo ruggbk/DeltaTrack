@@ -4,7 +4,7 @@ Each Jurisdiction pairs a Senate appropriations committee report with the report
 it explains. The builder (scripts/build_validation.py) reads the report and writes
 test_data/validation_<slug>.json; tests/test_validate_extraction.py validates the bill
 XML against it. All three tiers are committed: the report HTML (test_data/CRPT-*.htm),
-the reported bill XML (bills/118-s-*/1_reported-in-senate.xml), and the JSON fixtures.
+the reported bill XML (tests/corpus/118-s-*/1_reported-in-senate.xml), and the JSON fixtures.
 The `--fetch` flag re-obtains the upstream sources rather than supplying anything a
 fresh clone lacks (ADR 0015 committed them so the gate runs on the same set everywhere
 instead of on whatever each machine had downloaded).
@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+import corpus_paths
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,7 @@ class Jurisdiction:
 
     @property
     def bill_xml_path(self) -> Path:
-        return Path("bills") / self.bill_id / self.version
+        return corpus_paths.fixture_path(self.bill_id, self.version)
 
 
 def _senate_fy25(slug, display, srpt, s_num, bill_id, accounts, source="summary", fy="FY 2025"):

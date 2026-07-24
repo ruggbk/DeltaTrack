@@ -19,9 +19,8 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
+from corpus_paths import FIXTURES_DIR, sweep_bill_dirs
 from parsers.pdf_text import Page, extract_clean_pages
-
-BILLS_DIR = Path(__file__).parent.parent / "bills"
 
 # Persistent extraction cache. Gitignored (test_data/* is ignored). Keyed by PDF
 # path + mtime via the filename, so a changed PDF maps to a different file and
@@ -31,6 +30,9 @@ CACHE_DIR = Path(__file__).parent.parent / "test_data" / "extract_cache"
 # Optional single-bill filter for a fast TDD loop. Substring match on the bill
 # directory name, so TEST_BILL=4366 selects 118-hr-4366.
 _TEST_BILL = os.environ.get("TEST_BILL") or None
+
+# Read the same way tests/conftest.py reads it, so one variable widens every sweep.
+_CORPUS_SWEEP = os.environ.get("CORPUS_SWEEP") == "1"
 
 
 def _cache_file(pdf_path: Path) -> Path:
@@ -77,12 +79,34 @@ def _selected(bill_name: str) -> bool:
     return _TEST_BILL is None or _TEST_BILL in bill_name
 
 
+def bill_dirs() -> list[Path]:
+    """The bill directories these two suites iterate.
+
+    Committed fixtures by default, so CI and a clean clone collect a byte-identical set.
+    Under ``CORPUS_SWEEP=1``, both trees — matching the conftest gates. Before #308 these
+    suites globbed ``bills/``, which on a fetched machine included downloads; pinning them
+    to ``tests/corpus/`` alone would have silently dropped that exploratory breadth, and
+    nothing asserts a sweep's case count, so the loss would not turn anything red.
+
+    The sweep widens by BILL, not by version: ``sweep_bill_dirs`` yields one directory per
+    bill id with the committed copy winning, so a download-only *version* of a bill that
+    is committed for some other stage stays invisible even under ``CORPUS_SWEEP=1``. That
+    is deliberate (a downloaded copy must not shadow committed bytes) but it does mean the
+    sweep is not a strict superset of what the pre-#308 glob reached. See #308.
+
+    No ``.is_dir()`` guard on the fixture tree: it is committed, so its absence is a broken
+    checkout and should raise here rather than quietly collect zero cases — the fail-open
+    shape AGENTS.md warns against for parametrization lists.
+    """
+    if _CORPUS_SWEEP:
+        return [d for d in sweep_bill_dirs() if _selected(d.name)]
+    return sorted(d for d in FIXTURES_DIR.iterdir() if d.is_dir() and _selected(d.name))
+
+
 def dual_format_versions() -> list[tuple[str, Path, Path]]:
     """(bill_name, xml_path, pdf_path) for every version present in both formats."""
     out: list[tuple[str, Path, Path]] = []
-    for bill_dir in sorted(BILLS_DIR.iterdir()):
-        if not bill_dir.is_dir() or not _selected(bill_dir.name):
-            continue
+    for bill_dir in bill_dirs():
         for xml in sorted(bill_dir.glob("*.xml")):
             pdf = xml.with_suffix(".pdf")
             if pdf.exists():
@@ -93,9 +117,7 @@ def dual_format_versions() -> list[tuple[str, Path, Path]]:
 def adjacent_pdf_pairs() -> list[tuple[str, Path, Path]]:
     """(bill_name, old_pdf, new_pdf) for each adjacent version pair within a bill."""
     out: list[tuple[str, Path, Path]] = []
-    for bill_dir in sorted(BILLS_DIR.iterdir()):
-        if not bill_dir.is_dir() or not _selected(bill_dir.name):
-            continue
+    for bill_dir in bill_dirs():
         pdfs = sorted(bill_dir.glob("*.pdf"))
         for i in range(len(pdfs) - 1):
             out.append((bill_dir.name, pdfs[i], pdfs[i + 1]))

@@ -38,6 +38,7 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR, fixture_path
 from scripts.heading_precision import measure
 from server.pdf_compare import compare_pdfs
 from server.xml_compare import compare_xml
@@ -45,8 +46,6 @@ from server.xml_compare import compare_xml
 pytestmark = pytest.mark.slow
 
 ROOT = Path(__file__).parent.parent
-BILLS_DIR = ROOT / "bills"
-
 # The canonical-diff change_type vocabulary (formatters/canonical.py). "unchanged"
 # is not emitted as a change; the parity totals count only real changes.
 _VALID_OPS = {"modified", "added", "removed", "moved"}
@@ -84,7 +83,7 @@ _PARITY: dict[str, tuple[tuple[int, int], tuple[int, int], str]] = {
 # Senate #89 residual: size-band ratio is "in range" when account-anchor recovery
 # sits near 1.0 against the XML leaf-heading count. Observed 1.02 (2026-06-29).
 _SENATE_PDF = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
-_SENATE_XML = BILLS_DIR / "118-s-4795" / "1_reported-in-senate.xml"
+_SENATE_XML = fixture_path("118-s-4795", "1_reported-in-senate.xml")
 _SENATE_RATIO_BAND = (0.95, 1.10)
 
 
@@ -94,7 +93,7 @@ def _v1_v2(bill: str) -> tuple[Path, Path] | None:
     Returns ``(v1_pdf, v2_pdf)``; callers derive the XML via ``with_suffix``.
     Skips (returns None) when the bill is unfetched or a paired XML is missing.
     """
-    bill_dir = BILLS_DIR / bill
+    bill_dir = FIXTURES_DIR / bill
     pdfs = sorted(bill_dir.glob("[0-9]*_*.pdf"))
     if len(pdfs) < 2:
         return None

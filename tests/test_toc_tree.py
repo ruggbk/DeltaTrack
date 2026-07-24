@@ -10,14 +10,14 @@ CONSUMED output (the rendered HTML), per measure-at-consumed-output:
 """
 
 import re
-from pathlib import Path
 
 import pytest
 
+from corpus_paths import fixture_path
 from formatters.diff_html import _build_toc_from_tree, _node_anchor_offset, _walk_tree
 
-_V1 = Path("bills/118-hr-8752/1_reported-in-house.xml")
-_V2 = Path("bills/118-hr-8752/2_engrossed-in-house.xml")
+_V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
+_V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.xml")
 
 pytestmark = pytest.mark.skipif(not _V1.exists(), reason="bill corpus not present (fetch_bills.py)")
 

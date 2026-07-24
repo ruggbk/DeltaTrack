@@ -31,6 +31,7 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR
 from diff_pdf import diff_pdfs
 from formatters.canonical import view_from_canonical
 from formatters.diff_html import format_diff_html
@@ -41,8 +42,7 @@ from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow
 
-BILLS = Path(__file__).parent.parent / "bills"
-
+BILLS = FIXTURES_DIR
 # (bill, v1 stem, v2 stem) — stable fixtures named on #172/#175.
 XML_PAIRS = [
     ("113-hr-3547", "5_engrossed-amendment-house", "6_enrolled-bill"),

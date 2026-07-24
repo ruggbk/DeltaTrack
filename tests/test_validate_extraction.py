@@ -62,8 +62,7 @@ class TestLegBranchValidation:
             version = account["version"]
             if bill not in trees:
                 # Find the enrolled bill XML
-                bill_dir = Path("bills") / bill
-                xml_path = bill_dir / version
+                xml_path = resolve_bill_file(bill, version)
                 if xml_path.exists():
                     trees[bill] = normalize_bill(xml_path)
         if not trees:
@@ -86,20 +85,19 @@ class TestLegBranchValidation:
         Unconditional since #278: all seven referenced bills are now committed, so this
         needs no env var and fails closed everywhere, including CI. It used to assert only
         under REQUIRE_CORPUS=1, which CI never set — a guard that never ran. Asks git
-        whether each file is TRACKED, not merely present (#308/#327): a bill added without
-        its ``bills/`` ``.gitignore`` allowlist line exists on the author's machine and is
-        absent in CI, and only the git question catches that before the push.
+        whether each file is TRACKED, not merely present (#308/#327): a fixture written into
+        tests/corpus/ but never staged exists on the author's machine and is absent in CI,
+        and only the git question catches that before the push.
         """
         referenced = {f"{a['bill']}/{a['version']}" for a in fixture_data["accounts"]}
         missing = uncommitted_bill_files(referenced)
         assert not missing, (
             f"{len(missing)} of {len(referenced)} fixture-referenced bill version(s) are not "
             f"committed (missing on disk, or present but untracked): {missing}. Each bill "
-            "test_data/validation_leg_branch.json names must be committed under bills/ with "
-            "a matching .gitignore allowlist line, or its accounts silently drop out of "
-            "validation. Re-download with fetch_bills.py download <congress> <type> "
-            "<number> --format both if the file is gone; check .gitignore if it is present "
-            "but untracked."
+            "test_data/validation_leg_branch.json names must be committed under tests/corpus/, "
+            "or its accounts silently drop out of validation. Re-fetch with "
+            "fetch_bills.py download <congress> <type> <number> --format both and copy the "
+            "file into tests/corpus/<id>/ if it is gone; `git add` it if present but untracked."
         )
 
     def test_all_bills_loaded(self, fixture_data, bill_trees):
@@ -191,6 +189,7 @@ class TestLegBranchValidation:
 # *rises* (a regression) and is lowered intentionally when extraction improves. Run
 # `uv run python scripts/generate_validation_report.py` to refresh the doc and these counts.
 
+from corpus_paths import resolve_bill_file  # noqa: E402
 from validation_check import validate_jurisdiction  # noqa: E402
 from validation_sources import JURISDICTIONS  # noqa: E402
 

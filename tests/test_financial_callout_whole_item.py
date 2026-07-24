@@ -14,20 +14,18 @@ surfaced and the net is honest.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from bill_tree import normalize_bill
+from corpus_paths import fixture_path
 from diff_bill import bill_diff_to_dict, diff_bills
 from diff_pdf import PdfDiff, PdfHunk
 from formatters.canonical import pdf_diff_to_canonical, view_from_canonical, xml_diff_to_canonical
 from formatters.diff_html import _build_callout
 from parsers.pdf_anchors import Anchor
 
-BILLS_DIR = Path(__file__).parent.parent / "bills"
-_V1 = BILLS_DIR / "119-hr-1" / "1_reported-in-house.xml"
-_V2 = BILLS_DIR / "119-hr-1" / "2_engrossed-in-house.xml"
+_V1 = fixture_path("119-hr-1", "1_reported-in-house.xml")
+_V2 = fixture_path("119-hr-1", "2_engrossed-in-house.xml")
 
 # The XML headline is corpus-gated; the PDF fixture below is synthetic (fast).
 _corpus = [

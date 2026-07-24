@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import fixture_path
 from parsers.pdf_anchors import extract_anchors
 from parsers.pdf_text import extract_clean_pages
 from tests.conftest import assert_manifest_committed
@@ -31,8 +32,8 @@ GOLDEN_DIR = ROOT / "test_data" / "pdf" / "anchors_golden"
 
 # (golden name, pdf path) — approps (House), non-approps (House), approps (Senate).
 FIXTURES = {
-    "118-hr-8752": ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.pdf",
-    "118-hr-8282": ROOT / "bills" / "118-hr-8282" / "1_introduced-in-house.pdf",
+    "118-hr-8752": fixture_path("118-hr-8752", "1_reported-in-house.pdf"),
+    "118-hr-8282": fixture_path("118-hr-8282", "1_introduced-in-house.pdf"),
     "118-s-4795": ROOT / "test_data" / "BILLS-118s4795rs.pdf",
 }
 
@@ -128,8 +129,8 @@ class TestSectionCatchlineContinuation:
 
     # (pdf, the false-account text the wrapped catchline used to emit)
     REPROS = {
-        ROOT / "bills" / "117-hr-2471" / "1_introduced-in-house.pdf": "AND ASSEMBLY IN HAITI.",
-        ROOT / "bills" / "118-hr-2882" / "1_introduced-in-house.pdf": "TRUST FUND.",
+        fixture_path("117-hr-2471", "1_introduced-in-house.pdf"): "AND ASSEMBLY IN HAITI.",
+        fixture_path("118-hr-2882", "1_introduced-in-house.pdf"): "TRUST FUND.",
     }
 
     @pytest.mark.parametrize("pdf", sorted(REPROS), ids=lambda p: p.parent.name)
@@ -225,7 +226,7 @@ class TestMajorLevelEndToEnd:
         # No SPENDING REDUCTION ACCOUNT (body-size grouping header), no "U.S.C." or
         # "(8 U.S.C. 1448)." citation false positives.
         pdf = FIXTURES["118-hr-8752"]
-        xml = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.xml"
+        xml = fixture_path("118-hr-8752", "1_reported-in-house.xml")
         assert _pdf_major_vocab(pdf) == _xml_major_vocab(xml)
 
     def test_zero_majors_on_non_approps(self):
@@ -242,7 +243,7 @@ class TestMajorLevelEndToEnd:
         # separately and deterministically by test_anchors_match_golden; here we assert
         # the semantic floor, not a brittle hand-coded literal.
         pdf = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
-        xml = ROOT / "bills" / "118-s-4795" / "1_reported-in-senate.xml"
+        xml = fixture_path("118-s-4795", "1_reported-in-senate.xml")
         xm = _xml_major_vocab(xml)
         pm = _pdf_major_vocab(pdf)
         assert xm, "XML major oracle is empty — derivation broke"
@@ -253,8 +254,8 @@ class TestMajorLevelEndToEnd:
 
     # (pdf, the body-size all-caps catchline fragment that must NOT become a major)
     _MAJOR_FP_REPROS = {
-        ROOT / "bills" / "117-hr-2471" / "1_introduced-in-house.pdf": "AND ASSEMBLY IN HAITI.",
-        ROOT / "bills" / "118-hr-2882" / "1_introduced-in-house.pdf": "TRUST FUND.",
+        fixture_path("117-hr-2471", "1_introduced-in-house.pdf"): "AND ASSEMBLY IN HAITI.",
+        fixture_path("118-hr-2882", "1_introduced-in-house.pdf"): "TRUST FUND.",
     }
 
     @pytest.mark.parametrize("pdf", sorted(_MAJOR_FP_REPROS), ids=lambda p: p.parent.name)
@@ -434,7 +435,7 @@ class TestCarryoverAgenciesEndToEnd:
         # treats Title-case path segments as agencies and ALL-CAPS as majors. A new
         # fixture's casing must be eyeballed before trusting this `==`.
         pdf = FIXTURES["118-hr-8752"]
-        xml = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.xml"
+        xml = fixture_path("118-hr-8752", "1_reported-in-house.xml")
         assert _pdf_agency_vocab(pdf) == _xml_agency_vocab(xml)
 
     def test_zero_false_agencies_on_non_approps(self):
@@ -476,7 +477,7 @@ class TestCarryoverAgencyVocabFloors:
 
     def test_s4795_agency_vocab_floors(self):
         pdf = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
-        xml = ROOT / "bills" / "118-s-4795" / "1_reported-in-senate.xml"
+        xml = fixture_path("118-s-4795", "1_reported-in-senate.xml")
         xa = _xml_agency_vocab(xml)
         pa = _pdf_agency_vocab(pdf)
         assert len(xa) >= self.MIN_VOCAB, f"XML agency oracle shrank to {len(xa)}"
@@ -521,7 +522,7 @@ class TestCorpusAccountPrecision:
     # locally-fetched corpus and a clean CI checkout can disagree. Name the pair
     # explicitly for any bill whose committed set would resolve to the wrong version.
     BILLS = [
-        ("114-hr-2029", "bills/114-hr-2029", None),
+        ("114-hr-2029", "tests/corpus/114-hr-2029", None),
         # Explicit (#141): this bill's only COMMITTED pdf/xml pair is the enrolled
         # version, which carries no printed line numbers and so has no size-detected
         # account vocabulary at all — the directory form would measure 0.000 recall in
@@ -529,16 +530,16 @@ class TestCorpusAccountPrecision:
         # a numbered print, so it names v1 and skips where v1 isn't fetched.
         (
             "115-hr-5895",
-            "bills/115-hr-5895/1_reported-in-house.pdf",
-            "bills/115-hr-5895/1_reported-in-house.xml",
+            "tests/corpus/115-hr-5895/1_reported-in-house.pdf",
+            "tests/corpus/115-hr-5895/1_reported-in-house.xml",
         ),
         ("117-hr-4432", "bills/117-hr-4432", None),
-        ("117-hr-4502", "bills/117-hr-4502", None),
-        ("118-hr-4366", "bills/118-hr-4366", None),
+        ("117-hr-4502", "tests/corpus/117-hr-4502", None),
+        ("118-hr-4366", "tests/corpus/118-hr-4366", None),
         ("118-hr-4820", "bills/118-hr-4820", None),
-        ("118-hr-8752", "bills/118-hr-8752", None),
-        ("118-hr-8774", "bills/118-hr-8774", None),
-        ("118-s-4795", "test_data/BILLS-118s4795rs.pdf", "bills/118-s-4795/1_reported-in-senate.xml"),
+        ("118-hr-8752", "tests/corpus/118-hr-8752", None),
+        ("118-hr-8774", "tests/corpus/118-hr-8774", None),
+        ("118-s-4795", "test_data/BILLS-118s4795rs.pdf", "tests/corpus/118-s-4795/1_reported-in-senate.xml"),
     ]
     # Set below the lowest measured value (118-hr-4820: vrec 0.64 / vprec 0.46) with
     # margin for per-line median wobble; these are regression floors, not targets.
@@ -575,7 +576,7 @@ class TestPrecisionHarnessOracle:
 
     def test_measure_arithmetic_and_stable_xml_counts(self):
         pdf = FIXTURES["118-hr-8752"]
-        xml = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.xml"
+        xml = fixture_path("118-hr-8752", "1_reported-in-house.xml")
         from scripts.heading_precision import measure
 
         m = measure(pdf, xml)

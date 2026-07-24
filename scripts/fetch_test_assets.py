@@ -58,12 +58,12 @@ _SUBCOMMITTEE_PACKAGES = {
 
 # SEC.-catchline false-positive repro bills (introduced-in-House). Used by the
 # catchline guards in test_pdf_anchor_golden.py (a wrapped SEC. catchline must not
-# surface as an account or a major). They live under bills/<id>/ to match the
-# fetch_bills.py layout the tests already reference; fetched from govinfo here to
-# get the PDF format specifically (fetch_bills.py's default format is XML).
+# surface as an account or a major). They are committed fixtures under tests/corpus/<id>/
+# and keep the fetch_bills.py per-bill layout the tests reference; fetched from govinfo
+# here to get the PDF format specifically (fetch_bills.py's default format is XML).
 _CATCHLINE_BILLS = {
-    "bills/117-hr-2471/1_introduced-in-house.pdf": "BILLS-117hr2471ih",
-    "bills/118-hr-2882/1_introduced-in-house.pdf": "BILLS-118hr2882ih",
+    "tests/corpus/117-hr-2471/1_introduced-in-house.pdf": "BILLS-117hr2471ih",
+    "tests/corpus/118-hr-2882/1_introduced-in-house.pdf": "BILLS-118hr2882ih",
 }
 
 # (destination path relative to the repo root, govinfo URL)

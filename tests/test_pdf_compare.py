@@ -15,8 +15,10 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR, fixture_path
+
 ROOT = Path(__file__).resolve().parent.parent
-BILL_DIR = ROOT / "bills" / "118-hr-4366"
+BILL_DIR = FIXTURES_DIR / "118-hr-4366"
 SCHEMA = ROOT / "schema" / "canonical-diff.schema.json"
 
 
@@ -170,8 +172,8 @@ def test_compare_pdf_bytes_rejected_when_format_xml():
 # nothing and the diff silently degrades to one giant block instead of raising.
 # The guard must decline; these tests pin both the refusal and the happy path.
 
-ENROLLED_PDF = ROOT / "bills" / "115-hr-5895" / "5_enrolled-bill.pdf"
-NUMBERED_PDF = ROOT / "bills" / "118-hr-8752" / "1_reported-in-house.pdf"
+ENROLLED_PDF = fixture_path("115-hr-5895", "5_enrolled-bill.pdf")
+NUMBERED_PDF = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
 
 
 def _line(n):
@@ -230,7 +232,7 @@ def test_miss_window_stays_narrow():
 @pytest.mark.slow
 def test_enrolled_pdf_is_declined_not_silently_diffed():
     if not ENROLLED_PDF.exists():
-        pytest.skip("enrolled sample PDF not present (bills/115-hr-5895/)")
+        pytest.skip("enrolled sample PDF not present (tests/corpus/115-hr-5895/)")
 
     from server.pdf_compare import UnsupportedLayoutError, compare_pdfs
 
@@ -253,7 +255,7 @@ def test_enrolled_pdf_declined_when_only_one_side_is_enrolled():
 @pytest.mark.slow
 def test_enrolled_upload_returns_specific_message_not_generic_422():
     if not ENROLLED_PDF.exists():
-        pytest.skip("enrolled sample PDF not present (bills/115-hr-5895/)")
+        pytest.skip("enrolled sample PDF not present (tests/corpus/115-hr-5895/)")
 
     pdf = ENROLLED_PDF.read_bytes()
     resp = _client().post(
@@ -275,11 +277,11 @@ def test_enrolled_upload_returns_specific_message_not_generic_422():
 def test_numbered_pdfs_still_diff_after_guard():
     # The guard must not fire on the happy path.
     if not NUMBERED_PDF.exists():
-        pytest.skip("sample PDF not present (bills/118-hr-8752/)")
+        pytest.skip("sample PDF not present (tests/corpus/118-hr-8752/)")
 
-    end = ROOT / "bills" / "118-hr-8752" / "2_engrossed-in-house.pdf"
+    end = fixture_path("118-hr-8752", "2_engrossed-in-house.pdf")
     if not end.exists():
-        pytest.skip("sample PDF not present (bills/118-hr-8752/)")
+        pytest.skip("sample PDF not present (tests/corpus/118-hr-8752/)")
 
     from server.pdf_compare import compare_pdfs
 
@@ -295,7 +297,7 @@ def test_compare_pdfs_returns_valid_canonical():
     start = BILL_DIR / "1_reported-in-house.pdf"
     end = BILL_DIR / "2_engrossed-in-house.pdf"
     if not start.exists() or not end.exists():
-        pytest.skip("sample bill PDFs not present (bills/118-hr-4366/)")
+        pytest.skip("sample bill PDFs not present (tests/corpus/118-hr-4366/)")
 
     from server.pdf_compare import compare_pdfs
 
@@ -323,7 +325,7 @@ def test_compare_pdfs_html_returns_standalone_report():
     start = BILL_DIR / "1_reported-in-house.pdf"
     end = BILL_DIR / "2_engrossed-in-house.pdf"
     if not start.exists() or not end.exists():
-        pytest.skip("sample bill PDFs not present (bills/118-hr-4366/)")
+        pytest.skip("sample bill PDFs not present (tests/corpus/118-hr-4366/)")
 
     from server.pdf_compare import compare_pdfs_html
 
@@ -346,7 +348,7 @@ def test_compare_api_returns_html():
     start = BILL_DIR / "1_reported-in-house.pdf"
     end = BILL_DIR / "2_engrossed-in-house.pdf"
     if not start.exists() or not end.exists():
-        pytest.skip("sample bill PDFs not present (bills/118-hr-4366/)")
+        pytest.skip("sample bill PDFs not present (tests/corpus/118-hr-4366/)")
 
     resp = _client().post(
         "/api/compare?output=html",

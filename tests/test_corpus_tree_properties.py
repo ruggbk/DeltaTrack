@@ -39,6 +39,7 @@ from pathlib import Path
 import pytest
 
 from bill_tree import extract_text_content, find_bill_body, normalize_bill
+from corpus_paths import fixture_path
 from diff_bill import extract_amounts
 from formatters.canonical import _pdf_tree_payload
 from formatters.diff_html import _build_toc_from_tree
@@ -357,7 +358,7 @@ def test_pdf_tree_invariants_hold_corpus_wide(pdf_path: Path) -> None:
     _assert_money_conserves(roots, reference, _PDF_DROP_BUDGET.get(test_id, 0), test_id)
 
 
-_ENROLLED_PDF = Path(__file__).parent.parent / "bills" / "115-hr-5895" / "5_enrolled-bill.pdf"
+_ENROLLED_PDF = fixture_path("115-hr-5895", "5_enrolled-bill.pdf")
 
 
 def test_enrolled_pdf_text_layer_is_whole_though_its_tree_is_empty() -> None:

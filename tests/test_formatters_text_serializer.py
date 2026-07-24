@@ -8,11 +8,10 @@ JSON's optional `full_text` field for full-document tracked-changes views.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from bill_tree import BillNode, BillTree, bill_title, normalize_bill
+from corpus_paths import fixture_path
 from formatters.text_serializer import (
     serialize_tree,
     serialize_tree_for_diff,
@@ -280,7 +279,7 @@ def test_bill_title_without_official_title_is_just_the_designator():
     assert bill_title(tree) == "S. 12"
 
 
-_HR4366_V1 = Path("bills/118-hr-4366/1_reported-in-house.xml")
+_HR4366_V1 = fixture_path("118-hr-4366", "1_reported-in-house.xml")
 
 
 @pytest.mark.slow

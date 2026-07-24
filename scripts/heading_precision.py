@@ -24,10 +24,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from bill_tree import normalize_bill, normalize_header  # noqa: E402
+from corpus_paths import FIXTURES_DIR  # noqa: E402
 from parsers.pdf_anchors import extract_anchors  # noqa: E402
 from parsers.pdf_text import extract_clean_pages  # noqa: E402
 
-BILLS_DIR = ROOT / "bills"
+BILLS_DIR = FIXTURES_DIR
 
 
 def _xml_headings(xml_path: Path):

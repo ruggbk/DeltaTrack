@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR
 from diff_pdf import build_parser, main
 
-BILL_DIR = Path(__file__).parent.parent / "bills" / "118-hr-8752"
+BILL_DIR = FIXTURES_DIR / "118-hr-8752"
 V1 = BILL_DIR / "1_reported-in-house.pdf"
 V2 = BILL_DIR / "2_engrossed-in-house.pdf"
 

@@ -15,15 +15,17 @@
 # HOW THE GATES READ IT
 # tests/conftest.py loads this file once (stdlib tomllib) and derives the XML-file
 # list, the PDF-file list, and the adjacent-version pairs the gates parametrize over.
-# A file `bills/<id>/<stage>.<format>` is built for every (bill, version, format)
+# A file `tests/corpus/<id>/<stage>.<format>` is built for every (bill, version, format)
 # below. Because those files are committed, a normal checkout always has them; the
 # per-module completeness floor (test_manifest_fixtures_committed) fails closed if any
 # is absent — that is the CI signal that a manifested fixture was not committed.
 #
 # ADDING A FIXTURE — see the "Add a corpus fixture" recipe in TESTING.md. In short:
-# `git add` the bill files under bills/<id>/, add a [[bill]] entry here, and run the
-# gates so any per-bill baseline (_KNOWN_DUPLICATE_COUNTS, _XML_DROP_BUDGET, ...) is
-# calibrated. Manifest and committed files must move together.
+# put the bill files under tests/corpus/<id>/ and `git add` them, add a [[bill]] entry
+# here, and run the gates so any per-bill baseline (_KNOWN_DUPLICATE_COUNTS,
+# _XML_DROP_BUDGET, ...) is calibrated. Manifest and committed files must move together.
+# NOT bills/ — that tree is wholly gitignored since #308, so `git add` there is a silent
+# no-op and the fixture would live only on your disk.
 #
 # SCOPE (#217 / #126): this is the initial curated floor — the bills the gates encode
 # hand-pinned baselines for, plus one bill per appropriations subcommittee and the
@@ -149,7 +151,7 @@ versions = [
 # --- One Senate reported print per appropriations subcommittee -----------------
 # FY2025 (118th) unless noted. Reported-in-Senate prints exercise small-caps heading
 # bands and per-subcommittee department/major heading vocabulary — the overfitting
-# guard #126 asks for. Committed under the bills/118-s-*/ allowlist in .gitignore.
+# guard #126 asks for. Committed under tests/corpus/118-s-*/ like every other fixture.
 
 [[bill]]
 id = "118-s-4690"

@@ -11,21 +11,22 @@ from pathlib import Path
 import pytest
 
 from bill_tree import BillNode, BillTree, normalize_bill
+from corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_bill_dirs
 from diff_bill import NodeDiff, diff_bills
-
-BILLS_DIR = Path(__file__).parent.parent / "bills"
 
 # --- Committed corpus manifest (#217 / ADR 0015) -------------------------------
 # The three corpus correctness gates (test_corpus_properties, test_corpus_tree_
 # properties, test_diff_validation) parametrize over the COMMITTED fixture set named
-# in tests/corpus_manifest.toml — not a `bills/*/…` glob. Every manifested bill is in
-# git, so the collected set is byte-identical on every machine and in CI; a missing
+# in tests/corpus_manifest.toml — not a filesystem glob. Every manifested bill lives
+# in tests/corpus/ and is tracked in git, so the collected set is byte-identical on
+# every machine and in CI; a missing
 # fixture fails the per-module completeness floor (fail closed) instead of vanishing
 # from an empty glob (fail open). See docs/decisions/0015-corpus-test-fixtures.md.
 #
 # CORPUS_SWEEP=1 restores the old broad-glob behavior as an opt-in, non-CI exploratory
-# mode: it sweeps every locally-fetched bill (a superset of the manifest), which has
-# caught bugs a few clean bills did not (#126, #146). It is exploration, not a gate.
+# mode: it sweeps both trees — the committed fixtures AND every locally-downloaded
+# bill under bills/ (a superset of the manifest), which has caught bugs a few clean
+# bills did not (#126, #146). It is exploration, not a gate. See corpus_paths.py.
 CORPUS_SWEEP = os.environ.get("CORPUS_SWEEP") == "1"
 _MANIFEST_PATH = Path(__file__).parent / "corpus_manifest.toml"
 
@@ -48,7 +49,7 @@ def manifest_bill_ids() -> list[str]:
 def _manifest_paths(fmt: str) -> list[Path]:
     """Committed manifest fixture paths of one format ('xml' | 'pdf'), sorted."""
     return sorted(
-        BILLS_DIR / bill["id"] / f"{ver['stage']}.{fmt}"
+        FIXTURES_DIR / bill["id"] / f"{ver['stage']}.{fmt}"
         for bill in _manifest_bills()
         for ver in bill["versions"]
         if fmt in ver["formats"]
@@ -59,7 +60,7 @@ def manifest_xml_files() -> list[Path]:
     """XML fixtures the corpus gates parametrize over (manifest, or the full local
     glob under CORPUS_SWEEP)."""
     if CORPUS_SWEEP:
-        return sorted(BILLS_DIR.glob("*/[0-9]*_*.xml"))
+        return sorted(f for d in sweep_bill_dirs() for f in d.glob("[0-9]*_*.xml"))
     return _manifest_paths("xml")
 
 
@@ -67,7 +68,7 @@ def manifest_pdf_files() -> list[Path]:
     """PDF fixtures the corpus gates parametrize over (manifest, or the full local
     glob under CORPUS_SWEEP)."""
     if CORPUS_SWEEP:
-        return sorted(BILLS_DIR.glob("*/[0-9]*_*.pdf"))
+        return sorted(f for d in sweep_bill_dirs() for f in d.glob("[0-9]*_*.pdf"))
     return _manifest_paths("pdf")
 
 
@@ -84,7 +85,7 @@ def manifest_version_pairs() -> list[tuple[Path, Path]]:
     Under CORPUS_SWEEP, every adjacent pair across all locally-fetched bills."""
     pairs: list[tuple[Path, Path]] = []
     if CORPUS_SWEEP:
-        for bill_dir in sorted(BILLS_DIR.iterdir()):
+        for bill_dir in sweep_bill_dirs():
             if bill_dir.is_dir():
                 # Scope to the version-file naming (matches manifest_xml_files) so a stray
                 # non-bill XML (e.g. govinfo BILLSTATUS metadata) can't enter the diff pairs.
@@ -93,7 +94,7 @@ def manifest_version_pairs() -> list[tuple[Path, Path]]:
         return pairs
     for bill in _manifest_bills():
         versions = sorted(
-            (BILLS_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]),
+            (FIXTURES_DIR / bill["id"] / f"{ver['stage']}.xml" for ver in bill["versions"] if "xml" in ver["formats"]),
             key=_stage_num,
         )
         pairs += [(versions[i], versions[i + 1]) for i in range(len(versions) - 1)]
@@ -124,38 +125,39 @@ def _git_tracked_paths(repo: Path, subdir: str) -> frozenset[str] | None:
 
 @functools.cache
 def _tracked_bills() -> frozenset[str] | None:
-    """``bills/…``-prefixed paths git tracks (cached), or ``None`` outside a work tree.
+    """``tests/corpus/…`` paths git tracks (cached), or ``None`` outside a work tree.
     The corpus does not change mid-session, so one ``git ls-files`` serves every gate's
     floor."""
-    return _git_tracked_paths(BILLS_DIR.parent, "bills")
+    return _git_tracked_paths(PROJECT_ROOT, "tests/corpus")
 
 
 def uncommitted_bill_files(rel_paths: Iterable[str]) -> list[str]:
-    """Of the given ``bills/``-relative paths, those not committed to git, sorted.
+    """Of the given fixture-relative paths (``<id>/<stage>.<fmt>``), those not committed
+    to git under ``tests/corpus/``, sorted.
 
     A fixture counts as committed only if git TRACKS it *and* it is on disk — not merely
-    that it exists. That distinction is the whole point (#308): a contributor who adds a
-    fixture but forgets its per-file ``bills/`` ``.gitignore`` allowlist line still has
-    the file locally, so ``git add`` silently no-ops and the file is never tracked. A
-    bare ``Path.exists()`` check passes on that author's machine and the gap surfaces
-    only on a fresh CI checkout, where the file is genuinely gone and the gate quietly
-    collects fewer cases (fail-open). Asking git instead fails on the author's machine,
-    before the push.
+    that it exists. Splitting the trees (#308) removed the failure this was written for
+    (a forgotten ``bills/`` ``.gitignore`` re-admit line, which made ``git add`` a silent
+    no-op), but not the need for the check: a fixture can still be written into
+    ``tests/corpus/`` and left unstaged, and a bare ``Path.exists()`` passes on that
+    author's machine while a fresh CI checkout quietly collects fewer cases (fail-open).
+    Asking git fails on the author's machine, before the push.
 
-    Outside a git work tree (e.g. tests run from an unpacked sdist) git cannot answer,
-    so we fall back to the presence check alone — the forgotten-``.gitignore`` failure
-    mode only exists inside a working checkout.
+    Outside a git work tree (e.g. tests run from an unpacked sdist) git cannot answer, so
+    we fall back to the presence check alone — the untracked-fixture failure mode only
+    exists inside a working checkout.
 
     Takes a caller-supplied path list rather than reading the manifest, because two
     different sets need the same committed-ness semantics: the manifest fixtures
     (``missing_manifest_files``) and the bill versions the Legislative Branch validation
     fixture references (#278), which is derived from
-    ``test_data/validation_leg_branch.json`` and is not a manifest question."""
+    ``test_data/validation_leg_branch.json`` and is not a manifest question. Both sets
+    now live under ``tests/corpus/`` (#308)."""
     tracked = _tracked_bills()
     missing = []
     for rel in sorted(set(rel_paths)):
-        on_disk = (BILLS_DIR / rel).exists()
-        is_tracked = tracked is None or f"bills/{rel}" in tracked
+        on_disk = (FIXTURES_DIR / rel).exists()
+        is_tracked = tracked is None or f"tests/corpus/{rel}" in tracked
         if not (on_disk and is_tracked):
             missing.append(rel)
     return missing
@@ -179,17 +181,17 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 
     Called from a plain (non-parametrized) guard test so it always collects and runs —
     with no env var, unlike the retired REQUIRE_CORPUS floor. Fails (not skips) if any
-    manifested fixture is not committed to git — missing on disk OR present-but-untracked
-    (a forgotten ``bills/`` ``.gitignore`` allowlist line, #308) — so the gap goes red on
-    the author's machine before the push, not silently on a fresh CI checkout that
-    collects fewer cases. ``kind`` names the gate in the failure message.
+    manifested fixture is not committed to git — missing on disk OR present-but-unstaged
+    under tests/corpus/ (#308) — so the gap goes red on the author's machine before the
+    push, not silently on a fresh CI checkout that collects fewer cases. ``kind`` names
+    the gate in the failure message.
     """
     missing = missing_manifest_files()
     assert not missing, (
         f"{kind}: manifest fixtures not committed to git (missing on disk or untracked): "
-        f"{missing}. Every bill in tests/corpus_manifest.toml must be `git add`ed and "
-        "committed — a fixture present on your disk but untracked (a forgotten bills/ "
-        ".gitignore allowlist line) passes locally and then silently skips in CI (#308)."
+        f"{missing}. Every bill in tests/corpus_manifest.toml must live under tests/corpus/ "
+        "and be `git add`ed — a fixture present on your disk but untracked passes locally "
+        "and then silently skips in CI (#308)."
     )
     assert len(collected) > 0, f"{kind}: gate parametrized over zero cases despite a complete manifest."
 
@@ -547,15 +549,15 @@ def pytest_collection_modifyitems(config, items):
 
 
 # Paths to commonly used bill versions (118-hr-4366).
-HR4366_V1_PATH = BILLS_DIR / "118-hr-4366" / "1_reported-in-house.xml"
-HR4366_V4_PATH = BILLS_DIR / "118-hr-4366" / "4_engrossed-amendment-senate.xml"
-HR4366_V5_PATH = BILLS_DIR / "118-hr-4366" / "5_engrossed-amendment-house.xml"
-HR4366_V6_PATH = BILLS_DIR / "118-hr-4366" / "6_enrolled-bill.xml"
+HR4366_V1_PATH = fixture_path("118-hr-4366", "1_reported-in-house.xml")
+HR4366_V4_PATH = fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml")
+HR4366_V5_PATH = fixture_path("118-hr-4366", "5_engrossed-amendment-house.xml")
+HR4366_V6_PATH = fixture_path("118-hr-4366", "6_enrolled-bill.xml")
 
-HR4366_V2_PATH = BILLS_DIR / "118-hr-4366" / "2_engrossed-in-house.xml"
+HR4366_V2_PATH = fixture_path("118-hr-4366", "2_engrossed-in-house.xml")
 
-HR5895_V4_PATH = BILLS_DIR / "115-hr-5895" / "4_engrossed-amendment-senate.xml"
-HR5895_V5_PATH = BILLS_DIR / "115-hr-5895" / "5_enrolled-bill.xml"
+HR5895_V4_PATH = fixture_path("115-hr-5895", "4_engrossed-amendment-senate.xml")
+HR5895_V5_PATH = fixture_path("115-hr-5895", "5_enrolled-bill.xml")
 
 
 # --- Session-scoped cached bill trees ---
@@ -645,8 +647,8 @@ def hr5895_v4_v5_diff(hr5895_v4, hr5895_v5):
 
 # --- Session-scoped HR8752 PDF pages (shared across pdf recall tests) ---
 
-HR8752_V1_PDF = BILLS_DIR / "118-hr-8752" / "1_reported-in-house.pdf"
-HR8752_V2_PDF = BILLS_DIR / "118-hr-8752" / "2_engrossed-in-house.pdf"
+HR8752_V1_PDF = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
+HR8752_V2_PDF = fixture_path("118-hr-8752", "2_engrossed-in-house.pdf")
 
 
 @pytest.fixture(scope="session")
@@ -708,7 +710,7 @@ def has_bill_xml() -> bool:
     directory holding only non-bill XML (e.g. govinfo BILLSTATUS metadata) doesn't
     falsely report the corpus as present.
     """
-    return any(BILLS_DIR.glob("*/[0-9]*_*.xml"))
+    return any(f for d in sweep_bill_dirs() for f in d.glob("[0-9]*_*.xml"))
 
 
 def make_bill_node(

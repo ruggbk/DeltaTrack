@@ -200,3 +200,66 @@ curation from growing the pack by precedent, a fixture addition should:
 
 This is a guideline for reviewers, not a hard cap; the point is that each addition is a
 deliberate, justified choice rather than a default.
+
+## Amendment (#308, 2026-07-24)
+
+The decision is unchanged — fixtures are committed, curated, and enumerated by a
+manifest. What changes is **where they live**, which the body deliberately left open
+("it says nothing about where fixtures live"). They move from `bills/` to
+`tests/corpus/`, and `bills/` becomes entirely gitignored.
+
+The body's model was one directory holding both the committed fixtures and the
+downloaded working corpus, with the fixtures re-admitted past a blanket ignore rule
+file by file. That list reached 80 rules. It was a second copy of
+`tests/corpus_manifest.toml` that nothing checked for agreement — it accumulated at
+least one provably inert rule (`!bills/large_bills.csv`, overridden by a later
+`*.csv`) without anyone noticing — and its omission was silent, because `git add` on
+an ignored path is a no-op. #327 made that omission loud by asking `git ls-files`
+rather than the filesystem. Splitting the trees removes the edit instead of guarding
+it, which is why both changes exist and why the #327 floor is kept: it now guards an
+ordinary mistake (a fixture written but never staged) rather than a footgun.
+
+Consequences worth recording:
+
+- **Adding a fixture is `git add` plus a manifest entry.** No ignore-file edit, and no
+  need to know that `!bills/<id>/` is inert without a following `bills/<id>/*`.
+- **`bills/` is genuinely disposable again.** The body's model made it part-tracked,
+  which is why `TESTING.md` had to carry a bolded warning never to `rm -rf` it and why
+  symlinking another checkout's corpus over it was hazardous. Both are now safe.
+- **`test_data/` gets the same inversion.** It was deny-all-then-re-admit for the same
+  reason and with the same effect: adding a golden required an ignore edit. It is now
+  tracked by default with two local-only artifacts listed.
+- **`corpus_paths.py` is the single home for the layout**, so a future move is one edit
+  rather than thirty. `resolve_bill_file` is the concession to consumers whose inputs are
+  mixed at the *version* level — a bill committed for the stages a gate pins and
+  download-only for the rest, e.g. `115-hr-5895` (stage 3 not committed) and `115-hr-244`
+  (enrolled committed, engrossed-amendment doc withheld per #11/#322). It is a deliberate
+  fallback into `bills/`, and the layout guard cannot see through it, so prefer
+  `fixture_path` wherever the file is committed.
+- **Three new silent-failure channels open, and are closed by
+  `tests/test_fixture_layout.py`**: a committed fixture addressed through `bills/`
+  (resolves on a machine that downloaded it, absent in CI, where the skip-if-absent
+  guard keeps the run green); a `CORPUS_SWEEP` that stops spanning both trees (nothing
+  asserts its case count, so narrowing it loses coverage silently); and a fixture
+  written into `tests/corpus/` but never staged (the manifest floor covers manifested
+  bills, but the golden modules pin files the manifest does not name). Each rule proves
+  it can fire against a synthetic bad input, except the tracking one, whose fault has to
+  be injected on disk (an unstaged file) and so is verified by hand.
+- **The first channel has two spellings, and the composed one is the dangerous half.**
+  A bill id beside the word `bills` is greppable per bill; a download root bound once
+  and combined with a bill id hundreds of lines away (`_BILLS = _ROOT / "bills"`) is not,
+  because the two never appear together. `scripts/build_similarity_labels.py` came
+  through the move in exactly that shape and stopped resolving — caught in review of
+  #345, not by the first version of the guard. Hence a second rule: outside
+  `corpus_paths.py` and the fetchers, no module spells the download root at all.
+- **The judgement is per version, not per bill.** A bill-level allowlist cannot express
+  a partly committed bill, so exempting `115-hr-244` (for its withheld amendment doc)
+  silently exempted its committed enrolled text too. The guard derives the committed set
+  from the tree instead of keeping a list, which removes both the drift and the hole.
+- **Repository size is unchanged.** The files move; git already stores their blobs, and
+  history keeps them at the old paths regardless. The size bar for future additions
+  above still applies unchanged.
+- **The `.gitignore` loses its ~80-rule re-admit list**, roughly a two-thirds cut, and
+  stops growing with each fixture. (Deliberately not a line count: the file keeps
+  changing for unrelated reasons, and a number here would be wrong within a release
+  while still reading as measured.)

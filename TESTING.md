@@ -175,7 +175,7 @@ it had come to gate.
 ### Test counts are not comparable between machines
 
 A large share of the suite is data-driven, parametrized over real bill files that
-live in gitignored directories (`bills/`'s downloaded tier, `bills_corpus/`,
+live in gitignored directories (`bills/`, `bills_corpus/`,
 `bills_govinfo_staging/`). How many tests collect, pass, or skip therefore depends
 on how much bill data that particular machine has fetched — a full working
 checkout and a fresh clone legitimately report very different totals for the same
@@ -212,8 +212,10 @@ set and retired `REQUIRE_CORPUS` outright; the one requirement no fixture can su
 is a live network, and that is now the `network` marker.)
 
 To sweep every bill you have fetched locally -- broader than the committed set,
-and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`.
-This is exploration, not a gate; CI never runs it.
+and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`. It
+spans both trees (the committed fixtures in `tests/corpus/` *and* `bills/`), so it
+is a strict superset of what the gates collect. This is exploration, not a gate;
+CI never runs it.
 
 ```bash
 # The committed corpus gates (what CI runs):
@@ -255,24 +257,28 @@ why, and treat adding one as recording a gap rather than clearing an error.
 ### Why a local run can collect more than CI
 
 Most watched modules parametrize over the manifest, so their case list is
-identical everywhere. Two do not: `test_pdf_corpus_smoke` and
-`test_pdf_xml_amount_recall` sweep whatever pairs exist under `bills/`, so a
-machine with a fetched corpus collects many more cases than CI ever sees.
+identical everywhere. Two sweep instead: `test_pdf_corpus_smoke` and
+`test_pdf_xml_amount_recall` iterate whatever version pairs the bill trees hold.
+Since #308 they sweep `tests/corpus/` by default, so an ordinary local run, a
+worktree and CI now collect the *same* cases. Only `CORPUS_SWEEP=1` widens them to
+`bills/` as well, and that mode disables the skip ceiling outright.
 
-Those extra cases are excluded from the skip ceiling (`is_watched_case` in
-`tests/conftest.py`). No allowlist calibrated on the committed corpus could name
-a case that exists only on one machine, and a case CI cannot collect cannot
-regress in CI -- so watching them would turn a full local run red while CI was
-green, on a branch where nothing is wrong. Cases the committed corpus *can*
-produce stay watched, in those modules as in every other.
+Cases the committed corpus cannot produce are excluded from the ceiling anyway
+(`is_watched_case` in `tests/conftest.py`): no allowlist calibrated on the
+committed corpus could name a case that exists only on one machine, and a case CI
+cannot collect cannot regress in CI -- so watching them would turn a full local run
+red while CI was green, on a branch where nothing is wrong. With both sweeping
+suites now pinned to the fixture tree, that carve-out exempts nothing in practice;
+it is kept so a future sweeping module inherits the right behaviour rather than
+having to rediscover it.
 
 ### Adding a corpus fixture
 
 The manifest and the committed files move together:
 
-1. `git add` the bill version file(s) under `bills/<id>/`. `bills/` is
-   gitignored, so add an allowlist entry in `.gitignore` (follow the existing
-   `!bills/<id>/…` blocks) or use `git add -f`.
+1. Put the bill version file(s) under `tests/corpus/<id>/` and `git add` them.
+   That directory is tracked normally, so there is no `.gitignore` step: if you
+   fetched the bill first, copy it across from `bills/<id>/`.
 2. Add a `[[bill]]` entry to `tests/corpus_manifest.toml` naming the `id`, each
    committed version's `stage` (the filename without extension) and `formats`
    (`xml` and/or `pdf`), and a `covers` note saying what structural situation
@@ -282,15 +288,14 @@ The manifest and the committed files move together:
    the new bill or the gate fails. Commit the calibrated baseline alongside the
    fixture and manifest entry.
 
-**Because of step 1, `bills/` is part tracked and part ignored — never `rm -rf`
-it.** The allowlist means committed fixtures sit in the same directory tree as
-downloaded bills that git knows nothing about, so the directory looks disposable
-and is not: deleting it (to reclaim space, or to swap in a symlink to another
-checkout's corpus) takes the committed fixtures with it, and the corpus gates
-then fail closed on missing manifest bills. Move it aside instead of deleting
-it. If you already deleted it, `git restore bills/` brings the tracked files
-back; only the downloaded tier is actually lost, and `fetch_bills.py` refetches
-that.
+**The two trees are separate, and only one matters to the gates** (#308).
+`tests/corpus/` is committed and is what every gate reads; `bills/` is the
+fetchers' working directory, entirely gitignored and entirely disposable —
+delete it, or symlink another checkout's corpus over it, without touching a
+fixture. `corpus_paths.py` is the only place either path is spelled: use
+`fixture_path(bill_id, filename)` rather than composing a path yourself, and
+`tests/test_fixture_layout.py` will fail the build if a test reaches into
+`bills/` for a bill that is committed.
 
 Run a single area:
 
@@ -314,7 +319,6 @@ committed fixtures and are CI gates; a download only adds cases:
 
 | Still needs fetched bills | Why |
 |---|---|
-| `test_pdf_compare`'s end-to-end cases | Read `bills/118-hr-4366/` PDFs, which are not committed |
 | `test_govinfo_corpus_parity` | Live BILLSTATUS fetch, so it cannot be an offline gate. Marked `network`: skipped unless you pass `--run-network`. A weekly scheduled workflow runs it against the committed fixtures (#342); a download only widens which bills it checks |
 
 The Legislative Branch validation set used to be on that list. #278 committed its
@@ -322,8 +326,11 @@ five remaining bills, so its completeness floor is now an ordinary fail-closed
 check that runs everywhere, and CI validates all seven of the fixture's bills
 instead of the two that happened to be committed.
 
-Everything else in the slow group asserts on a clean clone. The two sweeping
-suites above simply widen their case list when you have more bills.
+Everything else in the slow group asserts on a clean clone, against
+`tests/corpus/`. A download never changes what those gates assert, and since #308
+it does not change what they *collect* either: the two sweeping suites
+(`test_pdf_corpus_smoke`, `test_pdf_xml_amount_recall`) read `tests/corpus/` like
+everything else. A download only widens what `CORPUS_SWEEP=1` reaches.
 
 When you do download, the PDF suites need each bill's PDF as well as its XML;
 pass `--format both`, e.g.
@@ -376,9 +383,10 @@ uv run python scripts/serve_compare.py path/to/bill-dir --port 8765 --no-browser
 ```
 
 With no `--v1`/`--v2` it picks the two lowest-numbered versions that have both a
-`.pdf` and an `.xml`, so the bill must be fetched with `--format both` (the
-vendored `bills/` corpus is XML-only). Rendered HTML goes to a temp dir, nothing
-committed. The panes reflect the current checkout, so run it on the branch whose
+`.pdf` and an `.xml`. A bare bill id resolves against the committed fixtures in
+`tests/corpus/`, many of which carry both formats; to view a bill you downloaded
+into `bills/` instead, pass its directory path (and fetch it with `--format
+both`). Rendered HTML goes to a temp dir, nothing committed. The panes reflect the current checkout, so run it on the branch whose
 diff output you're inspecting. This is a manual debugging aid, not a test.
 
 ## Measuring coverage
@@ -387,7 +395,7 @@ Coverage measures how much of the comparison code the tests actually exercise.
 It is reported with `pytest-cov` (already included as a development dependency).
 
 ```bash
-uv run pytest --cov --cov-report=term-missing                 # Full suite (needs bills/)
+uv run pytest --cov --cov-report=term-missing                 # Full suite (no download needed)
 uv run pytest -m "not slow and not browser" --cov --cov-report=term-missing  # Fast group only
 uv run pytest --cov --cov-report=html                          # Browsable report in htmlcov/
 ```
