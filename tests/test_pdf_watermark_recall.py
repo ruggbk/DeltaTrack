@@ -134,14 +134,18 @@ def test_robust_across_watermark_angles(tmp_path, angle):
 
 # ---- Benign bucket: the real watermarked public bill (image/graphic layer) -------------
 
-_S4795_PDF = Path("test_data/BILLS-118s4795rs.pdf")
+_S4795_PDF = Path(__file__).resolve().parent.parent / "test_data" / "BILLS-118s4795rs.pdf"
+
+
+def test_real_watermark_fixture_committed():
+    """Fail-closed floor (#326): the fixture below is committed, so its absence is a
+    broken checkout. The case used to carry a ``skipif`` on the same path, written when
+    the PDF had to be fetched; a skip is green, so deleting the file would have turned
+    the only real-watermark assertion off silently (epic #288, same shape as #287)."""
+    assert _S4795_PDF.exists(), f"committed watermark fixture absent from checkout: {_S4795_PDF}"
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    not _S4795_PDF.exists(),
-    reason="watermarked Senate PDF not present; run scripts/fetch_test_assets.py",
-)
 def test_real_graphic_watermark_extracts_clean():
     """The real watermarked Senate copy carries a graphic-layer watermark pypdfium2 ignores.
 

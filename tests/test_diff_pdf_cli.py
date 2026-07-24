@@ -4,19 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from corpus_paths import FIXTURES_DIR
+from corpus_paths import fixture_path
 from diff_pdf import build_parser, main
 
-BILL_DIR = FIXTURES_DIR / "118-hr-8752"
-V1 = BILL_DIR / "1_reported-in-house.pdf"
-V2 = BILL_DIR / "2_engrossed-in-house.pdf"
+V1 = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
+V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.pdf")
 
-requires_corpus = pytest.mark.skipif(
-    not (V1.exists() and V2.exists()),
-    reason="corpus PDFs not present (run scripts/fetch_test_assets.py)",
-)
+
+def test_fixtures_committed():
+    """Fail-closed floor (#326): both PDFs are committed and manifested, so an absent
+    one is a broken checkout, not an optional case. This used to be a class-level
+    ``skipif`` written when the corpus was fetched rather than committed; a skip is
+    green, so deleting either file would have silently turned the two CLI tests below
+    off (the fail-open shape epic #288 collects, same as #287)."""
+    absent = sorted(str(p) for p in (V1, V2) if not p.exists())
+    assert not absent, f"committed diff_pdf CLI fixtures absent from checkout: {absent}"
 
 
 class TestParser:
@@ -32,7 +34,6 @@ class TestParser:
         assert args.v2_label is None
 
 
-@requires_corpus
 class TestCli:
     def test_writes_html_file(self, tmp_path):
         out = tmp_path / "diff.html"
