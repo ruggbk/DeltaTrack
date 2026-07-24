@@ -61,11 +61,10 @@ print('Wrote reports/hr4366_pdf_v1_vs_v2.html')
 "
 ```
 
-Or regenerate a committed corpus example (if the bill is listed in `EXAMPLES_TO_RENDER` inside `render_examples.py`):
+Or regenerate every published example at once. No download step: `render_examples.py` reads the committed corpus under `tests/corpus/`, so it works on a fresh clone.
 
 ```bash
-uv run python fetch_bills.py download 118 hr 8752 --format both
-uv run python render_examples.py   # writes examples/hr8752_pdf_diff.html
+uv run python render_examples.py   # rewrites examples/*.html and examples/index.html
 ```
 
 | | README quickstart (XML) | Web upload / `compare_pdfs_html` (PDF) |
