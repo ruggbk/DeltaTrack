@@ -15,6 +15,7 @@ from fetch_bills import (
     cmd_download,
     cmd_download_all,
     congress_for_year,
+    download_all_versions,
     download_version_xml,
     enumerate_bill_versions,
     fetch_all_committee_bills,
@@ -1307,25 +1308,22 @@ def test_download_skips_gap_marker_entirely_for_the_api_source(tmp_path):
     assert not (tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).exists()
 
 
+# ---- one BILLSTATUS request per bill (#253) ----------------------------------
+#
+# Counted at the route, not inferred from timing: the gap marker and the
+# downloadable version list are both derived from one parsed BILLSTATUS element,
+# so a second request would be a regression worth ~1.1MB and one extra rate-limit
+# slot per bill across a download-all sweep.
+
+
 @respx.mock
-def test_download_survives_a_failing_gap_fetch(tmp_path, monkeypatch, capsys):
-    # The marker is a SIDE artifact and must never veto the primary download.
-    # record_gap_versions re-fetches BILLSTATUS, so a transient failure on that
-    # second request would otherwise abort a download that the first request
-    # already proved viable -- a regression against pre-#230 behavior, since the
-    # download itself needs nothing from the gap fetch.
-    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
-    ok = _gap_billstatus(_gap_item("Introduced in House", "2023-05-01", code="ih"))
-    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(
-        side_effect=[
-            httpx.Response(200, content=ok),  # enumeration succeeds
-            httpx.Response(500),  # gap fetch fails, and keeps failing through retries
-            httpx.Response(500),
-            httpx.Response(500),
-            httpx.Response(500),
-            httpx.Response(500),
-        ]
+def test_download_issues_one_billstatus_request_per_bill(tmp_path):
+    # A bill with both halves live at once: one served version to download AND one
+    # XML-less gap to record. Doing both must still cost a single request.
+    body = _gap_billstatus(
+        _gap_item("Introduced in House", "2023-05-01", code="ih") + _gap_item("Reported in House", "2023-06-01")
     )
+    route = respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(200, content=body))
     respx.get(url__regex=r".*BILLS-118hr3496ih\.xml").mock(return_value=httpx.Response(200, content=b"<bill/>"))
     args = argparse.Namespace(
         congress=118,
@@ -1337,8 +1335,56 @@ def test_download_survives_a_failing_gap_fetch(tmp_path, monkeypatch, capsys):
         source="govinfo",
     )
     with httpx.Client() as client:
-        cmd_download(client, args, None)  # must not raise
-    # The primary artifact still lands.
+        cmd_download(client, args, None)
+    assert route.call_count == 1, "BILLSTATUS fetched more than once for one bill"
+    # Both outputs still land, so the count above is a real dedup and not a
+    # half-done download.
     assert (tmp_path / "118-hr-3496" / "1_introduced-in-house.xml").exists()
-    # And the failure is reported rather than swallowed silently.
-    assert "gap" in capsys.readouterr().err.lower()
+    payload = json.loads((tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).read_text())
+    assert [g["code"] for g in payload["gap_versions"]] == ["rh"]
+
+
+@respx.mock
+def test_download_all_issues_one_billstatus_request_per_bill(tmp_path):
+    # download-all is where the duplicate compounds (~1,000 bills a sweep), so the
+    # count is pinned on that path too, in the all-gap shape where enumeration
+    # returns [] and only the marker is written.
+    body = _gap_billstatus(
+        _gap_item("Introduced in House", "2023-05-01") + _gap_item("Reported in House", "2023-06-01")
+    )
+    route = respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        download_all_versions(
+            client,
+            output_dir=tmp_path,
+            congress=118,
+            bill_type="hr",
+            number=3496,
+            source="govinfo",
+            api_key=None,
+            formats=["xml"],
+        )
+    assert route.call_count == 1, "BILLSTATUS fetched more than once for one bill"
+    payload = json.loads((tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).read_text())
+    assert [g["code"] for g in payload["gap_versions"]] == ["ih", "rh"]
+
+
+@respx.mock
+def test_download_aborts_loudly_when_billstatus_fails(tmp_path, monkeypatch):
+    # The flip side of sharing one fetch: there is no second request left to fail
+    # softly, so a BILLSTATUS failure is the download's own failure and must stay
+    # loud rather than becoming a silent "bill has no versions" (#10).
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
+    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(500))
+    args = argparse.Namespace(
+        congress=118,
+        bill_type="hr",
+        number=3496,
+        version=None,
+        format="xml",
+        output_dir=tmp_path,
+        source="govinfo",
+    )
+    with httpx.Client() as client, pytest.raises(httpx.HTTPError):
+        cmd_download(client, args, None)
+    assert not (tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).exists()

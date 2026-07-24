@@ -815,24 +815,23 @@ def write_gap_marker(bill_dir: Path, bill_id: str, records: list[dict]) -> Path 
     return path
 
 
-def fetch_gap_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
-    """Gap-version records for one bill, fetched from BILLSTATUS.
+def warn_urlless_gaps(bill: ET.Element) -> None:
+    """Warn on stderr about versions BILLSTATUS declares that govinfo can't serve as XML.
 
-    A separate helper rather than a second return value from
-    :func:`enumerate_versions`, whose API-shaped list is a deliberate drop-in seam
-    for the fetch_bills consumers (see its docstring) -- widening it would break
-    that contract. Callers that need both pay one extra BILLSTATUS request.
-
-    Note this reports gaps even when :func:`enumerate_versions` returns ``[]``:
-    a bill whose every declared version is XML-less (#226's 118-hr-3496) yields no
-    downloadable versions at all, which is exactly when the marker matters most.
+    #226 AC#1's "don't silently drop": the gap versions are absent from the
+    downloadable list by design, so enumeration says so out loud. Split out of
+    :func:`enumerate_versions` so every consumer of a parsed ``<bill>`` warns
+    identically without re-fetching it.
     """
-    resp = request_with_retry(client, billstatus_url(congress, bill_type, number))
-    resp.raise_for_status()
-    bill = ET.fromstring(resp.content).find("bill")
-    if bill is None:
-        return []
-    return urlless_declared_version_records(bill)
+    gaps = urlless_declared_versions(bill)
+    if not gaps:
+        return
+    listed = ", ".join(f"{code} ({name})" for code, name in gaps)
+    print(
+        f"WARNING: {len(gaps)} version(s) declared in BILLSTATUS but not available "
+        f"as govinfo XML (XML-less gap, #226/#228): {listed}",
+        file=sys.stderr,
+    )
 
 
 class CongressNotAvailable(Exception):
@@ -859,18 +858,18 @@ def require_supported_congress(congress: int) -> None:
         )
 
 
-def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
-    """Fetch one bill's BILLSTATUS and return its ordered, API-shaped versions.
+def fetch_billstatus_bill(client: httpx.Client, congress: int, bill_type: str, number: int) -> ET.Element | None:
+    """Fetch and parse one bill's BILLSTATUS; the ``<bill>`` element, or None if absent.
 
-    Drop-in for ``fetch_bills.fetch_text_versions`` on the govinfo source. Raises
-    on a non-200 BILLSTATUS response rather than mapping it to an empty list: an
-    enumeration failure must be loud, not a silent "bill has no versions" that
-    numbers a partial download as if it were complete (issue #10). A bill that
-    genuinely exists but has no published text yields an empty list from a 200.
+    The single network step every per-bill govinfo derivation builds on --
+    downloadable versions (:func:`versions_from_billstatus`) and XML-less gap
+    records (:func:`urlless_declared_version_records`) are both pure functions of
+    this element, so a caller needing both pays one request, not two (#253).
 
-    Any BILLSTATUS-declared version govinfo can't serve as XML (the XML-less gap,
-    #226 AC#1) is surfaced as a stderr warning here rather than silently dropped;
-    it is still absent from the returned (downloadable) list.
+    Raises on a non-200 rather than mapping it to None: an enumeration failure must
+    be loud, not a silent "bill has no versions" that numbers a partial download as
+    if it were complete (issue #10). None means a 200 whose body carried no
+    ``<bill>`` -- a real, empty answer.
     """
     resp = request_with_retry(client, billstatus_url(congress, bill_type, number))
     # request_with_retry already raises on persistent 429/5xx (and on 4xx), so this
@@ -878,15 +877,26 @@ def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, numb
     # that helper's contract ever changes to a non-raising return (its fetch_bills
     # callers guard with `if resp else`), never a silent "bill has no versions" (#10).
     resp.raise_for_status()
-    bill = ET.fromstring(resp.content).find("bill")
+    return ET.fromstring(resp.content).find("bill")
+
+
+def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
+    """Fetch one bill's BILLSTATUS and return its ordered, API-shaped versions.
+
+    Drop-in for ``fetch_bills.fetch_text_versions`` on the govinfo source; see
+    :func:`fetch_billstatus_bill` for the loud-failure contract it inherits.
+
+    Any BILLSTATUS-declared version govinfo can't serve as XML (the XML-less gap,
+    #226 AC#1) is surfaced as a stderr warning here rather than silently dropped;
+    it is still absent from the returned (downloadable) list.
+
+    A caller that also needs the gap *records* should compose
+    :func:`fetch_billstatus_bill` with :func:`versions_from_billstatus` and
+    :func:`urlless_declared_version_records` directly (as fetch_bills' download
+    paths do) rather than calling this and re-fetching BILLSTATUS for the gaps.
+    """
+    bill = fetch_billstatus_bill(client, congress, bill_type, number)
     if bill is None:
         return []
-    gaps = urlless_declared_versions(bill)
-    if gaps:
-        listed = ", ".join(f"{code} ({name})" for code, name in gaps)
-        print(
-            f"WARNING: {len(gaps)} version(s) declared in BILLSTATUS but not available "
-            f"as govinfo XML (XML-less gap, #226/#228): {listed}",
-            file=sys.stderr,
-        )
+    warn_urlless_gaps(bill)
     return versions_from_billstatus(bill)
