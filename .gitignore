@@ -88,8 +88,9 @@ bills/115-hr-5895/*
 bills/113-hr-3547/*
 !bills/113-hr-3547/6_enrolled-bill.xml
 # Stages 1-5 too (#220): the node-join gates pin the 4->5 and 5->6 XML amendment
-# pairs and the 1->2 / 3->4 PDF pairs. Committing them retires REQUIRE_CORPUS, whose
-# fetched-corpus gating let these gates collect zero cases and pass green.
+# pairs and the 1->2 / 3->4 PDF pairs. Committing them took these gates off the
+# REQUIRE_CORPUS fetched-corpus gating that let them collect zero cases and pass green.
+# (That variable is fully retired as of #278.)
 !bills/113-hr-3547/1_introduced-in-house.pdf
 !bills/113-hr-3547/2_engrossed-in-house.pdf
 !bills/113-hr-3547/3_received-in-senate.pdf
@@ -189,3 +190,21 @@ bills/118-hr-8774/*
 !bills/113-hr-83/
 bills/113-hr-83/*
 !bills/113-hr-83/6_engrossed-amendment-house.xml
+# Legislative Branch validation set (#278): the five enrolled bills
+# test_data/validation_leg_branch.json references but that were never committed. Its
+# completeness floor could therefore only assert behind REQUIRE_CORPUS=1, which CI never
+# sets — a guard that never ran. Committed so the floor becomes an ordinary fail-closed
+# check with no env var. Public domain (17 U.S.C. 105), ~3.9 MB compressed for all five.
+# 113-hr-83 and 114-hr-2029 already have allowlist blocks above (their enrolled stage is
+# the only addition); the other three are new directories.
+!bills/113-hr-83/7_enrolled-bill.xml
+!bills/114-hr-2029/7_enrolled-bill.xml
+!bills/115-hr-1625/
+bills/115-hr-1625/*
+!bills/115-hr-1625/6_enrolled-bill.xml
+!bills/115-hr-244/
+bills/115-hr-244/*
+!bills/115-hr-244/6_enrolled-bill.xml
+!bills/116-hr-1865/
+bills/116-hr-1865/*
+!bills/116-hr-1865/6_enrolled-bill.xml

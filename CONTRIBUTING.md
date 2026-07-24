@@ -167,11 +167,11 @@ Tests are split into groups by speed and dependencies:
 
 - **Fast tests** (`uv run pytest -m "not slow and not browser"`) -- unit tests on inline XML and mocked data; no bill files needed.
 - **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`.
-- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. Nearly all of them run in CI against fixtures committed to the repo, so they need no downloads and their counts are reproducible; the corpus correctness gates additionally fail closed if a manifested bill is uncommitted. The exception is the live-network govinfo parity gate. `CORPUS_SWEEP=1` opts into sweeping every locally-fetched bill (non-CI exploration), and `REQUIRE_CORPUS=1` makes the remaining fetched-corpus checks fail rather than skip. [TESTING.md](TESTING.md) has the details and says which suites still want a download.
+- **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. Nearly all of them run in CI against fixtures committed to the repo, so they need no downloads and their counts are reproducible; the corpus correctness gates additionally fail closed if a manifested bill is uncommitted. The exception is the live-network govinfo parity gate, marked `network` and skipped unless you pass `--run-network`. `CORPUS_SWEEP=1` opts into sweeping every locally-fetched bill (non-CI exploration). [TESTING.md](TESTING.md) has the details and says which suites still want a download.
 
 Adding or renaming a CLI subcommand? Add its row to the README "Command reference" table in the same change -- `tests/test_docs_consistency.py` introspects each root command script's parser and fails if a command has no row. Adding a whole new command? See ["Adding a CLI command"](#adding-a-cli-command) above for the convention the gate enforces.
 
-When adding code, write tests for it. Test files live in `tests/`; mark tests that need real XML files with `@pytest.mark.slow` and front-end tests with `@pytest.mark.browser`. Shared helpers are in `tests/conftest.py`. [TESTING.md](TESTING.md) is the home for the full command catalog and what each validation layer proves.
+When adding code, write tests for it. Test files live in `tests/`; mark tests that need real XML files with `@pytest.mark.slow`, front-end tests with `@pytest.mark.browser`, and anything fetching from a live external service with `@pytest.mark.network`. Shared helpers are in `tests/conftest.py`. [TESTING.md](TESTING.md) is the home for the full command catalog and what each validation layer proves.
 
 ### What CI checks
 

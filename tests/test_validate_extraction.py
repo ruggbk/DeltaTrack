@@ -27,7 +27,7 @@ import pytest
 
 from bill_tree import normalize_bill
 from diff_bill import extract_amounts
-from tests.conftest import BILLS_DIR, REQUIRE_CORPUS
+from tests.conftest import uncommitted_bill_files
 
 pytestmark = pytest.mark.slow
 
@@ -72,42 +72,51 @@ class TestLegBranchValidation:
             )
         return trees
 
-    def test_fixture_bills_present_when_required(self, fixture_data):
-        """Completeness floor (#167): in REQUIRE_CORPUS mode every fixture-referenced
-        bill version must be on disk.
+    def test_fixture_bills_committed(self, fixture_data):
+        """Completeness floor (#167, #278): every fixture-referenced bill version must be
+        committed to git.
 
         The bill_trees fixture loads a bill only ``if xml_path.exists()``, so a renamed
-        or unfetched version filename makes that bill silently absent — its accounts then
+        or absent version filename makes that bill silently absent — its accounts then
         skip in test_all_nodes_found/test_all_amounts_match (``if tree is None: continue``)
-        and the only tell is test_all_bills_loaded flipping to *skip*, not fail. The #10
-        BILLSTATUS-ordering rename (115-hr-1625 enrolled 7_->6_) is exactly the class of
-        change that would drop ~40 Leg-Branch accounts unnoticed; this floor fails loud
-        instead. Outside REQUIRE_CORPUS it skips, preserving clean-clone green.
+        and validation quietly shrinks. The #10 BILLSTATUS-ordering rename (115-hr-1625
+        enrolled 7_->6_) is exactly the class of change that would drop ~40 Leg-Branch
+        accounts unnoticed; this floor fails loud instead.
+
+        Unconditional since #278: all seven referenced bills are now committed, so this
+        needs no env var and fails closed everywhere, including CI. It used to assert only
+        under REQUIRE_CORPUS=1, which CI never set — a guard that never ran. Asks git
+        whether each file is TRACKED, not merely present (#308/#327): a bill added without
+        its ``bills/`` ``.gitignore`` allowlist line exists on the author's machine and is
+        absent in CI, and only the git question catches that before the push.
         """
-        if not REQUIRE_CORPUS:
-            pytest.skip("corpus not required (set REQUIRE_CORPUS=1 to enforce fixture completeness)")
-        referenced = {(a["bill"], a["version"]) for a in fixture_data["accounts"]}
-        missing = sorted(f"{bill}/{ver}" for bill, ver in referenced if not (BILLS_DIR / bill / ver).exists())
+        referenced = {f"{a['bill']}/{a['version']}" for a in fixture_data["accounts"]}
+        missing = uncommitted_bill_files(referenced)
         assert not missing, (
-            f"REQUIRE_CORPUS=1 but {len(missing)} fixture-referenced bill version(s) absent "
-            f"from {BILLS_DIR} (renamed or unfetched?): {missing}. Re-download with "
-            "fetch_bills.py download <congress> <type> <number> --format both."
+            f"{len(missing)} of {len(referenced)} fixture-referenced bill version(s) are not "
+            f"committed (missing on disk, or present but untracked): {missing}. Each bill "
+            "test_data/validation_leg_branch.json names must be committed under bills/ with "
+            "a matching .gitignore allowlist line, or its accounts silently drop out of "
+            "validation. Re-download with fetch_bills.py download <congress> <type> "
+            "<number> --format both if the file is gone; check .gitignore if it is present "
+            "but untracked."
         )
 
     def test_all_bills_loaded(self, fixture_data, bill_trees):
-        """Every downloaded bill referenced in the fixture should parse.
+        """Every bill referenced in the fixture must load and parse to a non-empty tree.
 
-        Skips (rather than fails) for bills not present locally, so a fresh
-        clone without the corpus is green. Download the corpus with
-        fetch_bills.py (see README) to exercise full validation.
+        Fails rather than skips on an absent bill (#278): all seven are committed, so
+        "not downloaded" is no longer a reachable state — test_fixture_bills_committed
+        fails first if one is missing. A skip here would assert nothing about the bills
+        that DID load, which is the fail-open channel #220's skip ceiling exists to close.
         """
         expected_bills = set(a["bill"] for a in fixture_data["accounts"])
         missing = expected_bills - set(bill_trees.keys())
-        if missing:
-            pytest.skip(
-                f"{len(missing)} bill(s) not downloaded: {sorted(missing)}. "
-                "Run fetch_bills.py download for each (see README)."
-            )
+        assert not missing, (
+            f"{len(missing)} fixture-referenced bill(s) did not load: {sorted(missing)}. "
+            "They are committed fixtures, so this means the file was renamed or removed "
+            "(see test_fixture_bills_committed) — not that the corpus needs downloading."
+        )
         # Every loaded bill must parse to a non-empty tree.
         for bill, tree in bill_trees.items():
             assert tree.nodes, f"{bill} loaded but produced no nodes"

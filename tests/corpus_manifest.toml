@@ -75,13 +75,14 @@ versions = [
 [[bill]]
 id = "114-hr-2029"
 subcommittee = "full-year omnibus"
-covers = "Omnibus span-geometry case (#172/#175). The 5->6 XML pair is the node-join amendment-shape gate; the 3->4 PDF pair is its anchor-agreement gate. Committed in #220 to retire REQUIRE_CORPUS; also a #126 curation candidate."
+covers = "Omnibus span-geometry case (#172/#175). The 5->6 XML pair is the node-join amendment-shape gate; the 3->4 PDF pair is its anchor-agreement gate. Committed in #220 as part of retiring REQUIRE_CORPUS; also a #126 curation candidate. The enrolled text (v7) joined in #278 with the Legislative Branch validation set, extending the XML chain to a 6->7 pair."
 versions = [
   { stage = "1_reported-in-house", formats = ["pdf"] },
   { stage = "3_referred-in-senate", formats = ["pdf"] },
   { stage = "4_reported-in-senate", formats = ["pdf"] },
   { stage = "5_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "6_engrossed-amendment-house", formats = ["xml"] },
+  { stage = "7_enrolled-bill", formats = ["xml"] },
 ]
 
 [[bill]]
@@ -234,8 +235,42 @@ versions = [
 [[bill]]
 id = "113-hr-83"
 subcommittee = "full-year omnibus (FY2015 CRomnibus)"
-covers = "Money-conservation bounded-drop baseline: the engrossed House amendment is the structure-tree overcount guard's real-bill case (test_structure_tree test_money_conservation_no_overcount_bounded_drops)."
+covers = "Money-conservation bounded-drop baseline: the engrossed House amendment is the structure-tree overcount guard's real-bill case (test_structure_tree test_money_conservation_no_overcount_bounded_drops). The enrolled text (v7) joined in #278 as part of the Legislative Branch validation set, which also gives the node-join gates a 6->7 amendment-shape pair on this bill."
 versions = [
   { stage = "6_engrossed-amendment-house", formats = ["xml"] },
+  { stage = "7_enrolled-bill", formats = ["xml"] },
 ]
 
+
+# --- Legislative Branch external-validation set (#278) -------------------------
+# The enrolled bills test_data/validation_leg_branch.json checks extracted amounts
+# against, committed in #278 so that validation runs whole in CI instead of over the two
+# bills that happened to be committed. Manifested for the same reason every other
+# committed bill is: the manifest is the record of the committed fixture set, and its
+# floor is what keeps a fixture from silently rotting out of the checkout. They add
+# corpus-gate coverage of enrolled full-year omnibus text across FY2014-FY2020 at no
+# calibration cost — each was added one at a time and needed no new baseline or skip.
+
+[[bill]]
+id = "116-hr-1865"
+subcommittee = "full-year omnibus (enrolled, FY2020)"
+covers = "Legislative Branch validation set (#278): enrolled FY2020 further-consolidated appropriations. Its curated accounts are checked against extracted amounts in test_validate_extraction TestLegBranchValidation."
+versions = [
+  { stage = "6_enrolled-bill", formats = ["xml"] },
+]
+
+[[bill]]
+id = "115-hr-1625"
+subcommittee = "full-year omnibus (enrolled, FY2018)"
+covers = "Legislative Branch validation set (#278): enrolled FY2018 consolidated appropriations. Also the #10 publication-ordering rename case (enrolled moved 7_ -> 6_ once the url-less phantom version was excluded), which is what the validation completeness floor exists to catch."
+versions = [
+  { stage = "6_enrolled-bill", formats = ["xml"] },
+]
+
+[[bill]]
+id = "115-hr-244"
+subcommittee = "full-year omnibus (enrolled, FY2018 first tranche)"
+covers = "Legislative Branch validation set (#278): enrolled FY2018 consolidated security/veterans appropriations. NOTE only the enrolled text is committed. Its v5 engrossed-amendment-house doc is deliberately withheld (#11 / #322): the corpus gates' body extraction does not surface that amendment class's appropriations, so committing it would force allowlisting a known parser gap as a documented-normal skip."
+versions = [
+  { stage = "6_enrolled-bill", formats = ["xml"] },
+]

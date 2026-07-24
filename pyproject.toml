@@ -63,6 +63,7 @@ addopts = ["-n", "auto", "-rs"]
 markers = [
     "slow: tests that require real bill XML files (deselect with '-m not slow')",
     "browser: end-to-end tests that drive a real browser via Playwright (run with '-m browser'; need 'playwright install chromium')",
+    "network: tests that fetch from a live external service (skipped unless '--run-network'; also deselectable with '-m not network')",
 ]
 
 [tool.coverage.run]

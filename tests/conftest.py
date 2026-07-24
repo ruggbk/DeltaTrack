@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import pytest
@@ -34,6 +34,15 @@ _MANIFEST_PATH = Path(__file__).parent / "corpus_manifest.toml"
 def _manifest_bills() -> tuple[dict, ...]:
     """The [[bill]] entries from corpus_manifest.toml (cached)."""
     return tuple(tomllib.loads(_MANIFEST_PATH.read_text())["bill"])
+
+
+def manifest_bill_ids() -> list[str]:
+    """Every bill id the manifest names (``118-hr-4366``, ...), sorted.
+
+    For gates that key on the bill DIRECTORY rather than individual fixture files — the
+    govinfo filename parity gate derives its completeness floor from this, so the floor
+    tracks the committed set instead of pinning a count (#342)."""
+    return sorted(bill["id"] for bill in _manifest_bills())
 
 
 def _manifest_paths(fmt: str) -> list[Path]:
@@ -121,8 +130,8 @@ def _tracked_bills() -> frozenset[str] | None:
     return _git_tracked_paths(BILLS_DIR.parent, "bills")
 
 
-def missing_manifest_files() -> list[str]:
-    """Manifest fixtures (all formats) that are not committed to git. Must be empty.
+def uncommitted_bill_files(rel_paths: Iterable[str]) -> list[str]:
+    """Of the given ``bills/``-relative paths, those not committed to git, sorted.
 
     A fixture counts as committed only if git TRACKS it *and* it is on disk — not merely
     that it exists. That distinction is the whole point (#308): a contributor who adds a
@@ -135,19 +144,34 @@ def missing_manifest_files() -> list[str]:
 
     Outside a git work tree (e.g. tests run from an unpacked sdist) git cannot answer,
     so we fall back to the presence check alone — the forgotten-``.gitignore`` failure
-    mode only exists inside a working checkout. Checks the manifest set regardless of
-    CORPUS_SWEEP."""
+    mode only exists inside a working checkout.
+
+    Takes a caller-supplied path list rather than reading the manifest, because two
+    different sets need the same committed-ness semantics: the manifest fixtures
+    (``missing_manifest_files``) and the bill versions the Legislative Branch validation
+    fixture references (#278), which is derived from
+    ``test_data/validation_leg_branch.json`` and is not a manifest question."""
     tracked = _tracked_bills()
     missing = []
-    for bill in _manifest_bills():
-        for ver in bill["versions"]:
-            for fmt in ver["formats"]:
-                rel = f"{bill['id']}/{ver['stage']}.{fmt}"
-                on_disk = (BILLS_DIR / bill["id"] / f"{ver['stage']}.{fmt}").exists()
-                is_tracked = tracked is None or f"bills/{rel}" in tracked
-                if not (on_disk and is_tracked):
-                    missing.append(rel)
+    for rel in sorted(set(rel_paths)):
+        on_disk = (BILLS_DIR / rel).exists()
+        is_tracked = tracked is None or f"bills/{rel}" in tracked
+        if not (on_disk and is_tracked):
+            missing.append(rel)
     return missing
+
+
+def missing_manifest_files() -> list[str]:
+    """Manifest fixtures (all formats) that are not committed to git. Must be empty.
+
+    Committed-ness semantics (and why git, not ``Path.exists``) are in
+    ``uncommitted_bill_files``. Checks the manifest set regardless of CORPUS_SWEEP."""
+    return uncommitted_bill_files(
+        f"{bill['id']}/{ver['stage']}.{fmt}"
+        for bill in _manifest_bills()
+        for ver in bill["versions"]
+        for fmt in ver["formats"]
+    )
 
 
 def assert_manifest_committed(collected: Sequence, kind: str) -> None:
@@ -287,42 +311,23 @@ CI_SLOW_MODULES = (
 )
 
 ALLOWED_CI_SLOW_SKIPS = {
-    # --- Uncommitted fixtures: real coverage gaps, tracked by #126 ---------------
-    # Each of these needs a bill version this repo does not commit, so the case cannot
-    # assert in CI. Listed (not silently skipped) so the gap is enforced and countable:
-    # a NEW skip fails the session, and committing any fixture below should delete its
-    # line here. None of these are properties of the documents; they are absences.
+    # --- Deliberately withheld fixture: a gap kept open on purpose ----------------
     # Not slow-marked, so this one skips in the FAST tier, not the slow step — the reach
-    # noted above. 115-hr-244 is present in a fetched local corpus but not committed, so
-    # it is the same kind of gap as the entries around it.
-    # The Leg-Branch fixture references five bills this repo does not commit, so the
-    # parse floor cannot run. One entry standing for five gaps: the reason enumerates
-    # them, so committing ANY of the five changes the message and reddens the session
-    # until this line is updated. That is the allowlist working as designed (the gap
-    # shrank, so the record of it must change), not a flake — see #126.
-    "tests/test_validate_extraction.py::TestLegBranchValidation::test_all_bills_loaded": (
-        "5 bill(s) not downloaded: ['113-hr-83', '114-hr-2029', '115-hr-1625', "
-        "'115-hr-244', '116-hr-1865']. Run fetch_bills.py download for each (see README)."
-    ),
-    # --- Environment-gated, not a fixture gap -------------------------------------
-    # A third flavour, called out so it is not mistaken for one of the absences above.
-    # This floor only asserts under REQUIRE_CORPUS=1 (a fetched corpus + network), which
-    # CI deliberately never sets, so it skips on every CI run by construction.
-    # Committing fixtures will NOT retire this line; only changing the gate would.
-    "tests/test_validate_extraction.py::TestLegBranchValidation::test_fixture_bills_present_when_required": (
-        "corpus not required (set REQUIRE_CORPUS=1 to enforce fixture completeness)"
+    # noted above.
+    # 115-hr-244 v5 is an engrossed-amendment-house doc whose appropriations are not
+    # surfaced by the corpus gate's body extraction (the #11 amendment-doc class), so
+    # committing it would force allowlisting a known-bug skip — declaring a parser gap as
+    # documented-normal. Left uncommitted for that reason (#322/#330); this bill_tree case
+    # asserts against the fetched copy locally and is declared here. Note the bill's v6
+    # (enrolled) IS committed as part of the Leg-Branch validation set (#278) — the
+    # withheld fixture is the v5 amendment doc specifically, not the bill.
+    "tests/test_bill_tree.py::TestFindBillBody::test_amendment_doc_115_hr_244_v5_produces_nodes": (
+        "Bill XML not available locally"
     ),
     # --- Content property, not an absence ----------------------------------------
     # 113-hr-3547 v4 is a one-section shell (see the note in ALLOWED_CORPUS_SKIPS): it
     # genuinely carries no dollar amounts, so there is nothing for the recall case to
     # assert. This one will not go away by committing anything.
-    # 115-hr-244 v5 is an engrossed-amendment-house doc whose appropriations are not
-    # surfaced by the corpus gate's body extraction (the #11 amendment-doc class), so
-    # committing it would force allowlisting a known-bug skip. Left uncommitted; this
-    # bill_tree case asserts against the fetched copy locally and is declared here.
-    "tests/test_bill_tree.py::TestFindBillBody::test_amendment_doc_115_hr_244_v5_produces_nodes": (
-        "Bill XML not available locally"
-    ),
     "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
     "[113-hr-3547/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
 }
@@ -504,14 +509,42 @@ def pytest_sessionfinish(session, exitstatus) -> None:
     )
 
 
-# --- REQUIRE_CORPUS: narrowed by #220 ------------------------------------------
-# No longer a corpus-gate mechanism: #220 put every corpus gate on the committed
-# manifest, so they fail closed with no env var. Two non-manifest consumers keep the
-# flag alive: test_govinfo_corpus_parity (a live-network gate) and
-# test_validate_extraction's fetched-bill floor. Read it now as "I have a fetched
-# corpus and a network", not "make the corpus gates strict". Full rationale, and the
-# retirement plan, are in ADR 0015 (its #220 amendment) and issue #278.
-REQUIRE_CORPUS = os.environ.get("REQUIRE_CORPUS") == "1"
+# --- Live-network opt-in (#278) ------------------------------------------------
+# REQUIRE_CORPUS used to live here. #220 put every corpus correctness gate on the
+# committed manifest and #278 committed the Legislative Branch validation set, so the
+# only requirement left that a fixture cannot satisfy is a NETWORK: test_govinfo_corpus
+# _parity fetches live BILLSTATUS per bill to confirm the on-disk filenames are still
+# what govinfo enumeration produces today. That is a real requirement, so it gets a
+# marker that says so rather than an env var whose name described neither consumer.
+#
+# The marker alone does not deselect: `-m slow` (what CI runs) would select the parity
+# gate right along with everything else, so the requirement has to be enforced at
+# collection, not by marker expression. `--run-network` opts in; `-m "not network"`
+# still deselects outright.
+#
+# It is kept out of the PR gates deliberately: a pull request should not go red because a
+# third-party service is down, and a naming change on govinfo's side is not something a
+# contributor's PR caused or can fix. #342 runs it on a weekly schedule instead, over the
+# committed fixtures, where a failure is real news rather than a merge blocker.
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-network",
+        action="store_true",
+        default=False,
+        help="Run tests marked `network` (live external fetches). They are skipped by default.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-network"):
+        return
+    skip_network = pytest.mark.skip(reason="needs a live network (run with --run-network)")
+    for item in items:
+        if "network" in item.keywords:
+            item.add_marker(skip_network)
+
 
 # Paths to commonly used bill versions (118-hr-4366).
 HR4366_V1_PATH = BILLS_DIR / "118-hr-4366" / "1_reported-in-house.xml"

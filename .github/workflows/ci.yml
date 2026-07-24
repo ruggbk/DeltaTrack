@@ -54,9 +54,11 @@ jobs:
         # test_validate_extraction.py runs WHOLE rather than by nodeid. The two names it
         # used to be selected by are parametrized, so they already pulled in most of the
         # module -- but seven cases (the TestLegBranchValidation class) were collected by
-        # no CI step. Five assert on a fresh clone; the other two skip, and are declared in
-        # ALLOWED_CI_SLOW_SKIPS so they are watched rather than silent. Selecting a module
-        # by nodeid is what let the gap open, so it is selected by path now.
+        # no CI step. Selecting a module by nodeid is what let the gap open, so it is
+        # selected by path now. All seven assert here since #278 committed the five
+        # remaining Legislative Branch bills: the class validates every curated account
+        # across all the fixture's bills, where CI previously saw only the two committed
+        # ones and silently dropped the rest.
         run: >
           uv run pytest -v -m slow
           tests/test_committee_report.py

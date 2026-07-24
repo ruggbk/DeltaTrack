@@ -8,11 +8,21 @@ This gate locks that alignment: every version filename already on disk must be o
 govinfo enumeration would produce *today*, so a future ordering/naming change can't
 leave the corpus pinned to stale names that then silently mis-key the property gates.
 
-Live BILLSTATUS fetch per bill, so it is ``slow`` + REQUIRE_CORPUS-gated: it skips on a
-clean clone (``bills/`` is gitignored) and runs only in the maintainer's strict corpus
-gate, which already has network to fetch the corpus. It fetches BILLSTATUS directly
-rather than reading a cache so it validates the *current* live enumeration, not a
-snapshot that could drift with it.
+Live BILLSTATUS fetch per bill, so it is ``slow`` + ``network``: skipped by default, run
+with ``pytest --run-network -m slow``. It fetches BILLSTATUS directly rather than reading
+a cache so it validates the *current* live enumeration, not a snapshot that could drift
+with it.
+
+The ``network`` marker replaced REQUIRE_CORPUS=1 in #278: the requirement is a network,
+which no fixture scheme can supply, and the marker says that where the env var did not.
+
+WHY THIS RUNS ON A SCHEDULE AND NOT AFTER A DOWNLOAD (#342). The obvious automation —
+fetch the corpus, then check it — is vacuous, and it fails GREEN. ``fetch_bills`` names
+each file from the same ``enumerate_versions`` call this gate compares against, so
+download-then-check compares a value with itself and would pass every run forever,
+including the run where the naming actually changed. The gate carries information only
+against filenames chosen EARLIER: the committed fixtures, whose names were frozen in git
+when each bill was fetched. Hence a schedule over the committed set, and no download step.
 """
 
 from __future__ import annotations
@@ -24,9 +34,9 @@ import pytest
 
 import fetch_govinfo as gi
 from fetch_bills import sanitize_version_name
-from tests.conftest import BILLS_DIR, REQUIRE_CORPUS
+from tests.conftest import BILLS_DIR, manifest_bill_ids
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.network]
 
 # bills/<congress>-<type>-<number>. Non-matching entries (bulk .zip archives, .error
 # markers) are not per-bill corpus dirs and are skipped.
@@ -40,17 +50,35 @@ _ACCEPTED_EXTRA_STEMS: dict[str, set[str]] = {
     "119-hr-1": {"6_public-law"},
 }
 
-# Floor: the reproducible corpus currently has this many per-bill dirs. A FLOOR, not a
-# pin — it fails if the corpus shrank (a fetch dropped bills, which would let the gate
-# pass while comparing fewer bills, #167), and grows freely (a new bill is still checked
-# by the per-dir assertion below).
-_MIN_CORPUS_DIRS = 31
+# Floor: every bill the committed manifest names must be on disk and compared. Derived,
+# not a hardcoded count (#342): the old floor pinned 31 dirs, the size of one maintainer's
+# fully downloaded corpus, so the gate could not run anywhere else — a clean checkout has
+# only the committed fixtures and failed the floor before comparing anything.
+#
+# Deriving it from tests/corpus_manifest.toml makes the requirement "the committed set is
+# intact", which every checkout can satisfy, and names WHICH bill is missing rather than
+# reporting a count that shrank. It still fails closed on a partial corpus, which is the
+# point (#167: an empty corpus would otherwise pass as "0 compared, 0 stale").
+#
+# The COMPARISON still walks everything in bills/, not just the manifest. In automation
+# that is exactly the committed set; on a machine with bills downloaded it also checks
+# those, so scheduling this loses no local coverage.
 
 
 def _corpus_dirs():
     if not BILLS_DIR.exists():
         return []
     return sorted(d for d in BILLS_DIR.iterdir() if d.is_dir() and _DIR_RE.match(d.name))
+
+
+def missing_manifest_dirs(dirs) -> list[str]:
+    """Manifested bills with no directory among ``dirs``. Must be empty.
+
+    Split out from the test so the floor is unit-testable WITHOUT a network (see
+    test_corpus_manifest). The gate itself only runs under ``--run-network``, so a floor
+    written inline would be exercised solely on a maintainer's machine — and a floor never
+    shown to fire cannot distinguish "the corpus is intact" from "the check is broken"."""
+    return sorted(set(manifest_bill_ids()) - {d.name for d in dirs})
 
 
 def _enumeration_stems(client: httpx.Client, congress: int, btype: str, number: int) -> set[str]:
@@ -66,18 +94,15 @@ def test_govinfo_enumeration_reproduces_corpus_filenames():
     so enumeration may list stems absent from disk (fine — just not fetched). The failure
     is the reverse — a stem ON disk that enumeration does NOT produce, i.e. a stale name.
     """
-    if not REQUIRE_CORPUS:
-        pytest.skip("corpus not required (set REQUIRE_CORPUS=1 to run the live parity gate)")
-
     dirs = _corpus_dirs()
     # Completeness floor: without it an empty/partial corpus would pass as
     # "0 compared, 0 stale" (#167 fail-open).
-    assert len(dirs) >= _MIN_CORPUS_DIRS, (
-        f"parity gate found {len(dirs)} corpus dirs under {BILLS_DIR}, expected >= "
-        f"{_MIN_CORPUS_DIRS}. An incomplete corpus would pass without comparing — run the "
-        "bill downloads in the README 'corpus setup' block before enforcing this gate. "
-        "(scripts/fetch_test_assets.py does not help here: it only adds files to bill "
-        "directories those downloads already create.)"
+    absent = missing_manifest_dirs(dirs)
+    assert not absent, (
+        f"parity gate is missing {len(absent)} bill(s) the committed manifest names: "
+        f"{absent}. An incomplete corpus would pass without comparing them. These are "
+        "committed fixtures, so a missing one means the checkout is damaged rather than "
+        "unfetched — see tests/corpus_manifest.toml."
     )
 
     client = httpx.Client(timeout=30, follow_redirects=True)
