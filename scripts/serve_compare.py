@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bill_tree import bill_title, normalize_bill  # noqa: E402
+from corpus_paths import FIXTURES_DIR
 from diff_bill import bill_diff_to_dict, diff_bills  # noqa: E402
 from diff_pdf import render_pdf_diff_html  # noqa: E402
 from formatters.canonical import view_from_canonical, xml_diff_to_canonical  # noqa: E402
@@ -45,7 +46,7 @@ from formatters.text_serializer import build_xml_full_text  # noqa: E402
 from shared.version_stems import label_from_stem, version_number_from_stem  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-BILLS = PROJECT_ROOT / "bills"
+BILLS = FIXTURES_DIR
 
 
 def _resolve_bill_dir(arg: str) -> Path:

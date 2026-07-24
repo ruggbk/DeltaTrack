@@ -200,3 +200,48 @@ curation from growing the pack by precedent, a fixture addition should:
 
 This is a guideline for reviewers, not a hard cap; the point is that each addition is a
 deliberate, justified choice rather than a default.
+
+## Amendment (#308, 2026-07-24)
+
+The decision is unchanged — fixtures are committed, curated, and enumerated by a
+manifest. What changes is **where they live**, which the body deliberately left open
+("it says nothing about where fixtures live"). They move from `bills/` to
+`tests/corpus/`, and `bills/` becomes entirely gitignored.
+
+The body's model was one directory holding both the committed fixtures and the
+downloaded working corpus, with the fixtures re-admitted past a blanket ignore rule
+file by file. That list reached 80 rules. It was a second copy of
+`tests/corpus_manifest.toml` that nothing checked for agreement — it accumulated at
+least one provably inert rule (`!bills/large_bills.csv`, overridden by a later
+`*.csv`) without anyone noticing — and its omission was silent, because `git add` on
+an ignored path is a no-op. #327 made that omission loud by asking `git ls-files`
+rather than the filesystem. Splitting the trees removes the edit instead of guarding
+it, which is why both changes exist and why the #327 floor is kept: it now guards an
+ordinary mistake (a fixture written but never staged) rather than a footgun.
+
+Consequences worth recording:
+
+- **Adding a fixture is `git add` plus a manifest entry.** No ignore-file edit, and no
+  need to know that `!bills/<id>/` is inert without a following `bills/<id>/*`.
+- **`bills/` is genuinely disposable again.** The body's model made it part-tracked,
+  which is why `TESTING.md` had to carry a bolded warning never to `rm -rf` it and why
+  symlinking another checkout's corpus over it was hazardous. Both are now safe.
+- **`test_data/` gets the same inversion.** It was deny-all-then-re-admit for the same
+  reason and with the same effect: adding a golden required an ignore edit. It is now
+  tracked by default with two local-only artifacts listed.
+- **`corpus_paths.py` is the single home for the layout**, so a future move is one edit
+  rather than thirty. `resolve_bill_file` is the one concession to a genuinely mixed
+  consumer: the committee-report validation fixtures reference fourteen committed bills
+  and five that remain download-only until [#278](https://github.com/AgoraDMV/DeltaTrack/issues/278).
+- **Three new silent-failure channels open, and are closed by
+  `tests/test_fixture_layout.py`**: a committed fixture addressed through `bills/`
+  (resolves on a machine that downloaded it, absent in CI, where the skip-if-absent
+  guard keeps the run green); a `CORPUS_SWEEP` that stops spanning both trees (nothing
+  asserts its case count, so narrowing it loses coverage silently); and a fixture
+  written into `tests/corpus/` but never staged (the manifest floor covers manifested
+  bills, but the golden modules pin files the manifest does not name). Each test proves
+  it can fire against a synthetic bad input.
+- **Repository size is unchanged.** The files move; git already stores their blobs, and
+  history keeps them at the old paths regardless. The size bar for future additions
+  above still applies unchanged.
+- **The `.gitignore` shrinks from 191 lines to 66**, and stops growing with each fixture.

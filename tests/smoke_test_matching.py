@@ -12,7 +12,7 @@ from bill_tree import normalize_bill, normalize_division_title
 from diff_bill import diff_bills
 
 FRESH_BILLS = [
-    "bills/117-hr-2471",  # Consolidated Appropriations Act, 2022
+    "tests/corpus/117-hr-2471",  # Consolidated Appropriations Act, 2022
     "bills/116-hr-133",  # Consolidated Appropriations Act, 2021
 ]
 

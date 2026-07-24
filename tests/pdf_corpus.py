@@ -19,10 +19,10 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
+from corpus_paths import FIXTURES_DIR
 from parsers.pdf_text import Page, extract_clean_pages
 
-BILLS_DIR = Path(__file__).parent.parent / "bills"
-
+BILLS_DIR = FIXTURES_DIR
 # Persistent extraction cache. Gitignored (test_data/* is ignored). Keyed by PDF
 # path + mtime via the filename, so a changed PDF maps to a different file and
 # the stale entry is simply never read.

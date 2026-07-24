@@ -39,25 +39,25 @@ _GOLDEN = _ROOT / "test_data" / "pdf" / "extraction_golden.json"
 _CASES = [
     (
         "hr4366_reported_p5",
-        "bills/118-hr-4366/1_reported-in-house.pdf",
+        "tests/corpus/118-hr-4366/1_reported-in-house.pdf",
         5,
         "numbered body + soft-hyphen reconstruction across margin lines",
     ),
     (
         "hr4366_pcs_p7",
-        "bills/118-hr-4366/3_placed-on-calendar-senate.pdf",
+        "tests/corpus/118-hr-4366/3_placed-on-calendar-senate.pdf",
         7,
         "page-boundary hyphen gluing the VerDate footer onto the last body line",
     ),
     (
         "hr2029_reported_p2",
-        "bills/114-hr-2029/1_reported-in-house.pdf",
+        "tests/corpus/114-hr-2029/1_reported-in-house.pdf",
         2,
         "page-boundary hyphen gluing the DSK watermark onto the last body line",
     ),
     (
         "hr8752_title_p1",
-        "bills/118-hr-8752/1_reported-in-house.pdf",
+        "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
         1,
         "title page: soft hyphen joined into one word (no margin numbers)",
     ),
@@ -158,7 +158,7 @@ def test_regeneration_refuses_when_a_fixture_is_absent(monkeypatch):
     must refuse rather than write a partial golden. Simulates the absence rather than
     moving a real PDF, so this runs on any checkout."""
     module = sys.modules[__name__]
-    absent_rel = "bills/118-hr-4366/1_reported-in-house.pdf"
+    absent_rel = "tests/corpus/118-hr-4366/1_reported-in-house.pdf"
     monkeypatch.setattr(module, "_present", lambda rel: rel != absent_rel)
     monkeypatch.setattr(module, "_page_lines", lambda path, pg: [[1, "regenerated"]])
 

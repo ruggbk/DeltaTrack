@@ -10,150 +10,35 @@ htmlcov/
 .venv/
 # Git worktrees live inside the repo here; never commit them as gitlinks
 .claude/worktrees/
-bills/*
-!bills/.gitkeep
-!bills/large_bills.csv
-# govinfo BILLS bulk-text downloads + staging (fetch_bill_text_archives.py); large, re-fetchable
-# No trailing slash (#319): a trailing slash matches only a real directory, and the
-# documented way to make the corpus gates run in a git worktree is to SYMLINK these in
-# from the main checkout. A symlink is not a directory to git, so `bills_bulk_text/`
-# left the link untracked and offered for commit -- and committing it would record an
-# absolute path from one developer's machine. Matching without the slash covers both.
+# The bill WORKING directory: fetch_bills.py and fetch_bill_text_archives.py download
+# into it and it can reach hundreds of MB. Nothing in it is a test input — the curated
+# test fixtures live in tests/corpus/ and are tracked normally, so this directory is
+# entirely ignored and entirely disposable (#308, ADR 0015). It used to hold both, which
+# meant every committed fixture needed a hand-written re-admit line here; that list had
+# grown to 80 rules, duplicated tests/corpus_manifest.toml, and failed silently when a
+# contributor forgot an entry.
+# No trailing slash (#319): a trailing slash matches only a real directory, and this is
+# commonly SYMLINKED in from another checkout to reuse a downloaded corpus. A symlink is
+# not a directory to git, so `bills/` would leave the link untracked and offered for
+# commit — recording an absolute path from one developer's machine. Matching without the
+# slash covers both.
+bills
+# govinfo BILLS bulk-text downloads + staging (fetch_bill_text_archives.py); large,
+# re-fetchable. Same no-trailing-slash reasoning as above (#319).
 bills_bulk_text
 bills_govinfo_staging
-# Vendored public-domain (17 U.S.C. 105) govinfo sources for the external-validation suite:
-# the Senate reported-bill XML each validation jurisdiction checks. Pinning the exact bytes
-# keeps the committed validation_*.json fixtures reproducible and lets the suite run in CI.
-# The broader (large) bill corpus stays ignored and is fetched on demand.
-!bills/118-s-*/
-bills/118-s-*/*
-!bills/118-s-*/1_reported-in-senate.xml
-# Vendored public-domain (17 U.S.C. 105) PDF fixtures for the glyph-size
-# heading-segmentation tests (#89), so they gate CI without fetching: an approps
-# House bill (PDF+XML, the FEDERAL PROTECTIVE SERVICE / account-detection case and
-# the harness oracle) and a non-approps House bill (PDF, the generalization case).
-!bills/118-hr-8752/
-bills/118-hr-8752/*
-!bills/118-hr-8752/1_reported-in-house.pdf
-!bills/118-hr-8752/1_reported-in-house.xml
-# v2 (engrossed) PDF + XML too, so the diff-recall suite (13 cross-version cases)
-# and the render-examples smoke test (XML v1<->v2 diff) gate CI.
-!bills/118-hr-8752/2_engrossed-in-house.pdf
-!bills/118-hr-8752/2_engrossed-in-house.xml
-!bills/118-hr-8282/
-bills/118-hr-8282/*
-!bills/118-hr-8282/1_introduced-in-house.pdf
-# 117-hr-2471 / 118-hr-2882 (#287): introduced-in-House PDFs, the SEC.-catchline
-# continuation false-positive repros pinned by test_pdf_anchor_golden (#89). PDF only;
-# committed + manifested so the golden gate fails closed instead of skipping in CI.
-!bills/117-hr-2471/
-bills/117-hr-2471/*
-!bills/117-hr-2471/6_enrolled-bill.xml
-!bills/117-hr-2471/1_introduced-in-house.pdf
-!bills/118-hr-2882/
-bills/118-hr-2882/*
-!bills/118-hr-2882/5_engrossed-amendment-house.xml
-!bills/118-hr-2882/4_engrossed-amendment-senate.xml
-!bills/118-hr-2882/1_introduced-in-house.pdf
-# Committed corpus-manifest fixtures (#217 / ADR 0015): the diff-validation baselines
-# (118-hr-4366, 115-hr-5895) and structural-shape coverage (113-hr-3547 enrolled omnibus,
-# 119-hr-1 reconciliation) the CI correctness gates run against. Public domain (17 U.S.C.
-# 105), immutable, small. Single source of truth: tests/corpus_manifest.toml.
-!bills/118-hr-4366/
-bills/118-hr-4366/*
-!bills/118-hr-4366/1_reported-in-house.xml
-!bills/118-hr-4366/2_engrossed-in-house.xml
-!bills/118-hr-4366/4_engrossed-amendment-senate.xml
-!bills/118-hr-4366/5_engrossed-amendment-house.xml
-!bills/118-hr-4366/6_enrolled-bill.xml
-# The v1 and v3 PDF prints too (#296): the pdf-extraction golden pins one page of each
-# (soft-hyphen reconstruction; VerDate footer glued across a page boundary). Committed
-# so regenerating the golden can never drop their recorded expectations.
-!bills/118-hr-4366/1_reported-in-house.pdf
-!bills/118-hr-4366/2_engrossed-in-house.pdf
-!bills/118-hr-4366/3_placed-on-calendar-senate.pdf
-!bills/115-hr-5895/
-bills/115-hr-5895/*
-!bills/115-hr-5895/1_reported-in-house.pdf
-!bills/115-hr-5895/2_engrossed-in-house.pdf
-!bills/115-hr-5895/1_reported-in-house.xml
-!bills/115-hr-5895/2_engrossed-in-house.xml
-!bills/115-hr-5895/4_engrossed-amendment-senate.xml
-!bills/115-hr-5895/5_enrolled-bill.xml
-# The enrolled PDF too (#141): the smallest enrolled print in the corpus, and the
-# fixture the unnumbered-layout decline guard is gated on. Enrolled bills carry no
-# GPO margin line numbers, so this is the shape that used to diff silently wrong.
-!bills/115-hr-5895/5_enrolled-bill.pdf
-!bills/113-hr-3547/
-bills/113-hr-3547/*
-!bills/113-hr-3547/6_enrolled-bill.xml
-# Stages 1-5 too (#220): the node-join gates pin the 4->5 and 5->6 XML amendment
-# pairs and the 1->2 / 3->4 PDF pairs. Committing them took these gates off the
-# REQUIRE_CORPUS fetched-corpus gating that let them collect zero cases and pass green.
-# (That variable is fully retired as of #278.)
-!bills/113-hr-3547/1_introduced-in-house.pdf
-!bills/113-hr-3547/2_engrossed-in-house.pdf
-!bills/113-hr-3547/3_received-in-senate.pdf
-!bills/113-hr-3547/4_engrossed-amendment-senate.pdf
-!bills/113-hr-3547/4_engrossed-amendment-senate.xml
-!bills/113-hr-3547/5_engrossed-amendment-house.xml
-# 114-hr-2029 (#220): the omnibus span-geometry pair. The 5->6 XML pair is the
-# node-join amendment-shape case; the 3->4 PDF pair is its anchor-agreement case.
-!bills/114-hr-2029/
-bills/114-hr-2029/*
-# The v1 PDF print too (#296): the pdf-extraction golden pins its page 2 (DSK watermark
-# glued across a page boundary). Committed so regeneration cannot drop that expectation.
-!bills/114-hr-2029/1_reported-in-house.pdf
-!bills/114-hr-2029/3_referred-in-senate.pdf
-!bills/114-hr-2029/4_reported-in-senate.pdf
-!bills/114-hr-2029/5_engrossed-amendment-senate.xml
-!bills/114-hr-2029/6_engrossed-amendment-house.xml
-# 117-hr-4502 (#220): a CLEAN convergence bill — the XML/PDF subsection gates assert
-# exact parity against it, so both formats of the one stage are committed.
-!bills/117-hr-4502/
-bills/117-hr-4502/*
-!bills/117-hr-4502/2_engrossed-in-house.pdf
-!bills/117-hr-4502/1_reported-in-house.xml
-!bills/117-hr-4502/2_engrossed-in-house.xml
-!bills/117-hr-4502/1_reported-in-house.pdf
-!bills/117-hr-4502/1_reported-in-house.xml
-!bills/119-hr-1/
-bills/119-hr-1/*
-!bills/119-hr-1/1_reported-in-house.xml
-# The PDF too (#220): the subsection gates pair the CLEAN exact-parity fixtures
-# (118-hr-8752, 117-hr-4502) against this one, the messy reconciliation print with the
-# largest oracle. Without it committed those gates silently dropped to two bills.
-!bills/119-hr-1/1_reported-in-house.pdf
-# v2 XML: the headline #86 gate (test_financial_callout_whole_item) diffs v1 -> v2 to
-# prove a wholly-removed appropriation is not rendered silently, and
-# scripts/build_similarity_labels.py re-derives the committed answer key from the same
-# pair. Neither was reproducible: v2 was uncommitted AND absent from the README corpus
-# block, so the gate skipped on every fresh clone including CI.
-!bills/119-hr-1/2_engrossed-in-house.xml
 reports/*
 !reports/.gitkeep
 plans/
-test_data/*
-!test_data/validation_*.json
-# Hand-labeled similarity-threshold answer key (DeltaTrack #8); regen: scripts/build_similarity_labels.py
-!test_data/similarity_labels.json
-!test_data/pdf/
-# Vendored committee-report HTML (public domain) — the external-validation ground-truth source.
-!test_data/CRPT-*.htm
-# Vendored public-domain (17 U.S.C. 105) PDF fixtures for the PDF golden + cross-subcommittee
-# gates (#287). These are golden-module fixtures (like the test_data/pdf/*.json goldens they
-# pair with), committed so the gates run in CI instead of skipping — not bill-corpus fixtures,
-# so they are NOT in tests/corpus_manifest.toml (which is bills/-layout only, ADR 0015):
-#   - subcommittee/: one reported-in-House print per approps subcommittee
-#     (test_pdf_anchor_golden::TestMajorLevelAcrossSubcommittees).
-#   - BILLS-118s4795rs.pdf: the CJS Senate reported print (anchor golden + subcommittee gate).
-#   - CRPT-118srpt198.pdf: the committee-report comparison-table page the extraction golden
-#     reads; committing it also resolves the fetchability half of #296.
-!test_data/subcommittee/
-!test_data/BILLS-118s4795rs.pdf
-!test_data/CRPT-118srpt198.pdf
+# test_data/ holds committed fixtures (validation JSON, committee-report HTML/PDF, the
+# PDF goldens and their source prints), so it is tracked by default and only the
+# local-only artifacts are listed here (#308). It used to be deny-all-then-re-admit,
+# which put a .gitignore edit in the path of adding a golden.
 # Persistent PDF extraction cache (developer test-loop speedup; see tests/pdf_corpus.py)
 test_data/extract_cache/
+# The source appropriations spreadsheet is deliberately not vendored; only the JSON
+# fixture derived from it is committed.
+test_data/*.xlsx
 *.csv
 # Vendored GPO render chain (public domain, ~2.2MB incl. binary JPGs) — local reference only.
 # Mined into docs/gpo-render-conventions.md; re-fetch from govinfo bulkdata when needed. See DeltaTrack#40.
@@ -181,30 +66,3 @@ docs/research/provision-matching/probes/form_*.html
 !docs/research/provision-matching/probes/form_template.html
 docs/research/provision-matching/probes/labels/
 docs/research/provision-matching/probes/merged_labels.json
-!bills/118-hr-8774/
-bills/118-hr-8774/*
-!bills/118-hr-8774/1_reported-in-house.pdf
-!bills/118-hr-8774/2_engrossed-in-house.pdf
-!bills/118-hr-8774/1_reported-in-house.xml
-!bills/118-hr-8774/2_engrossed-in-house.xml
-!bills/113-hr-83/
-bills/113-hr-83/*
-!bills/113-hr-83/6_engrossed-amendment-house.xml
-# Legislative Branch validation set (#278): the five enrolled bills
-# test_data/validation_leg_branch.json references but that were never committed. Its
-# completeness floor could therefore only assert behind REQUIRE_CORPUS=1, which CI never
-# sets — a guard that never ran. Committed so the floor becomes an ordinary fail-closed
-# check with no env var. Public domain (17 U.S.C. 105), ~3.9 MB compressed for all five.
-# 113-hr-83 and 114-hr-2029 already have allowlist blocks above (their enrolled stage is
-# the only addition); the other three are new directories.
-!bills/113-hr-83/7_enrolled-bill.xml
-!bills/114-hr-2029/7_enrolled-bill.xml
-!bills/115-hr-1625/
-bills/115-hr-1625/*
-!bills/115-hr-1625/6_enrolled-bill.xml
-!bills/115-hr-244/
-bills/115-hr-244/*
-!bills/115-hr-244/6_enrolled-bill.xml
-!bills/116-hr-1865/
-bills/116-hr-1865/*
-!bills/116-hr-1865/6_enrolled-bill.xml

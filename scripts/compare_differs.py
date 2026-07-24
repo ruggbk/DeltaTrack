@@ -8,8 +8,8 @@ interpretation.
 
 Usage:
     python scripts/compare_differs.py \
-        bills/118-hr-4366/1_reported-in-house \
-        bills/118-hr-4366/6_enrolled-bill
+        tests/corpus/118-hr-4366/1_reported-in-house \
+        tests/corpus/118-hr-4366/6_enrolled-bill
 
 Each argument is a path WITHOUT extension; the script reads <arg>.xml and
 <arg>.pdf. Requires the dev dependency group (`uv sync`), which includes xmldiff

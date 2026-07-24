@@ -21,6 +21,7 @@ from bill_tree import (
     find_bill_body,
     normalize_bill,
 )
+from corpus_paths import fixture_path
 from diff_bill import extract_amounts
 from parsers.pdf_anchors import Anchor
 from structure_tree import TreeNode, build_pdf_tree, build_xml_tree
@@ -290,10 +291,10 @@ class TestPdfTree:
 
 # --- Real-bill drift + conservation guards (slow; skip when corpus absent) ---
 
-_CLEAN = Path("bills/118-hr-8752/1_reported-in-house.xml")
-_CLEAN_PDF = Path("bills/118-hr-8752/1_reported-in-house.pdf")
-_OMNIBUS = Path("bills/113-hr-3547/6_enrolled-bill.xml")
-_BOTH_SHAPES = Path("bills/115-hr-5895/5_enrolled-bill.xml")
+_CLEAN = fixture_path("118-hr-8752", "1_reported-in-house.xml")
+_CLEAN_PDF = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
+_OMNIBUS = fixture_path("113-hr-3547", "6_enrolled-bill.xml")
+_BOTH_SHAPES = fixture_path("115-hr-5895", "5_enrolled-bill.xml")
 
 
 @pytest.mark.slow
@@ -353,7 +354,7 @@ def test_pdf_real_bill_conserves_and_is_leveled():
 # (feedback_validate_against_hard_fixture). PDF has no independent ground truth, so
 # its span-coverage check rides on step 4's offsets, not this gate. ---
 
-_HR83_AMEND = Path("bills/113-hr-83/6_engrossed-amendment-house.xml")
+_HR83_AMEND = fixture_path("113-hr-83", "6_engrossed-amendment-house.xml")
 
 # (path, max_dropped, why)
 _CONSERVATION_FIXTURES = [

@@ -8,9 +8,11 @@ import urllib.request
 from scripts.fetch_test_assets import ASSETS, fetch_asset
 
 # Valid destinations: test_data/<file>.pdf (watermark + subcommittee prints) or
-# bills/<congress>-<type>-<num>/<file>.pdf (catchline repro bills sharing the
-# fetch_bills.py layout, DeltaTrack#105). Both gitignored, fetched on demand.
-_DEST_RE = re.compile(r"^(test_data/.+|bills/\d+-[a-z]+-\d+/.+)\.pdf$")
+# tests/corpus/<congress>-<type>-<num>/<file>.pdf (catchline repro bills, which keep the
+# fetch_bills.py per-bill layout, DeltaTrack#105). Both trees are committed now, so this
+# script re-obtains the upstream bytes rather than supplying anything a clone lacks; the
+# pattern keeps a new entry from landing outside either fixture tree (#308).
+_DEST_RE = re.compile(r"^(test_data/.+|tests/corpus/\d+-[a-z]+-\d+/.+)\.pdf$")
 
 
 def test_assets_registry_well_formed():
@@ -30,8 +32,8 @@ def test_catchline_repro_bills_registered():
     # test_pdf_anchor_golden.py load these exact paths and skip-if-absent, so a
     # registry/test path mismatch would mask the guard. Keep the two in sync.
     dests = {dest for dest, _ in ASSETS}
-    assert "bills/117-hr-2471/1_introduced-in-house.pdf" in dests
-    assert "bills/118-hr-2882/1_introduced-in-house.pdf" in dests
+    assert "tests/corpus/117-hr-2471/1_introduced-in-house.pdf" in dests
+    assert "tests/corpus/118-hr-2882/1_introduced-in-house.pdf" in dests
 
 
 def test_skips_existing(tmp_path, monkeypatch):

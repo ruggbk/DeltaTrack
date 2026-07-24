@@ -38,6 +38,7 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR
 from scripts.heading_precision import measure
 from server.pdf_compare import compare_pdfs
 from server.xml_compare import compare_xml
@@ -45,8 +46,7 @@ from server.xml_compare import compare_xml
 pytestmark = pytest.mark.slow
 
 ROOT = Path(__file__).parent.parent
-BILLS_DIR = ROOT / "bills"
-
+BILLS_DIR = FIXTURES_DIR
 # The canonical-diff change_type vocabulary (formatters/canonical.py). "unchanged"
 # is not emitted as a change; the parity totals count only real changes.
 _VALID_OPS = {"modified", "added", "removed", "moved"}

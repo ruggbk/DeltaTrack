@@ -20,6 +20,7 @@ import respx
 import fetch_bill_text_archives as fbt
 import fetch_bills as fb
 import fetch_govinfo as gi
+from corpus_paths import fixture_path
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -652,7 +653,7 @@ def test_govinfo_bytes_identical_to_congressgov_fixture():
 
 
 _BULK_ZIP = REPO / "bills_bulk_text" / "BILLS-119-1-hr.zip"
-_CURATED = REPO / "bills" / "119-hr-1" / "1_reported-in-house.xml"
+_CURATED = fixture_path("119-hr-1", "1_reported-in-house.xml")
 
 
 @pytest.mark.skipif(

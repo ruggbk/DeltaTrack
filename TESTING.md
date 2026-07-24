@@ -175,7 +175,7 @@ it had come to gate.
 ### Test counts are not comparable between machines
 
 A large share of the suite is data-driven, parametrized over real bill files that
-live in gitignored directories (`bills/`'s downloaded tier, `bills_corpus/`,
+live in gitignored directories (`bills/`, `bills_corpus/`,
 `bills_govinfo_staging/`). How many tests collect, pass, or skip therefore depends
 on how much bill data that particular machine has fetched — a full working
 checkout and a fresh clone legitimately report very different totals for the same
@@ -212,8 +212,10 @@ set and retired `REQUIRE_CORPUS` outright; the one requirement no fixture can su
 is a live network, and that is now the `network` marker.)
 
 To sweep every bill you have fetched locally -- broader than the committed set,
-and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`.
-This is exploration, not a gate; CI never runs it.
+and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`. It
+spans both trees (the committed fixtures in `tests/corpus/` *and* `bills/`), so it
+is a strict superset of what the gates collect. This is exploration, not a gate;
+CI never runs it.
 
 ```bash
 # The committed corpus gates (what CI runs):
@@ -270,9 +272,9 @@ produce stay watched, in those modules as in every other.
 
 The manifest and the committed files move together:
 
-1. `git add` the bill version file(s) under `bills/<id>/`. `bills/` is
-   gitignored, so add an allowlist entry in `.gitignore` (follow the existing
-   `!bills/<id>/…` blocks) or use `git add -f`.
+1. Put the bill version file(s) under `tests/corpus/<id>/` and `git add` them.
+   That directory is tracked normally, so there is no `.gitignore` step: if you
+   fetched the bill first, copy it across from `bills/<id>/`.
 2. Add a `[[bill]]` entry to `tests/corpus_manifest.toml` naming the `id`, each
    committed version's `stage` (the filename without extension) and `formats`
    (`xml` and/or `pdf`), and a `covers` note saying what structural situation
@@ -282,15 +284,14 @@ The manifest and the committed files move together:
    the new bill or the gate fails. Commit the calibrated baseline alongside the
    fixture and manifest entry.
 
-**Because of step 1, `bills/` is part tracked and part ignored — never `rm -rf`
-it.** The allowlist means committed fixtures sit in the same directory tree as
-downloaded bills that git knows nothing about, so the directory looks disposable
-and is not: deleting it (to reclaim space, or to swap in a symlink to another
-checkout's corpus) takes the committed fixtures with it, and the corpus gates
-then fail closed on missing manifest bills. Move it aside instead of deleting
-it. If you already deleted it, `git restore bills/` brings the tracked files
-back; only the downloaded tier is actually lost, and `fetch_bills.py` refetches
-that.
+**The two trees are separate, and only one matters to the gates** (#308).
+`tests/corpus/` is committed and is what every gate reads; `bills/` is the
+fetchers' working directory, entirely gitignored and entirely disposable —
+delete it, or symlink another checkout's corpus over it, without touching a
+fixture. `corpus_paths.py` is the only place either path is spelled: use
+`fixture_path(bill_id, filename)` rather than composing a path yourself, and
+`tests/test_fixture_layout.py` will fail the build if a test reaches into
+`bills/` for a bill that is committed.
 
 Run a single area:
 
@@ -314,7 +315,6 @@ committed fixtures and are CI gates; a download only adds cases:
 
 | Still needs fetched bills | Why |
 |---|---|
-| `test_pdf_compare`'s end-to-end cases | Read `bills/118-hr-4366/` PDFs, which are not committed |
 | `test_govinfo_corpus_parity` | Live BILLSTATUS fetch, so it cannot be an offline gate. Marked `network`: skipped unless you pass `--run-network`. A weekly scheduled workflow runs it against the committed fixtures (#342); a download only widens which bills it checks |
 
 The Legislative Branch validation set used to be on that list. #278 committed its
@@ -322,8 +322,10 @@ five remaining bills, so its completeness floor is now an ordinary fail-closed
 check that runs everywhere, and CI validates all seven of the fixture's bills
 instead of the two that happened to be committed.
 
-Everything else in the slow group asserts on a clean clone. The two sweeping
-suites above simply widen their case list when you have more bills.
+Everything else in the slow group asserts on a clean clone, against
+`tests/corpus/`. A download never changes what those gates assert; it only widens
+the case list of the two sweeping suites (`test_pdf_corpus_smoke`,
+`test_pdf_xml_amount_recall`) and of anything run under `CORPUS_SWEEP=1`.
 
 When you do download, the PDF suites need each bill's PDF as well as its XML;
 pass `--format both`, e.g.

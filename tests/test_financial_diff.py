@@ -1,9 +1,8 @@
 """Tests for financial change extraction in diff_bill."""
 
-from pathlib import Path
-
 import pytest
 
+from corpus_paths import fixture_path
 from diff_bill import (
     FinancialChange,
     compute_financial_change,
@@ -280,8 +279,8 @@ class TestBillDiffToDictFinancial:
         assert "financial_summary" not in result
 
 
-_HR8774_V1 = Path("bills/118-hr-8774/1_reported-in-house.xml")
-_HR8774_V2 = Path("bills/118-hr-8774/2_engrossed-in-house.xml")
+_HR8774_V1 = fixture_path("118-hr-8774", "1_reported-in-house.xml")
+_HR8774_V2 = fixture_path("118-hr-8774", "2_engrossed-in-house.xml")
 
 
 @pytest.mark.slow
@@ -301,8 +300,8 @@ class TestCliFinancial:
                 "python",
                 "diff_bill.py",
                 "compare",
-                "bills/118-hr-8774/1_reported-in-house.xml",
-                "bills/118-hr-8774/2_engrossed-in-house.xml",
+                "tests/corpus/118-hr-8774/1_reported-in-house.xml",
+                "tests/corpus/118-hr-8774/2_engrossed-in-house.xml",
                 "--format",
                 "json",
                 "--financial",
@@ -332,8 +331,8 @@ class TestCliFinancial:
                 "python",
                 "diff_bill.py",
                 "compare",
-                "bills/118-hr-8774/1_reported-in-house.xml",
-                "bills/118-hr-8774/2_engrossed-in-house.xml",
+                "tests/corpus/118-hr-8774/1_reported-in-house.xml",
+                "tests/corpus/118-hr-8774/2_engrossed-in-house.xml",
                 "--format",
                 "json",
             ],

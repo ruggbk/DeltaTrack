@@ -48,6 +48,7 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import FIXTURES_DIR
 from parsers.pdf_anchors import (
     _match_runin_subsection,
     _valid_subsection_enum,
@@ -60,8 +61,7 @@ from tests.pdf_corpus import cached_pages
 pytestmark = pytest.mark.slow
 
 ROOT = Path(__file__).parent.parent
-BILLS = ROOT / "bills"
-
+BILLS = FIXTURES_DIR
 # (bill, pdf rel path, xml rel path) under bills/.
 FIXTURES = [
     ("118-hr-8752", "118-hr-8752/1_reported-in-house.pdf", "118-hr-8752/1_reported-in-house.xml"),

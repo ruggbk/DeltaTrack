@@ -13,18 +13,19 @@ from pathlib import Path
 import pytest
 
 from bill_tree import normalize_bill
+from corpus_paths import fixture_path
 from diff_bill import bill_diff_to_dict, diff_bills, extract_amounts
 from diff_pdf import PdfDiff
 from formatters.canonical import SCHEMA_VERSION, pdf_diff_to_canonical, xml_diff_to_canonical
 from formatters.text_serializer import build_xml_full_text
 from parsers.pdf_anchors import Anchor
 
-_V1 = Path("bills/118-hr-8752/1_reported-in-house.xml")
-_V2 = Path("bills/118-hr-8752/2_engrossed-in-house.xml")
-_OMNIBUS = Path("bills/113-hr-3547/6_enrolled-bill.xml")
+_V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
+_V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.xml")
+_OMNIBUS = fixture_path("113-hr-3547", "6_enrolled-bill.xml")
 _SCHEMA = Path("schema/canonical-diff.schema.json")
-_PDF_V1 = Path("bills/118-hr-4366/1_reported-in-house.pdf")
-_PDF_V2 = Path("bills/118-hr-4366/2_engrossed-in-house.pdf")
+_PDF_V1 = fixture_path("118-hr-4366", "1_reported-in-house.pdf")
+_PDF_V2 = fixture_path("118-hr-4366", "2_engrossed-in-house.pdf")
 
 pytestmark = pytest.mark.skipif(not _V1.exists(), reason="bill corpus not present (fetch_bills.py)")
 

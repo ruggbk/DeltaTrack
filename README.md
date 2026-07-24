@@ -253,9 +253,9 @@ The diff engine is fully deterministic: no LLM and no API key. `fetch_bills.py` 
 
 See [TESTING.md](TESTING.md) for how the test suite is organized, how diff accuracy is validated, what each validation layer proves, and where the known gaps are.
 
-Nearly every slow suite asserts against fixtures committed to the repo, so a fresh clone needs no downloads. A few checks do want fetched bills -- one PDF comparison case, the Legislative Branch completeness floor, and the live-network parity gate -- and [TESTING.md](TESTING.md#what-still-wants-a-download) lists them with the fetch commands. That list moves whenever fixture coverage changes, so it lives in one place rather than being mirrored here.
+Nearly every slow suite asserts against fixtures committed to the repo, so a fresh clone needs no downloads. The one check that still wants a network is the live-network parity gate, and [TESTING.md](TESTING.md#what-still-wants-a-download) lists them with the fetch commands. That list moves whenever fixture coverage changes, so it lives in one place rather than being mirrored here.
 
-The validation tests compare extracted line items across Legislative Branch bills (both chambers, multiple fiscal years) against amounts from a curated appropriations spreadsheet. The corpus property tests (`test_corpus_properties.py`) check dollar coverage, path uniqueness, and character coverage across the committed corpus (`tests/corpus_manifest.toml`); `CORPUS_SWEEP=1` extends them across every locally-fetched bill. See [TESTING.md](TESTING.md) for what each validation layer proves and where the gaps are.
+The validation tests compare extracted line items across Legislative Branch bills (both chambers, multiple fiscal years) against amounts from a curated appropriations spreadsheet. The corpus property tests (`test_corpus_properties.py`) check dollar coverage, path uniqueness, and character coverage across the committed corpus (`tests/corpus_manifest.toml`); `CORPUS_SWEEP=1` extends them across both trees (the committed fixtures plus every locally-fetched bill in `bills/`). See [TESTING.md](TESTING.md) for what each validation layer proves and where the gaps are.
 
 ## Contributing
 

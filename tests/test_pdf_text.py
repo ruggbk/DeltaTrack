@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+from corpus_paths import fixture_path, resolve_bill_file
 from parsers.pdf_text import (
     Line,
     Page,
@@ -23,7 +22,7 @@ from parsers.pdf_text import (
     strip_page_chrome,
 )
 
-_HR8752_V1 = Path(__file__).resolve().parent.parent / "bills" / "118-hr-8752" / "1_reported-in-house.pdf"
+_HR8752_V1 = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
 
 
 def _print_page(page_number: int, chrome_stripped: str) -> Page:
@@ -175,7 +174,7 @@ class TestStripPageChrome:
         assert strip_page_chrome("1 BODY\n2 MORE") == "1 BODY\n2 MORE"
 
 
-_HR5895_V3 = Path(__file__).resolve().parent.parent / "bills" / "115-hr-5895" / "3_placed-on-calendar-senate.pdf"
+_HR5895_V3 = resolve_bill_file("115-hr-5895", "3_placed-on-calendar-senate.pdf")
 
 
 @pytest.mark.skipif(not _HR5895_V3.exists(), reason="115-hr-5895 v3 PDF not present")

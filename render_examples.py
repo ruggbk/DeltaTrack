@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bill_tree import bill_title, normalize_bill
+from corpus_paths import FIXTURES_DIR
 from diff_bill import bill_diff_to_dict, diff_bills
 from formatters.canonical import view_from_canonical, xml_diff_to_canonical
 from formatters.diff_html import format_diff_html
@@ -28,7 +29,7 @@ from server.pdf_compare import compare_pdfs_html
 from shared.version_stems import label_from_stem, version_number_from_stem
 
 PROJECT_ROOT = Path(__file__).parent
-BILLS = PROJECT_ROOT / "bills"
+BILLS = FIXTURES_DIR
 EXAMPLES = PROJECT_ROOT / "examples"
 
 

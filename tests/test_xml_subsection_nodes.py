@@ -38,6 +38,7 @@ from pathlib import Path
 import pytest
 
 from bill_tree import normalize_bill
+from corpus_paths import FIXTURES_DIR
 from parsers.pdf_anchors import _valid_subsection_enum
 from tests.conftest import assert_manifest_committed
 from tests.test_pdf_subsection_recall import (
@@ -51,8 +52,7 @@ from tests.test_pdf_subsection_recall import (
 pytestmark = pytest.mark.slow
 
 ROOT = Path(__file__).parent.parent
-BILLS = ROOT / "bills"
-
+BILLS = FIXTURES_DIR
 # Clean fixtures where PDF precision/recall are exactly 1.0 (measured, #96) — the
 # convergence equality is asserted only there; 119-hr-1 carries documented residue.
 CLEAN = {"118-hr-8752", "117-hr-4502"}
