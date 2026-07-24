@@ -87,11 +87,19 @@ def bill_dirs() -> list[Path]:
     suites globbed ``bills/``, which on a fetched machine included downloads; pinning them
     to ``tests/corpus/`` alone would have silently dropped that exploratory breadth, and
     nothing asserts a sweep's case count, so the loss would not turn anything red.
+
+    The sweep widens by BILL, not by version: ``sweep_bill_dirs`` yields one directory per
+    bill id with the committed copy winning, so a download-only *version* of a bill that
+    is committed for some other stage stays invisible even under ``CORPUS_SWEEP=1``. That
+    is deliberate (a downloaded copy must not shadow committed bytes) but it does mean the
+    sweep is not a strict superset of what the pre-#308 glob reached. See #308.
+
+    No ``.is_dir()`` guard on the fixture tree: it is committed, so its absence is a broken
+    checkout and should raise here rather than quietly collect zero cases — the fail-open
+    shape AGENTS.md warns against for parametrization lists.
     """
     if _CORPUS_SWEEP:
         return [d for d in sweep_bill_dirs() if _selected(d.name)]
-    if not FIXTURES_DIR.is_dir():
-        return []
     return sorted(d for d in FIXTURES_DIR.iterdir() if d.is_dir() and _selected(d.name))
 
 

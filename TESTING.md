@@ -395,7 +395,7 @@ Coverage measures how much of the comparison code the tests actually exercise.
 It is reported with `pytest-cov` (already included as a development dependency).
 
 ```bash
-uv run pytest --cov --cov-report=term-missing                 # Full suite (needs bills/)
+uv run pytest --cov --cov-report=term-missing                 # Full suite (no download needed)
 uv run pytest -m "not slow and not browser" --cov --cov-report=term-missing  # Fast group only
 uv run pytest --cov --cov-report=html                          # Browsable report in htmlcov/
 ```

@@ -195,7 +195,7 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
     # limitation/administrative-provisions section, and general provisions), not parser
-    # errors. These Senate prints are committed (bills/118-s-* allowlist) and named in
+    # errors. These Senate prints are committed (tests/corpus/118-s-*) and named in
     # the corpus manifest, so the gate runs them in CI; these counts are its baselines.
     "118-s-4795/1_reported-in-senate.xml": 2,  # CJS: DOJ general-provisions + NASA pair
     "118-s-4796/1_reported-in-senate.xml": 7,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats

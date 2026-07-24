@@ -60,21 +60,48 @@ _DOWNLOAD_TIER_FILES = {
 
 _BILL_ID = r"\d{3}-[a-z]+-\d+"
 
-# Both spellings of "reach into the download tree for this bill": the literal path, and
-# the constant. The second matters more now — DOWNLOADS_DIR is the form a contributor
-# will reach for, and it reads as deliberate even when it is a mistake. The filename is
-# captured when present, because the question is per-VERSION (see committed_fixture_refs).
+# "Reach into the download tree for THIS bill", where the bill is spelled out beside the
+# path. The filename is captured when present, because the question is per-VERSION (see
+# committed_fixture_refs).
+#
+# The broader rule below already rejects every DOWNLOADS_DIR use outside corpus_paths.py,
+# so these two patterns are not the last line of defence. They stay because they can name
+# the offending fixture in the failure message — "115-hr-244/6_enrolled-bill.xml is
+# committed" is a far more actionable error than "you named the download tree".
 _BILLS_PATH_RES = (
     re.compile(rf"""bills/({_BILL_ID})(?:/([\w.\-]+))?"""),
     re.compile(rf"""DOWNLOADS_DIR\s*/\s*["']({_BILL_ID})["'](?:\s*/\s*["']([\w.\-]+)["'])?"""),
 )
 
-# Spelling the download ROOT rather than a bill under it: ``_BILLS = _ROOT / "bills"``,
-# ``Path("bills")``, ``(repo / "bills").glob(...)``. This is the shape that composes a
-# path one segment at a time, so the per-bill patterns above cannot see it — and it is
-# how scripts/build_similarity_labels.py silently stopped resolving after the #308 move.
-# corpus_paths.py is the one home for these names; everything else imports from it.
-_DOWNLOAD_ROOT_LITERAL = re.compile(r"""(?:Path\(\s*["']bills["']\s*\)|/\s*["']bills["'])""")
+# Naming the download tree at all, rather than a specific bill under it. The patterns
+# above need the bill id spelled as a literal right beside the path, which the most
+# idiomatic forms in a per-bill parametrized suite do not do:
+#
+#     DOWNLOADS_DIR / bill / "1_reported-in-house.xml"   # id in a variable
+#     DOWNLOADS_DIR / "118-hr-4366/1_reported-in-house.xml"   # id and file in one string
+#     Path(f"bills/{bill}/1_reported-in-house.xml")      # interpolated
+#     os.path.join("bills", bill, stem)                  # no / operator
+#     _BILLS = _ROOT / "bills"                           # root bound once, used far away
+#
+# The last is how scripts/build_similarity_labels.py came through the #308 move still
+# pointing at the download tree and stopped resolving. So the rule is the policy itself:
+# outside corpus_paths.py and the fetchers, no module names the download tree — it goes
+# through fixture_path() (committed) or resolve_bill_file() (mixed per version).
+#
+# Deliberately NOT "any 'bills' string literal": that flags a JSON key (``{"bills": []}``
+# in tests/test_shared_http.py) and the legitimate download-only paths in
+# tests/smoke_test_matching.py and tests/test_pdf_anchor_golden.py, which name bills
+# nobody has committed. Each pattern below is narrower than that and currently flags
+# nothing in the tree.
+_DOWNLOAD_TREE_NAME_RES = (
+    # The constant itself, in any composition. No non-exempt module uses it today, and
+    # both sanctioned helpers cover the legitimate cases, so this costs nothing.
+    re.compile(r"\bDOWNLOADS_DIR\b"),
+    # The directory name as a path segment: Path("bills"), x / "bills", join("bills", …).
+    re.compile(r"""(?:Path\(\s*["']bills["']\s*\)|/\s*["']bills["']|join\(\s*["']bills["'])"""),
+    # A "bills/…" literal whose bill id is interpolated or concatenated in.
+    re.compile(r"""["']bills/(?:\{|%|['"]\s*[+%])"""),
+)
 
 
 def committed_fixture_refs() -> set[str]:
@@ -93,8 +120,15 @@ def committed_fixture_refs() -> set[str]:
 
 
 def _python_sources() -> list[Path]:
-    roots = [PROJECT_ROOT / "tests", PROJECT_ROOT / "scripts"]
-    files = [f for r in roots for f in r.rglob("*.py")]
+    """Every module the rules police.
+
+    Beyond ``tests/`` and ``scripts/``, the package directories are included even though
+    they hold no bill paths today: a helper imported *by* a test is exactly where a stale
+    path would hide from a scan limited to test files. ``docs/research/`` is deliberately
+    out — those probes are download-tier scratch, like the fetchers.
+    """
+    roots = [PROJECT_ROOT / d for d in ("tests", "scripts", "parsers", "formatters", "shared", "server", "bill_index")]
+    files = [f for r in roots if r.is_dir() for f in r.rglob("*.py")]
     files += sorted(PROJECT_ROOT.glob("*.py"))
     return files
 
@@ -111,6 +145,10 @@ def find_stale_fixture_paths(sources: dict[str, str], committed: set[str]) -> di
     A reference naming a bill but no file is ambiguous, so it fails CLOSED whenever the
     bill has any committed file at all.
 
+    Lines mentioning ``tmp_path`` are skipped, as in :func:`find_download_tree_names`: a
+    synthetic tree built under a temp dir is not the real download directory, and a test
+    is entitled to name a real bill id inside one.
+
     Takes its input as a dict so the rule is testable on synthetic sources rather than
     only on the tree it polices.
     """
@@ -120,23 +158,26 @@ def find_stale_fixture_paths(sources: dict[str, str], committed: set[str]) -> di
         if rel in _DOWNLOAD_TIER_FILES:
             continue
         bad: set[str] = set()
-        for rx in _BILLS_PATH_RES:
-            for bill, filename in rx.findall(text):
-                if filename:
-                    if f"{bill}/{filename}" in committed:
-                        bad.add(f"{bill}/{filename}")
-                elif bill in committed_ids:
-                    bad.add(bill)
+        for line in text.splitlines():
+            if "tmp_path" in line:
+                continue
+            for rx in _BILLS_PATH_RES:
+                for bill, filename in rx.findall(line):
+                    if filename:
+                        if f"{bill}/{filename}" in committed:
+                            bad.add(f"{bill}/{filename}")
+                    elif bill in committed_ids:
+                        bad.add(bill)
         if bad:
             offenders[rel] = sorted(bad)
     return offenders
 
 
-def find_download_root_literals(sources: dict[str, str]) -> dict[str, list[int]]:
-    """``{relative path: [line numbers]}`` for sources that spell the download root.
+def find_download_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
+    """``{relative path: [line numbers]}`` for sources that name the download tree.
 
-    Catches the composed form the per-bill patterns structurally cannot see, because the
-    bill id never appears beside the word ``bills``::
+    Catches every composition the per-bill patterns structurally cannot see, because the
+    bill id is not spelled as a literal beside the path::
 
         _BILLS = _ROOT / "bills"
         normalize_bill(_BILLS / bill / version)   # ...300 lines later
@@ -156,7 +197,7 @@ def find_download_root_literals(sources: dict[str, str]) -> dict[str, list[int]]
         lines = [
             n
             for n, line in enumerate(text.splitlines(), 1)
-            if _DOWNLOAD_ROOT_LITERAL.search(line) and "tmp_path" not in line
+            if any(rx.search(line) for rx in _DOWNLOAD_TREE_NAME_RES) and "tmp_path" not in line
         ]
         if lines:
             offenders[rel] = lines
@@ -180,15 +221,15 @@ def test_no_source_reaches_into_bills_for_a_committed_fixture() -> None:
     )
 
 
-def test_no_source_spells_the_download_root_itself() -> None:
-    """The composed form of failure mode 1, which the per-bill patterns cannot see."""
+def test_no_source_names_the_download_tree() -> None:
+    """Every composed form of failure mode 1, which the per-bill patterns cannot see."""
     sources = {str(f.relative_to(PROJECT_ROOT)): f.read_text() for f in _python_sources()}
-    offenders = find_download_root_literals(sources)
+    offenders = find_download_tree_names(sources)
     assert not offenders, (
-        f"{len(offenders)} source file(s) spell the download directory themselves: "
-        f"{offenders}. Import DOWNLOADS_DIR (or better, FIXTURES_DIR / fixture_path / "
-        "sweep_bill_dirs) from corpus_paths, so a future move is one edit and this "
-        "guard can see which tree you meant."
+        f"{len(offenders)} source file(s) name the download tree: {offenders}. Reach a "
+        "committed fixture with corpus_paths.fixture_path(), a per-version mix with "
+        "resolve_bill_file(), and both trees with sweep_bill_dirs(). Composing the path "
+        "yourself puts the bill id out of this guard's sight (#345)."
     )
 
 
@@ -225,29 +266,72 @@ def test_stale_fixture_path_rule_can_fire() -> None:
     exempt = {"fetch_bills.py": 'default = Path("bills/118-hr-4366")'}
     assert find_stale_fixture_paths(exempt, committed) == {}
 
+    # A synthetic tree under a temp dir may name a real committed bill: it is not the
+    # download directory. (This rule used to scan whole-file, so the tmp_path exemption
+    # that find_download_tree_names had did not apply here — #345 review.)
+    synthetic = {"tests/test_thing.py": 'p = tmp_path / "bills/118-hr-4366/1_reported-in-house.xml"'}
+    assert find_stale_fixture_paths(synthetic, committed) == {}
 
-def test_download_root_literal_rule_can_fire() -> None:
-    """The composed-path rule, proven on the exact shape that escaped it (#345 review)."""
+
+def test_download_tree_name_rule_can_fire() -> None:
+    """The rule proven on every bypass an adversarial review of #345 demonstrated.
+
+    Each of these reached a committed fixture through the download tree while the
+    per-bill patterns stayed green, so each is a regression test for a real hole.
+    """
+    # The shape that actually shipped broken (scripts/build_similarity_labels.py).
     composed = {"scripts/thing.py": '_BILLS = _ROOT / "bills"\nX = _BILLS / bill / version'}
-    assert find_download_root_literals(composed) == {"scripts/thing.py": [1]}
+    assert find_download_tree_names(composed) == {"scripts/thing.py": [1]}
 
     glob_form = {"scripts/thing.py": 'for x in (repo / "bills").glob("*/*.xml"):\n    pass'}
-    assert find_download_root_literals(glob_form) == {"scripts/thing.py": [1]}
+    assert find_download_tree_names(glob_form) == {"scripts/thing.py": [1]}
 
     bare_path = {"scripts/thing.py": 'D = Path("bills")'}
-    assert find_download_root_literals(bare_path) == {"scripts/thing.py": [1]}
+    assert find_download_tree_names(bare_path) == {"scripts/thing.py": [1]}
+
+    # Bill id in a variable — the most idiomatic form in a parametrized suite, and the
+    # one the DOWNLOADS_DIR pattern missed because it demands a quoted literal id.
+    via_var = {"tests/test_thing.py": 'X = DOWNLOADS_DIR / bill / "1_reported-in-house.xml"'}
+    assert find_download_tree_names(via_var) == {"tests/test_thing.py": [1]}
+
+    # Id and filename in one string, so the id is not followed by a closing quote.
+    one_string = {"tests/test_thing.py": 'X = DOWNLOADS_DIR / "118-hr-4366/1_reported-in-house.xml"'}
+    assert find_download_tree_names(one_string) == {"tests/test_thing.py": [1]}
+
+    # An import alias defeats a name-based regex on the use site, but not on the import.
+    aliased = {"tests/test_thing.py": "from corpus_paths import DOWNLOADS_DIR as DL\nX = DL / bill"}
+    assert find_download_tree_names(aliased) == {"tests/test_thing.py": [1]}
+
+    interpolated = {"tests/test_thing.py": 'X = Path(f"bills/{bill}/1_reported-in-house.xml")'}
+    assert find_download_tree_names(interpolated) == {"tests/test_thing.py": [1]}
+
+    joined = {"tests/test_thing.py": 'X = os.path.join("bills", bill, stem)'}
+    assert find_download_tree_names(joined) == {"tests/test_thing.py": [1]}
 
     # A synthetic tree in a temp dir is not the real download directory.
     synthetic = {"tests/test_thing.py": 'downloads = tmp_path / "bills"'}
-    assert find_download_root_literals(synthetic) == {}
+    assert find_download_tree_names(synthetic) == {}
 
-    # Importing the constant is the sanctioned form.
-    good = {"scripts/thing.py": "from corpus_paths import DOWNLOADS_DIR\nX = DOWNLOADS_DIR / bill"}
-    assert find_download_root_literals(good) == {}
+    # The sanctioned doors.
+    for src in (
+        'X = fixture_path("118-hr-4366", "1_reported-in-house.xml")',
+        'X = resolve_bill_file("115-hr-5895", "3_placed-on-calendar-senate.pdf")',
+        "for d in sweep_bill_dirs():\n    pass",
+    ):
+        assert find_download_tree_names({"tests/test_thing.py": src}) == {}
+
+    # Not flagged: a JSON key, and download-only bills named as plain literals — the
+    # shapes a blunter "any 'bills' literal" rule would have broken (real code, #345).
+    for src in (
+        'resp = httpx.Response(200, json={"bills": []})',
+        '    "bills/116-hr-133",  # Consolidated Appropriations Act, 2021',
+        '        ("117-hr-4432", "bills/117-hr-4432", None),',
+    ):
+        assert find_download_tree_names({"tests/test_thing.py": src}) == {}
 
     # corpus_paths.py itself defines them, and the fetchers own the directory.
-    assert find_download_root_literals({"corpus_paths.py": 'DOWNLOADS_DIR = PROJECT_ROOT / "bills"'}) == {}
-    assert find_download_root_literals({"fetch_bills.py": 'default=Path("bills")'}) == {}
+    assert find_download_tree_names({"corpus_paths.py": 'DOWNLOADS_DIR = PROJECT_ROOT / "bills"'}) == {}
+    assert find_download_tree_names({"fetch_bills.py": 'default=Path("bills")'}) == {}
 
 
 def test_download_only_versions_are_genuinely_uncommitted() -> None:
