@@ -36,6 +36,15 @@ def _manifest_bills() -> tuple[dict, ...]:
     return tuple(tomllib.loads(_MANIFEST_PATH.read_text())["bill"])
 
 
+def manifest_bill_ids() -> list[str]:
+    """Every bill id the manifest names (``118-hr-4366``, ...), sorted.
+
+    For gates that key on the bill DIRECTORY rather than individual fixture files — the
+    govinfo filename parity gate derives its completeness floor from this, so the floor
+    tracks the committed set instead of pinning a count (#342)."""
+    return sorted(bill["id"] for bill in _manifest_bills())
+
+
 def _manifest_paths(fmt: str) -> list[Path]:
     """Committed manifest fixture paths of one format ('xml' | 'pdf'), sorted."""
     return sorted(
@@ -513,9 +522,10 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 # collection, not by marker expression. `--run-network` opts in; `-m "not network"`
 # still deselects outright.
 #
-# It stays maintainer-run rather than a CI gate because it also needs a FULLY FETCHED
-# corpus (its own >= 31-dir floor) and makes ~31 live requests. Whether it should become
-# a scheduled job instead of an on-demand one is open — see #278.
+# It is kept out of the PR gates deliberately: a pull request should not go red because a
+# third-party service is down, and a naming change on govinfo's side is not something a
+# contributor's PR caused or can fix. #342 runs it on a weekly schedule instead, over the
+# committed fixtures, where a failure is real news rather than a merge blocker.
 
 
 def pytest_addoption(parser):

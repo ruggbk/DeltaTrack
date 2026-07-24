@@ -315,7 +315,7 @@ committed fixtures and are CI gates; a download only adds cases:
 | Still needs fetched bills | Why |
 |---|---|
 | `test_pdf_compare`'s end-to-end cases | Read `bills/118-hr-4366/` PDFs, which are not committed |
-| `test_govinfo_corpus_parity` | Live BILLSTATUS fetch **and** a fully fetched corpus (its own >= 31-dir floor), so it cannot be an offline gate. Marked `network`: skipped unless you pass `--run-network` |
+| `test_govinfo_corpus_parity` | Live BILLSTATUS fetch, so it cannot be an offline gate. Marked `network`: skipped unless you pass `--run-network`. A weekly scheduled workflow runs it against the committed fixtures (#342); a download only widens which bills it checks |
 
 The Legislative Branch validation set used to be on that list. #278 committed its
 five remaining bills, so its completeness floor is now an ordinary fail-closed
