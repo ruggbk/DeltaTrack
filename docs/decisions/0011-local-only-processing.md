@@ -2,6 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-06-27
+- Amended: 2026-07-27 — recorded the currently-deployed hosted upload channel as a
+  known, deliberate, interim exception to this rule (see Consequences); its
+  retirement is tracked in
+  [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112).
 
 ## Context
 
@@ -98,4 +102,14 @@ Alternatives:
 - Telemetry, crash reporting, or "send us the file that failed" diagnostics that would
   carry bill content off-device are foreclosed by this rule. Diagnostics must be local
   or content-free.
+- **Known interim exception (2026-07-27).** The hosted upload page currently deployed
+  at deltatrack.agoradmv.org ([docs/web-compare.md](../web-compare.md)) processes
+  uploaded PDFs server-side and therefore does not meet this rule. It is a deliberate,
+  transitional state while the compliant channel (browser extension or similarly light
+  local install) is built, not a revision of the decision: the rule stands, the
+  deployment is out of compliance and known to be. The upload page carries a notice
+  telling users their files are processed on the project's server and warning against
+  uploading non-public drafts there. Retiring the exception is tracked in
+  [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112); this bullet
+  should be deleted when that lands.
 </content>
