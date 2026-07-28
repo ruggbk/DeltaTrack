@@ -36,7 +36,10 @@ import httpx
 
 import fetch_govinfo as gi
 
-PROJECT_DIR = Path(__file__).resolve().parent
+# The REPOSITORY root, not this script's directory — see the same constant in
+# fetch_bill_archives.py: the working directories are gitignored at the root, so
+# resolving them beside the script in `tools/` would escape those rules (#367, #308).
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_BILLS_DIR = PROJECT_DIR / "bills"
 
 # govinfo BILLS member filename, e.g. BILLS-119hr1eh.xml, BILLS-119hconres14enr.xml.

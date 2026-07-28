@@ -427,3 +427,68 @@ def test_fixture_tree_is_not_gitignored() -> None:
         capture_output=True,
     )
     assert result.returncode == 1, f"{probe} is gitignored — committed fixtures must be storable"
+
+
+def _fetch_tool_working_dirs() -> dict[str, Path]:
+    """Where each fetch tool actually writes, read from the tools themselves.
+
+    Every Path-valued argparse default counts, not a list of the ones that exist today:
+    a tool's working directories are exactly what its own CLI hands the caller, so
+    enumerating the parser covers a `--some-dir` added later for free. Restating a path
+    here instead is the drift this gate exists to catch, one level up -- renaming a
+    default would escape both .gitignore and a hand-written copy of it, and the copy
+    would stay green.
+
+    `fetch_bill_archives` has no argparse yet (a hardcoded congress range, #10), so its
+    module constant is the only thing to read.
+    """
+    import fetch_bill_archives
+    import fetch_bill_text_archives
+
+    dirs = {"fetch_bill_archives.DEFAULT_BILLS_DIR": fetch_bill_archives.DEFAULT_BILLS_DIR}
+    for action in fetch_bill_text_archives.build_parser()._actions:
+        if isinstance(action.default, Path):
+            dirs[f"fetch_bill_text_archives --{action.dest.replace('_', '-')}"] = action.default
+    return dirs
+
+
+def test_fetch_tools_download_into_gitignored_directories() -> None:
+    """Failure mode 4: a tool that downloads somewhere .gitignore does not reach (#367).
+
+    The ignore rules are anchored to the repository root (``/bills``, ``/bills_bulk_text``)
+    so that they cannot match a nested ``bills/`` the way the pre-#308 unanchored rules
+    did. Anchoring makes them exact, which means a tool that resolves its output beside
+    its own source file instead of at the root escapes them entirely — and the escape is
+    silent, because downloading still works and only ``git status`` shows the difference.
+
+    That is not hypothetical: moving the fetch cluster into ``tools/`` left
+    ``PROJECT_DIR`` pointing at ``tools/``, and hundreds of MB began landing in
+    ``tools/bills/``, one ``git add -A`` away from the #308 failure the anchoring exists
+    to prevent. So assert the property git actually enforces — is this path ignored —
+    rather than the path shape, which is what went wrong while looking correct.
+    """
+    working_dirs = _fetch_tool_working_dirs()
+    assert working_dirs, "discovery is broken: no fetch-tool working directories found"
+
+    # Same 0/1/128 contract as the gate above: 128 is git declining to answer.
+    def check_ignore(path: Path) -> int:
+        return subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "check-ignore", "-q", str(path)],
+            capture_output=True,
+        ).returncode
+
+    # Prove the probe can fire in BOTH directions before trusting it: a path that must be
+    # ignored, and one that must not. A check-ignore that always answered 0 would pass the
+    # real assertion below over any layout at all.
+    if check_ignore(PROJECT_ROOT / "bills") not in (0, 1):
+        pytest.skip("not a git work tree — git cannot answer whether a path is ignored")
+    assert check_ignore(PROJECT_ROOT / "bills") == 0, "probe is broken: /bills should be ignored"
+    assert check_ignore(PROJECT_ROOT / "README.md") == 1, "probe is broken: README.md should not be ignored"
+
+    escaped = sorted(name for name, path in working_dirs.items() if check_ignore(path) != 0)
+    assert not escaped, (
+        f"fetch tools write to directories git does not ignore: {escaped}. "
+        f"Resolved to { ({k: str(v) for k, v in working_dirs.items()}) }. "
+        "The .gitignore rules are anchored to the repository root, so a working directory "
+        "must resolve there too — see PROJECT_DIR in the fetch tools (#367, #308)."
+    )
