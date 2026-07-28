@@ -82,7 +82,8 @@ at the one call site that made it.
 `validation_check.py` and `validation_sources.py` are not imported by any product module,
 so they do not block this. Moving them is a separate question about import roots — `scripts/`
 is not a package and reaches the root through `sys.path.insert` — and folding it in would
-double a diff whose purpose is legibility.
+double a diff whose purpose is legibility. Tracked as
+[#401](https://github.com/AgoraDMV/DeltaTrack/issues/401).
 
 ## Consequences
 
