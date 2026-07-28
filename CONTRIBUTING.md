@@ -242,6 +242,9 @@ Leave specific comments, then approve or request changes. A maintainer does the 
 
 ## Filing an issue
 
+**Think you've found a security vulnerability?** Don't open a public issue —
+see [SECURITY.md](SECURITY.md) for the private reporting channel.
+
 Keep it light. Pick the matching template (bug, feature, or task) and fill in
 what you know — you don't need to scope, size, or solve it. The most useful thing
 you can provide for a bug is a way to reproduce it.
