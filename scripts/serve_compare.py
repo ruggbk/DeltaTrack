@@ -43,7 +43,7 @@ from diff_pdf import render_pdf_diff_html  # noqa: E402
 from formatters.canonical import view_from_canonical, xml_diff_to_canonical  # noqa: E402
 from formatters.diff_html import format_diff_html  # noqa: E402
 from formatters.text_serializer import build_xml_full_text  # noqa: E402
-from shared.version_stems import label_from_stem, version_number_from_stem  # noqa: E402
+from version_stems import label_from_stem, version_number_from_stem  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

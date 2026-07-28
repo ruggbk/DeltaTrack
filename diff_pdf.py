@@ -35,7 +35,7 @@ from typing import Literal
 from diff_bill import _move_candidates, _text_similarity_at_least, extract_amounts, match_amounts
 from parsers.pdf_anchors import Anchor, _is_uppercase_heading, extract_anchors
 from parsers.pdf_text import Page
-from shared.version_stems import label_from_stem
+from version_stems import label_from_stem
 
 ChangeType = Literal["added", "removed", "modified", "moved"]
 PageLineRange = tuple[int, int, int, int]  # (start_page, start_line, end_page, end_line)

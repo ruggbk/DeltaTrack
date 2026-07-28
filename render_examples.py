@@ -34,7 +34,7 @@ from pathlib import Path
 from corpus_paths import FIXTURES_DIR
 from server.pdf_compare import compare_pdfs_html
 from server.xml_compare import compare_xml_files_html
-from shared.version_stems import label_from_stem, version_number_from_stem
+from version_stems import label_from_stem, version_number_from_stem
 
 PROJECT_ROOT = Path(__file__).parent
 BILLS = FIXTURES_DIR

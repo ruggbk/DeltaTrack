@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bill_tree import BillNode, BillTree, normalize_bill, normalize_division_title
-from shared.version_stems import label_from_stem, version_number_from_stem
+from version_stems import label_from_stem, version_number_from_stem
 
 # --- Financial amount extraction ---
 

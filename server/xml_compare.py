@@ -34,7 +34,7 @@ from diff_bill import bill_diff_to_dict, diff_bills, filter_diff
 from formatters.canonical import view_from_canonical, xml_diff_to_canonical
 from formatters.diff_html import format_diff_html
 from formatters.text_serializer import build_xml_full_text
-from shared.version_stems import label_from_stem, version_number_from_stem
+from version_stems import label_from_stem, version_number_from_stem
 
 
 def _build_from_trees(
