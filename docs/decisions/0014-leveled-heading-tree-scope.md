@@ -2,6 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-06-29
+- Amended: 2026-07-27 — clarified that the semantic money rollup is deferred to
+  the financial-semantics epic #147, not dropped. The decision (ship the
+  conservation-checked tree now) is unchanged; earlier wording read as
+  abandoning rollups.
 
 ## Context
 
@@ -53,12 +57,17 @@ money gate rather than a semantic rollup.
   (not the derived `full_text`, which would pass tautologically —
   `feedback_measure_at_consumed_output`). Meaning-accurate figures (which figure is
   the base, semantic subtotals, text-derived deltas) are the separate
-  financial-semantics epic #147, not #54.
+  financial-semantics epic #147, not #54. The rollup itself remains a goal:
+  once #147 can isolate the appropriation base from subtotals, reservations,
+  and transfers, rolling an account up from its sub-amounts (and titles up
+  from accounts) is intended output, and the leveled tree shipped here is its
+  substrate.
 
 **Alternatives rejected.** Forcing a three-band size classifier (the distribution is
 bimodal — no third band exists to read); blocking #54 until prose-leading agencies are
 solved (holds the recoverable ~80% hostage to an open research question); surfacing a
-mechanical rolled total (the 32–44% overcount); a cross-source XML lookup to enrich a
+mechanical rolled total (the 32–44% overcount — what is rejected is the
+*mechanical* sum; the semantic rollup is deferred to #147, not rejected); a cross-source XML lookup to enrich a
 PDF diff (input automation + a network call the engine forbids, 0005/0008).
 
 ## Consequences
