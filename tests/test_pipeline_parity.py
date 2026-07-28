@@ -24,10 +24,10 @@ catches a regression. The human-readable snapshot + attribution live in
 ``docs/decisions/0014-leveled-heading-tree-scope.md``; regenerate with
 ``pytest -k parity -s``.
 
-The clean-bill parity case (``118-hr-8752``) is committed in both XML and PDF via
-the corpus manifest, and ``118-s-4795``'s XML is committed too, so those run on any
-checkout. The other evidence bills and the watermarked Senate PDF (fetched via
-``scripts/fetch_test_assets.py``) are uncommitted, so their cases skip when absent.
+Every input is committed: all four evidence bills carry v1/v2 in both formats under
+``tests/corpus/``, and the Senate pair is ``tests/corpus/118-s-4795`` XML plus
+``test_data/BILLS-118s4795rs.pdf``. So every case runs on any checkout, and absence is
+a hard failure on ``test_evidence_fixtures_committed`` rather than a skip (#326).
 This module is not in the CI slow selection, so it gates on a full local run.
 """
 
@@ -87,20 +87,34 @@ _SENATE_XML = fixture_path("118-s-4795", "1_reported-in-senate.xml")
 _SENATE_RATIO_BAND = (0.95, 1.10)
 
 
-def _v1_v2(bill: str) -> tuple[Path, Path] | None:
-    """The first two version PDFs (and their paired XML) for ``bill``, or None.
+def _v1_v2(bill: str) -> tuple[Path, Path]:
+    """The first two version PDFs (and their paired XML) for ``bill``.
 
     Returns ``(v1_pdf, v2_pdf)``; callers derive the XML via ``with_suffix``.
-    Skips (returns None) when the bill is unfetched or a paired XML is missing.
+    Fails rather than skipping when a file is missing: all four evidence bills are
+    committed in both formats, so an absent one is a broken checkout (#326).
     """
     bill_dir = FIXTURES_DIR / bill
     pdfs = sorted(bill_dir.glob("[0-9]*_*.pdf"))
-    if len(pdfs) < 2:
-        return None
+    assert len(pdfs) >= 2, f"{bill}: committed fixture needs two version PDFs, found {[p.name for p in pdfs]}"
     v1, v2 = pdfs[0], pdfs[1]
-    if not (v1.with_suffix(".xml").exists() and v2.with_suffix(".xml").exists()):
-        return None
+    absent = [str(p.with_suffix(".xml")) for p in (v1, v2) if not p.with_suffix(".xml").exists()]
+    assert not absent, f"{bill}: committed paired XML absent from checkout: {absent}"
     return v1, v2
+
+
+def test_evidence_fixtures_committed() -> None:
+    """Fail-closed floor (#326): every input this module reads is committed and present.
+
+    A plain, always-collected guard, so a deleted fixture fails HERE naming it rather
+    than turning the cases below into skips. They used to skip on ``_v1_v2`` returning
+    None and on two ``.exists()`` checks for the Senate pair, all written when those
+    files were fetched rather than committed; a skip is green, so the parity bands and
+    the #89 residual ratio could go dark unnoticed (#288)."""
+    for bill in _PARITY:
+        _v1_v2(bill)
+    absent = sorted(str(p) for p in (_SENATE_PDF, _SENATE_XML) if not p.exists())
+    assert not absent, f"committed 118-s-4795 parity fixtures absent from checkout: {absent}"
 
 
 def _totals(canonical: dict) -> Counter:
@@ -111,10 +125,7 @@ def _totals(canonical: dict) -> Counter:
 @pytest.mark.parametrize("bill", list(_PARITY))
 def test_pipeline_change_parity(bill: str) -> None:
     """Both pipelines emit valid changes; totals sit in their attributed bands."""
-    pair = _v1_v2(bill)
-    if pair is None:
-        pytest.skip(f"{bill} v1/v2 not fetched locally")
-    v1_pdf, v2_pdf = pair
+    v1_pdf, v2_pdf = _v1_v2(bill)
 
     xc = compare_xml(v1_pdf.with_suffix(".xml").read_bytes(), v2_pdf.with_suffix(".xml").read_bytes())
     pc = compare_pdfs(v1_pdf.read_bytes(), v2_pdf.read_bytes())
@@ -141,17 +152,11 @@ def test_pipeline_change_parity_table(capsys) -> None:
     """Emit the human-readable parity table (`pytest -k parity -s` regenerates it)."""
     rows = []
     for bill in _PARITY:
-        pair = _v1_v2(bill)
-        if pair is None:
-            continue
-        v1_pdf, v2_pdf = pair
+        v1_pdf, v2_pdf = _v1_v2(bill)
         xc = compare_xml(v1_pdf.with_suffix(".xml").read_bytes(), v2_pdf.with_suffix(".xml").read_bytes())
         pc = compare_pdfs(v1_pdf.read_bytes(), v2_pdf.read_bytes())
         xn, pn = _totals(xc), _totals(pc)
         rows.append((bill, xn, pn))
-
-    if not rows:
-        pytest.skip("no evidence bills fetched locally")
 
     with capsys.disabled():
         print("\nPDF↔XML change parity (v1→v2, reported→engrossed)")
@@ -167,12 +172,11 @@ def test_pipeline_change_parity_table(capsys) -> None:
 
 
 def test_senate_size_band_ratio() -> None:
-    """118-s-4795 (#89 residual): PDF size-band recovery ratio is in range."""
-    if not _SENATE_PDF.exists():
-        pytest.skip("118-s-4795 PDF not fetched (scripts/fetch_test_assets.py)")
-    if not _SENATE_XML.exists():
-        pytest.skip("118-s-4795 XML not present")
+    """118-s-4795 (#89 residual): PDF size-band recovery ratio is in range.
 
+    Both inputs are committed (#326), so a missing one fails on the floor above rather
+    than skipping this case.
+    """
     m = measure(_SENATE_PDF, _SENATE_XML)
     ratio = m["count_ratio"]
     lo, hi = _SENATE_RATIO_BAND

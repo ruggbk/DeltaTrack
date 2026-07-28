@@ -406,7 +406,7 @@ def _version_code_from_item(item: ET.Element) -> str | None:
     this fallback. Only the handful of names BILLSTATUS spells differently from
     VERSION_CODES stay unresolved here, which is no worse than a name-based join.
 
-    This is the *full* resolver used by :func:`build_billstatus_date_index`, where
+    This is the *full* resolver used by :func:`build_billstatus_indexes`, where
     the bulk ZIP already says which versions exist so the name fallback is safe.
     The enumeration path must NOT use it (see :func:`_version_pkg_from_item`).
     """
@@ -417,24 +417,38 @@ def _version_code_from_item(item: ET.Element) -> str | None:
     return NAME_TO_CODE.get(sanitize(typ)) if typ else None
 
 
-def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str]]:
-    """{bill_id: {version-code: date}} from local BILLSTATUS ZIPs.
+def build_billstatus_indexes(billstatus_dir: Path) -> tuple[dict[str, dict[str, str]], dict[str, list[dict]]]:
+    """``(date_index, gap_index)`` from one walk of the local BILLSTATUS ZIPs.
 
-    The govinfo BILLS text carries dc:date only ~74% of the time, and it is
-    missing on exactly the versions whose order is load-bearing (engrossed-in-
-    house). BILLSTATUS metadata (downloaded by fetch_bill_archives.py) supplies
-    the complete, authoritative dates -- the same source the curated corpus was
-    ordered from -- so bulk-downloaded versions order correctly.
+    **date_index** is ``{bill_id: {version-code: date}}``. The govinfo BILLS text
+    carries dc:date only ~74% of the time, and it is missing on exactly the
+    versions whose order is load-bearing (engrossed-in-house). BILLSTATUS
+    metadata (downloaded by fetch_bill_archives.py) supplies the complete,
+    authoritative dates -- the same source the curated corpus was ordered from --
+    so bulk-downloaded versions order correctly.
 
-    Keyed by the govinfo *version code* (extracted from each textVersions item's
-    format URL, e.g. .../BILLS-119s337rs.xml -> ``rs``), not the display-name.
-    BILLSTATUS's ``<type>`` vocabulary diverges from VERSION_CODES's names for
-    some versions (it says "Reported to Senate" where our table says "Reported
-    in Senate"), so a name-based join would silently miss those and mis-order
-    the very versions this index exists to place. The code is the one identifier
-    both sides share verbatim, including suffixed variants (eas2, rfs2).
+    It is keyed by the govinfo *version code* (extracted from each textVersions
+    item's format URL, e.g. .../BILLS-119s337rs.xml -> ``rs``), not the
+    display-name. BILLSTATUS's ``<type>`` vocabulary diverges from VERSION_CODES's
+    names for some versions (it says "Reported to Senate" where our table says
+    "Reported in Senate"), so a name-based join would silently miss those and
+    mis-order the very versions this index exists to place. The code is the one
+    identifier both sides share verbatim, including suffixed variants (eas2, rfs2).
+
+    **gap_index** is ``{bill_id: [gap record]}`` -- the XML-less versions of
+    :func:`urlless_declared_version_records`, derived offline from the same ZIPs
+    so the bulk-convert path can write and clear gap markers without any network
+    work (#254). A bill whose textVersions parsed with **no** gaps is present with
+    an empty list, so membership answers "did BILLSTATUS tell us about this bill"
+    -- distinct from a bill absent because its type's ZIP was never supplied,
+    where the gaps are unknown rather than known-empty. (date_index cannot answer
+    that: it drops bills whose codes all fail to resolve.)
+
+    Both indexes come from one walk because the bulk path needs both and a second
+    pass would re-read and re-decompress every BILLSTATUS ZIP in the corpus.
     """
-    index: dict[str, dict[str, str]] = {}
+    date_index: dict[str, dict[str, str]] = {}
+    gap_index: dict[str, list[dict]] = {}
     for zp in sorted(billstatus_dir.glob("*.zip")):
         try:
             zf = zipfile.ZipFile(zp)
@@ -455,20 +469,22 @@ def build_billstatus_date_index(billstatus_dir: Path) -> dict[str, dict[str, str
             tv = bill.find("textVersions")
             if not (congress and btype and number) or tv is None:
                 continue
+            bill_id = f"{congress}-{btype}-{number}"
             dates: dict[str, str] = {}
             for it in tv.findall("item"):
                 code = _version_code_from_item(it)
                 if code:
                     dates[code] = it.findtext("date") or ""
             if dates:
-                index[f"{congress}-{btype}-{number}"] = dates
-    return index
+                date_index[bill_id] = dates
+            gap_index[bill_id] = urlless_declared_version_records(bill)
+    return date_index, gap_index
 
 
 # ---- title-search index (discovery by title; approps as a facet) ------------
 #
 # #10's last acceptance item: find any bill by title over an index built from the
-# local BILLSTATUS ZIPs (the same source build_billstatus_date_index reads, and
+# local BILLSTATUS ZIPs (the same source build_billstatus_indexes reads, and
 # fetch_bill_archives.py downloads -- keyless, no network). Appropriations is a
 # facet, not the discovery gate it is in the committee-API pipeline: it keys on
 # committee referral systemCode (hsap00/ssap00), which #10 found more precise than
@@ -490,7 +506,7 @@ def _committee_system_codes(bill: ET.Element) -> set[str]:
 def build_title_index(billstatus_dir: Path) -> dict[str, dict]:
     """``{bill_id: {"title": str, "committee_codes": set[str]}}`` from local BILLSTATUS ZIPs.
 
-    Mirrors :func:`build_billstatus_date_index`: walks every ``*.zip`` in
+    Mirrors :func:`build_billstatus_indexes`: walks every ``*.zip`` in
     ``billstatus_dir``, reading its ``BILLSTATUS-*`` members. Scope is whatever ZIPs
     are present locally -- no hardcoded congress/type, and no network. ``committee_codes``
     backs the appropriations facet (see :func:`search_titles`).
@@ -771,13 +787,17 @@ def urlless_declared_version_records(bill: ET.Element) -> list[dict]:
 # re-deriving it from BILLSTATUS. Format is deliberately generic -- no consumer
 # shapes it (#228 is deferred).
 #
-# SCOPE, precisely: markers are written only by the per-bill fetch path
-# (fetch_bills' download / download-all). The bulk-convert path
-# (fetch_bill_text_archives.convert_archives) builds bill directories without
-# writing OR clearing them, so a bulk-built corpus carries none, and a marker left
-# by a per-bill fetch can outlive a bulk refresh that delivered the missing XML.
-# So this is not yet a corpus-wide coverage signal and must not be asserted on as
-# one; closing that is tracked in #254.
+# SCOPE, precisely: both paths that build bill directories keep the marker current
+# -- the per-bill fetch (fetch_bills' download / download-all) and the bulk convert
+# (fetch_bill_text_archives.convert_archives), which derives the same records
+# offline from the BILLSTATUS ZIPs it already reads (#254). Each writes when there
+# are gaps and clears when there are none, so no marker outlives the refresh that
+# delivered its missing XML. Two limits remain, and a coverage gate must respect
+# them: (1) the bulk path can only mark bills whose BILLSTATUS metadata was
+# supplied -- one without it is counted as bills_without_billstatus and its marker
+# is left untouched, since unknown gaps are not the same as none; (2) a bill whose
+# every declared version is XML-less has no directory in a bulk-built corpus at
+# all (there is nothing to download), so it is absent rather than marked.
 #
 # The name must not be mistaken for a bill version by anything that enumerates a
 # bill directory. Current enumerators glob either digit-prefixed stems
@@ -815,24 +835,23 @@ def write_gap_marker(bill_dir: Path, bill_id: str, records: list[dict]) -> Path 
     return path
 
 
-def fetch_gap_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
-    """Gap-version records for one bill, fetched from BILLSTATUS.
+def warn_urlless_gaps(bill: ET.Element) -> None:
+    """Warn on stderr about versions BILLSTATUS declares that govinfo can't serve as XML.
 
-    A separate helper rather than a second return value from
-    :func:`enumerate_versions`, whose API-shaped list is a deliberate drop-in seam
-    for the fetch_bills consumers (see its docstring) -- widening it would break
-    that contract. Callers that need both pay one extra BILLSTATUS request.
-
-    Note this reports gaps even when :func:`enumerate_versions` returns ``[]``:
-    a bill whose every declared version is XML-less (#226's 118-hr-3496) yields no
-    downloadable versions at all, which is exactly when the marker matters most.
+    #226 AC#1's "don't silently drop": the gap versions are absent from the
+    downloadable list by design, so enumeration says so out loud. Split out of
+    :func:`enumerate_versions` so every consumer of a parsed ``<bill>`` warns
+    identically without re-fetching it.
     """
-    resp = request_with_retry(client, billstatus_url(congress, bill_type, number))
-    resp.raise_for_status()
-    bill = ET.fromstring(resp.content).find("bill")
-    if bill is None:
-        return []
-    return urlless_declared_version_records(bill)
+    gaps = urlless_declared_versions(bill)
+    if not gaps:
+        return
+    listed = ", ".join(f"{code} ({name})" for code, name in gaps)
+    print(
+        f"WARNING: {len(gaps)} version(s) declared in BILLSTATUS but not available "
+        f"as govinfo XML (XML-less gap, #226/#228): {listed}",
+        file=sys.stderr,
+    )
 
 
 class CongressNotAvailable(Exception):
@@ -859,18 +878,18 @@ def require_supported_congress(congress: int) -> None:
         )
 
 
-def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
-    """Fetch one bill's BILLSTATUS and return its ordered, API-shaped versions.
+def fetch_billstatus_bill(client: httpx.Client, congress: int, bill_type: str, number: int) -> ET.Element | None:
+    """Fetch and parse one bill's BILLSTATUS; the ``<bill>`` element, or None if absent.
 
-    Drop-in for ``fetch_bills.fetch_text_versions`` on the govinfo source. Raises
-    on a non-200 BILLSTATUS response rather than mapping it to an empty list: an
-    enumeration failure must be loud, not a silent "bill has no versions" that
-    numbers a partial download as if it were complete (issue #10). A bill that
-    genuinely exists but has no published text yields an empty list from a 200.
+    The single network step every per-bill govinfo derivation builds on --
+    downloadable versions (:func:`versions_from_billstatus`) and XML-less gap
+    records (:func:`urlless_declared_version_records`) are both pure functions of
+    this element, so a caller needing both pays one request, not two (#253).
 
-    Any BILLSTATUS-declared version govinfo can't serve as XML (the XML-less gap,
-    #226 AC#1) is surfaced as a stderr warning here rather than silently dropped;
-    it is still absent from the returned (downloadable) list.
+    Raises on a non-200 rather than mapping it to None: an enumeration failure must
+    be loud, not a silent "bill has no versions" that numbers a partial download as
+    if it were complete (issue #10). None means a 200 whose body carried no
+    ``<bill>`` -- a real, empty answer.
     """
     resp = request_with_retry(client, billstatus_url(congress, bill_type, number))
     # request_with_retry already raises on persistent 429/5xx (and on 4xx), so this
@@ -878,15 +897,26 @@ def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, numb
     # that helper's contract ever changes to a non-raising return (its fetch_bills
     # callers guard with `if resp else`), never a silent "bill has no versions" (#10).
     resp.raise_for_status()
-    bill = ET.fromstring(resp.content).find("bill")
+    return ET.fromstring(resp.content).find("bill")
+
+
+def enumerate_versions(client: httpx.Client, congress: int, bill_type: str, number: int) -> list[dict]:
+    """Fetch one bill's BILLSTATUS and return its ordered, API-shaped versions.
+
+    Drop-in for ``fetch_bills.fetch_text_versions`` on the govinfo source; see
+    :func:`fetch_billstatus_bill` for the loud-failure contract it inherits.
+
+    Any BILLSTATUS-declared version govinfo can't serve as XML (the XML-less gap,
+    #226 AC#1) is surfaced as a stderr warning here rather than silently dropped;
+    it is still absent from the returned (downloadable) list.
+
+    A caller that also needs the gap *records* should compose
+    :func:`fetch_billstatus_bill` with :func:`versions_from_billstatus` and
+    :func:`urlless_declared_version_records` directly (as fetch_bills' download
+    paths do) rather than calling this and re-fetching BILLSTATUS for the gaps.
+    """
+    bill = fetch_billstatus_bill(client, congress, bill_type, number)
     if bill is None:
         return []
-    gaps = urlless_declared_versions(bill)
-    if gaps:
-        listed = ", ".join(f"{code} ({name})" for code, name in gaps)
-        print(
-            f"WARNING: {len(gaps)} version(s) declared in BILLSTATUS but not available "
-            f"as govinfo XML (XML-less gap, #226/#228): {listed}",
-            file=sys.stderr,
-        )
+    warn_urlless_gaps(bill)
     return versions_from_billstatus(bill)

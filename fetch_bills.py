@@ -13,7 +13,6 @@ import datetime
 import os
 import re
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import httpx
@@ -137,44 +136,56 @@ def enumerate_bill_versions(
     return fetch_text_versions(client, congress, bill_type, number, api_key=api_key)
 
 
+def enumerate_versions_and_gaps(
+    client: httpx.Client, congress: int, bill_type: str, number: int, *, source: str, api_key: str | None
+) -> tuple[list[dict], list[dict] | None]:
+    """The download paths' enumeration: versions plus XML-less gap records, one fetch.
+
+    Returns ``(versions, gaps)`` where ``versions`` is the same API-dict-shaped list
+    :func:`enumerate_bill_versions` returns and ``gaps`` is the #230 gap-marker
+    records -- or ``None`` on the API source, meaning "this source has no opinion
+    about gaps, leave any marker alone" (distinct from ``[]``, "no gaps: clear it").
+    Gaps are a govinfo *format* concept -- a version GPO never composed XML for --
+    so the API path fetches no BILLSTATUS it does not otherwise need.
+
+    Both halves are pure functions of one parsed BILLSTATUS ``<bill>`` element, so
+    this issues a single request per bill (#253). Deriving them separately, via
+    :func:`enumerate_bill_versions` plus a gap fetch, doubles per-bill BILLSTATUS
+    traffic and rate-limit exposure across a ``download-all`` sweep.
+
+    :func:`enumerate_bill_versions` stays the narrow, API-shaped seam for `versions`
+    and any other consumer that wants only the downloadable list (#10).
+    """
+    if source != "govinfo":
+        return fetch_text_versions(client, congress, bill_type, number, api_key=api_key), None
+    gi.require_supported_congress(congress)
+    bill = gi.fetch_billstatus_bill(client, congress, bill_type, number)
+    if bill is None:
+        return [], []
+    gi.warn_urlless_gaps(bill)
+    return gi.versions_from_billstatus(bill), gi.urlless_declared_version_records(bill)
+
+
 def record_gap_versions(
-    client: httpx.Client, *, congress: int, bill_type: str, number: int, output_dir: Path, source: str
+    *, congress: int, bill_type: str, number: int, output_dir: Path, gaps: list[dict] | None
 ) -> None:
     """Persist (or clear) the bill's XML-less gap marker (#230).
 
-    Gaps are a govinfo *format* concept -- a version GPO never composed XML for --
-    so the API source is skipped outright rather than fetching BILLSTATUS it does
-    not otherwise need.
+    ``gaps`` comes from :func:`enumerate_versions_and_gaps`; ``None`` (the API
+    source) writes and clears nothing.
 
     Called *before* the caller's "no versions" early return on purpose: a bill whose
     every declared version is XML-less enumerates to nothing (#226's 118-hr-3496),
     which is precisely the case the marker exists to record. Writing it only
     alongside a successful download would miss exactly that bill.
 
-    A failed gap fetch leaves any existing marker in place as last-known state,
-    rather than clearing it. Clearing on failure would delete a *true* gap record
-    because of a transient network blip; keeping it preserves the last good answer,
-    warns, and self-heals on the next successful fetch.
+    There is no fetch-failure path left to guard: the gap records now come from the
+    same BILLSTATUS response the download itself is built on, so a failure there
+    aborts the download loudly instead of silently degrading one side artifact.
     """
-    if source != "govinfo":
+    if gaps is None:
         return
     bill_id = f"{congress}-{bill_type}-{number}"
-    # The marker is a side artifact: it must never veto the primary download. This
-    # is a SECOND BILLSTATUS request (the seam keeps enumerate_versions' API-shaped
-    # return), so without this guard a transient failure here would abort a download
-    # the first request already proved viable -- work the download itself needs
-    # nothing from. Degrade to a warning and carry on; the next fetch rewrites it.
-    #
-    # Caught narrowly, on purpose: HTTPError covers every transport/status failure
-    # and ParseError a malformed body, while a genuine programming error still
-    # propagates loudly. A bare `except Exception` would degrade a real bug into a
-    # per-bill warning and leave markers silently unwritten corpus-wide -- and with
-    # #228 deferred there is no consumer whose absence would reveal it.
-    try:
-        gaps = gi.fetch_gap_versions(client, congress, bill_type, number)
-    except (httpx.HTTPError, ET.ParseError) as exc:
-        print(f"WARNING: could not record XML-less gap versions for {bill_id}: {exc}", file=sys.stderr)
-        return
     gi.write_gap_marker(output_dir / bill_id, bill_id, gaps)
 
 
@@ -458,16 +469,15 @@ def cmd_fetch_index(client: httpx.Client, args: argparse.Namespace, api_key: str
 
 def cmd_download(client: httpx.Client, args: argparse.Namespace, api_key: str | None):
     """Download text versions for a single bill."""
-    versions = enumerate_bill_versions(
+    versions, gaps = enumerate_versions_and_gaps(
         client, args.congress, args.bill_type, args.number, source=args.source, api_key=api_key
     )
     record_gap_versions(
-        client,
         congress=args.congress,
         bill_type=args.bill_type,
         number=args.number,
         output_dir=args.output_dir,
-        source=args.source,
+        gaps=gaps,
     )
 
     if not versions:
@@ -513,10 +523,8 @@ def download_all_versions(
     label, _ = BILL_TYPES.get(bill_type, (bill_type.upper(), ""))
     print(f"\n{label} {number} ({congress}th Congress):", file=sys.stderr)
 
-    versions = enumerate_bill_versions(client, congress, bill_type, number, source=source, api_key=api_key)
-    record_gap_versions(
-        client, congress=congress, bill_type=bill_type, number=number, output_dir=output_dir, source=source
-    )
+    versions, gaps = enumerate_versions_and_gaps(client, congress, bill_type, number, source=source, api_key=api_key)
+    record_gap_versions(congress=congress, bill_type=bill_type, number=number, output_dir=output_dir, gaps=gaps)
     if not versions:
         print("  No text versions available", file=sys.stderr)
         return
@@ -591,12 +599,16 @@ def cmd_download_all(client: httpx.Client, args: argparse.Namespace, api_key: st
                 skipped += 1
                 continue
 
+            # parse_bill_id returns the slug's parts as strings; download_all_versions
+            # is typed for ints and the govinfo floor check compares numerically, so a
+            # bare str raised TypeError on the first row (#151). The year-range path
+            # below has always coerced -- this boundary is the one that did not.
             download_all_versions(
                 client,
                 output_dir=args.output_dir,
-                congress=ident.congress,
+                congress=int(ident.congress),
                 bill_type=ident.bill_type,
-                number=ident.number,
+                number=int(ident.number),
                 source=args.source,
                 api_key=api_key,
                 formats=formats,

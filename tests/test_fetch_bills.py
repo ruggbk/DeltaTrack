@@ -15,6 +15,7 @@ from fetch_bills import (
     cmd_download,
     cmd_download_all,
     congress_for_year,
+    download_all_versions,
     download_version_xml,
     enumerate_bill_versions,
     fetch_all_committee_bills,
@@ -472,6 +473,35 @@ class TestCmdDownloadFormats:
         # Fails if the default flips to pdf *or* both (#151, #131).
         assert not (bill_dir / "1_reported-in-house.pdf").exists()
 
+    @respx.mock
+    def test_default_download_all_writes_the_xml_the_diff_consumes(self, tmp_path):
+        """The bulk path carries its own `--format` default, so it needs its own gate.
+
+        `download` and `download-all` read the flag from separate subparsers (two
+        `add_argument("--format", ...)` calls), so a flip in one is invisible to the
+        other's test. Same construction as the single-bill case above: real parser
+        args, real govinfo path, PDF route mocked so a default of pdf/both would
+        succeed and be caught by the assertion rather than erroring on an unmocked
+        request. Runs the `--file` form because it reaches `download_all_versions`
+        without the API-side committee discovery a year range needs (#151).
+        """
+        csv_path = tmp_path / "bills.csv"
+        csv_path.write_text("id\n118-hr-4366\n", encoding="utf-8")
+        out = tmp_path / "out"
+        respx.get(gi.billstatus_url(118, "hr", 4366)).respond(200, content=_govinfo_billstatus(118, "hr", 4366, "rh"))
+        respx.get(gi.package_content_url("BILLS-118hr4366rh", "xml")).respond(200, content=b"<bill/>")
+        respx.get(gi.package_content_url("BILLS-118hr4366rh", "pdf")).respond(200, content=b"%PDF-1.7")
+
+        args = build_parser().parse_args(["download-all", "--file", str(csv_path), "--output-dir", str(out)])
+        assert args.source == "govinfo"  # precondition: the shipped default under test
+        with httpx.Client() as client:
+            cmd_download_all(client, args, None)
+
+        bill_dir = out / "118-hr-4366"
+        assert (bill_dir / "1_reported-in-house.xml").read_bytes() == b"<bill/>"
+        # Fails if download-all's default flips to pdf *or* both (#151, #131).
+        assert not (bill_dir / "1_reported-in-house.pdf").exists()
+
     def test_parser_accepts_format_both(self):
         args = build_parser().parse_args(["download", "118", "hr", "4366", "--format", "both"])
         assert args.format == "both"
@@ -599,7 +629,15 @@ class TestCmdDownloadAllFromFile:
     """
 
     def _run(self, tmp_path, monkeypatch, rows):
-        """Run the command over `rows`; return the attempted bills and the exit status."""
+        """Run the command over `rows`; return the attempted bills and the exit status.
+
+        The attempted bills carry `congress` and `number` as ints, the type
+        `download_all_versions` declares. They used to be the strings `parse_bill_id`
+        returns, and this stub is why nothing noticed: it replaces the one function
+        that would have used them, so the whole class asserted on a call that never
+        happened for real. Under the real callee the govinfo floor check compared a
+        str to an int and the command died on its first row (#151).
+        """
         import fetch_bills
 
         csv_path = tmp_path / "bills.csv"
@@ -626,7 +664,7 @@ class TestCmdDownloadAllFromFile:
     def test_legacy_version_suffix_still_downloads_the_bill(self, tmp_path, monkeypatch, capsys):
         downloaded, status = self._run(tmp_path, monkeypatch, ["118-sconres-12:2"])
 
-        assert downloaded == [("118", "sconres", "12")]
+        assert downloaded == [(118, "sconres", 12)]
         # A served legacy row is not an error: the run is clean and exits clean.
         assert status == 0
         err = capsys.readouterr().err
@@ -641,7 +679,7 @@ class TestCmdDownloadAllFromFile:
         """
         downloaded, _ = self._run(tmp_path, monkeypatch, ["12345", "119-hr-1"])
 
-        assert downloaded == [("119", "hr", "1")]
+        assert downloaded == [(119, "hr", 1)]
         assert "Skipping unusable row '12345'" in capsys.readouterr().err
 
     def test_skipped_row_makes_the_whole_run_exit_nonzero(self, tmp_path, monkeypatch):
@@ -658,7 +696,7 @@ class TestCmdDownloadAllFromFile:
     def test_run_summarizes_what_it_processed_and_skipped(self, tmp_path, monkeypatch, capsys):
         downloaded, _ = self._run(tmp_path, monkeypatch, ["119-hr-1", "118-sconres-12:2", "12345", "not-a-bill-9"])
 
-        assert downloaded == [("119", "hr", "1"), ("118", "sconres", "12")]
+        assert downloaded == [(119, "hr", 1), (118, "sconres", 12)]
         # "Processed", not "downloaded": a bill with no text versions available is
         # attempted and counted here too, so the stronger word would overclaim.
         assert "Processed 2 bills, skipped 2 unusable rows." in capsys.readouterr().err
@@ -1307,25 +1345,22 @@ def test_download_skips_gap_marker_entirely_for_the_api_source(tmp_path):
     assert not (tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).exists()
 
 
+# ---- one BILLSTATUS request per bill (#253) ----------------------------------
+#
+# Counted at the route, not inferred from timing: the gap marker and the
+# downloadable version list are both derived from one parsed BILLSTATUS element,
+# so a second request would be a regression worth ~1.1MB and one extra rate-limit
+# slot per bill across a download-all sweep.
+
+
 @respx.mock
-def test_download_survives_a_failing_gap_fetch(tmp_path, monkeypatch, capsys):
-    # The marker is a SIDE artifact and must never veto the primary download.
-    # record_gap_versions re-fetches BILLSTATUS, so a transient failure on that
-    # second request would otherwise abort a download that the first request
-    # already proved viable -- a regression against pre-#230 behavior, since the
-    # download itself needs nothing from the gap fetch.
-    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
-    ok = _gap_billstatus(_gap_item("Introduced in House", "2023-05-01", code="ih"))
-    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(
-        side_effect=[
-            httpx.Response(200, content=ok),  # enumeration succeeds
-            httpx.Response(500),  # gap fetch fails, and keeps failing through retries
-            httpx.Response(500),
-            httpx.Response(500),
-            httpx.Response(500),
-            httpx.Response(500),
-        ]
+def test_download_issues_one_billstatus_request_per_bill(tmp_path):
+    # A bill with both halves live at once: one served version to download AND one
+    # XML-less gap to record. Doing both must still cost a single request.
+    body = _gap_billstatus(
+        _gap_item("Introduced in House", "2023-05-01", code="ih") + _gap_item("Reported in House", "2023-06-01")
     )
+    route = respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(200, content=body))
     respx.get(url__regex=r".*BILLS-118hr3496ih\.xml").mock(return_value=httpx.Response(200, content=b"<bill/>"))
     args = argparse.Namespace(
         congress=118,
@@ -1337,8 +1372,56 @@ def test_download_survives_a_failing_gap_fetch(tmp_path, monkeypatch, capsys):
         source="govinfo",
     )
     with httpx.Client() as client:
-        cmd_download(client, args, None)  # must not raise
-    # The primary artifact still lands.
+        cmd_download(client, args, None)
+    assert route.call_count == 1, "BILLSTATUS fetched more than once for one bill"
+    # Both outputs still land, so the count above is a real dedup and not a
+    # half-done download.
     assert (tmp_path / "118-hr-3496" / "1_introduced-in-house.xml").exists()
-    # And the failure is reported rather than swallowed silently.
-    assert "gap" in capsys.readouterr().err.lower()
+    payload = json.loads((tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).read_text())
+    assert [g["code"] for g in payload["gap_versions"]] == ["rh"]
+
+
+@respx.mock
+def test_download_all_issues_one_billstatus_request_per_bill(tmp_path):
+    # download-all is where the duplicate compounds (~1,000 bills a sweep), so the
+    # count is pinned on that path too, in the all-gap shape where enumeration
+    # returns [] and only the marker is written.
+    body = _gap_billstatus(
+        _gap_item("Introduced in House", "2023-05-01") + _gap_item("Reported in House", "2023-06-01")
+    )
+    route = respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(200, content=body))
+    with httpx.Client() as client:
+        download_all_versions(
+            client,
+            output_dir=tmp_path,
+            congress=118,
+            bill_type="hr",
+            number=3496,
+            source="govinfo",
+            api_key=None,
+            formats=["xml"],
+        )
+    assert route.call_count == 1, "BILLSTATUS fetched more than once for one bill"
+    payload = json.loads((tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).read_text())
+    assert [g["code"] for g in payload["gap_versions"]] == ["ih", "rh"]
+
+
+@respx.mock
+def test_download_aborts_loudly_when_billstatus_fails(tmp_path, monkeypatch):
+    # The flip side of sharing one fetch: there is no second request left to fail
+    # softly, so a BILLSTATUS failure is the download's own failure and must stay
+    # loud rather than becoming a silent "bill has no versions" (#10).
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
+    respx.get(gi.billstatus_url(118, "hr", 3496)).mock(return_value=httpx.Response(500))
+    args = argparse.Namespace(
+        congress=118,
+        bill_type="hr",
+        number=3496,
+        version=None,
+        format="xml",
+        output_dir=tmp_path,
+        source="govinfo",
+    )
+    with httpx.Client() as client, pytest.raises(httpx.HTTPError):
+        cmd_download(client, args, None)
+    assert not (tmp_path / "118-hr-3496" / gi.GAP_MARKER_NAME).exists()
