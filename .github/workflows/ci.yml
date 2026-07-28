@@ -95,6 +95,25 @@ jobs:
           tests/test_pdf_subsection_recall.py
           tests/test_financial_callout_whole_item.py
 
+      - name: Run the packaging gate (build, install, diff from outside the checkout)
+        if: ${{ !cancelled() }}
+        # Its own step rather than folded into the slow suites below, because what it
+        # reports is a different failure: the engine does not INSTALL, as distinct from
+        # the engine computing the wrong answer. A reviewer seeing this step red should
+        # look at pyproject.toml, not at the diff logic.
+        #
+        # Named here for the reason every step in this job spells out: the marker makes a
+        # gate runnable, naming its module is what makes it RUN. Every slow step selects
+        # modules by path, so a new @slow file is collected by none of them -- which is
+        # exactly what happened to this one when it was added, and it sat green-by-absence
+        # through a full CI run before this step existed.
+        #
+        # Its `uv` skip cannot silently fire here: the step invokes `uv run`, so a missing
+        # uv fails the step rather than retiring the gate.
+        run: >
+          uv run pytest -v -m slow
+          tests/test_engine_installs.py
+
       - name: Run remaining slow suites (committed fixtures)
         if: ${{ !cancelled() }}
         # These @slow modules already passed on any fresh clone, in ~20s, against

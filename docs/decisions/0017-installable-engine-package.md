@@ -96,7 +96,9 @@ double a diff whose purpose is legibility. Tracked as
   a real diff from a directory that is not the checkout. It also asserts that `pypdfium2`
   arrives and that `fastapi`/`uvicorn`/`httpx` do not, which is ADR 0016's central claim
   checked against an environment instead of a config file. It is marked `slow`, so the fast
-  inner loop does not exercise it; a packaging break is invisible until the slow gate runs.
+  inner loop does not exercise it, and it is named by its own CI step — every slow step in
+  this project selects modules by path, so a marker alone would have left it collected by
+  nothing. It was green-by-absence through one full CI run before that step existed.
 - **The boundary scan needs `src/` named explicitly.** `_product_roots()` now carries both
   roots. This is a standing constraint: any future move of the package has to update it, and
   the failure if it is missed is discovery finding nothing.
