@@ -24,8 +24,8 @@ import pytest
 
 from corpus_paths import fixture_path
 from parsers.pdf_anchors import extract_anchors
-from parsers.pdf_text import extract_clean_pages
 from tests.conftest import assert_manifest_committed
+from tests.pdf_corpus import cached_pages
 
 ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_DIR = ROOT / "test_data" / "pdf" / "anchors_golden"
@@ -39,7 +39,7 @@ FIXTURES = {
 
 
 def _current_anchors(pdf_path: Path) -> list[list]:
-    anchors = extract_anchors(extract_clean_pages(pdf_path))
+    anchors = extract_anchors(cached_pages(pdf_path))
     return [[a.kind, a.text, a.page_number, a.line_number] for a in anchors]
 
 
@@ -70,7 +70,7 @@ def test_agency_addition_is_purely_additive(name: str):
 
 
 def _account_names(pdf_path: Path) -> set[str]:
-    anchors = extract_anchors(extract_clean_pages(pdf_path))
+    anchors = extract_anchors(cached_pages(pdf_path))
     return {a.text for a in anchors if a.kind == "account"}
 
 
@@ -112,14 +112,14 @@ class TestNonAppropsGeneralization:
     def test_sections_detected(self):
         # new-true-positive (red-first claim): the universal SEC level is found.
         pdf = FIXTURES["118-hr-8282"]
-        anchors = extract_anchors(extract_clean_pages(pdf))
+        anchors = extract_anchors(cached_pages(pdf))
         assert any(a.kind == "section" for a in anchors)
 
     def test_zero_false_accounts(self):
         # precision-characterization: a non-appropriations bill has no accounts, so
         # size detection (incl. the run-in-enumerator reject) must emit none.
         pdf = FIXTURES["118-hr-8282"]
-        anchors = extract_anchors(extract_clean_pages(pdf))
+        anchors = extract_anchors(cached_pages(pdf))
         assert [a.text for a in anchors if a.kind == "account"] == []
 
 
@@ -169,7 +169,7 @@ def _xml_agency_vocab(xml_path: Path) -> set[str]:
 def _pdf_agency_vocab(pdf_path: Path) -> set[str]:
     from bill_tree import normalize_header
 
-    anchors = extract_anchors(extract_clean_pages(pdf_path))
+    anchors = extract_anchors(cached_pages(pdf_path))
     return {normalize_header(a.text) for a in anchors if a.kind == "agency"}
 
 
@@ -204,7 +204,7 @@ def _xml_major_vocab(xml_path: Path) -> set[str]:
 def _pdf_major_vocab(pdf_path: Path) -> set[str]:
     from bill_tree import normalize_header
 
-    anchors = extract_anchors(extract_clean_pages(pdf_path))
+    anchors = extract_anchors(cached_pages(pdf_path))
     return {normalize_header(a.text) for a in anchors if a.kind == "major"}
 
 
@@ -233,7 +233,7 @@ class TestMajorLevelEndToEnd:
         # Negative control: a non-appropriations bill has no department headings under
         # its titles, so the major rule must emit zero.
         pdf = FIXTURES["118-hr-8282"]
-        anchors = extract_anchors(extract_clean_pages(pdf))
+        anchors = extract_anchors(cached_pages(pdf))
         assert [a.text for a in anchors if a.kind == "major"] == []
 
     def test_s4795_major_recall_and_documented_residue(self):
@@ -262,12 +262,12 @@ class TestMajorLevelEndToEnd:
     def test_no_catchline_fragment_major(self, pdf: Path):
         # The 117-hr-2471 / 118-hr-2882 catchline class must not leak into the major
         # level either (the structural "after TITLE" gate excludes mid-section frags).
-        majors = {a.text for a in extract_anchors(extract_clean_pages(pdf)) if a.kind == "major"}
+        majors = {a.text for a in extract_anchors(cached_pages(pdf)) if a.kind == "major"}
         assert self._MAJOR_FP_REPROS[pdf] not in majors
 
 
 def _pdf_major_texts(pdf_path: Path) -> set[str]:
-    return {a.text for a in extract_anchors(extract_clean_pages(pdf_path)) if a.kind == "major"}
+    return {a.text for a in extract_anchors(cached_pages(pdf_path)) if a.kind == "major"}
 
 
 # One FY2025 reported-in-House print per appropriations subcommittee (CJS=Senate
@@ -405,7 +405,7 @@ def test_no_value_equal_duplicate_anchors(name: str):
     # still resolves each distinctly. A FULLY value-equal duplicate would break it;
     # pin its absence. Guards every fixture, all kinds.
     pdf_path = FIXTURES[name]
-    anchors = extract_anchors(extract_clean_pages(pdf_path))
+    anchors = extract_anchors(cached_pages(pdf_path))
     values = [(a.page_number, a.line_number, a.kind, a.text, a.division) for a in anchors]
     assert len(values) == len(set(values)), "value-equal duplicate anchors break breadcrumb .index()"
     # Any (page, line) collision must be exactly the #96 section/subsection pair
@@ -442,7 +442,7 @@ class TestCarryoverAgenciesEndToEnd:
         # Generalization guard (fresh-eyes C5): a non-appropriations bill has no
         # agency level, so the carry-over rule must emit zero agency anchors.
         pdf = FIXTURES["118-hr-8282"]
-        anchors = extract_anchors(extract_clean_pages(pdf))
+        anchors = extract_anchors(cached_pages(pdf))
         assert [a.text for a in anchors if a.kind == "agency"] == []
 
 

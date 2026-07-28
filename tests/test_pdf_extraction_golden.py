@@ -81,6 +81,9 @@ _COMMITTED_RELS = frozenset(rel for _, rel, _, _ in _CASES)
 
 def _page_lines(path: Path, page_number: int) -> list[list]:
     """The cleaned page's lines as JSON-friendly [line_number, text] pairs."""
+    # Deliberately NOT tests.pdf_corpus.cached_pages: this suite asserts the
+    # extractor's output against goldens, so reading a cached pickle would leave
+    # it asserting nothing about the code it guards (#348 / epic #288).
     pages = extract_clean_pages(path)
     page = next((p for p in pages if p.page_number == page_number), None)
     assert page is not None, f"{path} has no page {page_number}"
