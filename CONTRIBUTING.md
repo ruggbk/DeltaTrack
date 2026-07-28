@@ -93,14 +93,17 @@ work targets `develop`, not `main`.
 3. Push your branch and open a pull request against `develop`
 
 **Branch from `develop`, not from another feature branch.** Even when one piece
-of work logically follows another, don't stack pull requests. GitHub retargets a
-stacked pull request at `develop` only when its parent branch is *deleted* on
-merge, and this repo has "Automatically delete head branches" turned off
-([#88](https://github.com/AgoraDMV/DeltaTrack/issues/88)). Without that
-retargeting, "merged" means merged into the parent branch: the child pull request
-shows **MERGED** in the UI while its content sits in a now-stale branch and never
-reaches `develop`. The badge cannot tell you the difference. If you do stack one,
-confirm the content actually landed rather than trusting the badge:
+of work logically follows another, prefer not to stack pull requests: until the
+parent merges, the child's diff shows both branches' commits, which makes review
+noisy. If you do stack one, the retargeting mechanics now work in the common
+case: this repo has "Automatically delete head branches" turned on
+([#88](https://github.com/AgoraDMV/DeltaTrack/issues/88), the issue that tracked
+enabling it), and it is the parent branch's *deletion* on merge that makes GitHub
+retarget the child pull request at `develop`. That is also the edge to watch: if
+the parent branch was kept alive or restored after merge, no retarget happens,
+and the child then merges into a stale branch — it shows **MERGED** in the UI
+while its content never reaches `develop`, and the badge cannot tell you the
+difference. When in doubt, confirm the content actually landed:
 
 ```bash
 git fetch origin develop
