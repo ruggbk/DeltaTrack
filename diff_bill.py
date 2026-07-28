@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bill_tree import BillNode, BillTree, normalize_bill, normalize_division_title
-from shared.version_stems import version_number_from_stem
+from shared.version_stems import label_from_stem, version_number_from_stem
 
 # --- Financial amount extraction ---
 
@@ -730,41 +730,39 @@ def filter_diff(
 def cmd_compare(args: argparse.Namespace) -> None:
     old_tree = normalize_bill(Path(args.old_xml))
     new_tree = normalize_bill(Path(args.new_xml))
-    result = diff_bills(old_tree, new_tree)
-
-    result = filter_diff(
-        result,
-        include_unchanged=args.include_unchanged,
-        filter_text=args.filter,
-        financial_only=args.financial,
-    )
-
     fmt = getattr(args, "format", "json")
-    # HTML always gets financial enrichment; JSON only when --financial is passed
-    include_financial = args.financial or fmt == "html"
-    diff_dict = bill_diff_to_dict(result, financial=include_financial)
-
-    # Extract version numbers from filenames (e.g., "1_reported-in-house.xml" -> 1)
-    for key, xml_arg in (("old_version_number", args.old_xml), ("new_version_number", args.new_xml)):
-        num = version_number_from_stem(Path(xml_arg).stem)
-        if num is not None:
-            diff_dict[key] = num
 
     if fmt == "html":
-        from bill_tree import bill_title
-        from formatters.canonical import view_from_canonical, xml_diff_to_canonical
-        from formatters.diff_html import format_diff_html
-        from formatters.text_serializer import build_xml_full_text
+        # Imported here, not at module scope: server.xml_compare imports this module.
+        # It owns the whole XML → HTML chain (#42), so the CLI, the web app, and
+        # render_examples.py cannot drift into rendering the same pair differently.
+        from server.xml_compare import compare_xml_trees_html
 
-        full_text, full_text_spans, sections, tree = build_xml_full_text(old_tree, new_tree)
-        canonical = xml_diff_to_canonical(diff_dict, full_text=full_text, full_text_spans=full_text_spans, tree=tree)
-        output = format_diff_html(
-            view_from_canonical(canonical),
-            canonical=canonical,
-            title=bill_title(new_tree),
-            sections=sections,
+        old_stem, new_stem = Path(args.old_xml).stem, Path(args.new_xml).stem
+        output = compare_xml_trees_html(
+            old_tree,
+            new_tree,
+            start_label=label_from_stem(old_stem),
+            end_label=label_from_stem(new_stem),
+            old_version_number=version_number_from_stem(old_stem),
+            new_version_number=version_number_from_stem(new_stem),
+            include_unchanged=args.include_unchanged,
+            filter_text=args.filter,
+            financial_only=args.financial,
         )
     else:
+        result = filter_diff(
+            diff_bills(old_tree, new_tree),
+            include_unchanged=args.include_unchanged,
+            filter_text=args.filter,
+            financial_only=args.financial,
+        )
+        diff_dict = bill_diff_to_dict(result, financial=args.financial)
+        # Extract version numbers from filenames (e.g., "1_reported-in-house.xml" -> 1)
+        for key, xml_arg in (("old_version_number", args.old_xml), ("new_version_number", args.new_xml)):
+            num = version_number_from_stem(Path(xml_arg).stem)
+            if num is not None:
+                diff_dict[key] = num
         output = json.dumps(diff_dict, indent=2)
 
     if args.output:

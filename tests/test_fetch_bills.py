@@ -2,10 +2,7 @@
 
 import argparse
 import json
-import re
-import shlex
 import time
-from pathlib import Path
 
 import httpx
 import pytest
@@ -24,7 +21,6 @@ from fetch_bills import (
     fetch_all_committee_bills,
     fetch_text_versions,
     format_version_list,
-    formats_from_arg,
     get_pdf_url,
     get_xml_url,
     sanitize_version_name,
@@ -509,50 +505,6 @@ class TestCmdDownloadFormats:
     def test_parser_accepts_format_both(self):
         args = build_parser().parse_args(["download", "118", "hr", "4366", "--format", "both"])
         assert args.format == "both"
-
-
-class TestUpdateExamplesWorkflowFormat:
-    """The published-examples workflow downloads and diffs in two separate steps.
-
-    Nothing but agreement between them makes the second step's inputs exist, and the
-    workflow runs on `push: main` only, so a disagreement is latent on develop and
-    invisible to every PR -- the exact way the #131 `--format` regression shipped
-    green (#151). These read the workflow as text rather than adding a YAML
-    dependency, in the style of tests/test_docs_consistency.py.
-    """
-
-    WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "update-examples.yml"
-    # `uv run python fetch_bills.py <args>` inside a step's `run:` block.
-    _DOWNLOAD_RE = re.compile(r"python\s+fetch_bills\.py\s+(?P<args>[^\n]+)")
-    # A bill file the diff step reads out of the download step's output tree.
-    _CONSUMED_RE = re.compile(r"bills/(?P<bill>\d+-[a-z]+-\d+)/\S+?\.(?P<ext>xml|pdf)\b")
-
-    def _workflow(self) -> str:
-        return self.WORKFLOW.read_text(encoding="utf-8")
-
-    def test_download_step_supplies_every_format_the_diff_step_reads(self):
-        text = self._workflow()
-
-        commands = self._DOWNLOAD_RE.findall(text)
-        assert len(commands) == 1, f"expected exactly one fetch_bills.py step, found {len(commands)}"
-        # Through the shipped parser, so the effective format is whatever the workflow
-        # would really get -- including when it passes no --format at all.
-        args = build_parser().parse_args(shlex.split(commands[0]))
-        produced = set(formats_from_arg(args.format))
-        downloaded_bill = f"{args.congress}-{args.bill_type}-{args.number}"
-
-        consumed = set(self._CONSUMED_RE.findall(text))
-        assert consumed, "no bills/<id>/<version>.<ext> inputs found; the regex or the workflow moved"
-
-        mismatched = sorted(
-            f"{bill}/*.{ext}" for bill, ext in consumed if bill != downloaded_bill or ext not in produced
-        )
-        assert not mismatched, (
-            f"update-examples.yml diffs inputs its download step does not produce: {mismatched}. "
-            f"The step downloads {downloaded_bill} as {sorted(produced)} "
-            f"(--format {args.format}, --source {args.source}). Change both steps together, or the "
-            "workflow fails on main only -- which is how #131 shipped."
-        )
 
 
 class TestSourceRouting:

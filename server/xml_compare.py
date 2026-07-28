@@ -15,6 +15,13 @@ deleted before return), nothing is persisted.
 The XML pipeline resolves changes structurally (no page/line coordinates), and
 its full_text is gutterless paragraph flow — the renderer keys off
 ``versions.v2.source == "xml"`` to drop the PDF line-number gutter.
+
+**This module is the only place a bill-XML report is assembled** (#42). The web app,
+the ``diff_bill.py compare --format html`` CLI, and ``render_examples.py`` all enter
+here, so one bill pair renders one way no matter which surface asked for it. Each of
+those three used to assemble the canonical → view → HTML chain itself, and the copies
+had already drifted apart in which version metadata they set. ``diff_pdf.py`` delegates
+to ``server/pdf_compare.py`` for the same reason; this is the XML half of that pattern.
 """
 
 from __future__ import annotations
@@ -22,11 +29,58 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from bill_tree import bill_title, normalize_bill
+from bill_tree import BillTree, bill_title, normalize_bill
 from diff_bill import bill_diff_to_dict, diff_bills, filter_diff
 from formatters.canonical import view_from_canonical, xml_diff_to_canonical
 from formatters.diff_html import format_diff_html
 from formatters.text_serializer import build_xml_full_text
+from shared.version_stems import label_from_stem, version_number_from_stem
+
+
+def _build_from_trees(
+    old_tree: BillTree,
+    new_tree: BillTree,
+    *,
+    start_label: str | None,
+    end_label: str | None,
+    old_version_number: int | None = None,
+    new_version_number: int | None = None,
+    include_unchanged: bool = False,
+    filter_text: str | None = None,
+    financial_only: bool = False,
+) -> tuple[dict, list[dict], str]:
+    """Diff and serialize two parsed versions.
+
+    Returns ``(canonical, sections, title)``: the canonical diff JSON, the v2 section
+    jump-list for the full-bill TOC, and the report heading.
+
+    ``start_label``/``end_label`` override the XML's embedded version names so the
+    report reflects the file the caller actually supplied (matching the PDF path); pass
+    None to keep the embedded names. The version *numbers* are the bill's legislative
+    ordinals, which are known when the input is a numbered corpus filename and unknown
+    for a web upload — the renderer prefixes the header with ``v1:``/``v2:`` only when
+    they are supplied. Financial enrichment is unconditional on the HTML path.
+    """
+    result = filter_diff(
+        diff_bills(old_tree, new_tree),
+        include_unchanged=include_unchanged,
+        filter_text=filter_text,
+        financial_only=financial_only,
+    )
+    diff_dict = bill_diff_to_dict(result, financial=True)
+    if start_label is not None:
+        diff_dict["old_version"] = start_label
+    if end_label is not None:
+        diff_dict["new_version"] = end_label
+    if old_version_number is not None:
+        diff_dict["old_version_number"] = old_version_number
+    if new_version_number is not None:
+        diff_dict["new_version_number"] = new_version_number
+
+    # Readable full text + per-side element_id spans + the v2 TOC offsets.
+    full_text, full_text_spans, sections, tree = build_xml_full_text(old_tree, new_tree)
+    canonical = xml_diff_to_canonical(diff_dict, full_text=full_text, full_text_spans=full_text_spans, tree=tree)
+    return canonical, sections, bill_title(new_tree)
 
 
 def _build(
@@ -35,13 +89,9 @@ def _build(
     start_label: str,
     end_label: str,
 ) -> tuple[dict, list[dict], str]:
-    """Parse, diff, and serialize both XML versions.
+    """Parse two uploaded blobs, then diff them.
 
-    Returns ``(canonical, sections, title)``: the canonical diff JSON, the v2
-    section jump-list for the full-bill TOC, and the report heading. Temp files
-    exist only long enough for ``normalize_bill`` to read them. The filename-derived
-    labels override the XML's embedded version names so the report reflects what the
-    user uploaded (matching the PDF path).
+    Temp files exist only long enough for ``normalize_bill`` to read them.
     """
     with tempfile.TemporaryDirectory(prefix="deltatrack-") as tmp:
         start_path = Path(tmp) / "start.xml"
@@ -52,15 +102,7 @@ def _build(
         old_tree = normalize_bill(start_path)
         new_tree = normalize_bill(end_path)
 
-    result = filter_diff(diff_bills(old_tree, new_tree), include_unchanged=False)
-    diff_dict = bill_diff_to_dict(result, financial=True)
-    diff_dict["old_version"] = start_label
-    diff_dict["new_version"] = end_label
-
-    # Readable full text + per-side element_id spans + the v2 TOC offsets.
-    full_text, full_text_spans, sections, tree = build_xml_full_text(old_tree, new_tree)
-    canonical = xml_diff_to_canonical(diff_dict, full_text=full_text, full_text_spans=full_text_spans, tree=tree)
-    return canonical, sections, bill_title(new_tree)
+    return _build_from_trees(old_tree, new_tree, start_label=start_label, end_label=end_label)
 
 
 def compare_xml(
@@ -89,5 +131,62 @@ def compare_xml_html(
     section TOC and bill-title heading matching the PDF report.
     """
     canonical, sections, title = _build(start_bytes, end_bytes, start_label, end_label)
-    view = view_from_canonical(canonical)
-    return format_diff_html(view, canonical=canonical, title=title, sections=sections)
+    return _render(canonical, sections, title)
+
+
+def _render(canonical: dict, sections: list[dict], title: str) -> str:
+    """Canonical diff JSON → standalone HTML report.
+
+    The DiffView is rebuilt from the canonical (``view_from_canonical``) so the rendered
+    report and the embedded ``diff.json`` come from one source of truth.
+    """
+    return format_diff_html(view_from_canonical(canonical), canonical=canonical, title=title, sections=sections)
+
+
+def compare_xml_trees_html(
+    old_tree: BillTree,
+    new_tree: BillTree,
+    *,
+    start_label: str | None = None,
+    end_label: str | None = None,
+    old_version_number: int | None = None,
+    new_version_number: int | None = None,
+    include_unchanged: bool = False,
+    filter_text: str | None = None,
+    financial_only: bool = False,
+) -> str:
+    """Standalone HTML report for two already-parsed versions.
+
+    The entry point for callers that hold ``BillTree``s and would otherwise re-implement
+    the assembly chain — the CLI and ``render_examples.py``. See
+    :func:`_build_from_trees` for what the version metadata does.
+    """
+    canonical, sections, title = _build_from_trees(
+        old_tree,
+        new_tree,
+        start_label=start_label,
+        end_label=end_label,
+        old_version_number=old_version_number,
+        new_version_number=new_version_number,
+        include_unchanged=include_unchanged,
+        filter_text=filter_text,
+        financial_only=financial_only,
+    )
+    return _render(canonical, sections, title)
+
+
+def compare_xml_files_html(old_path: Path, new_path: Path) -> str:
+    """Standalone HTML report for two numbered corpus files (``<n>_<label>.xml``).
+
+    Derives both the readable labels and the legislative ordinals from the filename
+    stems, which is what makes a rendered example identical to the report a reader
+    would get by uploading the same two files.
+    """
+    return compare_xml_trees_html(
+        normalize_bill(old_path),
+        normalize_bill(new_path),
+        start_label=label_from_stem(old_path.stem),
+        end_label=label_from_stem(new_path.stem),
+        old_version_number=version_number_from_stem(old_path.stem),
+        new_version_number=version_number_from_stem(new_path.stem),
+    )

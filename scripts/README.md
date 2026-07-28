@@ -21,7 +21,7 @@ root.
 | `serve_compare.py <bill> [--v1 V --v2 V] [--port N] [--no-browser]` | Render a bill's PDF-derived and XML-derived diffs side by side and serve them locally — the main PDF↔XML parity debugging aid. |
 | `heading_precision.py` | Measure PDF heading-anchor recovery against the XML hierarchy (DeltaTrack#89). |
 | `ugly_money_table.py <old.xml> <new.xml> -o <out>` | Emit a deliberately unstyled money-diff table for staffer validation (fidelity stripped so only the money diff is under test). |
-| `../render_examples.py` | Regenerate the committed example HTML diffs under `examples/` (also run by the `update-examples` CI job). |
+| `../render_examples.py` | Regenerate the committed example HTML diffs and landing page under `examples/`. The only renderer of the published examples; CI deploys what it wrote, and `tests/test_committed_examples.py` fails if they're stale. |
 
 ## Similarity-threshold audit prototypes
 

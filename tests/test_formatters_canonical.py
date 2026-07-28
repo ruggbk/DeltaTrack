@@ -1014,3 +1014,23 @@ def test_pdf_canonical_validates_against_json_schema():
     diff = PdfDiff(hunks=hunks, v1_anchors=(SEC_101,), v2_anchors=(SEC_101, SEC_201))
     canonical = pdf_diff_to_canonical(diff, **_pdf_meta())
     jsonschema.validate(canonical, _load_schema())
+
+
+def test_pdf_version_numbers_default_to_none_and_pass_through_when_given():
+    """A PDF upload has no legislative ordinal; a numbered corpus file does (#42).
+
+    Both directions matter. The None default is what makes the renderer drop the
+    "vN: " prefix for uploads, so it is load-bearing rather than incidental: if it
+    started defaulting to a number, every uploaded report would head itself with an
+    index the uploader never supplied. The pass-through is what lets a published PDF
+    example head itself the same way the XML example of the same pair does.
+    """
+    diff = PdfDiff(hunks=(), v1_anchors=(), v2_anchors=())
+
+    upload = pdf_diff_to_canonical(diff, **_pdf_meta())
+    assert upload["versions"]["v1"]["version_number"] is None
+    assert upload["versions"]["v2"]["version_number"] is None
+
+    numbered = pdf_diff_to_canonical(diff, **_pdf_meta(), v1_version_number=1, v2_version_number=2)
+    assert numbered["versions"]["v1"]["version_number"] == 1
+    assert numbered["versions"]["v2"]["version_number"] == 2

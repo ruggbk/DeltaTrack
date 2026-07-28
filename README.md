@@ -4,7 +4,7 @@ Downloads U.S. bill text from official government data (GPO govinfo) and compare
 
 Works on any bill type (HR, S, HJRES, etc.), not just appropriations.
 
-**See it in action:** [Committee vs. Floor](https://agoradmv.github.io/DeltaTrack/hr4366_committee_vs_floor.html) | [House vs. Senate](https://agoradmv.github.io/DeltaTrack/hr4366_house_vs_senate.html) (example reports for HR 4366, 118th Congress)
+**See it in action:** [browse the example reports](https://agoradmv.github.io/DeltaTrack/) — real output for HR 8752 and HR 4366 (118th Congress), including [a Senate rewrite at full scale](https://agoradmv.github.io/DeltaTrack/hr4366_house_vs_senate_xml_diff.html). Every one is rendered by the same pipeline the tool runs for you.
 
 ## Why not a generic differ?
 

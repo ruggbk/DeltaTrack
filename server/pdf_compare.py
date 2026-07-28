@@ -155,6 +155,8 @@ def _build_canonical(
     *,
     congress: str = "",
     printed: bool = False,
+    start_version_number: int | None = None,
+    end_version_number: int | None = None,
 ) -> dict:
     """Canonical diff JSON (see schema/canonical-diff.md) with full text + per-change spans.
 
@@ -174,6 +176,8 @@ def _build_canonical(
         congress=congress,
         v1_label=start_label,
         v2_label=end_label,
+        v1_version_number=start_version_number,
+        v2_version_number=end_version_number,
         full_text={"v1": v1_text, "v2": v2_text},
         line_offsets={"v1": v1_offsets, "v2": v2_offsets},
     )
@@ -236,21 +240,28 @@ def compare_pdfs_html(
     *,
     start_label: str = "Start version",
     end_label: str = "End version",
+    start_version_number: int | None = None,
+    end_version_number: int | None = None,
 ) -> str:
     """Diff two PDF documents and return a standalone HTML report.
 
     The canonical dict is computed and handed to the renderer so the report can
     carry the full-bill view and an embedded ``diff.json`` for export.
+
+    Pass the version numbers when the caller knows the bill's legislative ordinals
+    (rendering a numbered corpus file, not an upload) so the report heads itself
+    identically to the XML report for the same pair.
     """
     pdf_diff, old_pages, new_pages = _extract_and_diff(start_bytes, end_bytes)
     congress = _derive_congress(new_pages)
-    canonical = _build_canonical(pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress)
+    numbers = {"start_version_number": start_version_number, "end_version_number": end_version_number}
+    canonical = _build_canonical(pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress, **numbers)
     # Per-change card text comes from the hunks, so it is identical regardless of the
     # printed flag; derive the view from the (non-printed) canonical for consistency
     # with the embedded diff.json.
     view = view_from_canonical(canonical)
     display_canonical = _build_canonical(
-        pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress, printed=True
+        pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress, printed=True, **numbers
     )
     title = _derive_bill_title(canonical)
     sections = _section_nav(pdf_diff, new_pages)

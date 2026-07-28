@@ -439,6 +439,8 @@ def pdf_diff_to_canonical(
     congress: int | str,
     v1_label: str = "v1",
     v2_label: str = "v2",
+    v1_version_number: int | None = None,
+    v2_version_number: int | None = None,
     full_text: dict | None = None,
     line_offsets: dict | None = None,
 ) -> dict:
@@ -448,6 +450,12 @@ def pdf_diff_to_canonical(
     mapping (page_number, line_number) -> (start_char, end_char) into the
     corresponding full_text string. Required if you want full_text_span
     populated on changes; without it, full_text_span is null on each.
+
+    The version numbers are the bill's legislative ordinals. A PDF carries no such
+    index, so an upload leaves them None and the renderer drops the "vN: " prefix
+    (see `_versions_html`); a caller reading numbered corpus filenames knows them and
+    passes them, which is what lets a published PDF example head its report the same
+    way the XML example of the same pair does.
     """
     line_offsets_v1 = (line_offsets or {}).get("v1")
     line_offsets_v2 = (line_offsets or {}).get("v2")
@@ -465,8 +473,8 @@ def pdf_diff_to_canonical(
         "generator": {"name": GENERATOR_NAME, "version": "0"},
         "bill": {"type": bill_type, "number": bill_number, "congress": congress},
         "versions": {
-            "v1": {"label": v1_label, "version_number": None, "source": "pdf"},
-            "v2": {"label": v2_label, "version_number": None, "source": "pdf"},
+            "v1": {"label": v1_label, "version_number": v1_version_number, "source": "pdf"},
+            "v2": {"label": v2_label, "version_number": v2_version_number, "source": "pdf"},
         },
         "summary": dict(diff.summary),
         "full_text": normalized_full_text,
