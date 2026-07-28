@@ -8,8 +8,8 @@ Usage: uv run python smoke_test_matching.py
 
 from pathlib import Path
 
-from bill_tree import normalize_bill, normalize_division_title
-from diff_bill import diff_bills
+from deltatrack.bill_tree import normalize_bill, normalize_division_title
+from deltatrack.diff_bill import diff_bills
 
 FRESH_BILLS = [
     "tests/corpus/117-hr-2471",  # Consolidated Appropriations Act, 2022

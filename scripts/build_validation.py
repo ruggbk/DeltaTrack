@@ -27,8 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import re  # noqa: E402
 
-from bill_tree import normalize_bill  # noqa: E402
-from parsers.committee_report import (  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
+from deltatrack.parsers.committee_report import (  # noqa: E402
     extract_pre_text,
     parse_comparative_statement,
     parse_summary_blocks,

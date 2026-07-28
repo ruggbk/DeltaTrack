@@ -38,9 +38,9 @@ from pathlib import Path
 
 import pytest
 
-from compare.pdf import compare_pdfs
-from compare.xml import compare_xml
 from corpus_paths import FIXTURES_DIR, fixture_path
+from deltatrack.compare.pdf import compare_pdfs
+from deltatrack.compare.xml import compare_xml
 from scripts.heading_precision import measure
 
 pytestmark = pytest.mark.slow

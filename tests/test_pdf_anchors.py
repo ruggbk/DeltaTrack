@@ -6,7 +6,7 @@ reliably carries and the diff layer attaches to hunks as a "where am I" label.
 
 from __future__ import annotations
 
-from parsers.pdf_anchors import Anchor, _scan_anchors_in_page, breadcrumb_for
+from deltatrack.parsers.pdf_anchors import Anchor, _scan_anchors_in_page, breadcrumb_for
 
 
 class TestTitleAnchor:

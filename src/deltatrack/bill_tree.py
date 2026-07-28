@@ -1,0 +1,1162 @@
+"""Normalize bill XML into a structured tree of content nodes."""
+
+import re
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+
+from deltatrack.parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subsection
+
+
+@dataclass(frozen=True)
+class BillNode:
+    """A single content-bearing node from a bill XML."""
+
+    match_path: tuple[str, ...]
+    display_path: tuple[str, ...]
+    tag: str
+    element_id: str
+    header_text: str
+    body_text: str
+    section_number: str
+    division_label: str
+    # Readable multi-line rendering of body_text for the full-bill view (#51).
+    # body_text stays collapsed for diff matching; display_text adds enum spacing and
+    # list line breaks. Empty for nodes built without it (callers fall back to body_text).
+    display_text: str = ""
+
+
+@dataclass(frozen=True)
+class BillTree:
+    """Normalized representation of one bill version."""
+
+    congress: int
+    bill_type: str
+    bill_number: int
+    version: str
+    nodes: list[BillNode]
+    official_title: str = ""
+
+
+# Chamber designators for report headings (e.g. "hr" → "H.R.").
+_DESIGNATORS = {
+    "hr": "H.R.",
+    "s": "S.",
+    "hjres": "H.J.Res.",
+    "sjres": "S.J.Res.",
+    "hconres": "H.Con.Res.",
+    "sconres": "S.Con.Res.",
+    "hres": "H.Res.",
+    "sres": "S.Res.",
+}
+
+
+def bill_title(tree: BillTree) -> str:
+    """Report heading for an XML bill: "H.R. 4366 — {official title}".
+
+    Mirrors the PDF path's ``_derive_bill_title`` format. Falls back to just the
+    designator when there's no official title, or "" when even the type is unknown.
+    """
+    if not tree.bill_type:
+        return tree.official_title
+    designator = _DESIGNATORS.get(tree.bill_type, tree.bill_type.upper())
+    label = f"{designator} {tree.bill_number}"
+    return f"{label} — {tree.official_title}" if tree.official_title else label
+
+
+def normalize_header(text: str) -> str:
+    """Normalize a header for matching: lowercase, collapse whitespace."""
+    return " ".join(text.lower().split())
+
+
+def normalize_division_title(division_label: str) -> str:
+    """Extract and normalize the descriptive title from a division label.
+
+    'Division A: Military Construction' -> 'military construction'
+    'Division F' -> ''
+    '' -> ''
+    """
+    if ":" not in division_label:
+        return ""
+    title = division_label.split(":", 1)[1]
+    return normalize_header(title)
+
+
+def find_bill_body(root: ET.Element) -> ET.Element:
+    """Find the effective body element from a bill or amendment-doc root.
+
+    Returns legis-body for bills, or amendment-block for amendment-docs.
+    Raises ValueError if no body can be found.
+    """
+    # Standard bill: <bill><legis-body>
+    body = root.find("legis-body")
+    if body is not None:
+        return body
+
+    # Amendment doc: <amendment-doc><engrossed-amendment-body><amendment><amendment-block>
+    block = root.find(".//engrossed-amendment-body/amendment/amendment-block")
+    if block is not None:
+        nested = block.find("legis-body")
+        return nested if nested is not None else block
+
+    raise ValueError("Could not find bill body in XML")
+
+
+_LIST_MARKER_RE = re.compile(r" (?=\((?:[0-9]{1,2}|[a-z]{1,4}|[A-Z])\))")
+
+# Block-level (structural) tags whose text is a distinct unit and must be
+# separated from an adjacent sibling's text by a space. Everything not listed
+# here is treated as inline (e.g. external-xref, quote, italic, term,
+# short-title, added-phrase), where text flows through the element with no
+# separator — so "sub<external-xref>chapter 59</external-xref>" stays
+# "subchapter 59" and "(<external-xref>Public Law 95-..." stays "(Public Law".
+_BLOCK_TAGS = frozenset(
+    {
+        "text",
+        "header",
+        "paragraph",
+        "proviso",
+        "subparagraph",
+        "subsection",
+        "section",
+        "clause",
+        "subclause",
+        "quoted-block",
+        "after-quoted-block",
+        "title",
+        "subtitle",
+        "continuation-text",
+        "division",
+        "part",
+        "chapter",
+        "item",
+        "subitem",
+        "list-item",
+        "toc",
+        "toc-entry",
+        "appropriations-major",
+        "appropriations-intermediate",
+        "appropriations-small",
+        "row",
+        "entry",
+        "committee-name",
+        "action",
+        "action-date",
+        "action-desc",
+        "form",
+        "header-in-text",
+    }
+)
+
+# Empty break elements that represent visual whitespace (a line wrap or page
+# break), not part of a word. They carry no character, so multi-line table cells
+# like "$66,464,000<linebreak/>Initial Non-Federal" mash without treating the
+# break as a space. GPO XML does not hyphenate across these, so a space is safe.
+_BREAK_TAGS = frozenset({"linebreak", "pagebreak"})
+
+
+def _itertext_block_spaced(element: ET.Element) -> str:
+    """Flatten an element to text, inserting a space between block-level siblings.
+
+    ElementTree's ``itertext`` concatenates an element's descendants with no
+    separator, so two adjacent block siblings whose source has no whitespace
+    between them run together (``<header>Effective date</header><text>The
+    amendments...</text>`` -> ``Effective dateThe amendments``). This walks the
+    tree and inserts a single space before a block-level child when the text so
+    far doesn't already end in whitespace, but only when:
+
+    - the preceding sibling is not a *parenthetical* ``enum`` (a marker like
+      ``(c)`` attaches to the following text without a space, per
+      _LIST_MARKER_RE's convention). Non-parenthetical enums — section/part
+      numbers like ``701.`` or ``1291.``, roman ``I``, bare ``110`` — are not
+      attaching markers, so they DO get a separator (``1291.Military`` ->
+      ``1291. Military``, ``IMilitary`` -> ``I Military``), and
+    - the child's own text starts with an alphanumeric (a new word), so we don't
+      push punctuation off its anchor (``(1).`` stays ``(1).``, not ``(1). .``).
+
+    Empty break elements (``_BREAK_TAGS``) are emitted as a space.
+
+    The result only ever *adds* spaces; it never removes or reorders text.
+    """
+    parts: list[str] = []
+    if element.text:
+        parts.append(element.text)
+    prev_paren_enum = False
+    for child in element:
+        if child.tag in _BREAK_TAGS:
+            # Emit the break as whitespace; the final split()/join collapses any
+            # resulting double space.
+            parts.append(" ")
+            if child.tail:
+                parts.append(child.tail)
+            prev_paren_enum = False
+            continue
+        child_text = _itertext_block_spaced(child)
+        if (
+            child.tag in _BLOCK_TAGS
+            and not prev_paren_enum
+            and parts
+            and parts[-1]
+            and not parts[-1][-1].isspace()
+            and child_text[:1].isalnum()
+        ):
+            parts.append(" ")
+        parts.append(child_text)
+        if child.tail:
+            parts.append(child.tail)
+        # A parenthetical enum like "(c)" attaches to the following text; a
+        # number/roman enum like "701." or "I" does not.
+        prev_paren_enum = child.tag == "enum" and child_text.lstrip()[:1] == "("
+    return "".join(parts)
+
+
+def extract_text_content(element: ET.Element) -> str:
+    """Recursively extract all text content from an XML element.
+
+    Inserts a space between adjacent block-level siblings (see
+    _itertext_block_spaced), collapses runs of whitespace into single spaces,
+    and removes spaces before parenthetical list markers like (1), (A), (iv) so
+    that formatting differences between bill versions don't appear as textual
+    changes.
+    """
+    text = " ".join(_itertext_block_spaced(element).split())
+    return _LIST_MARKER_RE.sub("", text)
+
+
+# Display indentation ladder (#51): each structural level is its own block on its
+# own line, indented one step per level (GPO renders these as fixed hanging indents).
+# Keyed on the structural tag itself, NOT recursion depth, so non-structural wrappers
+# (text, proviso, quoted-block) don't inflate the indent. Tags absent from the ladder
+# (appropriations-*, etc.) fall to rank 0 — they're emitted as separate sibling nodes
+# with their own body block, so they never need deep indentation here.
+_DISPLAY_RANK = {
+    "subsection": 0,
+    "paragraph": 1,
+    "subparagraph": 2,
+    "clause": 3,
+    "subclause": 4,
+    "item": 5,
+    "subitem": 6,
+}
+_DISPLAY_INDENT = "    "
+
+
+def _starts_display_line(child: ET.Element) -> bool:
+    """Whether a child begins a new display line: an enumerated *structural level*
+    (subsection/paragraph/clause…) that is not flagged ``display-inline`` (those render
+    inline for continuation runs, per GPO). Content blocks like ``<text>``/``<header>``
+    are the body of a level, not a new level, so they stay on the current line."""
+    return child.tag in _DISPLAY_RANK and child.get("display-inline") != "yes-display-inline"
+
+
+def _walk_display(
+    element: ET.Element,
+    rank: int,
+    blocks: list[list],
+    *,
+    skip_header_enum: bool = False,
+    skip_children: frozenset[int] = frozenset(),
+) -> None:
+    """Accumulate readable text into ``blocks`` (a list of ``[rank, parts]``).
+
+    Mirrors :func:`_itertext_block_spaced`'s inline/block distinction, but instead of
+    collapsing spacing for matching it produces human-readable output: one ASCII space
+    after every ``<enum>`` (GPO ``displayEnum``), and each structural level on its own
+    line at ``_DISPLAY_INDENT * rank``. Inline elements (the complement of
+    ``_BLOCK_TAGS``) and ``display-inline`` blocks flow into the current line.
+
+    ``skip_header_enum`` drops the element's own ``<enum>``/``<header>`` (the section
+    number and heading are rendered separately); ``skip_children`` drops specific
+    direct children by identity (subsections that became their own nodes, #188).
+    Both are applied only at the top level.
+    """
+    cur = blocks[-1][1]
+    if element.text:
+        cur.append(element.text)
+    for child in element:
+        if skip_header_enum and child.tag in ("enum", "header"):
+            continue
+        if id(child) in skip_children:
+            # The skipped child's tail is the PARENT's flow (a trailing rider
+            # after a carved subsection) — dropping it would drop its amounts
+            # from the section's display_text (conservation).
+            if child.tail:
+                cur.append(child.tail)
+            continue
+        if child.tag in _BREAK_TAGS:
+            cur.append(" ")
+            if child.tail:
+                cur.append(child.tail)
+            continue
+        if _starts_display_line(child):
+            child_rank = _DISPLAY_RANK.get(child.tag, rank)
+            blocks.append([child_rank, []])
+            _walk_display(child, child_rank, blocks)
+            # The block child's siblings/tail resume at the parent's rank in a fresh
+            # line; empty lines are dropped at join time.
+            blocks.append([rank, []])
+            cur = blocks[-1][1]
+            if child.tail:
+                cur.append(child.tail)
+        else:
+            # Inline element (incl. <enum> and display-inline blocks): render in place.
+            # A content block (text/header/proviso, …) is separated from its preceding
+            # sibling by a space so adjacent blocks don't run together; the final
+            # whitespace collapse dedupes any double space.
+            if child.tag in _BLOCK_TAGS:
+                cur.append(" ")
+            _walk_display(child, rank, blocks)
+            cur = blocks[-1][1]
+            if child.tag == "enum":
+                cur.append(" ")  # GPO: one space after every enum
+            if child.tail:
+                cur.append(child.tail)
+
+
+def extract_display_text(
+    element: ET.Element,
+    *,
+    skip_header_enum: bool = True,
+    skip_children: frozenset[int] = frozenset(),
+) -> str:
+    """Readable multi-line rendering of an element's body for the full-bill view (#51).
+
+    Unlike :func:`extract_text_content` (which collapses spacing for diff matching),
+    this keeps a space after each list marker and breaks structural levels onto their
+    own indented lines, so ``(a)The...include—(1)a description`` reads as the published
+    bill does. The element's own ``<enum>``/``<header>`` are dropped (rendered
+    separately) unless ``skip_header_enum`` is False (subsection nodes keep their
+    run-in ``(a) Catchline`` opening, #188); ``skip_children`` drops direct children
+    by ``id()`` (the element-exact carve for node-ized subsections). Whitespace
+    within a line is collapsed to single spaces.
+    """
+    blocks: list[list] = [[0, []]]
+    _walk_display(element, 0, blocks, skip_header_enum=skip_header_enum, skip_children=skip_children)
+    lines = []
+    for rank, parts in blocks:
+        collapsed = " ".join("".join(parts).split())
+        if collapsed:
+            lines.append(_DISPLAY_INDENT * rank + collapsed)
+    return "\n".join(lines)
+
+
+def get_header_text(element: ET.Element) -> str:
+    """Get the header text from an element."""
+    header = element.find("header")
+    if header is not None:
+        return extract_text_content(header).strip()
+    return ""
+
+
+# Bounds for the inline catchline probe (#188 review hardening) — see the comment
+# at the match site in _subsection_label.
+_RUNIN_PROBE_WINDOW = 240
+_RUNIN_CATCHLINE_CAP = 120
+
+
+def _subsection_label(sub: ET.Element) -> tuple[str, str]:
+    """``(label, catchline)`` for a direct ``<subsection>`` child, or ``("", "")``
+    when no label is derivable (#188).
+
+    The canonical label is the #96 anchor form ``(enum) Catchline``. The catchline
+    comes from ``<header>`` when present (XML-structured — no regex, and roman
+    enums like ``(i)`` are fine because the tag is authoritative); otherwise it is
+    parsed from the ``<text>`` opening with the PDF's run-in matcher, so both
+    pipelines derive the same label from the same ``.—`` signal (the header-OR-
+    inline union — catchlines live in ``<header>`` on some bills and inline on
+    others, and covering only one form is the #96 fail-open trap). A subsection
+    with neither yields the bare enum; one with no enum and no header yields
+    ``("", "")`` and the caller keeps it folded (a blank path segment would corrupt
+    match keys and TOC rows).
+    """
+    enum_el = sub.find("enum")
+    enum = enum_el.text.strip() if enum_el is not None and enum_el.text else ""
+    header = get_header_text(sub)
+    if header:
+        return (f"{enum} {header}" if enum else header, header)
+    if not enum:
+        return "", ""
+    text_el = sub.find("text")
+    if text_el is not None:
+        opening = extract_text_content(text_el)
+        # Mirror the PDF's physical bounds: its matcher sees one print line plus
+        # two continuations, so a probe over unbounded flattened text fabricates
+        # "catchlines" from a period+dash deep in plain prose (113-hr-83 §415(a):
+        # "…U.S.–E.U.…" produced a 335-char label). Window ≈ three print lines;
+        # cap ≈ the longest real catchline with wide margin (corpus max 90, the
+        # three fabrications 303–335). A quote-opening text is quoting other law —
+        # its catchline is not this subsection's (the PDF self-exclusion).
+        if not _RUNIN_QUOTED_LINE.match(opening):
+            matched = _match_runin_subsection(f"{enum} {opening[:_RUNIN_PROBE_WINDOW]}", [])
+            if matched is not None:
+                catchline = matched.split(" ", 1)[1]
+                if len(catchline) <= _RUNIN_CATCHLINE_CAP:
+                    return matched, catchline
+    return enum, ""
+
+
+def _node_subsections(section: ET.Element) -> list[tuple[ET.Element, str, str]]:
+    """The direct ``<subsection>`` children that become their own BillNodes, as
+    ``(element, label, catchline)`` in document order (#188).
+
+    Direct children only: subsections inside a ``<quoted-block>`` are amendment
+    payload (text inserted into other law), not this bill's structure — they stay
+    folded in the section's text, mirroring the PDF's quote self-exclusion.
+    """
+    specs = []
+    for child in section:
+        if child.tag != "subsection":
+            continue
+        label, catchline = _subsection_label(child)
+        if label:
+            specs.append((child, label, catchline))
+    return specs
+
+
+def _append_subsection_nodes(
+    sub_specs: list[tuple[ET.Element, str, str]],
+    match_path: tuple[str, ...],
+    display_path: tuple[str, ...],
+    section_num: str,
+    division_label: str,
+    nodes: list[BillNode],
+) -> None:
+    """Emit one BillNode per node-worthy subsection, nested under the section's
+    paths (#188). The body keeps the run-in ``(a) Catchline`` opening — the same
+    text the PDF pipeline's block carries — and ``section_number`` is the
+    enclosing section's, so a subsection change still cites its SEC."""
+    for el, label, catchline in sub_specs:
+        nodes.append(
+            BillNode(
+                match_path=(*match_path, normalize_header(label)),
+                display_path=(*display_path, label),
+                tag="subsection",
+                element_id=el.attrib.get("id", ""),
+                header_text=catchline,
+                body_text=extract_text_content(el),
+                display_text=extract_display_text(el, skip_header_enum=False),
+                section_number=section_num,
+                division_label=division_label,
+            )
+        )
+
+
+def build_title_label(title: ET.Element) -> str:
+    """Build a <title>'s path/heading label, including its enum (#50).
+
+    GPO renders titles as ``TITLE <enum>—<header>`` (displayEnumTitle). The enum is
+    real bill content carried in ``<enum>`` (e.g. ``<enum>I</enum>``); reading only
+    ``<header>`` drops ``TITLE I`` from the full-bill text and the breadcrumb. Titles
+    are the only level that lost their enum — divisions and sections already keep
+    theirs. Header casing is left as-is here; uppercasing is #53's scope.
+    """
+    header = get_header_text(title)
+    enum_el = title.find("enum")
+    enum = enum_el.text.strip() if enum_el is not None and enum_el.text else ""
+    if not enum:
+        return header
+    return f"TITLE {enum}—{header}" if header else f"TITLE {enum}"
+
+
+_TITLE_LABEL_RE = re.compile(r"^TITLE\s+[^\s—]+(?:—(.*))?$")
+
+
+def title_match_header(title_label: str) -> str:
+    """Recover the plain header from a title display label, for matching (#50).
+
+    Inverse of :func:`build_title_label`. Labels are ``TITLE <enum>—<header>`` or a
+    bare ``TITLE <enum>`` (headerless, e.g. division bills). Match keys use the
+    header alone — the enum is display chrome — so a bare label yields ``""`` and
+    contributes no match segment, preserving the existing (major, intermediate)
+    keys for division bills. A non-title string (no enum) passes through unchanged.
+    """
+    m = _TITLE_LABEL_RE.match(title_label)
+    if m:
+        return m.group(1) or ""
+    return title_label
+
+
+_PARENTHETICAL_RE = re.compile(r"^\(.*\)$")
+
+_CONGRESS_WORDS = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+    "tenth": 10,
+    "eleventh": 11,
+    "twelfth": 12,
+    "thirteenth": 13,
+    "fourteenth": 14,
+    "fifteenth": 15,
+    "sixteenth": 16,
+    "seventeenth": 17,
+    "eighteenth": 18,
+    "nineteenth": 19,
+    "twentieth": 20,
+}
+
+_LEGIS_NUM_RE = re.compile(r"([A-Z])\.\s*(?:[A-Z]*\.?\s*)?(\d+)")
+
+
+def _build_paths(
+    title_display: str,
+    division_label: str,
+    major: str | None,
+    intermediate: str | None,
+    leaf_header: str | None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Build match_path and display_path tuples.
+
+    match_path: normalized, no division. Used for cross-version matching.
+    display_path: original case, includes division. Used for human display.
+
+    ``title_display`` is the title label with its enum ("TITLE I—<header>", #50).
+    Display keeps the full label; matching keys on the header alone (the enum is
+    display chrome) so cross-version keys are unchanged from before this change.
+    """
+    match_parts: list[str] = []
+    display_parts: list[str] = []
+
+    if division_label:
+        display_parts.append(division_label)
+
+    if title_display:
+        title_match = title_match_header(title_display)
+        if title_match:
+            match_parts.append(normalize_header(title_match))
+        display_parts.append(title_display)
+
+    if major:
+        match_parts.append(normalize_header(major))
+        display_parts.append(major)
+
+    if intermediate:
+        match_parts.append(normalize_header(intermediate))
+        display_parts.append(intermediate)
+
+    if leaf_header and leaf_header != major and leaf_header != intermediate:
+        match_parts.append(normalize_header(leaf_header))
+        display_parts.append(leaf_header)
+
+    return tuple(match_parts), tuple(display_parts)
+
+
+def _process_appro_element(
+    child: ET.Element,
+    title_header: str,
+    division_label: str,
+    current_major: str | None,
+    current_intermediate: str | None,
+    prev_name: str | None,
+    nodes: list[BillNode],
+) -> tuple[str | None, str | None, str | None]:
+    """Process one appropriations-* element, updating context and appending nodes.
+
+    Returns updated (current_major, current_intermediate, prev_name).
+    """
+    tag = child.tag
+
+    if tag == "appropriations-major":
+        current_major = get_header_text(child)
+        current_intermediate = None
+        prev_name = current_major
+
+        body_text = _extract_appropriations_text(child)
+        display_text = extract_display_text(child)
+        if body_text:
+            match_path, display_path = _build_paths(
+                title_header,
+                division_label,
+                current_major,
+                None,
+                None,
+            )
+            nodes.append(
+                BillNode(
+                    match_path=match_path,
+                    display_path=display_path,
+                    tag=tag,
+                    element_id=child.attrib.get("id", ""),
+                    header_text=current_major or "",
+                    body_text=body_text,
+                    display_text=display_text,
+                    section_number="",
+                    division_label=division_label,
+                )
+            )
+
+    elif tag == "appropriations-intermediate":
+        header = get_header_text(child)
+        current_intermediate = header
+
+        if header and _PARENTHETICAL_RE.match(header):
+            effective_header = prev_name
+        else:
+            if header:
+                prev_name = header
+            effective_header = header
+
+        body_text = _extract_appropriations_text(child)
+        display_text = extract_display_text(child)
+        if body_text:
+            match_path, display_path = _build_paths(
+                title_header,
+                division_label,
+                current_major,
+                effective_header,
+                None,
+            )
+            nodes.append(
+                BillNode(
+                    match_path=match_path,
+                    display_path=display_path,
+                    tag=tag,
+                    element_id=child.attrib.get("id", ""),
+                    header_text=header,
+                    body_text=body_text,
+                    display_text=display_text,
+                    section_number="",
+                    division_label=division_label,
+                )
+            )
+
+    elif tag == "appropriations-small":
+        header = get_header_text(child)
+
+        if header and _PARENTHETICAL_RE.match(header):
+            effective_header = prev_name
+        else:
+            if header:
+                prev_name = header
+            effective_header = header
+
+        body_text = _extract_appropriations_text(child)
+        display_text = extract_display_text(child)
+        if body_text:
+            match_path, display_path = _build_paths(
+                title_header,
+                division_label,
+                current_major,
+                current_intermediate,
+                effective_header,
+            )
+            nodes.append(
+                BillNode(
+                    match_path=match_path,
+                    display_path=display_path,
+                    tag=tag,
+                    element_id=child.attrib.get("id", ""),
+                    header_text=header or "",
+                    body_text=body_text,
+                    display_text=display_text,
+                    section_number="",
+                    division_label=division_label,
+                )
+            )
+
+    return current_major, current_intermediate, prev_name
+
+
+def _process_section_element(
+    section: ET.Element,
+    title_header: str,
+    division_label: str,
+    current_major: str | None,
+    current_intermediate: str | None,
+    prev_name: str | None,
+    nodes: list[BillNode],
+) -> None:
+    """Process a <section> element, emitting BillNode(s).
+
+    Handles two cases:
+    - Sections with appropriations-* children: emit section text node,
+      then walk appropriations children with scoped context.
+    - Plain sections: emit a single node with all section text.
+    """
+    has_appro_children = any(c.tag.startswith("appropriations-") for c in section)
+
+    enum_el = section.find("enum")
+    section_num = ""
+    if enum_el is not None and enum_el.text:
+        section_num = f"Sec. {enum_el.text.strip().rstrip('.')}"
+
+    if has_appro_children:
+        text_el = section.find("text")
+        if text_el is not None:
+            sec_label = section_num.lower() if section_num else ""
+            match_path, display_path = _build_paths(
+                title_header,
+                division_label,
+                current_major,
+                current_intermediate,
+                sec_label,
+            )
+            nodes.append(
+                BillNode(
+                    match_path=match_path,
+                    display_path=display_path,
+                    tag="section",
+                    element_id=section.attrib.get("id", ""),
+                    header_text=get_header_text(section),
+                    body_text=extract_text_content(text_el),
+                    display_text=extract_display_text(text_el),
+                    section_number=section_num,
+                    division_label=division_label,
+                )
+            )
+
+        # Walk appropriations children with scoped context
+        sec_major = current_major
+        sec_intermediate = current_intermediate
+        sec_prev = prev_name
+        for sub in section:
+            if sub.tag.startswith("appropriations-"):
+                sec_major, sec_intermediate, sec_prev = _process_appro_element(
+                    sub,
+                    title_header,
+                    division_label,
+                    sec_major,
+                    sec_intermediate,
+                    sec_prev,
+                    nodes,
+                )
+    else:
+        sub_specs = _node_subsections(section)
+        carve = frozenset(id(el) for el, _label, _catch in sub_specs)
+        body_text = _extract_section_text(section, carve)
+        display_text = extract_display_text(section, skip_children=carve)
+        # A section whose children are all node-ized subsections has an empty own
+        # body (e.g. SEC. 547) but must survive as a node — it anchors the SEC.
+        # heading and parents the subsections (#188).
+        if body_text or sub_specs:
+            sec_label = section_num.lower() if section_num else ""
+            match_path, display_path = _build_paths(
+                title_header,
+                division_label,
+                current_major,
+                current_intermediate,
+                sec_label,
+            )
+            nodes.append(
+                BillNode(
+                    match_path=match_path,
+                    display_path=display_path,
+                    tag="section",
+                    element_id=section.attrib.get("id", ""),
+                    header_text=get_header_text(section),
+                    body_text=body_text,
+                    display_text=display_text,
+                    section_number=section_num,
+                    division_label=division_label,
+                )
+            )
+            _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division_label, nodes)
+
+
+_STRUCTURAL_TAGS = {"subtitle", "part", "chapter", "subchapter", "subpart"}
+
+
+def _walk_structural_children(
+    parent: ET.Element,
+    title_header: str,
+    division_label: str,
+    current_major: str | None,
+    current_intermediate: str | None,
+    prev_name: str | None,
+    nodes: list[BillNode],
+    *,
+    _in_structural_container: bool = False,
+) -> tuple[str | None, str | None, str | None]:
+    """Walk children of a structural element, dispatching by tag.
+
+    Handles appropriations-*, section, and structural containers
+    (subtitle, part, chapter, subchapter, subpart — the HOLC higher-unit
+    ladder below title). Structural containers
+    recurse with scoped context and their header mapped into the path:
+    - First container level: header -> current_major
+    - Deeper levels: header -> current_intermediate
+    """
+    for child in parent:
+        tag = child.tag
+
+        if tag.startswith("appropriations-"):
+            current_major, current_intermediate, prev_name = _process_appro_element(
+                child,
+                title_header,
+                division_label,
+                current_major,
+                current_intermediate,
+                prev_name,
+                nodes,
+            )
+
+        elif tag == "section":
+            _process_section_element(
+                child,
+                title_header,
+                division_label,
+                current_major,
+                current_intermediate,
+                prev_name,
+                nodes,
+            )
+
+        elif tag in _STRUCTURAL_TAGS:
+            container_header = get_header_text(child)
+            # Scope context: container changes don't leak to parent siblings
+            saved_major = current_major
+            saved_intermediate = current_intermediate
+            saved_prev = prev_name
+            # Container header always becomes new major for its children.
+            # If we're already inside a container (major was set by parent
+            # container), push the existing major to intermediate.
+            if _in_structural_container and current_major is not None:
+                sub_major = current_major
+                if current_intermediate is not None:
+                    # Third+ level: concatenate into intermediate
+                    sub_intermediate: str | None = (
+                        f"{current_intermediate} - {container_header}" if container_header else current_intermediate
+                    )
+                else:
+                    sub_intermediate = container_header
+            else:
+                sub_major = container_header
+                sub_intermediate = None
+            _walk_structural_children(
+                child,
+                title_header,
+                division_label,
+                sub_major,
+                sub_intermediate,
+                None,
+                nodes,
+                _in_structural_container=True,
+            )
+            current_major = saved_major
+            current_intermediate = saved_intermediate
+            prev_name = saved_prev
+
+    return current_major, current_intermediate, prev_name
+
+
+def walk_title(
+    title_element: ET.Element,
+    title_header: str,
+    division_label: str,
+) -> list[BillNode]:
+    """Walk a <title> element, tracking flat-sibling context.
+
+    Produces BillNodes for every content-bearing element (has a <text> child).
+    Tracks major/intermediate context as it scans siblings.
+
+    Args:
+        title_element: A <title> XML element.
+        title_header: The title's header text (may be empty for headerless titles).
+        division_label: Division label for display_path (empty if no division).
+    """
+    nodes: list[BillNode] = []
+    _walk_structural_children(
+        title_element,
+        title_header,
+        division_label,
+        None,
+        None,
+        None,
+        nodes,
+    )
+    return nodes
+
+
+def _extract_appropriations_text(element: ET.Element) -> str:
+    """Extract all text content from an appropriations element.
+
+    Captures text from all children except <enum> and <header>,
+    including direct <text> children and <paragraph> children.
+    Returns empty string if no text content found.
+    """
+    parts = []
+    for child in element:
+        if child.tag in ("enum", "header"):
+            continue
+        parts.append(extract_text_content(child))
+    return " ".join(part for part in parts if part).strip()
+
+
+def _extract_section_text(section: ET.Element, exclude: frozenset[int] = frozenset()) -> str:
+    """Extract text from a section element.
+
+    If the section is a simple lead-in line (a direct <text> child with no
+    subsections or quoted-block payload), use that text directly.
+    Otherwise, extract all text recursively from the section
+    (excluding the enum and header), which captures subsections and the
+    <quoted-block> body of "amend ... by adding the following" sections.
+    ``exclude`` drops direct children by ``id()`` — the element-exact carve for
+    subsections that became their own nodes (#188), so each character of the
+    section lives in exactly one node (money conservation by construction).
+    Returns empty string if no text content found.
+    """
+    text_el = section.find("text")
+    has_subsections = section.find("subsection") is not None
+    # A <quoted-block> holds the amendment payload (the text being inserted into
+    # existing law); its subsections are nested inside it, not direct children of
+    # the section, so has_subsections misses them. Without this guard an amendment
+    # section returns only its lead-in line and the payload is silently dropped.
+    has_quoted_block = section.find("quoted-block") is not None
+    if text_el is not None and not has_subsections and not has_quoted_block:
+        return extract_text_content(text_el)
+
+    # No direct <text> child, or the section carries a subsection / quoted-block
+    # payload. Extract text from everything except enum and header.
+    parts = []
+    for child in section:
+        if child.tag in ("enum", "header") or id(child) in exclude:
+            continue
+        parts.append(extract_text_content(child))
+    # Join with a space so adjacent parts keep a word boundary (a bare
+    # "".join produced run-together text like "...funds.(b)Whoever..." and
+    # "...2028:Military...").
+    #
+    # extract_text_content already applied _LIST_MARKER_RE inside each part, but
+    # the space-join can put a fresh space in front of a marker at a part
+    # boundary (part ends "...funds.", next part starts "(b)Whoever" -> joined
+    # "...funds. (b)Whoever"). Re-applying it here strips that boundary space so
+    # the output matches the single-<text> branch and avoids golden churn. The
+    # second pass is intentional, not redundant: it only touches the new join
+    # boundaries, and _LIST_MARKER_RE is idempotent on the already-clean parts.
+    text = _LIST_MARKER_RE.sub("", " ".join(part for part in parts if part)).strip()
+    return text
+
+
+def walk_body_sections(body: ET.Element) -> list[BillNode]:
+    """Walk sections directly under a body element (no titles).
+
+    Used for simple bills like HR 2882 v1-3 where the structure is
+    just legis-body > section with no title or division wrappers.
+    """
+    nodes: list[BillNode] = []
+
+    for child in body:
+        if child.tag != "section":
+            continue
+
+        sub_specs = _node_subsections(child)
+        carve = frozenset(id(el) for el, _label, _catch in sub_specs)
+        body_text = _extract_section_text(child, carve)
+        display_text = extract_display_text(child, skip_children=carve)
+        # Empty own body is fine when the section parents node-ized subsections (#188).
+        if not body_text and not sub_specs:
+            continue
+
+        enum_el = child.find("enum")
+        section_num = ""
+        if enum_el is not None and enum_el.text:
+            section_num = f"Sec. {enum_el.text.strip().rstrip('.')}"
+
+        sec_label = section_num.lower() if section_num else ""
+        match_path = (sec_label,) if sec_label else ()
+        display_path = (section_num,) if section_num else ()
+
+        nodes.append(
+            BillNode(
+                match_path=match_path,
+                display_path=display_path,
+                tag="section",
+                element_id=child.attrib.get("id", ""),
+                header_text=get_header_text(child),
+                body_text=body_text,
+                display_text=display_text,
+                section_number=section_num,
+                division_label="",
+            )
+        )
+        _append_subsection_nodes(sub_specs, match_path, display_path, section_num, "", nodes)
+
+    return nodes
+
+
+def _extract_metadata(root: ET.Element, xml_path: Path) -> tuple[int, str, int, str, str]:
+    """Extract congress, bill_type, bill_number, version, official_title.
+
+    The first four come from the XML root and filename; official_title is the
+    long bill description from <official-title> (e.g. "Making appropriations for
+    military construction ... for other purposes."), used for the report heading.
+    """
+    congress = 0
+    congress_el = root.find(".//congress")
+    if congress_el is not None and congress_el.text:
+        congress_text = congress_el.text.strip().lower()
+        # Try numeric first (e.g., "118th CONGRESS")
+        num_match = re.search(r"(\d+)", congress_text)
+        if num_match:
+            congress = int(num_match.group(1))
+        else:
+            # Try word form (e.g., "One Hundred Eighteenth Congress")
+            for word, num in _CONGRESS_WORDS.items():
+                if word in congress_text:
+                    if "hundred" in congress_text:
+                        congress = 100 + num
+                    else:
+                        congress = num
+                    break
+
+    bill_type = ""
+    bill_number = 0
+    legis_num_el = root.find(".//legis-num")
+    if legis_num_el is not None and legis_num_el.text:
+        match = _LEGIS_NUM_RE.search(legis_num_el.text.strip())
+        if match:
+            bill_type = match.group(1).lower()
+            if bill_type == "h":
+                bill_type = "hr"
+            bill_number = int(match.group(2))
+
+    version = ""
+    stem = xml_path.stem
+    parts = stem.split("_", 1)
+    if len(parts) == 2:
+        version = parts[1]
+
+    official_title = ""
+    title_el = root.find(".//official-title")
+    if title_el is not None:
+        official_title = extract_text_content(title_el).strip()
+
+    return congress, bill_type, bill_number, version, official_title
+
+
+# GPO injects a fixed enacting clause at the top of the bill body; it is not
+# carried in the XML (no <enacting-clause> element). Hardcoded boilerplate per
+# billres-details.xsl ($enact), suppressed when the body opts out.
+_ENACTING_CLAUSE = (
+    "Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,"
+)
+
+# Synthetic match_path root for front-matter nodes. They carry an empty
+# display_path (no heading) but need a stable, distinct match key so each piece
+# pairs with its counterpart across versions (e.g. an official-title edit diffs
+# as exactly that, not as the whole block).
+_FRONT_MATTER = "front matter"
+
+
+def _front_matter_node(key: str, body: str) -> BillNode:
+    return BillNode(
+        match_path=(_FRONT_MATTER, key),
+        display_path=(),
+        tag="front-matter",
+        # Stable synthetic id (same across versions so each piece pairs with its
+        # counterpart, distinct between pieces so pairings stay unique). The XML
+        # form block carries no per-element ids we can reuse.
+        element_id=f"front-matter-{key.replace(' ', '-')}",
+        header_text="",
+        body_text=body,
+        section_number="",
+        division_label="",
+    )
+
+
+def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillNode]:
+    """Build front-matter nodes from the <form> block and enacting clause (#48).
+
+    The <form> block (congress, session, legis-num, legis-type "AN ACT", official
+    title) and the GPO enacting clause sit outside <legis-body>, so they were
+    dropped from the full-bill text and the diff. Each piece is its own node so a
+    change diffs precisely. distribution-code renders nothing in GPO and is
+    skipped; sponsor/action lines are out of scope. Returns nodes in render order
+    (empty when there is no <form>, e.g. amendment docs).
+    """
+    form = root.find("form")
+    nodes: list[BillNode] = []
+    if form is None:
+        return nodes
+
+    # Masthead: one line each, mirroring the printed cover.
+    masthead_lines = []
+    for tag in ("congress", "session", "legis-num", "legis-type"):
+        el = form.find(tag)
+        if el is not None:
+            text = extract_text_content(el).strip()
+            if text:
+                masthead_lines.append(text)
+    if masthead_lines:
+        nodes.append(_front_matter_node("masthead", "\n".join(masthead_lines)))
+
+    # Official title (verbatim; casing transforms are out of scope, cf. #53).
+    title_el = form.find("official-title")
+    if title_el is not None:
+        official = extract_text_content(title_el).strip()
+        if official:
+            nodes.append(_front_matter_node("official title", official))
+
+    # Enacting clause: GPO boilerplate, unless the body opts out.
+    if body.get("display-enacting-clause") != "no-display-enacting-clause":
+        nodes.append(_front_matter_node("enacting clause", _ENACTING_CLAUSE))
+
+    return nodes
+
+
+def normalize_bill(xml_path: Path) -> BillTree:
+    """Parse a bill XML file into a normalized BillTree.
+
+    Handles three structural shapes:
+    - With divisions: body > division > title > appropriations-*
+    - Without divisions, with titles: body > title > appropriations-*
+    - Without titles: body > section (simple bills)
+    """
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    body = find_bill_body(root)
+    congress, bill_type, bill_number, version, official_title = _extract_metadata(root, xml_path)
+
+    # Front matter (form block + enacting clause) renders above the bill body (#48).
+    all_nodes: list[BillNode] = extract_front_matter_nodes(root, body)
+
+    # Check for divisions first
+    divisions = body.findall("division")
+    if divisions:
+        all_nodes.extend(walk_body_sections(body))
+        # Walk divisions and titles in document order. Some enrolled bills place a
+        # division's later titles as <title> siblings beside the <division> (only
+        # TITLE I stays nested) — e.g. 113-hr-3547, 115-hr-5895. Such an orphan
+        # title continues the preceding division's numbering, so attribute it to
+        # that division (its label) rather than dropping it (#146) or detaching it
+        # at the bill's end with no division breadcrumb. match_path excludes the
+        # division, so cross-version diff matching is unaffected; only the
+        # display_path (breadcrumb) and document order change.
+        current_division_label = ""
+        for child in body:
+            if child.tag == "division":
+                div_enum = child.find("enum")
+                div_header = child.find("header")
+                div_enum_text = div_enum.text.strip() if div_enum is not None and div_enum.text else ""
+                div_header_text = extract_text_content(div_header).strip() if div_header is not None else ""
+                if div_header_text:
+                    current_division_label = f"Division {div_enum_text}: {div_header_text}"
+                else:
+                    current_division_label = f"Division {div_enum_text}"
+
+                for title in child.findall("title"):
+                    title_header = build_title_label(title)
+                    all_nodes.extend(walk_title(title, title_header, current_division_label))
+            elif child.tag == "title":
+                title_header = build_title_label(child)
+                all_nodes.extend(walk_title(child, title_header, current_division_label))
+        return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
+
+    # Check for titles directly under body
+    titles = body.findall("title")
+    if titles:
+        all_nodes.extend(walk_body_sections(body))
+        for title in titles:
+            title_header = build_title_label(title)
+            all_nodes.extend(walk_title(title, title_header, ""))
+        return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
+
+    # Fallback: sections directly under body
+    all_nodes.extend(walk_body_sections(body))
+    return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)

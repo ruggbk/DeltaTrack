@@ -31,10 +31,10 @@ import html
 from dataclasses import dataclass
 from pathlib import Path
 
-from compare.pdf import compare_pdfs_html
-from compare.xml import compare_xml_files_html
 from corpus_paths import FIXTURES_DIR
-from version_stems import label_from_stem, version_number_from_stem
+from deltatrack.compare.pdf import compare_pdfs_html
+from deltatrack.compare.xml import compare_xml_files_html
+from deltatrack.version_stems import label_from_stem, version_number_from_stem
 
 PROJECT_ROOT = Path(__file__).parent
 BILLS = FIXTURES_DIR

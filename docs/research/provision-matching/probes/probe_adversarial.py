@@ -16,8 +16,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from bill_tree import normalize_bill, normalize_header
-from diff_bill import (
+from deltatrack.bill_tree import normalize_bill, normalize_header
+from deltatrack.diff_bill import (
     _normalize_text,
     _text_similarity,
     diff_bills,

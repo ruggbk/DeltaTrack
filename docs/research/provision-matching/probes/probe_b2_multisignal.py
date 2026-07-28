@@ -18,8 +18,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from bill_tree import normalize_bill
-from diff_bill import _normalize_text, _text_similarity, match_nodes
+from deltatrack.bill_tree import normalize_bill
+from deltatrack.diff_bill import _normalize_text, _text_similarity, match_nodes
 
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 BILLS = REPO / "bills"

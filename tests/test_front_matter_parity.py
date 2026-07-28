@@ -19,14 +19,14 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import BillNode, BillTree
-from compare.pdf import compare_pdfs
-from compare.xml import compare_xml, compare_xml_html
 from corpus_paths import FIXTURES_DIR, fixture_path
-from diff_bill import extract_amounts
-from formatters.diff_html import _build_toc_from_tree
-from parsers.pdf_anchors import Anchor
-from structure_tree import TreeNode, build_pdf_tree, build_xml_tree
+from deltatrack.bill_tree import BillNode, BillTree
+from deltatrack.compare.pdf import compare_pdfs
+from deltatrack.compare.xml import compare_xml, compare_xml_html
+from deltatrack.diff_bill import extract_amounts
+from deltatrack.formatters.diff_html import _build_toc_from_tree
+from deltatrack.parsers.pdf_anchors import Anchor
+from deltatrack.structure_tree import TreeNode, build_pdf_tree, build_xml_tree
 
 ROOT = Path(__file__).parent.parent
 _BILL_8752 = FIXTURES_DIR / "118-hr-8752"
@@ -275,8 +275,8 @@ def test_omnibus_leading_sections_group_under_front_matter() -> None:
     """An omnibus's short-title / table-of-contents / definitions sections precede
     the first division and nest under Front Matter as navigable (labeled) children
     — the toggle case (#161)."""
-    from bill_tree import normalize_bill
-    from structure_tree import build_xml_tree
+    from deltatrack.bill_tree import normalize_bill
+    from deltatrack.structure_tree import build_xml_tree
 
     xml = fixture_path("117-hr-2471", "6_enrolled-bill.xml")
     if not xml.exists():

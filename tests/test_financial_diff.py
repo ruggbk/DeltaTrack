@@ -3,7 +3,7 @@
 import pytest
 
 from corpus_paths import fixture_path
-from diff_bill import (
+from deltatrack.diff_bill import (
     FinancialChange,
     compute_financial_change,
     extract_amounts,
@@ -220,7 +220,7 @@ class TestFinancialChangeToDict:
 
 class TestBillDiffToDictFinancial:
     def test_financial_flag_adds_financial_key(self):
-        from diff_bill import BillDiff, NodeDiff, bill_diff_to_dict
+        from deltatrack.diff_bill import BillDiff, NodeDiff, bill_diff_to_dict
 
         diff = BillDiff(
             old_version="v1",
@@ -250,7 +250,7 @@ class TestBillDiffToDictFinancial:
         assert "financial_summary" in result
 
     def test_no_financial_flag_no_financial_key(self):
-        from diff_bill import BillDiff, NodeDiff, bill_diff_to_dict
+        from deltatrack.diff_bill import BillDiff, NodeDiff, bill_diff_to_dict
 
         diff = BillDiff(
             old_version="v1",
@@ -391,7 +391,7 @@ class TestIntegrationFinancial:
         assert any(v > 1_000_000_000 for v in fc.old_amounts)
 
     def test_financial_filter_reduces_output(self, hr4366_v1_v6_diff):
-        from diff_bill import bill_diff_to_dict
+        from deltatrack.diff_bill import bill_diff_to_dict
 
         result = hr4366_v1_v6_diff
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from parsers.pdf_text import normalize_glyphs
+from deltatrack.parsers.pdf_text import normalize_glyphs
 
 _WS = re.compile(r"\s+")
 # Real compounds like `Child-Rescue` that wrap at a line boundary surface as

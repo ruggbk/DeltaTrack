@@ -22,8 +22,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bill_tree import BillNode, BillTree, normalize_bill, normalize_header
-from diff_bill import (
+from deltatrack.bill_tree import BillNode, BillTree, normalize_bill, normalize_header
+from deltatrack.diff_bill import (
     _MOVE_THRESHOLD,
     _SIMILARITY_THRESHOLD,
     _normalize_text,

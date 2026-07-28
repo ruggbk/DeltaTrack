@@ -10,8 +10,8 @@ These tests pin the contract; the renderer's own snapshot tests come later.
 
 from __future__ import annotations
 
-from formatters.canonical import view_from_canonical, xml_diff_to_canonical
-from formatters.view_model import ChangeView, DiffView
+from deltatrack.formatters.canonical import view_from_canonical, xml_diff_to_canonical
+from deltatrack.formatters.view_model import ChangeView, DiffView
 
 
 def xml_dict_to_view(diff_dict: dict) -> DiffView:

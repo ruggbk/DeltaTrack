@@ -3,7 +3,7 @@
 import pytest
 from conftest import make_node_diff as _node
 
-from diff_bill import reconcile_moves
+from deltatrack.diff_bill import reconcile_moves
 
 
 class TestReconcileMoves:
@@ -158,8 +158,8 @@ class TestReconcileIntegration:
     def test_udall_sections_moved(self):
         from pathlib import Path
 
-        from bill_tree import normalize_bill
-        from diff_bill import diff_bills
+        from deltatrack.bill_tree import normalize_bill
+        from deltatrack.diff_bill import diff_bills
 
         self._skip_if_missing(self.HR2882_V4, self.HR2882_V5)
 

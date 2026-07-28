@@ -13,8 +13,8 @@ is satisfied by "$1,000,000" and a magnitude error renders green. The closing
 
 from __future__ import annotations
 
-from formatters.diff_html import _build_financial_summary
-from formatters.view_model import ChangeView, DiffView
+from deltatrack.formatters.diff_html import _build_financial_summary
+from deltatrack.formatters.view_model import ChangeView, DiffView
 
 
 def _change(**overrides) -> ChangeView:

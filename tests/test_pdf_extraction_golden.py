@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from parsers.pdf_text import extract_clean_pages
+from deltatrack.parsers.pdf_text import extract_clean_pages
 from tests.conftest import assert_manifest_committed
 
 _ROOT = Path(__file__).parent.parent

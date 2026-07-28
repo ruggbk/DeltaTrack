@@ -20,7 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from corpus_paths import FIXTURES_DIR, sweep_bill_dirs
-from parsers.pdf_text import Page, extract_clean_pages
+from deltatrack.parsers.pdf_text import Page, extract_clean_pages
 
 # Persistent extraction cache. Gitignored (test_data/* is ignored). Keyed by PDF
 # path + mtime via the filename, so a changed PDF maps to a different file and

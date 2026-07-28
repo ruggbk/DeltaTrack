@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from parsers.committee_report import (
+from deltatrack.parsers.committee_report import (
     extract_pre_text,
     parse_comparative_statement,
     parse_summary_blocks,

@@ -31,7 +31,7 @@ from pathlib import Path
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 sys.path.insert(0, str(REPO))
 
-from bill_tree import normalize_bill  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
 
 _word = re.compile(r"[a-z0-9]+")
 _CACHE = Path(__file__).with_name("idf_cache.json")

@@ -14,8 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bill_tree import BillNode, BillTree, normalize_bill, normalize_header
-from diff_bill import _normalize_text, _text_similarity
+from deltatrack.bill_tree import BillNode, BillTree, normalize_bill, normalize_header
+from deltatrack.diff_bill import _normalize_text, _text_similarity
 
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 BILLS = REPO / "bills"

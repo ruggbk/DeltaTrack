@@ -38,14 +38,14 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import extract_text_content, find_bill_body, normalize_bill
 from corpus_paths import fixture_path
-from diff_bill import extract_amounts
-from formatters.canonical import _pdf_tree_payload
-from formatters.diff_html import _build_toc_from_tree
-from formatters.text_serializer import _xml_tree_payload, serialize_tree_for_tree
-from parsers.pdf_anchors import extract_anchors
-from parsers.pdf_text import pdf_full_text
+from deltatrack.bill_tree import extract_text_content, find_bill_body, normalize_bill
+from deltatrack.diff_bill import extract_amounts
+from deltatrack.formatters.canonical import _pdf_tree_payload
+from deltatrack.formatters.diff_html import _build_toc_from_tree
+from deltatrack.formatters.text_serializer import _xml_tree_payload, serialize_tree_for_tree
+from deltatrack.parsers.pdf_anchors import extract_anchors
+from deltatrack.parsers.pdf_text import pdf_full_text
 from tests.conftest import CORPUS_SWEEP, assert_manifest_committed, manifest_pdf_files, manifest_xml_files
 from tests.pdf_corpus import cached_pages
 
@@ -251,7 +251,7 @@ def _assert_zero_anchor_layout(path: Path, test_id: str, full_text: str, anchors
       body still extracts, and it still carries the section enumerators a reader
       (and the downstream text pipeline) needs.
     """
-    from compare.pdf import _is_unnumbered_layout  # test-only import; see test_pdf_compare
+    from deltatrack.compare.pdf import _is_unnumbered_layout  # test-only import; see test_pdf_compare
 
     # The registry is calibrated to the committed manifest. CORPUS_SWEEP is an
     # uncalibrated superset (every locally-fetched bill, ten enrolled prints among

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from corpus_paths import fixture_path, resolve_bill_file
-from parsers.pdf_text import (
+from deltatrack.parsers.pdf_text import (
     Line,
     Page,
     _first_word_right,
@@ -192,7 +192,7 @@ class TestUnbulletedFooterConsumedOutput:
         # p27 ends "...for replace-"; the footer floats to the top of p28 between the
         # hyphen line and its "ment only," continuation, blocking the cross-page
         # rejoin. With the footer stripped, the seam stitches back to "replacement".
-        from diff_pdf import _flatten
+        from deltatrack.diff_pdf import _flatten
 
         pages = cached_pages(_HR5895_V3)
         flat = _flatten(pages)

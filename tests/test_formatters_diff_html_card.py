@@ -8,8 +8,8 @@ this step focuses on card structure and body.
 
 from __future__ import annotations
 
-from formatters.diff_html import _build_card
-from formatters.view_model import ChangeView
+from deltatrack.formatters.diff_html import _build_card
+from deltatrack.formatters.view_model import ChangeView
 
 
 def _change(**overrides) -> ChangeView:

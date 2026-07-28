@@ -17,8 +17,8 @@ Invariants pinned here because the page's JS depends on them:
 
 from __future__ import annotations
 
-from formatters.diff_html import _JS, _build_change_groups, _cards_section_html
-from formatters.view_model import ChangeView, DiffView
+from deltatrack.formatters.diff_html import _JS, _build_change_groups, _cards_section_html
+from deltatrack.formatters.view_model import ChangeView, DiffView
 
 
 def _change(**overrides) -> ChangeView:
@@ -148,7 +148,7 @@ def test_group_labels_are_escaped_in_cards_and_sidebar():
 
 
 def _order_map():
-    from formatters.diff_html import _node_order_map
+    from deltatrack.formatters.diff_html import _node_order_map
 
     tree = [
         {

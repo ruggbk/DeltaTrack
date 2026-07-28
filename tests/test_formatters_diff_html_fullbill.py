@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import re
 
-from formatters.diff_html import _LLM_PROMPTS, format_diff_html
-from formatters.view_model import DiffView
+from deltatrack.formatters.diff_html import _LLM_PROMPTS, format_diff_html
+from deltatrack.formatters.view_model import DiffView
 
 
 def _view(**overrides) -> DiffView:

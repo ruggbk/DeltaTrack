@@ -31,12 +31,12 @@ from pathlib import Path
 
 import pytest
 
-from compare.pdf import _build_canonical
-from compare.xml import compare_xml
 from corpus_paths import FIXTURES_DIR
-from diff_pdf import diff_pdfs
-from formatters.canonical import view_from_canonical
-from formatters.diff_html import format_diff_html
+from deltatrack.compare.pdf import _build_canonical
+from deltatrack.compare.xml import compare_xml
+from deltatrack.diff_pdf import diff_pdfs
+from deltatrack.formatters.canonical import view_from_canonical
+from deltatrack.formatters.diff_html import format_diff_html
 from tests.conftest import assert_manifest_committed
 from tests.pdf_corpus import cached_pages
 

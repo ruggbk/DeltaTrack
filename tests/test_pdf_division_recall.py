@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from parsers.pdf_anchors import _DIVISION_BANNER, breadcrumb_for, extract_anchors
+from deltatrack.parsers.pdf_anchors import _DIVISION_BANNER, breadcrumb_for, extract_anchors
 from tests.pdf_corpus import cached_pages, dual_format_versions
 
 # Known name residue (bill, division-letter) → why. Recovered names match XML across the

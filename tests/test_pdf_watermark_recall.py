@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from diff_bill import extract_amounts
-from parsers.pdf_text import extract_clean_pages
+from deltatrack.diff_bill import extract_amounts
+from deltatrack.parsers.pdf_text import extract_clean_pages
 from tests.pdf_corpus import cached_pages
 
 reportlab = pytest.importorskip("reportlab")

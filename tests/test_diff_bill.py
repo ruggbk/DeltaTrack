@@ -7,8 +7,17 @@ from conftest import HR4366_V1_PATH, HR4366_V6_PATH
 from conftest import make_bill_node as _node
 from conftest import make_bill_tree as _tree
 
-from bill_tree import BillTree, normalize_division_title
-from diff_bill import BillDiff, NodeDiff, bill_diff_to_dict, diff_bills, diff_text, filter_diff, main, match_nodes
+from deltatrack.bill_tree import BillTree, normalize_division_title
+from deltatrack.diff_bill import (
+    BillDiff,
+    NodeDiff,
+    bill_diff_to_dict,
+    diff_bills,
+    diff_text,
+    filter_diff,
+    main,
+    match_nodes,
+)
 
 
 class TestMatchNodes:

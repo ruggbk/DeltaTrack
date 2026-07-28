@@ -31,6 +31,27 @@ ROOT = Path(__file__).resolve().parents[1]
 NON_PRODUCT_TREES = ("tools", "web")
 
 
+def _product_roots() -> list[Path]:
+    """Directories that can directly contain a product package.
+
+    `src/` joined the list in #398, when the engine became `src/deltatrack/`. It has to be
+    named: `src/` holds no `__init__.py` and no depth-1 `.py`, so every discovery rule in
+    this file walks straight past it. Before this existed, the whole product side of the
+    scan was empty under the new layout -- caught only by the completeness floor below,
+    which is exactly the job that floor was added for.
+
+    The repo root stays a product root even though the engine left it. Two command
+    wrappers live there (`./diff_bill.py`, `./diff_pdf.py`) and they are shipped product;
+    so do four dev-only modules that #398 deliberately left in place, which the scan
+    over-covers. That is the safe direction, and the direction this file already argues
+    for: over-scanning surfaces as a loud failure someone resolves deliberately.
+
+    Derived at call time rather than captured at import, so the isolated-root tests below
+    can substitute a fake tree and have discovery follow it.
+    """
+    return [root for root in (ROOT, ROOT / "src") if root.is_dir()]
+
+
 def _product_packages() -> list[Path]:
     """Every package on the product side, by subtraction rather than by roster.
 
@@ -51,7 +72,8 @@ def _product_packages() -> list[Path]:
     """
     return sorted(
         entry
-        for entry in ROOT.iterdir()
+        for root in _product_roots()
+        for entry in root.iterdir()
         if entry.is_dir()
         and not entry.name.startswith((".", "_"))
         and entry.name not in NON_PRODUCT_TREES
@@ -61,7 +83,7 @@ def _product_packages() -> list[Path]:
 
 def _product_files() -> list[Path]:
     """Every source file on the product side of the boundary."""
-    files = sorted(p for p in ROOT.glob("*.py"))
+    files = sorted(p for root in _product_roots() for p in root.glob("*.py"))
     for package in _product_packages():
         files.extend(sorted(package.rglob("*.py")))
     return files
@@ -129,12 +151,25 @@ def test_the_boundary_scan_actually_looked_at_something():
     than pinning counts, so a new module joins without editing this.
     """
     scanned = {p.relative_to(ROOT).as_posix() for p in _product_files()}
-    for expected in ("diff_bill.py", "diff_pdf.py", "bill_tree.py", "compare/pdf.py", "formatters/diff_html.py"):
+    for expected in (
+        "src/deltatrack/diff_bill.py",
+        "src/deltatrack/diff_pdf.py",
+        "src/deltatrack/bill_tree.py",
+        "src/deltatrack/compare/pdf.py",
+        "src/deltatrack/formatters/diff_html.py",
+        # The command wrappers, which live at the root rather than under src/ (#398). Named
+        # so that dropping ROOT from `_product_roots` cannot pass quietly: every other name
+        # here is reachable through the src/ root alone.
+        "diff_bill.py",
+        "diff_pdf.py",
+    ):
         assert expected in scanned, f"product scan missed {expected!r} -- discovery is broken, not the code"
 
     packages = {p.name for p in _product_packages()}
-    assert {"parsers", "formatters", "compare"} <= packages, (
-        f"package derivation missed one of the engine's own packages: found {sorted(packages)}"
+    assert "deltatrack" in packages, (
+        f"package derivation missed the engine package itself: found {sorted(packages)}. "
+        "It lives under src/, which every discovery rule here walks past unless "
+        "`_product_roots` names it."
     )
     assert not packages & set(NON_PRODUCT_TREES), (
         f"package derivation swept in a non-product tree: {sorted(packages & set(NON_PRODUCT_TREES))}"
@@ -163,16 +198,23 @@ def test_a_namespace_package_cannot_hide_from_the_product_scan():
     that is neither a discovered package nor a listed consumer stops the suite and gets
     classified deliberately, instead of being silently assumed to be neither.
     """
-    discovered = {p.name for p in _product_packages()}
+    discovered = {p.resolve() for p in _product_packages()}
+    # `src/` itself is neither a package nor a consumer -- it is the container the packages
+    # sit in, so it is excluded by being a root rather than by being listed as something it
+    # is not. Directories INSIDE it stay in scope, which is where a namespace package under
+    # the new layout would hide.
+    containers = {r.resolve() for r in _product_roots()}
 
     unaccounted = sorted(
-        entry.name
-        for entry in ROOT.iterdir()
+        entry.relative_to(ROOT).as_posix()
+        for root in _product_roots()
+        for entry in root.iterdir()
         if entry.is_dir()
         and not entry.is_symlink()  # bills_corpus/ and bills_bulk_text/ point at the corpus
         and not entry.name.startswith((".", "_"))
         and entry.name not in CONSUMER_TREES
-        and entry.name not in discovered
+        and entry.resolve() not in discovered
+        and entry.resolve() not in containers
         and any(entry.glob("*.py"))
     )
 
@@ -206,6 +248,79 @@ def test_a_new_product_package_is_scanned_without_being_listed(tmp_path, monkeyp
     scanned = {p.relative_to(tmp_path).as_posix() for p in _product_files()}
     assert "engine/core.py" in scanned
     assert "notes/scratch.py" not in scanned
+
+
+def test_a_package_under_src_is_discovered_and_scanned(tmp_path, monkeypatch):
+    """The `src/` layout's discovery gap, pinned against a fake root (#398).
+
+    `src/` holds no `__init__.py` and no depth-1 `.py`, so every rule in this file walks
+    past it: without `_product_roots`, `_product_packages` returns `[]`, `_product_files`
+    returns `[]`, and the boundary is asserted over nothing at all. The completeness floor
+    above does catch that -- but only because it names real repo paths, so it would stop
+    catching it the moment the engine were renamed or moved again.
+
+    This pins the mechanism instead of the current paths. It fails under the pre-#398
+    implementation, which is the only reason to believe it is a gate.
+
+    Also pins the container exclusion: `src/` must not itself be reported as an
+    unaccounted directory, while a namespace package *inside* it must be.
+    """
+    (tmp_path / "src" / "engine").mkdir(parents=True)
+    (tmp_path / "src" / "engine" / "__init__.py").write_text("")
+    (tmp_path / "src" / "engine" / "core.py").write_text("import fetch_bills\n")
+    # A root-level wrapper, the shape the CLI commands take under this layout.
+    (tmp_path / "wrapper.py").write_text("from engine.core import main\n")
+    # `_forbidden_names` derives the roster from a real tools/ tree, so the fake root
+    # needs one for the boundary assertion below to have anything to forbid.
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "fetch_bills.py").write_text("")
+
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert [p.name for p in _product_packages()] == ["engine"]
+
+    scanned = {p.relative_to(tmp_path).as_posix() for p in _product_files()}
+    assert "src/engine/core.py" in scanned, "a package under src/ was not scanned"
+    assert "wrapper.py" in scanned, "the root stayed a product root alongside src/"
+
+    # The violation inside src/ is real and must be reported, not merely discovered.
+    with pytest.raises(AssertionError, match="src/engine/core.py"):
+        test_product_modules_do_not_import_tooling_or_the_web_channel()
+
+
+def test_a_namespace_package_under_src_is_reported_unaccounted(tmp_path, monkeypatch):
+    """The guard's blind spot after the move, and the container carve-out beside it.
+
+    A directory under `src/` with no `__init__.py` imports fine as a namespace package and
+    is invisible to `_product_packages`. Before #398 the guard only walked the repo root,
+    where `src/` shows no depth-1 `.py` and so was never even looked at -- the guard would
+    have passed green over the entire new layout.
+    """
+    (tmp_path / "src" / "engine").mkdir(parents=True)
+    (tmp_path / "src" / "engine" / "__init__.py").write_text("")
+    (tmp_path / "src" / "sneaky").mkdir()
+    (tmp_path / "src" / "sneaky" / "mod.py").write_text("import fetch_bills\n")
+
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="src/sneaky"):
+        test_a_namespace_package_cannot_hide_from_the_product_scan()
+
+
+def test_src_itself_is_not_reported_as_unaccounted(tmp_path, monkeypatch):
+    """The other direction: the container must not be mistaken for a stray package.
+
+    Separated from the test above so a guard that reported *everything* -- which would
+    make that one pass -- still fails here.
+    """
+    (tmp_path / "src" / "engine").mkdir(parents=True)
+    (tmp_path / "src" / "engine" / "__init__.py").write_text("")
+    # A depth-1 .py in src/, which is what would make the container itself match.
+    (tmp_path / "src" / "conftest.py").write_text("")
+
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    test_a_namespace_package_cannot_hide_from_the_product_scan()
 
 
 @pytest.mark.parametrize(
