@@ -20,7 +20,7 @@ def _client():
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from server.app import app
+    from web.app import app
 
     return TestClient(app)
 

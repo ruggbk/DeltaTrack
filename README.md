@@ -75,7 +75,7 @@ Environment setup is `source ./init` (installs dependencies and activates the vi
 
 > **`tools/fetch_bill_archives.py` is an advanced bulk tool.** Run with no arguments it immediately downloads every GovInfo BILLSTATUS archive for congresses 112–119 (hundreds of MB) with no prompt, extracts them, and writes a `bills/bills.csv` metadata index. The congress range is hardcoded and there are no CLI flags yet (tracked in [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)). Reach for it only when you specifically need a bulk bill index.
 
-To run the web comparison app locally: `uvicorn server.app:app --reload --port 8077` (see [docs/web-compare.md](docs/web-compare.md)).
+To run the web comparison app locally: `uvicorn web.app:app --reload --port 8077` (see [docs/web-compare.md](docs/web-compare.md)).
 
 ## Downloading Bills
 

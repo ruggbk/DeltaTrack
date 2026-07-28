@@ -29,7 +29,7 @@ def _client():
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from server.app import app
+    from web.app import app
 
     return TestClient(app)
 
@@ -75,7 +75,7 @@ def test_security_headers_on_served_page():
     `nosniff` stops a browser second-guessing a declared Content-Type, and
     `DENY` stops the site being framed. Nothing here is served for framing:
     the sample report and generated reports both open in a new tab
-    (webapp/index.html, webapp/js/compare.js), so DENY costs nothing.
+    (web/webapp/index.html, web/webapp/js/compare.js), so DENY costs nothing.
     """
     resp = _client().get("/", follow_redirects=False)
     assert resp.status_code == 200
@@ -143,7 +143,7 @@ def test_generated_report_response_is_gzipped(monkeypatch):
     the API route is checked separately, with the engine stubbed out to keep
     this in the fast group.
     """
-    import server.app as app_module
+    import web.app as app_module
 
     fake_html = "<!DOCTYPE html><html>" + ("report " * 20_000) + "</html>"
     monkeypatch.setitem(app_module._COMPARE, "pdf", (".pdf", lambda *a, **kw: fake_html, lambda *a, **kw: {}))
@@ -245,7 +245,7 @@ def _burst(client, count, forwarded_for=None):
 
 def test_burst_from_one_client_is_rate_limited():
     """A burst beyond the per-minute limit gets 429, not queued work (#64)."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     statuses = _burst(client, COMPARE_RATE_LIMIT_PER_MINUTE + 1)
@@ -258,7 +258,7 @@ def test_rate_limit_is_per_ip_not_global():
     every request arrives through the reverse proxy, so keying on the socket
     address would collapse all clients into one bucket; the key has to come
     from X-Forwarded-For."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     exhausted = _burst(client, COMPARE_RATE_LIMIT_PER_MINUTE + 1, forwarded_for="203.0.113.7")
@@ -272,7 +272,7 @@ def test_rate_limit_key_is_the_proxy_appended_address():
     which the proxy appends from the socket. Keying on anything but the
     rightmost entry lets an attacker rotate spoofed prefixes to dodge the
     limit; this pins that a rotating prefix does NOT reset the bucket."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     statuses = [
@@ -290,7 +290,7 @@ def test_rate_limited_response_keeps_security_headers():
     """The 429 short-circuits the route, but it must still pass through the
     header middleware — a rejection is exactly the response most likely to
     render attacker-influenced content."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     resp = None
@@ -312,7 +312,7 @@ def test_rate_limit_is_checked_before_the_body_is_read():
     An unparseable multipart body is the discriminator. If the limiter runs
     first the request is refused on sight (429); if the body is parsed first
     the parser rejects it (400) and the limiter is never consulted."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     _burst(client, COMPARE_RATE_LIMIT_PER_MINUTE)
@@ -330,7 +330,7 @@ def test_rate_limit_key_survives_duplicate_forwarded_for_headers():
     header, so reading the rightmost entry of *that* one lands on a value the
     client fully controls — a fresh bucket per request. The key has to come
     from the LAST header line, which is where the proxy's own append lands."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     statuses = [
@@ -351,7 +351,7 @@ def test_static_files_are_not_rate_limited():
     every route with a resolvable handler. The StaticFiles mount has no
     endpoint and is skipped — pin that, because a front-end that 429s on its
     own assets after a few page loads would be a severe regression."""
-    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+    from web.app import COMPARE_RATE_LIMIT_PER_MINUTE
 
     client = _client()
     statuses = [client.get("/index.html").status_code for _ in range(COMPARE_RATE_LIMIT_PER_MINUTE * 3)]

@@ -1,4 +1,4 @@
-# Public web compare (`webapp/` + `server/`)
+# Public web compare (`web/`)
 
 Brief map of the live home page, how it relates to the Python CLI, and where to change things.
 
@@ -6,7 +6,7 @@ Brief map of the live home page, how it relates to the Python CLI, and where to 
 
 HTTP→HTTPS: see **[docs/https-redirect.md](https-redirect.md)** — Apache `RewriteRule`
 before `ProxyPass` + ISPConfig **Force HTTPS**. App middleware is a backstop only.
-`webapp/.htaccess` is not used (Apache proxies all traffic to uvicorn).
+`web/webapp/.htaccess` is not used (Apache proxies all traffic to uvicorn).
 
 ---
 
@@ -17,7 +17,7 @@ before `ProxyPass` + ISPConfig **Force HTTPS**. App middleware is a backstop onl
 | **Browser-only** (`index.html`, left card) | Coming soon | Future WebAssembly build — PDFs never leave the device. Not wired up yet. |
 | **Process on our server** (`compare.html`, right card) | **Available now** (interim) | User uploads start + end PDFs; server runs the Python PDF diff and returns a standalone HTML report in a new tab. Stateless — PDFs are not stored. 
 
-Sample without uploading: `compare.html?example=1` loads a bundled report from `webapp/sample/example.html`.
+Sample without uploading: `compare.html?example=1` loads a bundled report from `web/webapp/sample/example.html`.
 
 The CLI path ([README](../README.md)) is separate: download govinfo **XML**, run `diff_bill.py compare … --format html` locally. Same HTML *renderer* family, different input pipeline (XML vs PDF).
 
@@ -81,10 +81,10 @@ XML and PDF paths can disagree on section boundaries and change counts for the s
 ## Request flow (server path)
 
 ```
-Browser (webapp/compare.html)
+Browser (web/webapp/compare.html)
   │  POST /api/compare?output=html  (multipart: start_pdf, end_pdf)
   ▼
-server/app.py                    ← FastAPI: upload guards, concurrency, timeout
+web/app.py                    ← FastAPI: upload guards, concurrency, timeout
   ▼
 compare/pdf.py            ← thin wrapper (bytes in → HTML out)
   │  extract_clean_pages()       parsers/pdf_text.py
@@ -93,7 +93,7 @@ compare/pdf.py            ← thin wrapper (bytes in → HTML out)
   │  view_from_canonical()       formatters/canonical.py
   │  format_diff_html()          formatters/diff_html.py
   ▼
-Standalone HTML report           ← opened in new tab by webapp/js/compare.js
+Standalone HTML report           ← opened in new tab by web/webapp/js/compare.js
 ```
 
 This is the same PDF engine as `render_examples.py` → `render_pdf_diff()` — not a reimplementation. The web layer only handles HTTP upload, labels from filenames, and returning HTML.
@@ -106,19 +106,19 @@ JSON output (`?output=json`) still exists for tests and tooling; the compare UI 
 
 | Path | Role |
 |---|---|
-| `webapp/index.html` | Landing — two path cards |
-| `webapp/compare.html` | PDF upload UI |
-| `webapp/js/compare.js` | Upload, validation, fetch, open report tab |
-| `webapp/css/styles.css` | Upload/landing styles (report CSS is inlined by Python) |
-| `webapp/sample/example.html` | Bundled sample report for `?example=1` |
-| `server/app.py` | FastAPI app: `/api/compare` + static mount of `webapp/` |
+| `web/webapp/index.html` | Landing — two path cards |
+| `web/webapp/compare.html` | PDF upload UI |
+| `web/webapp/js/compare.js` | Upload, validation, fetch, open report tab |
+| `web/webapp/css/styles.css` | Upload/landing styles (report CSS is inlined by Python) |
+| `web/webapp/sample/example.html` | Bundled sample report for `?example=1` |
+| `web/app.py` | FastAPI app: `/api/compare` + static mount of `web/webapp/` |
 | `compare/pdf.py` | In-process call into `diff_pdf` + `format_diff_html` |
 
 Run locally:
 
 ```bash
 uv sync
-uvicorn server.app:app --reload --port 8077
+uvicorn web.app:app --reload --port 8077
 # → http://127.0.0.1:8077/
 ```
 
@@ -134,16 +134,16 @@ Production ops (hosting, limits, systemd) live in gitignored `docs-for-ai/deploy
 - Re-run PDF tests: `uv run pytest tests/test_pdf_*`
 - Regenerate committed examples if output shape changes: `uv run python render_examples.py`
 
-**Upload / API behavior** — `server/app.py`, `compare/pdf.py`
+**Upload / API behavior** — `web/app.py`, `compare/pdf.py`
 
 - Keep **150 MB** cap aligned in three places: Apache `LimitRequestBody`, `MAX_UPLOAD_BYTES` in `app.py`, `MAX_BYTES` in `compare.js`
 - Keep `MAX_CONCURRENT_DIFFS` and `DIFF_TIMEOUT_S` in mind on the 8 GB host
 
-**Upload page copy or UX** — `webapp/compare.html`, `webapp/js/compare.js`, `webapp/css/styles.css`
+**Upload page copy or UX** — `web/webapp/compare.html`, `web/webapp/js/compare.js`, `web/webapp/css/styles.css`
 
-**Landing page / two-path messaging** — `webapp/index.html`
+**Landing page / two-path messaging** — `web/webapp/index.html`
 
-**Sample report** — replace `webapp/sample/example.html` after renderer changes (copy from `examples/*_pdf_diff.html` or regenerate)
+**Sample report** — replace `web/webapp/sample/example.html` after renderer changes (copy from `examples/*_pdf_diff.html` or regenerate)
 
 **Do not** duplicate diff logic in JavaScript; the web app should stay a thin client over `POST /api/compare`.
 
