@@ -14,7 +14,21 @@ would leave that gate discovering a bare `./diff_bill.py` and reporting the tabl
 while every subcommand went undocumented.
 """
 
-from deltatrack.diff_bill import build_parser, main
+try:
+    from deltatrack.diff_bill import build_parser, main
+except ModuleNotFoundError as exc:  # pragma: no cover - environment guard, not logic
+    if exc.name != "deltatrack":
+        raise
+    # Before #398 this script was stdlib-only and ran on a bare `python3`. It now needs the
+    # engine installed, so the un-activated case went from working to a raw traceback whose
+    # top frame is an import line -- which does not tell a non-technical user that the
+    # answer is one documented command. Re-raised unchanged for any OTHER missing module,
+    # so a genuinely broken install still surfaces its own name.
+    raise SystemExit(
+        "diff_bill.py: DeltaTrack is not installed in this environment.\n"
+        "Run `source ./init` from the project folder first (it installs dependencies and "
+        "activates the environment), then try again."
+    ) from exc
 
 __all__ = ["build_parser", "main"]
 

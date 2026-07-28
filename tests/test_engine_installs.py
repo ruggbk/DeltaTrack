@@ -169,6 +169,13 @@ def test_the_wrapper_commands_run_against_the_installed_engine(installed_engine,
     one piece whose import of `deltatrack` cannot be satisfied by the working tree. Copied
     next to the temp cwd rather than run in place, so a repo-root run cannot mask a broken
     wrapper by resolving something else.
+
+    Asserts on the diff's actual content, not merely that JSON came back. `assert payload`
+    accepted any truthy object, and a review demonstrated the cost concretely: with
+    `compare/` excluded from the wheel this test still passed, because `--format json`
+    never enters that subpackage. The headline test above caught that fault, so nothing
+    shipped vacuously -- but a wrapper test that cannot tell a real diff from an empty one
+    is not evidence about the wrapper.
     """
     wrapper = tmp_path / "diff_bill.py"
     wrapper.write_text((ROOT / "diff_bill.py").read_text())
@@ -181,7 +188,32 @@ def test_the_wrapper_commands_run_against_the_installed_engine(installed_engine,
         cwd=tmp_path,
     )
     payload = json.loads(result.stdout)
-    assert payload, "the wrapper produced an empty diff payload"
+
+    assert payload.get("summary"), f"no diff summary in the wrapper's output: {sorted(payload)}"
+    # A floor on the work done, not an exact count: these two committed versions differ
+    # substantially, so a run that parsed nothing cannot reach it, while the numbers stay
+    # free to move as the engine improves.
+    changed = sum(payload["summary"].get(kind, 0) for kind in ("added", "removed", "modified"))
+    assert changed > 0, f"the wrapper reported a diff with no changes at all: {payload['summary']}"
+
+
+def test_the_pdf_wrapper_also_resolves_the_installed_engine(installed_engine, tmp_path):
+    """The other wrapper, which the test above does not reach.
+
+    `diff_pdf.py` has its own import line, and the only thing exercising it was
+    `tests/test_docs_consistency.py` importing it through the DEV editable install -- which
+    says nothing about whether it resolves against the wheel. A typo there would ship.
+
+    `--help` rather than a real PDF diff: the import and argument-parser wiring are what is
+    unique to the wrapper, and the engine's PDF path is already covered by the headline
+    test's dependency chain. Keeps the gate off the PDF fixtures.
+    """
+    wrapper = tmp_path / "diff_pdf.py"
+    wrapper.write_text((ROOT / "diff_pdf.py").read_text())
+
+    result = _run([str(installed_engine), str(wrapper), "--help"], cwd=tmp_path)
+
+    assert "usage:" in result.stdout, f"the PDF wrapper printed no usage line:\n{result.stdout}"
 
 
 def test_this_gate_ran_against_a_freshly_built_wheel(installed_engine):

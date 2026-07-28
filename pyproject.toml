@@ -13,10 +13,37 @@ build-backend = "hatchling.build"
 # wheel. Naming the directory means a mismatch is a build error instead.
 packages = ["src/deltatrack"]
 
+[tool.hatch.build.targets.sdist]
+# Scope the source distribution the same way. Left unconfigured, hatchling's sdist is
+# everything git tracks: measured at 345 files and 30 MB, carrying `tests/corpus/` (a
+# 4.7 MB enrolled bill among them), `test_data/` PDFs, and `.github/`. Nothing publishes
+# today, so that was latent rather than live -- but `uv build` with no arguments produces
+# it, and the corpus is a test fixture set, not something a consumer of the engine should
+# be made to download.
+#
+# Includes the two command wrappers and the license alongside the package: an sdist is
+# meant to rebuild the wheel, and the wrappers are how the documented commands are
+# invoked. Not a substitute for a checkout -- the tests and fixtures are deliberately out,
+# so an sdist cannot run the suite. Anyone who needs that clones the repository.
+include = [
+    "src/deltatrack",
+    "diff_bill.py",
+    "diff_pdf.py",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+]
+
 [project]
 name = "deltatrack"
 version = "0.1.0"
-description = "Download U.S. bill text from Congress.gov and compare versions structurally"
+# Describes the ENGINE, which is what this distribution contains. The previous wording
+# led with downloading bill text; that is `tools/`, which is not in the wheel and whose
+# HTTP client is in an excluded dependency group, so an installed `deltatrack` cannot do
+# it. Harmless while nothing could be built, but #398 turned this string into published
+# metadata, where it would be the first thing a consumer read and the first thing that
+# did not work.
+description = "Compare two versions of a U.S. bill structurally, including account-level appropriations amounts"
 requires-python = ">=3.12"
 # The ENGINE's dependencies, and nothing else (#367). Installing DeltaTrack to diff two
 # bill versions should not install a web server or an HTTP client; those belong to the

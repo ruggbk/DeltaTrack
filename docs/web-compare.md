@@ -86,12 +86,12 @@ Browser (web/webapp/compare.html)
   ▼
 web/app.py                    ← FastAPI: upload guards, concurrency, timeout
   ▼
-compare/pdf.py            ← thin wrapper (bytes in → HTML out)
-  │  extract_clean_pages()       parsers/pdf_text.py
-  │  diff_pdfs()                 diff_pdf.py
-  │  pdf_diff_to_canonical()     formatters/canonical.py
-  │  view_from_canonical()       formatters/canonical.py
-  │  format_diff_html()          formatters/diff_html.py
+src/deltatrack/compare/pdf.py ← thin wrapper (bytes in → HTML out)
+  │  extract_clean_pages()       src/deltatrack/parsers/pdf_text.py
+  │  diff_pdfs()                 src/deltatrack/diff_pdf.py
+  │  pdf_diff_to_canonical()     src/deltatrack/formatters/canonical.py
+  │  view_from_canonical()       src/deltatrack/formatters/canonical.py
+  │  format_diff_html()          src/deltatrack/formatters/diff_html.py
   ▼
 Standalone HTML report           ← opened in new tab by web/webapp/js/compare.js
 ```

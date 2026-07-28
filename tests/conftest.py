@@ -310,6 +310,13 @@ CI_SLOW_MODULES = (
     "tests/test_pdf_watermark_recall.py",
     "tests/test_formatters_text_serializer.py",
     "tests/test_validate_extraction.py",
+    # Named in its own CI step (the packaging gate, #398) rather than the slow-suite step,
+    # but the convention keys on being named by SOME CI slow step, not on which one.
+    # Deliberately carries NO entry in the allowlist below: its only skip channel is `uv`
+    # missing from PATH, and that is not a content gap to declare as normal -- it means the
+    # gate did not run, which is exactly what this ceiling exists to redden. Anyone who can
+    # run this suite has uv, since `source ./init` is `uv sync`.
+    "tests/test_engine_installs.py",
 )
 
 ALLOWED_CI_SLOW_SKIPS = {
