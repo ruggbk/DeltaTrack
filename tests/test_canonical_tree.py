@@ -202,7 +202,7 @@ def test_pdf_tree_drops_to_none_without_full_text():
 @pytest.mark.slow
 @pytest.mark.skipif(not _PDF_V1.exists() or not _PDF_V2.exists(), reason="sample PDFs absent")
 def test_pdf_tree_conserves_money_no_overcount_on_real_bill():
-    from server.pdf_compare import compare_pdfs
+    from compare.pdf import compare_pdfs
 
     canonical = compare_pdfs(_PDF_V1.read_bytes(), _PDF_V2.read_bytes())
     assert canonical["tree"] is not None and canonical["tree"]["v2"]

@@ -36,7 +36,7 @@ uv run python diff_bill.py compare \
   --format html -o reports/hr4366_v1_vs_v2.html
 ```
 
-The public upload page does the **same kind of output** (standalone HTML via `format_diff_html`) but on **PDF** inputs. There is no `diff_pdf.py compare` subcommand — the web service calls the same steps as `server/pdf_compare.py` / `render_examples.py` → `render_pdf_diff()`.
+The public upload page does the **same kind of output** (standalone HTML via `format_diff_html`) but on **PDF** inputs. There is no `diff_pdf.py compare` subcommand — the web service calls the same steps as `compare/pdf.py` / `render_examples.py` → `render_pdf_diff()`.
 
 Local equivalent of uploading two PDFs to the site:
 
@@ -47,7 +47,7 @@ uv run python tools/fetch_bills.py download 118 hr 4366 --format both
 # Same pipeline as POST /api/compare?output=html
 uv run python -c "
 from pathlib import Path
-from server.pdf_compare import compare_pdfs_html
+from compare.pdf import compare_pdfs_html
 
 start = Path('bills/118-hr-4366/1_reported-in-house.pdf')
 end   = Path('bills/118-hr-4366/2_engrossed-in-house.pdf')
@@ -72,7 +72,7 @@ uv run python render_examples.py   # rewrites examples/*.html and examples/index
 | Input | govinfo XML on disk | User PDF bytes (upload) |
 | Diff engine | `diff_bill.py` | `diff_pdf.py` |
 | HTML renderer | `format_diff_html` via `view_from_canonical` | `format_diff_html` via `view_from_canonical` |
-| CLI entrypoint | `diff_bill.py compare … --format html` | `server/pdf_compare.py` (HTTP) or snippet above |
+| CLI entrypoint | `diff_bill.py compare … --format html` | `compare/pdf.py` (HTTP) or snippet above |
 
 XML and PDF paths can disagree on section boundaries and change counts for the same bill pair; compare like with like when validating. To inspect both diffs for the same two versions side by side, `scripts/serve_compare.py` serves them in two panes (see [TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
 
@@ -86,7 +86,7 @@ Browser (webapp/compare.html)
   ▼
 server/app.py                    ← FastAPI: upload guards, concurrency, timeout
   ▼
-server/pdf_compare.py            ← thin wrapper (bytes in → HTML out)
+compare/pdf.py            ← thin wrapper (bytes in → HTML out)
   │  extract_clean_pages()       parsers/pdf_text.py
   │  diff_pdfs()                 diff_pdf.py
   │  pdf_diff_to_canonical()     formatters/canonical.py
@@ -112,7 +112,7 @@ JSON output (`?output=json`) still exists for tests and tooling; the compare UI 
 | `webapp/css/styles.css` | Upload/landing styles (report CSS is inlined by Python) |
 | `webapp/sample/example.html` | Bundled sample report for `?example=1` |
 | `server/app.py` | FastAPI app: `/api/compare` + static mount of `webapp/` |
-| `server/pdf_compare.py` | In-process call into `diff_pdf` + `format_diff_html` |
+| `compare/pdf.py` | In-process call into `diff_pdf` + `format_diff_html` |
 
 Run locally:
 
@@ -134,7 +134,7 @@ Production ops (hosting, limits, systemd) live in gitignored `docs-for-ai/deploy
 - Re-run PDF tests: `uv run pytest tests/test_pdf_*`
 - Regenerate committed examples if output shape changes: `uv run python render_examples.py`
 
-**Upload / API behavior** — `server/app.py`, `server/pdf_compare.py`
+**Upload / API behavior** — `server/app.py`, `compare/pdf.py`
 
 - Keep **150 MB** cap aligned in three places: Apache `LimitRequestBody`, `MAX_UPLOAD_BYTES` in `app.py`, `MAX_BYTES` in `compare.js`
 - Keep `MAX_CONCURRENT_DIFFS` and `DIFF_TIMEOUT_S` in mind on the 8 GB host

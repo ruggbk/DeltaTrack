@@ -38,10 +38,10 @@ from pathlib import Path
 
 import pytest
 
+from compare.pdf import compare_pdfs
+from compare.xml import compare_xml
 from corpus_paths import FIXTURES_DIR, fixture_path
 from scripts.heading_precision import measure
-from server.pdf_compare import compare_pdfs
-from server.xml_compare import compare_xml
 
 pytestmark = pytest.mark.slow
 

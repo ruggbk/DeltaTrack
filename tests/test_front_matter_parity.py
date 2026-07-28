@@ -20,12 +20,12 @@ from pathlib import Path
 import pytest
 
 from bill_tree import BillNode, BillTree
+from compare.pdf import compare_pdfs
+from compare.xml import compare_xml, compare_xml_html
 from corpus_paths import FIXTURES_DIR, fixture_path
 from diff_bill import extract_amounts
 from formatters.diff_html import _build_toc_from_tree
 from parsers.pdf_anchors import Anchor
-from server.pdf_compare import compare_pdfs
-from server.xml_compare import compare_xml, compare_xml_html
 from structure_tree import TreeNode, build_pdf_tree, build_xml_tree
 
 ROOT = Path(__file__).parent.parent

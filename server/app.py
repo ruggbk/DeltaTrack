@@ -23,8 +23,8 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIASGIMiddleware
 
-from server.pdf_compare import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
-from server.xml_compare import compare_xml, compare_xml_html
+from compare.pdf import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
+from compare.xml import compare_xml, compare_xml_html
 
 # The static front-end (webapp/) ships alongside this package and is served by
 # the app itself — see the StaticFiles mount at the bottom of the file.

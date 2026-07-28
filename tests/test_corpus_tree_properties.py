@@ -251,7 +251,7 @@ def _assert_zero_anchor_layout(path: Path, test_id: str, full_text: str, anchors
       body still extracts, and it still carries the section enumerators a reader
       (and the downstream text pipeline) needs.
     """
-    from server.pdf_compare import _is_unnumbered_layout  # test-only import; see test_pdf_compare
+    from compare.pdf import _is_unnumbered_layout  # test-only import; see test_pdf_compare
 
     # The registry is calibrated to the committed manifest. CORPUS_SWEEP is an
     # uncalibrated superset (every locally-fetched bill, ten enrolled prints among
