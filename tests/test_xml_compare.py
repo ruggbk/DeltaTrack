@@ -1,4 +1,4 @@
-"""Tests for the web service's XML compare wrap (server/xml_compare.py).
+"""Tests for the engine's XML compare wrap (compare/xml.py).
 
 Mirrors test_pdf_compare's slow end-to-end layer: runs the real engine on the
 committed HR4366 sample XMLs and validates the result. Those XMLs are in the

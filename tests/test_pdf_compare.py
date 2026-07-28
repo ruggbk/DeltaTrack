@@ -1,4 +1,4 @@
-"""Tests for the web service's PDF compare wrap (server/).
+"""Tests for the engine's PDF compare wrap (compare/pdf.py).
 
 Two layers:
   - Fast API-guard tests (no real diffing) — validate upload rejection paths

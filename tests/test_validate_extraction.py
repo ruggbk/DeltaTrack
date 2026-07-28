@@ -96,7 +96,7 @@ class TestLegBranchValidation:
             f"committed (missing on disk, or present but untracked): {missing}. Each bill "
             "test_data/validation_leg_branch.json names must be committed under tests/corpus/, "
             "or its accounts silently drop out of validation. Re-fetch with "
-            "fetch_bills.py download <congress> <type> <number> --format both and copy the "
+            "./tools/fetch_bills.py download <congress> <type> <number> --format both and copy the "
             "file into tests/corpus/<id>/ if it is gone; `git add` it if present but untracked."
         )
 

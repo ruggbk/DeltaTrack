@@ -172,8 +172,8 @@ class TestExternallyAuthoredCsv:
 
     ``round_trip`` above only ever loads bytes that ``save()`` produced, so it cannot
     see anything about how ``load()`` treats input from elsewhere -- which is the whole
-    class of defect #258 belongs to. README:95 documents
-    ``./fetch_bills.py download-all --file your_bills.csv``, so a hand-authored index is a
+    class of defect #258 belongs to. The README documents
+    ``./tools/fetch_bills.py download-all --file your_bills.csv``, so a hand-authored index is a
     supported input, and for a non-technical audience "author a CSV" means Excel or
     Google Sheets. Both write a UTF-8 BOM by default.
 

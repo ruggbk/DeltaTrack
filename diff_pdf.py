@@ -563,7 +563,7 @@ def render_pdf_diff_html(
     the web app uses — so the report carries the full-bill text view, in-page
     search, section TOC, and embedded export. Title and Congress are derived
     from the PDF front matter; labels default to the (de-prefixed) filename
-    stems. Imported lazily to avoid a circular import (pdf_compare imports
+    stems. Imported lazily to avoid a circular import (compare.pdf imports
     diff_pdf).
     """
     from compare.pdf import compare_pdfs_html

@@ -224,7 +224,7 @@ def _wrapper_scripts() -> dict[str, str]:
 def _cli_commands() -> dict[str, list[str]]:
     """Every documentable command, keyed by the wrapper script that provides it.
 
-    A parser with subcommands contributes one entry per subcommand (`./fetch_bills.py
+    A parser with subcommands contributes one entry per subcommand (`./tools/fetch_bills.py
     search`); a parser that takes only options contributes the bare script name,
     which is how the README names it. A wrapper with no `build_parser` at all
     (fetch_bill_archives runs a hardcoded congress range with no flags and has no
@@ -345,7 +345,7 @@ def test_the_command_gate_actually_found_commands():
     empty = sorted(script for script, cmds in commands.items() if not cmds)
     assert not empty, f"no commands discovered for {empty} -- introspection is broken, not the docs"
 
-    # fetch_bills is the multi-subcommand script; a bare "./fetch_bills.py" from it would
+    # fetch_bills is the multi-subcommand script; a bare "./tools/fetch_bills.py" from it would
     # mean the subparser walk found nothing while still returning a plausible answer.
     assert len(commands["fetch_bills"]) > 1, "fetch_bills subcommands were not discovered"
 

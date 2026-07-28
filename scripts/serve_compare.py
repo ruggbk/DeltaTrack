@@ -13,7 +13,7 @@ Usage::
     uv run python scripts/serve_compare.py path/to/bill-dir --port 8765 --no-browser
 
 The bill directory holds ``<n>_<label>.{xml,pdf}`` version files — the layout
-``fetch_bills.py download <congress> <type> <number> --format both`` produces
+``./tools/fetch_bills.py download <congress> <type> <number> --format both`` produces
 under ``bills/``. With no ``--v1``/``--v2`` the two lowest-numbered versions
 that have *both* formats are used. Rendered HTML goes to a temp dir (never
 committed); Ctrl-C stops the server.

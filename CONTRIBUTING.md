@@ -122,7 +122,7 @@ uv run ruff format .         # Format
 
 ### Adding a CLI command
 
-A command is an **executable `.py` file in the project root**. That is the whole
+A command is an **executable `.py` file in the project root or in `tools/`**. That is the whole
 definition, and it is what the documentation gate keys on, so a new command is
 discovered automatically and is required to be documented. To add one:
 
