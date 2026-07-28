@@ -75,7 +75,7 @@ jobs:
           title='Corpus filenames diverge from govinfo enumeration'
           body="The weekly parity check found bill filenames on disk that govinfo enumeration no longer produces, which means the corpus gates are keying on stale names. Run log: $RUN_URL
 
-          The failure names each stale stem. Re-download the affected bill with \`fetch_bills.py download <congress> <type> <number> --format both\`, or add the stem to \`_ACCEPTED_EXTRA_STEMS\` in \`tests/test_govinfo_corpus_parity.py\` if it is legitimate (a Public Law text, for instance).
+          The failure names each stale stem. Re-download the affected bill with \`tools/fetch_bills.py download <congress> <type> <number> --format both\`, or add the stem to \`_ACCEPTED_EXTRA_STEMS\` in \`tests/test_govinfo_corpus_parity.py\` if it is legitimate (a Public Law text, for instance).
 
           A failure here can also mean govinfo was unreachable rather than that anything changed. Check the log before re-fetching.
 

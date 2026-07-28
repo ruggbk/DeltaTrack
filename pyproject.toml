@@ -30,6 +30,10 @@ dev = [
 
 [tool.ruff]
 line-length = 120
+# Both import roots, mirroring pytest's `pythonpath` (#367). Without `tools`, isort reads
+# the fetch scripts' sibling imports as third-party and demands they be grouped with httpx,
+# which would sort the cluster's own modules in among external packages.
+src = [".", "tools"]
 # Research reproducibility scripts are frozen artifacts (hardcoded paths, ad-hoc
 # one-liners) that reproduce a study's numbers, not maintained source. Exclude them
 # from lint/format so they stay verbatim. Applies to future studies' probes too.
@@ -44,8 +48,12 @@ unfixable = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Tests live in tests/ but import the source modules at the repo root.
-pythonpath = ["."]
+# Tests live in tests/ but import the source modules at the repo root. `tools/` is a
+# second root rather than a package (#367): the bill-fetching scripts are run directly
+# (`./tools/fetch_bills.py …`), which puts only their own directory on sys.path, so they
+# must resolve each other by bare name. Listing it here makes the tests resolve them the
+# same way, which is why the move needed no test-import changes at all.
+pythonpath = [".", "tools"]
 # Run in parallel by default (pytest-xdist). "auto" = one worker per CPU core.
 # The suite is dominated by a few heavy PDF/corpus cases, so wall-time collapses
 # toward the long pole instead of summing every test (#168). The session-scoped
@@ -69,8 +77,11 @@ markers = [
 
 [tool.coverage.run]
 # Coverage measures the diff engine, not the tests or fetch tooling.
+# A directory glob rather than a file list: the whole tools/ tree is acquisition
+# tooling, so a script added there is out of scope automatically instead of silently
+# joining the engine's coverage the way a stale filename list would let it.
 omit = [
     "tests/*",
-    "fetch_bills.py",
+    "tools/*",
     "render_examples.py",
 ]

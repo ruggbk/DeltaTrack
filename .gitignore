@@ -10,7 +10,7 @@ htmlcov/
 .venv/
 # Git worktrees live inside the repo here; never commit them as gitlinks
 .claude/worktrees/
-# The bill WORKING directory: fetch_bills.py and fetch_bill_text_archives.py download
+# The bill WORKING directory: tools/fetch_bills.py and tools/fetch_bill_text_archives.py download
 # into it and it can reach hundreds of MB. Nothing in it is a test input — the curated
 # test fixtures live in tests/corpus/ and are tracked normally, so this directory is
 # entirely ignored and entirely disposable (#308, ADR 0015). It used to hold both, which
@@ -26,7 +26,7 @@ htmlcov/
 # or `webapp/bills/` — reintroducing the silent-`git add` failure #308 exists to remove,
 # just somewhere else. `/bills` is anchored to the repo root AND still matches a symlink.
 /bills
-# govinfo BILLS bulk-text downloads + staging (fetch_bill_text_archives.py); large,
+# govinfo BILLS bulk-text downloads + staging (tools/fetch_bill_text_archives.py); large,
 # re-fetchable. Same anchoring reasoning as above (#319, #308).
 /bills_bulk_text
 /bills_govinfo_staging

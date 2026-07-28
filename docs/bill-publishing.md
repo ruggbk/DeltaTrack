@@ -80,8 +80,8 @@ is the access gap the PDF pipeline exists to close.
 - **Bill-status XML** (metadata, not text): 108th Congress forward, via the GPO Bulk
   Data Repository.
 
-Today `fetch_bills.py` fetches bill text from govinfo bulk data by default
-(`--source api` selects the Congress.gov API v3 instead), and `fetch_bill_archives.py`
+Today `tools/fetch_bills.py` fetches bill text from govinfo bulk data by default
+(`--source api` selects the Congress.gov API v3 instead), and `tools/fetch_bill_archives.py`
 loads bill-status metadata from the govinfo bulk repository. Per-bill version
 enumeration also uses govinfo BILLSTATUS; only `download-all` year-range *discovery*
 still uses the Congress.gov committee API. See

@@ -13,17 +13,22 @@ uv run pytest tests/test_diff_bill.py::TestMatchNodesIntegration  # Single test
 uv run python scripts/serve_compare.py 118-hr-8752  # PDF vs XML diff side by side (see TESTING.md)
 ```
 
-After `source ./init`, the top-level CLIs run directly (`./fetch_bills.py`,
-`./diff_bill.py`, `./diff_pdf.py`, `./fetch_bill_archives.py`,
-`./fetch_bill_text_archives.py`); the `uv run python <script>.py` form still works.
+After `source ./init`, the top-level CLIs run directly (`./tools/fetch_bills.py`,
+`./diff_bill.py`, `./diff_pdf.py`, `./tools/fetch_bill_archives.py`,
+`./tools/fetch_bill_text_archives.py`); the `uv run python <script>.py` form still works.
 
 ### Adding a CLI command
 
-A command is an **executable `.py` file in the project root**. That is the whole
-definition, and it is what the docs gate keys on: a new command is discovered
-automatically and is then required to carry a README row. Root `.py` files that are
-*not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply carry no executable bit, so
-do not "tidy up" a file mode you did not set, in either direction.
+A command is an **executable `.py` file in the project root or in `tools/`**. That is the
+whole definition, and it is what the docs gate keys on: a new command is discovered
+automatically and is then required to carry a README row, spelled with the path a user
+types (`./diff_bill.py`, but `./tools/fetch_bills.py`). Files that are *not* commands
+(`tools/fetch_govinfo.py`, `bill_tree.py`) simply carry no executable bit, so do not
+"tidy up" a file mode you did not set, in either direction.
+
+The two roots share one flat module namespace, because `tools/` is on pytest's
+`pythonpath` rather than being a package. So a `tools/x.py` may not be added beside a
+root `x.py`: one would shadow the other and drop out of the gate. A test asserts this.
 
 The steps for adding one, including the single step the gate cannot check for you, are
 in [CONTRIBUTING](CONTRIBUTING.md#adding-a-cli-command). They apply to any contributor,
@@ -72,7 +77,7 @@ The team meets in person every two weeks (Wednesdays); that meeting is the only 
 - `match_nodes()` in `diff_bill.py` uses division-aware matching: unique paths pair directly, collision groups (same `match_path` in multiple divisions) are resolved by normalized division title, then text similarity.
 - Floor amendment annotations like "(increased by $2,000,000)" reference the **budget request baseline**, not the previous bill version. The base amount in the text IS the correct appropriation. `amounts_changed` compares base amounts (annotations stripped). The `has_amendment_annotations` field on `FinancialChange` flags their presence for informational display.
 - Preamble sections (Short Title, References, etc.) sit alongside divisions/titles at the body level and are captured by `walk_body_sections()`.
-- Fetch tooling is layered: `fetch_bills.py` (per-bill text; `--source` defaults to keyless **govinfo**, `--source api` for the Congress.gov API — plus `search` for keyless title discovery over the local BILLSTATUS index, and `fetch-index` for the lightweight scoped BILLSTATUS fetch that gives `search` its ZIPs without the full bulk download), `fetch_bill_archives.py` (bulk bill *metadata* from govinfo BILLSTATUS archives; `fetch-index` reuses its download phase for one scoped `(congress, type)`), and `fetch_bill_text_archives.py` (bulk per-`(congress, session, type)` bill *text* download into `bills/`). `fetch_bills.py` and `fetch_bill_archives.py` share `shared/` (`http.py` API client + retry, `bill_types.py` the bill-type vocab, `version_stems.py` the version-file resolver) and `bill_index/` (a CSV-backed `BillIndex` keyed by `{congress}-{type}-{number}` slug; `parse_bill_id`/`make_bill_id`). `download-all --file <csv>` reads a slug list through `BillIndex`. Bills are stored as `bills/{congress}-{type}-{number}/{n}_{label}.{ext}` (folder = bill, file = version).
+- Fetch tooling is layered: `tools/fetch_bills.py` (per-bill text; `--source` defaults to keyless **govinfo**, `--source api` for the Congress.gov API — plus `search` for keyless title discovery over the local BILLSTATUS index, and `fetch-index` for the lightweight scoped BILLSTATUS fetch that gives `search` its ZIPs without the full bulk download), `tools/fetch_bill_archives.py` (bulk bill *metadata* from govinfo BILLSTATUS archives; `fetch-index` reuses its download phase for one scoped `(congress, type)`), and `tools/fetch_bill_text_archives.py` (bulk per-`(congress, session, type)` bill *text* download into `bills/`). `tools/fetch_bills.py` and `tools/fetch_bill_archives.py` share `shared/` (`http.py` API client + retry, `bill_types.py` the bill-type vocab, `version_stems.py` the version-file resolver) and `bill_index/` (a CSV-backed `BillIndex` keyed by `{congress}-{type}-{number}` slug; `parse_bill_id`/`make_bill_id`). `download-all --file <csv>` reads a slug list through `BillIndex`. Bills are stored as `bills/{congress}-{type}-{number}/{n}_{label}.{ext}` (folder = bill, file = version).
 
 ## Test conventions
 
@@ -90,7 +95,7 @@ The team meets in person every two weeks (Wednesdays); that meeting is the only 
 - **Gate the decision you had to argue for.** A design choice defended at length in a comment, ADR, or commit message but pinned by no test is ungated, and the prose reads as if it were settled. Swapping NFD for NFKD in the #244 fold left the whole module green despite paragraphs justifying that exact choice. Add a test that fails under the rejected alternative, then *prove* it by making the swap once and watching it go red — a decision gate that has never fired is not known to be a gate.
 - Shared test helpers live in `tests/conftest.py`: `make_bill_node()`, `make_bill_tree()`, `make_node_diff()`, `make_change_dict()`
 - Session-scoped fixtures in `tests/conftest.py` cache parsed bill trees and diffs to avoid redundant XML parsing
-- `fetch_bills.py` tests use `respx.mock` decorator and monkeypatch `time.sleep`
+- `tools/fetch_bills.py` tests use `respx.mock` decorator and monkeypatch `time.sleep`
 - `bill_tree.py` tests use inline XML snippets; integration tests use session fixtures
 - `tests/test_diff_validation.py` holds the hand-curated cross-version correctness assertions plus `TestCorpusDiffSmoke`, which runs invariant checks across every adjacent committed-manifest version pair
 - `tests/test_corpus_properties.py` parametrizes over the committed corpus manifest (`tests/corpus_manifest.toml`), broadened to every local XML file under `CORPUS_SWEEP=1`; uses `_KNOWN_DUPLICATE_COUNTS` and `_KNOWN_MISSING_APPRO` dicts for per-file baselines

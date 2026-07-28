@@ -28,7 +28,7 @@ The CLI path ([README](../README.md)) is separate: download govinfo **XML**, run
 Past development was command-line first. The [README](../README.md) quickstart compares **XML** files:
 
 ```bash
-uv run python fetch_bills.py download 118 hr 4366
+uv run python tools/fetch_bills.py download 118 hr 4366
 
 uv run python diff_bill.py compare \
   bills/118-hr-4366/1_reported-in-house.xml \
@@ -42,7 +42,7 @@ Local equivalent of uploading two PDFs to the site:
 
 ```bash
 # Fetch PDFs alongside XML (README Testing section)
-uv run python fetch_bills.py download 118 hr 4366 --format both
+uv run python tools/fetch_bills.py download 118 hr 4366 --format both
 
 # Same pipeline as POST /api/compare?output=html
 uv run python -c "
