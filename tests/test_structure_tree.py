@@ -335,9 +335,9 @@ def test_orphan_titles_absorbed_no_bare_title_roots():
 @pytest.mark.skipif(not _CLEAN_PDF.exists(), reason="bill corpus not present (fetch_bills.py)")
 def test_pdf_real_bill_conserves_and_is_leveled():
     from parsers.pdf_anchors import extract_anchors
-    from parsers.pdf_text import extract_clean_pages
+    from tests.pdf_corpus import cached_pages
 
-    anchors = extract_anchors(extract_clean_pages(_CLEAN_PDF))
+    anchors = extract_anchors(cached_pages(_CLEAN_PDF))
     content = _content_nodes(build_pdf_tree(anchors))
     # Conservation: every anchor maps to exactly one content node.
     assert {id(c.source) for c in content} == {id(a) for a in anchors}

@@ -27,6 +27,7 @@ import pytest
 
 from diff_bill import extract_amounts
 from parsers.pdf_text import extract_clean_pages
+from tests.pdf_corpus import cached_pages
 
 reportlab = pytest.importorskip("reportlab")
 from reportlab.lib.pagesizes import letter  # noqa: E402
@@ -152,7 +153,7 @@ def test_real_graphic_watermark_extracts_clean():
     Guards that the angle-based strip does not disturb a bill whose watermark is *not* text:
     body lines extract and no watermark phrase leaks. Provenance: govinfo package
     BILLS-118s4795rs (public domain, 17 U.S.C. 105)."""
-    text = _full_text(extract_clean_pages(_S4795_PDF))
+    text = _full_text(cached_pages(_S4795_PDF))
     assert len(text) > 50_000, "extraction collapsed"
     for token in ("CONFIDENTIAL", "NOT FOR DISTRIBUTION", "DRAFT COPY"):
         assert token not in text

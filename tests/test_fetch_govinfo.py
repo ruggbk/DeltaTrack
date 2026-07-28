@@ -852,9 +852,10 @@ def test_enumerate_versions_fetches_billstatus_and_orders():
 
 
 @respx.mock
-def test_enumerate_versions_raises_on_non_200_not_silent_empty():
+def test_enumerate_versions_raises_on_non_200_not_silent_empty(monkeypatch):
     # A 5xx must be loud: a silent empty list would number a partial/absent bill as
     # if it had no versions (issue #10 trap).
+    monkeypatch.setattr("shared.http.time.sleep", lambda *_: None)  # no real backoff wait
     respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(500))
     with httpx.Client() as client, pytest.raises(httpx.HTTPStatusError):
         gi.enumerate_versions(client, 999, "hr", 1)

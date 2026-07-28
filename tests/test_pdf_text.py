@@ -12,7 +12,6 @@ from parsers.pdf_text import (
     _merge_print_lines,
     _page_glyph_sizes,
     _parse_print_lines,
-    extract_clean_pages,
     normalize_glyphs,
     normalize_raw,
     page_range_text,
@@ -21,6 +20,7 @@ from parsers.pdf_text import (
     rejoin_soft_hyphens,
     strip_page_chrome,
 )
+from tests.pdf_corpus import cached_pages
 
 _HR8752_V1 = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
 
@@ -184,7 +184,7 @@ class TestUnbulletedFooterConsumedOutput:
     Senate) carries the unbulleted `HR 5895 PCS` footer on 181/184 pages (#140)."""
 
     def test_footer_absent_from_extracted_lines(self):
-        pages = extract_clean_pages(_HR5895_V3)
+        pages = cached_pages(_HR5895_V3)
         offenders = [(p.page_number, ln.text) for p in pages for ln in p.lines if "HR 5895 PCS" in ln.text]
         assert offenders == []
 
@@ -194,7 +194,7 @@ class TestUnbulletedFooterConsumedOutput:
         # rejoin. With the footer stripped, the seam stitches back to "replacement".
         from diff_pdf import _flatten
 
-        pages = extract_clean_pages(_HR5895_V3)
+        pages = cached_pages(_HR5895_V3)
         flat = _flatten(pages)
         assert any("airplane for replacement only" in ln.text for ln in flat)
         assert not any(ln.text == "HR 5895 PCS" for ln in flat)
@@ -287,7 +287,7 @@ class TestPageGlyphSizes:
         # pipeline's. Numbers found must be a superset of the merged-line numbers.
         if not _HR8752_V1.exists():
             pytest.skip("HR 8752 v1 PDF not present")
-        pages = extract_clean_pages(_HR8752_V1)
+        pages = cached_pages(_HR8752_V1)
         p3 = pages[2]
         merged_numbers = {ln.line_number for ln in p3.lines if ln.line_number is not None}
         sizes = self._page3_sizes()
@@ -297,7 +297,7 @@ class TestPageGlyphSizes:
     def test_sizes_attached_to_lines_after_extract(self):
         if not _HR8752_V1.exists():
             pytest.skip("HR 8752 v1 PDF not present")
-        pages = extract_clean_pages(_HR8752_V1)
+        pages = cached_pages(_HR8752_V1)
         p3 = pages[2]
         by_num = {ln.line_number: ln for ln in p3.lines}
         assert by_num[12].glyph_size is not None

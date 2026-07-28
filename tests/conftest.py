@@ -655,18 +655,18 @@ HR8752_V2_PDF = fixture_path("118-hr-8752", "2_engrossed-in-house.pdf")
 def hr8752_v1_pages():
     if not HR8752_V1_PDF.exists():
         pytest.skip("HR 8752 v1 PDF not present")
-    from parsers.pdf_text import extract_clean_pages
+    from tests.pdf_corpus import cached_pages
 
-    return extract_clean_pages(HR8752_V1_PDF)
+    return cached_pages(HR8752_V1_PDF)
 
 
 @pytest.fixture(scope="session")
 def hr8752_v2_pages():
     if not HR8752_V2_PDF.exists():
         pytest.skip("HR 8752 v2 PDF not present")
-    from parsers.pdf_text import extract_clean_pages
+    from tests.pdf_corpus import cached_pages
 
-    return extract_clean_pages(HR8752_V2_PDF)
+    return cached_pages(HR8752_V2_PDF)
 
 
 @pytest.fixture(scope="session")
