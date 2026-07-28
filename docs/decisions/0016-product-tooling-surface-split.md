@@ -55,8 +55,9 @@ so a default sync without it would convert them into silent skips — the fail-o
 Alternatives considered and rejected for now:
 
 - **Moving the engine into a `deltatrack/` package.** The orthodox layout, and wanted — but
-  it changes every documented command and roughly eighty test files, which would have
-  buried this diff. Deferred to its own issue; nothing here blocks it.
+  it touches 59 of 79 test files and every documented command, which would have buried this
+  diff. Deferred to [#398](https://github.com/AgoraDMV/DeltaTrack/issues/398); nothing here
+  blocks it, and that is also where the project becomes installable.
 - **Moving `server/` out as one unit.** Would have left the product CLIs importing across
   the very boundary being drawn. Splitting it instead removed two reach-arounds that
   [#62](https://github.com/AgoraDMV/DeltaTrack/issues/62) tracks.
