@@ -1,6 +1,6 @@
 # 17. Ship the diff engine as an installable `src/deltatrack` package
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-07-28
 
 ## Context
