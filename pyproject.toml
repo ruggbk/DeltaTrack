@@ -21,7 +21,7 @@ dev = [
     "pytest-cov>=6.0",
     "pytest-playwright>=0.5",
     "pytest-xdist>=3.6",
-    "reportlab>=4.5.1",
+    "reportlab>=5.0.0",
     "respx>=0.22",
     "ruff==0.15.10",  # pinned exactly so local `ruff format` matches CI (format output varies by version)
     "xmldiff>=3.0",  # off-the-shelf baseline for scripts/compare_differs.py; see docs/decisions/0001
