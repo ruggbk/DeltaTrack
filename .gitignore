@@ -69,3 +69,13 @@ docs/research/provision-matching/probes/form_*.html
 !docs/research/provision-matching/probes/form_template.html
 docs/research/provision-matching/probes/labels/
 docs/research/provision-matching/probes/merged_labels.json
+
+# Build artifacts. The project became buildable in #398, so `uv build` now produces
+# these where it never used to. `build/` matters beyond tidiness: some backends copy
+# the package's own .py files into it, and a directory holding Python that is neither
+# a discovered product package nor a listed consumer is a deliberate failure in
+# tests/test_surface_boundary.py -- so an un-ignored build tree would redden the suite
+# for anyone who ran a build.
+dist/
+build/
+*.egg-info/
