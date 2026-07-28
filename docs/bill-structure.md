@@ -1,8 +1,8 @@
 # Bill structure: the shared data model
 
 The vocabulary and hierarchy this project parses, for both the XML and PDF paths.
-Read this before touching heading/anchor/account detection (`parsers/pdf_anchors.py`,
-`bill_tree.py`) or discussing the account hierarchy (DeltaTrack#54).
+Read this before touching heading/anchor/account detection (`src/deltatrack/parsers/pdf_anchors.py`,
+`src/deltatrack/bill_tree.py`) or discussing the account hierarchy (DeltaTrack#54).
 
 ## The one non-obvious fact: hierarchy is positional, not nested
 
@@ -23,7 +23,7 @@ and they sit as flat siblings directly under `<title>`:
 A grouping header like `ADMINISTRATIVE PROVISIONS` is a **header-only**
 `appropriations-intermediate` with no body and no child sections; the SEC. sections
 it "owns" are *also* flat siblings under the title. The parent-child relationship is
-encoded by **reading order + level**, and a parser reconstructs it. `bill_tree.py`
+encoded by **reading order + level**, and a parser reconstructs it. `src/deltatrack/bill_tree.py`
 does exactly this, tracking `current_major` / `current_intermediate` as it scans
 siblings (`_walk_structural_children`).
 
@@ -77,7 +77,7 @@ Grouping headers (`ADMINISTRATIVE PROVISIONS`, `GENERAL PROVISIONS`,
 
 ### Emitted `level` vocabulary (the canonical structure tree, #108)
 
-The leveled tree (`structure_tree.py`, exposed as the canonical `tree` field) labels
+The leveled tree (`src/deltatrack/structure_tree.py`, exposed as the canonical `tree` field) labels
 every node with one `level` from a **shared 9-value enum** both pipelines map into, so
 the contract speaks one language and the renderer branches on data, not source
 (`schema/canonical-diff.schema.json` → `TreeNode.level`). The enum names are *budget
@@ -160,20 +160,20 @@ present: `title I`, `subtitle A`, `chapter 1`, `subchapter A`, `part I`, `subpar
 
 ## PDF ↔ XML parity (the goal, and where we stand)
 
-The aim is for the PDF parser to reconstruct the **same structure** `bill_tree.py`
+The aim is for the PDF parser to reconstruct the **same structure** `src/deltatrack/bill_tree.py`
 recovers from XML, so a diff means the same thing on either input.
 
 **Is the tree+rollup intent solved on the XML side? No — only partially.** Both paths
 fall short of the parent/child + money-rollup model, in different ways:
 
-- **XML side** (`bill_tree.py`): does *positional reconstruction*, but the output is a
+- **XML side** (`src/deltatrack/bill_tree.py`): does *positional reconstruction*, but the output is a
   **flat `list[BillNode]`**, not a tree. Each node carries its ancestry as a
   `match_path` / `display_path` tuple (enough for breadcrumbs and cross-version
   matching), but there is **no `parent`/`children` object, no money rollup, and
   header-only grouping nodes are dropped** (e.g. `ADMINISTRATIVE PROVISIONS` has no
   `<text>` body, so it produces no node and cannot parent its sections). So the XML
   recovers per-node *paths*, not a navigable tree with aggregation.
-- **PDF side** (`parsers/pdf_anchors.py`): emits a **flat anchor list** with three
+- **PDF side** (`src/deltatrack/parsers/pdf_anchors.py`): emits a **flat anchor list** with three
   kinds (`title`, `section`, `account`) and infers breadcrumbs by walking up by
   position (`breadcrumb_for`). It has only *one* money-tree level (`account`); it
   cannot yet mirror major/intermediate/small or roll money up.

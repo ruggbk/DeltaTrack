@@ -57,7 +57,7 @@ CONGRESS_API_KEY=your_key_here
 
 ## Command reference
 
-The product commands are the executable `.py` scripts in the project root — `diff_bill.py` and `diff_pdf.py`, the diff engine itself. The bill-downloading commands live in `tools/`, which holds the acquisition tooling rather than the product ([#367](https://github.com/AgoraDMV/DeltaTrack/issues/367)). Run either after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
+The product commands are the executable `.py` scripts in the project root — `diff_bill.py` and `diff_pdf.py`. Each is a thin wrapper over the diff engine, which lives in `src/deltatrack/` and is installed into the virtualenv rather than read from the working tree ([#398](https://github.com/AgoraDMV/DeltaTrack/issues/398)); `python -m deltatrack.diff_bill` also works. The bill-downloading commands live in `tools/`, which holds the acquisition tooling rather than the product ([#367](https://github.com/AgoraDMV/DeltaTrack/issues/367)). Run either after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
 
 | Command | What it does |
 |---------|--------------|
@@ -220,12 +220,13 @@ A bill goes through several versions as it moves through the legislative process
 
 The shared data model the whole project rests on — the bill hierarchy, the glossary, and how the XML and PDF paths reconstruct it — is documented in [docs/bill-structure.md](docs/bill-structure.md). Start there.
 
-Four modules:
+The engine is the `deltatrack` package under `src/`, installed rather than imported off
+disk (see [ADR 0017](docs/decisions/0017-installable-engine-package.md)). Four modules:
 
 - **`tools/fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`, `search` (keyless title discovery over a local BILLSTATUS index), `fetch-index` (download just the scoped BILLSTATUS ZIP `search` reads).
-- **`bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter, subpart). Captures preamble sections that sit alongside divisions or titles.
-- **`diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
-- **`formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.
+- **`src/deltatrack/bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter, subpart). Captures preamble sections that sit alongside divisions or titles.
+- **`src/deltatrack/diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
+- **`src/deltatrack/formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.
 
 ## Design decisions
 

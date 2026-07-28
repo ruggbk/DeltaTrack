@@ -129,6 +129,12 @@ discovered automatically and is required to be documented. To add one:
 1. Create `<name>.py` in the project root with a shebang. `#!/usr/bin/env python3` is
    the common form; the two bulk fetchers use `#!/usr/bin/env -S uv run --quiet python`,
    which resolves the environment itself rather than relying on `source ./init`.
+   **Put the implementation in `src/deltatrack/` and keep the root file a wrapper** if
+   the command is part of the engine (`diff_bill.py`, `diff_pdf.py` are the pattern).
+   A module inside a package cannot be executed directly — doing so puts the package's
+   own directory on `sys.path`, so `deltatrack` is not importable from within it — which
+   is why the command and its implementation are two files rather than one (ADR 0017).
+   Re-export `build_parser` from the wrapper, or step 3's gate finds nothing to walk.
 2. `chmod +x <name>.py`, and commit the bit (`git update-index --chmod=+x <name>.py`
    if it did not survive). Without it the file reads as a module and is not a command.
 3. Expose the argument parser as `build_parser()` returning an `argparse.ArgumentParser`.
@@ -154,7 +160,7 @@ runnable but are not executable`. Steps 1, 3 and 5 it cannot check for you:
 - Nothing ties the floor's list back to what discovery found, which is why step 5 is
   a step and not an assertion.
 
-`.py` files that are *not* commands (`tools/fetch_govinfo.py`, `bill_tree.py`) simply
+`.py` files that are *not* commands (`tools/fetch_govinfo.py`, `src/deltatrack/bill_tree.py`) simply
 carry no executable bit. Discovery covers two roots, the project root and `tools/`, and
 spells each command with the path a user types.
 
@@ -236,9 +242,9 @@ What to look at, roughly in priority order:
 
 - **Correctness of the diff itself.** This is the product. Passing tests are necessary, not sufficient: a diff can be green and still wrong. For any change that affects diff output, **run the tool on a real bill and eyeball the report** rather than trusting the suite alone. `scripts/serve_compare.py` gives a side-by-side view (see [TESTING.md](TESTING.md)).
 - **The risk hotspots**, where a bug does the most damage:
-  - **Parser accuracy** (`bill_tree.py`, `parsers/`) -- does the bill's structure come through intact? A missing or mis-nested section corrupts everything downstream. See [docs/parser-validation.md](docs/parser-validation.md).
-  - **Financial diff** (`diff_bill.py` and its financial filtering) -- dollar amounts and their changes must be exact.
-  - **The canonical schema contract** (`formatters/canonical.py`) -- both pipelines and the renderer depend on it, so a breaking change there ripples everywhere.
+  - **Parser accuracy** (`src/deltatrack/bill_tree.py`, `src/deltatrack/parsers/`) -- does the bill's structure come through intact? A missing or mis-nested section corrupts everything downstream. See [docs/parser-validation.md](docs/parser-validation.md).
+  - **Financial diff** (`src/deltatrack/diff_bill.py` and its financial filtering) -- dollar amounts and their changes must be exact.
+  - **The canonical schema contract** (`src/deltatrack/formatters/canonical.py`) -- both pipelines and the renderer depend on it, so a breaking change there ripples everywhere.
 - **Tests for the change.** New behavior should come with a test that would fail without the fix. Judge that by the red-green delta on your own machine, not by the totals the author reported — test counts legitimately differ between machines here, and [TESTING.md](TESTING.md#test-counts-are-not-comparable-between-machines) explains why.
 - **Docs and decisions.** A non-obvious choice belongs in a code comment or a [decision record](docs/decisions/); a user-facing change belongs in the README.
 

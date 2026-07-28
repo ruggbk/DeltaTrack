@@ -21,11 +21,11 @@ in-file signal read from the input the user already supplied.
 
 ## What we already extract
 
-- **PDF** (`parsers/pdf_text.py`, `parsers/pdf_anchors.py`): codepoints; per-glyph
+- **PDF** (`src/deltatrack/parsers/pdf_text.py`, `src/deltatrack/parsers/pdf_anchors.py`): codepoints; per-glyph
   char boxes → baseline clustering (visual lines), x-gaps (word spacing), line extent
   (justified column width, line-fullness split); text-matrix scale → glyph **size**
   (body/heading/major size bands). That is the complete set of PDFium signals we read.
-- **XML** (`bill_tree.py`, `structure_tree.py`, `diff_bill.py`): the structural tag
+- **XML** (`src/deltatrack/bill_tree.py`, `src/deltatrack/structure_tree.py`, `src/deltatrack/diff_bill.py`): the structural tag
   hierarchy + text, the `form` metadata block, and three attributes — `@id` (stored on
   `BillNode.element_id`, **not** used for matching), `@display-inline`,
   `@display-enacting-clause`.

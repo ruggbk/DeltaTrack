@@ -56,3 +56,4 @@ relitigated.
 | [0014](0014-leveled-heading-tree-scope.md) | Ship the recoverable heading levels as a conservation-checked tree; defer semantic rollup |
 | [0015](0015-corpus-test-fixtures.md) | Commit a curated corpus fixture set and collect the gates from a manifest |
 | [0016](0016-product-tooling-surface-split.md) | Separate the product, the acquisition tooling, and the delivery channel in the layout |
+| [0017](0017-installable-engine-package.md) | Ship the diff engine as an installable `src/deltatrack` package |
