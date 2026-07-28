@@ -222,6 +222,85 @@ def test_compare_pdf_bytes_rejected_when_format_xml():
     assert resp.status_code == 415
 
 
+# ---------- Per-IP rate limiting (#64) -------------------------------------
+#
+# The concurrency semaphore bounds *parallel CPU* but not *request volume*: a
+# burst can queue many heavy uploads despite it. These tests pin the per-IP
+# limiter. Bodies are cheap 415-rejects — the limiter counts a request before
+# the handler runs, so no test pays for a real diff. Counter state is reset
+# between tests by the autouse fixture in conftest.py.
+
+
+def _reject_files():
+    return {
+        "start_file": ("a.pdf", b"not a pdf at all", "application/pdf"),
+        "end_file": ("b.pdf", b"%PDF-1.4 whatever", "application/pdf"),
+    }
+
+
+def _burst(client, count, forwarded_for=None):
+    headers = {"X-Forwarded-For": forwarded_for} if forwarded_for else {}
+    return [client.post("/api/compare", files=_reject_files(), headers=headers).status_code for _ in range(count)]
+
+
+def test_burst_from_one_client_is_rate_limited():
+    """A burst beyond the per-minute limit gets 429, not queued work (#64)."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    statuses = _burst(client, COMPARE_RATE_LIMIT_PER_MINUTE + 1)
+    assert all(s == 415 for s in statuses[:-1]), statuses
+    assert statuses[-1] == 429, statuses
+
+
+def test_rate_limit_is_per_ip_not_global():
+    """One noisy client must not exhaust the limit for everyone. In production
+    every request arrives through the reverse proxy, so keying on the socket
+    address would collapse all clients into one bucket; the key has to come
+    from X-Forwarded-For."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    exhausted = _burst(client, COMPARE_RATE_LIMIT_PER_MINUTE + 1, forwarded_for="203.0.113.7")
+    assert exhausted[-1] == 429
+    other = client.post("/api/compare", files=_reject_files(), headers={"X-Forwarded-For": "203.0.113.8"})
+    assert other.status_code == 415
+
+
+def test_rate_limit_key_is_the_proxy_appended_address():
+    """The client controls every X-Forwarded-For entry except the last one,
+    which the proxy appends from the socket. Keying on anything but the
+    rightmost entry lets an attacker rotate spoofed prefixes to dodge the
+    limit; this pins that a rotating prefix does NOT reset the bucket."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    statuses = [
+        client.post(
+            "/api/compare",
+            files=_reject_files(),
+            headers={"X-Forwarded-For": f"10.0.0.{i}, 198.51.100.20"},
+        ).status_code
+        for i in range(COMPARE_RATE_LIMIT_PER_MINUTE + 1)
+    ]
+    assert statuses[-1] == 429, statuses
+
+
+def test_rate_limited_response_keeps_security_headers():
+    """The 429 short-circuits the route, but it must still pass through the
+    header middleware — a rejection is exactly the response most likely to
+    render attacker-influenced content."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    resp = None
+    for _ in range(COMPARE_RATE_LIMIT_PER_MINUTE + 1):
+        resp = client.post("/api/compare", files=_reject_files())
+    assert resp.status_code == 429
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+
 # ---------- Enrolled-layout decline guard (#141) ---------------------------
 #
 # Enrolled prints carry no GPO margin line numbers, so every anchor path returns

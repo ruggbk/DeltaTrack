@@ -703,6 +703,23 @@ def fast_normalize_diff(monkeypatch, hr4366_v1, hr4366_v2, hr4366_v6, hr4366_v1_
     monkeypatch.setattr(diff_bill_module, "diff_bills", _cached_diff)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Reset the server's per-IP rate-limit counters (#64) between tests.
+
+    The limiter's in-memory storage hangs off the module-level app, so it
+    outlives every TestClient instance and one test's requests would otherwise
+    bleed into the next test's budget — the burst test would then pass or fail
+    depending on suite order. getattr-guarded so tests that never import the
+    server pay nothing."""
+    import sys
+
+    limiter = getattr(sys.modules.get("server.app"), "limiter", None)
+    if limiter is not None:
+        limiter.reset()
+    yield
+
+
 def has_bill_xml() -> bool:
     """Check if real bill XML files are available.
 

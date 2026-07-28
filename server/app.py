@@ -19,6 +19,8 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
 
 from server.pdf_compare import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
 from server.xml_compare import compare_xml, compare_xml_html
@@ -33,6 +35,11 @@ CHUNK_SIZE = 1024 * 1024  # 1 MB read granularity for the streaming size guard
 PDF_MAGIC = b"%PDF"
 MAX_CONCURRENT_DIFFS = 2  # bound CPU; a large diff is heavy
 DIFF_TIMEOUT_S = 120
+# Per-IP request budget for /api/compare (#64). The semaphore bounds parallel
+# CPU but not request volume; this caps how fast one client can queue work.
+# A legitimate session is a handful of compares, each taking seconds to
+# minutes, so 10/minute is far above real use and far below a flood.
+COMPARE_RATE_LIMIT_PER_MINUTE = 10
 
 # Format → (label-extension, html entry point, json entry point).
 _COMPARE = {
@@ -51,6 +58,37 @@ app = FastAPI(
 # Limits how many diffs run at once. Paired with a process memory ceiling + the
 # per-request timeout below, this keeps one heavy upload from starving the box.
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_DIFFS)
+
+
+def _rate_limit_key(request: Request) -> str:
+    """Per-client key for the rate limiter.
+
+    In production every request arrives through the reverse proxy, so the
+    socket address is the proxy's — keying on it would put all clients in one
+    bucket. X-Forwarded-For is used instead, but only its RIGHTMOST entry: the
+    proxy appends the address it accepted the connection from, while every
+    earlier entry is client-supplied and spoofable (an attacker rotating fake
+    prefixes must not get a fresh bucket each time). Local dev has no proxy
+    and falls back to the socket address."""
+    if forwarded := request.headers.get("x-forwarded-for"):
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=_rate_limit_key)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limited(request: Request, exc: RateLimitExceeded):
+    """429 in the same {"detail": ...} shape every other rejection uses, so the
+    front-end error path renders it like any other server message."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests from this address. Wait a minute and try again."},
+        headers={"Retry-After": "60"},
+    )
+
 
 # Reports are 8-11 MB of highly repetitive HTML and gzip ~6x smaller (#354);
 # on the target users' constrained office networks the transfer, not the diff,
@@ -172,7 +210,9 @@ def _label_from_filename(name: str | None, fallback: str, ext: str) -> str:
 
 
 @app.post("/api/compare")
+@limiter.limit(f"{COMPARE_RATE_LIMIT_PER_MINUTE}/minute")
 async def compare(
+    request: Request,  # slowapi requires the Request in the signature to key the limit
     start_file: UploadFile = File(...),
     end_file: UploadFile = File(...),
     output: str = Query("html", pattern="^(html|json)$"),
