@@ -35,8 +35,19 @@ jobs:
       # Resolve the production dependency set from uv.lock (excluding the dev
       # group and the project itself) and audit those pinned versions against
       # the PyPI advisory DB. pip-audit exits non-zero if any has a known vuln.
+      #
+      # The audited set is NAMED, not inherited (#367). `--no-dev` alone would resolve
+      # to whatever `[tool.uv] default-groups` happens to contain, so making `web`
+      # opt-in -- which pyproject.toml documents as a supported install and #398 may
+      # well do -- would silently drop fastapi, uvicorn, slowapi and python-multipart
+      # from this audit, taking python-multipart's CVE-2024-53981 floor with them, and
+      # the check would stay green throughout. `--no-default-groups` clears the
+      # inheritance so the two `--group` flags below are the whole scope: this file is
+      # then the only place that can change what gets audited.
       - name: Export production requirements
-        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements-prod.txt
+        run: >
+          uv export --frozen --no-default-groups --group web --group fetch
+          --no-emit-project --format requirements-txt -o requirements-prod.txt
 
       - name: Audit dependencies
         run: uvx pip-audit -r requirements-prod.txt
