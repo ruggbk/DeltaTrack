@@ -19,6 +19,9 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIASGIMiddleware
 
 from server.pdf_compare import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
 from server.xml_compare import compare_xml, compare_xml_html
@@ -33,6 +36,11 @@ CHUNK_SIZE = 1024 * 1024  # 1 MB read granularity for the streaming size guard
 PDF_MAGIC = b"%PDF"
 MAX_CONCURRENT_DIFFS = 2  # bound CPU; a large diff is heavy
 DIFF_TIMEOUT_S = 120
+# Per-IP request budget for /api/compare (#64). The semaphore bounds parallel
+# CPU but not request volume; this caps how fast one client can queue work.
+# A legitimate session is a handful of compares, each taking seconds to
+# minutes, so 10/minute is far above real use and far below a flood.
+COMPARE_RATE_LIMIT_PER_MINUTE = 10
 
 # Format → (label-extension, html entry point, json entry point).
 _COMPARE = {
@@ -52,6 +60,54 @@ app = FastAPI(
 # per-request timeout below, this keeps one heavy upload from starving the box.
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_DIFFS)
 
+
+def _rate_limit_key(request: Request) -> str:
+    """Per-client key for the rate limiter.
+
+    In production every request arrives through the reverse proxy, so the
+    socket address is the proxy's — keying on it would put all clients in one
+    bucket. X-Forwarded-For is used instead, but only its RIGHTMOST entry: the
+    proxy appends the address it accepted the connection from, while every
+    earlier entry is client-supplied and spoofable (an attacker rotating fake
+    prefixes must not get a fresh bucket each time). Local dev has no proxy
+    and falls back to the socket address.
+
+    getlist, not get: a client can send SEVERAL X-Forwarded-For header lines,
+    and Starlette's ``.get`` returns only the first of them. Reading the last
+    entry of the last header keeps the proxy-appended address load-bearing
+    without depending on how the proxy merges a duplicated header."""
+    if forwarded := request.headers.getlist("x-forwarded-for"):
+        return forwarded[-1].split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+# default_limits + the ASGI middleware, rather than a @limiter.limit decorator
+# on the route: a decorator wraps the endpoint FUNCTION, which FastAPI reaches
+# only after it has parsed the multipart body, so the upload was already read
+# and spooled to disk before the 429. The middleware runs before routing, so a
+# refused request costs nothing. slowapi's own middleware deliberately skips
+# any route carrying a decorator, so the two cannot be combined.
+#
+# The limit therefore applies to every route with a resolvable handler, which
+# today is only /api/compare — the StaticFiles mount has no endpoint and is
+# skipped. That default is the safe direction (a new public endpoint is
+# limited unless it opts out via @limiter.exempt), but it does mean a future
+# route inherits this budget rather than being unlimited by oversight.
+limiter = Limiter(key_func=_rate_limit_key, default_limits=[f"{COMPARE_RATE_LIMIT_PER_MINUTE}/minute"])
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limited(request: Request, exc: RateLimitExceeded):
+    """429 in the same {"detail": ...} shape every other rejection uses, so the
+    front-end error path renders it like any other server message."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests from this address. Wait a minute and try again."},
+        headers={"Retry-After": "60"},
+    )
+
+
 # Reports are 8-11 MB of highly repetitive HTML and gzip ~6x smaller (#354);
 # on the target users' constrained office networks the transfer, not the diff,
 # is the dominant cost. Level 6 because level 9 buys 0.02 MB for 50% more CPU
@@ -60,6 +116,11 @@ _semaphore = asyncio.Semaphore(MAX_CONCURRENT_DIFFS)
 # responses as streaming without a Content-Length, and minimum_size only
 # applies when the length is known, so gzip must sit inside them to see it.
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+
+# Registered SECOND = just outside gzip and inside the two @app.middleware
+# wrappers below, so a 429 still passes through the security-header middleware
+# and an http→https redirect happens before a request is counted.
+app.add_middleware(SlowAPIASGIMiddleware)
 
 
 def _forwarded_proto(request: Request) -> str | None:
@@ -120,8 +181,7 @@ async def security_headers(request: Request, call_next):
     iframe. Registered after the redirect middleware, so it wraps it and the
     headers reach redirects and error responses too, not only 200s.
 
-    Rate limiting, the other half of the issue, is deliberately not here: it
-    needs a dependency that is not in the lock file today.
+    It also wraps the rate-limit middleware, so a 429 carries these headers.
     """
     response = await call_next(request)
     response.headers["X-Frame-Options"] = "DENY"
