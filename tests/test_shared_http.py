@@ -1,4 +1,4 @@
-"""Tests for shared/http.py retry semantics (issue #61).
+"""Tests for tools/shared/http.py retry semantics (issue #61).
 
 Hermetic: every response is served through respx, and ``shared.http.time.sleep`` is
 replaced by a recorder, so no test waits on a real backoff (the 429 branch sleeps 60s).
