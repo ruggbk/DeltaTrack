@@ -5,10 +5,10 @@ description = "Download U.S. bill text from Congress.gov and compare versions st
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28",
-    "pypdfium2>=5.8.0",
+    "pypdfium2>=5.12.1",
     "python-dotenv>=1.0",
     # Web service (server/) — wraps the diff engine as a FastAPI app served by uvicorn.
-    "fastapi>=0.115",
+    "fastapi>=0.140.13",
     "uvicorn[standard]>=0.51.0",
     "python-multipart>=0.0.18",  # 0.0.18 fixes CVE-2024-53981 (multipart DoS); also the floor pip-audit checks
 ]
@@ -16,14 +16,14 @@ dependencies = [
 [dependency-groups]
 dev = [
     "jsonschema>=4.21",  # canonical-diff schema validation tests; importorskip silently skips without it
-    "pre-commit>=4.0",
-    "pytest>=8.0",
+    "pre-commit>=4.6.1",
+    "pytest>=9.1.1",
     "pytest-cov>=6.0",
     "pytest-playwright>=0.5",
     "pytest-xdist>=3.6",
     "reportlab>=5.0.0",
     "respx>=0.22",
-    "ruff==0.15.10",  # pinned exactly so local `ruff format` matches CI (format output varies by version)
+    "ruff==0.16.0",  # pinned exactly so local `ruff format` matches CI (format output varies by version)
     "xmldiff>=3.0",  # off-the-shelf baseline for scripts/compare_differs.py; see docs/decisions/0001
 ]
 
