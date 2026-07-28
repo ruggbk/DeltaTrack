@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Least-privilege token: this job only checks out and runs the suite.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
