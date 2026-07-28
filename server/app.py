@@ -16,6 +16,7 @@ import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -50,6 +51,15 @@ app = FastAPI(
 # Limits how many diffs run at once. Paired with a process memory ceiling + the
 # per-request timeout below, this keeps one heavy upload from starving the box.
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_DIFFS)
+
+# Reports are 8-11 MB of highly repetitive HTML and gzip ~6x smaller (#354);
+# on the target users' constrained office networks the transfer, not the diff,
+# is the dominant cost. Level 6 because level 9 buys 0.02 MB for 50% more CPU
+# in the semaphore-capped worker; minimum_size skips the tiny JSON rejections.
+# Registered FIRST = innermost: the @app.middleware wrappers below re-emit
+# responses as streaming without a Content-Length, and minimum_size only
+# applies when the length is known, so gzip must sit inside them to see it.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
 
 
 def _forwarded_proto(request: Request) -> str | None:
