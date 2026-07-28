@@ -80,7 +80,13 @@ def installed_engine(tmp_path_factory) -> Path:
 
     venv = workspace / "venv"
     _run([uv, "venv", str(venv)])
-    python = venv / "bin" / "python"
+    # A venv lays its interpreter out per-platform: POSIX `bin/python`, Windows
+    # `Scripts\python.exe`. CI and the team run POSIX, so the second arm is for a
+    # future Windows contributor rather than any environment this runs in today.
+    if sys.platform == "win32":
+        python = venv / "Scripts" / "python.exe"
+    else:
+        python = venv / "bin" / "python"
     assert python.is_file(), f"uv venv produced no interpreter at {python}"
 
     # No `--group` flags: this installs what a CONSUMER gets, which is the thing under test.
