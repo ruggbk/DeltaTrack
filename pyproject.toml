@@ -3,18 +3,27 @@ name = "deltatrack"
 version = "0.1.0"
 description = "Download U.S. bill text from Congress.gov and compare versions structurally"
 requires-python = ">=3.12"
+# The ENGINE's dependencies, and nothing else (#367). Installing DeltaTrack to diff two
+# bill versions should not install a web server or an HTTP client; those belong to the
+# delivery channel and the acquisition tooling, which are separate surfaces in the layout
+# and separate groups below. This list is what a consumer of the engine actually gets.
 dependencies = [
-    "httpx>=0.28",
     "pypdfium2>=5.12.1",
-    "python-dotenv>=1.0",
-    # Web service (server/) — wraps the diff engine as a FastAPI app served by uvicorn.
+]
+
+[dependency-groups]
+# Web delivery channel (web/) — wraps the diff engine as a FastAPI app served by uvicorn.
+web = [
     "fastapi>=0.140.13",
     "uvicorn[standard]>=0.51.0",
     "python-multipart>=0.0.18",  # 0.0.18 fixes CVE-2024-53981 (multipart DoS); also the floor pip-audit checks
     "slowapi>=0.1.9",  # per-IP rate limiting on /api/compare (#64); chosen over a hand-rolled counter on the issue thread
 ]
-
-[dependency-groups]
+# Bill-acquisition tooling (tools/) — downloading bill text from govinfo / Congress.gov.
+fetch = [
+    "httpx>=0.28",
+    "python-dotenv>=1.0",
+]
 dev = [
     "jsonschema>=4.21",  # canonical-diff schema validation tests; importorskip silently skips without it
     "pre-commit>=4.6.1",
@@ -27,6 +36,20 @@ dev = [
     "ruff==0.16.0",  # pinned exactly so local `ruff format` matches CI (format output varies by version)
     "xmldiff>=3.0",  # off-the-shelf baseline for scripts/compare_differs.py; see docs/decisions/0001
 ]
+
+[tool.uv]
+# All three groups install by default, so `uv sync`, CI, and the test suite behave
+# exactly as before this split. The separation that matters is what a CONSUMER of the
+# engine gets, which is `[project.dependencies]` above -- groups are development-time
+# only and are never published.
+#
+# Making `web` opt-in instead would be worse than doing nothing: tests/test_server_static
+# and tests/test_pdf_compare guard their imports with `pytest.importorskip("fastapi")`,
+# so a default sync without it would turn them into silent skips -- a green run that
+# checks nothing, which is the failure mode epic #288 exists to close.
+#
+# To install the engine alone: `uv sync --no-group web --no-group fetch`.
+default-groups = ["dev", "web", "fetch"]
 
 [tool.ruff]
 line-length = 120
