@@ -272,19 +272,31 @@ def _write_zip(path: Path, members):
             zf.writestr(name, data)
 
 
+def _billstatus_item(congress, btype, num, type_name, date, code):
+    """One textVersions item; ``code=None`` makes it url-less (an XML-less gap).
+
+    A url-less item is how BILLSTATUS declares a version GPO published without
+    composing the XML (#226): the <type> is there, the BILLS format URL is not.
+    """
+    formats = (
+        f"<formats><item>"
+        f"<url>https://www.govinfo.gov/content/pkg/BILLS-{congress}{btype}{num}{code}"
+        f"/xml/BILLS-{congress}{btype}{num}{code}.xml</url>"
+        f"</item></formats>"
+        if code
+        else ""
+    )
+    return f"<item><type>{type_name}</type><date>{date}</date>{formats}</item>"
+
+
 def _billstatus_zip(path: Path, congress, btype, num, versions):
     """One BILLSTATUS ZIP for a bill; versions = [(type_name, date, code), ...].
 
     Each item carries a format URL embedding the version code, mirroring real
-    BILLSTATUS: the date index keys off that code, not the display <type>.
+    BILLSTATUS: the date index keys off that code, not the display <type>. A
+    ``None`` code emits a url-less item -- the XML-less gap shape.
     """
-    items = "".join(
-        f"<item><type>{t}</type><date>{d}</date><formats><item>"
-        f"<url>https://www.govinfo.gov/content/pkg/BILLS-{congress}{btype}{num}{code}"
-        f"/xml/BILLS-{congress}{btype}{num}{code}.xml</url>"
-        f"</item></formats></item>"
-        for t, d, code in versions
-    )
+    items = "".join(_billstatus_item(congress, btype, num, t, d, code) for t, d, code in versions)
     xml = (
         f"<billStatus><bill><congress>{congress}</congress><type>{btype.upper()}</type>"
         f"<number>{num}</number><textVersions>{items}</textVersions></bill></billStatus>"
@@ -1289,3 +1301,118 @@ def test_fetch_billstatus_bill_raises_on_a_failed_response(monkeypatch):
     respx.get(gi.billstatus_url(999, "hr", 1)).mock(return_value=httpx.Response(500))
     with httpx.Client() as client, pytest.raises(httpx.HTTPError):
         gi.fetch_billstatus_bill(client, 999, "hr", 1)
+
+
+# ---- bulk convert: XML-less gap markers (#254) -------------------------------
+#
+# The per-bill fetch path's marker semantics (write on gaps, clear on none) have
+# to hold for the bulk-convert path too, or a bulk-built corpus carries no gap
+# signal and a marker from an earlier fetch can outlive the refresh that
+# delivered its missing XML. The records come from the BILLSTATUS ZIPs convert
+# already reads for dates, so this costs no requests.
+
+
+def _gap_corpus(tmp_path, members, billstatus_versions, bill=(999, "hr", 1)):
+    """(zip_dir, bs_dir, out_dir) for one bill's bulk convert."""
+    congress, btype, num = bill
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir(exist_ok=True)
+    _write_zip(zip_dir / f"BILLS-{congress}-1-{btype}.zip", [_member(congress, btype, num, c) for c in members])
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir(exist_ok=True)
+    if billstatus_versions is not None:
+        _billstatus_zip(bs_dir / f"{congress}-{btype}.zip", congress, btype, num, billstatus_versions)
+    return zip_dir, bs_dir, tmp_path / "bills"
+
+
+def test_convert_writes_gap_marker_for_a_bill_with_an_xmlless_version(tmp_path):
+    # BILLSTATUS declares ih (served) and rh (url-less). Only ih is in the ZIP,
+    # so without a marker the bill reads as complete at one version.
+    zip_dir, bs_dir, out = _gap_corpus(
+        tmp_path,
+        ["ih"],
+        [("Introduced in House", "2025-01-01", "ih"), ("Reported in House", "2025-02-01", None)],
+    )
+    stats = fbt.convert_archives(zip_dir, out, min_versions=1, billstatus_dir=bs_dir)
+    assert stats["gap_markers_written"] == 1
+    payload = json.loads(gi.gap_marker_path(out / "999-hr-1").read_text())
+    assert payload["bill"] == "999-hr-1"
+    assert payload["gap_versions"] == [{"code": "rh", "name": "Reported in House", "date": "2025-02-01"}]
+
+
+def test_convert_writes_no_gap_marker_when_every_declared_version_is_served(tmp_path):
+    # Negative control: proves the marker above tracks the gap, not merely the run.
+    zip_dir, bs_dir, out = _gap_corpus(
+        tmp_path,
+        ["ih", "rh"],
+        [("Introduced in House", "2025-01-01", "ih"), ("Reported in House", "2025-02-01", "rh")],
+    )
+    stats = fbt.convert_archives(zip_dir, out, min_versions=1, billstatus_dir=bs_dir)
+    assert stats["bills_written"] == 1
+    assert stats.get("gap_markers_written", 0) == 0
+    assert not gi.gap_marker_path(out / "999-hr-1").exists()
+
+
+def test_convert_clears_a_stale_gap_marker_when_the_xml_arrives(tmp_path):
+    # The #254 stale case: a per-bill fetch recorded rh as XML-less; GPO has since
+    # composed it and this bulk refresh delivers it. A surviving marker would
+    # assert a gap that no longer exists -- worse than no marker, since a stale
+    # absence claim reads exactly like a current one.
+    zip_dir, bs_dir, out = _gap_corpus(
+        tmp_path,
+        ["ih", "rh"],
+        [("Introduced in House", "2025-01-01", "ih"), ("Reported in House", "2025-02-01", "rh")],
+    )
+    stale = [{"code": "rh", "name": "Reported in House", "date": "2025-02-01"}]
+    gi.write_gap_marker(out / "999-hr-1", "999-hr-1", stale)
+    assert gi.gap_marker_path(out / "999-hr-1").exists()  # the check can fire
+
+    stats = fbt.convert_archives(zip_dir, out, min_versions=1, billstatus_dir=bs_dir, skip_existing_dirs=False)
+    assert stats["gap_markers_cleared"] == 1
+    assert not gi.gap_marker_path(out / "999-hr-1").exists()
+
+
+def test_convert_leaves_the_marker_alone_for_a_dir_it_skips(tmp_path):
+    # skip_existing_dirs means the bill was not rebuilt, so no version arrived and
+    # nothing about its marker went stale. Touching it would be a claim this run
+    # has no evidence for.
+    zip_dir, bs_dir, out = _gap_corpus(
+        tmp_path,
+        ["ih", "rh"],
+        [("Introduced in House", "2025-01-01", "ih"), ("Reported in House", "2025-02-01", "rh")],
+    )
+    records = [{"code": "es", "name": "Engrossed in Senate", "date": "2025-03-01"}]
+    gi.write_gap_marker(out / "999-hr-1", "999-hr-1", records)
+
+    stats = fbt.convert_archives(zip_dir, out, min_versions=1, billstatus_dir=bs_dir)
+    assert stats["existing_dir_skipped"] == 1
+    assert json.loads(gi.gap_marker_path(out / "999-hr-1").read_text())["gap_versions"] == records
+
+
+def test_convert_leaves_the_marker_alone_when_the_bill_has_no_billstatus(tmp_path):
+    # Unknown gaps are not the same as no gaps: with the bill's type ZIP missing
+    # from --billstatus-dir there is no evidence to clear a marker on. The bill is
+    # already counted as bills_without_billstatus (its ordering is unreliable too).
+    zip_dir, bs_dir, out = _gap_corpus(tmp_path, ["ih", "rh"], None)
+    _billstatus_zip(bs_dir / "999-s.zip", 999, "s", 5, [("Introduced in Senate", "2025-01-01", "is")])
+    records = [{"code": "rh", "name": "Reported in House", "date": "2025-02-01"}]
+    gi.write_gap_marker(out / "999-hr-1", "999-hr-1", records)
+
+    stats = fbt.convert_archives(zip_dir, out, min_versions=1, billstatus_dir=bs_dir, skip_existing_dirs=False)
+    assert stats["bills_without_billstatus"] == 1
+    assert stats.get("gap_markers_cleared", 0) == 0
+    assert json.loads(gi.gap_marker_path(out / "999-hr-1").read_text())["gap_versions"] == records
+
+
+def test_billstatus_gap_index_distinguishes_known_empty_from_unknown(tmp_path):
+    # Membership is the "did BILLSTATUS tell us about this bill" signal the clear
+    # decision turns on, so an all-served bill must be present with an empty list,
+    # not absent. (The date index cannot answer that: it drops bills whose codes
+    # all fail to resolve.)
+    bs_dir = tmp_path / "billstatus"
+    bs_dir.mkdir()
+    _billstatus_zip(bs_dir / "999-hr.zip", 999, "hr", 1, [("Introduced in House", "2025-01-01", "ih")])
+    dates, gaps = gi.build_billstatus_indexes(bs_dir)
+    assert dates["999-hr-1"] == {"ih": "2025-01-01"}
+    assert gaps == {"999-hr-1": []}
+    assert "999-hr-2" not in gaps

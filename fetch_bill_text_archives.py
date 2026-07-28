@@ -165,10 +165,16 @@ def convert_archives(
     code order; that is a real mis-ordering risk, so it is COUNTED
     (``bills_without_billstatus``) and warned on stderr rather than left silent.
     Undated versions sort to the bill's latest date, tie-broken by tier then code.
+
+    Every bill directory this function *builds* also gets its XML-less gap marker
+    written or cleared from the same BILLSTATUS metadata (#254), so a bulk-built
+    corpus carries the same gap signal a per-bill fetch leaves. A bill skipped by
+    ``skip_existing_dirs`` or ``min_versions`` is not built, so its marker (if any)
+    is left exactly as it was -- nothing was refreshed, so nothing can be stale.
     Returns summary stats.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    date_index = gi.build_billstatus_date_index(billstatus_dir) if billstatus_dir else {}
+    date_index, gap_index = gi.build_billstatus_indexes(billstatus_dir) if billstatus_dir else ({}, {})
     if not date_index:
         print(
             "  WARNING: no BILLSTATUS dates loaded -- every version orders by tier-then-code "
@@ -240,6 +246,25 @@ def convert_archives(
                 for idx, (code, _date, _tier) in enumerate(ordered, 1):
                     name, data = members[code]
                     (bill_dir / f"{idx}_{gi.sanitize(name)}.xml").write_bytes(data)
+
+                # XML-less gap marker (#254), matching the per-bill fetch path's
+                # semantics: written when BILLSTATUS declares versions govinfo
+                # cannot serve as XML, and CLEARED when it declares none -- so a
+                # marker left by an earlier fetch cannot outlive the bulk refresh
+                # that delivered the missing XML. Derived offline from the same
+                # BILLSTATUS ZIPs the dates come from, so it costs no requests.
+                # A bill BILLSTATUS never told us about (absent from gap_index)
+                # has *unknown* gaps, not none: leave its marker alone rather than
+                # clear it on no evidence -- those bills are counted and warned
+                # about as bills_without_billstatus.
+                if bill_id in gap_index:
+                    records = gap_index[bill_id]
+                    had_marker = gi.gap_marker_path(bill_dir).exists()
+                    gi.write_gap_marker(bill_dir, bill_id, records)
+                    if records:
+                        stats["gap_markers_written"] += 1
+                    elif had_marker:
+                        stats["gap_markers_cleared"] += 1
                 stats["bills_written"] += 1
             except (OSError, zipfile.BadZipFile, zlib.error) as exc:
                 stats["read_error_skipped"] += 1
