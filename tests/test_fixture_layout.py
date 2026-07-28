@@ -126,8 +126,19 @@ def _python_sources() -> list[Path]:
     they hold no bill paths today: a helper imported *by* a test is exactly where a stale
     path would hide from a scan limited to test files. ``docs/research/`` is deliberately
     out — those probes are download-tier scratch, like the fetchers.
+
+    The ``is_dir()`` filter below tolerates a root that is absent, which makes a renamed
+    or moved package drop out of the scan with nothing to show for it. #367 did exactly
+    that: ``shared/``, ``server/`` and ``bill_index/`` moved under ``tools/`` and into
+    ``compare/``/``web/``, this roster kept naming their old locations, and every module
+    in them left the scan while the suite stayed green. Keep these paths in step with the
+    tree — the completeness floor below can catch a total collapse, but not a partial
+    shortfall, which is the shape a move produces.
     """
-    roots = [PROJECT_ROOT / d for d in ("tests", "scripts", "parsers", "formatters", "shared", "server", "bill_index")]
+    roots = [
+        PROJECT_ROOT / d
+        for d in ("tests", "scripts", "parsers", "formatters", "compare", "web", "tools/shared", "tools/bill_index")
+    ]
     files = [f for r in roots if r.is_dir() for f in r.rglob("*.py")]
     files += sorted(PROJECT_ROOT.glob("*.py"))
     return files
