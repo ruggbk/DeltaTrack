@@ -1,6 +1,6 @@
 # Security Policy
 
-DeltaTrack compares versions of U.S. appropriations bills. Its security-relevant
+DeltaTrack compares versions of U.S. bills. Its security-relevant
 surface is the hosted compare service — the public `/api/compare` upload endpoint
 (`server/`), the front-end it serves (`webapp/`) — and the PDF/XML parsers behind
 it, which process documents from untrusted sources.
@@ -13,8 +13,8 @@ discloses the flaw before a fix exists. Instead, use GitHub's private reporting:
 - [Report a vulnerability](https://github.com/AgoraDMV/DeltaTrack/security/advisories/new)
   (also reachable via the repo's **Security** tab → "Report a vulnerability").
 
-You'll get an acknowledgment within a week. This is a small volunteer-run civic
-tech project, so fixes ship on a best-effort timeline; we'll keep you updated in
+You'll get an acknowledgment within a week. This is a small volunteer-run [Civic
+Tech](https://www.civictechdc.org/) project, so fixes ship on a best-effort timeline; we'll keep you updated in
 the advisory thread and credit you in the fix unless you prefer otherwise.
 
 ## Scope
