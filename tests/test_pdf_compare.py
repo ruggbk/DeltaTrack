@@ -301,6 +301,63 @@ def test_rate_limited_response_keeps_security_headers():
     assert resp.headers["x-content-type-options"] == "nosniff"
 
 
+def test_rate_limit_is_checked_before_the_body_is_read():
+    """A refused request must cost nothing — no upload read, no disk spooled.
+
+    This is the difference between limiting the *work* and limiting the
+    *volume* #64 asked about: an endpoint-level check only runs after FastAPI
+    has parsed the multipart body, so 150 MB is already spooled to temp disk
+    by the time the 429 goes out and a flood still exhausts the box.
+
+    An unparseable multipart body is the discriminator. If the limiter runs
+    first the request is refused on sight (429); if the body is parsed first
+    the parser rejects it (400) and the limiter is never consulted."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    _burst(client, COMPARE_RATE_LIMIT_PER_MINUTE)
+    resp = client.post(
+        "/api/compare",
+        content=b"x" * 64,  # not a multipart body at all
+        headers={"Content-Type": "multipart/form-data; boundary=zzz"},
+    )
+    assert resp.status_code == 429, f"body was parsed before the limit was checked: {resp.status_code}"
+
+
+def test_rate_limit_key_survives_duplicate_forwarded_for_headers():
+    """A client can send SEVERAL X-Forwarded-For header lines, not just several
+    comma-separated entries in one. Starlette's ``.get`` returns only the FIRST
+    header, so reading the rightmost entry of *that* one lands on a value the
+    client fully controls — a fresh bucket per request. The key has to come
+    from the LAST header line, which is where the proxy's own append lands."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    statuses = [
+        client.post(
+            "/api/compare",
+            files=_reject_files(),
+            # Rotating the client-supplied header; the proxy-appended one is constant.
+            headers=[("x-forwarded-for", f"1.2.3.{i}"), ("x-forwarded-for", "198.51.100.20")],
+        ).status_code
+        for i in range(COMPARE_RATE_LIMIT_PER_MINUTE + 1)
+    ]
+    assert statuses[-1] == 429, statuses
+
+
+def test_static_files_are_not_rate_limited():
+    """The limit is configured as a default limit rather than a route decorator
+    (so it can run before the body is read), which widens its blast radius to
+    every route with a resolvable handler. The StaticFiles mount has no
+    endpoint and is skipped — pin that, because a front-end that 429s on its
+    own assets after a few page loads would be a severe regression."""
+    from server.app import COMPARE_RATE_LIMIT_PER_MINUTE
+
+    client = _client()
+    statuses = [client.get("/index.html").status_code for _ in range(COMPARE_RATE_LIMIT_PER_MINUTE * 3)]
+    assert set(statuses) == {200}, statuses
+
+
 # ---------- Enrolled-layout decline guard (#141) ---------------------------
 #
 # Enrolled prints carry no GPO margin line numbers, so every anchor path returns
