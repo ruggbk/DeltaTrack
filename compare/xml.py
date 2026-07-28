@@ -1,6 +1,6 @@
 """Turn two bill-XML byte blobs into canonical diff JSON or standalone HTML.
 
-The XML counterpart to ``server/pdf_compare.py``. Same contract, same stateless
+The XML counterpart to ``compare/pdf.py``. Same contract, same stateless
 guarantee: uploaded XML lives only for the duration of the request (temp files
 deleted before return), nothing is persisted.
 
@@ -21,7 +21,7 @@ the ``diff_bill.py compare --format html`` CLI, and ``render_examples.py`` all e
 here, so one bill pair renders one way no matter which surface asked for it. Each of
 those three used to assemble the canonical → view → HTML chain itself, and the copies
 had already drifted apart in which version metadata they set. ``diff_pdf.py`` delegates
-to ``server/pdf_compare.py`` for the same reason; this is the XML half of that pattern.
+to ``compare/pdf.py`` for the same reason; this is the XML half of that pattern.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from diff_bill import bill_diff_to_dict, diff_bills, filter_diff
 from formatters.canonical import view_from_canonical, xml_diff_to_canonical
 from formatters.diff_html import format_diff_html
 from formatters.text_serializer import build_xml_full_text
-from shared.version_stems import label_from_stem, version_number_from_stem
+from version_stems import label_from_stem, version_number_from_stem
 
 
 def _build_from_trees(

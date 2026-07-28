@@ -35,7 +35,7 @@ from typing import Literal
 from diff_bill import _move_candidates, _text_similarity_at_least, extract_amounts, match_amounts
 from parsers.pdf_anchors import Anchor, _is_uppercase_heading, extract_anchors
 from parsers.pdf_text import Page
-from shared.version_stems import label_from_stem
+from version_stems import label_from_stem
 
 ChangeType = Literal["added", "removed", "modified", "moved"]
 PageLineRange = tuple[int, int, int, int]  # (start_page, start_line, end_page, end_line)
@@ -559,14 +559,14 @@ def render_pdf_diff_html(
 ) -> str:
     """Render an HTML diff page for two PDF paths.
 
-    Delegates to ``server.pdf_compare.compare_pdfs_html`` — the same pipeline
+    Delegates to ``compare.pdf.compare_pdfs_html`` — the same pipeline
     the web app uses — so the report carries the full-bill text view, in-page
     search, section TOC, and embedded export. Title and Congress are derived
     from the PDF front matter; labels default to the (de-prefixed) filename
-    stems. Imported lazily to avoid a circular import (pdf_compare imports
+    stems. Imported lazily to avoid a circular import (compare.pdf imports
     diff_pdf).
     """
-    from server.pdf_compare import compare_pdfs_html
+    from compare.pdf import compare_pdfs_html
 
     return compare_pdfs_html(
         v1_pdf.read_bytes(),

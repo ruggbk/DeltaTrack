@@ -44,7 +44,7 @@ def live_url():
     """
     import uvicorn
 
-    from server.app import app
+    from web.app import app
 
     port = _free_port()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

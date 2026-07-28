@@ -1,4 +1,4 @@
-"""Tests for the static front-end served by server/app.py.
+"""Tests for the static front-end served by web/app.py.
 
 These guard the "View a sample report" path that broke in #41: the landing
 page must link directly to a reachable sample document, and the static mount
@@ -20,7 +20,7 @@ def _client():
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from server.app import app
+    from web.app import app
 
     return TestClient(app)
 

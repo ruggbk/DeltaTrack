@@ -9,7 +9,7 @@ e.g. `119-hr-1` for the 1st House Resolution bill of the 119th Congress.
 
 Version is deliberately not part of the slug. A version is a per-bill ordinal addressed
 as a separate token next to the bill, so its number and meaning are only defined under
-one bill (ADR 0013). `shared/version_stems.py` resolves a slug + ordinal to a file.
+one bill (ADR 0013). `version_stems.py` resolves a slug + ordinal to a file.
 
 Aside from a uniquely identifying slug, each bill can have arbitrary metadata.
 The index automatically syncs with a CSV file. It can be used to prevent duplicate downloads

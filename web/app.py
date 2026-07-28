@@ -23,12 +23,13 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIASGIMiddleware
 
-from server.pdf_compare import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
-from server.xml_compare import compare_xml, compare_xml_html
+from compare.pdf import UnsupportedLayoutError, compare_pdfs, compare_pdfs_html
+from compare.xml import compare_xml, compare_xml_html
 
-# The static front-end (webapp/) ships alongside this package and is served by
-# the app itself — see the StaticFiles mount at the bottom of the file.
-WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
+# The static front-end (web/webapp/) ships inside this package and is served by
+# the app itself — see the StaticFiles mount at the bottom of the file. Resolved
+# relative to this file, so the whole delivery channel relocates as one directory.
+WEBAPP_DIR = Path(__file__).resolve().parent / "webapp"
 
 # Upload guards — this endpoint accepts untrusted public input.
 MAX_UPLOAD_BYTES = 150 * 1024 * 1024  # 150 MB per file
@@ -286,6 +287,6 @@ async def compare(
 # Static front-end, mounted LAST and at "/" so the explicit /api/* routes above
 # always match first. With html=True, "/" serves index.html and clean paths like
 # "/compare.html" resolve to files. This makes the service self-contained:
-# `uvicorn server.app:app` serves the whole site — identical in dev (no proxy) and
+# `uvicorn web.app:app` serves the whole site — identical in dev (no proxy) and
 # in prod (a reverse proxy just forwards / to here). No docroot copy, no route drift.
 app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")

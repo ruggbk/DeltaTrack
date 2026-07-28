@@ -127,6 +127,6 @@ def test_govinfo_enumeration_reproduces_corpus_filenames():
     assert not stale, (
         f"{sum(len(v) for v in stale.values())} on-disk stem(s) across {len(stale)} bill(s) "
         "diverge from govinfo enumeration — stale names. Re-download the bill "
-        "(fetch_bills.py download <congress> <type> <number> --format both), or add to "
+        "(./tools/fetch_bills.py download <congress> <type> <number> --format both), or add to "
         f"_ACCEPTED_EXTRA_STEMS if legitimate (e.g. a Public Law text): {stale}"
     )

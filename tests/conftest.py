@@ -714,7 +714,7 @@ def _reset_rate_limiter():
     server pay nothing."""
     import sys
 
-    limiter = getattr(sys.modules.get("server.app"), "limiter", None)
+    limiter = getattr(sys.modules.get("web.app"), "limiter", None)
     if limiter is not None:
         limiter.reset()
     yield

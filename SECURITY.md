@@ -2,7 +2,7 @@
 
 DeltaTrack compares versions of U.S. bills. Its security-relevant
 surface is the hosted compare service — the public `/api/compare` upload endpoint
-(`server/`), the front-end it serves (`webapp/`) — and the PDF/XML parsers behind
+(`web/`), the front-end it serves (`web/webapp/`) — and the PDF/XML parsers behind
 it, which process documents from untrusted sources.
 
 ## Reporting a vulnerability

@@ -128,7 +128,7 @@ def test_unlabeled_nodes_are_not_rendered_as_blank_toc_rows():
 
 @pytest.mark.slow
 def test_real_xml_toc_has_no_blank_rows():
-    from server.xml_compare import compare_xml_html
+    from compare.xml import compare_xml_html
 
     html = compare_xml_html(_V1.read_bytes(), _V2.read_bytes(), start_label="v1", end_label="v2")
     toc = re.search(r'<div class="sidebar-toc".*?</nav>', html, re.S).group(0)
@@ -141,7 +141,7 @@ def test_real_xml_toc_has_no_blank_rows():
 def test_tree_toc_links_all_resolve_to_full_bill_rows():
     # Every TOC link (#fb-off-N) has a matching id in the full-bill view — no
     # dangling anchors after the offset-based rewrite.
-    from server.xml_compare import compare_xml_html
+    from compare.xml import compare_xml_html
 
     html = compare_xml_html(_V1.read_bytes(), _V2.read_bytes(), start_label="v1", end_label="v2")
     targets = set(re.findall(r'href="#(fb-off-\d+)"', html))

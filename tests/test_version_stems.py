@@ -1,8 +1,8 @@
-"""Pin the version-prefixed filename-stem parsers in shared.version_stems."""
+"""Pin the version-prefixed filename-stem parsers in version_stems."""
 
 from __future__ import annotations
 
-from shared.version_stems import label_from_stem, version_number_from_stem
+from version_stems import label_from_stem, version_number_from_stem
 
 
 class TestVersionNumberFromStem:

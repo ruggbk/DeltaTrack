@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bill_tree import BillNode, BillTree, normalize_bill, normalize_division_title
-from shared.version_stems import label_from_stem, version_number_from_stem
+from version_stems import label_from_stem, version_number_from_stem
 
 # --- Financial amount extraction ---
 
@@ -733,10 +733,10 @@ def cmd_compare(args: argparse.Namespace) -> None:
     fmt = getattr(args, "format", "json")
 
     if fmt == "html":
-        # Imported here, not at module scope: server.xml_compare imports this module.
+        # Imported here, not at module scope: compare.xml imports this module.
         # It owns the whole XML → HTML chain (#42), so the CLI, the web app, and
         # render_examples.py cannot drift into rendering the same pair differently.
-        from server.xml_compare import compare_xml_trees_html
+        from compare.xml import compare_xml_trees_html
 
         old_stem, new_stem = Path(args.old_xml).stem, Path(args.new_xml).stem
         output = compare_xml_trees_html(

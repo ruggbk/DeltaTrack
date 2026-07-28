@@ -158,8 +158,24 @@ def test_the_sourced_command_gate_actually_read_a_command():
 # undocumented, which a fixed list would not have looked at.
 
 
-def _wrapper_scripts() -> list[str]:
-    """Every product command, as an importable module name: executable root `.py` files.
+def _command_roots() -> list[Path]:
+    """Directories that can hold a runnable command.
+
+    Derived from `ROOT` at call time, never captured at import, so the isolated-root test
+    below can still substitute a fake tree and have the whole discovery chain follow it.
+    `tools/` is included only when it exists, which is what lets that fake tree describe a
+    repo with no tooling directory at all.
+    """
+    return [root for root in (ROOT, ROOT / "tools") if root.is_dir()]
+
+
+def _wrapper_paths() -> list[Path]:
+    """Every executable `.py` across the command roots, as paths."""
+    return [p for root in _command_roots() for p in sorted(root.glob("*.py")) if p.stat().st_mode & 0o111]
+
+
+def _wrapper_scripts() -> dict[str, str]:
+    """Every product command: importable module name -> the command a user types.
 
     Discovery keys on the executable bit because that is a property of *commands*: a
     file carrying the bit has a shebang and is meant to be run directly. The previous
@@ -194,27 +210,35 @@ def _wrapper_scripts() -> list[str]:
     Filesystems that do not carry an executable bit (a Windows checkout) yield an empty
     roster, which the completeness floor below turns into a loud failure rather than a
     silently passing gate.
+
+    Returns the invocation alongside the module name because commands no longer all live
+    in one place (#367): the bill-fetching scripts moved to `tools/`, so a user types
+    `./tools/fetch_bills.py` while the module still imports as `fetch_bills`. Deriving the
+    typed form from the file's own location keeps the README rows checked against where
+    the command actually is, instead of a prefix hardcoded here that a later move would
+    leave pointing at the old tree.
     """
-    return sorted(p.stem for p in ROOT.glob("*.py") if p.stat().st_mode & 0o111)
+    return {p.stem: f"./{p.relative_to(ROOT).as_posix()}" for p in _wrapper_paths()}
 
 
 def _cli_commands() -> dict[str, list[str]]:
     """Every documentable command, keyed by the wrapper script that provides it.
 
-    A parser with subcommands contributes one entry per subcommand (`./fetch_bills.py
+    A parser with subcommands contributes one entry per subcommand (`./tools/fetch_bills.py
     search`); a parser that takes only options contributes the bare script name,
     which is how the README names it. A wrapper with no `build_parser` at all
     (fetch_bill_archives runs a hardcoded congress range with no flags and has no
     argparse yet, #10) contributes the bare script name for the same reason.
 
-    Spelled `./name.py`, the way a user actually types it. The bare-name alias
-    symlinks that once made `./name` work are gone (#319).
+    Spelled the way a user actually types it, path included -- `./diff_bill.py` but
+    `./tools/fetch_bills.py` (#367). The bare-name alias symlinks that once made `./name`
+    work are gone (#319).
     """
     commands: dict[str, list[str]] = {}
-    for script in _wrapper_scripts():
+    for script, invocation in _wrapper_scripts().items():
         build_parser = getattr(importlib.import_module(script), "build_parser", None)
         if build_parser is None:
-            commands[script] = [f"./{script}.py"]
+            commands[script] = [invocation]
             continue
         parser = build_parser()
         subcommands = [
@@ -223,7 +247,7 @@ def _cli_commands() -> dict[str, list[str]]:
             if isinstance(action, argparse._SubParsersAction)
             for name in action.choices
         ]
-        commands[script] = [f"./{script}.py {name}" for name in subcommands] if subcommands else [f"./{script}.py"]
+        commands[script] = [f"{invocation} {name}" for name in subcommands] if subcommands else [invocation]
     return commands
 
 
@@ -321,7 +345,7 @@ def test_the_command_gate_actually_found_commands():
     empty = sorted(script for script, cmds in commands.items() if not cmds)
     assert not empty, f"no commands discovered for {empty} -- introspection is broken, not the docs"
 
-    # fetch_bills is the multi-subcommand script; a bare "./fetch_bills.py" from it would
+    # fetch_bills is the multi-subcommand script; a bare "./tools/fetch_bills.py" from it would
     # mean the subparser walk found nothing while still returning a plausible answer.
     assert len(commands["fetch_bills"]) > 1, "fetch_bills subcommands were not discovered"
 
@@ -358,10 +382,37 @@ def test_only_executable_root_scripts_are_discovered_as_commands(tmp_path, monke
     (tmp_path / "corpus_data").mkdir()
     (tmp_path / "bills_corpus").symlink_to(tmp_path / "corpus_data", target_is_directory=True)
     (tmp_path / "init").write_text("# sourced, not run\n")
+    # A second command root, so the tools/ half of discovery is pinned too (#367): the
+    # invocation must carry the subdirectory, or the README rows would be checked against
+    # a path no user can type.
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "a_tool.py").write_text("#!/usr/bin/env python3\ndef build_parser():\n    pass\n")
+    (tmp_path / "tools" / "a_tool.py").chmod(0o755)
+    (tmp_path / "tools" / "tool_module.py").write_text("#!/usr/bin/env python3\n# imported, not run\n")
+    (tmp_path / "tools" / "tool_module.py").chmod(0o644)
 
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
 
-    assert _wrapper_scripts() == ["real_command"]
+    assert _wrapper_scripts() == {"real_command": "./real_command.py", "a_tool": "./tools/a_tool.py"}
+
+
+def test_command_names_are_unique_across_command_roots():
+    """Two roots share one flat module namespace, so a duplicate stem must be loud (#367).
+
+    `_wrapper_scripts` is keyed by module name because `_cli_commands` imports each one,
+    and `tools/` is on pytest's pythonpath rather than being a package. A `tools/x.py`
+    added beside a root `x.py` would therefore collide: the dict keeps one, discovery
+    silently reports a single command, and the other ships with no README row -- the
+    undocumented-command failure this whole section exists to catch, reintroduced through
+    the back door. Checks the paths, not the deduplicated mapping, which cannot show it.
+    """
+    stems = [p.stem for p in _wrapper_paths()]
+
+    duplicates = sorted({stem for stem in stems if stems.count(stem) > 1})
+    assert not duplicates, (
+        f"command names collide across roots: {duplicates}. Two roots share one module "
+        "namespace, so one would shadow the other and vanish from the README gate; rename one."
+    )
 
 
 def test_a_runnable_root_script_carries_the_executable_bit():
@@ -379,14 +430,15 @@ def test_a_runnable_root_script_carries_the_executable_bit():
     Both halves together is the shape only a command has.
     """
     offenders = []
-    for path in sorted(ROOT.glob("*.py")):
-        text = path.read_text()
-        runnable = text.startswith("#!") and "__main__" in text
-        if runnable and not path.stat().st_mode & 0o111:
-            offenders.append(path.name)
+    for root in _command_roots():
+        for path in sorted(root.glob("*.py")):
+            text = path.read_text()
+            runnable = text.startswith("#!") and "__main__" in text
+            if runnable and not path.stat().st_mode & 0o111:
+                offenders.append(path.relative_to(ROOT).as_posix())
 
     assert not offenders, (
-        f"Root scripts look runnable but are not executable: {offenders}. A product command "
+        f"Scripts look runnable but are not executable: {offenders}. A product command "
         "needs `chmod +x` to be discovered by the README gate above; if it is not a command, "
         "drop the shebang or the `__main__` block so it reads as a module."
     )

@@ -334,7 +334,7 @@ everything else. A download only widens what `CORPUS_SWEEP=1` reaches.
 
 When you do download, the PDF suites need each bill's PDF as well as its XML;
 pass `--format both`, e.g.
-`uv run python fetch_bills.py download 118 hr 4366 --format both`. See the
+`uv run python tools/fetch_bills.py download 118 hr 4366 --format both`. See the
 Testing section of the [README](README.md#testing).
 
 Assets sourced directly from govinfo rather than the bill API -- such as the

@@ -1,4 +1,4 @@
-"""Tests for the web service's XML compare wrap (server/xml_compare.py).
+"""Tests for the engine's XML compare wrap (compare/xml.py).
 
 Mirrors test_pdf_compare's slow end-to-end layer: runs the real engine on the
 committed HR4366 sample XMLs and validates the result. Those XMLs are in the
@@ -27,7 +27,7 @@ def test_compare_xml_returns_valid_canonical():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
-    from server.xml_compare import compare_xml
+    from compare.xml import compare_xml
 
     canonical = compare_xml(
         start.read_bytes(),
@@ -55,7 +55,7 @@ def test_compare_xml_html_gutterless_fullbill():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
-    from server.xml_compare import compare_xml_html
+    from compare.xml import compare_xml_html
 
     html = compare_xml_html(
         start.read_bytes(),
@@ -92,7 +92,7 @@ def test_xml_changes_resolve_spans_structurally_on_real_bill():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
-    from server.xml_compare import compare_xml
+    from compare.xml import compare_xml
 
     canonical = compare_xml(start.read_bytes(), end.read_bytes(), start_label="v1", end_label="v2")
     unresolved = []

@@ -52,7 +52,7 @@ The fast tests use inline XML and mocked data. Integration tests need real bill 
 # via `cp .env.example .env`, and fetch_bills.py loads .env automatically.)
 
 # Download the primary test bill (--format both gets XML + PDF; default is XML only)
-uv run python fetch_bills.py download 118 hr 4366 --format both
+uv run python tools/fetch_bills.py download 118 hr 4366 --format both
 
 # Run the suite; tests whose bill isn't downloaded yet skip automatically
 uv run pytest
@@ -122,7 +122,7 @@ uv run ruff format .         # Format
 
 ### Adding a CLI command
 
-A command is an **executable `.py` file in the project root**. That is the whole
+A command is an **executable `.py` file in the project root or in `tools/`**. That is the whole
 definition, and it is what the documentation gate keys on, so a new command is
 discovered automatically and is required to be documented. To add one:
 
@@ -150,15 +150,16 @@ runnable but are not executable`. Steps 1, 3 and 5 it cannot check for you:
 - A shebang is never required on its own. Paired with a `__main__` block on a file
   that lacks the executable bit, it is what raises that step-2 failure.
 - A command with no `build_parser` is documented under its bare script name rather
-  than rejected (`fetch_bill_archives.py`, [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)).
+  than rejected (`tools/fetch_bill_archives.py`, [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)).
 - Nothing ties the floor's list back to what discovery found, which is why step 5 is
   a step and not an assertion.
 
-Root `.py` files that are *not* commands (`fetch_govinfo.py`, `bill_tree.py`) simply
-carry no executable bit.
+`.py` files that are *not* commands (`tools/fetch_govinfo.py`, `bill_tree.py`) simply
+carry no executable bit. Discovery covers two roots, the project root and `tools/`, and
+spells each command with the path a user types.
 
 Root scripts once shipped a bare-name symlink beside them (`fetch_bills` pointing at
-`fetch_bills.py`) so the `.py` could be dropped from the invocation. Those are gone
+`tools/fetch_bills.py`) so the `.py` could be dropped from the invocation. Those are gone
 ([#319](https://github.com/AgoraDMV/DeltaTrack/issues/319)): the symlink was cosmetic,
 and making "is a root symlink" the definition of a command meant anything else linked
 into the root, such as a corpus directory linked in from another checkout, was reported

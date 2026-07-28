@@ -38,7 +38,7 @@ source ./init
 
 # 2. Download all versions of a bill
 #    Example: HR 4366 from the 118th Congress (2023-2024)
-./fetch_bills.py download 118 hr 4366
+./tools/fetch_bills.py download 118 hr 4366
 
 # 3. Generate an HTML report comparing two versions
 ./diff_bill.py compare \
@@ -57,43 +57,43 @@ CONGRESS_API_KEY=your_key_here
 
 ## Command reference
 
-The product commands are the executable `.py` scripts in the project root; run them after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
+The product commands are the executable `.py` scripts in the project root — `diff_bill.py` and `diff_pdf.py`, the diff engine itself. The bill-downloading commands live in `tools/`, which holds the acquisition tooling rather than the product ([#367](https://github.com/AgoraDMV/DeltaTrack/issues/367)). Run either after `source ./init`. `versions`, `download`, and `download-all` default to the keyless **govinfo** source — pass `--source api` for the Congress.gov API. `download` and `download-all` default to **XML** — pass `--format pdf` or `--format both` for PDFs.
 
 | Command | What it does |
 |---------|--------------|
-| `./fetch_bills.py versions <congress> <type> <number>` | List a bill's available text versions (`--source govinfo\|api`, default govinfo) |
-| `./fetch_bills.py download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`, `--source govinfo\|api`) |
-| `./fetch_bills.py download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set; `--source govinfo\|api`) |
-| `./fetch_bills.py search "<terms>" [--congress N] [--type hr] [--appropriations]` | Find bills by title over a local BILLSTATUS index (keyless, offline; **requires the index** — fetch it first with `fetch-index`, see below) |
-| `./fetch_bills.py fetch-index --congress <N> [--type hr]` | Download just the scoped BILLSTATUS ZIP(s) that `search` reads (keyless; tens of MB, not the multi-GB full bulk set) — the lightweight on-ramp for `search` |
+| `./tools/fetch_bills.py versions <congress> <type> <number>` | List a bill's available text versions (`--source govinfo\|api`, default govinfo) |
+| `./tools/fetch_bills.py download <congress> <type> <number>` | Download a bill's versions (XML by default; `--format pdf\|both`, `--version N`, `--source govinfo\|api`) |
+| `./tools/fetch_bills.py download-all --start_year <Y> --end_year <Y>` | Download all appropriations bills in a year range (or `--file <csv>` for a specific set; `--source govinfo\|api`) |
+| `./tools/fetch_bills.py search "<terms>" [--congress N] [--type hr] [--appropriations]` | Find bills by title over a local BILLSTATUS index (keyless, offline; **requires the index** — fetch it first with `fetch-index`, see below) |
+| `./tools/fetch_bills.py fetch-index --congress <N> [--type hr]` | Download just the scoped BILLSTATUS ZIP(s) that `search` reads (keyless; tens of MB, not the multi-GB full bulk set) — the lightweight on-ramp for `search` |
 | `./diff_bill.py compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
 | `./diff_pdf.py <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
-| `./fetch_bill_archives.py` | Bulk-build a full bill-metadata index (all of 112–119) from govinfo archives — **see the warning below** |
-| `./fetch_bill_text_archives.py --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
+| `./tools/fetch_bill_archives.py` | Bulk-build a full bill-metadata index (all of 112–119) from govinfo archives — **see the warning below** |
+| `./tools/fetch_bill_text_archives.py --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
 
 Environment setup is `source ./init` (installs dependencies and activates the virtualenv). Use `source` so the environment change sticks; it is not a runnable command. Keep the leading `./`: a bare `source init` searches `PATH` before the current directory, so wherever `/usr/sbin` is on `PATH` (most Linux distributions) it finds the system `init` and fails.
 
-> **`fetch_bill_archives.py` is an advanced bulk tool.** Run with no arguments it immediately downloads every GovInfo BILLSTATUS archive for congresses 112–119 (hundreds of MB) with no prompt, extracts them, and writes a `bills/bills.csv` metadata index. The congress range is hardcoded and there are no CLI flags yet (tracked in [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)). Reach for it only when you specifically need a bulk bill index.
+> **`tools/fetch_bill_archives.py` is an advanced bulk tool.** Run with no arguments it immediately downloads every GovInfo BILLSTATUS archive for congresses 112–119 (hundreds of MB) with no prompt, extracts them, and writes a `bills/bills.csv` metadata index. The congress range is hardcoded and there are no CLI flags yet (tracked in [#10](https://github.com/AgoraDMV/DeltaTrack/issues/10)). Reach for it only when you specifically need a bulk bill index.
 
-To run the web comparison app locally: `uvicorn server.app:app --reload --port 8077` (see [docs/web-compare.md](docs/web-compare.md)).
+To run the web comparison app locally: `uvicorn web.app:app --reload --port 8077` (see [docs/web-compare.md](docs/web-compare.md)).
 
 ## Downloading Bills
 
 ```bash
 # List available text versions
-./fetch_bills.py versions 118 hr 4366
+./tools/fetch_bills.py versions 118 hr 4366
 
 # Download all versions of a bill (XML by default; add --format pdf or --format both for PDFs)
-./fetch_bills.py download 118 hr 4366
+./tools/fetch_bills.py download 118 hr 4366
 
 # Download a specific version (1-indexed)
-./fetch_bills.py download 118 hr 4366 --version 2
+./tools/fetch_bills.py download 118 hr 4366 --version 2
 
 # Download all appropriations bills for a year range
-./fetch_bills.py download-all --start_year 2024 --end_year 2026
+./tools/fetch_bills.py download-all --start_year 2024 --end_year 2026
 
 # Or batch-download a specific set of bills from a CSV you create with an 'id' column
-./fetch_bills.py download-all --file your_bills.csv
+./tools/fetch_bills.py download-all --file your_bills.csv
 ```
 
 Files are saved to `bills/<congress>-<type>-<number>/`.
@@ -104,15 +104,15 @@ If you don't know the bill number, search bill titles over a local index (keyles
 
 ```bash
 # 1. Fetch just the BILLSTATUS ZIP for the congress (and optionally type) you want (tens of MB)
-./fetch_bills.py fetch-index --congress 118 --type hr
+./tools/fetch_bills.py fetch-index --congress 118 --type hr
 
 # 2. Search it — any bill type/congress; --appropriations is an optional facet, not a required filter
-./fetch_bills.py search "military construction" --congress 118 --appropriations
+./tools/fetch_bills.py search "military construction" --congress 118 --appropriations
 ```
 
 Each match prints as `<congress>-<type>-<number>\t<title>`; feed the number back into `download`. The exit status follows `grep`, so scripts and agents can branch without parsing output: **0** matches found, **1** searched but nothing matched, **2** no index to search.
 
-The index is read from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone. Fetch just the slice you need with `./fetch_bills.py fetch-index --congress <N> [--type <hr>]` (keyless; tens of MB for one congress/type, vs the multi-GB full set; omit `--type` to pull every type for the congress); for a full multi-congress metadata index there is the heavier `./fetch_bill_archives.py` (described below). Both resolve `--billstatus-dir` (default `bills/`) relative to the current directory, so run either from the project root. Until an index exists, `search` exits 2 with a "no BILLSTATUS index" message. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
+The index is read from BILLSTATUS ZIPs in `bills/`, which are **not** part of a fresh clone. Fetch just the slice you need with `./tools/fetch_bills.py fetch-index --congress <N> [--type <hr>]` (keyless; tens of MB for one congress/type, vs the multi-GB full set; omit `--type` to pull every type for the congress); for a full multi-congress metadata index there is the heavier `./tools/fetch_bill_archives.py` (described below). Both resolve `--billstatus-dir` (default `bills/`) relative to the current directory, so run either from the project root. Until an index exists, `search` exits 2 with a "no BILLSTATUS index" message. `--appropriations` narrows results to bills referred to the House/Senate Appropriations committee; it never gates a plain title search.
 
 ## Comparing Bills
 
@@ -179,7 +179,7 @@ Some bill versions are only available as PDF — pre-publication committee print
 
 ```bash
 # download defaults to XML, so request the PDFs explicitly
-./fetch_bills.py download 118 hr 4366 --format pdf
+./tools/fetch_bills.py download 118 hr 4366 --format pdf
 
 # Generate the same standalone HTML report from two PDFs
 ./diff_pdf.py bills/118-hr-4366/1_reported-in-house.pdf bills/118-hr-4366/2_engrossed-in-house.pdf -o reports/hr4366.html
@@ -222,7 +222,7 @@ The shared data model the whole project rests on — the bill hierarchy, the glo
 
 Four modules:
 
-- **`fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`, `search` (keyless title discovery over a local BILLSTATUS index), `fetch-index` (download just the scoped BILLSTATUS ZIP `search` reads).
+- **`tools/fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`, `search` (keyless title discovery over a local BILLSTATUS index), `fetch-index` (download just the scoped BILLSTATUS ZIP `search` reads).
 - **`bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter, subpart). Captures preamble sections that sit alongside divisions or titles.
 - **`diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
 - **`formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.
@@ -249,7 +249,7 @@ uv run pytest tests/test_validate_extraction.py     # External validation tests
 
 Tests that require real bill files are marked `@pytest.mark.slow`. The fast suite (`-m "not slow and not browser"`) runs entirely on inline XML and mocked data, needs no downloads, and finishes quickly. The corpus correctness gates (corpus-wide property checks and cross-version diff validation) run against a committed fixture set named in `tests/corpus_manifest.toml` -- no download needed, and reproducible everywhere. Every pull request runs the full CI gate set: lint, formatting, the fast and browser tests, external ground-truth validation, and every slow gate that can run offline -- see [What CI checks](CONTRIBUTING.md#what-ci-checks).
 
-The diff engine is fully deterministic: no LLM and no API key. `fetch_bills.py` downloads bills keyless by default (govinfo bulk data); a `CONGRESS_API_KEY` is only needed for `--source api` or `download-all` year-range discovery, never by the diff itself.
+The diff engine is fully deterministic: no LLM and no API key. `tools/fetch_bills.py` downloads bills keyless by default (govinfo bulk data); a `CONGRESS_API_KEY` is only needed for `--source api` or `download-all` year-range discovery, never by the diff itself.
 
 See [TESTING.md](TESTING.md) for how the test suite is organized, how diff accuracy is validated, what each validation layer proves, and where the known gaps are.
 

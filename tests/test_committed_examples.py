@@ -26,7 +26,7 @@ from corpus_paths import FIXTURES_DIR
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
-SERVED_SAMPLE = ROOT / "webapp" / "sample" / "example.html"
+SERVED_SAMPLE = ROOT / "web" / "webapp" / "sample" / "example.html"
 PDF_EXAMPLE = EXAMPLES / "hr8752_pdf_diff.html"
 
 REGENERATE = "Run `uv run python render_examples.py` and commit the result."
@@ -173,7 +173,7 @@ def test_both_pipelines_head_the_same_pair_identically():
 def test_served_sample_matches_the_pdf_example():
     """The sample the web app serves is a copy of the committed PDF example.
 
-    `webapp/index.html` offers "View a sample report", so this file is the first thing a
+    `web/webapp/index.html` offers "View a sample report", so this file is the first thing a
     visitor opens. `docs/web-compare.md` documents it as a copy of `examples/*_pdf_diff.html`;
     this pins that, so the sample cannot lag the example it is copied from.
     """

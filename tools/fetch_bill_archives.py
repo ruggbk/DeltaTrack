@@ -28,8 +28,12 @@ from shared.bill_types import BILL_TYPES
 
 BillMetadata = dict[str, Any]
 
-# Workaround so that the script always runs correctly when running an an IDE
-PROJECT_DIR = Path(__file__).resolve().parent
+# The REPOSITORY root, not this script's directory: `parents[1]` because the fetch
+# tooling lives in `tools/` while the working directories it fills are gitignored at the
+# root (`/bills`, `/bills_bulk_text` — anchored, see .gitignore). Resolving them beside
+# the script instead would put hundreds of MB of downloads outside those rules, which is
+# the silent-`git add` failure #308 exists to prevent (#367).
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 DEFAULT_BILLS_DIR = PROJECT_DIR / "bills"
 
@@ -86,7 +90,7 @@ def archive_url(congress: int, bill_type: str) -> str:
 
 
 def resolve_destination(destination: Path | str | None = None) -> Path:
-    """Resolve destination relative to this script's project directory."""
+    """Resolve a relative destination against the repository root (see PROJECT_DIR)."""
     path = Path(destination or DEFAULT_BILLS_DIR)
     if not path.is_absolute():
         path = PROJECT_DIR / path
