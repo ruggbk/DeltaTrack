@@ -17,14 +17,16 @@ import os
 import pickle
 import tempfile
 from functools import lru_cache
+from importlib.metadata import version
 from pathlib import Path
 
+import parsers.pdf_text
 from corpus_paths import FIXTURES_DIR, sweep_bill_dirs
 from parsers.pdf_text import Page, extract_clean_pages
 
 # Persistent extraction cache. Gitignored (test_data/* is ignored). Keyed by PDF
-# path + mtime via the filename, so a changed PDF maps to a different file and
-# the stale entry is simply never read.
+# path + mtime AND the extractor's identity, via the filename, so a stale entry is
+# simply never read. See `_extractor_fingerprint` for why the second half is needed.
 CACHE_DIR = Path(__file__).parent.parent / "test_data" / "extract_cache"
 
 # Optional single-bill filter for a fast TDD loop. Substring match on the bill
@@ -35,9 +37,28 @@ _TEST_BILL = os.environ.get("TEST_BILL") or None
 _CORPUS_SWEEP = os.environ.get("CORPUS_SWEEP") == "1"
 
 
+@lru_cache(maxsize=1)
+def _extractor_fingerprint() -> str:
+    """Identity of the code that decides what a cache entry contains (#393).
+
+    Keying only on the PDF is not enough: editing `parsers/pdf_text.py` changes what
+    extraction produces but touches no PDF, so every entry still looks current and is
+    served unchanged. Tests that read the cache then assert against pre-change text and
+    stay green, which is worst for the golden suites, whose whole job is to go red on
+    exactly that drift. The engine version is in here for the same reason: a pypdfium2
+    upgrade can alter glyph handling without any source edit.
+
+    Deliberately blunt. A comment-only edit to the extractor also invalidates, costing
+    one re-extraction; that is cheaper than reasoning about which edits are behavioral.
+    """
+    src = Path(parsers.pdf_text.__file__).read_bytes()
+    return hashlib.sha1(src + version("pypdfium2").encode()).hexdigest()[:12]
+
+
 def _cache_file(pdf_path: Path) -> Path:
     mtime_ns = pdf_path.stat().st_mtime_ns
-    digest = hashlib.sha1(f"{pdf_path.resolve()}::{mtime_ns}".encode()).hexdigest()[:16]
+    key = f"{pdf_path.resolve()}::{mtime_ns}::{_extractor_fingerprint()}"
+    digest = hashlib.sha1(key.encode()).hexdigest()[:16]
     return CACHE_DIR / f"{pdf_path.stem}-{digest}.pkl"
 
 

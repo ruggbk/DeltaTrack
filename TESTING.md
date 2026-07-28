@@ -365,9 +365,18 @@ TEST_BILL=4366 uv run pytest -n auto tests/test_pdf_corpus_smoke.py
 
 The first run extracts each PDF and caches the result to
 `test_data/extract_cache/` (gitignored). Every later run loads from that cache
-instead of re-reading the PDF, so re-running the same tests is near-instant. The
-cache is keyed by file modification time, so editing or replacing a PDF
-re-extracts it automatically.
+instead of re-reading the PDF, so re-running the same tests is near-instant.
+
+An entry is reused only when nothing that produced it has changed, so the key
+covers both halves: the PDF (path and modification time) and the extractor
+(`parsers/pdf_text.py` and the pypdfium2 version). Editing or replacing a PDF
+re-extracts it, and so does any edit to the extractor. Before that second half
+was in the key (#393), an extractor change left every entry looking current, and
+the golden suites reading the cache asserted against pre-change text and stayed
+green on a real regression.
+
+The rule is deliberately blunt: a comment-only edit to `parsers/pdf_text.py` also
+invalidates the cache, so the next run pays one full re-extraction.
 
 ## Comparing the two pipelines by eye
 
