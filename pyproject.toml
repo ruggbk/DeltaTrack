@@ -9,7 +9,7 @@ dependencies = [
     "python-dotenv>=1.0",
     # Web service (server/) — wraps the diff engine as a FastAPI app served by uvicorn.
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
+    "uvicorn[standard]>=0.51.0",
     "python-multipart>=0.0.18",  # 0.0.18 fixes CVE-2024-53981 (multipart DoS); also the floor pip-audit checks
 ]
 
