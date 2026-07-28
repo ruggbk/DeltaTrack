@@ -119,6 +119,62 @@ def test_security_headers_survive_the_https_redirect():
     assert resp.headers["x-content-type-options"] == "nosniff"
 
 
+def test_report_sized_html_is_gzipped():
+    """Report-sized HTML compresses ~6x, and on an office connection the
+    transfer is the dominant cost of using the tool (#354). The sample report
+    is the largest committed page the static mount serves; it stands in for a
+    generated report without running the engine.
+
+    The security headers must survive compression: gzip wraps the header
+    middleware, and a reordering that drops them would pass a body-only check.
+    """
+    resp = _client().get("/sample/example.html", headers={"Accept-Encoding": "gzip"})
+    assert resp.status_code == 200
+    assert resp.headers.get("content-encoding") == "gzip"
+    assert resp.headers["x-frame-options"] == "DENY"
+    # httpx decodes transparently; the document must round-trip intact.
+    assert "</html>" in resp.text
+
+
+def test_generated_report_response_is_gzipped(monkeypatch):
+    """/api/compare's own HTML response is compressed, not just static files.
+
+    A minimum_size threshold can exclude one path and not the other (#354), so
+    the API route is checked separately, with the engine stubbed out to keep
+    this in the fast group.
+    """
+    import server.app as app_module
+
+    fake_html = "<!DOCTYPE html><html>" + ("report " * 20_000) + "</html>"
+    monkeypatch.setitem(app_module._COMPARE, "pdf", (".pdf", lambda *a, **kw: fake_html, lambda *a, **kw: {}))
+    resp = _client().post(
+        "/api/compare",
+        files={
+            "start_file": ("v1.pdf", b"%PDF-1.4 start", "application/pdf"),
+            "end_file": ("v2.pdf", b"%PDF-1.4 end", "application/pdf"),
+        },
+        headers={"Accept-Encoding": "gzip"},
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("content-encoding") == "gzip"
+    assert resp.text == fake_html
+
+
+def test_small_responses_are_not_compressed():
+    """Tiny JSON rejections stay below minimum_size and skip compression —
+    gzip overhead on a 50-byte body is pure waste (#354)."""
+    resp = _client().post(
+        "/api/compare",
+        files={
+            "start_file": ("a.pdf", b"not a pdf at all", "application/pdf"),
+            "end_file": ("b.pdf", b"%PDF-1.4 whatever", "application/pdf"),
+        },
+        headers={"Accept-Encoding": "gzip"},
+    )
+    assert resp.status_code == 415
+    assert "content-encoding" not in resp.headers
+
+
 def test_compare_rejects_non_pdf():
     # start_file lacks the %PDF magic → 415 before any diffing happens.
     resp = _client().post(
