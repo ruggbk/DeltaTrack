@@ -136,8 +136,7 @@ def _python_sources() -> list[Path]:
     shortfall, which is the shape a move produces.
     """
     roots = [
-        PROJECT_ROOT / d
-        for d in ("tests", "scripts", "parsers", "formatters", "compare", "web", "tools/shared", "tools/bill_index")
+        PROJECT_ROOT / d for d in ("tests", "scripts", "src/deltatrack", "web", "tools/shared", "tools/bill_index")
     ]
     files = [f for r in roots if r.is_dir() for f in r.rglob("*.py")]
     files += sorted(PROJECT_ROOT.glob("*.py"))
@@ -213,6 +212,47 @@ def find_download_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
         if lines:
             offenders[rel] = lines
     return offenders
+
+
+def test_the_source_scan_actually_covers_the_engine() -> None:
+    """Completeness floor for `_python_sources`, which had none (#398).
+
+    The `is_dir()` filter in that function tolerates a root that is absent, so a package
+    that moves drops out of the scan silently and every rule below keeps passing over a
+    shrinking set. Its docstring already records #367 doing exactly this, and #398 then
+    did it again: the roster still named root `parsers`/`formatters`/`compare` after the
+    engine moved to `src/deltatrack`, and the scan covered **zero** engine files while the
+    module stayed green.
+
+    The two `*_can_fire` tests below do not cover this. They feed the rules a synthetic
+    `sources` dict, so they prove the RULES work; nothing proved the SCAN reaches the code
+    the rules are meant to police. That gap is the whole reason a moved package was
+    invisible here.
+
+    Names load-bearing members rather than pinning a count, matching the floor in
+    `tests/test_surface_boundary.py`: a count passes while discovery returns the wrong set,
+    and a new module joins without editing this.
+    """
+    scanned = {p.relative_to(PROJECT_ROOT).as_posix() for p in _python_sources()}
+
+    for expected in (
+        # The engine, which is the half a move relocates and the half that reads bills.
+        "src/deltatrack/bill_tree.py",
+        "src/deltatrack/diff_bill.py",
+        "src/deltatrack/compare/pdf.py",
+        "src/deltatrack/formatters/diff_html.py",
+        "src/deltatrack/parsers/pdf_text.py",
+        # One member per remaining root, so a whole root going missing cannot pass.
+        "tests/conftest.py",
+        "scripts/serve_compare.py",
+        "web/app.py",
+        "corpus_paths.py",
+    ):
+        assert expected in scanned, (
+            f"fixture-path scan missed {expected!r} -- the roster in `_python_sources` is out "
+            "of step with the tree, so the rules below are policing a subset. Discovery is "
+            "broken, not the code."
+        )
 
 
 def test_no_source_reaches_into_bills_for_a_committed_fixture() -> None:

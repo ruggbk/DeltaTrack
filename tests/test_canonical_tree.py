@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import normalize_bill
 from corpus_paths import fixture_path
-from diff_bill import bill_diff_to_dict, diff_bills, extract_amounts
-from diff_pdf import PdfDiff
-from formatters.canonical import SCHEMA_VERSION, pdf_diff_to_canonical, xml_diff_to_canonical
-from formatters.text_serializer import build_xml_full_text
-from parsers.pdf_anchors import Anchor
+from deltatrack.bill_tree import normalize_bill
+from deltatrack.diff_bill import bill_diff_to_dict, diff_bills, extract_amounts
+from deltatrack.diff_pdf import PdfDiff
+from deltatrack.formatters.canonical import SCHEMA_VERSION, pdf_diff_to_canonical, xml_diff_to_canonical
+from deltatrack.formatters.text_serializer import build_xml_full_text
+from deltatrack.parsers.pdf_anchors import Anchor
 
 _V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
 _V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.xml")
@@ -111,7 +111,7 @@ def test_tree_conserves_money_against_full_diff_amounts():
     canonical, _ = _canonical(_V1, _V2)
     import xml.etree.ElementTree as ET
 
-    from bill_tree import extract_text_content, find_bill_body
+    from deltatrack.bill_tree import extract_text_content, find_bill_body
 
     tree_amounts: Counter = Counter()
     for node in _walk(canonical["tree"]["v2"]):
@@ -202,7 +202,7 @@ def test_pdf_tree_drops_to_none_without_full_text():
 @pytest.mark.slow
 @pytest.mark.skipif(not _PDF_V1.exists() or not _PDF_V2.exists(), reason="sample PDFs absent")
 def test_pdf_tree_conserves_money_no_overcount_on_real_bill():
-    from compare.pdf import compare_pdfs
+    from deltatrack.compare.pdf import compare_pdfs
 
     canonical = compare_pdfs(_PDF_V1.read_bytes(), _PDF_V2.read_bytes())
     assert canonical["tree"] is not None and canonical["tree"]["v2"]

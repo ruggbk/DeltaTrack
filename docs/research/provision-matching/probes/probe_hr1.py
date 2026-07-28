@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bill_tree import normalize_bill, normalize_header
-from diff_bill import _match_collision_group, _normalize_text, _text_similarity, diff_bills
+from deltatrack.bill_tree import normalize_bill, normalize_header
+from deltatrack.diff_bill import _match_collision_group, _normalize_text, _text_similarity, diff_bills
 
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 ta = normalize_bill(REPO / "bills/119-hr-1/1_reported-in-house.xml")

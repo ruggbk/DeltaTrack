@@ -25,9 +25,9 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from bill_tree import normalize_bill  # noqa: E402
 from corpus_paths import fixture_path  # noqa: E402
-from diff_bill import (  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
+from deltatrack.diff_bill import (  # noqa: E402
     _MOVE_THRESHOLD,
     _SIMILARITY_THRESHOLD,
     _normalize_text,

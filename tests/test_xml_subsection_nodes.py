@@ -37,9 +37,9 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import normalize_bill
 from corpus_paths import FIXTURES_DIR
-from parsers.pdf_anchors import _valid_subsection_enum
+from deltatrack.bill_tree import normalize_bill
+from deltatrack.parsers.pdf_anchors import _valid_subsection_enum
 from tests.conftest import assert_manifest_committed
 from tests.test_pdf_subsection_recall import (
     FIXTURES,

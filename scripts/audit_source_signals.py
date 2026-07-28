@@ -103,7 +103,7 @@ def _normalized(p: Path):
     Reaches into engine internals the way the test suite does; if the private-API
     decoupling in #62 lands, this is another call site to update.
     """
-    from bill_tree import normalize_bill
+    from deltatrack.bill_tree import normalize_bill
 
     return normalize_bill(p)
 
@@ -182,7 +182,7 @@ def section_id_stability(repo: Path):
 
 def id_matcher_lift(repo: Path):
     """How much does @id-equality add over match_nodes(), and does it ever disagree?"""
-    from diff_bill import match_nodes
+    from deltatrack.diff_bill import match_nodes
 
     agg = Counter()
     per: dict[str, Counter] = {}

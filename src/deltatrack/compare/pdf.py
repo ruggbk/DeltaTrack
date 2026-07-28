@@ -20,11 +20,11 @@ import re
 import tempfile
 from pathlib import Path
 
-from diff_pdf import PdfDiff, diff_pdfs
-from formatters.canonical import pdf_diff_to_canonical, view_from_canonical
-from formatters.diff_html import format_diff_html
-from parsers.pdf_anchors import Anchor
-from parsers.pdf_text import Page, extract_clean_pages, pdf_full_text, pdf_full_text_print
+from deltatrack.diff_pdf import PdfDiff, diff_pdfs
+from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
+from deltatrack.formatters.diff_html import format_diff_html
+from deltatrack.parsers.pdf_anchors import Anchor
+from deltatrack.parsers.pdf_text import Page, extract_clean_pages, pdf_full_text, pdf_full_text_print
 
 
 class UnsupportedLayoutError(ValueError):

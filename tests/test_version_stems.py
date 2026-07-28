@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from version_stems import label_from_stem, version_number_from_stem
+from deltatrack.version_stems import label_from_stem, version_number_from_stem
 
 
 class TestVersionNumberFromStem:

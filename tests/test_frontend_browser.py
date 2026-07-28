@@ -91,9 +91,9 @@ def _render_report_with_toc() -> str:
     """
     import re
 
-    from diff_pdf import PdfDiff
-    from formatters.canonical import pdf_diff_to_canonical, view_from_canonical
-    from formatters.diff_html import _build_toc, format_diff_html
+    from deltatrack.diff_pdf import PdfDiff
+    from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
+    from deltatrack.formatters.diff_html import _build_toc, format_diff_html
 
     canonical = pdf_diff_to_canonical(PdfDiff(hunks=()), bill_type="hr", bill_number=8752, congress=118)
     full_report = format_diff_html(view_from_canonical(canonical))
@@ -155,8 +155,8 @@ def _render_grouped_report() -> str:
     change directly under TITLE I, two non-financial changes under its
     SALARIES / OPERATIONS accounts. Exercises the real _JS.
     """
-    from formatters.canonical import view_from_canonical
-    from formatters.diff_html import format_diff_html
+    from deltatrack.formatters.canonical import view_from_canonical
+    from deltatrack.formatters.diff_html import format_diff_html
 
     def node(label, level, span, children=()):
         return {
@@ -222,8 +222,8 @@ def _render_full_bill_report() -> str:
     below it, and TITLE IV deliberately has no change after it, which is the
     case where "first change at or after this heading" has no answer.
     """
-    from formatters.canonical import view_from_canonical
-    from formatters.diff_html import format_diff_html
+    from deltatrack.formatters.canonical import view_from_canonical
+    from deltatrack.formatters.diff_html import format_diff_html
 
     lines = [
         "TITLE I",

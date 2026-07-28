@@ -2,7 +2,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from bill_tree import (
+from corpus_paths import fixture_path, resolve_bill_file
+from deltatrack.bill_tree import (
     BillNode,
     _extract_appropriations_text,
     _extract_section_text,
@@ -18,7 +19,6 @@ from bill_tree import (
     walk_body_sections,
     walk_title,
 )
-from corpus_paths import fixture_path, resolve_bill_file
 
 
 def _content(tree):
@@ -162,7 +162,7 @@ def test_divisions_and_top_level_titles_both_walked():
     Operations, General Provisions) and ~16% of the bill's dollar amounts."""
     from collections import Counter
 
-    from diff_bill import extract_amounts
+    from deltatrack.diff_bill import extract_amounts
 
     root = ET.parse(_HR5895_ENROLLED).getroot()
     body = find_bill_body(root)
@@ -1736,7 +1736,7 @@ class TestSubsectionNodes:
     def test_money_partitions_exactly_across_section_and_subsections(self):
         from collections import Counter
 
-        from diff_bill import extract_amounts
+        from deltatrack.diff_bill import extract_amounts
 
         body = _body_with(_SEC552_LEADIN_XML)
         nodes = walk_body_sections(body)

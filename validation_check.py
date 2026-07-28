@@ -21,8 +21,8 @@ from functools import lru_cache
 from itertools import combinations
 from pathlib import Path
 
-from bill_tree import normalize_bill
-from diff_bill import extract_amounts
+from deltatrack.bill_tree import normalize_bill
+from deltatrack.diff_bill import extract_amounts
 from validation_sources import Jurisdiction
 
 

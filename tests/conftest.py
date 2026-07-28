@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import BillNode, BillTree, normalize_bill
 from corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_bill_dirs
-from diff_bill import NodeDiff, diff_bills
+from deltatrack.bill_tree import BillNode, BillTree, normalize_bill
+from deltatrack.diff_bill import NodeDiff, diff_bills
 
 # --- Committed corpus manifest (#217 / ADR 0015) -------------------------------
 # The three corpus correctness gates (test_corpus_properties, test_corpus_tree_
@@ -310,6 +310,13 @@ CI_SLOW_MODULES = (
     "tests/test_pdf_watermark_recall.py",
     "tests/test_formatters_text_serializer.py",
     "tests/test_validate_extraction.py",
+    # Named in its own CI step (the packaging gate, #398) rather than the slow-suite step,
+    # but the convention keys on being named by SOME CI slow step, not on which one.
+    # Deliberately carries NO entry in the allowlist below: its only skip channel is `uv`
+    # missing from PATH, and that is not a content gap to declare as normal -- it means the
+    # gate did not run, which is exactly what this ceiling exists to redden. Anyone who can
+    # run this suite has uv, since `source ./init` is `uv sync`.
+    "tests/test_engine_installs.py",
 )
 
 ALLOWED_CI_SLOW_SKIPS = {
@@ -671,7 +678,7 @@ def hr8752_v2_pages():
 
 @pytest.fixture(scope="session")
 def hr8752_pdf_diff(hr8752_v1_pages, hr8752_v2_pages):
-    from diff_pdf import diff_pdfs
+    from deltatrack.diff_pdf import diff_pdfs
 
     return diff_pdfs(hr8752_v1_pages, hr8752_v2_pages)
 
@@ -680,7 +687,7 @@ def hr8752_pdf_diff(hr8752_v1_pages, hr8752_v2_pages):
 def fast_normalize_diff(monkeypatch, hr4366_v1, hr4366_v2, hr4366_v6, hr4366_v1_v2_diff, hr4366_v1_v6_diff):
     """Monkeypatch diff_bill.normalize_bill and diff_bills to reuse session-cached results
     for the 118-hr-4366 v1/v2/v6 paths used by the CLI tests. Saves ~7s/test."""
-    import diff_bill as diff_bill_module
+    import deltatrack.diff_bill as diff_bill_module
 
     normalize_orig = diff_bill_module.normalize_bill
     diff_orig = diff_bill_module.diff_bills

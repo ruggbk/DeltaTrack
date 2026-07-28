@@ -11,8 +11,8 @@ Sibling nodes under a shared parent path share that parent's heading.
 
 from __future__ import annotations
 
-from bill_tree import BillTree
-from structure_tree import TreeNode, build_xml_tree
+from deltatrack.bill_tree import BillTree
+from deltatrack.structure_tree import TreeNode, build_xml_tree
 
 
 def serialize_tree(tree: BillTree) -> str:

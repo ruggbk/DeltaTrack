@@ -17,7 +17,7 @@ Key geometry, mirrored from real corpus shapes (113-hr-3547):
 
 from __future__ import annotations
 
-from formatters.canonical import view_from_canonical
+from deltatrack.formatters.canonical import view_from_canonical
 
 
 def _node(label, level, span, children=()):
@@ -216,7 +216,7 @@ def test_group_label_survives_alongside_node_path():
 
 
 def test_node_path_default_is_empty_tuple():
-    from formatters.view_model import ChangeView
+    from deltatrack.formatters.view_model import ChangeView
 
     cv = ChangeView(
         change_type="modified",
@@ -348,7 +348,7 @@ def test_removed_label_match_is_case_and_whitespace_insensitive():
 def test_span_index_built_once_per_side_not_per_change(monkeypatch):
     # The omnibus blow-up is O(changes x nodes); the guard is structural —
     # exactly one index build per side regardless of change count.
-    import formatters.canonical as canonical_mod
+    import deltatrack.formatters.canonical as canonical_mod
 
     calls = []
     real = canonical_mod._span_join_index

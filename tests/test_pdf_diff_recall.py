@@ -22,7 +22,7 @@ import pytest
 from pdf_test_cases import PdfTestCase, load_cases
 from recall_text import normalize_for_recall
 
-from diff_pdf import PdfDiff, PdfHunk
+from deltatrack.diff_pdf import PdfDiff, PdfHunk
 
 # Floor-amendment annotations ("(reduced by $3,000,000)") are financial metadata
 # covered by the amount-recall tests, and extraction may reorder a long chain of

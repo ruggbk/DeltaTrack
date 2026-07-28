@@ -1,7 +1,49 @@
+[build-system]
+# The project is genuinely installable as of #398. Without this table `uv sync` treats
+# the repo as a virtual project and installs only the dependencies, never the engine --
+# which under the `src/` layout below means `import deltatrack` fails outright, so the
+# absence would be loud rather than silent.
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Explicit rather than relying on hatchling inferring `src/deltatrack` from the project
+# name. The inference is real and would work today, but it is a convention doing
+# load-bearing work invisibly: renaming the distribution would silently ship an empty
+# wheel. Naming the directory means a mismatch is a build error instead.
+packages = ["src/deltatrack"]
+
+[tool.hatch.build.targets.sdist]
+# Scope the source distribution the same way. Left unconfigured, hatchling's sdist is
+# everything git tracks: measured at 345 files and 30 MB, carrying `tests/corpus/` (a
+# 4.7 MB enrolled bill among them), `test_data/` PDFs, and `.github/`. Nothing publishes
+# today, so that was latent rather than live -- but `uv build` with no arguments produces
+# it, and the corpus is a test fixture set, not something a consumer of the engine should
+# be made to download.
+#
+# Includes the two command wrappers and the license alongside the package: an sdist is
+# meant to rebuild the wheel, and the wrappers are how the documented commands are
+# invoked. Not a substitute for a checkout -- the tests and fixtures are deliberately out,
+# so an sdist cannot run the suite. Anyone who needs that clones the repository.
+include = [
+    "src/deltatrack",
+    "diff_bill.py",
+    "diff_pdf.py",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+]
+
 [project]
 name = "deltatrack"
 version = "0.1.0"
-description = "Download U.S. bill text from Congress.gov and compare versions structurally"
+# Describes the ENGINE, which is what this distribution contains. The previous wording
+# led with downloading bill text; that is `tools/`, which is not in the wheel and whose
+# HTTP client is in an excluded dependency group, so an installed `deltatrack` cannot do
+# it. Harmless while nothing could be built, but #398 turned this string into published
+# metadata, where it would be the first thing a consumer read and the first thing that
+# did not work.
+description = "Compare two versions of a U.S. bill structurally, including account-level appropriations amounts"
 requires-python = ">=3.12"
 # The ENGINE's dependencies, and nothing else (#367). Installing DeltaTrack to diff two
 # bill versions should not install a web server or an HTTP client; those belong to the
@@ -53,10 +95,12 @@ default-groups = ["dev", "web", "fetch"]
 
 [tool.ruff]
 line-length = 120
-# Both import roots, mirroring pytest's `pythonpath` (#367). Without `tools`, isort reads
-# the fetch scripts' sibling imports as third-party and demands they be grouped with httpx,
-# which would sort the cluster's own modules in among external packages.
-src = [".", "tools"]
+# Every import root, mirroring pytest's `pythonpath` plus the installed package (#367,
+# #398). Without `tools`, isort reads the fetch scripts' sibling imports as third-party
+# and demands they be grouped with httpx, which would sort the cluster's own modules in
+# among external packages. `src` does the same for `deltatrack`, and `.` for the
+# dev-only root modules (`corpus_paths`, the validation pair, `render_examples`).
+src = ["src", ".", "tools"]
 # Research reproducibility scripts are frozen artifacts (hardcoded paths, ad-hoc
 # one-liners) that reproduce a study's numbers, not maintained source. Exclude them
 # from lint/format so they stay verbatim. Applies to future studies' probes too.
@@ -71,11 +115,21 @@ unfixable = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Tests live in tests/ but import the source modules at the repo root. `tools/` is a
-# second root rather than a package (#367): the bill-fetching scripts are run directly
-# (`./tools/fetch_bills.py …`), which puts only their own directory on sys.path, so they
-# must resolve each other by bare name. Listing it here makes the tests resolve them the
-# same way, which is why the move needed no test-import changes at all.
+# Notably absent: `src`. The engine resolves through the INSTALLED `deltatrack`
+# distribution, never off disk, which is the whole point of the `src/` layout (#398). A
+# module left out of the wheel, or a packaging config that stops matching the tree, fails
+# the suite here instead of passing locally and breaking on a user's machine.
+#
+# `.` stays and does not weaken that. It exposes the dev-only root modules that tests
+# import -- `corpus_paths`, `validation_check`, `validation_sources`, `render_examples`,
+# deliberately left at the root by #398 -- and nothing else: `deltatrack` is not at the
+# root to be found, so no amount of `.` makes an uninstalled engine importable. Verified
+# by `tests/test_engine_installs.py`, which is what would catch this claim going stale.
+#
+# `tools/` is a second root rather than a package (#367): the bill-fetching scripts are
+# run directly (`./tools/fetch_bills.py …`), which puts only their own directory on
+# sys.path, so they must resolve each other by bare name. Listing it here makes the tests
+# resolve them the same way, which is why that move needed no test-import changes at all.
 pythonpath = [".", "tools"]
 # Run in parallel by default (pytest-xdist). "auto" = one worker per CPU core.
 # The suite is dominated by a few heavy PDF/corpus cases, so wall-time collapses

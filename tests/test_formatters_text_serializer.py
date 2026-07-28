@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from bill_tree import BillNode, BillTree, bill_title, normalize_bill
 from corpus_paths import fixture_path
-from formatters.text_serializer import (
+from deltatrack.bill_tree import BillNode, BillTree, bill_title, normalize_bill
+from deltatrack.formatters.text_serializer import (
     serialize_tree,
     serialize_tree_for_diff,
     serialize_tree_with_offsets,

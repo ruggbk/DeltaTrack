@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from diff_bill import (
+from deltatrack.diff_bill import (
     _MOVE_THRESHOLD,
     _SIMILARITY_THRESHOLD,
     _normalize_text,

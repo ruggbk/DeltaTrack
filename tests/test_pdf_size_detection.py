@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from parsers.pdf_anchors import SizeBands, breadcrumb_for, derive_size_bands, extract_anchors
-from parsers.pdf_text import Line, Page
+from deltatrack.parsers.pdf_anchors import SizeBands, breadcrumb_for, derive_size_bands, extract_anchors
+from deltatrack.parsers.pdf_text import Line, Page
 
 BODY = 14.0
 HEAD = 11.2

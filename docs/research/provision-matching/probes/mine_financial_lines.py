@@ -39,8 +39,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from mine_common import make_candidate, write_pool  # noqa: E402
 
-from bill_tree import normalize_bill  # noqa: E402
-from diff_bill import (  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
+from deltatrack.diff_bill import (  # noqa: E402
     _normalize_text,
     _text_similarity,
     compute_financial_change,

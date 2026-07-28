@@ -8,10 +8,10 @@ all get resolved here.
 
 from __future__ import annotations
 
-from diff_pdf import PdfDiff, PdfHunk
-from formatters.canonical import pdf_diff_to_canonical, view_from_canonical
-from formatters.view_model import ChangeView, DiffView
-from parsers.pdf_anchors import Anchor
+from deltatrack.diff_pdf import PdfDiff, PdfHunk
+from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
+from deltatrack.formatters.view_model import ChangeView, DiffView
+from deltatrack.parsers.pdf_anchors import Anchor
 
 
 def pdf_diff_to_view(diff: PdfDiff, **meta) -> DiffView:

@@ -49,7 +49,7 @@ from pathlib import Path
 import pytest
 
 from corpus_paths import FIXTURES_DIR
-from parsers.pdf_anchors import (
+from deltatrack.parsers.pdf_anchors import (
     _match_runin_subsection,
     _valid_subsection_enum,
     breadcrumb_for,

@@ -171,7 +171,7 @@ There is a **measured, empirical** size signal in the **PDF** path that we use t
 headings: body prose extracts at one size and the appropriations heading levels (agency +
 account) at a distinct smaller band. Measured on the corpus working stages: **body ≈
 14.0pt, heading band ≈ 11.2pt** (ratio ≈ 0.8); the band-line count tracks XML
-`intermediate+small` within ~15%, and `extract_anchors` (`parsers/pdf_anchors.py`) keys
+`intermediate+small` within ~15%, and `extract_anchors` (`src/deltatrack/parsers/pdf_anchors.py`) keys
 account detection off it (#89).
 
 > **Correction (#89): the mechanism is GPO's PDF typesetting, NOT the CSS small-caps
@@ -206,7 +206,7 @@ derived per-document (and, for heterogeneous files, per-region), never hardcoded
 large explanatory statement, and engrossed-amendment versions consolidate many divisions,
 so a single global size split is muddied by extra matter at the heading size. The signal
 is present; isolating it there requires the production extractor's chrome-strip + line
-merge (`parsers/pdf_text`), not a global histogram. See
+merge (`src/deltatrack/parsers/pdf_text`), not a global histogram. See
 `plans/pdf-heading-segmentation-spike.md` for the investigation behind this signal.
 
 ---

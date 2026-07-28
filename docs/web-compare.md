@@ -36,7 +36,7 @@ uv run python diff_bill.py compare \
   --format html -o reports/hr4366_v1_vs_v2.html
 ```
 
-The public upload page does the **same kind of output** (standalone HTML via `format_diff_html`) but on **PDF** inputs. There is no `diff_pdf.py compare` subcommand — the web service calls the same steps as `compare/pdf.py` / `render_examples.py` → `render_pdf_diff()`.
+The public upload page does the **same kind of output** (standalone HTML via `format_diff_html`) but on **PDF** inputs. There is no `diff_pdf.py compare` subcommand — the web service calls the same steps as `src/deltatrack/compare/pdf.py` / `render_examples.py` → `render_pdf_diff()`.
 
 Local equivalent of uploading two PDFs to the site:
 
@@ -70,9 +70,9 @@ uv run python render_examples.py   # rewrites examples/*.html and examples/index
 | | README quickstart (XML) | Web upload / `compare_pdfs_html` (PDF) |
 |---|---|---|
 | Input | govinfo XML on disk | User PDF bytes (upload) |
-| Diff engine | `diff_bill.py` | `diff_pdf.py` |
+| Diff engine | `src/deltatrack/diff_bill.py` | `src/deltatrack/diff_pdf.py` |
 | HTML renderer | `format_diff_html` via `view_from_canonical` | `format_diff_html` via `view_from_canonical` |
-| CLI entrypoint | `diff_bill.py compare … --format html` | `compare/pdf.py` (HTTP) or snippet above |
+| CLI entrypoint | `diff_bill.py compare … --format html` | `src/deltatrack/compare/pdf.py` (HTTP) or snippet above |
 
 XML and PDF paths can disagree on section boundaries and change counts for the same bill pair; compare like with like when validating. To inspect both diffs for the same two versions side by side, `scripts/serve_compare.py` serves them in two panes (see [TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
 
@@ -86,12 +86,12 @@ Browser (web/webapp/compare.html)
   ▼
 web/app.py                    ← FastAPI: upload guards, concurrency, timeout
   ▼
-compare/pdf.py            ← thin wrapper (bytes in → HTML out)
-  │  extract_clean_pages()       parsers/pdf_text.py
-  │  diff_pdfs()                 diff_pdf.py
-  │  pdf_diff_to_canonical()     formatters/canonical.py
-  │  view_from_canonical()       formatters/canonical.py
-  │  format_diff_html()          formatters/diff_html.py
+src/deltatrack/compare/pdf.py ← thin wrapper (bytes in → HTML out)
+  │  extract_clean_pages()       src/deltatrack/parsers/pdf_text.py
+  │  diff_pdfs()                 src/deltatrack/diff_pdf.py
+  │  pdf_diff_to_canonical()     src/deltatrack/formatters/canonical.py
+  │  view_from_canonical()       src/deltatrack/formatters/canonical.py
+  │  format_diff_html()          src/deltatrack/formatters/diff_html.py
   ▼
 Standalone HTML report           ← opened in new tab by web/webapp/js/compare.js
 ```
@@ -112,7 +112,7 @@ JSON output (`?output=json`) still exists for tests and tooling; the compare UI 
 | `web/webapp/css/styles.css` | Upload/landing styles (report CSS is inlined by Python) |
 | `web/webapp/sample/example.html` | Bundled sample report for `?example=1` |
 | `web/app.py` | FastAPI app: `/api/compare` + static mount of `web/webapp/` |
-| `compare/pdf.py` | In-process call into `diff_pdf` + `format_diff_html` |
+| `src/deltatrack/compare/pdf.py` | In-process call into `diff_pdf` + `format_diff_html` |
 
 Run locally:
 
@@ -130,11 +130,11 @@ Production ops (hosting, limits, systemd) live in gitignored `docs-for-ai/deploy
 
 **Diff accuracy or report content** — edit the Python engine, not the web UI:
 
-- `diff_pdf.py`, `parsers/`, `formatters/diff_html.py`, `formatters/canonical.py`
+- `src/deltatrack/diff_pdf.py`, `src/deltatrack/parsers/`, `src/deltatrack/formatters/diff_html.py`, `src/deltatrack/formatters/canonical.py`
 - Re-run PDF tests: `uv run pytest tests/test_pdf_*`
 - Regenerate committed examples if output shape changes: `uv run python render_examples.py`
 
-**Upload / API behavior** — `web/app.py`, `compare/pdf.py`
+**Upload / API behavior** — `web/app.py`, `src/deltatrack/compare/pdf.py`
 
 - Keep **150 MB** cap aligned in three places: Apache `LimitRequestBody`, `MAX_UPLOAD_BYTES` in `app.py`, `MAX_BYTES` in `compare.js`
 - Keep `MAX_CONCURRENT_DIFFS` and `DIFF_TIMEOUT_S` in mind on the 8 GB host

@@ -369,14 +369,14 @@ NUMBERED_PDF = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
 
 
 def _line(n):
-    from parsers.pdf_text import Line
+    from deltatrack.parsers.pdf_text import Line
 
     return Line(n, "text")
 
 
 def _pages(numbered: int, unnumbered: int, *, per_page: int = 50):
     """One synthetic doc with the given mix of numbered/unnumbered lines."""
-    from parsers.pdf_text import Page
+    from deltatrack.parsers.pdf_text import Page
 
     lines = [_line(i + 1) for i in range(numbered)] + [_line(None) for _ in range(unnumbered)]
     return [
@@ -387,14 +387,14 @@ def _pages(numbered: int, unnumbered: int, *, per_page: int = 50):
 
 def test_unnumbered_layout_is_detected():
     # Enrolled shape: 14 stray numbered lines out of 3,808 (115-hr-5895 v5).
-    from compare.pdf import _is_unnumbered_layout
+    from deltatrack.compare.pdf import _is_unnumbered_layout
 
     assert _is_unnumbered_layout(_pages(14, 3794)) is True
 
 
 def test_numbered_layout_is_not_detected():
     # Lowest ratio among real numbered prints in the corpus is ~0.90.
-    from compare.pdf import _is_unnumbered_layout
+    from deltatrack.compare.pdf import _is_unnumbered_layout
 
     assert _is_unnumbered_layout(_pages(900, 100)) is False
 
@@ -403,7 +403,7 @@ def test_short_document_is_not_declined():
     # Short amendment prints in the corpus run 0.18-0.43 numbered over 21-28
     # lines, so the ratio alone would decline them. The size floor is what keeps
     # the guard from rejecting them; this pins that.
-    from compare.pdf import _is_unnumbered_layout
+    from deltatrack.compare.pdf import _is_unnumbered_layout
 
     assert _is_unnumbered_layout(_pages(4, 18)) is False
 
@@ -414,7 +414,7 @@ def test_miss_window_stays_narrow():
     # enrolled bill diffs to one anchorless block with a 200 OK, so raising this
     # floor re-opens the bug the guard exists to close. Pinned so a future change
     # to _MIN_LINES_FOR_GUARD has to be deliberate.
-    from compare.pdf import _MIN_LINES_FOR_GUARD, _is_unnumbered_layout
+    from deltatrack.compare.pdf import _MIN_LINES_FOR_GUARD, _is_unnumbered_layout
 
     assert _MIN_LINES_FOR_GUARD <= 50
     # An unnumbered document just above the floor must still be declined.
@@ -426,7 +426,7 @@ def test_enrolled_pdf_is_declined_not_silently_diffed():
     if not ENROLLED_PDF.exists():
         pytest.skip("enrolled sample PDF not present (tests/corpus/115-hr-5895/)")
 
-    from compare.pdf import UnsupportedLayoutError, compare_pdfs
+    from deltatrack.compare.pdf import UnsupportedLayoutError, compare_pdfs
 
     with pytest.raises(UnsupportedLayoutError):
         compare_pdfs(ENROLLED_PDF.read_bytes(), ENROLLED_PDF.read_bytes())
@@ -438,7 +438,7 @@ def test_enrolled_pdf_declined_when_only_one_side_is_enrolled():
     if not ENROLLED_PDF.exists() or not NUMBERED_PDF.exists():
         pytest.skip("sample PDFs not present")
 
-    from compare.pdf import UnsupportedLayoutError, compare_pdfs
+    from deltatrack.compare.pdf import UnsupportedLayoutError, compare_pdfs
 
     with pytest.raises(UnsupportedLayoutError):
         compare_pdfs(NUMBERED_PDF.read_bytes(), ENROLLED_PDF.read_bytes())
@@ -475,7 +475,7 @@ def test_numbered_pdfs_still_diff_after_guard():
     if not end.exists():
         pytest.skip("sample PDF not present (tests/corpus/118-hr-8752/)")
 
-    from compare.pdf import compare_pdfs
+    from deltatrack.compare.pdf import compare_pdfs
 
     canonical = compare_pdfs(NUMBERED_PDF.read_bytes(), end.read_bytes())
     assert canonical["changes"]
@@ -491,7 +491,7 @@ def test_compare_pdfs_returns_valid_canonical():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill PDFs not present (tests/corpus/118-hr-4366/)")
 
-    from compare.pdf import compare_pdfs
+    from deltatrack.compare.pdf import compare_pdfs
 
     canonical = compare_pdfs(
         start.read_bytes(),
@@ -519,7 +519,7 @@ def test_compare_pdfs_html_returns_standalone_report():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill PDFs not present (tests/corpus/118-hr-4366/)")
 
-    from compare.pdf import compare_pdfs_html
+    from deltatrack.compare.pdf import compare_pdfs_html
 
     html = compare_pdfs_html(
         start.read_bytes(),
@@ -555,8 +555,8 @@ def test_compare_api_returns_html():
 
 
 def test_derive_congress_from_cover():
-    from compare.pdf import _derive_congress
-    from parsers.pdf_text import Line, Page
+    from deltatrack.compare.pdf import _derive_congress
+    from deltatrack.parsers.pdf_text import Line, Page
 
     page = Page(1, (Line(None, "118TH CONGRESS"), Line(None, "1ST SESSION H. R. 4366")))
     assert _derive_congress([page]) == "118"

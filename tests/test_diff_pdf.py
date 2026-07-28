@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from diff_pdf import (
+from deltatrack.diff_pdf import (
     _Block,
     _block_key,
     _group_into_blocks,
@@ -12,8 +12,8 @@ from diff_pdf import (
     _rejoin_cross_page_hyphens,
     diff_pdfs,
 )
-from parsers.pdf_anchors import Anchor
-from parsers.pdf_text import Line, Page
+from deltatrack.parsers.pdf_anchors import Anchor
+from deltatrack.parsers.pdf_text import Line, Page
 
 
 def _page(page_number: int, *lines: tuple[int | None, str]) -> Page:

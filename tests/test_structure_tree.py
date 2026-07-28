@@ -14,17 +14,17 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import (
+from corpus_paths import fixture_path
+from deltatrack.bill_tree import (
     BillNode,
     BillTree,
     extract_text_content,
     find_bill_body,
     normalize_bill,
 )
-from corpus_paths import fixture_path
-from diff_bill import extract_amounts
-from parsers.pdf_anchors import Anchor
-from structure_tree import TreeNode, build_pdf_tree, build_xml_tree
+from deltatrack.diff_bill import extract_amounts
+from deltatrack.parsers.pdf_anchors import Anchor
+from deltatrack.structure_tree import TreeNode, build_pdf_tree, build_xml_tree
 
 
 def _node(display_path: tuple[str, ...], tag: str = "appropriations-small") -> BillNode:
@@ -334,7 +334,7 @@ def test_orphan_titles_absorbed_no_bare_title_roots():
 @pytest.mark.slow
 @pytest.mark.skipif(not _CLEAN_PDF.exists(), reason="bill corpus not present (fetch_bills.py)")
 def test_pdf_real_bill_conserves_and_is_leveled():
-    from parsers.pdf_anchors import extract_anchors
+    from deltatrack.parsers.pdf_anchors import extract_anchors
     from tests.pdf_corpus import cached_pages
 
     anchors = extract_anchors(cached_pages(_CLEAN_PDF))

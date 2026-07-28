@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-from parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subsection
+from deltatrack.parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subsection
 
 
 @dataclass(frozen=True)

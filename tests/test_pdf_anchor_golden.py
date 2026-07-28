@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from corpus_paths import fixture_path
-from parsers.pdf_anchors import extract_anchors
+from deltatrack.parsers.pdf_anchors import extract_anchors
 from tests.conftest import assert_manifest_committed
 from tests.pdf_corpus import cached_pages
 
@@ -152,7 +152,7 @@ def _xml_agency_vocab(xml_path: Path) -> set[str]:
     between the title prefix and the leaf, plus any standalone intermediate node.
     Derived, never hardcoded, so it can't drift against a regenerated golden.
     """
-    from bill_tree import normalize_bill, normalize_header
+    from deltatrack.bill_tree import normalize_bill, normalize_header
 
     tree = normalize_bill(xml_path)
     vocab: set[str] = set()
@@ -167,7 +167,7 @@ def _xml_agency_vocab(xml_path: Path) -> set[str]:
 
 
 def _pdf_agency_vocab(pdf_path: Path) -> set[str]:
-    from bill_tree import normalize_header
+    from deltatrack.bill_tree import normalize_header
 
     anchors = extract_anchors(cached_pages(pdf_path))
     return {normalize_header(a.text) for a in anchors if a.kind == "agency"}
@@ -189,7 +189,7 @@ def _xml_major_vocab(xml_path: Path) -> set[str]:
     Hence exact PDF==XML parity holds only on the clean bill (118-hr-8752); the hard
     bill uses a recall floor (see TestMajorLevelEndToEnd).
     """
-    from bill_tree import normalize_bill, normalize_header
+    from deltatrack.bill_tree import normalize_bill, normalize_header
 
     tree = normalize_bill(xml_path)
     vocab: set[str] = set()
@@ -202,7 +202,7 @@ def _xml_major_vocab(xml_path: Path) -> set[str]:
 
 
 def _pdf_major_vocab(pdf_path: Path) -> set[str]:
-    from bill_tree import normalize_header
+    from deltatrack.bill_tree import normalize_header
 
     anchors = extract_anchors(cached_pages(pdf_path))
     return {normalize_header(a.text) for a in anchors if a.kind == "major"}

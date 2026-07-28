@@ -22,11 +22,11 @@ from __future__ import annotations
 from bisect import bisect_right
 from html import escape
 
-from diff_bill import extract_amounts
-from diff_pdf import PdfDiff, PdfHunk
-from formatters.view_model import ChangeView, DiffView
-from parsers.pdf_anchors import Anchor, breadcrumb_for
-from structure_tree import TreeNode, build_pdf_tree
+from deltatrack.diff_bill import extract_amounts
+from deltatrack.diff_pdf import PdfDiff, PdfHunk
+from deltatrack.formatters.view_model import ChangeView, DiffView
+from deltatrack.parsers.pdf_anchors import Anchor, breadcrumb_for
+from deltatrack.structure_tree import TreeNode, build_pdf_tree
 
 SCHEMA_VERSION = "2.0"
 GENERATOR_NAME = "deltatrack"

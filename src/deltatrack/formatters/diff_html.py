@@ -14,8 +14,8 @@ from __future__ import annotations
 import json
 from html import escape
 
-from formatters._text import fmt_dollar, word_diff
-from formatters.view_model import ChangeView, DiffView
+from deltatrack.formatters._text import fmt_dollar, word_diff
+from deltatrack.formatters.view_model import ChangeView, DiffView
 
 __all__ = ["format_diff_html"]
 

@@ -7,9 +7,9 @@ modules; word_diff lives in formatters._text.
 
 import pytest
 
-from formatters._text import word_diff
-from formatters.canonical import view_from_canonical, xml_diff_to_canonical
-from formatters.diff_html import format_diff_html
+from deltatrack.formatters._text import word_diff
+from deltatrack.formatters.canonical import view_from_canonical, xml_diff_to_canonical
+from deltatrack.formatters.diff_html import format_diff_html
 
 
 def format_html(diff_dict):
@@ -221,14 +221,14 @@ class TestFormatHtml:
 
 class TestCliIntegration:
     def test_format_flag_accepted(self):
-        from diff_bill import build_parser
+        from deltatrack.diff_bill import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["compare", "a.xml", "b.xml", "--format", "html"])
         assert args.format == "html"
 
     def test_format_default_is_html(self):
-        from diff_bill import build_parser
+        from deltatrack.diff_bill import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["compare", "a.xml", "b.xml"])
@@ -241,7 +241,7 @@ class TestCliIntegration:
 
         from conftest import HR4366_V1_PATH, HR4366_V2_PATH
 
-        from diff_bill import main
+        from deltatrack.diff_bill import main
 
         out = tmp_path / "report.html"
         monkeypatch.setattr(
@@ -259,7 +259,7 @@ class TestCliIntegration:
 
         from conftest import HR4366_V1_PATH, HR4366_V2_PATH
 
-        from diff_bill import main
+        from deltatrack.diff_bill import main
 
         out = tmp_path / "report.html"
         monkeypatch.setattr(
@@ -280,7 +280,7 @@ class TestCliIntegration:
 
         from conftest import HR4366_V1_PATH, HR4366_V6_PATH
 
-        from diff_bill import main
+        from deltatrack.diff_bill import main
 
         out = tmp_path / "report.html"
         monkeypatch.setattr(

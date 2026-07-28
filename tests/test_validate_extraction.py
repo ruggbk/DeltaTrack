@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import normalize_bill
-from diff_bill import extract_amounts
+from deltatrack.bill_tree import normalize_bill
+from deltatrack.diff_bill import extract_amounts
 from tests.conftest import uncommitted_bill_files
 
 pytestmark = pytest.mark.slow

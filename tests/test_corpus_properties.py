@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import _extract_appropriations_text, find_bill_body, normalize_bill
+from deltatrack.bill_tree import _extract_appropriations_text, find_bill_body, normalize_bill
 from tests.conftest import assert_manifest_committed, manifest_xml_files
 
 pytestmark = pytest.mark.slow

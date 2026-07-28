@@ -20,13 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from diff_pdf import PdfDiff, PdfHunk
-from formatters.canonical import (
+from deltatrack.diff_pdf import PdfDiff, PdfHunk
+from deltatrack.formatters.canonical import (
     pdf_diff_to_canonical,
     view_from_canonical,
     xml_diff_to_canonical,
 )
-from parsers.pdf_anchors import Anchor
+from deltatrack.parsers.pdf_anchors import Anchor
 
 # Local pin (guard against unintended bumps). 2.0 removed the deprecated `amounts`
 # field (#274), leaving `amount_entries` (added in 1.4, #86) as the only money field;

@@ -14,7 +14,7 @@ import re
 import pytest
 
 from corpus_paths import fixture_path
-from formatters.diff_html import _build_toc_from_tree, _node_anchor_offset, _walk_tree
+from deltatrack.formatters.diff_html import _build_toc_from_tree, _node_anchor_offset, _walk_tree
 
 _V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
 _V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.xml")
@@ -97,8 +97,8 @@ def test_tree_toc_covers_every_flat_section_heading():
     # Superset / no coverage regression: every heading offset the flat `sections`
     # jump-list carried is reachable as a tree node's anchor offset. (Asserts the
     # DATA reproduces the old TOC's reach — NOT new-TOC-HTML == old-flat-HTML.)
-    from bill_tree import normalize_bill
-    from formatters.text_serializer import build_xml_full_text
+    from deltatrack.bill_tree import normalize_bill
+    from deltatrack.formatters.text_serializer import build_xml_full_text
 
     v1, v2 = normalize_bill(_V1), normalize_bill(_V2)
     full_text, _spans, sections, tree = build_xml_full_text(v1, v2)
@@ -128,7 +128,7 @@ def test_unlabeled_nodes_are_not_rendered_as_blank_toc_rows():
 
 @pytest.mark.slow
 def test_real_xml_toc_has_no_blank_rows():
-    from compare.xml import compare_xml_html
+    from deltatrack.compare.xml import compare_xml_html
 
     html = compare_xml_html(_V1.read_bytes(), _V2.read_bytes(), start_label="v1", end_label="v2")
     toc = re.search(r'<div class="sidebar-toc".*?</nav>', html, re.S).group(0)
@@ -141,7 +141,7 @@ def test_real_xml_toc_has_no_blank_rows():
 def test_tree_toc_links_all_resolve_to_full_bill_rows():
     # Every TOC link (#fb-off-N) has a matching id in the full-bill view — no
     # dangling anchors after the offset-based rewrite.
-    from compare.xml import compare_xml_html
+    from deltatrack.compare.xml import compare_xml_html
 
     html = compare_xml_html(_V1.read_bytes(), _V2.read_bytes(), start_label="v1", end_label="v2")
     targets = set(re.findall(r'href="#(fb-off-\d+)"', html))

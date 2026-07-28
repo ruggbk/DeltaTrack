@@ -27,7 +27,7 @@ def test_compare_xml_returns_valid_canonical():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
-    from compare.xml import compare_xml
+    from deltatrack.compare.xml import compare_xml
 
     canonical = compare_xml(
         start.read_bytes(),
@@ -55,7 +55,7 @@ def test_compare_xml_html_gutterless_fullbill():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
-    from compare.xml import compare_xml_html
+    from deltatrack.compare.xml import compare_xml_html
 
     html = compare_xml_html(
         start.read_bytes(),
@@ -92,7 +92,7 @@ def test_xml_changes_resolve_spans_structurally_on_real_bill():
     if not start.exists() or not end.exists():
         pytest.skip("sample bill XMLs not present (tests/corpus/118-hr-4366/)")
 
-    from compare.xml import compare_xml
+    from deltatrack.compare.xml import compare_xml
 
     canonical = compare_xml(start.read_bytes(), end.read_bytes(), start_label="v1", end_label="v2")
     unresolved = []

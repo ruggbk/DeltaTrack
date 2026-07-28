@@ -16,7 +16,7 @@ import statistics
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from parsers.pdf_text import Page, parse_lines, strip_page_chrome
+from deltatrack.parsers.pdf_text import Page, parse_lines, strip_page_chrome
 
 AnchorKind = Literal["title", "section", "account", "grouping", "agency", "major", "subsection", "preamble"]
 

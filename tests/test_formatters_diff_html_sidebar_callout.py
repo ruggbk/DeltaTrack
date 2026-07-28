@@ -6,8 +6,8 @@ prefix. Callout: flex-row layout, one row per real amount change.
 
 from __future__ import annotations
 
-from formatters.diff_html import _build_callout, _build_nav_item, _build_sidebar
-from formatters.view_model import ChangeView, DiffView
+from deltatrack.formatters.diff_html import _build_callout, _build_nav_item, _build_sidebar
+from deltatrack.formatters.view_model import ChangeView, DiffView
 
 
 def _change(**overrides) -> ChangeView:
@@ -155,7 +155,7 @@ def test_callout_net_zero_renders_neutral():
 
 def test_card_includes_callout_when_amounts_present():
     """The card builder integrates the callout below the body."""
-    from formatters.diff_html import _build_card
+    from deltatrack.formatters.diff_html import _build_card
 
     html = _build_card(
         _change(old_text="x", new_text="y", amount_pairs=((1000, 1500),)),
@@ -168,7 +168,7 @@ def test_card_includes_callout_when_amounts_present():
 
 
 def test_card_omits_callout_when_no_amount_pairs():
-    from formatters.diff_html import _build_card
+    from deltatrack.formatters.diff_html import _build_card
 
     html = _build_card(_change(old_text="x", new_text="y"), 0)
     assert "financial-callout" not in html

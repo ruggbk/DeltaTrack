@@ -39,8 +39,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from mine_common import containment, make_candidate, vec, write_pool  # noqa: E402
 
-from bill_tree import normalize_bill  # noqa: E402
-from diff_bill import _normalize_text, _text_similarity, diff_bills  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
+from deltatrack.diff_bill import _normalize_text, _text_similarity, diff_bills  # noqa: E402
 
 BILL = "119-hr-1"
 V_OLD = "3_placed-on-calendar-senate.xml"

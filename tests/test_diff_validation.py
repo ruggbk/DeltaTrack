@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from bill_tree import normalize_bill, normalize_division_title
-from diff_bill import (
+from deltatrack.bill_tree import normalize_bill, normalize_division_title
+from deltatrack.diff_bill import (
     _normalize_text,
     _text_similarity,
     compute_financial_change,

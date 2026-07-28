@@ -36,8 +36,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mine_common import containment, make_candidate, vec, write_pool  # noqa: E402
 from mine_idf import idf_fn, load  # noqa: E402
 
-from bill_tree import normalize_bill  # noqa: E402
-from diff_bill import _normalize_text  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
+from deltatrack.diff_bill import _normalize_text  # noqa: E402
 
 _POOL = REPO / "bills_corpus"
 _OUT = Path(__file__).with_name("candidates_high_containment_different.json")

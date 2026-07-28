@@ -29,12 +29,12 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from bill_tree import BillTree, bill_title, normalize_bill
-from diff_bill import bill_diff_to_dict, diff_bills, filter_diff
-from formatters.canonical import view_from_canonical, xml_diff_to_canonical
-from formatters.diff_html import format_diff_html
-from formatters.text_serializer import build_xml_full_text
-from version_stems import label_from_stem, version_number_from_stem
+from deltatrack.bill_tree import BillTree, bill_title, normalize_bill
+from deltatrack.diff_bill import bill_diff_to_dict, diff_bills, filter_diff
+from deltatrack.formatters.canonical import view_from_canonical, xml_diff_to_canonical
+from deltatrack.formatters.diff_html import format_diff_html
+from deltatrack.formatters.text_serializer import build_xml_full_text
+from deltatrack.version_stems import label_from_stem, version_number_from_stem
 
 
 def _build_from_trees(

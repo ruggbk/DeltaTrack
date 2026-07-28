@@ -31,9 +31,9 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from bill_tree import BillNode, BillTree
-from diff_bill import extract_amounts
-from parsers.pdf_anchors import Anchor, breadcrumb_for
+from deltatrack.bill_tree import BillNode, BillTree
+from deltatrack.diff_bill import extract_amounts
+from deltatrack.parsers.pdf_anchors import Anchor, breadcrumb_for
 
 # Leaf level from the XML tag — typed and reliable (docs/bill-structure.md glossary).
 _LEAF_LEVEL: dict[str, str] = {
