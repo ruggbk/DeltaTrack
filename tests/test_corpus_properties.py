@@ -84,10 +84,6 @@ def test_manifest_fixtures_committed() -> None:
     assert_manifest_committed(ALL_XML_FILES, "corpus-properties")
 
 
-# Files with known 0-node issues. Currently empty (issue #2 fixed).
-_XFAIL_ZERO_NODES: set[str] = set()
-
-
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
@@ -101,9 +97,6 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
     """
     _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
-    if test_id in _XFAIL_ZERO_NODES:
-        pytest.xfail(f"Known 0-node issue: {test_id}")
-
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
@@ -346,9 +339,6 @@ def test_character_coverage_ratio(xml_path: Path) -> None:
     """
     _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
-    if test_id in _XFAIL_ZERO_NODES:
-        pytest.xfail(f"Known 0-node issue: {test_id}")
-
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
