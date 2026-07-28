@@ -20,6 +20,9 @@ jobs:
   pip-audit:
     name: pip-audit (production deps)
     runs-on: ubuntu-latest
+    # Least-privilege token: this job only checks out and audits dependencies.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
