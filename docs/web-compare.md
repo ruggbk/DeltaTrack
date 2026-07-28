@@ -15,7 +15,7 @@ before `ProxyPass` + ISPConfig **Force HTTPS**. App middleware is a backstop onl
 | Path | Status | What it does |
 |---|---|---|
 | **Browser-only** (`index.html`, left card) | Coming soon | Future WebAssembly build — PDFs never leave the device. Not wired up yet. |
-| **Process on our server** (`compare.html`, right card) | **Available now** | User uploads start + end PDFs; server runs the Python PDF diff and returns a standalone HTML report in a new tab. Stateless — PDFs are not stored. |
+| **Process on our server** (`compare.html`, right card) | **Available now** (interim) | User uploads start + end PDFs; server runs the Python PDF diff and returns a standalone HTML report in a new tab. Stateless — PDFs are not stored. 
 
 Sample without uploading: `compare.html?example=1` loads a bundled report from `webapp/sample/example.html`.
 
