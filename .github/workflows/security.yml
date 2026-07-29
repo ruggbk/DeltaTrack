@@ -7,11 +7,19 @@ name: security
 #
 # To make it truly mandatory, add "pip-audit (production deps)" as a required
 # status check in the branch protection rules for both main and develop.
+#
+# `merge_group` reports that required check for pull requests sitting in a merge queue
+# (#416), and is inert until a queue is enabled because the event never fires otherwise.
+# BOTH required checks need this trigger, not just the test suite: a queue waits on every
+# required context, so leaving it off either workflow stalls the queue just as completely.
+# `ci.yml` carries it for `test`.
 on:
   pull_request:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
   workflow_dispatch:

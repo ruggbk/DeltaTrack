@@ -1,4 +1,9 @@
-"""Guardrails on the CI workflow's own triggers (#412).
+"""Guardrails on the triggers of the workflows that own a required status check.
+
+Two properties are pinned here: that the test suite runs when a commit lands on the
+integration branch (#412), and that both required checks answer the merge_group event so
+a merge queue can complete a merge (#416).
+
 
 Nothing ran the test suite when a commit landed on ``develop``, so a broken integration
 branch went unreported: ``ci.yml`` fired on ``pull_request`` and on pushes to ``main``
@@ -19,9 +24,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
-WORKFLOW = Path(__file__).parent.parent / ".github" / "workflows" / "ci.yml"
+WORKFLOWS = Path(__file__).parent.parent / ".github" / "workflows"
+WORKFLOW = WORKFLOWS / "ci.yml"
+
+# The workflows that own a REQUIRED status check on `develop`, by the context name branch
+# protection asks for: `test` from ci.yml, `pip-audit (production deps)` from
+# security.yml. A merge queue waits on every required context, so each of these has to
+# answer the merge_group event or the queue never completes a merge (#416).
+REQUIRED_CHECK_WORKFLOWS = {"ci.yml": "test", "security.yml": "pip-audit (production deps)"}
+
+
+def _triggers(path: Path) -> dict:
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    # PyYAML resolves a bare `on:` key to the boolean True (the YAML 1.1 truthy set),
+    # not the string "on". Both spellings are looked up so this does not silently find
+    # nothing -- an empty read here would pass the assertions below vacuously if it
+    # returned an empty dict instead of raising.
+    triggers = workflow.get("on", workflow.get(True))
+    assert triggers is not None, f"no trigger block parsed from {path}"
+    return triggers
 
 
 def _workflow() -> dict:
@@ -29,13 +53,26 @@ def _workflow() -> dict:
 
 
 def _push_branches(workflow: dict) -> list[str]:
-    # PyYAML resolves a bare `on:` key to the boolean True (the YAML 1.1 truthy set),
-    # not the string "on". Both spellings are looked up so this does not silently find
-    # nothing -- an empty read here would pass the `develop` assertion vacuously if it
-    # returned an empty list instead of raising.
     triggers = workflow.get("on", workflow.get(True))
     assert triggers is not None, f"no trigger block parsed from {WORKFLOW}"
     return triggers["push"]["branches"]
+
+
+@pytest.mark.parametrize(("filename", "context"), sorted(REQUIRED_CHECK_WORKFLOWS.items()))
+def test_required_checks_report_to_a_merge_queue(filename: str, context: str) -> None:
+    """Every required check answers `merge_group`, or a queue stalls on all merges.
+
+    This is inert while no merge queue is enabled, since the event never fires. It is
+    pinned anyway because the failure it prevents is both severe and silent: a queue
+    waits on a context that is never reported, so nothing merges, and the workflow files
+    look correct. Dropping the trigger from either workflow is what would cause it.
+    """
+    triggers = _triggers(WORKFLOWS / filename)
+    assert "merge_group" in triggers, (
+        f"{filename} no longer answers the merge_group event, so the required "
+        f"'{context}' check would never report for a queued pull request and the merge "
+        "queue would stall on every merge -- see #416."
+    )
 
 
 def test_ci_runs_on_pushes_to_develop() -> None:

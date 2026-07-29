@@ -21,10 +21,20 @@ name: CI
 # in-flight run means a merge commit finishes with no verdict, which is this issue's gap
 # in a new form. `update-examples.yml` uses that setting and is the nearby example likely
 # to be copied. `tests/test_ci_workflow.py` fails if either half of this is undone.
+#
+# `merge_group` reports the required `test` check for pull requests sitting in a merge
+# queue (#416). It is INERT until a queue is actually enabled in branch protection,
+# because the event never fires otherwise -- which is why it lands first: enabling the
+# queue while the workflows lack this trigger means the required checks are never
+# reported, so nothing merges until someone works out why. `checks_requested` is the only
+# activity type the event has; it is named rather than defaulted so the file says what it
+# responds to. `security.yml` carries the same trigger for the other required check.
 on:
   pull_request:
   push:
     branches: [main, develop]
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   test:
