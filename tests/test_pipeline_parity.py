@@ -34,7 +34,7 @@ bands below from drifting away from it.
 
 Every input is committed: all four evidence bills carry v1/v2 in both formats under
 ``tests/corpus/``, and the Senate pair is ``tests/corpus/118-s-4795`` XML plus
-``test_data/BILLS-118s4795rs.pdf``. So every case runs on any checkout, and absence is
+``tests/data/BILLS-118s4795rs.pdf``. So every case runs on any checkout, and absence is
 a hard failure on ``test_evidence_fixtures_committed`` rather than a skip (#326).
 CI runs this module: it is named in the ``Run remaining slow suites (committed
 fixtures)`` step of ``.github/workflows/ci.yml``. Committing a fixture makes a gate
@@ -48,7 +48,7 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import fixture_path
+from corpus_paths import DATA_DIR, fixture_path
 from scripts.heading_precision import measure
 from scripts.parity_table import PARITY_BILLS, parity_row, v1_v2
 
@@ -91,7 +91,7 @@ _PARITY: dict[str, tuple[tuple[int, int], tuple[int, int], str]] = {
 
 # Senate #89 residual: size-band ratio is "in range" when account-anchor recovery
 # sits near 1.0 against the XML leaf-heading count. Observed 1.02 (2026-06-29).
-_SENATE_PDF = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
+_SENATE_PDF = DATA_DIR / "BILLS-118s4795rs.pdf"
 _SENATE_XML = fixture_path("118-s-4795", "1_reported-in-senate.xml")
 _SENATE_RATIO_BAND = (0.95, 1.10)
 

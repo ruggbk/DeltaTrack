@@ -1,4 +1,4 @@
-"""Recall test for diff_pdf against the 13-case spec in test_data/pdf/118hr8752-changes.md.
+"""Recall test for diff_pdf against the 13-case spec in tests/data/pdf/118hr8752-changes.md.
 
 Each fixture case asserts:
   1. A hunk exists whose page+line range covers the case's location(s).

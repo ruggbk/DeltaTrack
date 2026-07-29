@@ -119,7 +119,7 @@ hand-written file. That does not scale to ~150 pairs. Split into:
    shown to the labeler**.
 2. **Labeling worklist generator** → renders each candidate blind to the scores (see §5), collects
    `label` / `confidence` / `rationale` into a worklist JSON.
-3. **Frozen fixture** (committed, schema-extended from today's `test_data/similarity_labels.json`)
+3. **Frozen fixture** (committed, schema-extended from today's `tests/data/similarity_labels.json`)
    → text re-derived byte-identical from the corpus as today, plus the Pass 2 fields (§4). The
    existing 12 pairs migrate in unchanged (tagged `challenge` / their bills' split per §6).
 4. **Baseline + eval harness** (`probes/eval_pass2.py`) → fits the re-tuned

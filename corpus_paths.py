@@ -1,6 +1,7 @@
-"""Where bill documents live.
+"""Where test inputs live.
 
-Two trees, deliberately separate (#308, ADR 0015):
+Three trees. The first two hold bill documents and are deliberately separate
+(#308, ADR 0015); the third holds everything else the suite reads from disk.
 
 ``tests/corpus/`` (:data:`FIXTURES_DIR`)
     The curated, committed fixture set. Every file here is tracked in git and named in
@@ -11,7 +12,19 @@ Two trees, deliberately separate (#308, ADR 0015):
     The working directory ``fetch_bills.py`` and ``fetch_bill_text_archives.py``
     download into. Entirely gitignored, entirely disposable, and not a test input.
 
-They used to be one directory, which meant a committed fixture needed a hand-written
+``tests/data/`` (:data:`DATA_DIR`)
+    Every committed test input that is not a bill document: the ground-truth
+    validation JSON, committee-report HTML and PDF, the PDF extraction goldens and
+    their source prints, the similarity answer key. Tracked by default, same as
+    ``tests/corpus/``, with only local-only artifacts (the extraction cache, the
+    source spreadsheet) named in ``.gitignore``.
+
+    This lived at a top-level ``test_data/`` reached through paths relative to the
+    current working directory, which meant the suite only ran from the repository
+    root and the convention had to be carried in prose to stay true (#404). It is
+    resolved from :data:`PROJECT_ROOT` here for the same reason the bill trees are.
+
+The first two used to be one directory, which meant a committed fixture needed a hand-written
 ``.gitignore`` re-admit line: a second copy of the manifest that nothing checked for
 agreement, and whose omission was silent (``git add`` no-ops on an ignored path, so the
 fixture stayed on the author's disk and vanished only on a fresh CI checkout). Splitting
@@ -33,6 +46,9 @@ FIXTURES_DIR = PROJECT_ROOT / "tests" / "corpus"
 
 #: Downloaded working corpus. Gitignored; present only where someone has fetched it.
 DOWNLOADS_DIR = PROJECT_ROOT / "bills"
+
+#: Committed non-bill test inputs. Tracked in git; safe to depend on in CI.
+DATA_DIR = PROJECT_ROOT / "tests" / "data"
 
 
 def fixture_path(bill_id: str, filename: str) -> Path:

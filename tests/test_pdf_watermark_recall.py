@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import DATA_DIR
 from deltatrack.diff_bill import extract_amounts
 from deltatrack.parsers.pdf_text import extract_clean_pages
 from tests.pdf_corpus import cached_pages
@@ -135,7 +136,7 @@ def test_robust_across_watermark_angles(tmp_path, angle):
 
 # ---- Benign bucket: the real watermarked public bill (image/graphic layer) -------------
 
-_S4795_PDF = Path(__file__).resolve().parent.parent / "test_data" / "BILLS-118s4795rs.pdf"
+_S4795_PDF = DATA_DIR / "BILLS-118s4795rs.pdf"
 
 
 def test_real_watermark_fixture_committed():

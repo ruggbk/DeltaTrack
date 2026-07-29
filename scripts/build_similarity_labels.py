@@ -1,4 +1,4 @@
-"""Regenerate test_data/similarity_labels.json — the similarity-threshold answer key (#8).
+"""Regenerate tests/data/similarity_labels.json — the similarity-threshold answer key (#8).
 
 Pulls each labeled pair's exact body text straight from the real corpus diffs so the
 frozen fixture text is byte-identical to what the matcher sees, then freezes text + the
@@ -25,7 +25,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from corpus_paths import fixture_path  # noqa: E402
+from corpus_paths import DATA_DIR, fixture_path  # noqa: E402
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
 from deltatrack.diff_bill import (  # noqa: E402
     _MOVE_THRESHOLD,
@@ -35,7 +35,7 @@ from deltatrack.diff_bill import (  # noqa: E402
     diff_bills,
 )
 
-_OUT = _ROOT / "test_data" / "similarity_labels.json"
+_OUT = DATA_DIR / "similarity_labels.json"
 
 
 def _diff(bill: str, v_old: str, v_new: str):

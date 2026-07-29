@@ -1,6 +1,6 @@
 """Answer key for the section-matching similarity thresholds (DeltaTrack #8).
 
-`test_data/similarity_labels.json` is a hand-labeled set of real section pairs, each
+`tests/data/similarity_labels.json` is a hand-labeled set of real section pairs, each
 tagged SAME (a revision of one provision -> the matcher should link them) or DIFFERENT
 (unrelated provisions that merely share boilerplate -> should not be linked). We run the
 production similarity pipeline (`_text_similarity(_normalize_text(...))`) over the frozen
@@ -28,10 +28,10 @@ with `scripts/build_similarity_labels.py` if the corpus text or thresholds chang
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
+from corpus_paths import DATA_DIR
 from deltatrack.diff_bill import (
     _MOVE_THRESHOLD,
     _SIMILARITY_THRESHOLD,
@@ -39,7 +39,7 @@ from deltatrack.diff_bill import (
     _text_similarity,
 )
 
-_FIXTURE = Path(__file__).parent.parent / "test_data" / "similarity_labels.json"
+_FIXTURE = DATA_DIR / "similarity_labels.json"
 _PAIRS = json.loads(_FIXTURE.read_text())["pairs"]
 
 

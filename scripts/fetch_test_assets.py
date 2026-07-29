@@ -13,12 +13,13 @@ different sets per machine and passed green in CI while asserting nothing.
 What this script is still for: re-obtaining an asset that was deleted locally, and
 recording where each one came from, so the committed corpus stays reproducible from
 its upstream source rather than being a set of binaries with no provenance. Adding a
-new asset here does NOT commit it; it also needs a .gitignore allowlist entry (#308).
+new asset here does NOT commit it: `git add` it too. No .gitignore edit is needed —
+both destination trees are tracked by default, which is the inversion #308 made.
 
 Currently:
-- test_data/BILLS-118s4795rs.pdf - the reported-in-Senate (watermarked) print
+- tests/data/BILLS-118s4795rs.pdf - the reported-in-Senate (watermarked) print
   of S.4795, read by tests/test_pdf_watermark_recall.py.
-- test_data/subcommittee/BILLS-118hr*rh.pdf - one FY2025 reported-in-House print
+- tests/data/subcommittee/BILLS-118hr*rh.pdf - one FY2025 reported-in-House print
   per appropriations subcommittee, read by the major-level cross-subcommittee
   tests (DeltaTrack#105). Major/department heading vocabulary differs per
   subcommittee, so these guard against overfitting to one or two bills. CJS and
@@ -68,8 +69,8 @@ _CATCHLINE_BILLS = {
 
 # (destination path relative to the repo root, govinfo URL)
 ASSETS: list[tuple[str, str]] = [
-    ("test_data/BILLS-118s4795rs.pdf", _gov("BILLS-118s4795rs")),
-    *((f"test_data/subcommittee/{pkg}.pdf", _gov(pkg)) for pkg in _SUBCOMMITTEE_PACKAGES),
+    ("tests/data/BILLS-118s4795rs.pdf", _gov("BILLS-118s4795rs")),
+    *((f"tests/data/subcommittee/{pkg}.pdf", _gov(pkg)) for pkg in _SUBCOMMITTEE_PACKAGES),
     *((dest, _gov(pkg)) for dest, pkg in _CATCHLINE_BILLS.items()),
 ]
 

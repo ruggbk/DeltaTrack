@@ -29,11 +29,12 @@ from pathlib import Path
 
 import pytest
 
+from corpus_paths import DATA_DIR
 from deltatrack.parsers.pdf_text import extract_clean_pages
 from tests.conftest import assert_manifest_committed
 
 _ROOT = Path(__file__).parent.parent
-_GOLDEN = _ROOT / "test_data" / "pdf" / "extraction_golden.json"
+_GOLDEN = DATA_DIR / "pdf" / "extraction_golden.json"
 
 # (key, pdf path relative to repo root, 1-based page, path exercised).
 _CASES = [
@@ -63,7 +64,7 @@ _CASES = [
     ),
     (
         "crpt198_compare_p220",
-        "test_data/CRPT-118srpt198.pdf",
+        "tests/data/CRPT-118srpt198.pdf",
         220,
         "watermarked committee-report comparison table read forward, not reversed",
     ),

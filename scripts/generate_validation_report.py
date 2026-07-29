@@ -18,17 +18,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from corpus_paths import DATA_DIR  # noqa: E402
 from validation_check import validate_jurisdiction  # noqa: E402
 from validation_sources import JURISDICTIONS  # noqa: E402
 
 OUTPUT = Path("docs/parser-validation.md")
-LEG_BRANCH_FIXTURE = Path("test_data/validation_leg_branch.json")
+LEG_BRANCH_FIXTURE = DATA_DIR / "validation_leg_branch.json"
 
 
 def _leg_branch_summary() -> str:
-    # Fixtures are gitignored and fetch-scripted, so on a clean clone this file
-    # is absent. Degrade like the JURISDICTIONS availability filter below rather
-    # than raising FileNotFoundError.
+    # Committed since ADR 0015, so a clean clone has this. Degrade like the
+    # JURISDICTIONS availability filter below rather than raising FileNotFoundError,
+    # for the partial checkout where it is genuinely absent.
     if not LEG_BRANCH_FIXTURE.exists():
         return "- **Legislative Branch** — not fetched (run `uv run python scripts/build_validation.py --fetch`)."
     data = json.loads(LEG_BRANCH_FIXTURE.read_text())

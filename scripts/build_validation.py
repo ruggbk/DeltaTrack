@@ -1,4 +1,4 @@
-"""Build test_data/validation_<slug>.json for each committee-report jurisdiction.
+"""Build tests/data/validation_<slug>.json for each committee-report jurisdiction.
 
 External ground truth for #8: each Senate appropriations committee report is read for its
 3-line account summary blocks (committee-recommendation amounts, in actual dollars), which

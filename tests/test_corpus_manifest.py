@@ -13,10 +13,10 @@ These are fast (non-slow) on purpose, for two reasons:
 """
 
 import json
-from pathlib import Path
 
 import pytest
 
+from corpus_paths import DATA_DIR
 from tests import conftest
 from validation_sources import JURISDICTIONS
 
@@ -154,7 +154,7 @@ def test_tracked_bills_uses_git_in_this_repo() -> None:
 
 # --- uncommitted_bill_files: the same committed-ness question, arbitrary path list ----
 # The Legislative Branch validation floor (#278) asks it of the bills
-# test_data/validation_leg_branch.json references, which is not a manifest question. It
+# tests/data/validation_leg_branch.json references, which is not a manifest question. It
 # shares an implementation with missing_manifest_files precisely so the git-vs-presence
 # semantics cannot drift apart between the two callers.
 
@@ -189,7 +189,7 @@ def test_leg_branch_validation_bills_are_committed() -> None:
     fresh clone missing one of the seven bills would only go red in the slow step; the
     committed-fixture guarantee is checked on EVERY run for the same reason the manifest
     floor is (see this module's docstring)."""
-    fixture = json.loads(Path("test_data/validation_leg_branch.json").read_text())
+    fixture = json.loads((DATA_DIR / "validation_leg_branch.json").read_text())
     referenced = {f"{a['bill']}/{a['version']}" for a in fixture["accounts"]}
     assert conftest.uncommitted_bill_files(referenced) == [], (
         "Legislative Branch validation references bill versions that are not committed; "
@@ -556,7 +556,7 @@ def test_all_report_fixtures_committed() -> None:
     its committed ground-truth fixture on disk.
 
     Mirrors the corpus gates' ``test_manifest_fixtures_committed`` (#217, ADR 0015). The
-    fixtures are committed (``test_data/validation_*.json`` is re-included in .gitignore),
+    fixtures are committed (``tests/data/`` is tracked by default, #308),
     so a normal checkout has all of them and this is green; it turns red — naming every
     absent subcommittee — only when a rename/cleanup/.gitignore change drops one, instead
     of silently shrinking external validation.
@@ -564,7 +564,7 @@ def test_all_report_fixtures_committed() -> None:
     missing = sorted(j.slug for j in JURISDICTIONS if not j.fixture_path.exists())
     assert not missing, (
         f"{len(missing)} committee-report validation fixture(s) registered in "
-        f"validation_sources.py but absent from test_data/: {missing}. Each missing fixture "
+        f"validation_sources.py but absent from tests/data/: {missing}. Each missing fixture "
         "silently removes its subcommittee from external validation. Restore the committed "
         "file(s) or rebuild with `uv run python scripts/build_validation.py --fetch`."
     )
