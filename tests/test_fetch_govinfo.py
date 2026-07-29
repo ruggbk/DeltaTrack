@@ -20,7 +20,7 @@ import respx
 import fetch_bill_text_archives as fbt
 import fetch_bills as fb
 import fetch_govinfo as gi
-from corpus_paths import fixture_path
+from tests.corpus_paths import fixture_path
 
 REPO = Path(__file__).resolve().parent.parent
 

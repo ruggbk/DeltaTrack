@@ -22,7 +22,7 @@ root.
 | `heading_precision.py` | Measure PDF heading-anchor recovery against the XML hierarchy (DeltaTrack#89). |
 | `parity_table.py` | Print the PDF↔XML change-parity table for the four evidence bills — the snapshot [ADR 0014](../docs/decisions/0014-leveled-heading-tree-scope.md) records. Reporting only; `tests/test_pipeline_parity.py` is the gate that asserts the bands. |
 | `ugly_money_table.py <old.xml> <new.xml> -o <out>` | Emit a deliberately unstyled money-diff table for staffer validation (fidelity stripped so only the money diff is under test). |
-| `../render_examples.py` | Regenerate the committed example HTML diffs and landing page under `examples/`. The only renderer of the published examples; CI deploys what it wrote, and `tests/test_committed_examples.py` fails if they're stale. |
+| `render_examples.py` | Regenerate the committed example HTML diffs and landing page under `examples/`. The only renderer of the published examples; CI deploys what it wrote, and `tests/test_committed_examples.py` fails if they're stale. |
 
 ## Similarity-threshold audit prototypes
 

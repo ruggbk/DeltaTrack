@@ -2,7 +2,6 @@
 
 import pytest
 
-from corpus_paths import fixture_path
 from deltatrack.diff_bill import (
     FinancialChange,
     compute_financial_change,
@@ -10,6 +9,7 @@ from deltatrack.diff_bill import (
     financial_change_to_dict,
     match_amounts,
 )
+from tests.corpus_paths import fixture_path
 
 
 class TestExtractAmounts:

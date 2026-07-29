@@ -18,9 +18,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from corpus_paths import DATA_DIR  # noqa: E402
-from validation_check import validate_jurisdiction  # noqa: E402
-from validation_sources import JURISDICTIONS  # noqa: E402
+from tests.corpus_paths import DATA_DIR  # noqa: E402
+from tests.validation_check import validate_jurisdiction  # noqa: E402
+from tests.validation_sources import JURISDICTIONS  # noqa: E402
 
 OUTPUT = Path("docs/parser-validation.md")
 LEG_BRANCH_FIXTURE = DATA_DIR / "validation_leg_branch.json"

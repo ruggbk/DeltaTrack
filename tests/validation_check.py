@@ -23,7 +23,7 @@ from pathlib import Path
 
 from deltatrack.bill_tree import normalize_bill
 from deltatrack.diff_bill import extract_amounts
-from validation_sources import Jurisdiction
+from tests.validation_sources import Jurisdiction
 
 
 def _normalize(name: str | None) -> str:

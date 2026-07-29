@@ -22,9 +22,9 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import DATA_DIR, fixture_path
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from tests.conftest import assert_manifest_committed
+from tests.corpus_paths import DATA_DIR, fixture_path
 from tests.pdf_corpus import cached_pages
 
 ROOT = Path(__file__).resolve().parent.parent

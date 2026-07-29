@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from corpus_paths import fixture_path
 from deltatrack.diff_pdf import build_parser, main
+from tests.corpus_paths import fixture_path
 
 V1 = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
 V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.pdf")

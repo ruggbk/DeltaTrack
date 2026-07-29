@@ -21,15 +21,15 @@ from pathlib import Path
 
 import pytest
 
-import render_examples
-from corpus_paths import FIXTURES_DIR
+from scripts import render_examples
+from tests.corpus_paths import FIXTURES_DIR
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
 SERVED_SAMPLE = ROOT / "web" / "webapp" / "sample" / "example.html"
 PDF_EXAMPLE = EXAMPLES / "hr8752_pdf_diff.html"
 
-REGENERATE = "Run `uv run python render_examples.py` and commit the result."
+REGENERATE = "Run `uv run python scripts/render_examples.py` and commit the result."
 
 
 def _corpus_files() -> list[Path]:

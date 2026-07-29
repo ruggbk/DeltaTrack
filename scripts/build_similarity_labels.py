@@ -25,7 +25,6 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from corpus_paths import DATA_DIR, fixture_path  # noqa: E402
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
 from deltatrack.diff_bill import (  # noqa: E402
     _MOVE_THRESHOLD,
@@ -34,6 +33,7 @@ from deltatrack.diff_bill import (  # noqa: E402
     _text_similarity,
     diff_bills,
 )
+from tests.corpus_paths import DATA_DIR, fixture_path  # noqa: E402
 
 _OUT = DATA_DIR / "similarity_labels.json"
 

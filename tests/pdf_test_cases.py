@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from corpus_paths import DATA_DIR
+from tests.corpus_paths import DATA_DIR
 
 DEFAULT_FIXTURE = DATA_DIR / "pdf" / "118hr8752-changes.md"
 

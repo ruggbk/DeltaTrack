@@ -32,9 +32,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from corpus_paths import FIXTURES_DIR  # noqa: E402
 from deltatrack.compare.pdf import compare_pdfs  # noqa: E402
 from deltatrack.compare.xml import compare_xml  # noqa: E402
+from tests.corpus_paths import FIXTURES_DIR  # noqa: E402
 
 # The four evidence bills, v1→v2 (reported→engrossed). Order is the table's order.
 # Every one is committed in both formats under tests/corpus/, so this runs on any

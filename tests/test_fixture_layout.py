@@ -36,8 +36,8 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import DOWNLOADS_DIR, FIXTURES_DIR, PROJECT_ROOT, sweep_bill_dirs
 from tests.conftest import _git_tracked_paths
+from tests.corpus_paths import DOWNLOADS_DIR, FIXTURES_DIR, PROJECT_ROOT, sweep_bill_dirs
 
 # Modules that legitimately name ``bills/``: they are about the DOWNLOAD tier itself
 # (the fetchers and their tests, the live parity gate) or they pin a bill nobody has
@@ -64,7 +64,7 @@ _BILL_ID = r"\d{3}-[a-z]+-\d+"
 # path. The filename is captured when present, because the question is per-VERSION (see
 # committed_fixture_refs).
 #
-# The broader rule below already rejects every DOWNLOADS_DIR use outside corpus_paths.py,
+# The broader rule below already rejects every DOWNLOADS_DIR use outside tests/corpus_paths.py,
 # so these two patterns are not the last line of defence. They stay because they can name
 # the offending fixture in the failure message — "115-hr-244/6_enrolled-bill.xml is
 # committed" is a far more actionable error than "you named the download tree".
@@ -85,7 +85,7 @@ _BILLS_PATH_RES = (
 #
 # The last is how scripts/build_similarity_labels.py came through the #308 move still
 # pointing at the download tree and stopped resolving. So the rule is the policy itself:
-# outside corpus_paths.py and the fetchers, no module names the download tree — it goes
+# outside tests/corpus_paths.py and the fetchers, no module names the download tree — it goes
 # through fixture_path() (committed) or resolve_bill_file() (mixed per version).
 #
 # Deliberately NOT "any 'bills' string literal": that flags a JSON key (``{"bills": []}``
@@ -227,7 +227,7 @@ def find_download_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
     """
     offenders: dict[str, list[int]] = {}
     for rel, text in sources.items():
-        if rel in _DOWNLOAD_TIER_FILES or rel == "corpus_paths.py":
+        if rel in _DOWNLOAD_TIER_FILES or rel == "tests/corpus_paths.py":
             continue
         lines = [
             n
@@ -250,14 +250,14 @@ def find_data_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
     being removed.
 
     ``corpus_paths.DATA_DIR`` is the one home for the name, so everything outside
-    ``corpus_paths.py`` imports rather than respells.
+    ``tests/corpus_paths.py`` imports rather than respells.
 
     Lines mentioning ``tmp_path`` are skipped, as above: a synthetic ``tmp_path / "tests" /
     "data"`` tree in a test is not the real directory.
     """
     offenders: dict[str, list[int]] = {}
     for rel, text in sources.items():
-        if rel == "corpus_paths.py" or rel == "tests/test_fixture_layout.py":
+        if rel == "tests/corpus_paths.py" or rel == "tests/test_fixture_layout.py":
             continue
         lines = [
             n
@@ -312,8 +312,8 @@ def test_data_tree_rule_can_fire() -> None:
     synthetic = {"tests/test_thing.py": 'dest = tmp_path / "tests" / "data" / "x.pdf"'}
     assert find_data_tree_names(synthetic) == {}
 
-    # corpus_paths.py defines the constant, so it must be able to spell it.
-    assert find_data_tree_names({"corpus_paths.py": 'DATA_DIR = PROJECT_ROOT / "tests" / "data"'}) == {}
+    # tests/corpus_paths.py defines the constant, so it must be able to spell it.
+    assert find_data_tree_names({"tests/corpus_paths.py": 'DATA_DIR = PROJECT_ROOT / "tests" / "data"'}) == {}
 
 
 def test_the_source_scan_actually_covers_the_engine() -> None:
@@ -348,7 +348,8 @@ def test_the_source_scan_actually_covers_the_engine() -> None:
         "tests/conftest.py",
         "scripts/serve_compare.py",
         "web/app.py",
-        "corpus_paths.py",
+        # The repository root, which since #401 holds only the two command wrappers.
+        "diff_bill.py",
     ):
         assert expected in scanned, (
             f"fixture-path scan missed {expected!r} -- the roster in `_python_sources` is out "
@@ -452,7 +453,7 @@ def test_download_tree_name_rule_can_fire() -> None:
     assert find_download_tree_names(one_string) == {"tests/test_thing.py": [1]}
 
     # An import alias defeats a name-based regex on the use site, but not on the import.
-    aliased = {"tests/test_thing.py": "from corpus_paths import DOWNLOADS_DIR as DL\nX = DL / bill"}
+    aliased = {"tests/test_thing.py": "from tests.corpus_paths import DOWNLOADS_DIR as DL\nX = DL / bill"}
     assert find_download_tree_names(aliased) == {"tests/test_thing.py": [1]}
 
     interpolated = {"tests/test_thing.py": 'X = Path(f"bills/{bill}/1_reported-in-house.xml")'}
@@ -482,8 +483,8 @@ def test_download_tree_name_rule_can_fire() -> None:
     ):
         assert find_download_tree_names({"tests/test_thing.py": src}) == {}
 
-    # corpus_paths.py itself defines them, and the fetchers own the directory.
-    assert find_download_tree_names({"corpus_paths.py": 'DOWNLOADS_DIR = PROJECT_ROOT / "bills"'}) == {}
+    # tests/corpus_paths.py itself defines them, and the fetchers own the directory.
+    assert find_download_tree_names({"tests/corpus_paths.py": 'DOWNLOADS_DIR = PROJECT_ROOT / "bills"'}) == {}
     assert find_download_tree_names({"fetch_bills.py": 'default=Path("bills")'}) == {}
 
 
@@ -526,8 +527,8 @@ def test_sweep_prefers_the_committed_copy(tmp_path, monkeypatch) -> None:
     (fixtures / "118-hr-4366").mkdir(parents=True)
     (downloads / "118-hr-4366").mkdir(parents=True)
     (downloads / "999-hr-9").mkdir(parents=True)
-    monkeypatch.setattr("corpus_paths.FIXTURES_DIR", fixtures)
-    monkeypatch.setattr("corpus_paths.DOWNLOADS_DIR", downloads)
+    monkeypatch.setattr("tests.corpus_paths.FIXTURES_DIR", fixtures)
+    monkeypatch.setattr("tests.corpus_paths.DOWNLOADS_DIR", downloads)
 
     swept = sweep_bill_dirs()
     assert [d.name for d in swept] == ["118-hr-4366", "999-hr-9"], "one entry per bill id"

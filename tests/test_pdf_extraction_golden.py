@@ -29,9 +29,9 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import DATA_DIR
 from deltatrack.parsers.pdf_text import extract_clean_pages
 from tests.conftest import assert_manifest_committed
+from tests.corpus_paths import DATA_DIR
 
 _ROOT = Path(__file__).parent.parent
 _GOLDEN = DATA_DIR / "pdf" / "extraction_golden.json"

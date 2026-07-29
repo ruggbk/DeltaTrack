@@ -85,6 +85,11 @@ is not a package and reaches the root through `sys.path.insert` — and folding 
 double a diff whose purpose is legibility. Tracked as
 [#401](https://github.com/AgoraDMV/DeltaTrack/issues/401).
 
+*Superseded by #401*, which moved all four: the fixture-path resolver and the validation
+pair into `tests/`, the example renderer into `scripts/`. No import root was added — both
+directories resolve as namespace packages under the `.` already on `pythonpath`, which is
+how `tests/` and several `scripts/` modules were already imported.
+
 ## Consequences
 
 - **Running the suite now requires an install.** `source ./init` runs `uv sync`, which

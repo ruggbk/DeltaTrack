@@ -8,7 +8,7 @@ name: Publish examples
 # running successfully the published demo silently froze fifteenfold behind the real
 # renderer while the repo's own tests stayed green.
 #
-# Rendering now happens in exactly one place — `render_examples.py`, run by a human and
+# Rendering now happens in exactly one place — `scripts/render_examples.py`, run by a human and
 # committed — and `tests/test_committed_examples.py` fails the normal CI job if what is
 # committed is not what the current pipeline emits. So the files this job publishes are
 # already proven fresh, and it only has to copy them.

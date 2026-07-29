@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_bill_dirs
 from deltatrack.bill_tree import BillNode, BillTree, normalize_bill
 from deltatrack.diff_bill import NodeDiff, diff_bills
+from tests.corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_bill_dirs
 
 # --- Committed corpus manifest (#217 / ADR 0015) -------------------------------
 # The three corpus correctness gates (test_corpus_properties, test_corpus_tree_

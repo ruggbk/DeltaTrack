@@ -254,7 +254,7 @@ Consequences worth recording:
   because the two never appear together. `scripts/build_similarity_labels.py` came
   through the move in exactly that shape and stopped resolving — caught in review of
   #345, not by the first version of the guard. Hence a second rule: outside
-  `corpus_paths.py` and the fetchers, no module spells the download root at all.
+  `tests/corpus_paths.py` and the fetchers, no module spells the download root at all.
 - **The judgement is per version, not per bill.** A bill-level allowlist cannot express
   a partly committed bill, so exempting `115-hr-244` (for its withheld amendment doc)
   silently exempted its committed enrolled text too. The guard derives the committed set

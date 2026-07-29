@@ -64,7 +64,7 @@ print('Wrote reports/hr4366_pdf_v1_vs_v2.html')
 Or regenerate every published example at once. No download step: `render_examples.py` reads the committed corpus under `tests/corpus/`, so it works on a fresh clone.
 
 ```bash
-uv run python render_examples.py   # rewrites examples/*.html and examples/index.html
+uv run python scripts/render_examples.py   # rewrites examples/*.html and examples/index.html
 ```
 
 | | README quickstart (XML) | Web upload / `compare_pdfs_html` (PDF) |
@@ -132,7 +132,7 @@ Production ops (hosting, limits, systemd) live in gitignored `docs-for-ai/deploy
 
 - `src/deltatrack/diff_pdf.py`, `src/deltatrack/parsers/`, `src/deltatrack/formatters/diff_html.py`, `src/deltatrack/formatters/canonical.py`
 - Re-run PDF tests: `uv run pytest tests/test_pdf_*`
-- Regenerate committed examples if output shape changes: `uv run python render_examples.py`
+- Regenerate committed examples if output shape changes: `uv run python scripts/render_examples.py`
 
 **Upload / API behavior** — `web/app.py`, `src/deltatrack/compare/pdf.py`
 

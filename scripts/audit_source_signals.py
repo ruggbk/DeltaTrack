@@ -28,7 +28,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from corpus_paths import sweep_bill_dirs  # noqa: E402
+from tests.corpus_paths import sweep_bill_dirs  # noqa: E402
 
 
 def _bill_files(repo: Path, pattern: str) -> list[Path]:

@@ -5,7 +5,7 @@ gracefully on a clean clone instead of raising FileNotFoundError (#18).
 """
 
 import scripts.generate_validation_report as report
-from corpus_paths import DATA_DIR
+from tests.corpus_paths import DATA_DIR
 
 
 def test_leg_branch_summary_degrades_when_fixture_absent(monkeypatch):

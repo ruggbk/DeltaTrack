@@ -13,8 +13,8 @@ import re
 
 import pytest
 
-from corpus_paths import fixture_path
 from deltatrack.formatters.diff_html import _build_toc_from_tree, _node_anchor_offset, _walk_tree
+from tests.corpus_paths import fixture_path
 
 _V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
 _V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.xml")

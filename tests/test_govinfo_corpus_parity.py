@@ -33,9 +33,9 @@ import httpx
 import pytest
 
 import fetch_govinfo as gi
-from corpus_paths import sweep_bill_dirs
 from fetch_bills import sanitize_version_name
 from tests.conftest import manifest_bill_ids
+from tests.corpus_paths import sweep_bill_dirs
 
 pytestmark = [pytest.mark.slow, pytest.mark.network]
 
