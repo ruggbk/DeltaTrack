@@ -26,10 +26,9 @@ htmlcov/
 # or `webapp/bills/` — reintroducing the silent-`git add` failure #308 exists to remove,
 # just somewhere else. `/bills` is anchored to the repo root AND still matches a symlink.
 /bills
-# govinfo BILLS bulk-text downloads + staging (tools/fetch_bill_text_archives.py); large,
-# re-fetchable. Same anchoring reasoning as above (#319, #308).
+# govinfo BILLS bulk-text ZIP downloads (tools/fetch_bill_text_archives.py --zip-dir);
+# large, re-fetchable. Same anchoring reasoning as above (#319, #308).
 /bills_bulk_text
-/bills_govinfo_staging
 reports/*
 !reports/.gitkeep
 plans/
