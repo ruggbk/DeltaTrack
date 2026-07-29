@@ -253,6 +253,21 @@ Matching is on nodeid **and** reason, so an allowlisted case that starts skippin
 for a *different* reason still fails. Add an entry only with a comment saying
 why, and treat adding one as recording a gap rather than clearing an error.
 
+**Sometimes the answer is not to declare it at all.** Both allowlists assume the
+skip is honest: the document really has no dollar amounts, or the fixture really
+is not committed. A skip caused by a *parser gap* fits neither. Declaring one
+converts a known bug into documented-normal, and the ceiling then permits it
+permanently — the gate goes quiet on exactly the case it exists to catch. The
+honest options there are to fix the parser, or to leave the fixture out of the
+corpus with a note saying why.
+
+`115-hr-244` v5 is the worked example. It is an engrossed-amendment-house
+document carrying ~1900 appropriations tags that the gates' body extraction does
+not surface — the amendment-doc class tracked in #11. Committing it would have
+forced an `ALLOWED_CORPUS_SKIPS` entry recording that the document had nothing
+to find, which is not true of the document. It is withheld instead, and the
+manifest's `covers` note for that bill says so where the next person will look.
+
 ### Why a local run can collect more than CI
 
 Most watched modules parametrize over the manifest, so their case list is
@@ -286,6 +301,19 @@ The manifest and the committed files move together:
    (`_KNOWN_DUPLICATE_COUNTS`, `_XML_DROP_BUDGET`, ...) must be calibrated for
    the new bill or the gate fails. Commit the calibrated baseline alongside the
    fixture and manifest entry.
+4. Expect the run to name your fixture in a **skip-ceiling banner**, and decide
+   what to do about it. The manifest entry does not only add cases: it enrols the
+   bill in the corpus property gates, which may then legitimately content-skip on
+   it, and an undeclared skip fails the session. The banner names a test you
+   never touched, in a module you may not have known your fixture had joined —
+   that is this step, not a pre-existing breakage. See
+   [When a skip has to be declared](#when-a-skip-has-to-be-declared) for which
+   allowlist applies, and for the case where the right answer is to withhold the
+   fixture rather than declare anything.
+
+A version committed in both `xml` and `pdf` joins more gates than the same
+version committed in one format, so expect step 4 to reach further. #322 added a
+single PDF and widened three modules at once.
 
 **The two trees are separate, and only one matters to the gates** (#308).
 `tests/corpus/` is committed and is what every gate reads; `bills/` is the
