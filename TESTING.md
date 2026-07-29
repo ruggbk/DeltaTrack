@@ -368,14 +368,20 @@ instead of re-reading the PDF, so re-running the same tests is near-instant.
 
 An entry is reused only when nothing that produced it has changed, so the key
 covers both halves: the PDF (path and modification time) and the extractor
-(`parsers/pdf_text.py` and the pypdfium2 version). Editing or replacing a PDF
-re-extracts it, and so does any edit to the extractor. Before that second half
-was in the key (#393), an extractor change left every entry looking current, and
-the golden suites reading the cache asserted against pre-change text and stayed
-green on a real regression.
+(`src/deltatrack/parsers/pdf_text.py` and the pypdfium2 version). Editing or
+replacing a PDF re-extracts it, and so does any edit to the extractor. Before
+that second half was in the key (#393), an extractor change left every entry
+looking current, and the golden suites reading the cache asserted against
+pre-change text and stayed green on a real regression.
 
-The rule is deliberately blunt: a comment-only edit to `parsers/pdf_text.py` also
-invalidates the cache, so the next run pays one full re-extraction.
+The rule is deliberately blunt: a comment-only edit to
+`src/deltatrack/parsers/pdf_text.py` also invalidates the cache, so the next run
+pays one full re-extraction.
+
+Superseded entries are never reclaimed, so each invalidation leaves the previous
+set on disk. Nothing reads them and nothing in CI restores the directory, so to
+reclaim the space just delete it: `rm -rf test_data/extract_cache`. The next run
+re-extracts.
 
 ## Comparing the two pipelines by eye
 

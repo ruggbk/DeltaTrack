@@ -3,8 +3,9 @@
 `tests/pdf_corpus.cached_pages` persists extracted PDF text to disk so repeat runs
 skip extraction. A cache entry is only safe to reuse when both halves of what produced
 it are unchanged: the PDF, and the extractor. Keying on the PDF alone (path + mtime)
-left the second half unchecked, so editing `parsers/pdf_text.py` did not invalidate
-anything and the suites reading the cache asserted against pre-change text.
+left the second half unchecked, so editing `src/deltatrack/parsers/pdf_text.py` did
+not invalidate anything and the suites reading the cache asserted against pre-change
+text.
 
 That failure mode is silent by construction: the tests do not skip, they pass. It hit
 hardest in `test_pdf_anchor_golden.py`, which exists to go red on exactly this drift.
@@ -15,12 +16,12 @@ path, so nothing here needs the corpus or an extraction.
 
 from __future__ import annotations
 
-import hashlib
 import os
-from importlib.metadata import version
 from pathlib import Path
 
-import parsers.pdf_text
+import pytest
+
+from deltatrack.parsers import pdf_text
 from tests import pdf_corpus
 
 
@@ -31,15 +32,42 @@ def _touch(dir_path: Path, name: str = "bill.pdf", content: bytes = b"%PDF-1.7\n
     return p
 
 
-def test_fingerprint_tracks_extractor_source_and_engine():
-    """The fingerprint must be derived from the extractor's own bytes plus the engine
-    version. Recomputed here from those inputs directly, so dropping either one from
-    `_extractor_fingerprint` fails here instead of silently widening what a stale entry
-    can survive."""
-    expected = hashlib.sha1(Path(parsers.pdf_text.__file__).read_bytes() + version("pypdfium2").encode()).hexdigest()[
-        :12
-    ]
-    assert pdf_corpus._extractor_fingerprint() == expected
+@pytest.fixture
+def fingerprint():
+    """`_extractor_fingerprint` memoizes, so a test that varies its inputs has to clear
+    the cache around every call. Without that the second call returns the value computed
+    from the first call's inputs, and the assertion reads as a pass for the wrong reason.
+    """
+
+    def _read() -> str:
+        pdf_corpus._extractor_fingerprint.cache_clear()
+        return pdf_corpus._extractor_fingerprint()
+
+    yield _read
+    pdf_corpus._extractor_fingerprint.cache_clear()
+
+
+def test_fingerprint_changes_when_the_extractor_source_changes(tmp_path, monkeypatch, fingerprint):
+    """Editing the extractor must move the fingerprint. Asserted as behavior rather than
+    by recomputing the digest here, so the hash recipe stays free to change (a wider
+    input set, a different algorithm) without this test going red on an improvement."""
+    before = fingerprint()
+
+    stand_in = tmp_path / "pdf_text.py"
+    stand_in.write_bytes(Path(pdf_text.__file__).read_bytes() + b"\n# an edit to the extractor\n")
+    monkeypatch.setattr(pdf_text, "__file__", str(stand_in))
+
+    assert fingerprint() != before
+
+
+def test_fingerprint_changes_when_the_engine_version_changes(monkeypatch, fingerprint):
+    """A pypdfium2 upgrade can alter glyph handling with no source edit, which
+    `test_pdf_extraction_golden.py` already names as a drift risk it exists to catch."""
+    before = fingerprint()
+
+    monkeypatch.setattr(pdf_corpus, "version", lambda _package: "0.0.0-not-a-real-version")
+
+    assert fingerprint() != before
 
 
 def test_key_changes_when_the_extractor_changes(tmp_path, monkeypatch):
@@ -64,9 +92,9 @@ def test_key_changes_when_the_pdf_changes(tmp_path):
 
 
 def test_key_is_stable_when_nothing_changed(tmp_path):
-    """Completeness floor for the two tests above. A key that varied every call would
-    satisfy both of them while never hitting, quietly removing the speedup the cache
-    exists for (#348, duplicated PDF extraction across xdist workers)."""
+    """Completeness floor for the tests above. A key that varied every call would satisfy
+    all of them while never hitting, quietly removing the speedup the cache exists for
+    (#348, duplicated PDF extraction across xdist workers)."""
     pdf = _touch(tmp_path)
     assert pdf_corpus._cache_file(pdf) == pdf_corpus._cache_file(pdf)
 
