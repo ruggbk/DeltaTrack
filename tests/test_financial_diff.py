@@ -572,11 +572,10 @@ class TestAmountSourceIsDisplayText:
     def test_empty_display_text_falls_back_rather_than_blanking(self):
         """A node whose display_text is empty must not extract from "" and lose its amounts.
 
-        _amount_text mirrors structure_tree's `display_text or body_text`, so the empty
+        bill_tree.amount_text is the one function both money views read, so the empty
         string falls through to body_text instead of silently zeroing the node.
         """
-        from deltatrack.bill_tree import BillNode
-        from deltatrack.diff_bill import _amount_text
+        from deltatrack.bill_tree import BillNode, amount_text
 
         node = BillNode(
             match_path=("title i", "army"),
@@ -589,8 +588,8 @@ class TestAmountSourceIsDisplayText:
             division_label="",
             display_text="",
         )
-        assert _amount_text(node) == "For construction, $4,000,000."
-        assert extract_amounts(_amount_text(node)) == (4000000,)
+        assert amount_text(node) == "For construction, $4,000,000."
+        assert extract_amounts(amount_text(node)) == (4000000,)
 
 
 @pytest.mark.slow
@@ -661,7 +660,10 @@ class TestAmountSourceCorpusRegression:
             if changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
             and not changed(compute_financial_change(c.old_text, c.new_text))
         ]
-        # 8 on this pair (63 across all 17 adjacent corpus pairs). Pinned rather than
-        # bounded: a drop means the fix stopped reaching entries it used to reach, and a
-        # rise means extraction changed shape -- both are worth a look, neither is silent.
+        # 8 on this pair. Pinned rather than bounded: a drop means the fix stopped
+        # reaching entries it used to reach, and a rise means extraction changed shape --
+        # both are worth a look, neither is silent. This pin is scoped to ONE pair on
+        # purpose; the corpus-wide safety invariant (never HIDE a change, on every
+        # manifest pair) is TestCorpusDiffSmoke::test_amount_source_never_hides_a_change
+        # in test_diff_validation.py, so a new corpus bill does not fail this count.
         assert len(gained) == 8, f"expected 8 newly surfaced amount changes, got {len(gained)}"

@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from deltatrack.bill_tree import BillNode, BillTree, normalize_bill, normalize_division_title
+from deltatrack.bill_tree import BillNode, BillTree, amount_text, normalize_bill, normalize_division_title
 from deltatrack.version_stems import label_from_stem, version_number_from_stem
 
 # --- Financial amount extraction ---
@@ -360,15 +360,6 @@ def diff_text(old_text: str, new_text: str) -> list[str]:
     return [line.rstrip() for line in diff_lines]
 
 
-def _amount_text(node: BillNode) -> str:
-    """The text amount extraction reads for a node (#365).
-
-    Mirrors ``structure_tree.build_xml_tree``'s ``display_text or body_text`` exactly,
-    so the money tree and the money diff read the SAME rendering. See ``NodeDiff``.
-    """
-    return node.display_text or node.body_text
-
-
 @dataclass(frozen=True)
 class NodeDiff:
     """Diff result for a single node."""
@@ -400,7 +391,7 @@ class NodeDiff:
     # would churn rendered output and goldens for no gain.
     #
     # Repairing _extract_section_text would fix body_text for every consumer at once, but
-    # it is the matching key -- a much wider blast radius, tracked separately.
+    # it is the matching key -- a much wider blast radius, tracked in #422.
     #
     # KNOWN LIMIT, and why this is a mitigation rather than a cure: when the dropped
     # payload is the ONLY thing that changed, both versions' body_text are byte-identical,
@@ -408,7 +399,8 @@ class NodeDiff:
     # filters it out (include_unchanged=False) before any of this is read. The amounts on
     # such an entry are now correct, but the entry never reaches the report. 118-hr-4366
     # v2->v4 sec. 124 and sec. 256 are live instances (sec. 256 moves billions). Only
-    # completing body_text fixes the CLASSIFICATION -- these fields cannot.
+    # completing body_text fixes the CLASSIFICATION -- these fields cannot. Tracked in
+    # #422, with the measured instances and the matching-blast-radius caveat.
     #
     # None means "no separate source recorded" (a hand-built NodeDiff), and the
     # amount_source_* properties fall back to old_text/new_text so such callers behave
@@ -611,7 +603,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                     section_number=new_node.section_number,
                     element_id_old="",
                     element_id_new=new_node.element_id,
-                    new_amount_text=_amount_text(new_node),
+                    new_amount_text=amount_text(new_node),
                 )
             )
 
@@ -628,7 +620,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                     section_number=old_node.section_number,
                     element_id_old=old_node.element_id,
                     element_id_new="",
-                    old_amount_text=_amount_text(old_node),
+                    old_amount_text=amount_text(old_node),
                 )
             )
 
@@ -649,8 +641,8 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=new_node.section_number or old_node.section_number,
                         element_id_old=old_node.element_id,
                         element_id_new=new_node.element_id,
-                        old_amount_text=_amount_text(old_node),
-                        new_amount_text=_amount_text(new_node),
+                        old_amount_text=amount_text(old_node),
+                        new_amount_text=amount_text(new_node),
                     )
                 )
             elif _text_similarity(old_normalized, new_normalized) < _SIMILARITY_THRESHOLD:
@@ -667,7 +659,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=old_node.section_number,
                         element_id_old=old_node.element_id,
                         element_id_new="",
-                        old_amount_text=_amount_text(old_node),
+                        old_amount_text=amount_text(old_node),
                     )
                 )
                 changes.append(
@@ -682,7 +674,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=new_node.section_number,
                         element_id_old="",
                         element_id_new=new_node.element_id,
-                        new_amount_text=_amount_text(new_node),
+                        new_amount_text=amount_text(new_node),
                     )
                 )
             else:
@@ -698,8 +690,8 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=new_node.section_number or old_node.section_number,
                         element_id_old=old_node.element_id,
                         element_id_new=new_node.element_id,
-                        old_amount_text=_amount_text(old_node),
-                        new_amount_text=_amount_text(new_node),
+                        old_amount_text=amount_text(old_node),
+                        new_amount_text=amount_text(new_node),
                     )
                 )
 

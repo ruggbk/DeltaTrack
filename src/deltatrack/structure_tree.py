@@ -31,7 +31,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from deltatrack.bill_tree import BillNode, BillTree
+from deltatrack.bill_tree import BillNode, BillTree, amount_text
 from deltatrack.diff_bill import extract_amounts
 from deltatrack.parsers.pdf_anchors import Anchor, breadcrumb_for
 
@@ -186,8 +186,10 @@ def build_xml_tree(bill: BillTree) -> list[TreeNode]:
     Returns the ordered top-level nodes (divisions, or bare titles for a
     no-division bill, plus any empty-path front-matter/preamble leaves). Leaf
     level comes from the XML tag; interior structure from display_path nesting.
-    ``own_amounts`` come from each node's display_text (the locked decision: NOT
+    ``own_amounts`` come from ``bill_tree.amount_text`` (the locked decision: NOT
     the lossy body_text — display_text keeps trailing content body_text drops).
+    The amount-change table reads the same function, so the two money views cannot
+    disagree about a section (#365).
 
     The leading run of empty-path front-matter nodes (masthead / enacting clause /
     leading boilerplate, and any short-title/definitions sections that precede the
@@ -200,7 +202,7 @@ def build_xml_tree(bill: BillTree) -> list[TreeNode]:
             n.display_path,
             _leaf_level(n.tag),
             n,
-            extract_amounts(n.display_text or n.body_text),
+            extract_amounts(amount_text(n)),
         )
         for n in bill.nodes
     )
