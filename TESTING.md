@@ -302,7 +302,7 @@ The manifest and the committed files move together:
    the new bill or the gate fails. Commit the calibrated baseline alongside the
    fixture and manifest entry.
 4. Expect the run to name your fixture in a **skip-ceiling banner**, and decide
-   what to do about it. The manifest entry does not only add cases: it enrols the
+   what to do about it. The manifest entry does not only add cases: it enrolls the
    bill in the corpus property gates, which may then legitimately content-skip on
    it, and an undeclared skip fails the session. The banner names a test you
    never touched, in a module you may not have known your fixture had joined —
