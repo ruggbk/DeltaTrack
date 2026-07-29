@@ -175,11 +175,10 @@ it had come to gate.
 ### Test counts are not comparable between machines
 
 A large share of the suite is data-driven, parametrized over real bill files that
-live in gitignored directories (`bills/`, `bills_corpus/`,
-`bills_govinfo_staging/`). How many tests collect, pass, or skip therefore depends
-on how much bill data that particular machine has fetched — a full working
-checkout and a fresh clone legitimately report very different totals for the same
-commit.
+live in gitignored directories (`bills/`, `bills_corpus/`). How many tests collect,
+pass, or skip therefore depends on how much bill data that particular machine has
+fetched — a full working checkout and a fresh clone legitimately report very
+different totals for the same commit.
 
 So an absolute count proves nothing on its own, and comparing one across machines
 proves less than nothing: a reviewer who measures a contributor's reported total
