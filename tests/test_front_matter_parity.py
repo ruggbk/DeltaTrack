@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import FIXTURES_DIR, fixture_path
 from deltatrack.bill_tree import BillNode, BillTree
 from deltatrack.compare.pdf import compare_pdfs
 from deltatrack.compare.xml import compare_xml, compare_xml_html
@@ -27,6 +26,7 @@ from deltatrack.diff_bill import extract_amounts
 from deltatrack.formatters.diff_html import _build_toc_from_tree
 from deltatrack.parsers.pdf_anchors import Anchor
 from deltatrack.structure_tree import TreeNode, build_pdf_tree, build_xml_tree
+from tests.corpus_paths import FIXTURES_DIR, fixture_path
 
 ROOT = Path(__file__).parent.parent
 _BILL_8752 = FIXTURES_DIR / "118-hr-8752"

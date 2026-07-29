@@ -16,9 +16,9 @@ import json
 
 import pytest
 
-from corpus_paths import DATA_DIR
 from tests import conftest
-from validation_sources import JURISDICTIONS
+from tests.corpus_paths import DATA_DIR
+from tests.validation_sources import JURISDICTIONS
 
 
 def test_manifest_parses_and_is_nonempty() -> None:

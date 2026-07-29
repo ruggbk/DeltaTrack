@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import render_examples
+from scripts import render_examples
 
 
 def _has_corpus() -> bool:

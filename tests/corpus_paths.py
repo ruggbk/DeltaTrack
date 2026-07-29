@@ -39,7 +39,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+#: The checkout root, two levels up: this module lives in ``tests/`` (#401). It is test
+#: infrastructure — it names where test inputs live, and every one of the three trees it
+#: resolves is a test tree — so it sits with the fixtures it addresses rather than at the
+#: repository root, which now holds only the two commands a user types and configuration.
+#: The four `scripts/` that import it reach it as ``tests.corpus_paths``; they are corpus
+#: tooling, so depending on the fixture layout is the direction that already holds.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 #: Committed test fixtures. Tracked in git; safe to depend on in CI.
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "corpus"

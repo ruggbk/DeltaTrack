@@ -2,7 +2,6 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from corpus_paths import fixture_path, resolve_bill_file
 from deltatrack.bill_tree import (
     BillNode,
     _extract_appropriations_text,
@@ -19,6 +18,7 @@ from deltatrack.bill_tree import (
     walk_body_sections,
     walk_title,
 )
+from tests.corpus_paths import fixture_path, resolve_bill_file
 
 
 def _content(tree):

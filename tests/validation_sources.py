@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import corpus_paths
+from tests import corpus_paths
 
 
 @dataclass(frozen=True)

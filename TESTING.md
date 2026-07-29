@@ -324,7 +324,7 @@ single PDF and widened three modules at once.
 `tests/corpus/` is committed and is what every gate reads; `bills/` is the
 fetchers' working directory, entirely gitignored and entirely disposable —
 delete it, or symlink another checkout's corpus over it, without touching a
-fixture. `corpus_paths.py` is the only place either path is spelled: use
+fixture. `tests/corpus_paths.py` is the only place either path is spelled: use
 `fixture_path(bill_id, filename)` rather than composing a path yourself, and
 `tests/test_fixture_layout.py` will fail the build if a test reaches into
 `bills/` for a bill that is committed.

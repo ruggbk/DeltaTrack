@@ -36,7 +36,7 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import fixture_path
+from tests.corpus_paths import fixture_path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -114,8 +114,9 @@ def test_the_installed_engine_runs_a_diff_from_outside_the_checkout(installed_en
     )
 
     # cwd is tmp_path, NOT the checkout: with the repo as cwd, `src/` is still absent from
-    # sys.path but the four root dev modules would be importable, and a stray engine import
-    # of one of them would resolve instead of failing. Running elsewhere removes that.
+    # sys.path but the dev-only modules would be importable as `tests.*` / `scripts.*`
+    # namespace packages (#401), and a stray engine import of one of them would resolve
+    # instead of failing. Running elsewhere removes that.
     result = _run([str(installed_engine), str(probe), str(old), str(new)], cwd=tmp_path)
     report = json.loads(result.stdout.strip().splitlines()[-1])
 

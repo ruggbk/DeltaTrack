@@ -31,13 +31,13 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import FIXTURES_DIR
 from deltatrack.compare.pdf import _build_canonical
 from deltatrack.compare.xml import compare_xml
 from deltatrack.diff_pdf import diff_pdfs
 from deltatrack.formatters.canonical import view_from_canonical
 from deltatrack.formatters.diff_html import format_diff_html
 from tests.conftest import assert_manifest_committed
+from tests.corpus_paths import FIXTURES_DIR
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow

@@ -425,9 +425,9 @@ def test_a_runnable_root_script_carries_the_executable_bit():
     A root `.py` that both declares a shebang and runs a `__main__` block is asking to
     be executed directly, so it is a command missing its bit rather than a module.
     Neither half alone is enough to say that: `fetch_govinfo.py` has a shebang and no
-    `__main__` (a library whose interpreter line is vestigial), and `render_examples.py`
-    has a `__main__` and no shebang (a dev script run as `python render_examples.py`).
-    Both halves together is the shape only a command has.
+    `__main__` (a library whose interpreter line is vestigial), while the opposite shape
+    is a dev script invoked as `python <path>.py` -- `scripts/render_examples.py`, which
+    has a `__main__` and no shebang. Both halves together is the shape only a command has.
     """
     offenders = []
     for root in _command_roots():

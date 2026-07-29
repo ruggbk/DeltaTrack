@@ -48,9 +48,9 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import DATA_DIR, fixture_path
 from scripts.heading_precision import measure
 from scripts.parity_table import PARITY_BILLS, parity_row, v1_v2
+from tests.corpus_paths import DATA_DIR, fixture_path
 
 pytestmark = pytest.mark.slow
 

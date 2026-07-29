@@ -20,9 +20,9 @@ from functools import lru_cache
 from importlib.metadata import version
 from pathlib import Path
 
-from corpus_paths import DATA_DIR, FIXTURES_DIR, sweep_bill_dirs
 from deltatrack.parsers import pdf_text
 from deltatrack.parsers.pdf_text import Page, extract_clean_pages
+from tests.corpus_paths import DATA_DIR, FIXTURES_DIR, sweep_bill_dirs
 
 # Persistent extraction cache. The one gitignored subtree of the otherwise-committed
 # tests/data/ (see .gitignore). Keyed by PDF path + mtime AND the extractor's identity,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from corpus_paths import fixture_path, resolve_bill_file
 from deltatrack.parsers.pdf_text import (
     Line,
     Page,
@@ -20,6 +19,7 @@ from deltatrack.parsers.pdf_text import (
     rejoin_soft_hyphens,
     strip_page_chrome,
 )
+from tests.corpus_paths import fixture_path, resolve_bill_file
 from tests.pdf_corpus import cached_pages
 
 _HR8752_V1 = fixture_path("118-hr-8752", "1_reported-in-house.pdf")

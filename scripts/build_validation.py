@@ -6,7 +6,7 @@ tests/test_validate_extraction.py validates against the reported bill's XML. Mir
 hand-curated validation_leg_branch.json, but generated deterministically from the report.
 
 Sources are fetched from govinfo (both gitignored locally); the JSON fixtures are committed.
-The jurisdiction registry lives in validation_sources.py.
+The jurisdiction registry lives in tests/validation_sources.py.
 
 Usage:
   uv run python scripts/build_validation.py              # build from local report HTML
@@ -33,7 +33,7 @@ from deltatrack.parsers.committee_report import (  # noqa: E402
     parse_comparative_statement,
     parse_summary_blocks,
 )
-from validation_sources import BY_SLUG, JURISDICTIONS, Jurisdiction  # noqa: E402
+from tests.validation_sources import BY_SLUG, JURISDICTIONS, Jurisdiction  # noqa: E402
 
 _GOVINFO = "https://www.govinfo.gov/content/pkg"
 

@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import pytest
 
-from corpus_paths import fixture_path
 from deltatrack.bill_tree import normalize_bill
 from deltatrack.diff_bill import bill_diff_to_dict, diff_bills
 from deltatrack.diff_pdf import PdfDiff, PdfHunk
 from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical, xml_diff_to_canonical
 from deltatrack.formatters.diff_html import _build_callout
 from deltatrack.parsers.pdf_anchors import Anchor
+from tests.corpus_paths import fixture_path
 
 _V1 = fixture_path("119-hr-1", "1_reported-in-house.xml")
 _V2 = fixture_path("119-hr-1", "2_engrossed-in-house.xml")

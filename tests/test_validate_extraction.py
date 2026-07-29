@@ -24,10 +24,10 @@ import json
 
 import pytest
 
-from corpus_paths import DATA_DIR
 from deltatrack.bill_tree import normalize_bill
 from deltatrack.diff_bill import extract_amounts
 from tests.conftest import uncommitted_bill_files
+from tests.corpus_paths import DATA_DIR
 
 pytestmark = pytest.mark.slow
 
@@ -189,9 +189,9 @@ class TestLegBranchValidation:
 # *rises* (a regression) and is lowered intentionally when extraction improves. Run
 # `uv run python scripts/generate_validation_report.py` to refresh the doc and these counts.
 
-from corpus_paths import resolve_bill_file  # noqa: E402
-from validation_check import validate_jurisdiction  # noqa: E402
-from validation_sources import JURISDICTIONS  # noqa: E402
+from tests.corpus_paths import resolve_bill_file  # noqa: E402
+from tests.validation_check import validate_jurisdiction  # noqa: E402
+from tests.validation_sources import JURISDICTIONS  # noqa: E402
 
 # Max accounts whose report amount is not recalled from the bill, per jurisdiction. These
 # are confirmed report-vs-bill structural differences, not parser errors (see the doc).

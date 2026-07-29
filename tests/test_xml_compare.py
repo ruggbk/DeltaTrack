@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import FIXTURES_DIR
+from tests.corpus_paths import FIXTURES_DIR
 
 ROOT = Path(__file__).resolve().parent.parent
 BILL_DIR = FIXTURES_DIR / "118-hr-4366"

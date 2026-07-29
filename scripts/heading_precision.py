@@ -23,10 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from corpus_paths import FIXTURES_DIR  # noqa: E402
 from deltatrack.bill_tree import normalize_bill, normalize_header  # noqa: E402
 from deltatrack.parsers.pdf_anchors import extract_anchors  # noqa: E402
 from deltatrack.parsers.pdf_text import extract_clean_pages  # noqa: E402
+from tests.corpus_paths import FIXTURES_DIR  # noqa: E402
 
 BILLS_DIR = FIXTURES_DIR
 

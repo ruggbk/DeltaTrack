@@ -11,7 +11,7 @@ These are also the project's public demo, deployed to GitHub Pages from this dir
 Everything here is generated, by one script:
 
 ```bash
-uv run python render_examples.py
+uv run python scripts/render_examples.py
 ```
 
 | File | What it shows |
@@ -31,7 +31,7 @@ report is stale, and if a committed report is one the script doesn't produce.
 ## Adding an example
 
 Append an `ExampleSpec` to `EXAMPLES_TO_RENDER` in
-[`render_examples.py`](../render_examples.py) — the bill directory, the two version
+[`render_examples.py`](../scripts/render_examples.py) — the bill directory, the two version
 stems, which pipelines to render it through, and its landing-page blurb. Re-run the
 script and commit the result; the landing page updates itself.
 

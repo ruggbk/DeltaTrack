@@ -99,8 +99,8 @@ line-length = 120
 # Every import root, mirroring pytest's `pythonpath` plus the installed package (#367,
 # #398). Without `tools`, isort reads the fetch scripts' sibling imports as third-party
 # and demands they be grouped with httpx, which would sort the cluster's own modules in
-# among external packages. `src` does the same for `deltatrack`, and `.` for the
-# dev-only root modules (`corpus_paths`, the validation pair, `render_examples`).
+# among external packages. `src` does the same for `deltatrack`, and `.` for the `tests`
+# and `scripts` namespace packages the dev-only modules live in (#401).
 src = ["src", ".", "tools"]
 # Research reproducibility scripts are frozen artifacts (hardcoded paths, ad-hoc
 # one-liners) that reproduce a study's numbers, not maintained source. Exclude them
@@ -121,11 +121,14 @@ testpaths = ["tests"]
 # module left out of the wheel, or a packaging config that stops matching the tree, fails
 # the suite here instead of passing locally and breaking on a user's machine.
 #
-# `.` stays and does not weaken that. It exposes the dev-only root modules that tests
-# import -- `corpus_paths`, `validation_check`, `validation_sources`, `render_examples`,
-# deliberately left at the root by #398 -- and nothing else: `deltatrack` is not at the
-# root to be found, so no amount of `.` makes an uninstalled engine importable. Verified
-# by `tests/test_engine_installs.py`, which is what would catch this claim going stale.
+# `.` stays and does not weaken that. It is what makes `tests.*` and `scripts.*` resolve
+# as namespace packages, which is how the dev-only modules are reached now that they sit
+# beside what they serve rather than at the root (#401): the fixture-path resolver and the
+# validation pair in `tests/`, the example renderer in `scripts/`. That adds no third
+# import root and no new flat-namespace collision, because neither directory is itself on
+# the path -- only the root above them is. And `deltatrack` is not at the root to be found,
+# so no amount of `.` makes an uninstalled engine importable. Verified by
+# `tests/test_engine_installs.py`, which is what would catch this claim going stale.
 #
 # `tools/` is a second root rather than a package (#367): the bill-fetching scripts are
 # run directly (`./tools/fetch_bills.py …`), which puts only their own directory on
@@ -161,5 +164,5 @@ markers = [
 omit = [
     "tests/*",
     "tools/*",
-    "render_examples.py",
+    "scripts/render_examples.py",
 ]

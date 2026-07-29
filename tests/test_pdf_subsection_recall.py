@@ -48,7 +48,6 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import FIXTURES_DIR
 from deltatrack.parsers.pdf_anchors import (
     _match_runin_subsection,
     _valid_subsection_enum,
@@ -56,6 +55,7 @@ from deltatrack.parsers.pdf_anchors import (
     extract_anchors,
 )
 from tests.conftest import assert_manifest_committed
+from tests.corpus_paths import FIXTURES_DIR
 from tests.pdf_corpus import cached_pages
 
 pytestmark = pytest.mark.slow

@@ -31,13 +31,13 @@ import json
 
 import pytest
 
-from corpus_paths import DATA_DIR
 from deltatrack.diff_bill import (
     _MOVE_THRESHOLD,
     _SIMILARITY_THRESHOLD,
     _normalize_text,
     _text_similarity,
 )
+from tests.corpus_paths import DATA_DIR
 
 _FIXTURE = DATA_DIR / "similarity_labels.json"
 _PAIRS = json.loads(_FIXTURE.read_text())["pairs"]

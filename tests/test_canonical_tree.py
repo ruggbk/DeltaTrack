@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import fixture_path
 from deltatrack.bill_tree import normalize_bill
 from deltatrack.diff_bill import bill_diff_to_dict, diff_bills, extract_amounts
 from deltatrack.diff_pdf import PdfDiff
 from deltatrack.formatters.canonical import SCHEMA_VERSION, pdf_diff_to_canonical, xml_diff_to_canonical
 from deltatrack.formatters.text_serializer import build_xml_full_text
 from deltatrack.parsers.pdf_anchors import Anchor
+from tests.corpus_paths import fixture_path
 
 _V1 = fixture_path("118-hr-8752", "1_reported-in-house.xml")
 _V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.xml")

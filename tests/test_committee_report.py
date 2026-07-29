@@ -10,12 +10,12 @@ import re
 
 import pytest
 
-from corpus_paths import DATA_DIR
 from deltatrack.parsers.committee_report import (
     extract_pre_text,
     parse_comparative_statement,
     parse_summary_blocks,
 )
+from tests.corpus_paths import DATA_DIR
 
 # A real-shape 3-line summary block: ALL-CAPS heading, blank line, then the
 # Appropriations / Budget estimate / Committee recommendation rows in actual dollars.
