@@ -472,3 +472,37 @@ class TestCorpusDiffSmoke:
 
         for key, value in result.summary.items():
             assert value >= 0, f"Negative summary count {key}={value}"
+
+    def test_amount_source_never_hides_a_change(self, old_path, new_path):
+        """Reading amounts from the display rendering is strictly additive (#365).
+
+        The safety property behind #365: the amount-change table now extracts from
+        ``display_text``, which is a superset of the ``body_text`` the matching key uses
+        (``_extract_section_text`` truncates a section at its lead-in, #422). So the
+        switch may SURFACE an amount change, never hide one.
+
+        This is the invariant that must hold for every bill, which is why it lives here
+        rather than beside the single pinned instance in test_financial_diff.py: a
+        regression that only shows up on the eighteenth corpus pair is exactly what a
+        one-pair assertion cannot see. The count of newly surfaced changes is deliberately
+        not pinned here — it legitimately varies per pair, and pinning it would turn a
+        corpus addition into a test failure.
+        """
+        _skip_pair_if_absent(old_path, new_path)
+        result = _cached_diff(old_path, new_path)
+
+        def changed(fc):
+            return fc is not None and fc.amounts_changed
+
+        hidden = [
+            c.match_path
+            for c in result.changes
+            if changed(compute_financial_change(c.old_text, c.new_text))
+            and not changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
+        ]
+
+        assert hidden == [], (
+            f"Reading amounts from display_text hid an amount change that body_text saw, "
+            f"on {len(hidden)} section(s): {hidden[:5]}. The switch is only safe while it "
+            f"is additive; a section here means display_text lost content body_text kept."
+        )
