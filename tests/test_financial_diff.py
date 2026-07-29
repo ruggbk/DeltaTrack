@@ -511,3 +511,157 @@ class TestMatchAmounts:
         new = "appropriation estimated at $0: Provided, $7,000,000 for ops."
         pairs = match_amounts(old, new)
         assert pairs == [(0, 0), (5000000, 7000000)]
+
+
+class TestAmountSourceIsDisplayText:
+    """The financial diff extracts amounts from display_text, not body_text (#365).
+
+    body_text is normalized for MATCHING and drops section payload that sits after the
+    lead-in <text> (bill_tree._extract_section_text's "simple lead-in" fast path), so
+    extracting amounts from it loses money the leveled tree shows. structure_tree already
+    reads display_text for its own_amounts; these lock the diff onto the same source so
+    the two money views cannot disagree.
+    """
+
+    def _node_diff(self, **kw):
+        from deltatrack.diff_bill import NodeDiff
+
+        base = dict(
+            display_path_old=("Title I", "Army"),
+            display_path_new=("Title I", "Army"),
+            match_path=("title i", "army"),
+            change_type="modified",
+            old_text=None,
+            new_text=None,
+            text_diff=None,
+            section_number="",
+            element_id_old="a",
+            element_id_new="b",
+        )
+        return NodeDiff(**{**base, **kw})
+
+    def test_amount_source_prefers_the_display_rendering(self):
+        """When the amount fields are populated they win over old_text/new_text."""
+        c = self._node_diff(
+            old_text="For construction, $1,000,000.",
+            new_text="For construction, $1,000,000.",
+            old_amount_text="For construction, $1,000,000: Provided, $30,000,000 more.",
+            new_amount_text="For construction, $1,000,000: Provided, $7,500,000 more.",
+        )
+        assert c.amount_source_old == "For construction, $1,000,000: Provided, $30,000,000 more."
+        assert c.amount_source_new == "For construction, $1,000,000: Provided, $7,500,000 more."
+
+        fc = compute_financial_change(c.amount_source_old, c.amount_source_new)
+        assert fc is not None
+        assert fc.amounts_changed is True
+        assert 30000000 in fc.old_amounts and 7500000 in fc.new_amounts
+
+    def test_falls_back_to_body_text_when_no_separate_source(self):
+        """A hand-built NodeDiff (no amount fields) behaves as it did before #365.
+
+        The fields default to None rather than "", so the fallback is unambiguous and
+        existing callers -- tests, older constructions -- keep working untouched.
+        """
+        c = self._node_diff(
+            old_text="For construction, $1,000,000.",
+            new_text="For construction, $2,000,000.",
+        )
+        assert c.amount_source_old == "For construction, $1,000,000."
+        assert c.amount_source_new == "For construction, $2,000,000."
+
+    def test_empty_display_text_falls_back_rather_than_blanking(self):
+        """A node whose display_text is empty must not extract from "" and lose its amounts.
+
+        _amount_text mirrors structure_tree's `display_text or body_text`, so the empty
+        string falls through to body_text instead of silently zeroing the node.
+        """
+        from deltatrack.bill_tree import BillNode
+        from deltatrack.diff_bill import _amount_text
+
+        node = BillNode(
+            match_path=("title i", "army"),
+            display_path=("Title I", "Army"),
+            tag="section",
+            element_id="x",
+            header_text="",
+            body_text="For construction, $4,000,000.",
+            section_number="",
+            division_label="",
+            display_text="",
+        )
+        assert _amount_text(node) == "For construction, $4,000,000."
+        assert extract_amounts(_amount_text(node)) == (4000000,)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not fixture_path("118-hr-4366", "2_engrossed-in-house.xml").exists()
+    or not fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml").exists(),
+    reason="Real XML not present",
+)
+class TestAmountSourceCorpusRegression:
+    """The live instance #365 was filed for, pinned against the committed corpus."""
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def v2_v4_diff():
+        from deltatrack.bill_tree import normalize_bill
+        from deltatrack.diff_bill import diff_bills
+
+        return diff_bills(
+            normalize_bill(fixture_path("118-hr-4366", "2_engrossed-in-house.xml")),
+            normalize_bill(fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml")),
+        )
+
+    def test_dod_sec_128_reallocation_reaches_the_amount_table(self, v2_v4_diff):
+        """DoD sec. 128 splits $30M/$30M/$30M into $15M/$7.5M/$7.5M across v2->v4.
+
+        Its payload lives in <list>/<continuation-text>, which body_text drops entirely --
+        so before #365 this section was emitted as `modified` carrying NO financial change
+        at all, and a $90M -> $30M reallocation never reached the headline table.
+        """
+        c = next(
+            x
+            for x in v2_v4_diff.changes
+            if x.match_path == ("department of defense", "administrative provisions", "sec. 128")
+        )
+        assert c.change_type == "modified"
+
+        # The regression itself: body_text sees no money here.
+        assert compute_financial_change(c.old_text, c.new_text) is None
+
+        fc = compute_financial_change(c.amount_source_old, c.amount_source_new)
+        assert fc is not None, "sec. 128 must carry a financial change"
+        assert fc.amounts_changed is True
+        assert fc.old_amounts == (30000000, 30000000, 30000000)
+        assert fc.new_amounts == (15000000, 7500000, 7500000)
+
+    def test_switching_source_only_adds_amount_changes(self, v2_v4_diff):
+        """Reading display_text is strictly additive: it surfaces changes, never hides one.
+
+        Guards the direction of the fix. body_text only ever DROPS content relative to
+        display_text (267 nodes / 1662 amount-instances corpus-wide, no case of the
+        reverse), so no change visible via body_text may disappear.
+        """
+
+        def changed(fc):
+            return fc is not None and fc.amounts_changed
+
+        lost = [
+            c
+            for c in v2_v4_diff.changes
+            if changed(compute_financial_change(c.old_text, c.new_text))
+            and not changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
+        ]
+        assert lost == [], f"display_text hid an amount change body_text saw: {[c.match_path for c in lost]}"
+
+        gained = [
+            c
+            for c in v2_v4_diff.changes
+            if changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
+            and not changed(compute_financial_change(c.old_text, c.new_text))
+        ]
+        # 8 on this pair (63 across all 17 adjacent corpus pairs). Pinned rather than
+        # bounded: a drop means the fix stopped reaching entries it used to reach, and a
+        # rise means extraction changed shape -- both are worth a look, neither is silent.
+        assert len(gained) == 8, f"expected 8 newly surfaced amount changes, got {len(gained)}"

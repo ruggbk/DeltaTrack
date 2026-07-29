@@ -151,7 +151,8 @@ class TestControlledDiff:
         financially_changed = []
         for c in hr4366_v1_v2_diff.changes:
             if c.old_text and c.new_text:
-                fc = compute_financial_change(c.old_text, c.new_text)
+                # Same source the report's amount table reads (#365).
+                fc = compute_financial_change(c.amount_source_old, c.amount_source_new)
                 if fc and fc.amounts_changed:
                     financially_changed.append(c.match_path)
 
@@ -165,7 +166,8 @@ class TestControlledDiff:
         annotated = []
         for c in hr4366_v1_v2_diff.changes:
             if c.old_text and c.new_text:
-                fc = compute_financial_change(c.old_text, c.new_text)
+                # Same source the report's amount table reads (#365).
+                fc = compute_financial_change(c.amount_source_old, c.amount_source_new)
                 if fc and fc.has_amendment_annotations:
                     annotated.append(c.match_path)
 
