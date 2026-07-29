@@ -265,8 +265,13 @@ corpus with a note saying why.
 document carrying ~1900 appropriations tags that the gates' body extraction does
 not surface — the amendment-doc class tracked in #11. Committing it would have
 forced an `ALLOWED_CORPUS_SKIPS` entry recording that the document had nothing
-to find, which is not true of the document. It is withheld instead, and the
-manifest's `covers` note for that bill says so where the next person will look.
+to find, which is not true of the document. It is withheld instead. Withholding
+is not the same as declaring nothing: `tests/test_bill_tree.py` still names that
+version, so its skip is declared in `ALLOWED_CI_SLOW_SKIPS`, where an
+uncommitted fixture is an honest coverage gap that committing the file would
+retire. What the withholding avoids is the *other* entry — the one that would
+have asserted a false fact about the document. The manifest's `covers` note for
+that bill records why, where the next person will look.
 
 ### Why a local run can collect more than CI
 
@@ -301,15 +306,15 @@ The manifest and the committed files move together:
    (`_KNOWN_DUPLICATE_COUNTS`, `_XML_DROP_BUDGET`, ...) must be calibrated for
    the new bill or the gate fails. Commit the calibrated baseline alongside the
    fixture and manifest entry.
-4. Expect the run to name your fixture in a **skip-ceiling banner**, and decide
-   what to do about it. The manifest entry does not only add cases: it enrolls the
-   bill in the corpus property gates, which may then legitimately content-skip on
-   it, and an undeclared skip fails the session. The banner names a test you
+4. If the run names your fixture in a **skip-ceiling banner**, decide what to do
+   about it. The manifest entry does not only add cases: it enrolls the bill in
+   the corpus property gates, which may then legitimately content-skip on it,
+   and an undeclared skip fails the session. The banner names a test you
    never touched, in a module you may not have known your fixture had joined —
    that is this step, not a pre-existing breakage. See
    [When a skip has to be declared](#when-a-skip-has-to-be-declared) for which
    allowlist applies, and for the case where the right answer is to withhold the
-   fixture rather than declare anything.
+   fixture rather than declare its skip as a content fact.
 
 A version committed in both `xml` and `pdf` joins more gates than the same
 version committed in one format, so expect step 4 to reach further. #322 added a

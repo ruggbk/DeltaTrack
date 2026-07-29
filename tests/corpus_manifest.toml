@@ -26,7 +26,7 @@
 # _XML_DROP_BUDGET, ...) is calibrated. Manifest and committed files must move together.
 # NOT bills/ — that tree is wholly gitignored since #308, so `git add` there is a silent
 # no-op and the fixture would live only on your disk.
-# An entry here also ENROLS the bill in the corpus property gates, which may then
+# An entry here also ENROLLS the bill in the corpus property gates, which may then
 # content-skip on it; an undeclared skip fails the session. TESTING.md's "When a skip
 # has to be declared" covers which allowlist applies, and when the right answer is to
 # withhold the fixture instead — see this file's 115-hr-244 note for that case (#330).
