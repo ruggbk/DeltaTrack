@@ -114,7 +114,7 @@ bill XML; we check that our parser reads it correctly, by comparing the parser's
 
 An account is counted as **recalled** when the report's amount appears in the parser's
 extraction under the correct agency, or as a sum of the account's components (totals the bill
-states only as parts). See `validation_check.validate_jurisdiction`. For the comparative-
+states only as parts). See `tests/validation_check.py::validate_jurisdiction`. For the comparative-
 statement source, rollup totals/subtotals and negative reduction/offset lines (rescissions,
 offsetting collections) are excluded — they are not leaf appropriation accounts.
 
