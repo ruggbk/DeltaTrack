@@ -215,6 +215,37 @@ If a slow run ends in `undeclared skip ceiling exceeded`, that is not a flake: a
 
 A maintainer reviews and merges. CI must be green.
 
+### How a merge lands: the merge queue
+
+`develop` sits behind a **merge queue**, so a maintainer approving your pull
+request *enqueues* it rather than merging it on the spot. GitHub then builds a
+temporary branch holding your changes on top of everything ahead of you in the
+queue, runs the required checks against that, and merges only if they pass.
+
+The reason is that a pull request's own checks test its head merged into
+`develop` **as `develop` stood when the run happened**. If `develop` moves
+afterwards the green check stays green, and it is now answering about a merge
+nobody is performing. That is the normal case here, not a rare one: across the 27
+merges in the 36 hours before 2026-07-29, 18 landed on a check that predated a
+change to `develop` ([#416](https://github.com/AgoraDMV/DeltaTrack/issues/416) has
+the measurement). Usually the changes are compatible and nothing happens. Once
+they weren't, and `develop` spent hours importing a package a merge in between had
+moved ([#406](https://github.com/AgoraDMV/DeltaTrack/issues/406)). The queue tests
+the merge that is actually about to happen.
+
+What it changes for you:
+
+- **Merging is no longer instant.** Your pull request waits while its merge-group
+  checks run — roughly the length of one CI run.
+- **You still don't rebase on `develop` before merging.** The queue does that work,
+  which is why it was chosen over requiring every branch to be up to date; that
+  alternative would force a rebase and a fresh CI run on every open branch each
+  time `develop` moved. #416 records both options and the measurements behind the
+  choice.
+- **If your merge-group checks fail**, your pull request is dropped from the queue
+  with the reason posted to its timeline, and the queue rebuilds without it. The
+  pull requests behind you are not blocked. Fix it and re-queue.
+
 ### AI-assisted contributions
 
 They're welcome, and we ask you to disclose them: one line in the pull request
