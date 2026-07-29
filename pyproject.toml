@@ -16,7 +16,7 @@ packages = ["src/deltatrack"]
 [tool.hatch.build.targets.sdist]
 # Scope the source distribution the same way. Left unconfigured, hatchling's sdist is
 # everything git tracks: measured at 345 files and 30 MB, carrying `tests/corpus/` (a
-# 4.7 MB enrolled bill among them), `test_data/` PDFs, and `.github/`. Nothing publishes
+# 4.7 MB enrolled bill among them), `tests/data/` PDFs, and `.github/`. Nothing publishes
 # today, so that was latent rather than live -- but `uv build` with no arguments produces
 # it, and the corpus is a test fixture set, not something a consumer of the engine should
 # be made to download.

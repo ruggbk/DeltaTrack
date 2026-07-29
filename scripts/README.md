@@ -9,7 +9,7 @@ root.
 
 | Script | What it does |
 |--------|--------------|
-| `build_validation.py` | Build `test_data/validation_<slug>.json` for each committee-report jurisdiction (the ground-truth fixtures). `--fetch` downloads the upstream sources first. |
+| `build_validation.py` | Build `tests/data/validation_<slug>.json` for each committee-report jurisdiction (the ground-truth fixtures). `--fetch` downloads the upstream sources first. |
 | `generate_validation_report.py` | Generate `docs/parser-validation.md`, the team-facing parser-accuracy report, from those fixtures. |
 | `fetch_test_assets.py` | Re-fetch a bill-print PDF the slow suite needs that `tools/fetch_bills.py` cannot produce (it defaults to XML). Every asset it lists is committed, so this is a provenance record plus a way to restore one you deleted, not a setup step. Committee-report PDFs are **not** fetched here — the ones the gates read are committed fixtures ([ADR 0015](../docs/decisions/0015-corpus-test-fixtures.md)). |
 | `compare_differs.py <a> <b>` | Compare DeltaTrack against off-the-shelf differs on the same bill pair (evidence for [ADR 0001](../docs/decisions/0001-structured-money-diff.md)). |

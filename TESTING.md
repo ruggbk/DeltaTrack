@@ -132,7 +132,7 @@ We keep these in the open rather than papering over them:
   partly similar but not clearly the same and not clearly different, the tool
   has to make a judgment call, and that is where it is most likely to mislabel
   an edit. We track how often this borderline case comes up so it cannot quietly
-  increase. A hand-labeled answer key (`test_data/similarity_labels.json`, checked
+  increase. A hand-labeled answer key (`tests/data/similarity_labels.json`, checked
   by `tests/test_similarity_labels.py`) pins the current behavior: real section
   pairs the tool gets right anchor the metric, and five human-ruled dead-zone pairs
   are recorded as `xfail` because today's word-similarity thresholds classify them
@@ -363,7 +363,7 @@ TEST_BILL=4366 uv run pytest -n auto tests/test_pdf_corpus_smoke.py
 ```
 
 The first run extracts each PDF and caches the result to
-`test_data/extract_cache/` (gitignored). Every later run loads from that cache
+`tests/data/extract_cache/` (gitignored). Every later run loads from that cache
 instead of re-reading the PDF, so re-running the same tests is near-instant.
 
 An entry is reused only when nothing that produced it has changed, so the key

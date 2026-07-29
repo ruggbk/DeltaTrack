@@ -32,7 +32,7 @@ from deltatrack.diff_bill import (
 
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 BILLS = REPO / "bills"
-FIXTURE = REPO / "test_data" / "similarity_labels.json"
+FIXTURE = REPO / "tests" / "data" / "similarity_labels.json"
 
 HIGH_KEEP = 0.6   # raised text keep-floor (was 0.40); structure rescues low-sim keeps
 HDR = 0.8         # header-similarity keep threshold

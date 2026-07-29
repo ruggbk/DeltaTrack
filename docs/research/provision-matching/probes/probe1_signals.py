@@ -19,7 +19,7 @@ from deltatrack.diff_bill import _normalize_text, _text_similarity
 
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 BILLS = REPO / "bills"
-FIXTURE = REPO / "test_data" / "similarity_labels.json"
+FIXTURE = REPO / "tests" / "data" / "similarity_labels.json"
 
 _tree_cache: dict[str, BillTree] = {}
 

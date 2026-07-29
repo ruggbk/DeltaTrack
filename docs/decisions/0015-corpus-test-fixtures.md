@@ -2,6 +2,9 @@
 
 - Status: Accepted
 - Date: 2026-07-17
+- Note: the second fixture tree this record calls `test_data/` moved to `tests/data/` in
+  #404, resolved through `corpus_paths.DATA_DIR`. The decision below is unchanged; only
+  the path is. Paths in this record are left as they were written.
 
 ## Context
 

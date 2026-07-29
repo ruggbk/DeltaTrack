@@ -7,12 +7,12 @@ import urllib.request
 
 from scripts.fetch_test_assets import ASSETS, fetch_asset
 
-# Valid destinations: test_data/<file>.pdf (watermark + subcommittee prints) or
+# Valid destinations: tests/data/<file>.pdf (watermark + subcommittee prints) or
 # tests/corpus/<congress>-<type>-<num>/<file>.pdf (catchline repro bills, which keep the
 # fetch_bills.py per-bill layout, DeltaTrack#105). Both trees are committed now, so this
 # script re-obtains the upstream bytes rather than supplying anything a clone lacks; the
 # pattern keeps a new entry from landing outside either fixture tree (#308).
-_DEST_RE = re.compile(r"^(test_data/.+|tests/corpus/\d+-[a-z]+-\d+/.+)\.pdf$")
+_DEST_RE = re.compile(r"^(tests/data/.+|tests/corpus/\d+-[a-z]+-\d+/.+)\.pdf$")
 
 
 def test_assets_registry_well_formed():
@@ -24,7 +24,7 @@ def test_assets_registry_well_formed():
 
 def test_watermark_pdf_registered():
     dests = [dest for dest, _ in ASSETS]
-    assert "test_data/BILLS-118s4795rs.pdf" in dests
+    assert "tests/data/BILLS-118s4795rs.pdf" in dests
 
 
 def test_catchline_repro_bills_registered():
@@ -37,7 +37,7 @@ def test_catchline_repro_bills_registered():
 
 
 def test_skips_existing(tmp_path, monkeypatch):
-    dest = tmp_path / "test_data" / "x.pdf"
+    dest = tmp_path / "tests" / "data" / "x.pdf"
     dest.parent.mkdir(parents=True)
     dest.write_bytes(b"already")
     monkeypatch.setattr("scripts.fetch_test_assets._ROOT", tmp_path)
@@ -47,7 +47,7 @@ def test_skips_existing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)
 
-    wrote = fetch_asset("test_data/x.pdf", "https://www.govinfo.gov/whatever.pdf")
+    wrote = fetch_asset("tests/data/x.pdf", "https://www.govinfo.gov/whatever.pdf")
     assert wrote is False
     assert dest.read_bytes() == b"already"
 
@@ -67,6 +67,6 @@ def test_writes_when_missing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: FakeResp())
 
-    wrote = fetch_asset("test_data/new.pdf", "https://www.govinfo.gov/new.pdf")
+    wrote = fetch_asset("tests/data/new.pdf", "https://www.govinfo.gov/new.pdf")
     assert wrote is True
-    assert (tmp_path / "test_data" / "new.pdf").read_bytes() == b"%PDF-fake"
+    assert (tmp_path / "tests" / "data" / "new.pdf").read_bytes() == b"%PDF-fake"

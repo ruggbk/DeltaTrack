@@ -103,6 +103,31 @@ _DOWNLOAD_TREE_NAME_RES = (
     re.compile(r"""["']bills/(?:\{|%|['"]\s*[+%])"""),
 )
 
+# The same policy for the non-bill fixture tree, ``tests/data/`` (#404). It reached the
+# same two wrong shapes the download tree did, for the same reason: no single home for
+# the name, so each caller spelled it again.
+#
+#     Path("test_data/validation_leg_branch.json")   # relative to the CWD, not the repo
+#     Path(__file__).parent.parent / "test_data"     # correct, but respelled per caller
+#
+# The first is the defect proper: it resolves only when pytest happens to be run from the
+# repository root, so the convention had to be carried in prose (AGENTS.md said so
+# explicitly) to stay true. The second works, and is still worth rejecting, because five
+# spellings of one location is what made the first hard to see.
+#
+# Deliberately NOT "any 'tests/data' string literal". Two legitimate uses are bare
+# strings resolved against a repo root the caller already holds: the destination registry
+# in scripts/fetch_test_assets.py, which doubles as the human-readable provenance list,
+# and the golden-case tables that print a repo-relative path in their failure messages.
+# Requiring `Path(` narrows the rule to path CONSTRUCTION, which is the thing with a
+# single correct home.
+_DATA_TREE_NAME_RES = (
+    # A CWD-relative literal: Path("tests/data/…"), Path(f"test_data/…").
+    re.compile(r"""Path\(\s*f?["'](?:test_data|tests/data)/"""),
+    # The directory name composed a segment at a time: x / "test_data", x / "tests" / "data".
+    re.compile(r"""/\s*["']test_data["']|["']tests["']\s*/\s*["']data["']"""),
+)
+
 
 def committed_fixture_refs() -> set[str]:
     """``"<bill id>/<filename>"`` for every file committed under ``tests/corpus/``.
@@ -212,6 +237,83 @@ def find_download_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
         if lines:
             offenders[rel] = lines
     return offenders
+
+
+def find_data_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
+    """``{relative path: [line numbers]}`` for sources that respell ``tests/data/``.
+
+    The non-bill counterpart of :func:`find_download_tree_names`, and the guard that keeps
+    #404 fixed. That tree was reached three different ways at once — a CWD-relative
+    literal, ``Path(__file__).parent.parent / "test_data"``, and a locally-defined ``ROOT``
+    constant — and only the first was actually broken. The other two were correct, which is
+    why nothing turned red and the CWD requirement survived as documentation instead of
+    being removed.
+
+    ``corpus_paths.DATA_DIR`` is the one home for the name, so everything outside
+    ``corpus_paths.py`` imports rather than respells.
+
+    Lines mentioning ``tmp_path`` are skipped, as above: a synthetic ``tmp_path / "tests" /
+    "data"`` tree in a test is not the real directory.
+    """
+    offenders: dict[str, list[int]] = {}
+    for rel, text in sources.items():
+        if rel == "corpus_paths.py" or rel == "tests/test_fixture_layout.py":
+            continue
+        lines = [
+            n
+            for n, line in enumerate(text.splitlines(), 1)
+            if any(rx.search(line) for rx in _DATA_TREE_NAME_RES) and "tmp_path" not in line
+        ]
+        if lines:
+            offenders[rel] = lines
+    return offenders
+
+
+def test_no_source_respells_the_data_fixture_tree() -> None:
+    """Failure mode 4: the non-bill fixture tree addressed by a hand-spelled path (#404).
+
+    A CWD-relative one resolves only when pytest is run from the repository root; the rest
+    work but scatter the layout, which is what let the broken spelling hide among them.
+    """
+    sources = {str(f.relative_to(PROJECT_ROOT)): f.read_text() for f in _python_sources()}
+    offenders = find_data_tree_names(sources)
+    assert not offenders, (
+        f"{len(offenders)} source file(s) respell the tests/data/ fixture tree: {offenders}. "
+        "Import corpus_paths.DATA_DIR instead. A path built relative to the current working "
+        "directory resolves only from the repository root; one built from __file__ works but "
+        "puts a fourth spelling of the same location in the tree (#404)."
+    )
+
+
+def test_data_tree_rule_can_fire() -> None:
+    """The rule above, proven against known-bad sources (and known-good ones)."""
+    cwd_relative = {"tests/test_thing.py": 'X = Path("test_data/validation_leg_branch.json")'}
+    assert find_data_tree_names(cwd_relative) == {"tests/test_thing.py": [1]}
+
+    # The post-move spelling of the same defect: still relative to the CWD.
+    moved = {"tests/test_thing.py": 'X = Path("tests/data/similarity_labels.json")'}
+    assert find_data_tree_names(moved) == {"tests/test_thing.py": [1]}
+
+    composed = {"tests/test_thing.py": 'D = Path(__file__).parent.parent / "test_data"'}
+    assert find_data_tree_names(composed) == {"tests/test_thing.py": [1]}
+
+    post_move_composed = {"tests/test_thing.py": 'D = ROOT / "tests" / "data"'}
+    assert find_data_tree_names(post_move_composed) == {"tests/test_thing.py": [1]}
+
+    good = {"tests/test_thing.py": 'X = DATA_DIR / "similarity_labels.json"'}
+    assert find_data_tree_names(good) == {}
+
+    # A bare repo-relative string is not path construction: the destination registry in
+    # scripts/fetch_test_assets.py and the golden tables' display paths both rely on it.
+    bare_string = {"tests/test_thing.py": 'ASSETS = [("tests/data/BILLS-118s4795rs.pdf", url)]'}
+    assert find_data_tree_names(bare_string) == {}
+
+    # A synthetic tree under tmp_path is not the real directory.
+    synthetic = {"tests/test_thing.py": 'dest = tmp_path / "tests" / "data" / "x.pdf"'}
+    assert find_data_tree_names(synthetic) == {}
+
+    # corpus_paths.py defines the constant, so it must be able to spell it.
+    assert find_data_tree_names({"corpus_paths.py": 'DATA_DIR = PROJECT_ROOT / "tests" / "data"'}) == {}
 
 
 def test_the_source_scan_actually_covers_the_engine() -> None:

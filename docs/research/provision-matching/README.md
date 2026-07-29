@@ -30,7 +30,7 @@ PYTHONPATH=. .venv/bin/python docs/research/provision-matching/probes/<probe>.py
 
 `paper.md` Appendix A maps each probe to the numbers it produces. The probes read the
 XML corpus under `bills/` (fetch via `scripts/fetch_test_assets.py`) and the labeled
-answer key at `test_data/similarity_labels.json`.
+answer key at `tests/data/similarity_labels.json`.
 
 ## Run the Study 2 labeling pipeline
 

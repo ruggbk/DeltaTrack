@@ -23,7 +23,7 @@ from deltatrack.diff_bill import _normalize_text, _text_similarity, match_nodes
 
 REPO = Path("/Users/williamhea/Documents/Code/civictech/appropriations_bills")
 BILLS = REPO / "bills"
-FIXTURE = REPO / "test_data" / "similarity_labels.json"
+FIXTURE = REPO / "tests" / "data" / "similarity_labels.json"
 _num = re.compile(r"^(\d+)_")
 _word = re.compile(r"[a-z0-9]+")
 W, C = 0.50, 0.70  # candidate thresholds

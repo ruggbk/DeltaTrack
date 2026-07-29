@@ -8,7 +8,7 @@ intended, and prove the delta with the set-diff assertion in the swap commit.
 
 Fixture policy (#287): every fixture this module pins is committed, so the gate runs
 in CI instead of silently skipping (the fail-open shape #287 removes). The bills/
-fixtures are in tests/corpus_manifest.toml; the test_data/ fixtures (subcommittee
+fixtures are in tests/corpus_manifest.toml; the tests/data/ fixtures (subcommittee
 prints, the CJS Senate print) sit outside the bills/-layout manifest and are floored
 directly by test_manifest_fixtures_committed. The ONE fetched-only case left is
 TestCorpusAccountPrecision, a tolerant net over the larger appropriations corpus that
@@ -22,19 +22,19 @@ from pathlib import Path
 
 import pytest
 
-from corpus_paths import fixture_path
+from corpus_paths import DATA_DIR, fixture_path
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from tests.conftest import assert_manifest_committed
 from tests.pdf_corpus import cached_pages
 
 ROOT = Path(__file__).resolve().parent.parent
-GOLDEN_DIR = ROOT / "test_data" / "pdf" / "anchors_golden"
+GOLDEN_DIR = DATA_DIR / "pdf" / "anchors_golden"
 
 # (golden name, pdf path) — approps (House), non-approps (House), approps (Senate).
 FIXTURES = {
     "118-hr-8752": fixture_path("118-hr-8752", "1_reported-in-house.pdf"),
     "118-hr-8282": fixture_path("118-hr-8282", "1_introduced-in-house.pdf"),
-    "118-s-4795": ROOT / "test_data" / "BILLS-118s4795rs.pdf",
+    "118-s-4795": DATA_DIR / "BILLS-118s4795rs.pdf",
 }
 
 
@@ -242,7 +242,7 @@ class TestMajorLevelEndToEnd:
         # superset of the oracle, never a subset. The exact anchor set is pinned
         # separately and deterministically by test_anchors_match_golden; here we assert
         # the semantic floor, not a brittle hand-coded literal.
-        pdf = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
+        pdf = DATA_DIR / "BILLS-118s4795rs.pdf"
         xml = fixture_path("118-s-4795", "1_reported-in-senate.xml")
         xm = _xml_major_vocab(xml)
         pm = _pdf_major_vocab(pdf)
@@ -272,10 +272,10 @@ def _pdf_major_texts(pdf_path: Path) -> set[str]:
 
 # One FY2025 reported-in-House print per appropriations subcommittee (CJS=Senate
 # 118-s-4795, Homeland=existing 118-hr-8752). Fetched by scripts/fetch_test_assets.py.
-_SUBC_DIR = ROOT / "test_data" / "subcommittee"
+_SUBC_DIR = DATA_DIR / "subcommittee"
 SUBCOMMITTEE_FIXTURES = {
     "agriculture": _SUBC_DIR / "BILLS-118hr9027rh.pdf",
-    "cjs": ROOT / "test_data" / "BILLS-118s4795rs.pdf",
+    "cjs": DATA_DIR / "BILLS-118s4795rs.pdf",
     "defense": _SUBC_DIR / "BILLS-118hr8774rh.pdf",
     "energy-water": _SUBC_DIR / "BILLS-118hr8997rh.pdf",
     "financial-services": _SUBC_DIR / "BILLS-118hr8773rh.pdf",
@@ -297,7 +297,7 @@ def test_manifest_fixtures_committed():
     committed fixture fails HERE naming it, instead of the fail-open shape #287 removes
     (a case silently skipping in CI). The bills/ fixtures (117-hr-2471, 118-hr-2882, and
     the already-manifested 118-hr-8752 / 118-hr-8282 / 118-s-4795) are checked via the
-    shared manifest helper; the test_data/ golden fixtures (the 10 subcommittee prints and
+    shared manifest helper; the tests/data/ golden fixtures (the 10 subcommittee prints and
     the CJS Senate print) sit outside the bills/-layout manifest (ADR 0015), so they are
     floored here directly. TestCorpusAccountPrecision's larger corpus stays fetched-only
     and is deliberately NOT floored — it keeps a visible per-case skip."""
@@ -476,7 +476,7 @@ class TestCarryoverAgencyVocabFloors:
     MIN_VOCAB = 30
 
     def test_s4795_agency_vocab_floors(self):
-        pdf = ROOT / "test_data" / "BILLS-118s4795rs.pdf"
+        pdf = DATA_DIR / "BILLS-118s4795rs.pdf"
         xml = fixture_path("118-s-4795", "1_reported-in-senate.xml")
         xa = _xml_agency_vocab(xml)
         pa = _pdf_agency_vocab(pdf)
@@ -539,7 +539,7 @@ class TestCorpusAccountPrecision:
         ("118-hr-4820", "bills/118-hr-4820", None),
         ("118-hr-8752", "tests/corpus/118-hr-8752", None),
         ("118-hr-8774", "tests/corpus/118-hr-8774", None),
-        ("118-s-4795", "test_data/BILLS-118s4795rs.pdf", "tests/corpus/118-s-4795/1_reported-in-senate.xml"),
+        ("118-s-4795", "tests/data/BILLS-118s4795rs.pdf", "tests/corpus/118-s-4795/1_reported-in-senate.xml"),
     ]
     # Set below the lowest measured value (118-hr-4820: vrec 0.64 / vprec 0.46) with
     # margin for per-line median wobble; these are regression floors, not targets.

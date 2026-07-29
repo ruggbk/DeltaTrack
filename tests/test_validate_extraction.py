@@ -21,17 +21,17 @@ internal-only tests cannot detect. Two jurisdictions, two external sources:
 """
 
 import json
-from pathlib import Path
 
 import pytest
 
+from corpus_paths import DATA_DIR
 from deltatrack.bill_tree import normalize_bill
 from deltatrack.diff_bill import extract_amounts
 from tests.conftest import uncommitted_bill_files
 
 pytestmark = pytest.mark.slow
 
-FIXTURE_PATH = Path("test_data/validation_leg_branch.json")
+FIXTURE_PATH = DATA_DIR / "validation_leg_branch.json"
 
 
 def _load_fixture():
@@ -94,7 +94,7 @@ class TestLegBranchValidation:
         assert not missing, (
             f"{len(missing)} of {len(referenced)} fixture-referenced bill version(s) are not "
             f"committed (missing on disk, or present but untracked): {missing}. Each bill "
-            "test_data/validation_leg_branch.json names must be committed under tests/corpus/, "
+            "tests/data/validation_leg_branch.json names must be committed under tests/corpus/, "
             "or its accounts silently drop out of validation. Re-fetch with "
             "./tools/fetch_bills.py download <congress> <type> <number> --format both and copy the "
             "file into tests/corpus/<id>/ if it is gone; `git add` it if present but untracked."

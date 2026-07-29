@@ -245,7 +245,7 @@ versions = [
 
 
 # --- Legislative Branch external-validation set (#278) -------------------------
-# The enrolled bills test_data/validation_leg_branch.json checks extracted amounts
+# The enrolled bills tests/data/validation_leg_branch.json checks extracted amounts
 # against, committed in #278 so that validation runs whole in CI instead of over the two
 # bills that happened to be committed. Manifested for the same reason every other
 # committed bill is: the manifest is the record of the committed fixture set, and its

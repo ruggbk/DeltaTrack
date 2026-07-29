@@ -554,7 +554,7 @@ def pdf_signals(repo: Path, pages_per_file: int = 8):
     n = examined
     print(
         f"\n[6] PDF SIGNALS  (examined {n}/{len(pdfs)} bill PDFs, failed {failed}; "
-        "committee-report PDF in test_data/ is out of scope)"
+        "committee-report PDF in tests/data/ is out of scope)"
     )
     print(f"  document outline/bookmarks: {with_bookmark}/{n}")
     print(f"  non-empty tagged struct tree: {with_structtree}/{n}")

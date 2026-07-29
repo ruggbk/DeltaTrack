@@ -151,7 +151,7 @@ def uncommitted_bill_files(rel_paths: Iterable[str]) -> list[str]:
     different sets need the same committed-ness semantics: the manifest fixtures
     (``missing_manifest_files``) and the bill versions the Legislative Branch validation
     fixture references (#278), which is derived from
-    ``test_data/validation_leg_branch.json`` and is not a manifest question. Both sets
+    ``tests/data/validation_leg_branch.json`` and is not a manifest question. Both sets
     now live under ``tests/corpus/`` (#308)."""
     tracked = _tracked_bills()
     missing = []

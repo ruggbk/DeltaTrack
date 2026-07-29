@@ -32,15 +32,15 @@ htmlcov/
 reports/*
 !reports/.gitkeep
 plans/
-# test_data/ holds committed fixtures (validation JSON, committee-report HTML/PDF, the
+# tests/data/ holds committed fixtures (validation JSON, committee-report HTML/PDF, the
 # PDF goldens and their source prints), so it is tracked by default and only the
 # local-only artifacts are listed here (#308). It used to be deny-all-then-re-admit,
 # which put a .gitignore edit in the path of adding a golden.
 # Persistent PDF extraction cache (developer test-loop speedup; see tests/pdf_corpus.py)
-test_data/extract_cache/
+tests/data/extract_cache/
 # The source appropriations spreadsheet is deliberately not vendored; only the JSON
 # fixture derived from it is committed.
-test_data/*.xlsx
+tests/data/*.xlsx
 *.csv
 # Vendored GPO render chain (public domain, ~2.2MB incl. binary JPGs) — local reference only.
 # Mined into docs/gpo-render-conventions.md; re-fetch from govinfo bulkdata when needed. See DeltaTrack#40.

@@ -20,14 +20,15 @@ from functools import lru_cache
 from importlib.metadata import version
 from pathlib import Path
 
-from corpus_paths import FIXTURES_DIR, sweep_bill_dirs
+from corpus_paths import DATA_DIR, FIXTURES_DIR, sweep_bill_dirs
 from deltatrack.parsers import pdf_text
 from deltatrack.parsers.pdf_text import Page, extract_clean_pages
 
-# Persistent extraction cache. Gitignored (test_data/* is ignored). Keyed by PDF
-# path + mtime AND the extractor's identity, via the filename, so a stale entry is
-# simply never read. See `_extractor_fingerprint` for why the second half is needed.
-CACHE_DIR = Path(__file__).parent.parent / "test_data" / "extract_cache"
+# Persistent extraction cache. The one gitignored subtree of the otherwise-committed
+# tests/data/ (see .gitignore). Keyed by PDF path + mtime AND the extractor's identity,
+# via the filename, so a stale entry is simply never read. See `_extractor_fingerprint`
+# for why the second half is needed.
+CACHE_DIR = DATA_DIR / "extract_cache"
 
 # Optional single-bill filter for a fast TDD loop. Substring match on the bill
 # directory name, so TEST_BILL=4366 selects 118-hr-4366.
