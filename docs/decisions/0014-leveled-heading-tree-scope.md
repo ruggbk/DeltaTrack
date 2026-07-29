@@ -104,7 +104,8 @@ the #96 PDF recalibration), and the XML↔PDF gap narrows sharply (4502 +389→+
 subsection granularity the XML tree previously lacked. 118-hr-8752's exact parity
 gives way to a −2 by design: XML emits bare subsections the PDF cannot detect
 (the all-subsections scope decision recorded on #188). The live numbers and the bands that gate them are in
-`tests/test_pipeline_parity.py` (regenerate: `pytest -k parity -s`). The Senate #89
+`tests/test_pipeline_parity.py` (regenerate the table:
+`.venv/bin/python scripts/parity_table.py`). The Senate #89
 residual `118-s-4795` recovers its heading hierarchy at a size-band ratio of 1.02
 (account anchors vs XML leaf headings) — in range, the residual closes.
 

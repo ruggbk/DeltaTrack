@@ -22,7 +22,15 @@ bands are guardrail constants: a snug lower bound catches a silent collapse to
 zero (``feedback_property_tests_fail_open`` — the fail-open trap), an upper bound
 catches a regression. The human-readable snapshot + attribution live in
 ``docs/decisions/0014-leveled-heading-tree-scope.md``; regenerate with
-``pytest -k parity -s``.
+``.venv/bin/python scripts/parity_table.py``.
+
+That table used to be a case in this module. It asserted nothing — it printed what
+the parametrized case below already computes — so it was reporting wearing a gate's
+clothes, and as one monolithic test it was a hard floor on the suite's wall clock
+(``pytest-xdist`` distributes whole tests). It moved to the script in #350, which
+also owns the inputs both sides need (``PARITY_BILLS``, ``v1_v2``, ``totals``) so
+the bill list has one home; ``test_band_table_covers_every_parity_bill`` keeps the
+bands below from drifting away from it.
 
 Every input is committed: all four evidence bills carry v1/v2 in both formats under
 ``tests/corpus/``, and the Senate pair is ``tests/corpus/118-s-4795`` XML plus
@@ -33,15 +41,13 @@ This module is not in the CI slow selection, so it gates on a full local run.
 
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 
 import pytest
 
-from corpus_paths import FIXTURES_DIR, fixture_path
-from deltatrack.compare.pdf import compare_pdfs
-from deltatrack.compare.xml import compare_xml
+from corpus_paths import fixture_path
 from scripts.heading_precision import measure
+from scripts.parity_table import PARITY_BILLS, parity_row, v1_v2
 
 pytestmark = pytest.mark.slow
 
@@ -87,50 +93,40 @@ _SENATE_XML = fixture_path("118-s-4795", "1_reported-in-senate.xml")
 _SENATE_RATIO_BAND = (0.95, 1.10)
 
 
-def _v1_v2(bill: str) -> tuple[Path, Path]:
-    """The first two version PDFs (and their paired XML) for ``bill``.
+def test_band_table_covers_every_parity_bill() -> None:
+    """The bands and the script's bill list stay in step (#350).
 
-    Returns ``(v1_pdf, v2_pdf)``; callers derive the XML via ``with_suffix``.
-    Fails rather than skipping when a file is missing: all four evidence bills are
-    committed in both formats, so an absent one is a broken checkout (#326).
+    ``PARITY_BILLS`` drives the reporting script; ``_PARITY`` drives this gate. A bill
+    added to one and not the other would silently go ungated (or be reported with no
+    band on record), which is the fail-open shape — so pin them to each other rather
+    than trusting two hand-maintained lists to agree.
     """
-    bill_dir = FIXTURES_DIR / bill
-    pdfs = sorted(bill_dir.glob("[0-9]*_*.pdf"))
-    assert len(pdfs) >= 2, f"{bill}: committed fixture needs two version PDFs, found {[p.name for p in pdfs]}"
-    v1, v2 = pdfs[0], pdfs[1]
-    absent = [str(p.with_suffix(".xml")) for p in (v1, v2) if not p.with_suffix(".xml").exists()]
-    assert not absent, f"{bill}: committed paired XML absent from checkout: {absent}"
-    return v1, v2
+    assert set(_PARITY) == set(PARITY_BILLS), (
+        "parity bands and scripts/parity_table.PARITY_BILLS disagree: "
+        f"banded-only={sorted(set(_PARITY) - set(PARITY_BILLS))}, "
+        f"reported-only={sorted(set(PARITY_BILLS) - set(_PARITY))}"
+    )
 
 
 def test_evidence_fixtures_committed() -> None:
     """Fail-closed floor (#326): every input this module reads is committed and present.
 
     A plain, always-collected guard, so a deleted fixture fails HERE naming it rather
-    than turning the cases below into skips. They used to skip on ``_v1_v2`` returning
+    than turning the cases below into skips. They used to skip on ``v1_v2`` returning
     None and on two ``.exists()`` checks for the Senate pair, all written when those
     files were fetched rather than committed; a skip is green, so the parity bands and
     the #89 residual ratio could go dark unnoticed (#288)."""
     for bill in _PARITY:
-        _v1_v2(bill)
+        v1_v2(bill)
     absent = sorted(str(p) for p in (_SENATE_PDF, _SENATE_XML) if not p.exists())
     assert not absent, f"committed 118-s-4795 parity fixtures absent from checkout: {absent}"
-
-
-def _totals(canonical: dict) -> Counter:
-    """Per-change_type totals for a canonical diff document."""
-    return Counter(c.get("change_type") for c in canonical.get("changes", []))
 
 
 @pytest.mark.parametrize("bill", list(_PARITY))
 def test_pipeline_change_parity(bill: str) -> None:
     """Both pipelines emit valid changes; totals sit in their attributed bands."""
-    v1_pdf, v2_pdf = _v1_v2(bill)
+    xn, pn = parity_row(bill)
 
-    xc = compare_xml(v1_pdf.with_suffix(".xml").read_bytes(), v2_pdf.with_suffix(".xml").read_bytes())
-    pc = compare_pdfs(v1_pdf.read_bytes(), v2_pdf.read_bytes())
-
-    xn, pn = _totals(xc), _totals(pc)
     # Genuinely-true invariants (not fail-open): both pipelines emit changes, and
     # every change_type is a real op.
     assert set(xn) <= _VALID_OPS, f"{bill} XML emitted unknown ops: {set(xn) - _VALID_OPS}"
@@ -146,29 +142,6 @@ def test_pipeline_change_parity(bill: str) -> None:
         f"{bill} PDF total {pdf_total} outside [{plo},{phi}] — recalibrate band + ADR 0014 snapshot, "
         f"or investigate regression. Gap cause on record: {cause}"
     )
-
-
-def test_pipeline_change_parity_table(capsys) -> None:
-    """Emit the human-readable parity table (`pytest -k parity -s` regenerates it)."""
-    rows = []
-    for bill in _PARITY:
-        v1_pdf, v2_pdf = _v1_v2(bill)
-        xc = compare_xml(v1_pdf.with_suffix(".xml").read_bytes(), v2_pdf.with_suffix(".xml").read_bytes())
-        pc = compare_pdfs(v1_pdf.read_bytes(), v2_pdf.read_bytes())
-        xn, pn = _totals(xc), _totals(pc)
-        rows.append((bill, xn, pn))
-
-    with capsys.disabled():
-        print("\nPDF↔XML change parity (v1→v2, reported→engrossed)")
-        hdr = f"{'bill':<14}{'pipe':>5}{'modified':>10}{'added':>8}{'removed':>9}{'moved':>7}{'total':>7}"
-        print(hdr)
-        for bill, xn, pn in rows:
-            for label, n in (("XML", xn), ("PDF", pn)):
-                print(
-                    f"{bill if label == 'XML' else '':<14}{label:>5}"
-                    f"{n.get('modified', 0):>10}{n.get('added', 0):>8}"
-                    f"{n.get('removed', 0):>9}{n.get('moved', 0):>7}{sum(n.values()):>7}"
-                )
 
 
 def test_senate_size_band_ratio() -> None:
