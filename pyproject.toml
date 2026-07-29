@@ -73,6 +73,7 @@ dev = [
     "pytest-cov>=6.0",
     "pytest-playwright>=0.5",
     "pytest-xdist>=3.6",
+    "pyyaml>=6.0",  # tests/test_ci_workflow.py parses ci.yml; transitive today, declared so CI cannot lose it
     "reportlab>=5.0.0",
     "respx>=0.22",
     "ruff==0.16.0",  # pinned exactly so local `ruff format` matches CI (format output varies by version)
