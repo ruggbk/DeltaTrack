@@ -1,9 +1,30 @@
 name: CI
 
+# `develop` is listed under push because it is the integration branch every contributor
+# branches from, and until #412 nothing ran the suite when a commit landed on it. The
+# pull-request run tests the head merged into the base AS THE BASE STOOD WHEN IT RAN, so
+# a green required check can describe a merge that no longer resembles the one being
+# performed: #396's `test` check was seven hours stale when it merged, and the package
+# move in #402 had landed in between. `security.yml` already covered `develop` on push,
+# which is why the branch showed green marks after that merge while the suite was
+# uncollectable. This step is DETECTION, not prevention -- `develop` still goes red, but
+# within minutes and attributed to the merge commit that caused it, instead of surfacing
+# later on an unrelated pull request. Prevention (a merge queue) is a separate decision.
+#
+# A push to a branch that also has an open pull request runs this workflow twice, once
+# per event. Feature branches are unaffected: `develop` and `main` are only pushed to by
+# a merge, which closes the pull request rather than synchronizing it. The one case that
+# does double is the `develop` -> `main` promotion pull request, which is rare and
+# maintainer-initiated, so it is accepted rather than worked around.
+#
+# DO NOT add a `concurrency` group with `cancel-in-progress: true`. Cancelling an
+# in-flight run means a merge commit finishes with no verdict, which is this issue's gap
+# in a new form. `update-examples.yml` uses that setting and is the nearby example likely
+# to be copied. `tests/test_ci_workflow.py` fails if either half of this is undone.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   test:
