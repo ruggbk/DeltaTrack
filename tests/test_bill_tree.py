@@ -1921,6 +1921,45 @@ class TestResolutionLegisNum:
 
 
 @pytest.mark.slow
+class TestReportedStageVariants:
+    """Reported-stage resolutions can carry the committee amendment as PAIRED blocks —
+    a changed="deleted" (struck) copy and a changed="added" copy — as two
+    <resolution-body> and/or two <preamble> children.
+
+    Taking the first would render the SUPERSEDED text as though it were the document,
+    turning a loud failure into a silent wrong answer. These already fail on develop, so
+    failing loudly here regresses nothing. Choosing a variant is an amendment-display
+    feature and deliberately out of scope (#201).
+    """
+
+    def test_paired_variants_raise_instead_of_rendering_the_struck_text(self):
+        with pytest.raises(ValueError) as excinfo:
+            normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hres137rh.xml")
+        message = str(excinfo.value)
+        # The message must name what was found, so the failure is diagnosable.
+        assert "2 <resolution-body>" in message
+        assert "2 <preamble>" in message
+        assert "deleted" in message
+        assert "added" in message
+
+    def test_the_struck_variant_really_does_differ_from_the_amended_one(self):
+        """Guards the premise: if the paired blocks were identical, silently taking the
+        first would be harmless and this whole guard would be unnecessary. They are not
+        — the committee restyled a recital and rewrote the body."""
+        root = ET.parse(RESOLUTION_FIXTURES / "BILLS-119hres137rh.xml").getroot()
+        deleted, added = root.findall("resolution-body")
+        assert deleted.get("changed") == "deleted"
+        assert added.get("changed") == "added"
+        assert extract_text_content(deleted) != extract_text_content(added)
+        old_recitals, new_recitals = (
+            [extract_text_content(w).strip() for w in preamble.findall("whereas")]
+            for preamble in root.findall("preamble")
+        )
+        assert len(old_recitals) == len(new_recitals) == 17
+        assert old_recitals != new_recitals
+
+
+@pytest.mark.slow
 class TestResolutionParsing:
     """End-to-end parsing of real GPO resolution XML (#201)."""
 

@@ -82,12 +82,27 @@ def normalize_division_title(division_label: str) -> str:
     return normalize_header(title)
 
 
+def _variant_summary(bodies: list[ET.Element], preambles: list[ET.Element]) -> str:
+    """Name the committee-amendment variants found, for the find_bill_body error.
+
+    Reports each block's ``changed`` attribute ("deleted"/"added"), which is what
+    distinguishes the struck text from the amended text.
+    """
+    parts = []
+    for label, elements in (("resolution-body", bodies), ("preamble", preambles)):
+        if len(elements) > 1:
+            marks = ", ".join(el.get("changed") or "unmarked" for el in elements)
+            parts.append(f"{label} [{marks}]")
+    return "; ".join(parts)
+
+
 def find_bill_body(root: ET.Element) -> ET.Element:
     """Find the effective body element from a bill, resolution or amendment-doc root.
 
     Returns legis-body for bills, resolution-body for resolutions, or
     amendment-block for amendment-docs.
-    Raises ValueError if no body can be found.
+    Raises ValueError if no body can be found, or if the document carries paired
+    committee-amendment variants we cannot choose between (see below).
     """
     # Standard bill: <bill><legis-body>
     body = root.find("legis-body")
@@ -96,9 +111,23 @@ def find_bill_body(root: ET.Element) -> ET.Element:
 
     # Resolution: <resolution><resolution-body>. Joint (hjres/sjres), concurrent
     # (hconres/sconres) and simple (hres/sres) resolutions all share this shape (#201).
-    resolution_body = root.find("resolution-body")
-    if resolution_body is not None:
-        return resolution_body
+    resolution_bodies = root.findall("resolution-body")
+    preambles = root.findall("preamble")
+    if len(resolution_bodies) > 1 or len(preambles) > 1:
+        # Reported-stage resolutions can carry the committee amendment as PAIRED
+        # blocks — a changed="deleted" (struck) variant and a changed="added" one —
+        # as two <resolution-body> and/or two <preamble> children. Taking the first
+        # would silently render the superseded text as though it were the document.
+        # Picking a variant is an amendment-display feature, not a parse decision, so
+        # fail loudly instead; these documents already fail today (#201).
+        raise ValueError(
+            f"Resolution carries paired committee-amendment variants "
+            f"({len(resolution_bodies)} <resolution-body>, {len(preambles)} <preamble>: "
+            f"{_variant_summary(resolution_bodies, preambles)}). Choosing between the struck and "
+            f"the amended text is not supported."
+        )
+    if resolution_bodies:
+        return resolution_bodies[0]
 
     # Amendment doc: <amendment-doc><engrossed-amendment-body><amendment><amendment-block>
     block = root.find(".//engrossed-amendment-body/amendment/amendment-block")
