@@ -67,6 +67,7 @@ The product commands are the executable `.py` scripts in the project root — `d
 | `./tools/fetch_bills.py search "<terms>" [--congress N] [--type hr] [--appropriations]` | Find bills by title over a local BILLSTATUS index (keyless, offline; **requires the index** — fetch it first with `fetch-index`, see below) |
 | `./tools/fetch_bills.py fetch-index --congress <N> [--type hr]` | Download just the scoped BILLSTATUS ZIP(s) that `search` reads (keyless; tens of MB, not the multi-GB full bulk set) — the lightweight on-ramp for `search` |
 | `./diff_bill.py compare <old.xml> <new.xml>` | Diff two XML versions (HTML by default; `--format json`, `--financial`, `--filter`, `-o`) |
+| `./diff_bill.py compare <slug> <n_old> <n_new>` | Diff two versions of a downloaded bill by ordinal, resolved under `--bills-dir` (default `bills/`); a bare `<slug>` lists that bill's local versions |
 | `./diff_pdf.py <old.pdf> <new.pdf> -o <out.html>` | Diff two PDF versions into the same HTML report |
 | `./tools/fetch_bill_archives.py` | Bulk-build a full bill-metadata index (all of 112–119) from govinfo archives — **see the warning below** |
 | `./tools/fetch_bill_text_archives.py --from-congress <n> --to-congress <n>` | Bulk-download bill text from govinfo into `bills/` (no API key; `--min-versions 2` keeps only bills comparable across versions) |
@@ -119,6 +120,12 @@ The index is read from BILLSTATUS ZIPs in `bills/`, which are **not** part of a 
 ```bash
 # Compare two versions (prints an HTML report to stdout by default)
 ./diff_bill.py compare bills/118-hr-4366/1_reported-in-house.xml bills/118-hr-4366/6_enrolled-bill.xml
+
+# Or address the versions by ordinal: bill first, then n (resolved under bills/)
+./diff_bill.py compare 118-hr-4366 1 6
+
+# Which ordinal is which? A bare slug lists the versions you have locally
+./diff_bill.py compare 118-hr-4366
 
 # Only sections with dollar amount changes
 ./diff_bill.py compare old.xml new.xml --financial
