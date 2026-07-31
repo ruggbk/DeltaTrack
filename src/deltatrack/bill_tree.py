@@ -83,15 +83,22 @@ def normalize_division_title(division_label: str) -> str:
 
 
 def find_bill_body(root: ET.Element) -> ET.Element:
-    """Find the effective body element from a bill or amendment-doc root.
+    """Find the effective body element from a bill, resolution or amendment-doc root.
 
-    Returns legis-body for bills, or amendment-block for amendment-docs.
+    Returns legis-body for bills, resolution-body for resolutions, or
+    amendment-block for amendment-docs.
     Raises ValueError if no body can be found.
     """
     # Standard bill: <bill><legis-body>
     body = root.find("legis-body")
     if body is not None:
         return body
+
+    # Resolution: <resolution><resolution-body>. Joint (hjres/sjres), concurrent
+    # (hconres/sconres) and simple (hres/sres) resolutions all share this shape (#201).
+    resolution_body = root.find("resolution-body")
+    if resolution_body is not None:
+        return resolution_body
 
     # Amendment doc: <amendment-doc><engrossed-amendment-body><amendment><amendment-block>
     block = root.find(".//engrossed-amendment-body/amendment/amendment-block")
@@ -501,7 +508,26 @@ _CONGRESS_WORDS = {
     "twentieth": 20,
 }
 
-_LEGIS_NUM_RE = re.compile(r"([A-Z])\.\s*(?:[A-Z]*\.?\s*)?(\d+)")
+# <legis-num> splits into a chamber/kind prefix and the number: "H. R. 3547",
+# "H.R. 2029", "H. CON. RES. 4". The prefix is captured whole (lazily, so it stops at
+# the number) and normalized to letters before lookup.
+_LEGIS_NUM_RE = re.compile(r"([A-Z][A-Z.\s]*?)\s*(\d+)")
+
+# Normalized <legis-num> prefix -> bill_type, for every form GPO prints. Resolutions
+# were previously collapsed onto the old regex's single captured letter — both chambers'
+# joint resolutions became "j" and both concurrent ones "n", while the simple
+# resolutions were mislabelled as the bill types "hr"/"s" (#201). Spelled out rather
+# than derived so each designator is greppable; the keys match _DESIGNATORS.
+_LEGIS_NUM_TYPES = {
+    "HR": "hr",
+    "S": "s",
+    "HJRES": "hjres",
+    "SJRES": "sjres",
+    "HCONRES": "hconres",
+    "SCONRES": "sconres",
+    "HRES": "hres",
+    "SRES": "sres",
+}
 
 
 def _build_paths(
@@ -1011,9 +1037,11 @@ def _extract_metadata(root: ET.Element, xml_path: Path) -> tuple[int, str, int, 
     if legis_num_el is not None and legis_num_el.text:
         match = _LEGIS_NUM_RE.search(legis_num_el.text.strip())
         if match:
-            bill_type = match.group(1).lower()
-            if bill_type == "h":
-                bill_type = "hr"
+            # "H. CON. RES." -> "HCONRES". An unrecognized prefix falls through to its
+            # own normalized form rather than raising, so a new GPO spelling degrades
+            # to a visibly odd designator instead of a silently wrong one.
+            prefix = re.sub(r"[^A-Z]", "", match.group(1).upper())
+            bill_type = _LEGIS_NUM_TYPES.get(prefix, prefix.lower())
             bill_number = int(match.group(2))
 
     version = ""

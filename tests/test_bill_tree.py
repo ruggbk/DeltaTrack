@@ -1,10 +1,13 @@
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pytest
 
 from deltatrack.bill_tree import (
+    _DESIGNATORS,
     BillNode,
     _extract_appropriations_text,
+    _extract_metadata,
     _extract_section_text,
     build_title_label,
     extract_display_text,
@@ -18,7 +21,13 @@ from deltatrack.bill_tree import (
     walk_body_sections,
     walk_title,
 )
-from tests.corpus_paths import fixture_path, resolve_bill_file
+from deltatrack.diff_bill import diff_bills
+from tests.corpus_paths import PROJECT_ROOT, fixture_path, resolve_bill_file
+
+# Real GPO resolution XML, committed beside the byte-identity fixtures rather than in
+# tests/corpus/ + corpus_manifest.toml: the manifest enrolls a bill in the appropriations
+# corpus gates, which these procedural texts carry no amounts for (#201).
+RESOLUTION_FIXTURES = PROJECT_ROOT / "tests" / "fixtures" / "resolutions"
 
 
 def _content(tree):
@@ -502,6 +511,22 @@ class TestFindBillBody:
         )
         body = find_bill_body(root)
         assert body.tag == "legis-body"
+        assert body.find("section") is not None
+
+    def test_resolution_with_resolution_body(self):
+        """Joint/concurrent/simple resolutions root at <resolution> and carry
+        <resolution-body> where a bill carries <legis-body> (#201)."""
+        root = ET.fromstring(
+            '<resolution resolution-type="house-joint">'
+            "<form><legis-num>H. J. RES. 25</legis-num></form>"
+            '<resolution-body style="traditional">'
+            '<section section-type="undesignated-section"><enum/>'
+            "<text>That the following article is proposed.</text></section>"
+            "</resolution-body>"
+            "</resolution>"
+        )
+        body = find_bill_body(root)
+        assert body.tag == "resolution-body"
         assert body.find("section") is not None
 
     def test_amendment_doc(self):
@@ -1854,3 +1879,82 @@ class TestSubsectionLabelBounds:
         out = extract_display_text(section, skip_children=frozenset({id(sub)}))
         assert "Body." not in out
         assert "$9,999" in out
+
+
+class TestResolutionLegisNum:
+    """<legis-num> -> bill_type for every resolution form (#201).
+
+    Expected values are pasted literals, not re-derived from the parser's own
+    mapping. Before the fix the four multi-word forms collapsed onto the regex's
+    first captured letter ('j' for both chambers' joint resolutions, 'n' for both
+    concurrent ones) and the two simple forms were mislabelled as the bill types
+    'hr'/'s' — a wrong designator printed on a real document.
+    """
+
+    @pytest.mark.parametrize(
+        ("legis_num", "expected_type", "expected_number"),
+        [
+            ("H. R. 3547", "hr", 3547),
+            ("S. 2321", "s", 2321),
+            ("H. J. RES. 25", "hjres", 25),
+            ("S. J. RES. 10", "sjres", 10),
+            ("H. CON. RES. 4", "hconres", 4),
+            ("S. CON. RES. 3", "sconres", 3),
+            ("H. RES. 5", "hres", 5),
+            ("S. RES. 9", "sres", 9),
+        ],
+    )
+    def test_bill_type_and_number(self, legis_num, expected_type, expected_number):
+        root = ET.fromstring(f"<resolution><form><legis-num>{legis_num}</legis-num></form></resolution>")
+        _congress, bill_type, bill_number, _version, _title = _extract_metadata(root, Path("BILLS-119test.xml"))
+        assert bill_type == expected_type
+        assert bill_number == expected_number
+
+    def test_unrecognised_form_degrades_rather_than_raising(self):
+        """The mapping is a lookup over known forms, so an unknown one must fall
+        through to the pre-#201 single-letter behaviour, not raise. The letter
+        itself is a regex artefact and deliberately not pinned here."""
+        root = ET.fromstring("<resolution><form><legis-num>X. Y. RES. 7</legis-num></form></resolution>")
+        _congress, bill_type, bill_number, _version, _title = _extract_metadata(root, Path("BILLS-119test.xml"))
+        assert bill_number == 7
+        assert bill_type not in _DESIGNATORS
+
+
+@pytest.mark.slow
+class TestResolutionParsing:
+    """End-to-end parsing of real GPO resolution XML (#201)."""
+
+    def test_joint_resolution_parses_with_correct_metadata(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hjres25ih.xml")
+        assert tree.congress == 119
+        assert tree.bill_type == "hjres"
+        assert tree.bill_number == 25
+        body_nodes = _content(tree)
+        assert body_nodes, "resolution body produced no content nodes"
+        assert any(n.body_text.strip() for n in body_nodes), "body nodes carry no text"
+
+    def test_senate_joint_resolution_parses_with_correct_metadata(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119sjres3is.xml")
+        assert tree.congress == 119
+        assert tree.bill_type == "sjres"
+        assert tree.bill_number == 3
+        assert _content(tree), "resolution body produced no content nodes"
+
+    def test_concurrent_resolution_parses_with_correct_metadata(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        assert tree.congress == 119
+        assert tree.bill_type == "hconres"
+        assert tree.bill_number == 58
+
+
+@pytest.mark.slow
+class TestResolutionDiff:
+    """A real introduced-vs-engrossed resolution pair diffs end to end (#201)."""
+
+    def test_concurrent_resolution_versions_diff(self):
+        old = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        new = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58eh.xml")
+        diff = diff_bills(old, new)
+        assert diff.bill_type == "hconres"
+        assert diff.bill_number == 58
+        assert diff.congress == 119
