@@ -817,7 +817,10 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
             raise SystemExit(listing)
         print(listing)
         raise SystemExit(0)
-    raise SystemExit(f"{_COMPARE_USAGE} — got {len(targets)}.")
+    # argparse rejected these arities with exit 2 (a usage error); a wrapper keying on
+    # the exit status has to keep seeing 2, not the 1 a bare SystemExit(message) gives.
+    print(f"{_COMPARE_USAGE} — got {len(targets)}.", file=sys.stderr)
+    raise SystemExit(2)
 
 
 def cmd_compare(args: argparse.Namespace) -> None:
@@ -878,19 +881,15 @@ class _IntermixedSubParser(argparse.ArgumentParser):
 
     `parse_intermixed_args` is argparse's own answer to that, but it refuses a parser
     holding subparsers, so it cannot be switched on for the top-level parser -- only
-    here, where `add_subparsers` hands control to the subcommand. It delegates back into
-    `parse_known_args` with the positionals suppressed; the guard lets that inner call
-    through, and is inert if a future argparse stops re-entering.
+    here, where `add_subparsers` hands control to the subcommand. The delegation below
+    cannot recurse: `parse_known_intermixed_args` calls the private `_parse_known_args2`
+    (which calls the private `_parse_known_args`), never the public `parse_known_args`
+    it overrides here -- verified with `inspect.getsource` on CPython 3.12 and 3.13,
+    the range this repo supports.
     """
 
     def parse_known_args(self, args=None, namespace=None):
-        if getattr(self, "_intermixing", False):
-            return super().parse_known_args(args, namespace)
-        self._intermixing = True
-        try:
-            return self.parse_known_intermixed_args(args, namespace)
-        finally:
-            self._intermixing = False
+        return self.parse_known_intermixed_args(args, namespace)
 
 
 def build_parser() -> argparse.ArgumentParser:

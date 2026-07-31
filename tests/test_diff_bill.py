@@ -887,12 +887,17 @@ class TestCompareVersionListing:
             _run_compare(monkeypatch, str(bill / "1_reported-in-house.xml"), "--format", "json")
         assert exc.value.code != 0
 
-    def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch):
-        """Dispatch is on the count, so 0 and 4+ are the arities with no meaning."""
+    def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch, capsys):
+        """Dispatch is on the count, so 0 and 4+ are the arities with no meaning.
+
+        argparse's two-positional parser rejected these with exit 2 and the message on
+        stderr; the count dispatch keeps that contract rather than inventing a new one.
+        """
         for argv in ([], ["a.xml", "b.xml", "c.xml", "d.xml"]):
             with pytest.raises(SystemExit) as exc:
                 _run_compare(monkeypatch, *argv, "--bills-dir", str(synthetic_bills_dir))
-            assert "compare takes two file paths" in str(exc.value.code)
+            assert exc.value.code == 2, "an arity error is a usage error, as argparse made it"
+            assert "compare takes two file paths" in capsys.readouterr().err
 
 
 @pytest.mark.slow
