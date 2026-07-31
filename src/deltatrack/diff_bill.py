@@ -17,7 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from deltatrack.bill_tree import BillNode, BillTree, normalize_bill, normalize_division_title
-from deltatrack.version_stems import label_from_stem, version_number_from_stem
+from deltatrack.version_stems import (
+    label_from_stem,
+    local_versions,
+    resolve_version_file,
+    version_number_from_stem,
+)
 
 # --- Financial amount extraction ---
 
@@ -733,9 +738,75 @@ def filter_diff(
     )
 
 
+_COMPARE_USAGE = (
+    "compare takes two file paths (compare <old.xml> <new.xml>), a bill slug with two "
+    "version ordinals (compare <slug> <n_old> <n_new>), or a bare slug to list that "
+    "bill's local versions"
+)
+
+
+def _format_version_listing(bills_dir: Path, slug: str) -> str:
+    """The bill's local versions, numbered, as both an answer and an error message.
+
+    A bare slug asks which versions exist; a bad ordinal asks the same question without
+    knowing it. Both get this text, so a version's meaning is one command away rather
+    than one directory listing away (#152) — the ordinals are per-bill (ADR 0013), so
+    "version 3" means nothing until you have seen this list.
+    """
+    versions = local_versions(bills_dir, slug)
+    if not versions:
+        return (
+            f"No local versions for {slug} in {bills_dir / slug}. "
+            "Download them with: ./tools/fetch_bills.py download <congress> <type> <number>"
+        )
+    lines = [f"{slug} has {len(versions)} local version{'' if len(versions) == 1 else 's'}:"]
+    lines += [f"  {number}  {label}" for number, label in versions]
+    lines.append(f"Pick two: compare {slug} <old> <new>")
+    return "\n".join(lines)
+
+
+def _resolve_version_arg(bills_dir: Path, slug: str, ordinal: str) -> Path:
+    """One ``<slug> <n>`` pair to the file it addresses, or exit with the version list.
+
+    A non-numeric ordinal and an out-of-range one are the same mistake with the same
+    remedy, so they get the same answer rather than separate diagnostics.
+    """
+    resolved = resolve_version_file(bills_dir, slug, int(ordinal)) if ordinal.isdigit() else None
+    if resolved is None:
+        raise SystemExit(f"No version {ordinal} for {slug}.\n{_format_version_listing(bills_dir, slug)}")
+    return resolved
+
+
+def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
+    """The two XML files ``compare`` should diff, from its positional arguments.
+
+    Dispatch is on the positional COUNT, never on the shape of a value: two paths are
+    the legacy invocation and must stay unreachable from any slug regex or ``.xml``
+    sniffing, so that adding the version-addressable form cannot re-read an existing
+    command as something else (#152).
+
+    A bare slug is a question rather than a failure, so it answers on stdout and exits
+    0; every other unresolvable case is an error whose message is the same listing.
+    """
+    targets = args.targets
+    if len(targets) == 2:
+        return Path(targets[0]), Path(targets[1])
+    if len(targets) == 3:
+        slug, n_old, n_new = targets
+        return (
+            _resolve_version_arg(args.bills_dir, slug, n_old),
+            _resolve_version_arg(args.bills_dir, slug, n_new),
+        )
+    if len(targets) == 1:
+        print(_format_version_listing(args.bills_dir, targets[0]))
+        raise SystemExit(0)
+    raise SystemExit(f"{_COMPARE_USAGE} — got {len(targets)}.")
+
+
 def cmd_compare(args: argparse.Namespace) -> None:
-    old_tree = normalize_bill(Path(args.old_xml))
-    new_tree = normalize_bill(Path(args.new_xml))
+    old_path, new_path = _compare_targets(args)
+    old_tree = normalize_bill(old_path)
+    new_tree = normalize_bill(new_path)
     fmt = getattr(args, "format", "json")
 
     if fmt == "html":
@@ -744,7 +815,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
         # render_examples.py cannot drift into rendering the same pair differently.
         from deltatrack.compare.xml import compare_xml_trees_html
 
-        old_stem, new_stem = Path(args.old_xml).stem, Path(args.new_xml).stem
+        old_stem, new_stem = old_path.stem, new_path.stem
         output = compare_xml_trees_html(
             old_tree,
             new_tree,
@@ -765,8 +836,8 @@ def cmd_compare(args: argparse.Namespace) -> None:
         )
         diff_dict = bill_diff_to_dict(result, financial=args.financial)
         # Extract version numbers from filenames (e.g., "1_reported-in-house.xml" -> 1)
-        for key, xml_arg in (("old_version_number", args.old_xml), ("new_version_number", args.new_xml)):
-            num = version_number_from_stem(Path(xml_arg).stem)
+        for key, path in (("old_version_number", old_path), ("new_version_number", new_path)):
+            num = version_number_from_stem(path.stem)
             if num is not None:
                 diff_dict[key] = num
         output = json.dumps(diff_dict, indent=2)
@@ -785,8 +856,25 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
 
     compare = subparsers.add_parser("compare", help="Compare two bill versions")
-    compare.add_argument("old_xml", help="Path to older bill XML")
-    compare.add_argument("new_xml", help="Path to newer bill XML")
+    # One variadic positional, dispatched on count in `_compare_targets`. Two separate
+    # required positionals cannot express the <slug> <n_old> <n_new> and bare-<slug>
+    # forms, and a pair of optional ones would make the arity implicit (#152).
+    compare.add_argument(
+        "targets",
+        nargs="*",
+        metavar="TARGET",
+        help=(
+            "Either two bill XML paths (<old.xml> <new.xml>), or a bill slug and two "
+            "version ordinals (<slug> <n_old> <n_new>) resolved under --bills-dir. "
+            "A bare <slug> lists that bill's local versions and exits."
+        ),
+    )
+    compare.add_argument(
+        "--bills-dir",
+        type=Path,
+        default=Path("bills"),
+        help="Root holding the per-bill download folders, for the <slug> forms (default: %(default)s)",
+    )
     compare.add_argument("-o", "--output", help="Output JSON file (default: stdout)")
     compare.add_argument(
         "--include-unchanged",

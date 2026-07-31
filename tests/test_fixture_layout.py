@@ -40,8 +40,9 @@ from tests.conftest import _git_tracked_paths
 from tests.corpus_paths import DOWNLOADS_DIR, FIXTURES_DIR, PROJECT_ROOT, sweep_bill_dirs
 
 # Modules that legitimately name ``bills/``: they are about the DOWNLOAD tier itself
-# (the fetchers and their tests, the live parity gate) or they pin a bill nobody has
-# committed. Each entry is a deliberate exception, not a waiver — see the comment.
+# (the fetchers and their tests, the live parity gate, the CLI that addresses what they
+# downloaded) or they pin a bill nobody has committed. Each entry is a deliberate
+# exception, not a waiver — see the comment.
 _DOWNLOAD_TIER_FILES = {
     # The fetchers: bills/ is their output directory, which is the point.
     "fetch_bills.py",
@@ -52,6 +53,11 @@ _DOWNLOAD_TIER_FILES = {
     "tests/test_fetch_bill_archives_extract.py",
     "tests/test_fetch_bill_text_archives.py",
     "tests/test_fetch_govinfo.py",
+    # `diff_bill compare <slug> <n_old> <n_new>` addresses the download tier on purpose
+    # (ADR 0013 / #152): its --bills-dir default has to name the tree the fetchers write
+    # into, for the same reason theirs do. Only that default; the file addresses no
+    # individual bill, and its tests build synthetic trees under tmp_path.
+    "src/deltatrack/diff_bill.py",
     # Live-network gate over whatever is downloaded locally.
     "tests/test_govinfo_corpus_parity.py",
     # This file: the patterns below are the thing under test.

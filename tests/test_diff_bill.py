@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from conftest import HR4366_V1_PATH, HR4366_V6_PATH
@@ -505,6 +506,287 @@ class TestFilterDiff:
         assert filtered.summary["added"] == 0
         assert filtered.summary["removed"] == 0
         assert filtered.summary["unchanged"] == 0
+
+
+def _synthetic_bill_xml(stage: str, army_amount: str) -> str:
+    """One title, two appropriations lines — the smallest bill both forms can diff.
+
+    Inline rather than from the corpus so these stay in the fast suite: the dispatch and
+    the resolver are about argument handling, and a real appropriations bill would add
+    seconds of parsing to prove nothing extra about either.
+    """
+    return (
+        f'<bill bill-stage="{stage}">'
+        "<form>"
+        "<congress>One Hundred Eighteenth Congress</congress>"
+        "<legis-num>H. R. 4366</legis-num>"
+        "</form>"
+        '<legis-body style="OLC">'
+        '<title id="T1">'
+        "<enum>I</enum>"
+        "<header>DEPARTMENT OF DEFENSE</header>"
+        '<appropriations-intermediate id="AI1">'
+        "<header>Military construction, army</header>"
+        f"<text>For acquisition, {army_amount}.</text>"
+        "</appropriations-intermediate>"
+        '<appropriations-intermediate id="AI2">'
+        "<header>Family housing</header>"
+        "<text>For family housing, $250,000.</text>"
+        "</appropriations-intermediate>"
+        "</title>"
+        "</legis-body>"
+        "</bill>"
+    )
+
+
+@pytest.fixture
+def synthetic_bills_dir(tmp_path) -> Path:
+    """A three-version bill in a synthetic download root under a temp dir.
+
+    Not the real download tree, and not a fixture bill: an ordinal-addressing test has to
+    control which ordinals exist, and the middle version is what proves the ordinal is
+    read rather than the first and last file simply being taken.
+    """
+    root = tmp_path / "bills"
+    bill_dir = root / "118-hr-4366"
+    bill_dir.mkdir(parents=True)
+    for name, stage, amount in (
+        ("1_reported-in-house.xml", "Reported-in-House", "$1,000,000"),
+        ("3_placed-on-calendar-senate.xml", "Placed-on-Calendar-Senate", "$1,500,000"),
+        ("6_enrolled-bill.xml", "Enrolled-Bill", "$2,000,000"),
+    ):
+        (bill_dir / name).write_text(_synthetic_bill_xml(stage, amount))
+    return root
+
+
+def _run_compare(monkeypatch, *argv: str) -> None:
+    monkeypatch.setattr(sys, "argv", ["diff_bill.py", "compare", *argv])
+    main()
+
+
+class TestCompareLegacyTwoPathForm:
+    """Characterization: `compare <old.xml> <new.xml>` must not move (#152).
+
+    The version-addressable form is additive, so the risk in it is not that the new
+    dispatch is wrong but that the old one changed underneath. Every assertion here is a
+    literal that was produced by the two-path form before the new form existed, so it
+    reads as a pin rather than as a restatement of the code.
+    """
+
+    def test_json_output_is_unchanged(self, synthetic_bills_dir, monkeypatch, capsys):
+        bill = synthetic_bills_dir / "118-hr-4366"
+        _run_compare(
+            monkeypatch,
+            str(bill / "1_reported-in-house.xml"),
+            str(bill / "6_enrolled-bill.xml"),
+            "--format",
+            "json",
+        )
+        data = json.loads(capsys.readouterr().out)
+
+        assert data["old_version"] == "reported-in-house"
+        assert data["new_version"] == "enrolled-bill"
+        assert data["congress"] == 118
+        assert data["bill_type"] == "hr"
+        assert data["bill_number"] == 4366
+        assert data["summary"] == {"added": 0, "removed": 0, "modified": 1, "unchanged": 0, "moved": 0}
+        assert [c["match_path"] for c in data["changes"]] == [["department of defense", "military construction, army"]]
+        assert data["changes"][0]["text_diff"] == [
+            "--- old",
+            "+++ new",
+            "@@ -1 +1 @@",
+            "-For acquisition, $1,000,000.",
+            "+For acquisition, $2,000,000.",
+        ]
+
+    def test_version_numbers_still_come_from_the_filename_stems(self, synthetic_bills_dir, monkeypatch, capsys):
+        """The two-path form has no slug and no ordinals, so the stems remain the source."""
+        bill = synthetic_bills_dir / "118-hr-4366"
+        _run_compare(
+            monkeypatch,
+            str(bill / "1_reported-in-house.xml"),
+            str(bill / "6_enrolled-bill.xml"),
+            "--format",
+            "json",
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["old_version_number"] == 1
+        assert data["new_version_number"] == 6
+
+    def test_a_path_whose_stem_carries_no_ordinal_still_diffs(self, synthetic_bills_dir, tmp_path, monkeypatch, capsys):
+        """Legacy callers pass any two paths, named anything — no version keys, no error."""
+        loose = tmp_path / "loose"
+        loose.mkdir()
+        (loose / "before.xml").write_text(_synthetic_bill_xml("Reported-in-House", "$1,000,000"))
+        (loose / "after.xml").write_text(_synthetic_bill_xml("Enrolled-Bill", "$2,000,000"))
+        _run_compare(monkeypatch, str(loose / "before.xml"), str(loose / "after.xml"), "--format", "json")
+        data = json.loads(capsys.readouterr().out)
+        assert data["summary"]["modified"] == 1
+        assert "old_version_number" not in data
+        assert "new_version_number" not in data
+
+    def test_include_unchanged_and_filter_still_reach_cmd_compare(self, synthetic_bills_dir, monkeypatch, capsys):
+        bill = synthetic_bills_dir / "118-hr-4366"
+        paths = [str(bill / "1_reported-in-house.xml"), str(bill / "6_enrolled-bill.xml")]
+
+        _run_compare(monkeypatch, *paths, "--format", "json", "--include-unchanged")
+        data = json.loads(capsys.readouterr().out)
+        assert data["summary"] == {"added": 0, "removed": 0, "modified": 1, "unchanged": 3, "moved": 0}
+
+        _run_compare(monkeypatch, *paths, "--format", "json", "--include-unchanged", "--filter", "family housing")
+        data = json.loads(capsys.readouterr().out)
+        assert [c["match_path"] for c in data["changes"]] == [["department of defense", "family housing"]]
+
+    def test_financial_still_reaches_cmd_compare(self, synthetic_bills_dir, monkeypatch, capsys):
+        bill = synthetic_bills_dir / "118-hr-4366"
+        _run_compare(
+            monkeypatch,
+            str(bill / "1_reported-in-house.xml"),
+            str(bill / "6_enrolled-bill.xml"),
+            "--format",
+            "json",
+            "--financial",
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["financial_summary"] == {"sections_with_financial_changes": 1}
+        assert data["changes"][0]["financial"] == {
+            "old_amounts": [1000000],
+            "new_amounts": [2000000],
+            "amounts_changed": True,
+            "paired_amounts": [[1000000, 2000000]],
+            "has_amendment_annotations": False,
+        }
+
+    def test_output_flag_still_writes_the_file_and_nothing_to_stdout(
+        self, synthetic_bills_dir, tmp_path, monkeypatch, capsys
+    ):
+        bill = synthetic_bills_dir / "118-hr-4366"
+        out = tmp_path / "diff.json"
+        _run_compare(
+            monkeypatch,
+            str(bill / "1_reported-in-house.xml"),
+            str(bill / "6_enrolled-bill.xml"),
+            "--format",
+            "json",
+            "-o",
+            str(out),
+        )
+        assert capsys.readouterr().out == ""
+        data = json.loads(out.read_text())
+        assert data["old_version"] == "reported-in-house"
+        assert data["new_version"] == "enrolled-bill"
+
+
+class TestCompareVersionAddressableForm:
+    """`compare <slug> <n_old> <n_new>` resolves under --bills-dir and diffs (#152)."""
+
+    def test_three_positionals_resolve_and_diff(self, synthetic_bills_dir, monkeypatch, capsys):
+        _run_compare(
+            monkeypatch,
+            "118-hr-4366",
+            "1",
+            "6",
+            "--bills-dir",
+            str(synthetic_bills_dir),
+            "--format",
+            "json",
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["old_version"] == "reported-in-house"
+        assert data["new_version"] == "enrolled-bill"
+        assert data["old_version_number"] == 1
+        assert data["new_version_number"] == 6
+        assert data["summary"] == {"added": 0, "removed": 0, "modified": 1, "unchanged": 0, "moved": 0}
+
+    def test_the_ordinals_pick_the_versions_named(self, synthetic_bills_dir, monkeypatch, capsys):
+        """The middle version, so "resolved" cannot mean "took the first and last file"."""
+        _run_compare(
+            monkeypatch,
+            "118-hr-4366",
+            "1",
+            "3",
+            "--bills-dir",
+            str(synthetic_bills_dir),
+            "--format",
+            "json",
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["new_version"] == "placed-on-calendar-senate"
+        assert data["new_version_number"] == 3
+        assert data["changes"][0]["new_text"] == "For acquisition, $1,500,000."
+
+    def test_the_other_flags_still_apply_to_the_resolved_pair(self, synthetic_bills_dir, monkeypatch, capsys):
+        _run_compare(
+            monkeypatch,
+            "118-hr-4366",
+            "1",
+            "6",
+            "--bills-dir",
+            str(synthetic_bills_dir),
+            "--format",
+            "json",
+            "--financial",
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["financial_summary"] == {"sections_with_financial_changes": 1}
+
+
+class TestCompareVersionListing:
+    """A bare slug, and a bad ordinal, both answer with the bill's local versions (#152)."""
+
+    def test_bare_slug_lists_every_local_version_ascending(self, synthetic_bills_dir, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, "118-hr-4366", "--bills-dir", str(synthetic_bills_dir))
+        assert exc.value.code == 0, "a bare slug is a question, not a failure"
+        assert capsys.readouterr().out == (
+            "118-hr-4366 has 3 local versions:\n"
+            "  1  reported-in-house\n"
+            "  3  placed-on-calendar-senate\n"
+            "  6  enrolled-bill\n"
+            "Pick two: compare 118-hr-4366 <old> <new>\n"
+        )
+
+    def test_out_of_range_ordinal_teaches_with_the_same_listing(self, synthetic_bills_dir, monkeypatch):
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(
+                monkeypatch, "118-hr-4366", "1", "9", "--bills-dir", str(synthetic_bills_dir), "--format", "json"
+            )
+        assert exc.value.code != 0, "an unresolvable version is an error, unlike a bare slug"
+        assert str(exc.value.code) == (
+            "No version 9 for 118-hr-4366.\n"
+            "118-hr-4366 has 3 local versions:\n"
+            "  1  reported-in-house\n"
+            "  3  placed-on-calendar-senate\n"
+            "  6  enrolled-bill\n"
+            "Pick two: compare 118-hr-4366 <old> <new>"
+        )
+
+    def test_a_non_numeric_ordinal_gets_the_same_answer(self, synthetic_bills_dir, monkeypatch):
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(
+                monkeypatch,
+                "118-hr-4366",
+                "1",
+                "enrolled",
+                "--bills-dir",
+                str(synthetic_bills_dir),
+                "--format",
+                "json",
+            )
+        assert "118-hr-4366 has 3 local versions:" in str(exc.value.code)
+
+    def test_an_unknown_slug_names_the_directory_it_looked_in(self, synthetic_bills_dir, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, "119-hr-1", "--bills-dir", str(synthetic_bills_dir))
+        assert exc.value.code == 0
+        assert capsys.readouterr().out.startswith(f"No local versions for 119-hr-1 in {synthetic_bills_dir}/119-hr-1.")
+
+    def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch):
+        """Dispatch is on the count, so 0 and 4+ are the arities with no meaning."""
+        for argv in ([], ["a.xml", "b.xml", "c.xml", "d.xml"]):
+            with pytest.raises(SystemExit) as exc:
+                _run_compare(monkeypatch, *argv, "--bills-dir", str(synthetic_bills_dir))
+            assert "compare takes two file paths" in str(exc.value.code)
 
 
 @pytest.mark.slow
