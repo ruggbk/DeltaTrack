@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 import urllib.request
 
-from scripts.fetch_test_assets import ASSETS, fetch_asset
+import pytest
+
+from scripts.fetch_test_assets import ASSETS, build_parser, fetch_asset
 
 # Valid destinations: tests/data/<file>.pdf (watermark + subcommittee prints) or
 # tests/corpus/<congress>-<type>-<num>/<file>.pdf (catchline repro bills, which keep the
@@ -70,3 +72,17 @@ def test_writes_when_missing(tmp_path, monkeypatch):
     wrote = fetch_asset("tests/data/new.pdf", "https://www.govinfo.gov/new.pdf")
     assert wrote is True
     assert (tmp_path / "tests" / "data" / "new.pdf").read_bytes() == b"%PDF-fake"
+
+
+def test_help_exits_zero(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args(["--help"])
+    assert excinfo.value.code == 0
+    assert "usage:" in capsys.readouterr().out
+
+
+def test_unknown_argument_exits_two_with_usage(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args(["--nope"])
+    assert excinfo.value.code == 2
+    assert "usage:" in capsys.readouterr().err

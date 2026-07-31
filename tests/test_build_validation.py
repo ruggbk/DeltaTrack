@@ -9,7 +9,10 @@ appropriation components, and negative reduction/offset lines) are excluded.
 
 from types import SimpleNamespace
 
-from scripts.build_validation import _ground_truth
+import pytest
+
+from scripts.build_validation import _ground_truth, build_parser
+from tests.validation_sources import BY_SLUG
 
 # A canonical comparative statement: a TITLE-section agency, two leaf accounts, a rollup
 # total, and a negative offset line (offsetting collections). Columns are
@@ -50,3 +53,40 @@ def test_comparative_ground_truth_drops_totals_and_negative_offsets():
     assert "Total, title I, Military Personnel" not in items  # rollup total
     assert "Offsetting collections" not in items  # negative reduction line
     assert items == {"Military Personnel, Army", "Military Personnel, Navy"}
+
+
+def test_help_exits_zero_and_documents_both_arguments(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args(["--help"])
+    assert excinfo.value.code == 0
+    out = capsys.readouterr().out
+    assert "usage:" in out
+    assert "--fetch" in out
+    assert next(iter(BY_SLUG)) in out  # the slug positional names the valid jurisdictions
+
+
+def test_unknown_option_exits_two_with_usage(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args(["--nope"])
+    assert excinfo.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_unknown_slug_exits_two_instead_of_keyerror(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args(["nosuchslug"])
+    assert excinfo.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_real_argument_forms_parse():
+    args = build_parser().parse_args([])
+    assert args.fetch is False
+    assert args.slugs == []
+    args = build_parser().parse_args(["--fetch"])
+    assert args.fetch is True
+    assert args.slugs == []
+    slug = next(iter(BY_SLUG))
+    args = build_parser().parse_args(["--fetch", slug])
+    assert args.fetch is True
+    assert args.slugs == [slug]
