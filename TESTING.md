@@ -379,6 +379,11 @@ provenance:
 uv run python scripts/fetch_test_assets.py
 ```
 
+That script is not part of the validation-evidence refresh — rebuilding the
+ground-truth fixtures and regenerating `docs/parser-validation.md` is a separate
+procedure, written down as a runbook in
+[scripts/README.md](scripts/README.md#refreshing-the-validation-evidence).
+
 ### Speeding up the PDF tests for development
 
 The slow PDF tests read every bill PDF, and reading a large omnibus takes a

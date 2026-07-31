@@ -11,6 +11,8 @@ instead of on whatever each machine had downloaded).
 
 To add a jurisdiction: find its FY2025 Senate report (CRPT-118srptNNN) and reported bill
 (BILLS-118sNNNNrs), add an entry, then `uv run python scripts/build_validation.py --fetch`.
+The full refresh — including regenerating docs/parser-validation.md afterwards — is the
+runbook in scripts/README.md.
 """
 
 from __future__ import annotations
