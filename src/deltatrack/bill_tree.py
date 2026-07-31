@@ -1089,14 +1089,16 @@ def _front_matter_node(key: str, body: str) -> BillNode:
 
 
 def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillNode]:
-    """Build front-matter nodes from the <form> block and enacting clause (#48).
+    """Build front-matter nodes from the <form> block, preamble and enacting clause (#48).
 
     The <form> block (congress, session, legis-num, legis-type "AN ACT", official
     title) and the GPO enacting clause sit outside <legis-body>, so they were
-    dropped from the full-bill text and the diff. Each piece is its own node so a
-    change diffs precisely. distribution-code renders nothing in GPO and is
-    skipped; sponsor/action lines are out of scope. Returns nodes in render order
-    (empty when there is no <form>, e.g. amendment docs).
+    dropped from the full-bill text and the diff. A resolution's <preamble> sits in
+    the same position — a sibling of <resolution-body> — and is captured here for
+    the same reason (#201). Each piece is its own node so a change diffs precisely.
+    distribution-code renders nothing in GPO and is skipped; sponsor/action lines
+    are out of scope. Returns nodes in render order (empty when there is no <form>,
+    e.g. amendment docs).
     """
     form = root.find("form")
     nodes: list[BillNode] = []
@@ -1120,6 +1122,16 @@ def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillN
         official = extract_text_content(title_el).strip()
         if official:
             nodes.append(_front_matter_node("official title", official))
+
+    # Preamble: a resolution's "Whereas ..." recitals, printed between the form block
+    # and the resolving clause. One node for the whole block rather than one per
+    # recital: <whereas> carries no id, so a per-recital key could only be positional
+    # and inserting one recital would re-key every later one into a false diff (#201).
+    preamble = root.find("preamble")
+    if preamble is not None:
+        recitals = [text for w in preamble.findall("whereas") if (text := extract_text_content(w).strip())]
+        if recitals:
+            nodes.append(_front_matter_node("preamble", "\n".join(recitals)))
 
     # Enacting clause: GPO boilerplate, unless the body opts out.
     if body.get("display-enacting-clause") != "no-display-enacting-clause":

@@ -1948,6 +1948,59 @@ class TestResolutionParsing:
 
 
 @pytest.mark.slow
+class TestResolutionPreamble:
+    """The <preamble>/<whereas> recitals must survive the parse (#201).
+
+    A body-finder fix alone converts the crash into a silent drop: <preamble> is a
+    sibling of <resolution-body>, so nothing walks it and a clean-looking report
+    loses every recital. These assertions are what make that regression loud.
+    """
+
+    # Pasted verbatim from tests/fixtures/resolutions/BILLS-119hconres58ih.xml.
+    FIRST_RECITAL = (
+        "Whereas socialist ideology necessitates a concentration of power that has, time and time again, "
+        "collapsed into communist regimes, totalitarian rule, and brutal dictatorships;"
+    )
+    LAST_RECITAL_OPENING = (
+        "Whereas the United States was founded on the belief in the sanctity of the individual, "
+        "to which the collectivistic system of socialism"
+    )
+
+    @staticmethod
+    def _preamble_node(tree):
+        matches = [n for n in tree.nodes if n.element_id == "front-matter-preamble"]
+        assert len(matches) == 1, f"expected exactly one preamble node, got {len(matches)}"
+        return matches[0]
+
+    def test_every_recital_is_captured(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        node = self._preamble_node(tree)
+        recitals = node.body_text.split("\n")
+        assert len(recitals) == 12
+        assert recitals[0] == self.FIRST_RECITAL
+        assert recitals[-1].startswith(self.LAST_RECITAL_OPENING)
+        assert sum(1 for line in recitals if line.startswith("Whereas ")) == 12
+
+    def test_recitals_survive_into_the_engrossed_version_too(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58eh.xml")
+        node = self._preamble_node(tree)
+        assert len(node.body_text.split("\n")) == 12
+        assert node.body_text.split("\n")[0] == self.FIRST_RECITAL
+
+    def test_preamble_renders_before_the_resolving_clause(self):
+        """GPO prints form -> recitals -> resolving clause -> body, and
+        extract_front_matter_nodes returns nodes in render order."""
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        ids = [n.element_id for n in tree.nodes]
+        assert ids.index("front-matter-preamble") < ids.index("front-matter-enacting-clause")
+        assert ids.index("front-matter-official-title") < ids.index("front-matter-preamble")
+
+    def test_a_resolution_without_a_preamble_gains_no_preamble_node(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hjres25ih.xml")
+        assert [n for n in tree.nodes if n.element_id == "front-matter-preamble"] == []
+
+
+@pytest.mark.slow
 class TestResolutionDiff:
     """A real introduced-vs-engrossed resolution pair diffs end to end (#201)."""
 
