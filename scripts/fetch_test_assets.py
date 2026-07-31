@@ -31,6 +31,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import urllib.request
 from pathlib import Path
 
@@ -92,7 +93,12 @@ def fetch_asset(dest_rel: str, url: str) -> bool:
     return True
 
 
+def build_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
 def main() -> None:
+    build_parser().parse_args()
     for dest_rel, url in ASSETS:
         fetch_asset(dest_rel, url)
 
