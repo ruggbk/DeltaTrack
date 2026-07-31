@@ -4,6 +4,8 @@ The script reads gitignored, fetch-scripted fixtures, so it must degrade
 gracefully on a clean clone instead of raising FileNotFoundError (#18).
 """
 
+import sys
+
 import pytest
 
 import scripts.generate_validation_report as report
@@ -27,5 +29,14 @@ def test_help_exits_zero(capsys):
 def test_unknown_argument_exits_two_with_usage(capsys):
     with pytest.raises(SystemExit) as excinfo:
         report.build_parser().parse_args(["--nope"])
+    assert excinfo.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_main_parses_argv_and_rejects_unknown_argument(monkeypatch, capsys):
+    """Wiring: main() must run argv through the parser before writing the report."""
+    monkeypatch.setattr(sys, "argv", ["generate_validation_report.py", "--nope"])
+    with pytest.raises(SystemExit) as excinfo:
+        report.main()
     assert excinfo.value.code == 2
     assert "usage:" in capsys.readouterr().err

@@ -7,10 +7,13 @@ amounts convert from thousands to dollars, and non-leaf rows (rollup totals, adv
 appropriation components, and negative reduction/offset lines) are excluded.
 """
 
+import json
+import sys
 from types import SimpleNamespace
 
 import pytest
 
+import scripts.build_validation as bv
 from scripts.build_validation import _ground_truth, build_parser
 from tests.validation_sources import BY_SLUG
 
@@ -90,3 +93,37 @@ def test_real_argument_forms_parse():
     args = build_parser().parse_args(["--fetch", slug])
     assert args.fetch is True
     assert args.slugs == [slug]
+
+
+def test_main_parses_argv_and_rejects_unknown_argument(monkeypatch, capsys):
+    """Wiring: main() must run argv through the parser, not ignore it."""
+    monkeypatch.setattr(sys, "argv", ["build_validation.py", "--nope"])
+    with pytest.raises(SystemExit) as excinfo:
+        bv.main()
+    assert excinfo.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_main_consumes_fetch_and_slug_arguments(tmp_path, monkeypatch):
+    """Wiring: main() must act on args.fetch (fetch first) and args.slugs (restrict)."""
+    fake = SimpleNamespace(
+        slug="fake",
+        report_html_path=tmp_path / "CRPT-fake.htm",
+        fixture_path=tmp_path / "validation_fake.json",
+    )
+    fake.report_html_path.write_text("<pre></pre>", encoding="utf-8")
+    fetched, built = [], []
+    monkeypatch.setattr(bv, "BY_SLUG", {"fake": fake})
+    monkeypatch.setattr(bv, "fetch_sources", lambda j: fetched.append(j.slug))
+    monkeypatch.setattr(bv, "build_fixture", lambda j: built.append(j.slug) or {"accounts": []})
+
+    monkeypatch.setattr(sys, "argv", ["build_validation.py", "--fetch", "fake"])
+    bv.main()
+    assert fetched == ["fake"]  # --fetch reached fetch_sources
+    assert built == ["fake"]  # the slug restricted the run to exactly this jurisdiction
+    assert json.loads(fake.fixture_path.read_text(encoding="utf-8")) == {"accounts": []}
+
+    fetched.clear()
+    monkeypatch.setattr(sys, "argv", ["build_validation.py", "fake"])
+    bv.main()
+    assert fetched == []  # no --fetch, no fetch

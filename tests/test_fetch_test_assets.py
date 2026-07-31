@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
+import sys
 import urllib.request
 
 import pytest
 
-from scripts.fetch_test_assets import ASSETS, build_parser, fetch_asset
+from scripts.fetch_test_assets import ASSETS, build_parser, fetch_asset, main
 
 # Valid destinations: tests/data/<file>.pdf (watermark + subcommittee prints) or
 # tests/corpus/<congress>-<type>-<num>/<file>.pdf (catchline repro bills, which keep the
@@ -84,5 +85,14 @@ def test_help_exits_zero(capsys):
 def test_unknown_argument_exits_two_with_usage(capsys):
     with pytest.raises(SystemExit) as excinfo:
         build_parser().parse_args(["--nope"])
+    assert excinfo.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_main_parses_argv_and_rejects_unknown_argument(monkeypatch, capsys):
+    """Wiring: main() must run argv through the parser before touching any asset."""
+    monkeypatch.setattr(sys, "argv", ["fetch_test_assets.py", "--nope"])
+    with pytest.raises(SystemExit) as excinfo:
+        main()
     assert excinfo.value.code == 2
     assert "usage:" in capsys.readouterr().err
