@@ -745,15 +745,17 @@ _COMPARE_USAGE = (
 )
 
 
-def _format_version_listing(bills_dir: Path, slug: str) -> str:
+def _format_version_listing(bills_dir: Path, slug: str, versions: list[tuple[int, str]]) -> str:
     """The bill's local versions, numbered, as both an answer and an error message.
 
     A bare slug asks which versions exist; a bad ordinal asks the same question without
     knowing it. Both get this text, so a version's meaning is one command away rather
     than one directory listing away (#152) — the ordinals are per-bill (ADR 0013), so
     "version 3" means nothing until you have seen this list.
+
+    Takes the versions rather than reading them, so a caller that has to branch on
+    whether there are any does not look at the directory twice.
     """
-    versions = local_versions(bills_dir, slug)
     if not versions:
         return (
             f"No local versions for {slug} in {bills_dir / slug}. "
@@ -770,10 +772,15 @@ def _resolve_version_arg(bills_dir: Path, slug: str, ordinal: str) -> Path:
 
     A non-numeric ordinal and an out-of-range one are the same mistake with the same
     remedy, so they get the same answer rather than separate diagnostics.
+
+    ``isdecimal`` rather than ``isdigit``: the latter also accepts superscripts and other
+    numeric-looking characters that ``int()`` then refuses, turning a typo into a
+    ValueError traceback instead of this listing.
     """
-    resolved = resolve_version_file(bills_dir, slug, int(ordinal)) if ordinal.isdigit() else None
+    resolved = resolve_version_file(bills_dir, slug, int(ordinal)) if ordinal.isdecimal() else None
     if resolved is None:
-        raise SystemExit(f"No version {ordinal} for {slug}.\n{_format_version_listing(bills_dir, slug)}")
+        listing = _format_version_listing(bills_dir, slug, local_versions(bills_dir, slug))
+        raise SystemExit(f"No version {ordinal} for {slug}.\n{listing}")
     return resolved
 
 
@@ -798,7 +805,17 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
             _resolve_version_arg(args.bills_dir, slug, n_new),
         )
     if len(targets) == 1:
-        print(_format_version_listing(args.bills_dir, targets[0]))
+        slug = targets[0]
+        versions = local_versions(args.bills_dir, slug)
+        listing = _format_version_listing(args.bills_dir, slug, versions)
+        if not versions:
+            # An empty listing is a failure, not an answer. `compare "$OLD" "$NEW"` with
+            # an unset variable collapses to one argument, which the two-positional
+            # parser rejected outright — a wrapper reading the exit status has to keep
+            # seeing that, rather than a clean exit and a message about a bill nobody
+            # asked for.
+            raise SystemExit(listing)
+        print(listing)
         raise SystemExit(0)
     raise SystemExit(f"{_COMPARE_USAGE} — got {len(targets)}.")
 
@@ -849,11 +866,38 @@ def cmd_compare(args: argparse.Namespace) -> None:
         print(output)
 
 
+class _IntermixedSubParser(argparse.ArgumentParser):
+    """A subparser whose optionals may sit anywhere among its positionals.
+
+    argparse matches positionals greedily within each run *between* optionals, so a
+    variadic positional swallows the whole first run: `compare old.xml --financial
+    new.xml` would fail with "unrecognized arguments: new.xml" even though the
+    two-required-positional parser this replaced accepted it. Every ordering that puts a
+    flag *between* the two paths would have regressed, silently, since flags-first and
+    flags-last still work.
+
+    `parse_intermixed_args` is argparse's own answer to that, but it refuses a parser
+    holding subparsers, so it cannot be switched on for the top-level parser -- only
+    here, where `add_subparsers` hands control to the subcommand. It delegates back into
+    `parse_known_args` with the positionals suppressed; the guard lets that inner call
+    through, and is inert if a future argparse stops re-entering.
+    """
+
+    def parse_known_args(self, args=None, namespace=None):
+        if getattr(self, "_intermixing", False):
+            return super().parse_known_args(args, namespace)
+        self._intermixing = True
+        try:
+            return self.parse_known_intermixed_args(args, namespace)
+        finally:
+            self._intermixing = False
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Compare two bill XML versions and produce a structured diff.",
     )
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", parser_class=_IntermixedSubParser)
 
     compare = subparsers.add_parser("compare", help="Compare two bill versions")
     # One variadic positional, dispatched on count in `_compare_targets`. Two separate

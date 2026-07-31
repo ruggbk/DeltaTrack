@@ -657,6 +657,86 @@ class TestCompareLegacyTwoPathForm:
             "has_amendment_annotations": False,
         }
 
+    @pytest.mark.parametrize(
+        "middle",
+        [
+            ["--financial"],
+            ["--include-unchanged"],
+            ["--filter", "military"],
+            ["--format", "json"],
+            ["-o", "OUT"],
+        ],
+        ids=["financial", "include-unchanged", "filter", "format", "output"],
+    )
+    def test_a_flag_between_the_two_paths_is_still_accepted(
+        self, synthetic_bills_dir, tmp_path, monkeypatch, capsys, middle
+    ):
+        """`compare <old.xml> <flag> <new.xml>` — the ordering a variadic positional loses.
+
+        argparse matches positionals greedily within each run between optionals, so a
+        `nargs="*"` positional takes the whole first run and reports the second path as
+        unrecognized. Flags-first and flags-last keep working, which is precisely why an
+        ordering-blind suite does not notice; every case below failed with `SystemExit: 2`
+        against the first version of this change.
+        """
+        bill = synthetic_bills_dir / "118-hr-4366"
+        out = tmp_path / "middle.json"
+        middle = [str(out) if part == "OUT" else part for part in middle]
+        _run_compare(
+            monkeypatch,
+            str(bill / "1_reported-in-house.xml"),
+            *middle,
+            str(bill / "6_enrolled-bill.xml"),
+            "--format",
+            "json",
+        )
+        raw = out.read_text() if out.exists() else capsys.readouterr().out
+        data = json.loads(raw)
+        assert data["old_version"] == "reported-in-house"
+        assert data["new_version"] == "enrolled-bill"
+        assert data["old_version_number"] == 1
+        assert data["new_version_number"] == 6
+
+    def test_a_flag_between_the_paths_still_takes_effect(self, synthetic_bills_dir, monkeypatch, capsys):
+        """Accepting the ordering is not enough — the flag has to still be applied."""
+        bill = synthetic_bills_dir / "118-hr-4366"
+        _run_compare(
+            monkeypatch,
+            str(bill / "1_reported-in-house.xml"),
+            "--include-unchanged",
+            str(bill / "6_enrolled-bill.xml"),
+            "--format",
+            "json",
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["summary"] == {"added": 0, "removed": 0, "modified": 1, "unchanged": 3, "moved": 0}
+
+    def test_a_leading_flag_is_still_accepted(self, synthetic_bills_dir, monkeypatch, capsys):
+        bill = synthetic_bills_dir / "118-hr-4366"
+        _run_compare(
+            monkeypatch,
+            "--format",
+            "json",
+            "--financial",
+            str(bill / "1_reported-in-house.xml"),
+            str(bill / "6_enrolled-bill.xml"),
+        )
+        data = json.loads(capsys.readouterr().out)
+        assert data["financial_summary"] == {"sections_with_financial_changes": 1}
+
+    def test_an_unknown_flag_is_still_a_usage_error_not_a_target(self, synthetic_bills_dir, monkeypatch):
+        """Collecting positionals loosely must not turn a mistyped flag into a file path."""
+        bill = synthetic_bills_dir / "118-hr-4366"
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(
+                monkeypatch,
+                str(bill / "1_reported-in-house.xml"),
+                "--fromat",
+                "json",
+                str(bill / "6_enrolled-bill.xml"),
+            )
+        assert exc.value.code == 2
+
     def test_output_flag_still_writes_the_file_and_nothing_to_stdout(
         self, synthetic_bills_dir, tmp_path, monkeypatch, capsys
     ):
@@ -761,13 +841,24 @@ class TestCompareVersionListing:
             "Pick two: compare 118-hr-4366 <old> <new>"
         )
 
-    def test_a_non_numeric_ordinal_gets_the_same_answer(self, synthetic_bills_dir, monkeypatch):
+    @pytest.mark.parametrize(
+        "ordinal",
+        ["enrolled", "", "-1", "1.0", "³"],
+        ids=["word", "empty", "negative", "decimal-point", "superscript"],
+    )
+    def test_an_ordinal_that_is_not_a_number_gets_the_same_answer(self, synthetic_bills_dir, monkeypatch, ordinal):
+        """Every non-ordinal shape lands on the listing, never on a traceback.
+
+        `³` is the one a `str.isdigit()` guard lets through: it answers True while
+        `int("³")` raises, so the guard has to be `isdecimal()` — which is exactly the
+        set `int()` accepts. A ValueError traceback is not a teaching error.
+        """
         with pytest.raises(SystemExit) as exc:
             _run_compare(
                 monkeypatch,
                 "118-hr-4366",
                 "1",
-                "enrolled",
+                ordinal,
                 "--bills-dir",
                 str(synthetic_bills_dir),
                 "--format",
@@ -775,11 +866,26 @@ class TestCompareVersionListing:
             )
         assert "118-hr-4366 has 3 local versions:" in str(exc.value.code)
 
-    def test_an_unknown_slug_names_the_directory_it_looked_in(self, synthetic_bills_dir, monkeypatch, capsys):
+    def test_an_unknown_slug_fails_rather_than_reporting_success(self, synthetic_bills_dir, monkeypatch, capsys):
+        """A listing with nothing in it is a failure, not an answer.
+
+        `compare "$OLD" "$NEW"` with an unset variable collapses to a single argument,
+        which the two-positional parser rejected outright. A wrapper reading the exit
+        status has to keep seeing that failure rather than a clean exit and a message
+        about a bill it never named.
+        """
         with pytest.raises(SystemExit) as exc:
             _run_compare(monkeypatch, "119-hr-1", "--bills-dir", str(synthetic_bills_dir))
-        assert exc.value.code == 0
-        assert capsys.readouterr().out.startswith(f"No local versions for 119-hr-1 in {synthetic_bills_dir}/119-hr-1.")
+        assert exc.value.code != 0
+        assert str(exc.value.code).startswith(f"No local versions for 119-hr-1 in {synthetic_bills_dir}/119-hr-1.")
+        assert capsys.readouterr().out == "", "the failure belongs on stderr, not stdout"
+
+    def test_a_vanished_shell_argument_still_fails(self, synthetic_bills_dir, tmp_path, monkeypatch):
+        """The shape the fail-open actually takes: one real path, second argument gone."""
+        bill = synthetic_bills_dir / "118-hr-4366"
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, str(bill / "1_reported-in-house.xml"), "--format", "json")
+        assert exc.value.code != 0
 
     def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch):
         """Dispatch is on the count, so 0 and 4+ are the arities with no meaning."""

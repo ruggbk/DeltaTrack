@@ -49,6 +49,15 @@ class TestVersionNumberFromStem:
     def test_empty_stem(self):
         assert version_number_from_stem("") is None
 
+    def test_a_digit_int_cannot_parse_answers_none_rather_than_raising(self):
+        """`"³".isdigit()` is True but `int("³")` raises, so the test must be isdecimal.
+
+        Reachable since #152: `local_versions` reads whatever filenames are on disk, so
+        an `isdigit` guard turned an oddly named file into a ValueError traceback.
+        """
+        assert version_number_from_stem("³_reported-in-house") is None
+        assert version_number_from_stem("½_draft") is None
+
 
 class TestLabelFromStem:
     def test_strips_numeric_prefix(self):
@@ -63,6 +72,10 @@ class TestLabelFromStem:
 
     def test_empty_stem(self):
         assert label_from_stem("") == ""
+
+    def test_a_prefix_that_is_not_an_ordinal_is_not_stripped(self):
+        """Mirrors version_number_from_stem: what cannot become an ordinal is not one."""
+        assert label_from_stem("³_reported-in-house") == "³_reported-in-house"
 
 
 class TestLocalVersions:
@@ -98,6 +111,11 @@ class TestLocalVersions:
 
     def test_missing_bill_folder_lists_nothing(self, bills_dir):
         assert local_versions(bills_dir, "119-hr-1") == []
+
+    def test_a_numeric_looking_prefix_int_rejects_does_not_raise(self, bills_dir):
+        """A file named `³_x.xml` is listed as unnumbered, not as a ValueError."""
+        _make_bill(bills_dir, "118-hr-4366", "1_reported-in-house.xml", "³_odd.xml")
+        assert local_versions(bills_dir, "118-hr-4366") == [(1, "reported-in-house")]
 
 
 class TestResolveVersionFile:

@@ -13,15 +13,24 @@ from pathlib import Path
 
 
 def version_number_from_stem(stem: str) -> int | None:
-    """Leading ``<n>_`` version number from a filename stem, else None."""
+    """Leading ``<n>_`` version number from a filename stem, else None.
+
+    ``isdecimal`` rather than ``isdigit``: ``"³".isdigit()`` is True while ``int("³")``
+    raises, so a file named ``³_x.xml`` made this raise ValueError instead of answering
+    None. Reachable from :func:`local_versions`, which reads whatever is on disk.
+    """
     prefix = stem.split("_", 1)[0]
-    return int(prefix) if prefix.isdigit() else None
+    return int(prefix) if prefix.isdecimal() else None
 
 
 def label_from_stem(stem: str) -> str:
-    """Human-readable label after a numeric ``<n>_`` prefix; stem unchanged otherwise."""
+    """Human-readable label after a numeric ``<n>_`` prefix; stem unchanged otherwise.
+
+    Same ``isdecimal`` test as above, so a prefix this module cannot turn into an
+    ordinal is not treated as one here either.
+    """
     parts = stem.split("_", 1)
-    return parts[1] if len(parts) == 2 and parts[0].isdigit() else stem
+    return parts[1] if len(parts) == 2 and parts[0].isdecimal() else stem
 
 
 def local_versions(bills_dir: Path, slug: str, ext: str = "xml") -> list[tuple[int, str]]:
