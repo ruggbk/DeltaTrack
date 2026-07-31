@@ -539,24 +539,12 @@ _CONGRESS_WORDS = {
 
 # <legis-num> splits into a chamber/kind prefix and the number: "H. R. 3547",
 # "H.R. 2029", "H. CON. RES. 4". The prefix is captured whole (lazily, so it stops at
-# the number) and normalized to letters before lookup.
+# the number); stripping it to letters and lowercasing yields the bill_type directly —
+# "H. CON. RES." -> "hconres" — for every form GPO prints, which is why there is no
+# lookup table here. The old regex captured a SINGLE letter instead, which collapsed
+# both chambers' joint resolutions onto "j" and both concurrent ones onto "n", and
+# labelled the simple resolutions with the bill types "hr"/"s" (#201).
 _LEGIS_NUM_RE = re.compile(r"([A-Z][A-Z.\s]*?)\s*(\d+)")
-
-# Normalized <legis-num> prefix -> bill_type, for every form GPO prints. Resolutions
-# were previously collapsed onto the old regex's single captured letter — both chambers'
-# joint resolutions became "j" and both concurrent ones "n", while the simple
-# resolutions were mislabelled as the bill types "hr"/"s" (#201). Spelled out rather
-# than derived so each designator is greppable; the keys match _DESIGNATORS.
-_LEGIS_NUM_TYPES = {
-    "HR": "hr",
-    "S": "s",
-    "HJRES": "hjres",
-    "SJRES": "sjres",
-    "HCONRES": "hconres",
-    "SCONRES": "sconres",
-    "HRES": "hres",
-    "SRES": "sres",
-}
 
 
 def _build_paths(
@@ -1066,11 +1054,11 @@ def _extract_metadata(root: ET.Element, xml_path: Path) -> tuple[int, str, int, 
     if legis_num_el is not None and legis_num_el.text:
         match = _LEGIS_NUM_RE.search(legis_num_el.text.strip())
         if match:
-            # "H. CON. RES." -> "HCONRES". An unrecognized prefix falls through to its
-            # own normalized form rather than raising, so a new GPO spelling degrades
-            # to a visibly odd designator instead of a silently wrong one.
-            prefix = re.sub(r"[^A-Z]", "", match.group(1).upper())
-            bill_type = _LEGIS_NUM_TYPES.get(prefix, prefix.lower())
+            # Strip the prefix to letters and lowercase it: "H. CON. RES." -> "hconres",
+            # "H.R." -> "hr". This is the whole mapping — it produces the right answer
+            # for all eight forms, and an unfamiliar spelling degrades to a visibly odd
+            # designator rather than a silently wrong one.
+            bill_type = re.sub(r"[^A-Z]", "", match.group(1).upper()).lower()
             bill_number = int(match.group(2))
 
     version = ""

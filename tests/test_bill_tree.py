@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from deltatrack.bill_tree import (
-    _DESIGNATORS,
     BillNode,
     _extract_appropriations_text,
     _extract_metadata,
@@ -1910,14 +1909,52 @@ class TestResolutionLegisNum:
         assert bill_type == expected_type
         assert bill_number == expected_number
 
-    def test_unrecognised_form_degrades_rather_than_raising(self):
-        """The mapping is a lookup over known forms, so an unknown one must fall
-        through to the pre-#201 single-letter behaviour, not raise. The letter
-        itself is a regex artefact and deliberately not pinned here."""
+    def test_unfamiliar_form_normalizes_rather_than_raising(self):
+        """The mapping is a normalization, not a lookup over an enumerated set, so an
+        unfamiliar prefix yields its own letters ("X. Y. RES." -> "xyres") rather than
+        raising or landing on a real designator. Pre-#201 this yielded "y", because the
+        old regex captured one letter and was unanchored, so it matched at the second."""
         root = ET.fromstring("<resolution><form><legis-num>X. Y. RES. 7</legis-num></form></resolution>")
         _congress, bill_type, bill_number, _version, _title = _extract_metadata(root, Path("BILLS-119test.xml"))
         assert bill_number == 7
-        assert bill_type not in _DESIGNATORS
+        assert bill_type == "xyres"
+
+
+class TestLegisNumNormalization:
+    """bill_type is derived by NORMALIZING the <legis-num> prefix — strip it to letters,
+    lowercase it — not by looking it up in a table of known forms.
+
+    Pinned directly, because that normalization is the entire mechanism: a table mapping
+    "HCONRES" to "hconres" would be an identity map that the normalization already
+    satisfies, so a test that only went through such a table would pin nothing.
+    """
+
+    @staticmethod
+    def _bill_type(legis_num):
+        root = ET.fromstring(f"<resolution><form><legis-num>{legis_num}</legis-num></form></resolution>")
+        return _extract_metadata(root, Path("BILLS-119test.xml"))[1]
+
+    @pytest.mark.parametrize(
+        ("spaced", "unspaced", "expected"),
+        [
+            ("H. R. 4366", "H.R. 4366", "hr"),
+            ("H. CON. RES. 58", "H.CON.RES. 58", "hconres"),
+            ("S. J. RES. 3", "S.J.RES. 3", "sjres"),
+        ],
+    )
+    def test_separators_are_normalized_away(self, spaced, unspaced, expected):
+        """GPO spells the same designator both ways — the corpus carries "H. R. 2029"
+        and "H.R. 2029" — so the dots and spaces must not survive into bill_type."""
+        assert self._bill_type(spaced) == expected
+        assert self._bill_type(unspaced) == expected
+
+    def test_bill_type_is_letters_only_and_lowercase(self):
+        """The normalization's postcondition, asserted on the shape rather than on a
+        pasted value: no dots, no spaces, no uppercase survive it."""
+        for legis_num in ("H. CON. RES. 58", "H.R. 4366", "S. RES. 9"):
+            bill_type = self._bill_type(legis_num)
+            assert bill_type.isalpha(), f"{legis_num!r} -> {bill_type!r} is not letters-only"
+            assert bill_type.islower(), f"{legis_num!r} -> {bill_type!r} is not lowercase"
 
 
 @pytest.mark.slow
