@@ -23,10 +23,10 @@ Every step runs from the project root.
 ```sh
 # 1. Fetch the upstream govinfo sources and rebuild the ground-truth fixtures.
 #    Optional slugs restrict it to those jurisdictions (default: all).
-uv run python scripts/build_validation.py --fetch        # -> wrote tests/data/validation_<slug>.json (N accounts)
+uv run python scripts/build_validation.py --fetch        # -> wrote <absolute path>/tests/data/validation_<slug>.json (N accounts)
 
 # 2. Regenerate the team-facing report from those fixtures.
-uv run python scripts/generate_validation_report.py      # -> wrote docs/parser-validation.md (val/tot recalled, N%)
+uv run python scripts/generate_validation_report.py      # -> wrote docs/parser-validation.md (val/tot recalled, N%); skipped: none
 
 # 3. Verify with the gate that actually reads this evidence.
 uv run pytest -m slow tests/test_committee_report.py tests/test_validate_extraction.py
