@@ -6,6 +6,7 @@ no markers and run in the default fast suite.
 
 import argparse
 import importlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -442,3 +443,140 @@ def test_a_runnable_root_script_carries_the_executable_bit():
         "needs `chmod +x` to be discovered by the README gate above; if it is not a command, "
         "drop the shebang or the `__main__` block so it reads as a module."
     )
+
+
+# --- No doc command names the retired fixture directory (#428) -------------------
+# The fixture trees moved out of a top-level `test_data/` into `tests/data/` (#404), but
+# TESTING.md kept telling the reader to reclaim the extraction cache with
+# `rm -rf test_data/extract_cache`. That path is not merely stale, it is inert: the suite
+# writes the cache to `tests/data/extract_cache/` (`tests/pdf_corpus.py`), so running the
+# documented command frees nothing while reporting success, and the real cache -- which
+# never reclaims superseded entries by design -- keeps growing unattended.
+#
+# `tests/test_fixture_layout.py` already rejects this path, but it builds its scan list
+# from `rglob("*.py")`, so it sees Python only. A retired path living in a Markdown
+# command sits outside every pattern it checks. This is that gate's docs half.
+_RETIRED_FIXTURE_DIR = "test_data/"
+
+
+def _tracked_markdown() -> list[str]:
+    """Every Markdown file git tracks, as repo-relative POSIX paths.
+
+    Enumerated from the index rather than by globbing doc roots: a glob over
+    `*.md` + `docs/` + `.github/` misses `examples/README.md`, `scripts/README.md`,
+    `schema/canonical-diff.md` and a fixture `.md`, while picking up the gitignored
+    generated `worklist_sample.md`. Both errors point the wrong way for a gate -- the
+    first narrows what is checked, the second reddens the suite over a file nobody
+    committed.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z", "--", "*.md"],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return [p for p in out.stdout.split("\0") if p]
+
+
+def _code_spans(text: str) -> list[str]:
+    """Every stretch of text a reader would copy as code, inline or fenced.
+
+    Two shapes, because the defect this gate exists for was in the first and the
+    obvious place for the next one is the second:
+
+    - an inline span between backticks, which is how prose embeds a command
+      ("just delete it: `rm -rf ...`"), and
+    - each line of a fenced shell block, which `_shell_blocks` already isolates.
+
+    Inline spans are read by splitting on the backtick rather than by regex: on a line
+    outside a fence, the odd-numbered pieces of that split are exactly the spans. Lines
+    inside any fence are excluded from the inline pass so a fence's own delimiters are
+    never mistaken for span boundaries.
+    """
+    spans = []
+    in_fence = False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            pieces = line.split("`")
+            spans += [piece for piece in pieces[1::2] if piece.strip()]
+    for block in _shell_blocks(text):
+        spans += [line.strip().removeprefix("$ ").strip() for line in block.splitlines() if line.strip()]
+    return spans
+
+
+def _retired_path_instructions() -> list[str]:
+    """Doc code spans that tell a reader to act on the retired fixture directory.
+
+    A span counts only when it names the retired path AND carries more than one word.
+    That is the line between an instruction and a reference, and both genuinely occur:
+    ADR 0015 (the corpus fixture split) deliberately records the old name in bare spans
+    -- "the second fixture tree this record calls `test_data/` moved to `tests/data/`" --
+    because an ADR documents the decision as it was made. A bare path is history; a path
+    with a verb in front of it is something a reader will run.
+    """
+    offenders = []
+    for rel in _tracked_markdown():
+        for span in _code_spans((ROOT / rel).read_text()):
+            if _RETIRED_FIXTURE_DIR in span and len(span.split()) > 1:
+                offenders.append(f"{rel}: {span}")
+    return offenders
+
+
+def test_no_doc_command_names_the_retired_fixture_directory():
+    """Fails on `rm -rf test_data/extract_cache`, passes on `rm -rf tests/data/extract_cache`.
+
+    Bare `test_data/` references stay legal, so the ADRs that record the pre-move layout
+    do not have to be rewritten to keep this green.
+    """
+    offenders = _retired_path_instructions()
+
+    assert not offenders, (
+        f"Docs give a command naming the retired top-level `{_RETIRED_FIXTURE_DIR}` tree, which "
+        "the suite no longer reads or writes -- running it silently does nothing (#404 moved "
+        "these under `tests/data/`). Repoint the command:\n" + "\n".join(offenders)
+    )
+
+
+def test_the_retired_path_gate_actually_read_code_spans():
+    """Completeness floor for the gate above.
+
+    The gate asserts an absence, so it passes green whether the docs are clean or the
+    parse matched nothing at all -- a `git ls-files` that answered nothing, a fence
+    tracker that swallowed every line, and correct docs are indistinguishable from its
+    result alone. Floor both halves: that markdown was found, and that spans were read
+    out of the one doc known to carry the cache instructions.
+    """
+    docs = _tracked_markdown()
+    assert "TESTING.md" in docs, (
+        f"`git ls-files` returned no TESTING.md -- the file enumeration is broken, not the docs ({len(docs)} found)"
+    )
+
+    spans = _code_spans((ROOT / "TESTING.md").read_text())
+    assert spans, "no code span parsed out of TESTING.md -- the span parse is broken, not the docs"
+    assert any("extract_cache" in span for span in spans), (
+        "TESTING.md parsed to spans but none mention the extraction cache -- the doc changed "
+        "shape and this gate is now watching nothing"
+    )
+
+
+def test_the_retired_path_rule_can_fire():
+    """The rule must reject an instruction and accept a reference.
+
+    A gate for a defect that is already fixed passes on its first run, which proves
+    nothing about whether it can fail. Both directions are pinned here against literal
+    input, so neither the retired-path match nor the instruction/reference distinction
+    can be loosened without a red test.
+    """
+    instruction = _code_spans("just delete it: `rm -rf test_data/extract_cache`. The next run")
+    assert instruction == ["rm -rf test_data/extract_cache"]
+    assert [s for s in instruction if _RETIRED_FIXTURE_DIR in s and len(s.split()) > 1]
+
+    reference = _code_spans("the tree this record calls `test_data/` moved to `tests/data/`")
+    assert reference == ["test_data/", "tests/data/"]
+    assert not [s for s in reference if _RETIRED_FIXTURE_DIR in s and len(s.split()) > 1]
+
+    fenced = _code_spans("```bash\n$ rm -rf test_data/extract_cache\n```")
+    assert fenced == ["rm -rf test_data/extract_cache"]

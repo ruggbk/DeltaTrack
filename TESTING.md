@@ -413,7 +413,7 @@ pays one full re-extraction.
 
 Superseded entries are never reclaimed, so each invalidation leaves the previous
 set on disk. Nothing reads them and nothing in CI restores the directory, so to
-reclaim the space just delete it: `rm -rf test_data/extract_cache`. The next run
+reclaim the space just delete it: `rm -rf tests/data/extract_cache`. The next run
 re-extracts.
 
 ## Comparing the two pipelines by eye
