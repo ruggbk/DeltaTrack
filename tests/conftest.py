@@ -10,9 +10,76 @@ from pathlib import Path
 
 import pytest
 
-from deltatrack.bill_tree import BillNode, BillTree, normalize_bill
-from deltatrack.diff_bill import NodeDiff, diff_bills
 from tests.corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_bill_dirs
+
+# --- The suite must import the tree it is running in (#435) --------------------
+# `pythonpath` deliberately excludes `src` (see pyproject), so the engine is importable
+# only through the installed package -- which records ONE absolute path, the checkout
+# where `uv sync` last ran. Running from a git worktree against another checkout's
+# interpreter therefore collects this worktree's tests (`pythonpath = ["."]`) while
+# `deltatrack` comes from somewhere else entirely, and the suite reports green about
+# code nobody is editing. Red-green is then meaningless: reverting the file under review
+# changes nothing the run can see.
+#
+# Measured, not hypothetical: a top-level `raise RuntimeError` in a worktree's
+# src/deltatrack/bill_tree.py left tests/test_bill_tree.py at 133 passed.
+#
+# Checked here rather than in a test, because a test that asserts this would itself be
+# collected by the wrong-tree run and prove only that the WRONG tree agrees with itself.
+# conftest import time is the last point that is still unambiguously about this checkout.
+#
+# Rejecting the violation rather than adding `src` to `pythonpath`, which would resolve
+# the engine off disk and make this symptom disappear. Not for wheel fidelity -- under an
+# editable install the suite already reports on the working tree, which is exactly why
+# tests/test_engine_installs.py exists and says so. The reason is that `pythonpath` would
+# make pytest the ONLY consumer with its own import story: in an env-less worktree the
+# suite would quietly pass against that worktree while `./diff_bill.py` beside it imports
+# another checkout or fails outright. A split brain is worse than a hard stop, and the
+# stop names the real problem (a tree running on a foreign environment) instead of
+# papering over the one symptom that happened to surface.
+try:
+    import deltatrack
+    from deltatrack.bill_tree import BillNode, BillTree, normalize_bill
+    from deltatrack.diff_bill import NodeDiff, diff_bills
+except ModuleNotFoundError as exc:
+    # ONLY the engine's own top-level name means "the environment is wrong". A failure
+    # from INSIDE the engine -- a renamed or typo'd `deltatrack.something` -- is a fault in
+    # the branch, and rewriting it as an environment problem would point a developer with a
+    # healthy environment at their venv instead of their diff. pytest prints conftest import
+    # errors without the `raise ... from` chain, so the original module name would be
+    # invisible: re-raise it untouched, and carry `exc` into the message where it survives.
+    if exc.name != "deltatrack":
+        raise
+    raise ModuleNotFoundError(
+        f"the `deltatrack` engine is not importable ({exc}), which is an ENVIRONMENT fault "
+        "rather than a fault in this branch. `pythonpath` excludes `src` on purpose, so the "
+        "engine comes only from the editable install -- and that install records an absolute "
+        "path which may no longer exist (a deleted worktree is the usual cause). Inspect it "
+        "with `cat .venv/lib/python*/site-packages/_editable_impl_deltatrack.pth` and repair "
+        "with `uv pip install -e . --no-deps` from this checkout."
+    ) from exc
+
+
+def engine_is_foreign(engine: Path, root: Path) -> bool:
+    """Whether an imported engine belongs to a DIFFERENT checkout than ``root``.
+
+    Split out from the check below so the rule is unit-testable. A guard whose only
+    exercise is the happy path cannot distinguish "correctly silent" from "broken and
+    silent", and silent-and-broken is precisely the state it exists to detect --
+    see ``test_the_foreign_engine_rule_can_fire``.
+    """
+    return not engine.resolve().is_relative_to(root.resolve())
+
+
+_ENGINE = Path(deltatrack.__file__).resolve()
+if engine_is_foreign(_ENGINE, PROJECT_ROOT):
+    raise RuntimeError(
+        f"the tests are running in {PROJECT_ROOT} but `deltatrack` imported from {_ENGINE}, "
+        "so this run would report on a DIFFERENT checkout's source. A green result here says "
+        "nothing about the code in this tree, and reverting a file under review would not "
+        "change it. Give this worktree its own environment (`uv sync` -- about a second on a "
+        "warm cache), or set PYTHONPATH=$PWD/src for a one-off run against a shared venv."
+    )
 
 # --- Committed corpus manifest (#217 / ADR 0015) -------------------------------
 # The three corpus correctness gates (test_corpus_properties, test_corpus_tree_
