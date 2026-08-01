@@ -45,6 +45,12 @@ Things worth knowing before running any of it:
 - **`fetch_test_assets.py` is not part of this loop.** It restores committed bill-print
   PDFs you deleted locally and records their provenance; it touches neither the
   validation fixtures nor the report.
+- **Step 1 currently produces a nine-fixture diff you should not commit.** Six
+  committee-report fixtures have drifted from their sources and are never rebuilt
+  from them ([#293](https://github.com/AgoraDMV/DeltaTrack/issues/293)); on the
+  current tree the rebuild regenerates `match_path` values as `null`, quietly
+  dropping those accounts to the agency-scoped fallback. Committing that diff
+  degrades the ground truth while looking like a refresh.
 - **Adding a jurisdiction** is documented in
   [tests/validation_sources.py](../tests/validation_sources.py) — follow it, then run
   this loop.
