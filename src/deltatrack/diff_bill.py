@@ -881,15 +881,33 @@ class _IntermixedSubParser(argparse.ArgumentParser):
 
     `parse_intermixed_args` is argparse's own answer to that, but it refuses a parser
     holding subparsers, so it cannot be switched on for the top-level parser -- only
-    here, where `add_subparsers` hands control to the subcommand. The delegation below
-    cannot recurse: `parse_known_intermixed_args` calls the private `_parse_known_args2`
-    (which calls the private `_parse_known_args`), never the public `parse_known_args`
-    it overrides here -- verified with `inspect.getsource` on CPython 3.12 and 3.13,
-    the range this repo supports.
+    here, where `add_subparsers` hands control to the subcommand. It delegates back into
+    `parse_known_args` with the positionals suppressed; the guard lets that inner call
+    through, and is inert if a future argparse stops re-entering.
+
+    The re-entry is NOT hypothetical: on CPython 3.12.0 through 3.12.7,
+    `parse_known_intermixed_args` calls the public `self.parse_known_args`, so without
+    the guard this override recurses into itself until RecursionError -- every `compare`
+    invocation fails, legacy two-path form included. CPython 3.12.8 refactored the
+    delegation to the private `_parse_known_args2`, so the guard passes through unused
+    there. Verified with `inspect.getsource` and by running `build_parser()` on CPython
+    3.12.0, 3.12.4, 3.12.7 (re-enter via the public method), 3.12.8, 3.12.12 and
+    3.13.14 (call `_parse_known_args2`). `requires-python` is ">=3.12" and Ubuntu
+    24.04 ships 3.12.3, so the re-entering band is supported and the guard stays.
+
+    `add_subparsers(parser_class=...)` binds EVERY subparser of this parser, not only
+    `compare`: a future subcommand with a `nargs=REMAINDER` positional raises
+    `TypeError: parse_intermixed_args: positional arg with nargs=...` at parse time.
     """
 
     def parse_known_args(self, args=None, namespace=None):
-        return self.parse_known_intermixed_args(args, namespace)
+        if getattr(self, "_intermixing", False):
+            return super().parse_known_args(args, namespace)
+        self._intermixing = True
+        try:
+            return self.parse_known_intermixed_args(args, namespace)
+        finally:
+            self._intermixing = False
 
 
 def build_parser() -> argparse.ArgumentParser:
