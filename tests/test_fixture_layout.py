@@ -583,6 +583,51 @@ def test_fixture_tree_is_not_gitignored() -> None:
     assert result.returncode == 1, f"{probe} is gitignored — committed fixtures must be storable"
 
 
+# Trees whose ignore rule must survive the directory being a SYMLINK. A trailing slash
+# matches only a real directory, so the slashed form left a symlinked copy unignored and
+# offered for commit as an ordinary untracked entry (#432). `docs-for-ai` is the tree the
+# file marks "never publish" — private operator notes — and sharing it between checkouts by
+# symlink is exactly the setup the `/bills` comment says is common, so the rule failed open
+# in the one case it most needed to hold. `.venv` is the same shape at lower stakes.
+_MUST_IGNORE_EVEN_AS_SYMLINK = ("docs-for-ai", ".venv")
+
+
+def test_private_trees_stay_ignored_when_symlinked(tmp_path) -> None:
+    """These rules must ignore a symlink, not only a real directory.
+
+    Run against the repository's own ``.gitignore`` inside a throwaway work tree: the
+    hazard only appears with a real symlink, and this checkout has none to test. Copying
+    the file rather than restating its rules is the point — a future edit that puts the
+    trailing slash back reddens this, which is the whole reason it exists.
+    """
+    work = tmp_path / "repo"
+    work.mkdir()
+    if subprocess.run(["git", "-C", str(work), "init", "-q"], capture_output=True).returncode != 0:
+        pytest.skip("git unavailable — cannot ask whether a path is ignored")
+    (work / ".gitignore").write_text((PROJECT_ROOT / ".gitignore").read_text())
+
+    external = tmp_path / "external"
+    external.mkdir()
+    for name in _MUST_IGNORE_EVEN_AS_SYMLINK:
+        (external / name).mkdir()
+        (work / name).symlink_to(external / name)
+
+    def ignored(path: str) -> bool:
+        return subprocess.run(["git", "-C", str(work), "check-ignore", "-q", path], capture_output=True).returncode == 0
+
+    # Confirm the probe can fire before trusting a negative: a check that can never report
+    # "not ignored" would pass this test over a .gitignore that hides the entire repo.
+    (work / "README.md").write_text("x")
+    assert not ignored("README.md"), "probe is broken: README.md must not be ignored, so a real result is meaningful"
+
+    offenders = [name for name in _MUST_IGNORE_EVEN_AS_SYMLINK if not ignored(name)]
+    assert not offenders, (
+        f"symlinked {offenders} are not gitignored — a trailing slash matches only a real "
+        "directory, so the tree is offered for commit when it is shared between checkouts "
+        "by symlink (#432). Drop the trailing slash, as /bills does."
+    )
+
+
 def _fetch_tool_working_dirs() -> dict[str, Path]:
     """Where each fetch tool actually writes, read from the tools themselves.
 
