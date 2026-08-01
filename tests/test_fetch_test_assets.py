@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sys
 import urllib.request
+from unittest import mock
 
 import pytest
 
@@ -92,7 +93,13 @@ def test_unknown_argument_exits_two_with_usage(capsys):
 def test_main_parses_argv_and_rejects_unknown_argument(monkeypatch, capsys):
     """Wiring: main() must run argv through the parser before touching any asset."""
     monkeypatch.setattr(sys, "argv", ["fetch_test_assets.py", "--nope"])
+    # Pin the ordering, not just the rejection: SystemExit(2) and "usage:" hold
+    # even if the parse is moved to the END of main(), after the fetch loop has
+    # already run (#297's shape under a green suite). The work may never start.
+    fetch = mock.Mock(side_effect=AssertionError("fetch_asset ran before argv was parsed"))
+    monkeypatch.setattr("scripts.fetch_test_assets.fetch_asset", fetch)
     with pytest.raises(SystemExit) as excinfo:
         main()
     assert excinfo.value.code == 2
     assert "usage:" in capsys.readouterr().err
+    fetch.assert_not_called()
