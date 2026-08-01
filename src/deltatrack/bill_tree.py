@@ -1082,6 +1082,54 @@ _ENACTING_CLAUSE = (
     "Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,"
 )
 
+# A resolution gets a resolving clause instead, also synthesized rather than
+# carried in the XML. One of seven, selected the way billres-details.xsl's
+# resolution-body template selects them: keyed on resolution/@resolution-type,
+# with resolution-body/@style="constitutional-amendment" overriding the joint
+# forms, and resolution-body/@display-resolving-clause opting out of the simple
+# and order forms (the only ones the stylesheet checks it for). res.dtd names
+# the opt-out display-resolving-clause — <resolution-body> carries no
+# display-enacting-clause attribute, so the bill opt-out cannot gate these (#427).
+_HOUSE_CONCURRENT_CLAUSE = "Resolved by the House of Representatives (the Senate concurring),"
+_SENATE_CONCURRENT_CLAUSE = "Resolved by the Senate (the House of Representatives concurring),"
+_JOINT_CLAUSE = (
+    "Resolved by the Senate and House of Representatives of the United States of America in Congress assembled,"
+)
+_CONSTITUTIONAL_AMENDMENT_CLAUSE = (
+    "Resolved by the Senate and House of Representatives of the United States of America "
+    "in Congress assembled (two-thirds of each House concurring therein),"
+)
+_SIMPLE_CLAUSES = {
+    "house-resolution": "Resolved,",
+    "senate-resolution": "Resolved,",
+    "house-order": "Ordered,",
+    "senate-order": "Ordered,",
+}
+
+
+def _resolving_clause(root: ET.Element, body: ET.Element) -> str | None:
+    """The resolving clause GPO prints for this resolution, or None when none prints.
+
+    Mirrors the when-chain of billres-details.xsl's resolution-body template,
+    in its order. An unrecognized resolution-type yields None — nothing is
+    emitted rather than something false.
+    """
+    resolution_type = root.get("resolution-type", "")
+    if resolution_type == "house-concurrent":
+        return _HOUSE_CONCURRENT_CLAUSE
+    if body.get("style") == "constitutional-amendment":
+        return _CONSTITUTIONAL_AMENDMENT_CLAUSE
+    if resolution_type in ("house-joint", "senate-joint"):
+        return _JOINT_CLAUSE
+    if resolution_type == "senate-concurrent":
+        return _SENATE_CONCURRENT_CLAUSE
+    if resolution_type in _SIMPLE_CLAUSES:
+        if body.get("display-resolving-clause") == "no-display-resolving-clause":
+            return None
+        return _SIMPLE_CLAUSES[resolution_type]
+    return None
+
+
 # Synthetic match_path root for front-matter nodes. They carry an empty
 # display_path (no heading) but need a stable, distinct match key so each piece
 # pairs with its counterpart across versions (e.g. an official-title edit diffs
@@ -1106,11 +1154,12 @@ def _front_matter_node(key: str, body: str) -> BillNode:
 
 
 def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillNode]:
-    """Build front-matter nodes from the <form> block, preamble and enacting clause (#48).
+    """Build front-matter nodes from the <form> block, preamble and clause (#48).
 
     The <form> block (congress, session, legis-num, legis-type "AN ACT", official
-    title) and the GPO enacting clause sit outside <legis-body>, so they were
-    dropped from the full-bill text and the diff. A resolution's <preamble> sits in
+    title) and the GPO clause (enacting for a bill, resolving for a resolution,
+    #427) sit outside the body element, so they were dropped from the full-bill
+    text and the diff. A resolution's <preamble> sits in
     the same position — a sibling of <resolution-body> — and is captured here for
     the same reason (#201). Each piece is its own node so a change diffs precisely.
     distribution-code renders nothing in GPO and is skipped; sponsor/action lines
@@ -1150,8 +1199,17 @@ def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillN
         if recitals:
             nodes.append(_front_matter_node("preamble", "\n".join(recitals)))
 
-    # Enacting clause: GPO boilerplate, unless the body opts out.
-    if body.get("display-enacting-clause") != "no-display-enacting-clause":
+    # Enacting clause (bills) / resolving clause (resolutions): GPO boilerplate,
+    # unless the body opts out. The bill opt-out must not gate resolutions:
+    # <resolution-body> carries no display-enacting-clause attribute (res.dtd
+    # names its opt-out display-resolving-clause), so the check below silently
+    # never fired for a resolution and every resolution carried the bill
+    # clause (#427).
+    if root.tag == "resolution":
+        clause = _resolving_clause(root, body)
+        if clause is not None:
+            nodes.append(_front_matter_node("resolving clause", clause))
+    elif body.get("display-enacting-clause") != "no-display-enacting-clause":
         nodes.append(_front_matter_node("enacting clause", _ENACTING_CLAUSE))
 
     return nodes

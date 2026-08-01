@@ -2022,6 +2022,23 @@ class TestResolutionParsing:
         assert tree.bill_type == "hconres"
         assert tree.bill_number == 58
 
+    def test_concurrent_resolution_carries_its_resolving_clause(self):
+        """End to end: the synthesized node a real resolution gains is its OWN clause,
+        not the bill enacting clause every resolution carried pre-#427."""
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        node = next(n for n in tree.nodes if n.element_id == "front-matter-resolving-clause")
+        assert node.body_text == "Resolved by the House of Representatives (the Senate concurring),"
+        assert not [n for n in tree.nodes if n.element_id == "front-matter-enacting-clause"]
+
+    def test_joint_resolution_carries_the_joint_clause(self):
+        expected = (
+            "Resolved by the Senate and House of Representatives of the United States of America in Congress assembled,"
+        )
+        for fixture in ("BILLS-119hjres25ih.xml", "BILLS-119sjres3is.xml"):
+            tree = normalize_bill(RESOLUTION_FIXTURES / fixture)
+            node = next(n for n in tree.nodes if n.element_id == "front-matter-resolving-clause")
+            assert node.body_text == expected
+
 
 @pytest.mark.slow
 class TestResolutionPreamble:
@@ -2068,12 +2085,91 @@ class TestResolutionPreamble:
         extract_front_matter_nodes returns nodes in render order."""
         tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
         ids = [n.element_id for n in tree.nodes]
-        assert ids.index("front-matter-preamble") < ids.index("front-matter-enacting-clause")
+        assert ids.index("front-matter-preamble") < ids.index("front-matter-resolving-clause")
         assert ids.index("front-matter-official-title") < ids.index("front-matter-preamble")
 
     def test_a_resolution_without_a_preamble_gains_no_preamble_node(self):
         tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hjres25ih.xml")
         assert [n for n in tree.nodes if n.element_id == "front-matter-preamble"] == []
+
+
+class TestResolvingClause:
+    """The resolving clause synthesized for a resolution, pinned per resolution-type (#427).
+
+    The clause appears nowhere in the source XML — GPO injects it at render time — so
+    no corpus assertion can contradict a wrong string. These expected values are pasted
+    literals from billres-details.xsl's resolution-body template (whitespace collapsed),
+    sharing no constant with the production code, so a drifted synthesized string fails
+    here. Pre-#427 every resolution carried the BILL enacting clause, and the opt-out
+    that might have masked it reads display-enacting-clause, an attribute res.dtd does
+    not define on <resolution-body> (its opt-out is display-resolving-clause).
+    """
+
+    @staticmethod
+    def _clause(resolution_type, body_attrs=""):
+        # Local import: pinned against the production symbol, so a revert of the
+        # production change fails these tests individually rather than at collection.
+        from deltatrack.bill_tree import _resolving_clause
+
+        root = ET.fromstring(
+            f'<resolution resolution-type="{resolution_type}"><resolution-body {body_attrs}/></resolution>'
+        )
+        return _resolving_clause(root, root.find("resolution-body"))
+
+    @pytest.mark.parametrize(
+        ("resolution_type", "expected"),
+        [
+            ("house-concurrent", "Resolved by the House of Representatives (the Senate concurring),"),
+            ("senate-concurrent", "Resolved by the Senate (the House of Representatives concurring),"),
+            (
+                "house-joint",
+                "Resolved by the Senate and House of Representatives of the United States of America "
+                "in Congress assembled,",
+            ),
+            (
+                "senate-joint",
+                "Resolved by the Senate and House of Representatives of the United States of America "
+                "in Congress assembled,",
+            ),
+            ("house-resolution", "Resolved,"),
+            ("senate-resolution", "Resolved,"),
+            ("house-order", "Ordered,"),
+            ("senate-order", "Ordered,"),
+        ],
+    )
+    def test_clause_per_resolution_type(self, resolution_type, expected):
+        assert self._clause(resolution_type) == expected
+
+    def test_constitutional_amendment_style_overrides_the_joint_clause(self):
+        """resolution-body/@style="constitutional-amendment" selects its own clause,
+        ahead of the joint forms in the stylesheet's when-chain."""
+        expected = (
+            "Resolved by the Senate and House of Representatives of the United States of America "
+            "in Congress assembled (two-thirds of each House concurring therein),"
+        )
+        for resolution_type in ("house-joint", "senate-joint"):
+            assert self._clause(resolution_type, 'style="constitutional-amendment"') == expected
+
+    def test_opt_out_suppresses_the_simple_and_order_forms(self):
+        for resolution_type in ("house-resolution", "senate-resolution", "house-order", "senate-order"):
+            assert self._clause(resolution_type, 'display-resolving-clause="no-display-resolving-clause"') is None
+
+    def test_opt_out_does_not_suppress_the_joint_or_concurrent_forms(self):
+        """The stylesheet checks display-resolving-clause only on the simple and order
+        forms; the joint and concurrent clauses print regardless."""
+        for resolution_type in ("house-joint", "senate-joint", "house-concurrent", "senate-concurrent"):
+            assert self._clause(resolution_type, 'display-resolving-clause="no-display-resolving-clause"') is not None
+
+    def test_unrecognized_resolution_type_emits_nothing(self):
+        """Emitting nothing rather than something false — the pre-#427 failure mode was
+        exactly the opposite."""
+        assert self._clause("made-up-type") is None
+
+    def test_no_resolution_type_attribute_emits_nothing(self):
+        from deltatrack.bill_tree import _resolving_clause
+
+        root = ET.fromstring("<resolution><resolution-body/></resolution>")
+        assert _resolving_clause(root, root.find("resolution-body")) is None
 
 
 @pytest.mark.slow
