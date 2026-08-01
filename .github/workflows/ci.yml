@@ -42,6 +42,16 @@ jobs:
     # Least-privilege token: this job only checks out and runs the suite.
     permissions:
       contents: read
+    strategy:
+      matrix:
+        # "3.12" resolves to the NEWEST patch uv knows, so a lone `uv python install
+        # 3.12` never visits the oldest interpreters `requires-python = ">=3.12"`
+        # promises to support -- and argparse's `parse_known_intermixed_args` re-enters
+        # the public `parse_known_args` on 3.12.0-3.12.7 but not from 3.12.8 on, so the
+        # difference is behavioural, not cosmetic (#426). The "3.12.0" entry pins the
+        # declared floor; "3.12" keeps tracking the newest patch. Ubuntu 24.04's system
+        # Python (3.12.3) sits inside the band only the floor entry exercises.
+        python-version: ["3.12", "3.12.0"]
     steps:
       - uses: actions/checkout@v7
 
@@ -49,7 +59,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync
