@@ -880,12 +880,22 @@ class TestCompareVersionListing:
         assert str(exc.value.code).startswith(f"No local versions for 119-hr-1 in {synthetic_bills_dir}/119-hr-1.")
         assert capsys.readouterr().out == "", "the failure belongs on stderr, not stdout"
 
-    def test_a_vanished_shell_argument_still_fails(self, synthetic_bills_dir, tmp_path, monkeypatch):
-        """The shape the fail-open actually takes: one real path, second argument gone."""
+    def test_a_vanished_shell_argument_still_fails(self, synthetic_bills_dir, monkeypatch):
+        """The shape the fail-open actually takes: one real path, second argument gone.
+
+        The message names the missing second path. A lone existing file is not a slug,
+        so the old answer -- a version listing doubled to "bills/bills/..." plus advice
+        to download a file already on disk -- pointed away from the mistake.
+        """
         bill = synthetic_bills_dir / "118-hr-4366"
+        only = str(bill / "1_reported-in-house.xml")
         with pytest.raises(SystemExit) as exc:
-            _run_compare(monkeypatch, str(bill / "1_reported-in-house.xml"), "--format", "json")
+            _run_compare(monkeypatch, only, "--format", "json")
         assert exc.value.code != 0
+        message = str(exc.value.code)
+        assert "the second path is missing" in message
+        assert only in message
+        assert "Download them with" not in message
 
     def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch, capsys):
         """Dispatch is on the count, so 0 and 4+ are the arities with no meaning.

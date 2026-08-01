@@ -790,7 +790,9 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
     Dispatch is on the positional COUNT, never on the shape of a value: two paths are
     the legacy invocation and must stay unreachable from any slug regex or ``.xml``
     sniffing, so that adding the version-addressable form cannot re-read an existing
-    command as something else (#152).
+    command as something else (#152). The one shape check below (a lone positional that
+    is an existing file) only picks the ERROR WORDING; the count still decides the
+    outcome, so it cannot re-read a working command.
 
     A bare slug is a question rather than a failure, so it answers on stdout and exits
     0; every other unresolvable case is an error whose message is the same listing.
@@ -805,7 +807,14 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
             _resolve_version_arg(args.bills_dir, slug, n_new),
         )
     if len(targets) == 1:
-        slug = targets[0]
+        target = targets[0]
+        if Path(target).is_file():
+            # One real path and nothing else: `compare "$OLD" "$NEW"` with $NEW unset.
+            # The answer is the missing second path, not a version listing for a "slug"
+            # that is plainly a file -- the listing doubled it ("in bills/bills/...")
+            # and advised downloading a bill the user already has on disk.
+            raise SystemExit(f"compare takes two file paths; the second path is missing (got only {target}).")
+        slug = target
         versions = local_versions(args.bills_dir, slug)
         listing = _format_version_listing(args.bills_dir, slug, versions)
         if not versions:
