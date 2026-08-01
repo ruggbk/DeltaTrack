@@ -1,13 +1,20 @@
 .env
 # Private operator/AI notes — threat analysis, exact resource thresholds, etc.
 # Never publish: see docs-for-ai/deployment-security-notes.md
-docs-for-ai/
+# No TRAILING slash, for the reason spelled out on /bills below: a trailing slash matches
+# only a real directory, so a SYMLINKED copy of this tree — the way it is shared between
+# checkouts — was not ignored and showed up as an ordinary untracked entry. That is the
+# worst place in this file for a rule to fail open. Without the slash a symlink and a real
+# directory are both ignored. Deliberately left unanchored: matching at any depth is the
+# fail-safe direction for a tree that must never be published.
+docs-for-ai
 .DS_Store
 __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
-.venv/
+# No trailing slash for the same reason: a virtualenv is commonly symlinked in.
+.venv
 # AI assistant state (Claude Code). Ignore the directory's CONTENTS, then re-admit the
 # few things a team shares on purpose. This is deny-all-then-re-admit, which `/bills` and
 # `tests/data/` above deliberately moved AWAY from -- the polarity is what differs, and it
@@ -56,7 +63,9 @@ htmlcov/
 /bills_bulk_text
 reports/*
 !reports/.gitkeep
-plans/
+# LEADING slash (#319): unanchored, this matched a `plans` component at ANY depth, so a
+# future tools/plans/ or docs/plans/ would have been ignored with no error.
+/plans
 # tests/data/ holds committed fixtures (validation JSON, committee-report HTML/PDF, the
 # PDF goldens and their source prints), so it is tracked by default and only the
 # local-only artifacts are listed here (#308). It used to be deny-all-then-re-admit,
@@ -66,10 +75,11 @@ tests/data/extract_cache/
 # The source appropriations spreadsheet is deliberately not vendored; only the JSON
 # fixture derived from it is committed.
 tests/data/*.xlsx
-*.csv
 # Vendored GPO render chain (public domain, ~2.2MB incl. binary JPGs) — local reference only.
 # Mined into docs/gpo-render-conventions.md; re-fetch from govinfo bulkdata when needed. See DeltaTrack#40.
-reference/
+# LEADING slash (#319): unanchored, this matched a `reference` component at ANY depth, so a
+# future docs/reference/ or src/deltatrack/reference/ would have been ignored with no error.
+/reference
 # govinfo-derived test corpus for provision-matching research (#170); large, re-derivable.
 # No trailing slash: it is commonly symlinked into a worktree root (see #319 above).
 bills_corpus
