@@ -24,9 +24,11 @@ from tests.corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_b
 # Measured, not hypothetical: a top-level `raise RuntimeError` in a worktree's
 # src/deltatrack/bill_tree.py left tests/test_bill_tree.py at 133 passed.
 #
-# Checked here rather than in a test, because a test that asserts this would itself be
-# collected by the wrong-tree run and prove only that the WRONG tree agrees with itself.
-# conftest import time is the last point that is still unambiguously about this checkout.
+# Checked at conftest import rather than in a test, because a guard *test* is only as
+# reachable as the selection that collects it. `pytest tests/test_bill_tree.py` never
+# collects it, and neither does any `-k` or `-m` run -- and a single-module run is exactly
+# the scenario measured above. conftest imports on every selection under `tests/`, so it
+# is the one place the check cannot be selected away.
 #
 # Rejecting the violation rather than adding `src` to `pythonpath`, which would resolve
 # the engine off disk and make this symptom disappear. Not for wheel fidelity -- under an
@@ -42,12 +44,31 @@ try:
     from deltatrack.bill_tree import BillNode, BillTree, normalize_bill
     from deltatrack.diff_bill import NodeDiff, diff_bills
 except ModuleNotFoundError as exc:
-    # ONLY the engine's own top-level name means "the environment is wrong". A failure
-    # from INSIDE the engine -- a renamed or typo'd `deltatrack.something` -- is a fault in
-    # the branch, and rewriting it as an environment problem would point a developer with a
-    # healthy environment at their venv instead of their diff. pytest prints conftest import
-    # errors without the `raise ... from` chain, so the original module name would be
-    # invisible: re-raise it untouched, and carry `exc` into the message where it survives.
+    # ONLY the engine's own top-level name is rewritten. Every other name is re-raised
+    # untouched, which is conservative rather than precise: a typo'd `deltatrack.something`
+    # is a fault in the branch and must not be dressed up as an environment problem, but a
+    # missing third-party dependency (an unsynced venv) and a stale partial install are
+    # environment faults that also arrive under some other name and get no guidance here.
+    # Propagating the original exception is the right trade either way -- it names the real
+    # module, and a wrong environment message would send a developer with a healthy venv
+    # looking anywhere but at their diff. pytest prints conftest import errors without the
+    # `raise ... from` chain, so that name is the only thing they would see: re-raise it
+    # untouched, and carry `exc` into the message below where it survives.
+    #
+    # Neither branch can produce a false green -- this runs only when the import already
+    # failed, so the session is red regardless, and what is at stake is the diagnostic.
+    # `test_conftest_names_a_broken_environment` and its `..._does_not_blame_the_environment`
+    # sibling pin both directions anyway, because a message that misdirects costs an hour.
+    #
+    # The repair below is `uv sync` and deliberately NOT `uv pip install -e .`, which is the
+    # more obvious fix for a stale editable pointer. `uv pip` resolves an activated
+    # VIRTUAL_ENV ahead of the checkout you are standing in, and otherwise walks up parent
+    # directories -- and a worktree of this repo sits INSIDE the checkout that owns it. Both
+    # paths lead a developer who is in a worktree, reading this message, to re-point the
+    # shared environment at that worktree: the trap AGENTS.md names, and the state
+    # `engine_is_foreign` had to be re-anchored on `src/` to see. `uv sync` targets the cwd
+    # project's own `.venv` from either seat. That reasoning stays here rather than in the
+    # message, because someone stuck at this error needs one action, not the argument.
     if exc.name != "deltatrack":
         raise
     raise ModuleNotFoundError(
@@ -56,29 +77,45 @@ except ModuleNotFoundError as exc:
         "engine comes only from the editable install -- and that install records an absolute "
         "path which may no longer exist (a deleted worktree is the usual cause). Inspect it "
         "with `cat .venv/lib/python*/site-packages/_editable_impl_deltatrack.pth` and repair "
-        "with `uv pip install -e . --no-deps` from this checkout."
+        "by running `uv sync` (or `source ./init`) from this checkout, which builds THIS "
+        "tree its own `.venv` and so is safe to run from a worktree."
     ) from exc
 
 
 def engine_is_foreign(engine: Path, root: Path) -> bool:
-    """Whether an imported engine belongs to a DIFFERENT checkout than ``root``.
+    """Whether an imported engine is anything other than ``root``'s own ``src/`` tree.
+
+    Anchored on ``root/src``, NOT on ``root`` itself, because a worktree of this repository
+    lives *inside* the checkout that owns it: they are created at
+    ``<root>/.claude/worktrees/<name>``. A containment test against ``root`` reads such a
+    sibling working tree as "this checkout" and stays silent on it, which is the same
+    wrong-tree green running the other way -- the shared ``.venv`` re-pointed at a nested
+    worktree, then the suite run from the checkout that owns it. Measured: with an engine
+    copy at ``<root>/.claude/worktrees/other/src``, a ``root``-anchored check let the run
+    import it and said nothing.
+
+    Anchoring on ``src/`` also rejects a non-editable install under ``<root>/.venv/``. That
+    is a stale snapshot which equally cannot see an edit to ``src/``, so it belongs on the
+    same side of the line even though it never leaves the checkout.
 
     Split out from the check below so the rule is unit-testable. A guard whose only
     exercise is the happy path cannot distinguish "correctly silent" from "broken and
     silent", and silent-and-broken is precisely the state it exists to detect --
     see ``test_the_foreign_engine_rule_can_fire``.
     """
-    return not engine.resolve().is_relative_to(root.resolve())
+    return not engine.resolve().is_relative_to((root / "src").resolve())
 
 
 _ENGINE = Path(deltatrack.__file__).resolve()
 if engine_is_foreign(_ENGINE, PROJECT_ROOT):
     raise RuntimeError(
         f"the tests are running in {PROJECT_ROOT} but `deltatrack` imported from {_ENGINE}, "
-        "so this run would report on a DIFFERENT checkout's source. A green result here says "
+        "so this run would report on a DIFFERENT tree's source. A green result here says "
         "nothing about the code in this tree, and reverting a file under review would not "
-        "change it. Give this worktree its own environment (`uv sync` -- about a second on a "
-        "warm cache), or set PYTHONPATH=$PWD/src for a one-off run against a shared venv."
+        "change it. Give this tree its own environment (`uv sync`, which reuses the shared "
+        "cache), or set PYTHONPATH=$PWD/src for a one-off run against a shared venv. A "
+        "worktree nested under .claude/worktrees/ needs this too: it is a separate working "
+        "tree, and being inside the owning checkout does not make its source this source."
     )
 
 # --- Committed corpus manifest (#217 / ADR 0015) -------------------------------
