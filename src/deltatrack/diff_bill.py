@@ -484,13 +484,31 @@ def _move_candidates(
     pair: same seq1/seq2 and autojunk, and the indices are local positions in
     `removed_texts`/`added_texts`. Callers sort by the full tuple, so iteration
     order does not affect the result.
+
+    Text-free entries produce no candidate at all (#357). difflib scores two empty
+    sequences as a perfect 1.0, so every empty removed entry used to match every empty
+    added entry at the maximum, and the caller's greedy claim loop turned that tie into
+    a move record decided by iteration order rather than by any property of the two
+    sections. A section with no text carries no evidence that it moved anywhere. Such
+    nodes are legitimate rather than a text-extraction fault: a section whose subsections
+    all became their own nodes keeps the SEC. heading and an empty body (#188).
+
+    This is a behavior change, and the only one: an empty entry paired with a non-empty
+    one already scored 0.0, far below any usable threshold, so nothing that previously
+    reached the threshold stops doing so. It is also where most of the work went --
+    on 118-hr-3935 v1 -> v6, 75,032 of 78,397 candidate pairs were empty-against-empty.
     """
     removed_words = [t.split() for t in removed_texts]
     candidates: list[tuple[float, int, int]] = []
     sm = difflib.SequenceMatcher()  # autojunk=True, matching _text_similarity
     for ai, added in enumerate(added_texts):
-        sm.set_seq2(added.split())
+        added_words = added.split()
+        if not added_words:
+            continue
+        sm.set_seq2(added_words)
         for ri, words in enumerate(removed_words):
+            if not words:
+                continue
             sm.set_seq1(words)
             if sm.real_quick_ratio() < threshold or sm.quick_ratio() < threshold:
                 continue
