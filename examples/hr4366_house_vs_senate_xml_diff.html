@@ -9066,10 +9066,22 @@ document.addEventListener('DOMContentLoaded', function() {
   // (a new .fb-row, a card, a paragraph) starts a new display line.
   var FIND_INLINE = {SPAN: 1, MARK: 1, INS: 1, DEL: 1, EM: 1, STRONG: 1, A: 1, B: 1,
                      I: 1, U: 1, S: 1, CODE: 1, SUP: 1, SUB: 1, SMALL: 1, ABBR: 1};
-  function findBlockOf(node) {
-    var el = node.parentElement;
-    while (el && FIND_INLINE[el.tagName]) el = el.parentElement;
-    return el;
+  // Separates text that is adjacent on screen but not continuous prose: a card's
+  // deleted text and the insertion that replaces it are alternatives, not a
+  // sequence, so joining them with a space would let a query match wording that
+  // exists in no version of the bill. Nothing a user can type contains it.
+  var FIND_BREAK = '\u0000';
+  // One walk up the inline ancestors answers everything the flattener needs, so
+  // no per-node closest() or layout read (this runs over every text node in the
+  // view, and reports get large — see #169).
+  function findSegment(node) {
+    var el = node.parentElement, del = null, gutter = false;
+    while (el && FIND_INLINE[el.tagName]) {
+      if (el.tagName === 'DEL') del = el;
+      if (el.classList.contains('fb-gutter')) gutter = true;
+      el = el.parentElement;
+    }
+    return {block: el, del: del, gutter: gutter};
   }
   // Flatten the active view into one searchable string, with a map back to the
   // text nodes it came from. Searching this instead of each text node is what
@@ -9077,29 +9089,24 @@ document.addEventListener('DOMContentLoaded', function() {
   // view is print-faithful, so GPO's line breaks and its soft-hyphenated word
   // splits are real DOM boundaries, and every row is its own text node.
   //
-  // Three normalizations, all mirroring what the parser already does to produce
-  // the merged (whole-word) canonical text:
-  //   - soft hyphens rejoined  (`WORD-` + lowercase continuation, the rule in
-  //     parsers/pdf_text.py `_merge_print_lines`; an uppercase continuation is a
-  //     real compound like `Child-Rescue` and is left alone)
+  // Normalizations, following the parser's own handling of the printed page
+  // (parsers/pdf_text.py `_merge_print_lines`):
+  //   - a word split at a syllable break (`Serv-` + lowercase continuation) is
+  //     rejoined into one word, hyphen dropped
+  //   - a real compound broken at its own hyphen (`Child-` + uppercase `Rescue`)
+  //     keeps the hyphen and closes up. The parser leaves these two lines
+  //     separate, so this is deliberately MORE than it does: on screen the
+  //     compound reads as one word, so search should treat it as one.
   //   - display lines joined with a single space
   //   - whitespace runs collapsed (GPO pads columns with runs of spaces)
   // The line-number gutter and page markers are print furniture, not bill text,
   // so they're left out of the searchable string entirely.
   function buildFindIndex(root) {
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: function(node) {
-        if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
-        var el = node.parentElement;
-        if (!el) return NodeFilter.FILTER_REJECT;
-        if (el.closest('.fb-gutter, .fb-page')) return NodeFilter.FILTER_REJECT;
-        if (el.offsetParent === null && el.tagName !== 'BODY') return NodeFilter.FILTER_REJECT;  // filter-hidden
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     // `pieces` are the runs where the flat string and a node's own text advance
     // in lockstep, so a flat char range resolves back to exact node offsets.
-    var parts = [], pieces = [], flatLen = 0, lastCh = '', block = null, node;
+    var parts = [], pieces = [], flatLen = 0, lastCh = '', node;
+    var block = null, del = null, visBlock = null, visible = true;
     function push(node, nodeStart, str) {
       if (!str) return;
       pieces.push({node: node, flatStart: flatLen, nodeStart: nodeStart, len: str.length});
@@ -9114,28 +9121,51 @@ document.addEventListener('DOMContentLoaded', function() {
       if (node) { push(node, nodeStart, ' '); return; }
       parts.push(' '); flatLen += 1; lastCh = ' ';
     }
+    function pushBreak() {
+      if (!flatLen || lastCh === FIND_BREAK) return;
+      parts.push(FIND_BREAK); flatLen += 1; lastCh = FIND_BREAK;
+    }
     while ((node = walker.nextNode())) {
-      var b = findBlockOf(node);
-      if (block !== null && b !== block) {
-        var cont = node.nodeValue.replace(/^\s+/, '').charAt(0);
-        var hyphenated = /[A-Za-z0-9]-$/.test(parts[parts.length - 1] || '');
-        if (hyphenated && cont && cont !== cont.toUpperCase()) {
-          // Soft hyphen (lowercase continuation): drop it, `Serv-`+`ices` is one word.
-          var tail = parts[parts.length - 1];
-          parts[parts.length - 1] = tail.slice(0, -1);
-          flatLen -= 1;
-          var lastPiece = pieces[pieces.length - 1];
-          if (--lastPiece.len === 0) pieces.pop();
-          if (!parts[parts.length - 1]) parts.pop();
-          lastCh = tail.charAt(tail.length - 2);
-        } else if (hyphenated && cont) {
-          // A real compound broken at its own hyphen (`Child-` / `Rescue`): keep
-          // the hyphen and close the gap, so the reader's `Child-Rescue` matches.
+      if (!node.nodeValue) continue;
+      var seg = findSegment(node);
+      if (seg.gutter || !seg.block) continue;
+      if (seg.block !== visBlock) {  // one layout read per block, not per node
+        visBlock = seg.block;
+        visible = !seg.block.classList.contains('fb-page')
+                  && (seg.block.offsetParent !== null || seg.block.tagName === 'BODY');
+      }
+      if (!visible) continue;
+      var b = seg.block;
+      if (block !== null && seg.del !== del) {
+        // Crossing into or out of deleted text: alternatives, not a sequence.
+        pushBreak();
+      } else if (block !== null && b !== block) {
+        // Consecutive rows of the bill are one flowing text; anything else
+        // (card to card, the meta line, the removed-text appendix) is not.
+        if (!b.classList.contains('fb-row') || !block.classList.contains('fb-row')) {
+          pushBreak();
         } else {
-          pushSpace(null, 0);
+          var cont = node.nodeValue.replace(/^\s+/, '').charAt(0);
+          var hyphenated = /[A-Za-z0-9]-$/.test(parts[parts.length - 1] || '');
+          if (hyphenated && cont && cont !== cont.toUpperCase()) {
+            // Soft hyphen (lowercase continuation): drop it, `Serv-`+`ices` is one word.
+            var tail = parts[parts.length - 1];
+            parts[parts.length - 1] = tail.slice(0, -1);
+            flatLen -= 1;
+            var lastPiece = pieces[pieces.length - 1];
+            if (--lastPiece.len === 0) pieces.pop();
+            if (!parts[parts.length - 1]) parts.pop();
+            lastCh = tail.charAt(tail.length - 2);
+          } else if (hyphenated && cont) {
+            // A real compound broken at its own hyphen (`Child-` / `Rescue`): keep
+            // the hyphen and close the gap, so the reader's `Child-Rescue` matches.
+          } else {
+            pushSpace(null, 0);
+          }
         }
       }
       block = b;
+      del = seg.del;
       var text = node.nodeValue, ws = /\s+/g, m, cursor = 0;
       while ((m = ws.exec(text)) !== null) {
         push(node, cursor, text.slice(cursor, m.index));
@@ -9161,6 +9191,10 @@ document.addEventListener('DOMContentLoaded', function() {
     clearFind();
     var q = (findInput ? findInput.value : '').trim().replace(/\s+/g, ' ');
     if (q.length < 2) { updateFindCounter(); return; }
+    // A query pasted off the screen can end at a line-break hyphen
+    // ("House of Representa-"). That hyphen is gone from the searchable text,
+    // so drop it rather than return nothing for a phrase the reader copied.
+    if (/[A-Za-z0-9]-$/.test(q) && q.length > 3) q = q.slice(0, -1);
     var idx = buildFindIndex(activeView());
     var ql = q.toLowerCase();
     var hits = [], ranges = [], at = 0;
