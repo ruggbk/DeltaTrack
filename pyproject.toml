@@ -116,10 +116,20 @@ unfixable = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Notably absent: `src`. The engine resolves through the INSTALLED `deltatrack`
-# distribution, never off disk, which is the whole point of the `src/` layout (#398). A
-# module left out of the wheel, or a packaging config that stops matching the tree, fails
-# the suite here instead of passing locally and breaking on a user's machine.
+# Notably absent: `src`. NOT for wheel fidelity, which this does not buy (#438). `uv sync`
+# creates an EDITABLE install pointed straight at `src/`, so an ordinary run already reports
+# on the working tree: a module left out of the wheel, or a packaging config that drifts
+# from the layout, passes here exactly as it would with `src` listed. That is the gap
+# `tests/test_engine_installs.py` exists to close, by building a real wheel into a throwaway
+# environment -- read its docstring before reasoning about what the suite covers.
+#
+# What excluding `src` preserves is ONE import-resolution story shared by every consumer.
+# The root command wrappers, the tools and the tests all reach `deltatrack` through the
+# installed distribution. Add `src` and pytest alone resolves the engine off disk, which
+# makes the suite the only consumer with its own rules: in a worktree with no environment
+# the tests would quietly pass against that worktree while `./diff_bill.py` beside them
+# imports another checkout or fails outright. A split brain is worse than a hard stop, so
+# the wrong-tree case is rejected in `tests/conftest.py` rather than papered over (#435).
 #
 # `.` stays and does not weaken that. It is what makes `tests.*` and `scripts.*` resolve
 # as namespace packages, which is how the dev-only modules are reached now that they sit
