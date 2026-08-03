@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from deltatrack.bill_tree import BillNode, BillTree, normalize_bill, normalize_division_title
+from deltatrack.bill_tree import BillNode, BillTree, amount_text, normalize_bill, normalize_division_title
 from deltatrack.version_stems import (
     label_from_stem,
     local_versions,
@@ -379,6 +379,49 @@ class NodeDiff:
     section_number: str
     element_id_old: str
     element_id_new: str
+    # --- Amount-extraction source (#365) ---------------------------------------
+    # body_text is normalized for MATCHING, and bill_tree._extract_section_text's
+    # "simple lead-in" fast path returns only a section's first <text> when its payload
+    # sits in <list>/<continuation-text>/<paragraph> -- so body_text silently drops the
+    # rest of the section, amounts included. Measured on the committed corpus: 267 nodes
+    # / 1662 amount-instances dropped, and 83 real amount changes missing from the
+    # amount-change table (e.g. 118-hr-4366 v2->v4 sec. 128, $30M/$30M/$30M ->
+    # $15M/$7.5M/$7.5M, reported as `modified` with NO financial change at all).
+    # structure_tree already extracts the leveled tree's own_amounts from display_text
+    # for precisely this reason; these fields carry the same source so the two money
+    # views cannot disagree.
+    #
+    # old_text/new_text deliberately stay body_text: they feed matching, text_diff and
+    # the JSON payload, none of which this is trying to change. Repointing them wholesale
+    # would churn rendered output and goldens for no gain.
+    #
+    # Repairing _extract_section_text would fix body_text for every consumer at once, but
+    # it is the matching key -- a much wider blast radius, tracked in #422.
+    #
+    # KNOWN LIMIT, and why this is a mitigation rather than a cure: when the dropped
+    # payload is the ONLY thing that changed, both versions' body_text are byte-identical,
+    # so diff_text sees nothing, the node is classified "unchanged", and diff_to_dict
+    # filters it out (include_unchanged=False) before any of this is read. The amounts on
+    # such an entry are now correct, but the entry never reaches the report. 118-hr-4366
+    # v2->v4 sec. 124 and sec. 256 are live instances (sec. 256 moves billions). Only
+    # completing body_text fixes the CLASSIFICATION -- these fields cannot. Tracked in
+    # #422, with the measured instances and the matching-blast-radius caveat.
+    #
+    # None means "no separate source recorded" (a hand-built NodeDiff), and the
+    # amount_source_* properties fall back to old_text/new_text so such callers behave
+    # exactly as they did before this field existed.
+    old_amount_text: str | None = None
+    new_amount_text: str | None = None
+
+    @property
+    def amount_source_old(self) -> str | None:
+        """Old-side text that amount extraction should read (#365)."""
+        return self.old_amount_text if self.old_amount_text is not None else self.old_text
+
+    @property
+    def amount_source_new(self) -> str | None:
+        """New-side text that amount extraction should read (#365)."""
+        return self.new_amount_text if self.new_amount_text is not None else self.new_text
 
 
 @dataclass(frozen=True)
@@ -527,6 +570,10 @@ def reconcile_moves(
                 section_number=ac.section_number or rc.section_number,
                 element_id_old=rc.element_id_old,
                 element_id_new=ac.element_id_new,
+                # Carry each side's amount source across the move, from the same entry
+                # the text comes from, so a moved section's amounts stay readable (#365).
+                old_amount_text=rc.old_amount_text,
+                new_amount_text=ac.new_amount_text,
             )
         )
 
@@ -561,6 +608,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                     section_number=new_node.section_number,
                     element_id_old="",
                     element_id_new=new_node.element_id,
+                    new_amount_text=amount_text(new_node),
                 )
             )
 
@@ -577,6 +625,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                     section_number=old_node.section_number,
                     element_id_old=old_node.element_id,
                     element_id_new="",
+                    old_amount_text=amount_text(old_node),
                 )
             )
 
@@ -597,6 +646,8 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=new_node.section_number or old_node.section_number,
                         element_id_old=old_node.element_id,
                         element_id_new=new_node.element_id,
+                        old_amount_text=amount_text(old_node),
+                        new_amount_text=amount_text(new_node),
                     )
                 )
             elif _text_similarity(old_normalized, new_normalized) < _SIMILARITY_THRESHOLD:
@@ -613,6 +664,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=old_node.section_number,
                         element_id_old=old_node.element_id,
                         element_id_new="",
+                        old_amount_text=amount_text(old_node),
                     )
                 )
                 changes.append(
@@ -627,6 +679,7 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=new_node.section_number,
                         element_id_old="",
                         element_id_new=new_node.element_id,
+                        new_amount_text=amount_text(new_node),
                     )
                 )
             else:
@@ -642,6 +695,8 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         section_number=new_node.section_number or old_node.section_number,
                         element_id_old=old_node.element_id,
                         element_id_new=new_node.element_id,
+                        old_amount_text=amount_text(old_node),
+                        new_amount_text=amount_text(new_node),
                     )
                 )
 
@@ -677,7 +732,8 @@ def bill_diff_to_dict(diff: BillDiff, *, financial: bool = False) -> dict:
             "element_id_new": c.element_id_new,
         }
         if financial:
-            fc = compute_financial_change(c.old_text, c.new_text)
+            # Amounts come from the display rendering, not body_text (#365).
+            fc = compute_financial_change(c.amount_source_old, c.amount_source_new)
             if fc is not None:
                 entry["financial"] = financial_change_to_dict(fc)
                 if fc.amounts_changed:
@@ -724,7 +780,8 @@ def filter_diff(
         changes = [
             c
             for c in changes
-            if (fc := compute_financial_change(c.old_text, c.new_text)) is not None and fc.amounts_changed
+            if (fc := compute_financial_change(c.amount_source_old, c.amount_source_new)) is not None
+            and fc.amounts_changed
         ]
 
     return BillDiff(

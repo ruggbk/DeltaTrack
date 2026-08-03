@@ -304,6 +304,16 @@ with no money carries an empty array rather than omitting the key, so a consumer
 reads it unconditionally and never has to distinguish "no money here" from "this
 producer didn't write the field".
 
+**An amount here need not appear in this change's `text`.** The two fields are
+derived from different renderings of the same section: `text` carries the
+match-normalized body (the form used to pair sections across versions), while
+amounts are extracted from the readable rendering, which keeps section content the
+normalized form truncates (#365). So a consumer that searches `text` for a figure
+listed in `amount_entries` can legitimately fail to find it, and must not treat
+that as a producer error or a reason to drop the amount. To show a reader the text
+an amount came from, use `full_text_span` to index into `full_text`, which is the
+readable rendering; that is the correspondence the report itself renders from.
+
 ### `full_text_span` (optional, v1.2+)
 
 Character offsets into `full_text.v1` and `full_text.v2` locating where this

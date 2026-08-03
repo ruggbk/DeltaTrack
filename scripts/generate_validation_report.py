@@ -12,6 +12,7 @@ Requires the bill XML for each jurisdiction present locally (gitignored; fetch w
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -45,7 +46,12 @@ def _leg_branch_summary() -> str:
     )
 
 
+def build_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
 def main() -> None:
+    build_parser().parse_args()
     available = [j for j in JURISDICTIONS if j.fixture_path.exists() and j.bill_xml_path.exists()]
     missing = [j.slug for j in JURISDICTIONS if j not in available]
 

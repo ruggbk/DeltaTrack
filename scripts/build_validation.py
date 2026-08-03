@@ -7,15 +7,11 @@ hand-curated validation_leg_branch.json, but generated deterministically from th
 
 Sources are fetched from govinfo (both gitignored locally); the JSON fixtures are committed.
 The jurisdiction registry lives in tests/validation_sources.py.
-
-Usage:
-  uv run python scripts/build_validation.py              # build from local report HTML
-  uv run python scripts/build_validation.py --fetch      # fetch missing sources first
-  uv run python scripts/build_validation.py --fetch cjs  # restrict to one slug
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import urllib.request
@@ -149,12 +145,18 @@ def build_fixture(j: Jurisdiction) -> dict:
     }
 
 
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--fetch", action="store_true", help="Fetch the upstream govinfo sources first")
+    p.add_argument("slugs", nargs="*", choices=sorted(BY_SLUG), help="Restrict to these jurisdictions (default: all)")
+    return p
+
+
 def main() -> None:
-    args = [a for a in sys.argv[1:] if a != "--fetch"]
-    do_fetch = "--fetch" in sys.argv
-    targets = [BY_SLUG[s] for s in args] if args else JURISDICTIONS
+    args = build_parser().parse_args()
+    targets = [BY_SLUG[s] for s in args.slugs] if args.slugs else JURISDICTIONS
     for j in targets:
-        if do_fetch:
+        if args.fetch:
             fetch_sources(j)
         if not j.report_html_path.exists():
             print(f"skip {j.slug}: {j.report_html_path} not present (use --fetch)")

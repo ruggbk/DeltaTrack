@@ -26,6 +26,21 @@ class BillNode:
     display_text: str = ""
 
 
+def amount_text(node: BillNode) -> str:
+    """The text every money view extracts a node's dollar amounts from (#365).
+
+    One function rather than the same ``display_text or body_text`` expression written
+    out at each call site, because the two money views disagreeing is exactly the defect
+    #365 was filed for: the leveled tree read ``display_text`` while the amount-change
+    table read ``body_text``, which ``_extract_section_text`` truncates. Two copies of a
+    rule can drift; one cannot, so both callers import this.
+
+    The ``or`` is load-bearing: a node built without a ``display_text`` falls back to
+    ``body_text`` rather than extracting from an empty string and losing its amounts.
+    """
+    return node.display_text or node.body_text
+
+
 @dataclass(frozen=True)
 class BillTree:
     """Normalized representation of one bill version."""

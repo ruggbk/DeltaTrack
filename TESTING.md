@@ -379,6 +379,11 @@ provenance:
 uv run python scripts/fetch_test_assets.py
 ```
 
+That script is not part of the validation-evidence refresh — rebuilding the
+ground-truth fixtures and regenerating `docs/parser-validation.md` is a separate
+procedure, written down as a runbook in
+[scripts/README.md](scripts/README.md#refreshing-the-validation-evidence).
+
 ### Speeding up the PDF tests for development
 
 The slow PDF tests read every bill PDF, and reading a large omnibus takes a
@@ -413,7 +418,7 @@ pays one full re-extraction.
 
 Superseded entries are never reclaimed, so each invalidation leaves the previous
 set on disk. Nothing reads them and nothing in CI restores the directory, so to
-reclaim the space just delete it: `rm -rf test_data/extract_cache`. The next run
+reclaim the space just delete it: `rm -rf tests/data/extract_cache`. The next run
 re-extracts.
 
 ## Comparing the two pipelines by eye
