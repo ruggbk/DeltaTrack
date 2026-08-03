@@ -80,8 +80,9 @@ def chromium():
 class _Form:
     """One open form, driven the way a reviewer drives it."""
 
-    def __init__(self, page):
+    def __init__(self, page, reviewer):
         self.page = page
+        self.reviewer = reviewer
         self.dialogs: list[str] = []
         page.on("dialog", self._on_dialog)
 
@@ -89,15 +90,35 @@ class _Form:
         self.dialogs.append(dialog.message)
         dialog.accept()
 
+    @property
+    def index(self) -> int:
+        return int(self.page.inner_text("#pos").split("/")[0]) - 1
+
     def goto_card(self, index: int) -> None:
-        """Navigate to card `index` from wherever we are, using the form's own Prev/Next."""
-        current = int(self.page.inner_text("#pos").split("/")[0]) - 1
-        while current < index:
-            self.page.click("text=Next →")
-            current += 1
-        while current > index:
-            self.page.click("text=← Prev")
-            current -= 1
+        """Navigate to card `index` from wherever we are, using the form's own Prev/Next.
+
+        Forward movement is gated on the current card being finished, so an unfinished card would
+        otherwise surface as an opaque click timeout. Assert it directly instead.
+        """
+        while self.index < index:
+            assert self.page.is_enabled("#next"), (
+                f"cannot advance past card {self.index}: it is unfinished ({self.page.inner_text('.status')})"
+            )
+            self.page.click("#next")
+        while self.index > index:
+            self.page.click("#prev")
+
+    def seed_stored_answers(self, stored: dict) -> None:
+        """Put answers straight into browser storage, then reload as a returning reviewer would.
+
+        Reaches past the interface on purpose, to reconstruct a state the interface no longer
+        produces (see the stored-without-confidence case below).
+        """
+        self.page.evaluate(
+            "([k, v]) => localStorage.setItem(k, JSON.stringify(v))",
+            [f"pass2-labels-{self.reviewer}", stored],
+        )
+        self.page.reload(wait_until="domcontentloaded")
 
     def answer(self, index, label=None, confidence=None, rationale=None) -> None:
         self.goto_card(index)
@@ -131,7 +152,7 @@ def form(chromium, tmp_path, request):
     path.write_text(_make_form(reviewer, 12), encoding="utf-8")
     page = chromium.new_page()
     page.goto(path.as_uri(), wait_until="domcontentloaded")
-    yield _Form(page)
+    yield _Form(page, reviewer)
     page.close()
 
 
@@ -175,12 +196,12 @@ def test_whitespace_only_rationale_does_not_satisfy_the_rule(form):
 def test_started_but_incomplete_cards_are_named_and_untouched_ones_are_not(form):
     """The distinction the reviewer depends on when deciding whether they are done.
 
-    A card with an answer but no confidence is dropped AND named, so the reviewer can go finish
-    it. A card never touched is also dropped but must NOT be named, or the warning would list
-    every remaining card and be ignored.
+    A card downgraded to medium without a rationale is dropped AND named, so the reviewer can go
+    finish it. A card never touched is also dropped but must NOT be named, or the warning would
+    list every remaining card and be ignored.
     """
-    form.answer(0, label="different", confidence="high")  # complete
-    form.answer(1, label="same")  # started, no confidence
+    form.answer(0, label="different")  # complete: the answer click sets confidence to high
+    form.answer(1, label="same", confidence="medium")  # started, owes a rationale
     # cards 2..11 never touched
 
     doc = form.export()
@@ -190,6 +211,72 @@ def test_started_but_incomplete_cards_are_named_and_untouched_ones_are_not(form)
     warning = form.dialogs[0]
     assert "hcd-001" in warning, "the started-but-incomplete card must be named"
     assert "hcd-002" not in warning, "a never-touched card must not be reported as incomplete"
+
+
+def test_picking_an_answer_sets_confidence_to_high(form):
+    """A clear-cut card is one click.
+
+    Most cards in the pool are clear-cut, and the reviewer labels hundreds, so a mandatory second
+    click on every one of them costs a lot and decides nothing. `high` consequently means "not
+    downgraded"; medium and low remain deliberate.
+    """
+    form.answer(0, label="different")  # answer only, no confidence touched
+
+    (rec,) = form.export()["labels"]
+
+    assert rec["confidence"] == "high"
+
+
+def test_downgrading_confidence_overrides_the_default_and_survives_a_re_answer(form):
+    """The default must not claw back a downgrade the reviewer made on purpose."""
+    form.answer(0, label="different", confidence="low", rationale="Shared citation only.")
+    form.answer(0, label="same")  # change the answer; confidence must stay where it was put
+
+    (rec,) = form.export()["labels"]
+
+    assert rec["label"] == "same"
+    assert rec["confidence"] == "low"
+
+
+def test_cannot_advance_past_an_unfinished_card(form):
+    """Forward movement is gated so a card cannot be left half-answered by walking past it."""
+    assert not form.page.is_enabled("#next"), "an unanswered card must block Next"
+    assert not form.page.is_enabled("#jump"), "and must block 'Next unfinished' too"
+
+    form.answer(0, label="same", confidence="medium")  # owes a rationale
+    assert not form.page.is_enabled("#next"), "medium confidence without a rationale still blocks"
+    assert "add a rationale" in form.page.inner_text(".status")
+
+    form.answer(0, rationale="Same account, amount edited.")
+    assert form.page.is_enabled("#next")
+
+    form.page.click("#next")
+    assert form.index == 1
+
+
+def test_going_back_is_never_blocked(form):
+    """Reviewing an earlier answer is not what leaves a card unfinished, so Prev stays free."""
+    form.answer(0, label="different")
+    form.page.click("#next")
+    form.page.click("#card select")  # focus only; card 1 is still unanswered
+
+    form.page.click("#prev")
+
+    assert form.index == 0
+
+
+def test_an_answer_stored_without_a_confidence_is_still_held_back(form):
+    """The completeness rule does not lean on the default having run.
+
+    The interface no longer produces an answer without a confidence, but browser storage from an
+    earlier build can hold one, and it must not be exported as though it were finished.
+    """
+    form.seed_stored_answers({"hcd-000": {"label": "different"}})
+
+    doc = form.export()
+
+    assert doc["n"] == 0
+    assert "hcd-000" in form.dialogs[0]
 
 
 def test_answers_survive_a_reload(form):
