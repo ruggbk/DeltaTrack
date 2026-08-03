@@ -20,10 +20,10 @@ for the rationale and a reproducible comparison.
 
 ## Prerequisites
 
-- **Python 3.12+** - Download from https://www.python.org/downloads/ if you don't have it. To check, open a terminal (Terminal on Mac, Command Prompt on Windows) and type `python3 --version`.
-- **uv** (Python package manager) - Open a terminal and run:
+- **uv** (Python package manager) - the only thing you need to install. Open a terminal (Terminal on Mac, Command Prompt on Windows) and run:
   - Mac/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
   - Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+- **Python 3.12** - you do not need to install this. uv downloads the version pinned in `.python-version` the first time you run the setup step below, so whatever `python3 --version` reports on your machine is not what the tool runs.
 
 ## Quickstart
 

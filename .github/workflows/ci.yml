@@ -63,6 +63,12 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
+        # The other workflows install the version named in `.python-version` (#442).
+        # This job deliberately overrides it: the matrix exists to run the newest 3.12
+        # AND the declared floor, and one source of truth cannot name two interpreters.
+        # `.python-version` still governs developer environments and the
+        # single-interpreter workflows; the explicit version here, and the `--python`
+        # on `uv sync` below, are what hold the two legs apart (#426).
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies

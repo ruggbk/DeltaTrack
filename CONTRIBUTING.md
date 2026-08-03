@@ -20,7 +20,7 @@ You don't need either to send a pull request, but both make the on-ramp much sho
 
 ### Prerequisites
 
-- **Python 3.12+** -- check with `python3 --version`
+- **Python 3.12** -- pinned in `.python-version`, and uv installs it for you, so you do not need a matching system Python. Whatever `python3 --version` says is not what the project runs.
 - **uv** (Python package manager) -- install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Git** -- for version control
 
@@ -39,6 +39,21 @@ uv run pre-commit install
 
 # Run the fast test suite to verify everything works
 uv run pytest -m "not slow and not browser"
+```
+
+`.python-version` is what makes everyone, and CI, run the same interpreter. Without it uv
+picks the first version satisfying `requires-python = ">=3.12"`, which on a machine with a
+newer system Python is that newer one, while CI stays on 3.12. Nothing fails at install
+time when that happens, so the divergence only shows up later as a test result you cannot
+reproduce anywhere else.
+
+**If you already had an environment before this was pinned**, uv reuses an existing
+`.venv`'s interpreter rather than reselecting, so the pin does not apply to it. Recreate it
+once:
+
+```bash
+rm -rf .venv && uv sync
+uv run python -V   # expect 3.12.x
 ```
 
 ### Optional: download bill files for full test suite

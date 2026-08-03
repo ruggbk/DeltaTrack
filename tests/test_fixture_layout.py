@@ -36,8 +36,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import _git_tracked_paths, engine_is_foreign
+from tests.conftest import _git_tracked_paths
 from tests.corpus_paths import DOWNLOADS_DIR, FIXTURES_DIR, PROJECT_ROOT, sweep_bill_dirs
+from tests.engine_guard import engine_is_foreign
 
 # Modules that legitimately name ``bills/``: they are about the DOWNLOAD tier itself
 # (the fetchers and their tests, the live parity gate) or they pin a bill nobody has
@@ -714,6 +715,16 @@ _FOREIGN_ENGINE = {
     "diff_bill.py": "NodeDiff = diff_bills = None\n",
 }
 
+# The same foreign engine with a layout that does NOT match: importable as `deltatrack`
+# from outside the checkout, but missing a submodule conftest pulls off it. This is the
+# shape the guard used to miss (#439) -- the foreignness check ran after those submodule
+# imports, so the run died on a bare "no module named" that reads as a broken branch and
+# the environment was never named. Reachable today only via a partial or rolled-back
+# install; it widens with every engine submodule conftest adds.
+_FOREIGN_ENGINE_PARTIAL = {
+    "__init__.py": "",
+}
+
 # An engine that is absent in the way a stale editable pointer makes it absent: the name
 # resolves, importing it raises with `name == "deltatrack"`. That is the ONE shape conftest
 # rewrites into environment guidance.
@@ -721,11 +732,22 @@ _BROKEN_ENVIRONMENT = {
     "__init__.py": "raise ModuleNotFoundError(\"No module named 'deltatrack'\", name='deltatrack')\n",
 }
 
-# A fault in the branch wearing the same exception type: the engine imports, but something
-# inside it reaches for a module that does not exist. conftest must leave this alone.
+# A fault in the source wearing the same exception type: the engine's own `__init__` reaches
+# for a module that does not exist, so the failure arrives under a name that is not
+# `deltatrack`. conftest must leave this alone rather than dress it up as an environment
+# problem -- the same shape a missing third-party dependency takes, which is what the
+# handler's `exc.name` discrimination exists for.
+#
+# The fault sits in `__init__.py`, not in a submodule, because the foreignness check now runs
+# between `import deltatrack` and the submodule imports (#439). Every stand-in engine here is
+# foreign by construction -- that is how PYTHONPATH makes one reproducible -- so a submodule
+# fault would be preempted by the foreign-engine error and this test would pin nothing. That
+# preemption is correct where the two genuinely coincide: a broken import inside an engine
+# from ANOTHER checkout is still the environment's fault, and naming the module would send a
+# developer into a diff that is not theirs. What must not be preempted is a fault in the tree
+# under test, and that engine is not foreign, so it reaches the submodule imports as before.
 _BRANCH_FAULT = {
-    "__init__.py": "",
-    "bill_tree.py": "from deltatrack.missing_helper import Oops\n",
+    "__init__.py": "from deltatrack.missing_helper import Oops\n",
 }
 
 
@@ -773,6 +795,39 @@ def test_conftest_refuses_a_foreign_engine(tmp_path) -> None:
     assert "DIFFERENT tree's source" in result.stdout + result.stderr, (
         "the child session failed, but not with the foreign-engine guard, so this test is "
         f"passing for the wrong reason.\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
+    )
+
+
+def test_conftest_refuses_a_foreign_engine_before_reading_its_layout(tmp_path) -> None:
+    """A foreign engine must be NAMED as one whatever its shape (#439).
+
+    The case above supplies every name conftest pulls off the engine, so it only proves
+    the guard fires on a foreign engine that happens to look like this one. Order is what
+    is pinned here: the check has to run on `import deltatrack` alone, before any submodule
+    import can fail first. When it ran after them, an engine missing `bill_tree` died on a
+    bare `ModuleNotFoundError: No module named 'deltatrack.bill_tree'` -- correctly
+    re-raised as a branch fault by the `exc.name != "deltatrack"` test, because by that test
+    it genuinely is one, while the fact that the engine came from another checkout was
+    never consulted.
+
+    This cannot fail open: the session is red either way, which is why #435's property
+    still held. What it costs is the diagnostic, and one that points at the diff when the
+    fault is the environment is the expensive direction -- the developer inspects their own
+    changes. The exposure grows with the import list: `conftest.py` names two engine
+    submodules today and nothing holds that number, so the first change that adds a third
+    makes this reachable for anyone reviewing THAT change from a worktree against a shared
+    environment, which is the workflow the guard exists to protect.
+    """
+    result = _collect_with_engine(tmp_path, _FOREIGN_ENGINE_PARTIAL)
+    combined = result.stdout + result.stderr
+
+    assert result.returncode != 0, (
+        f"a child session importing a foreign `deltatrack` collected successfully.\n{combined[-2000:]}"
+    )
+    assert "DIFFERENT tree's source" in combined, (
+        "a foreign engine missing a submodule failed as a BRANCH fault instead of being "
+        "named as a foreign engine, so the foreignness check is running after the submodule "
+        f"imports again.\n{combined[-2000:]}"
     )
 
 
