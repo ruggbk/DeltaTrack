@@ -849,7 +849,10 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
     sniffing, so that adding the version-addressable form cannot re-read an existing
     command as something else (#152). The one shape check below (a lone positional that
     is an existing file or directory) only picks the ERROR WORDING; the count still
-    decides the outcome, so it cannot re-read a working command.
+    decides the outcome, so it cannot re-read a working command. That holds only because
+    the check runs AFTER the version listing has been tried and come back empty -- ahead
+    of it, the same check chooses between success and failure, which is the bug #426's
+    review caught.
 
     A bare slug is a question rather than a failure, so it answers on stdout and exits
     0; every other unresolvable case is an error whose message is the same listing.
@@ -865,25 +868,28 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
         )
     if len(targets) == 1:
         target = targets[0]
+        # The listing is tried FIRST so that the shape check below only ever picks
+        # between two failures. Checking the shape first let it pick between success and
+        # failure instead: `cd bills && compare --bills-dir . 118-hr-4366` names both a
+        # resolvable slug and an existing directory, and the check turned that working
+        # command into "the second path is missing" (#426 review).
+        versions = local_versions(args.bills_dir, target)
+        if versions:
+            print(_format_version_listing(args.bills_dir, target, versions))
+            raise SystemExit(0)
         if Path(target).is_file() or Path(target).is_dir():
-            # One real path and nothing else: `compare "$OLD" "$NEW"` with $NEW unset,
-            # or a lone directory from shell completion. The answer is the missing
-            # second path, not a version listing for a "slug" that is plainly a path
-            # -- the listing doubled it ("in bills/bills/...") and advised downloading
-            # a bill the user already has on disk.
+            # One real path, no versions under it, and nothing else: `compare "$OLD"
+            # "$NEW"` with $NEW unset, or a lone directory from shell completion. The
+            # answer is the missing second path, not a version listing for a "slug"
+            # that is plainly a path -- the listing doubled it ("in bills/bills/...")
+            # and advised downloading a bill the user already has on disk.
             raise SystemExit(f"compare takes two file paths; the second path is missing (got only {target}).")
-        slug = target
-        versions = local_versions(args.bills_dir, slug)
-        listing = _format_version_listing(args.bills_dir, slug, versions)
-        if not versions:
-            # An empty listing is a failure, not an answer. `compare "$OLD" "$NEW"` with
-            # an unset variable collapses to one argument, which the two-positional
-            # parser rejected outright — a wrapper reading the exit status has to keep
-            # seeing that, rather than a clean exit and a message about a bill nobody
-            # asked for.
-            raise SystemExit(listing)
-        print(listing)
-        raise SystemExit(0)
+        # An empty listing is a failure, not an answer. `compare "$OLD" "$NEW"` with
+        # an unset variable collapses to one argument, which the two-positional
+        # parser rejected outright — a wrapper reading the exit status has to keep
+        # seeing that, rather than a clean exit and a message about a bill nobody
+        # asked for.
+        raise SystemExit(_format_version_listing(args.bills_dir, target, versions))
     # argparse rejected these arities with exit 2 (a usage error); a wrapper keying on
     # the exit status has to keep seeing 2, not the 1 a bare SystemExit(message) gives.
     print(f"{_COMPARE_USAGE} — got {len(targets)}.", file=sys.stderr)

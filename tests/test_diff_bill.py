@@ -918,8 +918,9 @@ class TestCompareVersionListing:
         assert capsys.readouterr().out == "", "the failure belongs on stderr, not stdout"
 
     def test_a_vanished_shell_argument_still_fails(self, synthetic_bills_dir, monkeypatch):
-        """The shape the fail-open actually takes: one real path, second argument gone.
+        """INTENDED: the missing-second-path error -- an existing FILE holding no versions.
 
+        The shape the fail-open actually takes: one real path, second argument gone.
         The message names the missing second path. A lone existing file is not a slug,
         so the old answer -- a version listing doubled to "bills/bills/..." plus advice
         to download a file already on disk -- pointed away from the mistake.
@@ -934,23 +935,94 @@ class TestCompareVersionListing:
         assert only in message
         assert "Download them with" not in message
 
-    def test_a_lone_existing_directory_gets_the_missing_path_error(self, synthetic_bills_dir, monkeypatch):
-        """Shell completion hands over a directory; that is the same vanished-argument shape.
+    def test_a_slug_that_also_names_a_directory_in_the_cwd_still_gets_the_listing(
+        self, synthetic_bills_dir, monkeypatch, capsys
+    ):
+        """INTENDED: the listing. The shape check must never cost a working command.
 
-        A lone directory used to fall through to the slug path and answer with the
-        doubled "in bills/bills/..." listing plus advice to download a bill plainly
-        on disk. The shape check covers an existing directory with the same wording
-        as a lone file (#426 review).
+        `cd bills && compare --bills-dir . 118-hr-4366` -- the slug resolves to versions
+        AND happens to name a directory relative to the cwd. It printed the listing and
+        exited 0 until a shape check was placed AHEAD of the listing, which turned it
+        into "the second path is missing" (#426 review). Trying the listing first is what
+        keeps the check choosing between two failures rather than between success and
+        failure, as the function's docstring has always claimed.
         """
-        only = str(synthetic_bills_dir / "118-hr-4366")
+        monkeypatch.chdir(synthetic_bills_dir)
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, "118-hr-4366", "--bills-dir", ".")
+        assert exc.value.code == 0, "a bare slug is a question, not a failure"
+        assert capsys.readouterr().out == (
+            "118-hr-4366 has 3 local versions:\n"
+            "  1  reported-in-house\n"
+            "  3  placed-on-calendar-senate\n"
+            "  6  enrolled-bill\n"
+            "Pick two: compare 118-hr-4366 <old> <new>\n"
+        )
+
+    def test_a_lone_absolute_directory_that_has_versions_gets_the_listing(
+        self, synthetic_bills_dir, monkeypatch, capsys
+    ):
+        """INTENDED: the listing, and this assertion is a deliberate reversal.
+
+        `Path(bills_dir) / <absolute path>` collapses to the absolute path, so an
+        absolute bill directory addresses its own versions and reaches the listing
+        first. This test used to require the missing-second-path error here; showing
+        the versions of the directory the user just named is the more useful answer,
+        and the "Pick two" line it prints is runnable as spelled (#426 review).
+
+        The failure branch for a directory is pinned by the no-versions test below.
+        """
+        only = synthetic_bills_dir / "118-hr-4366"
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, str(only), "--format", "json")
+        assert exc.value.code == 0
+        assert capsys.readouterr().out == (
+            f"{only} has 3 local versions:\n"
+            "  1  reported-in-house\n"
+            "  3  placed-on-calendar-senate\n"
+            "  6  enrolled-bill\n"
+            f"Pick two: compare {only} <old> <new>\n"
+        )
+
+    def test_a_lone_existing_directory_with_no_versions_gets_the_missing_path_error(
+        self, synthetic_bills_dir, monkeypatch
+    ):
+        """INTENDED: the missing-second-path error -- an existing path holding no versions.
+
+        The bills ROOT is a real directory with no `{n}_{label}.xml` of its own, so the
+        listing finds nothing and the shape check picks the wording. That is the
+        shell-completion shape: one real path, second argument gone. The doubled
+        "in bills/bills/..." listing plus advice to download a bill plainly on disk
+        pointed away from the mistake.
+        """
+        only = str(synthetic_bills_dir)
         with pytest.raises(SystemExit) as exc:
             _run_compare(monkeypatch, only, "--format", "json")
         assert exc.value.code != 0
         message = str(exc.value.code)
-        assert "the second path is missing" in message
-        assert only in message
+        assert message == f"compare takes two file paths; the second path is missing (got only {only})."
         assert "Download them with" not in message
         assert "No local versions" not in message
+
+    def test_a_lone_path_that_exists_nowhere_gets_the_no_local_versions_message(
+        self, synthetic_bills_dir, monkeypatch, capsys
+    ):
+        """INTENDED: the "No local versions" failure -- the third and last branch.
+
+        A path-shaped argument naming nothing on disk and holding no versions under
+        `--bills-dir` passes the listing and the shape check both, so it lands on the
+        message that says where the tool looked.
+        """
+        only = "119-hr-1/1_reported-in-house.xml"
+        monkeypatch.chdir(synthetic_bills_dir)
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, only, "--bills-dir", str(synthetic_bills_dir))
+        assert exc.value.code != 0
+        assert str(exc.value.code) == (
+            f"No local versions for {only} in {synthetic_bills_dir}/119-hr-1/1_reported-in-house.xml. "
+            "Download them with: ./tools/fetch_bills.py download <congress> <type> <number>"
+        )
+        assert capsys.readouterr().out == "", "the failure belongs on stderr, not stdout"
 
     def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch, capsys):
         """Dispatch is on the count, so 0 and 4+ are the arities with no meaning.
