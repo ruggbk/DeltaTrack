@@ -1,10 +1,12 @@
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pytest
 
 from deltatrack.bill_tree import (
     BillNode,
     _extract_appropriations_text,
+    _extract_metadata,
     _extract_section_text,
     build_title_label,
     extract_display_text,
@@ -18,7 +20,13 @@ from deltatrack.bill_tree import (
     walk_body_sections,
     walk_title,
 )
-from tests.corpus_paths import fixture_path, resolve_bill_file
+from deltatrack.diff_bill import diff_bills
+from tests.corpus_paths import PROJECT_ROOT, fixture_path, resolve_bill_file
+
+# Real GPO resolution XML, committed beside the byte-identity fixtures rather than in
+# tests/corpus/ + corpus_manifest.toml: the manifest enrolls a bill in the appropriations
+# corpus gates, which these procedural texts carry no amounts for (#201).
+RESOLUTION_FIXTURES = PROJECT_ROOT / "tests" / "fixtures" / "resolutions"
 
 
 def _content(tree):
@@ -502,6 +510,22 @@ class TestFindBillBody:
         )
         body = find_bill_body(root)
         assert body.tag == "legis-body"
+        assert body.find("section") is not None
+
+    def test_resolution_with_resolution_body(self):
+        """Joint/concurrent/simple resolutions root at <resolution> and carry
+        <resolution-body> where a bill carries <legis-body> (#201)."""
+        root = ET.fromstring(
+            '<resolution resolution-type="house-joint">'
+            "<form><legis-num>H. J. RES. 25</legis-num></form>"
+            '<resolution-body style="traditional">'
+            '<section section-type="undesignated-section"><enum/>'
+            "<text>That the following article is proposed.</text></section>"
+            "</resolution-body>"
+            "</resolution>"
+        )
+        body = find_bill_body(root)
+        assert body.tag == "resolution-body"
         assert body.find("section") is not None
 
     def test_amendment_doc(self):
@@ -1854,3 +1878,308 @@ class TestSubsectionLabelBounds:
         out = extract_display_text(section, skip_children=frozenset({id(sub)}))
         assert "Body." not in out
         assert "$9,999" in out
+
+
+class TestResolutionLegisNum:
+    """<legis-num> -> bill_type for every resolution form (#201).
+
+    Expected values are pasted literals, not re-derived from the parser's own
+    mapping. Before the fix the four multi-word forms collapsed onto the regex's
+    first captured letter ('j' for both chambers' joint resolutions, 'n' for both
+    concurrent ones) and the two simple forms were mislabelled as the bill types
+    'hr'/'s' — a wrong designator printed on a real document.
+    """
+
+    @pytest.mark.parametrize(
+        ("legis_num", "expected_type", "expected_number"),
+        [
+            ("H. R. 3547", "hr", 3547),
+            ("S. 2321", "s", 2321),
+            ("H. J. RES. 25", "hjres", 25),
+            ("S. J. RES. 10", "sjres", 10),
+            ("H. CON. RES. 4", "hconres", 4),
+            ("S. CON. RES. 3", "sconres", 3),
+            ("H. RES. 5", "hres", 5),
+            ("S. RES. 9", "sres", 9),
+        ],
+    )
+    def test_bill_type_and_number(self, legis_num, expected_type, expected_number):
+        root = ET.fromstring(f"<resolution><form><legis-num>{legis_num}</legis-num></form></resolution>")
+        _congress, bill_type, bill_number, _version, _title = _extract_metadata(root, Path("BILLS-119test.xml"))
+        assert bill_type == expected_type
+        assert bill_number == expected_number
+
+    def test_unfamiliar_form_normalizes_rather_than_raising(self):
+        """The mapping is a normalization, not a lookup over an enumerated set, so an
+        unfamiliar prefix yields its own letters ("X. Y. RES." -> "xyres") rather than
+        raising or landing on a real designator. Pre-#201 this yielded "y", because the
+        old regex captured one letter and was unanchored, so it matched at the second."""
+        root = ET.fromstring("<resolution><form><legis-num>X. Y. RES. 7</legis-num></form></resolution>")
+        _congress, bill_type, bill_number, _version, _title = _extract_metadata(root, Path("BILLS-119test.xml"))
+        assert bill_number == 7
+        assert bill_type == "xyres"
+
+
+class TestLegisNumNormalization:
+    """bill_type is derived by NORMALIZING the <legis-num> prefix — strip it to letters,
+    lowercase it — not by looking it up in a table of known forms.
+
+    Pinned directly, because that normalization is the entire mechanism: a table mapping
+    "HCONRES" to "hconres" would be an identity map that the normalization already
+    satisfies, so a test that only went through such a table would pin nothing.
+    """
+
+    @staticmethod
+    def _bill_type(legis_num):
+        root = ET.fromstring(f"<resolution><form><legis-num>{legis_num}</legis-num></form></resolution>")
+        return _extract_metadata(root, Path("BILLS-119test.xml"))[1]
+
+    @pytest.mark.parametrize(
+        ("spaced", "unspaced", "expected"),
+        [
+            ("H. R. 4366", "H.R. 4366", "hr"),
+            ("H. CON. RES. 58", "H.CON.RES. 58", "hconres"),
+            ("S. J. RES. 3", "S.J.RES. 3", "sjres"),
+        ],
+    )
+    def test_separators_are_normalized_away(self, spaced, unspaced, expected):
+        """GPO spells the same designator both ways — the corpus carries "H. R. 2029"
+        and "H.R. 2029" — so the dots and spaces must not survive into bill_type."""
+        assert self._bill_type(spaced) == expected
+        assert self._bill_type(unspaced) == expected
+
+    def test_bill_type_is_letters_only_and_lowercase(self):
+        """The normalization's postcondition, asserted on the shape rather than on a
+        pasted value: no dots, no spaces, no uppercase survive it."""
+        for legis_num in ("H. CON. RES. 58", "H.R. 4366", "S. RES. 9"):
+            bill_type = self._bill_type(legis_num)
+            assert bill_type.isalpha(), f"{legis_num!r} -> {bill_type!r} is not letters-only"
+            assert bill_type.islower(), f"{legis_num!r} -> {bill_type!r} is not lowercase"
+
+
+@pytest.mark.slow
+class TestReportedStageVariants:
+    """Reported-stage resolutions can carry the committee amendment as PAIRED blocks —
+    a changed="deleted" (struck) copy and a changed="added" copy — as two
+    <resolution-body> and/or two <preamble> children.
+
+    Taking the first would render the SUPERSEDED text as though it were the document,
+    turning a loud failure into a silent wrong answer. These already fail on develop, so
+    failing loudly here regresses nothing. Choosing a variant is an amendment-display
+    feature and deliberately out of scope (#201).
+    """
+
+    def test_paired_variants_raise_instead_of_rendering_the_struck_text(self):
+        with pytest.raises(ValueError) as excinfo:
+            normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hres137rh.xml")
+        message = str(excinfo.value)
+        # The message must name what was found, so the failure is diagnosable.
+        assert "2 <resolution-body>" in message
+        assert "2 <preamble>" in message
+        assert "deleted" in message
+        assert "added" in message
+
+    def test_the_struck_variant_really_does_differ_from_the_amended_one(self):
+        """Guards the premise: if the paired blocks were identical, silently taking the
+        first would be harmless and this whole guard would be unnecessary. They are not
+        — the committee restyled a recital and rewrote the body."""
+        root = ET.parse(RESOLUTION_FIXTURES / "BILLS-119hres137rh.xml").getroot()
+        deleted, added = root.findall("resolution-body")
+        assert deleted.get("changed") == "deleted"
+        assert added.get("changed") == "added"
+        assert extract_text_content(deleted) != extract_text_content(added)
+        old_recitals, new_recitals = (
+            [extract_text_content(w).strip() for w in preamble.findall("whereas")]
+            for preamble in root.findall("preamble")
+        )
+        assert len(old_recitals) == len(new_recitals) == 17
+        assert old_recitals != new_recitals
+
+
+@pytest.mark.slow
+class TestResolutionParsing:
+    """End-to-end parsing of real GPO resolution XML (#201)."""
+
+    def test_joint_resolution_parses_with_correct_metadata(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hjres25ih.xml")
+        assert tree.congress == 119
+        assert tree.bill_type == "hjres"
+        assert tree.bill_number == 25
+        body_nodes = _content(tree)
+        assert body_nodes, "resolution body produced no content nodes"
+        assert any(n.body_text.strip() for n in body_nodes), "body nodes carry no text"
+
+    def test_senate_joint_resolution_parses_with_correct_metadata(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119sjres3is.xml")
+        assert tree.congress == 119
+        assert tree.bill_type == "sjres"
+        assert tree.bill_number == 3
+        assert _content(tree), "resolution body produced no content nodes"
+
+    def test_concurrent_resolution_parses_with_correct_metadata(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        assert tree.congress == 119
+        assert tree.bill_type == "hconres"
+        assert tree.bill_number == 58
+
+    def test_concurrent_resolution_carries_its_resolving_clause(self):
+        """End to end: the synthesized node a real resolution gains is its OWN clause,
+        not the bill enacting clause every resolution carried pre-#427."""
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        node = next(n for n in tree.nodes if n.element_id == "front-matter-resolving-clause")
+        assert node.body_text == "Resolved by the House of Representatives (the Senate concurring),"
+        assert not [n for n in tree.nodes if n.element_id == "front-matter-enacting-clause"]
+
+    def test_joint_resolution_carries_the_joint_clause(self):
+        expected = (
+            "Resolved by the Senate and House of Representatives of the United States of America in Congress assembled,"
+        )
+        for fixture in ("BILLS-119hjres25ih.xml", "BILLS-119sjres3is.xml"):
+            tree = normalize_bill(RESOLUTION_FIXTURES / fixture)
+            node = next(n for n in tree.nodes if n.element_id == "front-matter-resolving-clause")
+            assert node.body_text == expected
+
+
+@pytest.mark.slow
+class TestResolutionPreamble:
+    """The <preamble>/<whereas> recitals must survive the parse (#201).
+
+    A body-finder fix alone converts the crash into a silent drop: <preamble> is a
+    sibling of <resolution-body>, so nothing walks it and a clean-looking report
+    loses every recital. These assertions are what make that regression loud.
+    """
+
+    # Pasted verbatim from tests/fixtures/resolutions/BILLS-119hconres58ih.xml.
+    FIRST_RECITAL = (
+        "Whereas socialist ideology necessitates a concentration of power that has, time and time again, "
+        "collapsed into communist regimes, totalitarian rule, and brutal dictatorships;"
+    )
+    LAST_RECITAL_OPENING = (
+        "Whereas the United States was founded on the belief in the sanctity of the individual, "
+        "to which the collectivistic system of socialism"
+    )
+
+    @staticmethod
+    def _preamble_node(tree):
+        matches = [n for n in tree.nodes if n.element_id == "front-matter-preamble"]
+        assert len(matches) == 1, f"expected exactly one preamble node, got {len(matches)}"
+        return matches[0]
+
+    def test_every_recital_is_captured(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        node = self._preamble_node(tree)
+        recitals = node.body_text.split("\n")
+        assert len(recitals) == 12
+        assert recitals[0] == self.FIRST_RECITAL
+        assert recitals[-1].startswith(self.LAST_RECITAL_OPENING)
+        assert sum(1 for line in recitals if line.startswith("Whereas ")) == 12
+
+    def test_recitals_survive_into_the_engrossed_version_too(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58eh.xml")
+        node = self._preamble_node(tree)
+        assert len(node.body_text.split("\n")) == 12
+        assert node.body_text.split("\n")[0] == self.FIRST_RECITAL
+
+    def test_preamble_renders_before_the_resolving_clause(self):
+        """GPO prints form -> recitals -> resolving clause -> body, and
+        extract_front_matter_nodes returns nodes in render order."""
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        ids = [n.element_id for n in tree.nodes]
+        assert ids.index("front-matter-preamble") < ids.index("front-matter-resolving-clause")
+        assert ids.index("front-matter-official-title") < ids.index("front-matter-preamble")
+
+    def test_a_resolution_without_a_preamble_gains_no_preamble_node(self):
+        tree = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hjres25ih.xml")
+        assert [n for n in tree.nodes if n.element_id == "front-matter-preamble"] == []
+
+
+class TestResolvingClause:
+    """The resolving clause synthesized for a resolution, pinned per resolution-type (#427).
+
+    The clause appears nowhere in the source XML — GPO injects it at render time — so
+    no corpus assertion can contradict a wrong string. These expected values are pasted
+    literals from billres-details.xsl's resolution-body template (whitespace collapsed),
+    sharing no constant with the production code, so a drifted synthesized string fails
+    here. Pre-#427 every resolution carried the BILL enacting clause, and the opt-out
+    that might have masked it reads display-enacting-clause, an attribute res.dtd does
+    not define on <resolution-body> (its opt-out is display-resolving-clause).
+    """
+
+    @staticmethod
+    def _clause(resolution_type, body_attrs=""):
+        # Local import: pinned against the production symbol, so a revert of the
+        # production change fails these tests individually rather than at collection.
+        from deltatrack.bill_tree import _resolving_clause
+
+        root = ET.fromstring(
+            f'<resolution resolution-type="{resolution_type}"><resolution-body {body_attrs}/></resolution>'
+        )
+        return _resolving_clause(root, root.find("resolution-body"))
+
+    @pytest.mark.parametrize(
+        ("resolution_type", "expected"),
+        [
+            ("house-concurrent", "Resolved by the House of Representatives (the Senate concurring),"),
+            ("senate-concurrent", "Resolved by the Senate (the House of Representatives concurring),"),
+            (
+                "house-joint",
+                "Resolved by the Senate and House of Representatives of the United States of America "
+                "in Congress assembled,",
+            ),
+            (
+                "senate-joint",
+                "Resolved by the Senate and House of Representatives of the United States of America "
+                "in Congress assembled,",
+            ),
+            ("house-resolution", "Resolved,"),
+            ("senate-resolution", "Resolved,"),
+            ("house-order", "Ordered,"),
+            ("senate-order", "Ordered,"),
+        ],
+    )
+    def test_clause_per_resolution_type(self, resolution_type, expected):
+        assert self._clause(resolution_type) == expected
+
+    def test_constitutional_amendment_style_overrides_the_joint_clause(self):
+        """resolution-body/@style="constitutional-amendment" selects its own clause,
+        ahead of the joint forms in the stylesheet's when-chain."""
+        expected = (
+            "Resolved by the Senate and House of Representatives of the United States of America "
+            "in Congress assembled (two-thirds of each House concurring therein),"
+        )
+        for resolution_type in ("house-joint", "senate-joint"):
+            assert self._clause(resolution_type, 'style="constitutional-amendment"') == expected
+
+    def test_opt_out_suppresses_the_simple_and_order_forms(self):
+        for resolution_type in ("house-resolution", "senate-resolution", "house-order", "senate-order"):
+            assert self._clause(resolution_type, 'display-resolving-clause="no-display-resolving-clause"') is None
+
+    def test_opt_out_does_not_suppress_the_joint_or_concurrent_forms(self):
+        """The stylesheet checks display-resolving-clause only on the simple and order
+        forms; the joint and concurrent clauses print regardless."""
+        for resolution_type in ("house-joint", "senate-joint", "house-concurrent", "senate-concurrent"):
+            assert self._clause(resolution_type, 'display-resolving-clause="no-display-resolving-clause"') is not None
+
+    def test_unrecognized_resolution_type_emits_nothing(self):
+        """Emitting nothing rather than something false — the pre-#427 failure mode was
+        exactly the opposite."""
+        assert self._clause("made-up-type") is None
+
+    def test_no_resolution_type_attribute_emits_nothing(self):
+        from deltatrack.bill_tree import _resolving_clause
+
+        root = ET.fromstring("<resolution><resolution-body/></resolution>")
+        assert _resolving_clause(root, root.find("resolution-body")) is None
+
+
+@pytest.mark.slow
+class TestResolutionDiff:
+    """A real introduced-vs-engrossed resolution pair diffs end to end (#201)."""
+
+    def test_concurrent_resolution_versions_diff(self):
+        old = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58ih.xml")
+        new = normalize_bill(RESOLUTION_FIXTURES / "BILLS-119hconres58eh.xml")
+        diff = diff_bills(old, new)
+        assert diff.bill_type == "hconres"
+        assert diff.bill_number == 58
+        assert diff.congress == 119
