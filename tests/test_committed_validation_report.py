@@ -31,7 +31,7 @@ REGENERATE = "Run `uv run python scripts/generate_validation_report.py` and comm
 
 
 def _mismatch(committed: bytes, fresh: bytes) -> str | None:
-    """None when identical; otherwise point at the first differing line.
+    """None when identical; otherwise point at the first differing line/column.
 
     The comparison is byte-exact, not whitespace-normalized: the generator is
     deterministic, so a wrapping-only difference is drift too — it means someone
@@ -43,8 +43,44 @@ def _mismatch(committed: bytes, fresh: bytes) -> str | None:
     new = fresh.decode().splitlines()
     for n, (a, b) in enumerate(zip(old, new), start=1):
         if a != b:
-            return f"first differs at line {n}:\n  committed: {a[:160]}\n  fresh:     {b[:160]}"
+            diff_col = _first_diff_column(a, b)
+            return (
+                f"first differs at line {n}, column {diff_col}:\n"
+                f"  committed: {_clip(a, diff_col)}\n"
+                f"  fresh:     {_clip(b, diff_col)}"
+            )
     return f"identical for {min(len(old), len(new))} lines, then lengths differ ({len(old)} vs {len(new)})"
+
+
+def _first_diff_column(a: str, b: str) -> int:
+    """Return the 0-based index of the first differing character."""
+    limit = min(len(a), len(b))
+    for i in range(limit):
+        if a[i] != b[i]:
+            return i
+    return limit
+
+
+def _clip(s: str, diff_col: int, width: int = 160) -> str:
+    """Return a ~width window of ``s`` centred on ``diff_col``.
+
+    An ellipsis prefix makes it obvious when the window does not start at
+    column 0; an ellipsis suffix is added when it does not reach the end.
+    """
+    if len(s) <= width:
+        return s
+    half = width // 2
+    if diff_col < half:
+        start, end = 0, width
+    else:
+        start = diff_col - half
+        end = diff_col + half
+        if end > len(s):
+            start = len(s) - width
+            end = len(s)
+    prefix = "..." if start > 0 else ""
+    suffix = "..." if end < len(s) else ""
+    return f"{prefix}{s[start:end]}{suffix}"
 
 
 def test_validation_report_fixtures_are_committed():
@@ -101,3 +137,23 @@ def test_validation_report_gate_can_fire():
     result = _mismatch(good, b"# Parser accuracy\n\n")
     assert result is not None
     assert "lengths differ" in result
+
+
+def test_mismatch_window_centres_on_first_diff_column():
+    """A difference past the old 160-character truncation is still visible."""
+    # Both strings share 170 leading "a"s, then differ at column 170, then share
+    # another 200 "b"s. Total length is 409, mirroring the Legislative Branch
+    # bullet that motivated the windowed output.
+    shared = "a" * 170
+    committed = (shared + "X" + "b" * 200).encode()
+    fresh = (shared + "Y" + "b" * 200).encode()
+
+    result = _mismatch(committed, fresh)
+
+    assert result is not None
+    assert "column 170" in result
+    assert "X" in result
+    assert "Y" in result
+    # The window starts at column 90, so the output must announce that the
+    # leading columns are omitted.
+    assert "..." in result
