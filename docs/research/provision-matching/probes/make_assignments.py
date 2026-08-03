@@ -1,24 +1,36 @@
-"""Assign candidates to reviewers: disjoint shards for throughput + a stratified overlap set
-for inter-annotator agreement (protocol §6/§8, multi-reviewer extension).
+"""Assign candidates to reviewers, in one of two modes (protocol §6/§8, multi-reviewer extension).
 
-Team labeling (3-4 CivicTech reviewers, possibly one). Each candidate is assigned to one or
-more reviewers:
-  - overlap set: a small stratified subset assigned to EVERY reviewer, so we can measure real
-    agreement (kappa) where it is hardest, instead of over-relying on one reviewer.
-  - disjoint remainder: round-robin across reviewers (deterministic by id hash) for throughput.
+SHARED (default) — every reviewer labels every candidate. Agreement is then measurable on the
+whole pool rather than on a small designated subset, which is what you want while the open
+question is still "do independent people reach the same answer at all". Reviewers work the same
+ordered queue and stop wherever they stop; `merge_labels.py` derives its agreement set from the
+data (any candidate carrying >= 2 human labels), so a partial pass from a late-joining reviewer
+still yields usable agreement. Adding a reviewer is purely ADDITIVE here: nobody's work is taken
+away, so a growing team costs nothing.
 
-Only NEW (unassigned) candidate ids are assigned, and existing assignments are preserved, so
-re-running after miners add examples never reshuffles work already handed out. With one
-reviewer the overlap is skipped (no agreement possible) and everything goes to them.
+SPLIT (`--split`) — disjoint shards for throughput, plus a small stratified overlap set everyone
+labels for agreement. Use this once agreement is established and volume is the goal. The reviewer
+set is fixed at first run in this mode, because the partition was handed out for that set and
+changing it strands or orphans work.
 
-Run (reviewers as args; default ["will"]):
-    .venv/bin/python docs/research/provision-matching/probes/make_assignments.py will alice bob
+In both modes only NEW (unassigned) candidate ids are partitioned, and existing assignments are
+preserved, so re-running after miners add examples never reshuffles work already handed out.
+
+Reviewer ids are OPAQUE (`r1`, `r2`, ...), never personal names: the ids travel in
+`labels_<id>.json`, in the `labeler` field of every record, and onward into the committed fixture,
+so a name here becomes a name in a public repo. Keep the id-to-person mapping outside the
+repository.
+
+Run (reviewer ids as args; no default — the id must be chosen deliberately):
+    .venv/bin/python docs/research/provision-matching/probes/make_assignments.py r1 r2 r3
+    .venv/bin/python docs/research/provision-matching/probes/make_assignments.py --split r1 r2 r3
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -26,16 +38,70 @@ from pathlib import Path
 _HERE = Path(__file__).parent
 _WORKLIST = _HERE / "worklist.json"
 _OUT = _HERE / "assignments.json"
-OVERLAP_TARGET = 24  # shared items (stratified) when >=2 reviewers
+OVERLAP_TARGET = 24  # stratified shared items in --split mode when >=2 reviewers
+# Opaque ids only. Not a privacy theatre check — it cannot tell "r1" from "alice" — but it does
+# stop the shapes people reach for when they stop thinking about it ("Jane Doe", an email address).
+_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def _h(s: str) -> int:
     return int(hashlib.sha256(s.encode()).hexdigest(), 16)
 
 
+def _write(assignments: dict, reviewers: list[str], *, shared: bool) -> None:
+    """Write assignments.json and report the load, for either mode."""
+    load: dict[str, int] = defaultdict(int)
+    for a in assignments.values():
+        for r in a["reviewers"]:
+            load[r] += 1
+    total_overlap = sum(1 for a in assignments.values() if a.get("overlap"))
+    mode = "shared" if shared else "split"
+    _OUT.write_text(
+        json.dumps(
+            {
+                "_about": (
+                    "Reviewer assignments for Pass 2 labeling. mode=shared: every reviewer labels every "
+                    "candidate, and adding a reviewer only ever adds work (never reassigns). mode=split: "
+                    "overlap=True items are labeled by all reviewers (agreement set), the rest are "
+                    "disjoint, and the reviewer set is fixed at first run. Only new candidate ids are "
+                    "assigned on re-run. Reviewer ids are opaque; the mapping to people is not in this "
+                    "repository."
+                ),
+                "mode": mode,
+                "reviewers": reviewers,
+                "overlap_target": 0 if shared or len(reviewers) < 2 else OVERLAP_TARGET,
+                "n_overlap": total_overlap,
+                "load_per_reviewer": dict(load),
+                "assignments": assignments,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print(f"mode: {mode}  reviewers: {reviewers}  overlap: {total_overlap}  total: {len(assignments)}")
+    print(f"load per reviewer: {dict(load)}")
+    idle = [r for r in reviewers if load.get(r, 0) == 0]
+    if idle:
+        print(
+            f"!! WARNING: {idle} received 0 items — all ids may already be assigned; add candidates "
+            "or delete assignments.json to re-partition for the current reviewer set."
+        )
+
+
 def main() -> None:
-    reviewers = sys.argv[1:] or ["will"]
-    reviewers = sorted(dict.fromkeys(reviewers))  # de-dup, stable
+    argv = sys.argv[1:]
+    shared = "--split" not in argv
+    reviewers = sorted(dict.fromkeys(a for a in argv if not a.startswith("--")))
+    # No default reviewer id. A bare run used to assign the whole pool to a hardcoded personal
+    # name, which is both a silent mis-assignment and a name in a public repo.
+    if not reviewers:
+        sys.exit("usage: make_assignments.py [--split] <reviewer-id> [<reviewer-id> ...]  (e.g. r1 r2)")
+    named = [r for r in reviewers if not _ID_RE.fullmatch(r)]
+    if named:
+        sys.exit(
+            f"reviewer ids must be opaque (letters/digits/-/_, no spaces), got {named}. Ids travel into "
+            "labels_<id>.json and the committed fixture — use r1/r2 and keep the mapping out of the repo."
+        )
     entries = json.loads(_WORKLIST.read_text(encoding="utf-8"))["entries"]
 
     prev, prev_reviewers = {}, None
@@ -44,15 +110,38 @@ def main() -> None:
         prev = prev_doc.get("assignments", {})
         prev_reviewers = prev_doc.get("reviewers")
 
-    # The reviewer set is FIXED at first run: the disjoint partition + overlap set were handed out for
-    # that set, so silently changing it strands new reviewers (0 work, no agreement set) or orphans
-    # handed-out work. Only miner-ADDS are incremental. Refuse a changed set loudly.
-    if prev_reviewers is not None and sorted(prev_reviewers) != reviewers:
+    dropped = sorted(set(prev_reviewers or []) - set(reviewers))
+    if dropped:
+        sys.exit(
+            f"reviewer(s) {dropped} would be dropped from assignments.json. Removing a reviewer is the "
+            "destructive direction (their handed-out work is orphaned) — re-run including them, or "
+            "delete assignments.json to start the partition over."
+        )
+    # In SPLIT mode the partition and overlap set were handed out for one reviewer set, so growing it
+    # strands the newcomer (0 items, no agreement set). SHARED mode has no partition to invalidate:
+    # a new reviewer simply joins every existing assignment, so it is always safe.
+    if not shared and prev_reviewers is not None and sorted(prev_reviewers) != reviewers:
         sys.exit(
             f"reviewer set changed: assignments.json was built for {sorted(prev_reviewers)}, requested "
-            f"{reviewers}. Work is already handed out for the old set — to re-partition, delete "
+            f"{reviewers}. Work is already handed out under --split — to re-partition, delete "
             f"assignments.json and re-run (loses in-progress assignments); else re-run the original set."
         )
+
+    if shared:
+        # Everyone labels everything: existing assignments gain the new reviewers, unassigned ids go
+        # to all of them. Nothing is ever taken away, so this is safe to re-run as the team grows.
+        for cid, a in prev.items():
+            a["reviewers"] = sorted(set(a["reviewers"]) | set(reviewers))
+            a["overlap"] = len(a["reviewers"]) >= 2
+        for e in entries:
+            if e["id"] not in prev:
+                prev[e["id"]] = {
+                    "reviewers": list(reviewers),
+                    "overlap": len(reviewers) >= 2,
+                    "stratum": e["stratum"],
+                }
+        _write(prev, reviewers, shared=True)
+        return
 
     # group unassigned ids by stratum (deterministic order by id hash)
     by_stratum: dict[str, list[str]] = defaultdict(list)
@@ -94,36 +183,7 @@ def main() -> None:
             assignments[cid] = {"reviewers": [who], "overlap": False, "stratum": strata_of[cid]}
             rr += 1
 
-    # report load per reviewer
-    load: dict[str, int] = defaultdict(int)
-    for a in assignments.values():
-        for r in a["reviewers"]:
-            load[r] += 1
-    total_overlap = sum(1 for a in assignments.values() if a.get("overlap"))
-    idle = [r for r in reviewers if load.get(r, 0) == 0]
-    _OUT.write_text(
-        json.dumps(
-            {
-                "_about": "Reviewer assignments for Pass 2 labeling. overlap=True items are labeled by "
-                "all reviewers (agreement set); others are disjoint. The reviewer set is fixed at first "
-                "run; only new ids are added on re-run, and the overlap set is capped at overlap_target.",
-                "reviewers": reviewers,
-                "overlap_target": OVERLAP_TARGET if len(reviewers) >= 2 else 0,
-                "n_overlap": total_overlap,
-                "load_per_reviewer": dict(load),
-                "assignments": assignments,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    print(f"reviewers: {reviewers}  overlap: {total_overlap}  total assigned: {len(assignments)}")
-    print(f"load per reviewer: {dict(load)}")
-    if idle:
-        print(
-            f"!! WARNING: {idle} received 0 items — all ids may already be assigned; add candidates "
-            "or delete assignments.json to re-partition for the current reviewer set."
-        )
+    _write(assignments, reviewers, shared=False)
 
 
 if __name__ == "__main__":

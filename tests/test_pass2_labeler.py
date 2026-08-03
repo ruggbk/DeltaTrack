@@ -442,14 +442,14 @@ def _write_worklist(path, id_stratum):
     path.write_text(json.dumps({"entries": [{"id": i, "stratum": s} for i, s in id_stratum]}), encoding="utf-8")
 
 
-def test_assignments_overlap_capped_across_reruns(tmp_path, monkeypatch):
+def test_split_overlap_capped_across_reruns(tmp_path, monkeypatch):
     wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
     monkeypatch.setattr(A, "_WORKLIST", wl)
     monkeypatch.setattr(A, "_OUT", out)
     base = [(f"hcd-{i}", "high-containment-different") for i in range(30)]
     base += [(f"con-{i}", "consolidation") for i in range(30)]
     _write_worklist(wl, base)
-    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "alice", "bob"])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "--split", "r1", "r2"])
     A.main()
     d1 = json.loads(out.read_text(encoding="utf-8"))
     assert d1["n_overlap"] <= A.OVERLAP_TARGET
@@ -465,17 +465,110 @@ def test_assignments_overlap_capped_across_reruns(tmp_path, monkeypatch):
         assert d2["assignments"][cid] == a
 
 
-def test_assignments_reviewer_set_change_exits(tmp_path, monkeypatch):
+def test_split_reviewer_set_change_exits(tmp_path, monkeypatch):
     wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
     monkeypatch.setattr(A, "_WORKLIST", wl)
     monkeypatch.setattr(A, "_OUT", out)
     _write_worklist(wl, [(f"hcd-{i}", "high-containment-different") for i in range(10)])
-    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "will"])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "--split", "r1"])
     A.main()  # first run establishes the reviewer set
     monkeypatch.setattr(
-        sys, "argv", ["make_assignments.py", "will", "alice"]
-    )  # changing it must not silently strand alice
+        sys, "argv", ["make_assignments.py", "--split", "r1", "r2"]
+    )  # changing it must not silently strand r2
     with pytest.raises(SystemExit, match="reviewer set changed"):
+        A.main()
+
+
+def test_shared_mode_gives_every_reviewer_every_candidate(tmp_path, monkeypatch):
+    """The default: agreement is measurable on the whole pool, not a designated subset."""
+    wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
+    monkeypatch.setattr(A, "_WORKLIST", wl)
+    monkeypatch.setattr(A, "_OUT", out)
+    _write_worklist(wl, [(f"hcd-{i}", "high-containment-different") for i in range(10)])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "r1", "r2"])
+
+    A.main()
+
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["mode"] == "shared"
+    assert doc["load_per_reviewer"] == {"r1": 10, "r2": 10}
+    assert all(a["reviewers"] == ["r1", "r2"] for a in doc["assignments"].values())
+
+
+def test_shared_mode_adding_a_reviewer_takes_nothing_away(tmp_path, monkeypatch):
+    """The property the mode exists for: a team can grow without a destructive re-partition.
+
+    Under --split, adding a reviewer is refused because the disjoint shards were handed out. Here
+    a newcomer joins every existing assignment, so nobody's queue changes and no labels are
+    stranded — which is what makes "start solo, add people later" safe.
+    """
+    wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
+    monkeypatch.setattr(A, "_WORKLIST", wl)
+    monkeypatch.setattr(A, "_OUT", out)
+    _write_worklist(wl, [(f"hcd-{i}", "high-containment-different") for i in range(10)])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "r1"])
+    A.main()
+    solo = json.loads(out.read_text(encoding="utf-8"))
+    assert solo["load_per_reviewer"] == {"r1": 10}
+
+    # two people join later, and 5 new candidates arrive in the same re-run
+    _write_worklist(
+        wl,
+        [(f"hcd-{i}", "high-containment-different") for i in range(10)]
+        + [(f"fin-{i}", "financial-line") for i in range(5)],
+    )
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "r1", "r2", "r3"])
+    A.main()
+
+    grown = json.loads(out.read_text(encoding="utf-8"))
+    assert grown["load_per_reviewer"] == {"r1": 15, "r2": 15, "r3": 15}
+    for cid in solo["assignments"]:
+        assert "r1" in grown["assignments"][cid]["reviewers"], f"{cid} was taken away from r1"
+
+
+def test_dropping_a_reviewer_is_refused(tmp_path, monkeypatch):
+    """Removing a reviewer orphans their handed-out work, so it is never silent."""
+    wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
+    monkeypatch.setattr(A, "_WORKLIST", wl)
+    monkeypatch.setattr(A, "_OUT", out)
+    _write_worklist(wl, [(f"hcd-{i}", "high-containment-different") for i in range(6)])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "r1", "r2"])
+    A.main()
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", "r1"])
+
+    with pytest.raises(SystemExit, match="would be dropped"):
+        A.main()
+
+
+def test_a_bare_run_assigns_nothing_to_nobody(tmp_path, monkeypatch):
+    """No default reviewer id.
+
+    The default used to be a hardcoded personal name, so a bare run silently handed the whole pool
+    to one person AND put that name in a public repository.
+    """
+    wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
+    monkeypatch.setattr(A, "_WORKLIST", wl)
+    monkeypatch.setattr(A, "_OUT", out)
+    _write_worklist(wl, [("hcd-0", "high-containment-different")])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py"])
+
+    with pytest.raises(SystemExit, match="usage:"):
+        A.main()
+
+    assert not out.exists(), "a rejected run must not write an assignments file"
+
+
+@pytest.mark.parametrize("bad", ["Jane Doe", "jane@example.com", "Jane Q. Public"])
+def test_reviewer_ids_that_look_like_people_are_refused(bad, tmp_path, monkeypatch):
+    """A weak guard on purpose: it cannot tell r1 from alice, but it catches the shapes people
+    reach for when they are not thinking about where the id ends up."""
+    wl, out = tmp_path / "worklist.json", tmp_path / "assignments.json"
+    monkeypatch.setattr(A, "_WORKLIST", wl)
+    monkeypatch.setattr(A, "_OUT", out)
+    _write_worklist(wl, [("hcd-0", "high-containment-different")])
+    monkeypatch.setattr(sys, "argv", ["make_assignments.py", bad])
+
+    with pytest.raises(SystemExit, match="opaque"):
         A.main()
 
 
