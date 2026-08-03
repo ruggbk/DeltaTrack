@@ -716,6 +716,16 @@ class TestSectionsWhoseOnlyChangeIsMoney:
         The floor matters as much as the assertion: an ``unchanged`` entry is only
         checkable if some pair produces ``unchanged`` entries at all, and a gate that
         cannot tell "fixed" from "nothing to check" is not a gate.
+
+        KNOWN BLIND SPOT, stated here rather than left to be discovered: this compares
+        what the two sides of a comparison EXPOSE, so it cannot see a drop that happens
+        identically on both sides. `_process_section_element` takes a different path for
+        a section with ``appropriations-*`` children and builds its node from the opening
+        <text> alone, dropping any <list> / <continuation-text> / <quoted-block> sibling
+        from every node in both renderings -- 8 money-bearing instances on this corpus.
+        Both versions truncate the same way, so the amounts always agree and this passes.
+        Tracked in #459; closing it wants a gate that compares node amounts against the
+        source XML rather than against the other side.
         """
         from pathlib import Path
 
