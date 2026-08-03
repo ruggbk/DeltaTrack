@@ -6,8 +6,9 @@ the doc cannot drift. Regenerate after changing the parser, fixtures, or jurisdi
 
   uv run python scripts/generate_validation_report.py
 
-Requires the bill XML for each jurisdiction present locally (gitignored; fetch with
-`uv run python scripts/build_validation.py --fetch`).
+All inputs are committed fixtures (ADR 0015): the bill XML lives in `tests/corpus/` and
+the validation JSON in `tests/data/`, so a clean clone has everything. `--fetch` re-obtains
+the upstream sources rather than supplying anything a fresh clone lacks.
 """
 
 from __future__ import annotations

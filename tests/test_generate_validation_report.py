@@ -1,7 +1,8 @@
 """Regression tests for scripts/generate_validation_report.py.
 
-The script reads gitignored, fetch-scripted fixtures, so it must degrade
-gracefully on a clean clone instead of raising FileNotFoundError (#18).
+The fixtures are committed since ADR 0015, but the script must still degrade
+gracefully where one is genuinely absent (a partial checkout) instead of
+raising FileNotFoundError (#18).
 """
 
 import sys
