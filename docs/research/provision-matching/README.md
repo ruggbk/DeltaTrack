@@ -54,13 +54,15 @@ PYTHONPATH=. .venv/bin/python $P/mine_financial_lines.py
 # 4. Build the blind worklist: scores and stratum stripped.
 .venv/bin/python $P/make_worklist.py                                # -> worklist.json
 
-# 5. Shard it across reviewers, plus an overlap set everyone labels.
-.venv/bin/python $P/make_assignments.py will alice bob              # -> assignments.json
+# 5. Assign it. Default: every reviewer labels every candidate (agreement first).
+#    Reviewer ids are opaque; the mapping to people stays out of this repo.
+#    Add --split for disjoint shards + an overlap set once volume matters more.
+.venv/bin/python $P/make_assignments.py r1 r2 r3                    # -> assignments.json
 
-# 6. One self-contained HTML form per reviewer. Repeat per name.
-.venv/bin/python $P/make_form.py will                               # -> form_will.html
+# 6. One self-contained HTML form per reviewer. Repeat per id.
+.venv/bin/python $P/make_form.py r1                                 # -> form_r1.html
 
-# 7. Reviewers label in a browser and send back labels_<name>.json; put those in probes/labels/.
+# 7. Reviewers label in a browser and send back labels_<id>.json; put those in probes/labels/.
 #    Optional LLM second opinion, written in the same shape:
 .venv/bin/python $P/label_llm.py --sample 2                         # -> labels/labels_llm.json
 

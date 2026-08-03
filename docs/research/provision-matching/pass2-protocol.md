@@ -186,7 +186,7 @@ Every field on the current record is retained. Added:
   "sampling": "challenge",                     // challenge | estimation
   "split": "dev",                              // dev | held-out  (assigned by BILL, §6)
   "confidence": "high",                        // high | medium | low  (labeler's)
-  "labeler": "will",                           // primary labeler id
+  "labeler": "r1",                             // opaque reviewer id (never a personal name)
   "adjudication": null,                        // null | {llm_label, agreed: bool, resolved_by, note}
   "miner": "mine_consolidation",               // provenance
   "text_sha256": "…",                          // drift guard for the re-derived text
@@ -341,7 +341,7 @@ bill (continues the leave-one-bill-out discipline the paper already validated).
   LLM is additionally blind to project context (verified empirically — see
   `plans/pass2-llm-review-fixes.md`).
 - Disagreements are surfaced to Will with all rationales; Will's ruling is final and recorded in
-  `adjudication` (`{final_label, llm_label, agreed, resolved_by: "will", read_llm_after, note}`).
+  `adjudication` (`{final_label, llm_label, agreed, resolved_by: "<reviewer id>", read_llm_after, note}`).
 - Pairs that stay contested after adjudication are flagged `confidence: low` and reported **both in
   and out** of the headline accuracy (§7), so a hard core is visible rather than silently averaged in.
 - **Correlated-error caveat — the load-bearing one.** The LLM can fail the *same way* the measure

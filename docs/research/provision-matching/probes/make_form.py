@@ -12,8 +12,9 @@ the matcher's decision. Rationale is required whenever confidence is medium/low.
 The HTML/CSS/JS lives in `form_template.html` (edit it there); this script only injects the
 reviewer's assigned, blinded candidates as JSON.
 
-Run (per reviewer; the reviewer must exist in assignments.json):
-    .venv/bin/python docs/research/provision-matching/probes/make_form.py will
+Run (per reviewer id; the id must exist in assignments.json). Ids are opaque (r1, r2, ...),
+never personal names — they travel into labels_<id>.json and onward into the committed fixture:
+    .venv/bin/python docs/research/provision-matching/probes/make_form.py r1
 """
 
 from __future__ import annotations
