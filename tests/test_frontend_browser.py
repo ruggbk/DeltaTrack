@@ -735,3 +735,50 @@ def test_find_agrees_with_the_parser_merged_text(chromium, tmp_path):
 
     assert not missing, f"phrases in the merged text that Find cannot locate: {missing}"
     assert control == "0 / 0", "control phrase matched — the search is not discriminating"
+
+
+def test_find_does_not_match_across_a_deletion_and_its_replacement(chromium, tmp_path):
+    """In the changes view, old and new wording are alternatives, not a sequence.
+
+    A card shows the removed text next to the text that replaces it. Flattening
+    the view for search puts them side by side, so joining them with a space
+    would let a query match wording that appears in no version of the bill —
+    a false positive, which is worse than the missed match this all started
+    with. A separator no query can contain keeps them apart.
+    """
+    report = tmp_path / "changes_view.html"
+    report.write_text(_render_find_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")  # changes view is the default
+
+    # The card reads "cars" (removed) immediately followed by "vehicles" (added).
+    card = page.locator(".change-card").first.inner_text()
+    assert "cars" in card and "vehicles" in card, "fixture no longer shows both sides"
+
+    assert _find(page, "cars vehicles") == "0 / 0"
+    # Each side is still findable on its own.
+    assert _find(page, "vehicles") != "0 / 0"
+    assert _find(page, "cars") != "0 / 0"
+    page.close()
+
+
+def test_find_accepts_a_query_pasted_off_the_screen(chromium, tmp_path):
+    """A phrase copied from the page can end at a line-break hyphen.
+
+    The reader sees "…Administrator of General Serv-" at the end of a printed
+    line and pastes exactly that. The hyphen is not in the searchable text
+    (it was rejoined away), so without handling this the query returns 0 / 0 —
+    the same silent miss, in the opposite direction.
+    """
+    page = _open_full_bill(chromium, tmp_path)
+    # Dropping the trailing hyphen leaves "…General Serv", which is a prefix of
+    # both the split occurrence on rows 1-2 and the whole "Services" on row 3,
+    # so two matches is correct here — the point is that it is no longer zero.
+    assert _find(page, "Administrator of General Serv-") == "1 / 2"
+    # The first hit is the line the reader copied from.
+    row = page.evaluate(
+        """() => document.querySelector('mark.find-hit--current')
+                        .closest('.fb-row').querySelector('.fb-gutter').textContent.trim()"""
+    )
+    assert row == "1"
+    page.close()
