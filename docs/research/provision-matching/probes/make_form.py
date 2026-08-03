@@ -184,6 +184,32 @@ def _assert_blind(data: dict) -> None:
         sys.exit(f"§5 blindness leak: {sorted(leaked)} would reach the reviewer — refusing to write the form")
 
 
+def build_form(reviewer: str, cards: list[dict]) -> str:
+    """Blindness-check a reviewer's blind cards and render the self-contained form HTML.
+
+    Split out of `main` so the browser tests (#333) exercise this exact path — the same rubric,
+    the same leak guard and the same escaping — rather than a second copy of the injection that
+    could drift from the form reviewers actually get.
+    """
+    data = {
+        "reviewer": reviewer,
+        "standard": _STANDARD,
+        "confidence": _CONFIDENCE,
+        "examples": _EXAMPLES,
+        "entries": cards,
+    }
+    _assert_blind(data)
+    # </ breaks out of <script>; U+2028/U+2029 are legal JSON but JS line terminators that
+    # would make the whole embedded blob fail to parse — escape all three.
+    injected = (
+        json.dumps(data, ensure_ascii=False)
+        .replace("</", "<\\/")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+    return _TEMPLATE.read_text(encoding="utf-8").replace("__REVIEWER__", reviewer).replace("__DATA__", injected)
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         sys.exit("usage: make_form.py <reviewer>")
@@ -204,20 +230,7 @@ def main() -> None:
         if e["stratum"] not in _QUESTION:
             sys.exit(f"unknown stratum {e['stratum']!r} for {cid} — no neutral question defined (§5)")
         payload.append(_build_card(e))
-    data = {
-        "reviewer": reviewer,
-        "standard": _STANDARD,
-        "confidence": _CONFIDENCE,
-        "examples": _EXAMPLES,
-        "entries": payload,
-    }
-    _assert_blind(data)
-    # </ breaks out of <script>; U+2028/U+2029 are legal JSON but JS line terminators that
-    # would make the whole embedded blob fail to parse — escape all three.
-    injected = (
-        json.dumps(data, ensure_ascii=False).replace("</", "<\\/").replace(" ", "\\u2028").replace(" ", "\\u2029")
-    )
-    html = _TEMPLATE.read_text(encoding="utf-8").replace("__REVIEWER__", reviewer).replace("__DATA__", injected)
+    html = build_form(reviewer, payload)
     out = _HERE / f"form_{reviewer}.html"
     out.write_text(html, encoding="utf-8")
     print(f"wrote {len(payload)} cards -> {out.name}  (open in a browser; export labels_{reviewer}.json)")
