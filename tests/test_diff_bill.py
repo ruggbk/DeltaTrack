@@ -1,3 +1,4 @@
+import argparse
 import json
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from deltatrack.diff_bill import (
     BillDiff,
     NodeDiff,
     bill_diff_to_dict,
+    build_parser,
     diff_bills,
     diff_text,
     filter_diff,
@@ -564,6 +566,41 @@ def _run_compare(monkeypatch, *argv: str) -> None:
     main()
 
 
+class TestIntermixedSubParserGuard:
+    """The re-entrancy guard in _IntermixedSubParser, pinned on ANY interpreter (#426).
+
+    The guard only bites on CPython 3.12.0-3.12.7, where
+    `parse_known_intermixed_args` re-enters the public `parse_known_args`; from
+    3.12.8 on argparse delegates to the private `_parse_known_args2` and the guard
+    passes through unused. That is how 787868a deleted it as dead code: nothing in
+    the suite referenced the re-entry, and only the CI floor leg still exercised it.
+    This test simulates the legacy shape by monkeypatching, so it fails without the
+    guard (RecursionError) and passes with it, whichever interpreter runs it.
+    """
+
+    def _compare_subparser(self) -> argparse.ArgumentParser:
+        parser = build_parser()
+        subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        return subparsers.choices["compare"]
+
+    def test_legacy_argparse_reentry_completes(self, monkeypatch):
+        compare = self._compare_subparser()
+
+        def legacy_reentry(args=None, namespace=None):
+            # CPython 3.12.0-3.12.7's parse_known_intermixed_args: it delegates back
+            # into the public parse_known_args, which is what recurses without the guard.
+            return compare.parse_known_args(args, namespace)
+
+        monkeypatch.setattr(compare, "parse_known_intermixed_args", legacy_reentry)
+        # The patched re-entry parses with the PLAIN algorithm, which consumes a
+        # variadic positional in one run -- so the argv puts the optional first.
+        # What is pinned is that the parse completes instead of recursing.
+        namespace, remaining = compare.parse_known_args(["--financial", "old.xml", "new.xml"])
+        assert remaining == []
+        assert namespace.targets == ["old.xml", "new.xml"]
+        assert namespace.financial is True
+
+
 class TestCompareLegacyTwoPathForm:
     """Characterization: `compare <old.xml> <new.xml>` must not move (#152).
 
@@ -896,6 +933,24 @@ class TestCompareVersionListing:
         assert "the second path is missing" in message
         assert only in message
         assert "Download them with" not in message
+
+    def test_a_lone_existing_directory_gets_the_missing_path_error(self, synthetic_bills_dir, monkeypatch):
+        """Shell completion hands over a directory; that is the same vanished-argument shape.
+
+        A lone directory used to fall through to the slug path and answer with the
+        doubled "in bills/bills/..." listing plus advice to download a bill plainly
+        on disk. The shape check covers an existing directory with the same wording
+        as a lone file (#426 review).
+        """
+        only = str(synthetic_bills_dir / "118-hr-4366")
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, only, "--format", "json")
+        assert exc.value.code != 0
+        message = str(exc.value.code)
+        assert "the second path is missing" in message
+        assert only in message
+        assert "Download them with" not in message
+        assert "No local versions" not in message
 
     def test_an_unusable_positional_count_is_a_usage_error(self, synthetic_bills_dir, monkeypatch, capsys):
         """Dispatch is on the count, so 0 and 4+ are the arities with no meaning.

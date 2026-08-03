@@ -848,8 +848,8 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
     the legacy invocation and must stay unreachable from any slug regex or ``.xml``
     sniffing, so that adding the version-addressable form cannot re-read an existing
     command as something else (#152). The one shape check below (a lone positional that
-    is an existing file) only picks the ERROR WORDING; the count still decides the
-    outcome, so it cannot re-read a working command.
+    is an existing file or directory) only picks the ERROR WORDING; the count still
+    decides the outcome, so it cannot re-read a working command.
 
     A bare slug is a question rather than a failure, so it answers on stdout and exits
     0; every other unresolvable case is an error whose message is the same listing.
@@ -865,11 +865,12 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
         )
     if len(targets) == 1:
         target = targets[0]
-        if Path(target).is_file():
-            # One real path and nothing else: `compare "$OLD" "$NEW"` with $NEW unset.
-            # The answer is the missing second path, not a version listing for a "slug"
-            # that is plainly a file -- the listing doubled it ("in bills/bills/...")
-            # and advised downloading a bill the user already has on disk.
+        if Path(target).is_file() or Path(target).is_dir():
+            # One real path and nothing else: `compare "$OLD" "$NEW"` with $NEW unset,
+            # or a lone directory from shell completion. The answer is the missing
+            # second path, not a version listing for a "slug" that is plainly a path
+            # -- the listing doubled it ("in bills/bills/...") and advised downloading
+            # a bill the user already has on disk.
             raise SystemExit(f"compare takes two file paths; the second path is missing (got only {target}).")
         slug = target
         versions = local_versions(args.bills_dir, slug)
@@ -960,6 +961,9 @@ class _IntermixedSubParser(argparse.ArgumentParser):
     3.12.0, 3.12.4, 3.12.7 (re-enter via the public method), 3.12.8, 3.12.12 and
     3.13.14 (call `_parse_known_args2`). `requires-python` is ">=3.12" and Ubuntu
     24.04 ships 3.12.3, so the re-entering band is supported and the guard stays.
+    tests/test_diff_bill.py::TestIntermixedSubParserGuard simulates the re-entering
+    shape by monkeypatching, so the guard is pinned on every interpreter -- not only
+    on the CI floor leg that happens to run an interpreter from that band.
 
     `add_subparsers(parser_class=...)` binds EVERY subparser of this parser, not only
     `compare`: a future subcommand with a `nargs=REMAINDER` positional raises
