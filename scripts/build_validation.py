@@ -5,7 +5,7 @@ External ground truth for #8: each Senate appropriations committee report is rea
 tests/test_validate_extraction.py validates against the reported bill's XML. Mirrors the
 hand-curated validation_leg_branch.json, but generated deterministically from the report.
 
-Sources are fetched from govinfo (both gitignored locally); the JSON fixtures are committed.
+Report HTML and bill XML sources are committed (tracked since ADR 0015); the JSON fixtures are committed.
 The jurisdiction registry lives in tests/validation_sources.py.
 """
 
