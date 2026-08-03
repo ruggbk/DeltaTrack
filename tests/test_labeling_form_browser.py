@@ -247,6 +247,13 @@ def test_cannot_advance_past_an_unfinished_card(form):
     assert not form.page.is_enabled("#next"), "medium confidence without a rationale still blocks"
     assert "add a rationale" in form.page.inner_text(".status")
 
+    # Call the navigation directly, not through the buttons. A disabled button cannot be clicked,
+    # so clicking alone would only ever prove the button is disabled and would leave the rule
+    # itself unexercised — the gate has to hold even if a later change re-enables the control.
+    form.page.evaluate("go(1)")
+    form.page.evaluate("jumpNext()")
+    assert form.index == 0, "navigation must refuse to leave an unfinished card"
+
     form.answer(0, rationale="Same account, amount edited.")
     assert form.page.is_enabled("#next")
 
