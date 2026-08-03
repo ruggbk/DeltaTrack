@@ -36,7 +36,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import _git_tracked_paths
+from tests.conftest import _git_tracked_paths, engine_is_foreign
 from tests.corpus_paths import DOWNLOADS_DIR, FIXTURES_DIR, PROJECT_ROOT, sweep_bill_dirs
 
 # Modules that legitimately name ``bills/``: they are about the DOWNLOAD tier itself
@@ -625,6 +625,169 @@ def test_private_trees_stay_ignored_when_symlinked(tmp_path) -> None:
         f"symlinked {offenders} are not gitignored — a trailing slash matches only a real "
         "directory, so the tree is offered for commit when it is shared between checkouts "
         "by symlink (#432). Drop the trailing slash, as /bills does."
+    )
+
+
+def test_the_foreign_engine_rule_can_fire(tmp_path) -> None:
+    """The conftest guard that refuses a wrong-checkout engine must be able to fail.
+
+    That guard (#435) is the only thing standing between a worktree run and a green
+    result about source nobody is editing, and it lives at conftest import time, where
+    a broken version is *silent*: the suite would simply go back to passing. Every
+    ordinary run exercises only its happy path, which cannot tell "correctly silent"
+    apart from "never fires again". Both directions are pinned here against literal
+    paths, so the rule cannot be loosened without a red test.
+    """
+    root = tmp_path / "checkout"
+    (root / "src" / "deltatrack").mkdir(parents=True)
+    local = root / "src" / "deltatrack" / "__init__.py"
+    local.write_text("")
+
+    other = tmp_path / "another-checkout" / "src" / "deltatrack"
+    other.mkdir(parents=True)
+    foreign = other / "__init__.py"
+    foreign.write_text("")
+
+    assert not engine_is_foreign(local, root), "an engine inside the tree under test must be accepted"
+    assert engine_is_foreign(foreign, root), "an engine from a different checkout must be rejected"
+
+    # A sibling directory whose name merely PREFIXES the root must not read as inside it,
+    # which is the difference between a path comparison and a string comparison.
+    sibling = tmp_path / "checkout-review" / "src" / "deltatrack" / "__init__.py"
+    sibling.parent.mkdir(parents=True)
+    sibling.write_text("")
+    assert engine_is_foreign(sibling, root), "a sibling sharing a name prefix must be rejected"
+
+    # The case a root-anchored check cannot see, and the reason the rule anchors on `src/`:
+    # this repository's worktrees are created INSIDE the checkout that owns them. Re-point a
+    # shared `.venv` at one (the install AGENTS.md forbids) and run the suite from the owner,
+    # and a `root` comparison calls that engine "inside this checkout" and stays silent.
+    nested = root / ".claude" / "worktrees" / "other-branch" / "src" / "deltatrack" / "__init__.py"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("")
+    assert engine_is_foreign(nested, root), "a worktree nested under the root must be rejected"
+
+    # Same line, different side of it: a non-editable install into the checkout's own venv
+    # never leaves `root`, but it is a copied snapshot that cannot see an edit to `src/`.
+    snapshot = root / ".venv" / "lib" / "python3.12" / "site-packages" / "deltatrack" / "__init__.py"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text("")
+    assert engine_is_foreign(snapshot, root), "a non-editable install inside the root must be rejected"
+
+
+# A stand-in engine, importable and satisfying every name conftest pulls off it, whose only
+# distinguishing feature is living somewhere else. Put on PYTHONPATH it wins over the
+# editable install, which is what makes a foreign engine reproducible without a worktree.
+_FOREIGN_ENGINE = {
+    "__init__.py": "",
+    "bill_tree.py": "BillNode = BillTree = normalize_bill = None\n",
+    "diff_bill.py": "NodeDiff = diff_bills = None\n",
+}
+
+# An engine that is absent in the way a stale editable pointer makes it absent: the name
+# resolves, importing it raises with `name == "deltatrack"`. That is the ONE shape conftest
+# rewrites into environment guidance.
+_BROKEN_ENVIRONMENT = {
+    "__init__.py": "raise ModuleNotFoundError(\"No module named 'deltatrack'\", name='deltatrack')\n",
+}
+
+# A fault in the branch wearing the same exception type: the engine imports, but something
+# inside it reaches for a module that does not exist. conftest must leave this alone.
+_BRANCH_FAULT = {
+    "__init__.py": "",
+    "bill_tree.py": "from deltatrack.missing_helper import Oops\n",
+}
+
+
+def _collect_with_engine(tmp_path, engine_files: dict[str, str]):
+    """Collect a child pytest session against a stand-in ``deltatrack`` on PYTHONPATH.
+
+    A child session is the only instrument that reaches conftest's import-time code: this
+    session already imported it, so by the time any test body runs the guard has either
+    fired or been skipped, and its `except` has either run or not. Asserting on the child's
+    output is therefore what covers the WIRING, as distinct from the rules above.
+    """
+    import os
+    import subprocess
+    import sys
+
+    engine = tmp_path / "elsewhere" / "deltatrack"
+    engine.mkdir(parents=True)
+    for name, body in engine_files.items():
+        (engine / name).write_text(body)
+
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:randomly", "tests/test_bill_tree.py"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(tmp_path / "elsewhere")},
+    )
+
+
+def test_conftest_refuses_a_foreign_engine(tmp_path) -> None:
+    """The guard must be WIRED UP, not merely correct.
+
+    ``test_the_foreign_engine_rule_can_fire`` pins the rule; nothing there pins that
+    conftest consults it, so deleting the three lines that call it would restore the
+    silent wrong-tree green with the whole suite still passing -- the same fail-open the
+    guard exists to close, one level up. One wired case is enough to cover that call:
+    every rejected shape flows through the same rule, which is where they are enumerated.
+    """
+    result = _collect_with_engine(tmp_path, _FOREIGN_ENGINE)
+
+    assert result.returncode != 0, (
+        "a child session importing `deltatrack` from outside the checkout collected "
+        f"successfully -- conftest is no longer consulting the rule.\n{result.stdout[-2000:]}"
+    )
+    assert "DIFFERENT tree's source" in result.stdout + result.stderr, (
+        "the child session failed, but not with the foreign-engine guard, so this test is "
+        f"passing for the wrong reason.\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
+    )
+
+
+def test_conftest_names_a_broken_environment(tmp_path) -> None:
+    """An absent engine is reported as an environment fault, with a repair that is safe.
+
+    Neither this nor its sibling below can fail OPEN -- the handler runs only when the
+    import already failed, so the session is red either way. What is pinned is the
+    DIAGNOSTIC, and a wrong one is expensive: it sends a developer to their venv when the
+    fault is in their diff, or the reverse. The repair is asserted too, because
+    `uv pip install -e .` resolves an activated VIRTUAL_ENV ahead of the checkout you are
+    standing in, so recommending it from a worktree re-points the shared environment --
+    the exact trap AGENTS.md names two bullets above the one this guard serves.
+    """
+    out = _collect_with_engine(tmp_path, _BROKEN_ENVIRONMENT)
+    combined = out.stdout + out.stderr
+
+    assert "ENVIRONMENT fault" in combined, (
+        f"a missing engine was not reported as an environment fault.\n{combined[-2000:]}"
+    )
+    assert "uv sync" in combined, f"the environment message names no repair.\n{combined[-2000:]}"
+    assert "uv pip install -e" not in combined, (
+        "the repair advice recommends the editable install that re-points a shared venv "
+        f"when it is run from a worktree.\n{combined[-2000:]}"
+    )
+
+
+def test_conftest_does_not_blame_the_environment_for_a_branch_fault(tmp_path) -> None:
+    """A broken import INSIDE the engine must reach the developer intact.
+
+    The engine is present and importable here; something it reaches for is not. Rewriting
+    that as an environment problem would point a developer with a healthy venv at their
+    venv instead of their diff -- and pytest prints conftest import errors without the
+    `raise ... from` chain, so the original module name is the only thing they would see.
+    Losing it is silent: the suite is red either way, just red about the wrong thing.
+    """
+    out = _collect_with_engine(tmp_path, _BRANCH_FAULT)
+    combined = out.stdout + out.stderr
+
+    assert "deltatrack.missing_helper" in combined, (
+        f"the failing module name was swallowed, leaving nothing to debug from.\n{combined[-2000:]}"
+    )
+    assert "ENVIRONMENT fault" not in combined, (
+        "a fault inside the engine was misreported as an environment fault, which sends a "
+        f"developer with a healthy venv looking in the wrong place.\n{combined[-2000:]}"
     )
 
 
