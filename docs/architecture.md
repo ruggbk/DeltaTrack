@@ -33,11 +33,16 @@ repo is a way *into* that engine or a way of *checking* it:
 | `tests/`, `schema/` | The gates and the published contract. |
 
 `src/deltatrack/compare/` is the product surface: `compare/xml.py` and `compare/pdf.py`
-each wrap the whole parse → diff → render chain for one input format, taking bytes and
-returning canonical JSON or HTML. **Every surface enters through them** — both CLIs, the
-web app, and `scripts/render_examples.py` — so one bill pair renders one way no matter
-who asked. Those two modules' docstrings name each stage they call, and are the shortest
-accurate map of the pipeline.
+each wrap the whole parse → diff → render chain for one input format, taking bytes (or,
+from the XML CLI, already-parsed trees) and returning canonical JSON or HTML. **Every
+report is assembled there** — both CLIs, the web app and `scripts/render_examples.py`
+enter through them — so one bill pair renders one way no matter who asked. Those two
+modules' docstrings name each stage they call, and are the shortest accurate map of the
+pipeline.
+
+One path deliberately does not go through them: `diff_bill.py compare --format json`
+emits the older diff-dict shape straight from `bill_diff_to_dict`, not canonical JSON.
+If you are consuming diff output programmatically, take the canonical JSON.
 
 ## Pipeline tour
 
@@ -58,8 +63,8 @@ Both paths reach the same canonical JSON, then the same renderer.
 | Stage | Owner | What it does |
 |---|---|---|
 | Extract | `parsers.pdf_text.extract_clean_pages` | PDF → pages of text via pypdfium2 ([ADR 0002](decisions/0002-pdfium-single-engine.md)). |
-| Anchor | `parsers.pdf_anchors` | Find the landmarks (TITLE / SEC. / account headings) the structure keys on. |
-| Diff | `diff_pdf.diff_pdfs` | Block-level comparison between the two extractions. |
+| Diff | `diff_pdf.diff_pdfs` | Block-level comparison. Calls `parsers.pdf_anchors.extract_anchors` first: the landmarks (TITLE / SEC. / account headings) it groups blocks around. |
+| Full text | `parsers.pdf_text.pdf_full_text` | Text and character offsets per side, for the full-bill view and the change spans. |
 | Canonicalize | `formatters.canonical.pdf_diff_to_canonical` | → the same canonical JSON. |
 
 **Shared tail:**

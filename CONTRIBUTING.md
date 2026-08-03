@@ -66,8 +66,10 @@ integration and correctness gates read are committed to the repo, named in
 same set. If a manifested bill is missing the gate fails rather than quietly asserting
 less, which is why there is no "download this first" step to forget.
 
-The one exception is the live-network govinfo parity gate, skipped unless you pass
-`--run-network`. TESTING.md's [What still wants a
+What a download still changes is narrow: the live-network govinfo parity gate (skipped
+unless you pass `--run-network`), and a handful of individual cases pinned to a bill
+version that is deliberately not committed, which skip when it is absent. No gate loses
+its assertions that way. TESTING.md's [What still wants a
 download](TESTING.md#what-still-wants-a-download) is the current list.
 
 Downloading bills is for working *beyond* the committed set — exploring a bill the

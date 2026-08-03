@@ -352,6 +352,13 @@ committed fixtures and are CI gates; a download only adds cases:
 | Still needs fetched bills | Why |
 |---|---|
 | `test_govinfo_corpus_parity` | Live BILLSTATUS fetch, so it cannot be an offline gate. Marked `network`: skipped unless you pass `--run-network`. A weekly scheduled workflow runs it against the committed fixtures (#342); a download only widens which bills it checks |
+| `test_bill_tree.py::…::test_amendment_doc_115_hr_244_v5_produces_nodes` | Pinned to 115-hr-244 v5, whose fixture is deliberately withheld (#11/#322, and this file's ["When a skip has to be declared"](#when-a-skip-has-to-be-declared)). Skips without it |
+| `test_pdf_text.py::TestUnbulletedFooterConsumedOutput` | Pinned to the 115-hr-5895 v3 PDF; that bill is committed at stages 1/2/4/5 only, so the class is `skipif`-gated on v3 being downloaded |
+
+Those two are single cases pinned to a withheld version, not gates losing coverage:
+they resolve through `resolve_bill_file`, which returns the `bills/` path when no
+fixture exists precisely so the caller's own `.exists()` check reports on the file it
+would really read.
 
 The Legislative Branch validation set used to be on that list. #278 committed its
 five remaining bills, so its completeness floor is now an ordinary fail-closed
