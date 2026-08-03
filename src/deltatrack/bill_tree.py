@@ -738,9 +738,22 @@ def _process_section_element(
     """Process a <section> element, emitting BillNode(s).
 
     Handles two cases:
-    - Sections with appropriations-* children: emit section text node,
+    - Sections with appropriations-* children: emit a node for the section's OWN text,
       then walk appropriations children with scoped context.
     - Plain sections: emit a single node with all section text.
+
+    Both cases read the section's own text through ``_extract_section_text``, carving out
+    the children that become their own nodes by element identity. That is what keeps each
+    character of a section in exactly one node, and it is the same carve used for
+    subsections promoted to their own nodes (#188).
+
+    The appropriations branch used to build its node from ``section.find("text")`` alone,
+    which is not the same thing: any sibling that was neither the opening <text> nor an
+    ``appropriations-*`` child, i.e. a <list>, <continuation-text> or <quoted-block>, was
+    dropped from this node and picked up by no other. It went missing from BOTH
+    renderings, so nothing downstream could recover it. That is the same failure mode as
+    #422 in a second location (#459): 8 money-bearing elements on the committed corpus,
+    including $45,000,000 / $46,400,000 / $80,500,000 in 114-hr-2029 v5 sec. 129.
     """
     has_appro_children = any(c.tag.startswith("appropriations-") for c in section)
 
@@ -750,8 +763,9 @@ def _process_section_element(
         section_num = f"Sec. {enum_el.text.strip().rstrip('.')}"
 
     if has_appro_children:
-        text_el = section.find("text")
-        if text_el is not None:
+        appro_carve = frozenset(id(c) for c in section if c.tag.startswith("appropriations-"))
+        own_body = _extract_section_text(section, appro_carve)
+        if own_body:
             sec_label = section_num.lower() if section_num else ""
             match_path, display_path = _build_paths(
                 title_header,
@@ -767,8 +781,8 @@ def _process_section_element(
                     tag="section",
                     element_id=section.attrib.get("id", ""),
                     header_text=get_header_text(section),
-                    body_text=extract_text_content(text_el),
-                    display_text=extract_display_text(text_el),
+                    body_text=own_body,
+                    display_text=extract_display_text(section, skip_children=appro_carve),
                     section_number=section_num,
                     division_label=division_label,
                 )
