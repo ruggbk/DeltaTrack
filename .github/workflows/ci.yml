@@ -37,11 +37,25 @@ on:
     types: [checks_requested]
 
 jobs:
-  test:
+  # The matrix legs report one context PER LEG (`test-suite (3.12)`,
+  # `test-suite (3.12.0)`), so the job that branch protection requires is the
+  # `test` aggregator at the bottom of this file, not the matrix itself. Renaming
+  # this job's id does not strand the required check; deleting the aggregator does.
+  test-suite:
     runs-on: ubuntu-latest
     # Least-privilege token: this job only checks out and runs the suite.
     permissions:
       contents: read
+    strategy:
+      matrix:
+        # "3.12" resolves to the NEWEST patch uv knows, so a lone `uv python install
+        # 3.12` never visits the oldest interpreters `requires-python = ">=3.12"`
+        # promises to support -- and argparse's `parse_known_intermixed_args` re-enters
+        # the public `parse_known_args` on 3.12.0-3.12.7 but not from 3.12.8 on, so the
+        # difference is behavioural, not cosmetic (#426). The "3.12.0" entry pins the
+        # declared floor; "3.12" keeps tracking the newest patch. Ubuntu 24.04's system
+        # Python (3.12.3) sits inside the band only the floor entry exercises.
+        python-version: ["3.12", "3.12.0"]
     steps:
       - uses: actions/checkout@v7
 
@@ -49,13 +63,20 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
-        # No version here: `uv python install` with no argument installs the one named in
-        # `.python-version`, so the repository has a single source of truth that developers
-        # and CI share. Hardcoding it in each workflow let the two drift silently (#442).
-        run: uv python install
+        # The other workflows install the version named in `.python-version` (#442).
+        # This job deliberately overrides it: the matrix exists to run the newest 3.12
+        # AND the declared floor, and one source of truth cannot name two interpreters.
+        # `.python-version` still governs developer environments and the
+        # single-interpreter workflows; the explicit version here, and the `--python`
+        # on `uv sync` below, are what hold the two legs apart (#426).
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync
+        # --python pins the sync to the matrix interpreter. A bare `uv sync` follows
+        # uv's own preference order, so a later .python-version file or a UV_PYTHON
+        # env var would point BOTH legs at the same interpreter and the "3.12.0"
+        # floor leg would stay green while testing nothing.
+        run: uv sync --python ${{ matrix.python-version }}
 
       # Each check runs even if an earlier one failed (but not after cancellation),
       # so one push surfaces every problem at once instead of failing fast on the
@@ -193,3 +214,34 @@ jobs:
           tests/test_reconcile.py
           tests/test_pdf_watermark_recall.py
           tests/test_formatters_text_serializer.py
+
+  # The required status check on `develop` and `main` is a context named exactly
+  # `test`. The matrix above reports per-leg contexts (`test-suite (3.12)`, ...),
+  # so without this aggregator the first matrix edit silently strands branch
+  # protection: every following pull request would wait on a `test` context that
+  # no longer reports (#426 review). This job reports `test` forever, no matter
+  # how the matrix is renamed or resized, and no branch-protection edit is needed.
+  #
+  # `if: always()` is load-bearing: a skipped or failed dependency would otherwise
+  # skip this job too, and a skipped aggregator reports no verdict at all. The
+  # explicit result check is the other half: `needs.*.result` is "success" only
+  # when EVERY matrix leg succeeded -- a skipped or cancelled leg surfaces as
+  # "skipped"/"cancelled", and without the comparison below those would count as
+  # a pass, making the aggregator a rubber stamp.
+  test:
+    needs: test-suite
+    if: always()
+    runs-on: ubuntu-latest
+    # Least-privilege token: this job only reads the matrix result.
+    permissions:
+      contents: read
+    steps:
+      - name: Require every matrix leg to have succeeded
+        env:
+          MATRIX_RESULT: ${{ needs.test-suite.result }}
+        run: |
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "::error::test-suite matrix result is '$MATRIX_RESULT', not 'success'"
+            exit 1
+          fi
+          echo "All test-suite matrix legs succeeded."

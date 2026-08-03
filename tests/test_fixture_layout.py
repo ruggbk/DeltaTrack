@@ -59,6 +59,24 @@ _DOWNLOAD_TIER_FILES = {
     "tests/test_fixture_layout.py",
 }
 
+# Modules that name the download ROOT but never a bill under it. Membership of
+# ``_DOWNLOAD_TIER_FILES`` would do the job, but it is the wrong size: it also switches
+# off ``find_stale_fixture_paths``, the rule that catches a committed fixture addressed
+# through ``bills/`` — which these files should still be held to, precisely because they
+# have no business naming an individual bill. So they are exempted from the
+# name-the-tree rule alone.
+#
+# ``tests/corpus_paths.py`` defines ``DOWNLOADS_DIR``; that name has to live somewhere.
+# ``src/deltatrack/diff_bill.py`` carries ``compare``'s ``--bills-dir`` default, which
+# addresses the download tier by design (ADR 0013 / #152) for the same reason the
+# fetchers' output directory does.
+_DOWNLOAD_ROOT_NAMERS = frozenset(
+    {
+        "tests/corpus_paths.py",
+        "src/deltatrack/diff_bill.py",
+    }
+)
+
 _BILL_ID = r"\d{3}-[a-z]+-\d+"
 
 # "Reach into the download tree for THIS bill", where the bill is spelled out beside the
@@ -221,14 +239,16 @@ def find_download_tree_names(sources: dict[str, str]) -> dict[str, list[int]]:
     That is not hypothetical: it is how ``scripts/build_similarity_labels.py`` came
     through the #308 move still pointing at the download tree, raising FileNotFoundError
     on four bills that had just become committed fixtures. ``corpus_paths`` is the one
-    home for these names, so everything outside it imports rather than respells.
+    home for these names, so everything outside it imports rather than respells — bar
+    the handful in :data:`_DOWNLOAD_ROOT_NAMERS`, which name the root and nothing under
+    it, and stay subject to every other rule here.
 
     Lines mentioning ``tmp_path`` are skipped: a synthetic ``tmp_path / "bills"`` tree in
     a test is not the real directory.
     """
     offenders: dict[str, list[int]] = {}
     for rel, text in sources.items():
-        if rel in _DOWNLOAD_TIER_FILES or rel == "tests/corpus_paths.py":
+        if rel in _DOWNLOAD_TIER_FILES or rel in _DOWNLOAD_ROOT_NAMERS:
             continue
         lines = [
             n
@@ -487,6 +507,16 @@ def test_download_tree_name_rule_can_fire() -> None:
     # tests/corpus_paths.py itself defines them, and the fetchers own the directory.
     assert find_download_tree_names({"tests/corpus_paths.py": 'DOWNLOADS_DIR = PROJECT_ROOT / "bills"'}) == {}
     assert find_download_tree_names({"fetch_bills.py": 'default=Path("bills")'}) == {}
+    # ...and the compare CLI's --bills-dir default, which addresses the tier by design.
+    assert find_download_tree_names({"src/deltatrack/diff_bill.py": 'default=Path("bills")'}) == {}
+
+    # The narrow exemption stays narrow: naming an individual BILL under the tree is
+    # still an offence for those two, which a `_DOWNLOAD_TIER_FILES` entry would waive.
+    committed = {"118-hr-4366/1_reported-in-house.xml"}
+    reaching = {"src/deltatrack/diff_bill.py": 'X = Path("bills/118-hr-4366/1_reported-in-house.xml")'}
+    assert find_stale_fixture_paths(reaching, committed) == {
+        "src/deltatrack/diff_bill.py": ["118-hr-4366/1_reported-in-house.xml"]
+    }
 
 
 def test_download_only_versions_are_genuinely_uncommitted() -> None:

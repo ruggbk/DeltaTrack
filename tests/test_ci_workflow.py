@@ -75,6 +75,44 @@ def test_required_checks_report_to_a_merge_queue(filename: str, context: str) ->
     )
 
 
+def test_required_test_context_is_an_aggregator_over_the_matrix() -> None:
+    """The required `test` context must survive any matrix rename or resize.
+
+    A matrix job reports one context per leg (`test-suite (3.12)`, ...), so a
+    required check pointing at the matrix job is stranded by the next matrix edit:
+    branch protection keeps waiting on `test` while only per-leg contexts report
+    (#426 review). The aggregator job named exactly `test` closes that: it needs
+    the matrix job, runs unconditionally, and fails unless every leg succeeded.
+
+    Each pinned property fails silently without the other: without `if: always()`
+    a skipped matrix leg skips the aggregator too (no verdict at all), and without
+    the explicit result comparison a skipped or cancelled leg counts as a pass,
+    making the aggregator a rubber stamp.
+    """
+    jobs = _workflow()["jobs"]
+    aggregator = jobs.get("test")
+    assert aggregator is not None, (
+        "ci.yml has no job named exactly 'test': the required check context stops "
+        "reporting the next time the matrix job is renamed or resized."
+    )
+    needs = aggregator.get("needs")
+    needs = [needs] if isinstance(needs, str) else list(needs or [])
+    assert len(needs) == 1, f"the 'test' aggregator should need exactly the matrix job, got: {needs}"
+    matrix_job = jobs[needs[0]]
+    assert "matrix" in matrix_job.get("strategy", {}), (
+        f"the 'test' aggregator needs '{needs[0]}', which is not a matrix job"
+    )
+    assert aggregator.get("if") == "always()", (
+        "the 'test' aggregator must run even when the matrix fails or is skipped, "
+        "or a skipped leg leaves the required check with no verdict"
+    )
+    assert any(f"needs.{needs[0]}.result" in str(step) for step in aggregator.get("steps", [])), (
+        "the 'test' aggregator must compare needs.*.result explicitly: a skipped "
+        "dependency reports 'skipped', not 'success', and without the comparison "
+        "the aggregator is a rubber stamp"
+    )
+
+
 def test_ci_runs_on_pushes_to_develop() -> None:
     """The integration branch gets a verdict of its own, not just its pull requests.
 
