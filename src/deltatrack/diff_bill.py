@@ -379,33 +379,26 @@ class NodeDiff:
     section_number: str
     element_id_old: str
     element_id_new: str
-    # --- Amount-extraction source (#365) ---------------------------------------
-    # body_text is normalized for MATCHING, and bill_tree._extract_section_text's
-    # "simple lead-in" fast path returns only a section's first <text> when its payload
-    # sits in <list>/<continuation-text>/<paragraph> -- so body_text silently drops the
-    # rest of the section, amounts included. Measured on the committed corpus: 267 nodes
-    # / 1662 amount-instances dropped, and 83 real amount changes missing from the
-    # amount-change table (e.g. 118-hr-4366 v2->v4 sec. 128, $30M/$30M/$30M ->
-    # $15M/$7.5M/$7.5M, reported as `modified` with NO financial change at all).
-    # structure_tree already extracts the leveled tree's own_amounts from display_text
-    # for precisely this reason; these fields carry the same source so the two money
-    # views cannot disagree.
+    # --- Amount-extraction source (#365, #422) ---------------------------------
+    # The text each money view extracts dollar amounts from. These exist because the
+    # amount-change table and the leveled money tree once read DIFFERENT renderings of
+    # the same section and could therefore disagree about whether its money moved (#365):
+    # structure_tree read display_text, this table read body_text, and body_text was
+    # truncated by bill_tree._extract_section_text's "simple lead-in" fast path, which
+    # returned only a section's first <text> when the payload sat in
+    # <list>/<continuation-text>/<paragraph>. Measured then: 267 nodes / 1662
+    # amount-instances dropped, 83 amount changes missing from the table.
+    #
+    # #422 removed that fast path, so body_text carries the whole section and the two
+    # renderings now agree on amounts. These fields are consequently a no-op on today's
+    # corpus, and they are kept rather than removed for two reasons: display_text remains
+    # the more faithful rendering of a section (body_text stays collapsed for matching),
+    # and deleting them would re-open the divergence by letting the two views drift apart
+    # again with nothing naming the rule. The agreement itself is pinned by
+    # TestAmountSourceCorpusRegression in tests/test_financial_diff.py.
     #
     # old_text/new_text deliberately stay body_text: they feed matching, text_diff and
-    # the JSON payload, none of which this is trying to change. Repointing them wholesale
-    # would churn rendered output and goldens for no gain.
-    #
-    # Repairing _extract_section_text would fix body_text for every consumer at once, but
-    # it is the matching key -- a much wider blast radius, tracked in #422.
-    #
-    # KNOWN LIMIT, and why this is a mitigation rather than a cure: when the dropped
-    # payload is the ONLY thing that changed, both versions' body_text are byte-identical,
-    # so diff_text sees nothing, the node is classified "unchanged", and diff_to_dict
-    # filters it out (include_unchanged=False) before any of this is read. The amounts on
-    # such an entry are now correct, but the entry never reaches the report. 118-hr-4366
-    # v2->v4 sec. 124 and sec. 256 are live instances (sec. 256 moves billions). Only
-    # completing body_text fixes the CLASSIFICATION -- these fields cannot. Tracked in
-    # #422, with the measured instances and the matching-blast-radius caveat.
+    # the JSON payload, none of which this is trying to change.
     #
     # None means "no separate source recorded" (a hand-built NodeDiff), and the
     # amount_source_* properties fall back to old_text/new_text so such callers behave
