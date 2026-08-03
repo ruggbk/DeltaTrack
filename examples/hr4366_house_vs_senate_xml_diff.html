@@ -9048,53 +9048,172 @@ document.addEventListener('DOMContentLoaded', function() {
     if (findPrev) findPrev.disabled = findHits.length === 0;
     if (findNext) findNext.disabled = findHits.length === 0;
   }
+  // A hit is a group of <mark>s: one match can span several text nodes (a
+  // phrase crossing a printed line break, or a change mark mid-line), so the
+  // whole group carries the current-hit styling and the counter counts matches.
   function setCurrentHit(i) {
     if (!findHits.length) { updateFindCounter(); return; }
-    if (findHits[findIdx]) findHits[findIdx].classList.remove('find-hit--current');
+    var prev = findHits[findIdx];
+    if (prev) prev.forEach(function(m) { m.classList.remove('find-hit--current'); });
     findIdx = (i % findHits.length + findHits.length) % findHits.length;
     var cur = findHits[findIdx];
-    cur.classList.add('find-hit--current');
-    revealCard(cur);  // a hit inside a collapsed card group must open it, like goTo
-    cur.scrollIntoView({behavior: 'smooth', block: 'center'});
+    cur.forEach(function(m) { m.classList.add('find-hit--current'); });
+    revealCard(cur[0]);  // a hit inside a collapsed card group must open it, like goTo
+    cur[0].scrollIntoView({behavior: 'smooth', block: 'center'});
     updateFindCounter();
   }
-  function runFind() {
-    clearFind();
-    var q = (findInput ? findInput.value : '').trim();
-    if (q.length < 2) { updateFindCounter(); return; }
-    var root = activeView();
-    var ql = q.toLowerCase();
+  // Elements that don't interrupt the flow of a printed line. Anything else
+  // (a new .fb-row, a card, a paragraph) starts a new display line.
+  var FIND_INLINE = {SPAN: 1, MARK: 1, INS: 1, DEL: 1, EM: 1, STRONG: 1, A: 1, B: 1,
+                     I: 1, U: 1, S: 1, CODE: 1, SUP: 1, SUB: 1, SMALL: 1, ABBR: 1};
+  function findBlockOf(node) {
+    var el = node.parentElement;
+    while (el && FIND_INLINE[el.tagName]) el = el.parentElement;
+    return el;
+  }
+  // Flatten the active view into one searchable string, with a map back to the
+  // text nodes it came from. Searching this instead of each text node is what
+  // lets a phrase match across a printed line break (#162): the PDF full-bill
+  // view is print-faithful, so GPO's line breaks and its soft-hyphenated word
+  // splits are real DOM boundaries, and every row is its own text node.
+  //
+  // Three normalizations, all mirroring what the parser already does to produce
+  // the merged (whole-word) canonical text:
+  //   - soft hyphens rejoined  (`WORD-` + lowercase continuation, the rule in
+  //     parsers/pdf_text.py `_merge_print_lines`; an uppercase continuation is a
+  //     real compound like `Child-Rescue` and is left alone)
+  //   - display lines joined with a single space
+  //   - whitespace runs collapsed (GPO pads columns with runs of spaces)
+  // The line-number gutter and page markers are print furniture, not bill text,
+  // so they're left out of the searchable string entirely.
+  function buildFindIndex(root) {
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: function(node) {
-        if (!node.nodeValue || node.nodeValue.toLowerCase().indexOf(ql) === -1) return NodeFilter.FILTER_REJECT;
-        var el = node.parentElement;  // skip filter-hidden subtrees
-        if (!el || (el.offsetParent === null && el.tagName !== 'BODY')) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+        var el = node.parentElement;
+        if (!el) return NodeFilter.FILTER_REJECT;
+        if (el.closest('.fb-gutter, .fb-page')) return NodeFilter.FILTER_REJECT;
+        if (el.offsetParent === null && el.tagName !== 'BODY') return NodeFilter.FILTER_REJECT;  // filter-hidden
         return NodeFilter.FILTER_ACCEPT;
       }
     });
-    var nodes = [];  // snapshot before mutating the tree
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-    nodes.forEach(function(node) {
-      var text = node.nodeValue, lower = text.toLowerCase();
-      // Rebuild the node as [text, <mark>, text, …] in one replaceChild — no
-      // splitText juggling, no index invalidation.
-      var frag = document.createDocumentFragment();
-      var last = 0, at;
-      while ((at = lower.indexOf(ql, last)) !== -1) {
-        if (at > last) frag.appendChild(document.createTextNode(text.slice(last, at)));
-        var mark = document.createElement('mark');
-        mark.className = 'find-hit';
-        mark.textContent = text.slice(at, at + ql.length);
-        frag.appendChild(mark);
-        last = at + ql.length;
+    // `pieces` are the runs where the flat string and a node's own text advance
+    // in lockstep, so a flat char range resolves back to exact node offsets.
+    var parts = [], pieces = [], flatLen = 0, lastCh = '', block = null, node;
+    function push(node, nodeStart, str) {
+      if (!str) return;
+      pieces.push({node: node, flatStart: flatLen, nodeStart: nodeStart, len: str.length});
+      parts.push(str);
+      flatLen += str.length;
+      lastCh = str.charAt(str.length - 1);
+    }
+    function pushSpace(node, nodeStart) {
+      if (!flatLen || lastCh === ' ') return;  // no leading or doubled spaces
+      // Map the space onto a real source char when there is one, so a match
+      // spanning it highlights continuously instead of leaving a gap.
+      if (node) { push(node, nodeStart, ' '); return; }
+      parts.push(' '); flatLen += 1; lastCh = ' ';
+    }
+    while ((node = walker.nextNode())) {
+      var b = findBlockOf(node);
+      if (block !== null && b !== block) {
+        var cont = node.nodeValue.replace(/^\s+/, '').charAt(0);
+        var hyphenated = /[A-Za-z0-9]-$/.test(parts[parts.length - 1] || '');
+        if (hyphenated && cont && cont !== cont.toUpperCase()) {
+          // Soft hyphen (lowercase continuation): drop it, `Serv-`+`ices` is one word.
+          var tail = parts[parts.length - 1];
+          parts[parts.length - 1] = tail.slice(0, -1);
+          flatLen -= 1;
+          var lastPiece = pieces[pieces.length - 1];
+          if (--lastPiece.len === 0) pieces.pop();
+          if (!parts[parts.length - 1]) parts.pop();
+          lastCh = tail.charAt(tail.length - 2);
+        } else if (hyphenated && cont) {
+          // A real compound broken at its own hyphen (`Child-` / `Rescue`): keep
+          // the hyphen and close the gap, so the reader's `Child-Rescue` matches.
+        } else {
+          pushSpace(null, 0);
+        }
       }
-      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-      node.parentNode.replaceChild(frag, node);
-    });
-    findHits = [].slice.call(root.querySelectorAll('mark.find-hit'));
+      block = b;
+      var text = node.nodeValue, ws = /\s+/g, m, cursor = 0;
+      while ((m = ws.exec(text)) !== null) {
+        push(node, cursor, text.slice(cursor, m.index));
+        pushSpace(node, m.index);
+        cursor = m.index + m[0].length;
+      }
+      push(node, cursor, text.slice(cursor));
+    }
+    var flat = parts.join('');
+    return {lower: flat.toLowerCase(), pieces: pieces};
+  }
+  // First piece whose flat range reaches past `pos` (matches are resolved in
+  // order, so a binary search keeps this linear-ish on long documents).
+  function findPieceAt(pieces, pos) {
+    var lo = 0, hi = pieces.length - 1, ans = pieces.length;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (pieces[mid].flatStart + pieces[mid].len > pos) { ans = mid; hi = mid - 1; } else { lo = mid + 1; }
+    }
+    return ans;
+  }
+  function runFind() {
+    clearFind();
+    var q = (findInput ? findInput.value : '').trim().replace(/\s+/g, ' ');
+    if (q.length < 2) { updateFindCounter(); return; }
+    var idx = buildFindIndex(activeView());
+    var ql = q.toLowerCase();
+    var hits = [], ranges = [], at = 0;
+    while ((at = idx.lower.indexOf(ql, at)) !== -1) {
+      var end = at + ql.length, group = [];
+      hits.push(group);
+      for (var i = findPieceAt(idx.pieces, at); i < idx.pieces.length; i++) {
+        var p = idx.pieces[i], ps = p.flatStart, pe = ps + p.len;
+        if (ps >= end) break;
+        var a = Math.max(at, ps), b = Math.min(end, pe);
+        if (b > a) {
+          var s = p.nodeStart + (a - ps), e2 = p.nodeStart + (b - ps);
+          // Pieces break at every whitespace run, so one match spans several of
+          // them; re-join the contiguous ones to get one <mark> per display row
+          // rather than one per word.
+          var tailR = ranges[ranges.length - 1];
+          if (tailR && tailR.group === group && tailR.node === p.node && tailR.end === s) {
+            tailR.end = e2;
+          } else {
+            ranges.push({node: p.node, start: s, end: e2, group: group});
+          }
+        }
+      }
+      at = end;
+    }
+    // Rebuild each text node once, in one replaceChild — no splitText juggling,
+    // no index invalidation. Ranges are in document order, so a node's ranges
+    // are consecutive.
+    var j = 0;
+    while (j < ranges.length) {
+      var k = j, target = ranges[j].node;
+      while (k < ranges.length && ranges[k].node === target) k++;
+      wrapFindRanges(target, ranges.slice(j, k));
+      j = k;
+    }
+    findHits = hits.filter(function(g) { return g.length; });
     findIdx = -1;
     updateFindCounter();
     if (findHits.length) setCurrentHit(0);
+  }
+  function wrapFindRanges(node, ranges) {
+    var text = node.nodeValue, frag = document.createDocumentFragment(), last = 0;
+    ranges.forEach(function(r) {
+      if (r.start > last) frag.appendChild(document.createTextNode(text.slice(last, r.start)));
+      var mark = document.createElement('mark');
+      mark.className = 'find-hit';
+      mark.textContent = text.slice(r.start, r.end);
+      frag.appendChild(mark);
+      r.group.push(mark);
+      last = r.end;
+    });
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
   }
   if (findInput) {
     var findTimer;

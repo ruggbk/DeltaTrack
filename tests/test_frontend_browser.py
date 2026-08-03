@@ -661,8 +661,16 @@ def test_find_ignores_line_number_gutter(chromium, tmp_path):
     text ("…Serv- 2 ices…"), both creating false hits and breaking real ones.
     """
     page = _open_full_bill(chromium, tmp_path)
-    # "for expenses" is on line 1; a search spanning into line 2 must not have
-    # to step over the "2" gutter, and the gutter digits are not themselves hits.
+    # A phrase crossing rows 5 -> 6: with the gutter in the searchable text this
+    # would read "…available until 6 expended" and never match. This is the
+    # assertion that makes the test discriminating — the two negatives below
+    # both hold on the pre-fix per-node search as well.
+    assert _find(page, "available until expended") == "1 / 1"
+    # Runs of column padding collapse to a single space, as they do in the
+    # parser's merged text.
+    assert _find(page, "expended $5,000,000") == "1 / 1"
+    # The rejoined hyphen is gone from the searchable text, and no gutter digit
+    # is ever itself a hit.
     assert _find(page, "Serv- ices") == "0 / 0"
     hits_in_gutter = page.evaluate("() => document.querySelectorAll('.fb-gutter mark.find-hit').length")
     assert hits_in_gutter == 0
