@@ -97,16 +97,52 @@ def normalize_division_title(division_label: str) -> str:
     return normalize_header(title)
 
 
-def find_bill_body(root: ET.Element) -> ET.Element:
-    """Find the effective body element from a bill or amendment-doc root.
+def _variant_summary(bodies: list[ET.Element], preambles: list[ET.Element]) -> str:
+    """Name the committee-amendment variants found, for the find_bill_body error.
 
-    Returns legis-body for bills, or amendment-block for amendment-docs.
-    Raises ValueError if no body can be found.
+    Reports each block's ``changed`` attribute ("deleted"/"added"), which is what
+    distinguishes the struck text from the amended text.
+    """
+    parts = []
+    for label, elements in (("resolution-body", bodies), ("preamble", preambles)):
+        if len(elements) > 1:
+            marks = ", ".join(el.get("changed") or "unmarked" for el in elements)
+            parts.append(f"{label} [{marks}]")
+    return "; ".join(parts)
+
+
+def find_bill_body(root: ET.Element) -> ET.Element:
+    """Find the effective body element from a bill, resolution or amendment-doc root.
+
+    Returns legis-body for bills, resolution-body for resolutions, or
+    amendment-block for amendment-docs.
+    Raises ValueError if no body can be found, or if the document carries paired
+    committee-amendment variants we cannot choose between (see below).
     """
     # Standard bill: <bill><legis-body>
     body = root.find("legis-body")
     if body is not None:
         return body
+
+    # Resolution: <resolution><resolution-body>. Joint (hjres/sjres), concurrent
+    # (hconres/sconres) and simple (hres/sres) resolutions all share this shape (#201).
+    resolution_bodies = root.findall("resolution-body")
+    preambles = root.findall("preamble")
+    if len(resolution_bodies) > 1 or len(preambles) > 1:
+        # Reported-stage resolutions can carry the committee amendment as PAIRED
+        # blocks — a changed="deleted" (struck) variant and a changed="added" one —
+        # as two <resolution-body> and/or two <preamble> children. Taking the first
+        # would silently render the superseded text as though it were the document.
+        # Picking a variant is an amendment-display feature, not a parse decision, so
+        # fail loudly instead; these documents already fail today (#201).
+        raise ValueError(
+            f"Resolution carries paired committee-amendment variants "
+            f"({len(resolution_bodies)} <resolution-body>, {len(preambles)} <preamble>: "
+            f"{_variant_summary(resolution_bodies, preambles)}). Choosing between the struck and "
+            f"the amended text is not supported."
+        )
+    if resolution_bodies:
+        return resolution_bodies[0]
 
     # Amendment doc: <amendment-doc><engrossed-amendment-body><amendment><amendment-block>
     block = root.find(".//engrossed-amendment-body/amendment/amendment-block")
@@ -516,7 +552,14 @@ _CONGRESS_WORDS = {
     "twentieth": 20,
 }
 
-_LEGIS_NUM_RE = re.compile(r"([A-Z])\.\s*(?:[A-Z]*\.?\s*)?(\d+)")
+# <legis-num> splits into a chamber/kind prefix and the number: "H. R. 3547",
+# "H.R. 2029", "H. CON. RES. 4". The prefix is captured whole (lazily, so it stops at
+# the number); stripping it to letters and lowercasing yields the bill_type directly —
+# "H. CON. RES." -> "hconres" — for every form GPO prints, which is why there is no
+# lookup table here. The old regex captured a SINGLE letter instead, which collapsed
+# both chambers' joint resolutions onto "j" and both concurrent ones onto "n", and
+# labelled the simple resolutions with the bill types "hr"/"s" (#201).
+_LEGIS_NUM_RE = re.compile(r"([A-Z][A-Z.\s]*?)\s*(\d+)")
 
 
 def _build_paths(
@@ -1026,9 +1069,11 @@ def _extract_metadata(root: ET.Element, xml_path: Path) -> tuple[int, str, int, 
     if legis_num_el is not None and legis_num_el.text:
         match = _LEGIS_NUM_RE.search(legis_num_el.text.strip())
         if match:
-            bill_type = match.group(1).lower()
-            if bill_type == "h":
-                bill_type = "hr"
+            # Strip the prefix to letters and lowercase it: "H. CON. RES." -> "hconres",
+            # "H.R." -> "hr". This is the whole mapping — it produces the right answer
+            # for all eight forms, and an unfamiliar spelling degrades to a visibly odd
+            # designator rather than a silently wrong one.
+            bill_type = re.sub(r"[^A-Z]", "", match.group(1).upper()).lower()
             bill_number = int(match.group(2))
 
     version = ""
@@ -1051,6 +1096,54 @@ def _extract_metadata(root: ET.Element, xml_path: Path) -> tuple[int, str, int, 
 _ENACTING_CLAUSE = (
     "Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,"
 )
+
+# A resolution gets a resolving clause instead, also synthesized rather than
+# carried in the XML. One of seven, selected the way billres-details.xsl's
+# resolution-body template selects them: keyed on resolution/@resolution-type,
+# with resolution-body/@style="constitutional-amendment" overriding the joint
+# forms, and resolution-body/@display-resolving-clause opting out of the simple
+# and order forms (the only ones the stylesheet checks it for). res.dtd names
+# the opt-out display-resolving-clause — <resolution-body> carries no
+# display-enacting-clause attribute, so the bill opt-out cannot gate these (#427).
+_HOUSE_CONCURRENT_CLAUSE = "Resolved by the House of Representatives (the Senate concurring),"
+_SENATE_CONCURRENT_CLAUSE = "Resolved by the Senate (the House of Representatives concurring),"
+_JOINT_CLAUSE = (
+    "Resolved by the Senate and House of Representatives of the United States of America in Congress assembled,"
+)
+_CONSTITUTIONAL_AMENDMENT_CLAUSE = (
+    "Resolved by the Senate and House of Representatives of the United States of America "
+    "in Congress assembled (two-thirds of each House concurring therein),"
+)
+_SIMPLE_CLAUSES = {
+    "house-resolution": "Resolved,",
+    "senate-resolution": "Resolved,",
+    "house-order": "Ordered,",
+    "senate-order": "Ordered,",
+}
+
+
+def _resolving_clause(root: ET.Element, body: ET.Element) -> str | None:
+    """The resolving clause GPO prints for this resolution, or None when none prints.
+
+    Mirrors the when-chain of billres-details.xsl's resolution-body template,
+    in its order. An unrecognized resolution-type yields None — nothing is
+    emitted rather than something false.
+    """
+    resolution_type = root.get("resolution-type", "")
+    if resolution_type == "house-concurrent":
+        return _HOUSE_CONCURRENT_CLAUSE
+    if body.get("style") == "constitutional-amendment":
+        return _CONSTITUTIONAL_AMENDMENT_CLAUSE
+    if resolution_type in ("house-joint", "senate-joint"):
+        return _JOINT_CLAUSE
+    if resolution_type == "senate-concurrent":
+        return _SENATE_CONCURRENT_CLAUSE
+    if resolution_type in _SIMPLE_CLAUSES:
+        if body.get("display-resolving-clause") == "no-display-resolving-clause":
+            return None
+        return _SIMPLE_CLAUSES[resolution_type]
+    return None
+
 
 # Synthetic match_path root for front-matter nodes. They carry an empty
 # display_path (no heading) but need a stable, distinct match key so each piece
@@ -1076,14 +1169,17 @@ def _front_matter_node(key: str, body: str) -> BillNode:
 
 
 def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillNode]:
-    """Build front-matter nodes from the <form> block and enacting clause (#48).
+    """Build front-matter nodes from the <form> block, preamble and clause (#48).
 
     The <form> block (congress, session, legis-num, legis-type "AN ACT", official
-    title) and the GPO enacting clause sit outside <legis-body>, so they were
-    dropped from the full-bill text and the diff. Each piece is its own node so a
-    change diffs precisely. distribution-code renders nothing in GPO and is
-    skipped; sponsor/action lines are out of scope. Returns nodes in render order
-    (empty when there is no <form>, e.g. amendment docs).
+    title) and the GPO clause (enacting for a bill, resolving for a resolution,
+    #427) sit outside the body element, so they were dropped from the full-bill
+    text and the diff. A resolution's <preamble> sits in
+    the same position — a sibling of <resolution-body> — and is captured here for
+    the same reason (#201). Each piece is its own node so a change diffs precisely.
+    distribution-code renders nothing in GPO and is skipped; sponsor/action lines
+    are out of scope. Returns nodes in render order (empty when there is no <form>,
+    e.g. amendment docs).
     """
     form = root.find("form")
     nodes: list[BillNode] = []
@@ -1108,8 +1204,27 @@ def extract_front_matter_nodes(root: ET.Element, body: ET.Element) -> list[BillN
         if official:
             nodes.append(_front_matter_node("official title", official))
 
-    # Enacting clause: GPO boilerplate, unless the body opts out.
-    if body.get("display-enacting-clause") != "no-display-enacting-clause":
+    # Preamble: a resolution's "Whereas ..." recitals, printed between the form block
+    # and the resolving clause. One node for the whole block rather than one per
+    # recital: <whereas> carries no id, so a per-recital key could only be positional
+    # and inserting one recital would re-key every later one into a false diff (#201).
+    preamble = root.find("preamble")
+    if preamble is not None:
+        recitals = [text for w in preamble.findall("whereas") if (text := extract_text_content(w).strip())]
+        if recitals:
+            nodes.append(_front_matter_node("preamble", "\n".join(recitals)))
+
+    # Enacting clause (bills) / resolving clause (resolutions): GPO boilerplate,
+    # unless the body opts out. The bill opt-out must not gate resolutions:
+    # <resolution-body> carries no display-enacting-clause attribute (res.dtd
+    # names its opt-out display-resolving-clause), so the check below silently
+    # never fired for a resolution and every resolution carried the bill
+    # clause (#427).
+    if root.tag == "resolution":
+        clause = _resolving_clause(root, body)
+        if clause is not None:
+            nodes.append(_front_matter_node("resolving clause", clause))
+    elif body.get("display-enacting-clause") != "no-display-enacting-clause":
         nodes.append(_front_matter_node("enacting clause", _ENACTING_CLAUSE))
 
     return nodes
