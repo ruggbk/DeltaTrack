@@ -26,6 +26,16 @@ A `src/deltatrack/` package cannot be found from the repository root, so the onl
 import it is to install it. The suite then exercises the distribution, and a packaging
 defect fails in CI.
 
+*Corrected by [#438](https://github.com/AgoraDMV/DeltaTrack/issues/438): the last sentence
+overstates what the layout buys, and the contrast drawn with the root package does not hold.
+`uv sync` installs the engine EDITABLE, a `.pth` pointing straight at `src/`, so an ordinary
+run resolves the working tree and a module left out of the wheel passes the suite under
+either layout. Packaging fidelity is covered only by `tests/test_engine_installs.py`, as the
+Consequences below already say. What excluding `src` from `pythonpath` does preserve is ONE
+import-resolution story shared by pytest, the root command wrappers and the tools, which is
+the reason now recorded in `pyproject.toml` and AGENTS.md. The decision stands; this part of
+the reasoning recorded for it does not.*
+
 Three things were measured on the branch rather than assumed, because each would have
 changed the decision:
 
