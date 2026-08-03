@@ -56,24 +56,32 @@ rm -rf .venv && uv sync
 uv run python -V   # expect 3.12.x
 ```
 
-### Optional: download bill files for full test suite
+### The test suite needs no downloads
 
-The fast tests use inline XML and mocked data. Integration tests need real bill files: XML for the diff tests and PDF for the PDF comparison tests (`test_pdf_*`):
+`uv run pytest` runs on a fresh clone without fetching a single bill (the browser tests
+want a one-time `uv run playwright install chromium`; nothing else does). The bills the
+integration and correctness gates read are committed to the repo, named in
+[`tests/corpus_manifest.toml`](tests/corpus_manifest.toml) ([ADR
+0015](docs/decisions/0015-corpus-test-fixtures.md)), so every machine and CI collect the
+same set. If a manifested bill is missing the gate fails rather than quietly asserting
+less, which is why there is no "download this first" step to forget.
+
+What a download still changes is narrow: the live-network govinfo parity gate (skipped
+unless you pass `--run-network`), and a handful of individual cases pinned to a bill
+version that is deliberately not committed, which skip when it is absent. No gate loses
+its assertions that way. TESTING.md's [What still wants a
+download](TESTING.md#what-still-wants-a-download) is the current list.
+
+Downloading bills is for working *beyond* the committed set — exploring a bill the
+corpus doesn't cover, or sweeping your local tree with `CORPUS_SWEEP=1`. No API key
+needed; `fetch_bills.py` reads keyless govinfo bulk data by default (a key is only for
+`--source api` or `download-all` year-range discovery: get a free one at
+https://api.congress.gov/sign-up/ and `cp .env.example .env`).
 
 ```bash
-# No API key needed: fetch_bills.py downloads from keyless govinfo bulk data by
-# default. (A key is only needed for --source api or download-all year-range
-# discovery — get a free one at https://api.congress.gov/sign-up/, put it in .env
-# via `cp .env.example .env`, and fetch_bills.py loads .env automatically.)
-
-# Download the primary test bill (--format both gets XML + PDF; default is XML only)
+# --format both gets XML + PDF; the default is XML only
 uv run python tools/fetch_bills.py download 118 hr 4366 --format both
-
-# Run the suite; tests whose bill isn't downloaded yet skip automatically
-uv run pytest
 ```
-
-See the README for the full list of bills used by the test suite.
 
 ## Finding work to do
 
