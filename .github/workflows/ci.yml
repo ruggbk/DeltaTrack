@@ -37,7 +37,11 @@ on:
     types: [checks_requested]
 
 jobs:
-  test:
+  # The matrix legs report one context PER LEG (`test-suite (3.12)`,
+  # `test-suite (3.12.0)`), so the job that branch protection requires is the
+  # `test` aggregator at the bottom of this file, not the matrix itself. Renaming
+  # this job's id does not strand the required check; deleting the aggregator does.
+  test-suite:
     runs-on: ubuntu-latest
     # Least-privilege token: this job only checks out and runs the suite.
     permissions:
@@ -62,7 +66,11 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync
+        # --python pins the sync to the matrix interpreter. A bare `uv sync` follows
+        # uv's own preference order, so a later .python-version file or a UV_PYTHON
+        # env var would point BOTH legs at the same interpreter and the "3.12.0"
+        # floor leg would stay green while testing nothing.
+        run: uv sync --python ${{ matrix.python-version }}
 
       # Each check runs even if an earlier one failed (but not after cancellation),
       # so one push surfaces every problem at once instead of failing fast on the
@@ -200,3 +208,34 @@ jobs:
           tests/test_reconcile.py
           tests/test_pdf_watermark_recall.py
           tests/test_formatters_text_serializer.py
+
+  # The required status check on `develop` and `main` is a context named exactly
+  # `test`. The matrix above reports per-leg contexts (`test-suite (3.12)`, ...),
+  # so without this aggregator the first matrix edit silently strands branch
+  # protection: every following pull request would wait on a `test` context that
+  # no longer reports (#426 review). This job reports `test` forever, no matter
+  # how the matrix is renamed or resized, and no branch-protection edit is needed.
+  #
+  # `if: always()` is load-bearing: a skipped or failed dependency would otherwise
+  # skip this job too, and a skipped aggregator reports no verdict at all. The
+  # explicit result check is the other half: `needs.*.result` is "success" only
+  # when EVERY matrix leg succeeded -- a skipped or cancelled leg surfaces as
+  # "skipped"/"cancelled", and without the comparison below those would count as
+  # a pass, making the aggregator a rubber stamp.
+  test:
+    needs: test-suite
+    if: always()
+    runs-on: ubuntu-latest
+    # Least-privilege token: this job only reads the matrix result.
+    permissions:
+      contents: read
+    steps:
+      - name: Require every matrix leg to have succeeded
+        env:
+          MATRIX_RESULT: ${{ needs.test-suite.result }}
+        run: |
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "::error::test-suite matrix result is '$MATRIX_RESULT', not 'success'"
+            exit 1
+          fi
+          echo "All test-suite matrix legs succeeded."
