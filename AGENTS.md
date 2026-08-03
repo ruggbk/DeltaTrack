@@ -17,6 +17,13 @@ After `source ./init`, the top-level CLIs run directly (`./tools/fetch_bills.py`
 `./diff_bill.py`, `./diff_pdf.py`, `./tools/fetch_bill_archives.py`,
 `./tools/fetch_bill_text_archives.py`); the `uv run python <script>.py` form still works.
 
+Both forms are correct, and the docs pick between them deliberately rather than by
+accident: [README](README.md) is read by users, so it spells a command the way a reader
+types it (`./tools/fetch_bills.py`), while [CONTRIBUTING](CONTRIBUTING.md) and
+[TESTING](TESTING.md) are read by contributors, so they use `uv run python …`, which
+resolves the pinned interpreter without assuming an activated venv. Match the file you
+are editing; do not unify them.
+
 ### Adding a CLI command
 
 A command is an **executable `.py` file in the project root or in `tools/`**. That is the
