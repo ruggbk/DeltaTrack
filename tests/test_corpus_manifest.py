@@ -373,16 +373,20 @@ def test_manifested_expanding_case_is_still_watched() -> None:
 # property under test is the RESOLUTION LOGIC rather than the corpus's current shape.
 #
 # These two tests used to key on real single-format stages (113-hr-3547 v6 as the xml-only
-# case, and a v5->v6 pair whose second side had no pdf). #126 committed a pdf beside every
-# manifested xml, so both examples became dual-format and the assertions inverted — the
-# tests failed while the code they cover was unchanged. That is the fragility
-# test_unmanifested_expanding_case_is_not_watched already names in its own docstring: an
+# case, and a v5->v6 pair whose second side had no pdf). #126 took format parity to 51 of
+# 57 versions, and those particular examples were among the ones that gained a pdf, so both
+# became dual-format and the assertions inverted — the tests failed while the code they
+# cover was unchanged. That is the fragility test_unmanifested_expanding_case_is_not_watched
+# already names in its own docstring: an
 # example "cannot be invalidated by the corpus gaining or losing a format" only if it does
 # not depend on one. test_guard_flags_a_stale_extensionless_stage_entry says the same thing
 # from the other side ("parity means there may be none, in which case the honest fix is a
 # synthetic unmanifested id rather than hunting for a real one"). Stubbing gets that
 # guarantee for the format-resolution cases, which genuinely need a single-format stage to
-# point at and can no longer find a real one.
+# point at. Six real ones do remain — one pdf-only version and the five xml-only versions
+# whose pdfs are withheld for #519 — but every one of them is single-format only until the
+# issue that withholds its counterpart is resolved, so keying on any of them would reset
+# this same trap with a later fuse.
 _STUB_MANIFEST = frozenset(
     {
         "000-xx-1/1_both.xml",
@@ -403,14 +407,16 @@ def test_expanding_case_resolves_per_version_and_per_format(monkeypatch) -> None
     through the exact ids that reddened a local run. Both single-format directions are
     covered: xml-only and pdf-only.
 
-    The real corpus still carries one pdf-only stage (114-hr-2029 v4, whose xml is withheld
-    while the multi-<legis-body> section drop is open; see the manifest note), asserted
-    below against the live manifest. It has no xml-only counterpart since #126, which is
-    why the rest runs against the stub.
+    The real corpus carries one pdf-only stage (114-hr-2029 v4, whose xml is withheld while
+    the multi-<legis-body> section drop is open; see the manifest note), asserted below
+    against the live manifest. Real xml-only stages exist too — the five engrossed
+    amendments whose pdfs are withheld for #519 — but each is single-format only until its
+    issue is resolved, so the rest runs against the stub rather than keying on an example
+    that is scheduled to stop being one.
     """
     recall = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[{}]"
 
-    # Live manifest: the one real single-format stage left in the corpus.
+    # Live manifest: the corpus's only pdf-only version.
     assert not conftest.is_watched_case(recall.format("114-hr-2029/4_reported-in-senate"))  # pdf only
 
     monkeypatch.setattr(conftest, "_manifest_case_refs", lambda: _STUB_MANIFEST)
@@ -425,8 +431,12 @@ def test_pair_case_resolves_both_sides(monkeypatch) -> None:
     watching half the uncollectable pairs — so the unwatched case must be driven by the
     SECOND side, which is the half a first-side-only parser would get wrong.
 
-    Runs against the stub: since #126 every manifested version carries a pdf, so no real
-    pair has a side that fails this check.
+    Runs against the stub because no real pair can exercise the negative branch: the pair
+    ids come from adjacent_pdf_pairs(), which enumerates the PDFs actually on disk, and the
+    manifest declares "pdf" for exactly those. A version with no pdf — the five xml-only
+    #519 ones — never appears as either side of a generated id in the first place, so a
+    real example of a side failing this check cannot be constructed by hand from the
+    corpus.
     """
     monkeypatch.setattr(conftest, "_manifest_case_refs", lambda: _STUB_MANIFEST)
     pair = "tests/test_pdf_corpus_smoke.py::TestPdfCorpusSmoke::test_no_crash[000-xx-1/{}->{}]"

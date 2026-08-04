@@ -159,9 +159,10 @@ _PDF_MONEY_SKIP: set[str] = {"116-hr-133/7_enrolled-bill.pdf"}
 # direction. Value is the reason the layout carries no anchors.
 _PDF_NO_ANCHOR_LAYOUTS: dict[str, str] = {
     "115-hr-5895/5_enrolled-bill.pdf": "enrolled print — no GPO margin line numbers (#141)",
-    # The enrolled prints committed by #126, which took every manifested version to both
-    # formats so any pairing can be tested. Carried for the dollar-amount cross-check
-    # (that gate reads PDF text, so it needs no anchors) and for the enacted text itself,
+    # The enrolled prints committed by #126, which took format parity to 51 of 57
+    # manifested versions so far more pairings can be tested. Carried for the
+    # dollar-amount cross-check (that gate reads PDF text, so it needs no anchors) and for
+    # the enacted text itself,
     # rather than for structure. Same #141 layout as the entry above, and held to the same
     # assertions: documented member, unnumbered layout, text layer intact. Only the anchor
     # layer declines.
@@ -294,10 +295,12 @@ def _assert_zero_anchor_layout(path: Path, test_id: str, full_text: str, anchors
     # Text layer intact. The anchor layer declining must not mean the document is
     # unreadable — a PDF that extracted to nothing would otherwise land here and pass.
     #
-    # Measured against the version's OWN XML, which #126 guarantees is committed beside
-    # every PDF here. The absolute floors this replaced (>10,000 chars, >=10 `SEC.`
-    # enumerators) encoded "omnibus-sized" and so could not admit a genuinely short
-    # enrolled print: 118-hr-9468 is 3 pages and 4 sections, and its PDF text slightly
+    # Measured against the version's OWN XML, which #126 committed beside every PDF this
+    # registry names — they are all dual-format versions. A pdf-only entry would fall to
+    # the absolute floors in the `else` below rather than going unmeasured. The floors
+    # this replaced (>10,000 chars, >=10 `SEC.` enumerators) encoded "omnibus-sized" and
+    # so could not admit a genuinely short enrolled print: 118-hr-9468 is 3 pages and 4
+    # sections, and its PDF text slightly
     # EXCEEDS its XML (5,222 vs 4,594 chars) — extraction is perfect and the floor was
     # simply the wrong instrument. The relative form is also STRICTER where it matters: a
     # multi-thousand-page omnibus that extracted 10,001 chars passed the old floor and

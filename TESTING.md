@@ -458,8 +458,9 @@ uv run python scripts/serve_compare.py path/to/bill-dir --port 8765 --no-browser
 
 With no `--v1`/`--v2` it picks the two lowest-numbered versions that have both a
 `.pdf` and an `.xml`. A bare bill id resolves against the committed fixtures in
-`tests/corpus/`, every version of which carries both formats since #126 (with one
-deliberate exception, noted in the manifest); to view a bill you downloaded
+`tests/corpus/`, 51 of whose 57 versions carry both formats since #126; the six
+single-format versions (five XML-only, one PDF-only) are each deliberate and each
+says why at its manifest entry. To view a bill you downloaded
 into `bills/` instead, pass its directory path (and fetch it with `--format
 both`). Rendered HTML goes to a temp dir, nothing committed. The panes reflect the current checkout, so run it on the branch whose
 diff output you're inspecting. This is a manual debugging aid, not a test.

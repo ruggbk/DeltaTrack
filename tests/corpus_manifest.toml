@@ -41,9 +41,11 @@
 # off the `formats` fields, not off this comment; the six single-format entries are each
 # deliberate and each says why at the version.
 #
-# What parity bought, measured when it landed: 27 PDFs joined the corpus, every version's
-# XML dollar amounts are now cross-checked against its own PDF text
-# (test_pdf_xml_amount_recall), and four bills that had NO amount cross-check at all —
+# What parity bought, measured when it landed: 27 PDFs joined the corpus, every
+# DUAL-FORMAT version's XML dollar amounts are now cross-checked against its own PDF text
+# (test_pdf_xml_amount_recall) — the five XML-only versions below have no PDF to check
+# against and stay outside that gate until #519 lands — and four bills that had NO amount
+# cross-check at all —
 # 117-hr-2471, 116-hr-1865, 115-hr-1625, 115-hr-244 — gained one. Every added PDF was
 # measured against that gate before being committed and none needed a new baseline.
 #
