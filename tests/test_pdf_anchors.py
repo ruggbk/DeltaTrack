@@ -48,9 +48,22 @@ class TestSectionAnchor:
 
 
 class TestAccountAnchor:
-    def test_uppercase_heading_before_for_necessary_expenses(self):
-        # A common GPO pattern: an all-caps account heading followed within
-        # a few lines by `For necessary expenses of …`.
+    """Raw text alone never yields an account anchor (#114).
+
+    These cases used to assert the opposite: an all-caps heading within three lines
+    above a `For necessary expenses of` line became an ``account``. That made an
+    appropriations-specific English phrase load-bearing for structure, which #114
+    rules out — text triggers may interpret dollar amounts, never name accounts.
+    Account detection is now glyph-size based, and `_scan_anchors_in_page` builds
+    pages from raw text with no sizes attached, so this entry point is structurally
+    incapable of producing one. Account-level assertions live in
+    test_pdf_size_detection.py and test_pdf_anchor_golden.py, against sized pages
+    and real PDFs respectively.
+    """
+
+    def test_for_necessary_expenses_does_not_name_an_account(self):
+        # The exact GPO shape the retired backwalk keyed on: heading, then the
+        # trigger phrase within its 3-line reach.
         text = (
             "11 OFFICE OF THE SECRETARY AND EXECUTIVE\n"
             "12 MANAGEMENT\n"
@@ -58,20 +71,19 @@ class TestAccountAnchor:
             "14 For necessary expenses of the Office of the Secretary"
         )
         anchors = _scan_anchors_in_page(2, text)
-        accounts = [a for a in anchors if a.kind == "account"]
-        # The heading immediately preceding `For necessary expenses of` is the
-        # closest account label. The plan accepts misses; require at least one
-        # uppercase heading line is found and stored as an account.
-        assert any(a.text == "OPERATIONS AND SUPPORT" for a in accounts)
+        assert not any(a.kind == "account" for a in anchors)
 
-    def test_no_account_when_no_for_necessary_expenses(self):
-        # Without the trigger phrase, uppercase lines may be titles or other
-        # display headings; the heuristic should not produce account anchors.
+    def test_no_account_from_bare_uppercase_headings(self):
+        # Uppercase lines may be titles or other display headings; without a size
+        # signal nothing classifies them as accounts.
         text = "7 TITLE I\n8 DEPARTMENTAL MANAGEMENT, INTEL-\n9 LIGENCE"
         anchors = _scan_anchors_in_page(2, text)
         assert not any(a.kind == "account" for a in anchors)
 
-    def test_account_heading_below_section_break(self):
+    def test_section_break_still_yields_its_section_anchor(self):
+        # Losing the account level must not cost the universal SEC. token beside it
+        # (#114 category D) — that is the whole point of degrading rather than
+        # guessing: TITLE/SEC survive, the appropriations-specific guess does not.
         text = (
             "5 SEC. 101. Short title.\n"
             "6 U.S. CUSTOMS AND BORDER PROTECTION\n"
@@ -79,8 +91,8 @@ class TestAccountAnchor:
             "8 For necessary expenses of U.S. Customs and Border Protection"
         )
         anchors = _scan_anchors_in_page(11, text)
-        accounts = [a for a in anchors if a.kind == "account"]
-        assert any(a.text == "OPERATIONS AND SUPPORT" for a in accounts)
+        assert not any(a.kind == "account" for a in anchors)
+        assert [a.text for a in anchors if a.kind == "section"] == ["SEC. 101"]
 
 
 class TestPageChromeIgnored:
