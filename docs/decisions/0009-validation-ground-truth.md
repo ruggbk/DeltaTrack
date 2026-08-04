@@ -33,13 +33,13 @@ not an abandoned product feature. It is test infrastructure.
 
 We will validate the parser by comparing the amounts it extracts from a bill against
 amounts **independently authored in published committee reports** (Senate
-Appropriations `CRPT-…` documents). These cover eleven of the twelve regular
-appropriations subcommittees; the twelfth, Legislative Branch, is covered by a second
-independent source — a separately maintained appropriations spreadsheet — checked
-structurally (the right amount in the right place). Together the two sources reach all
-twelve. The living figures, coverage, and the case-by-case remainder live in
-[docs/parser-validation.md](../parser-validation.md), which is generated from the
-validation suite; this record is the *why*, not the numbers.
+Appropriations `CRPT-…` documents). These now cover all twelve regular
+appropriations subcommittees. Legislative Branch is covered by *both* a Senate
+committee report (like the other eleven) and a second independent source — a
+separately maintained appropriations spreadsheet — checked structurally (the right
+amount in the right place). The living figures, coverage, and the case-by-case
+remainder live in [docs/parser-validation.md](../parser-validation.md), which is
+generated from the validation suite; this record is the *why*, not the numbers.
 
 Two further commitments make the check trustworthy rather than self-serving:
 
@@ -85,18 +85,18 @@ Alternatives:
 - Reproducibility depends on the report sources being vendored and CI-gated, so the
   check runs the same for everyone and does not silently skip.
 - Coverage is bounded by what the reports provide, and its depth varies on purpose.
-  The eleven committee-report subcommittees are checked at amount-recall depth (the
-  right amount under the right agency) on a single Senate-reported bill each; only
-  Legislative Branch is checked structurally and on the House side. Some sources are
-  also awkward (House committee reports print their account tables as images, and one
-  subcommittee's bill was never reported in the target year, forcing an earlier-year
-  substitute), so gaps are driven by source availability and are documented in the doc
-  rather than hidden.
+  All twelve committee-report subcommittees are checked at amount-recall depth (the
+  right amount under the right agency) on a single Senate-reported bill each;
+  Legislative Branch additionally has the spreadsheet structural check. Some sources
+  are also awkward (House committee reports print their account tables as images, and
+  one subcommittee's bill was never reported in the target year, forcing an
+  earlier-year substitute), so gaps are driven by source availability and are
+  documented in the doc rather than hidden.
 - The remainder list is reviewed by hand and will shift as new bills and years are
   added; a new legitimate report/bill discrepancy is expected, not a regression.
-- Extending Legislative Branch to *also* rest on a committee report — so all twelve
-  subcommittees are validated against reports uniformly, with the spreadsheet kept as
-  an additional structural cross-check on Leg Branch — is planned but not yet built
+- Legislative Branch now rests on both a committee report and the spreadsheet, so
+  all twelve subcommittees are validated against reports uniformly, with the
+  spreadsheet kept as an additional structural cross-check on Leg Branch
   (tracked in [DeltaTrack#99](https://github.com/AgoraDMV/DeltaTrack/issues/99)).
 - This pairs with the deterministic-engine decision ([0008](0008-deterministic-engine.md)):
   a fixed input has exactly one correct output, which is what makes validating it

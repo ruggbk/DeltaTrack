@@ -109,7 +109,7 @@ bill XML; we check that our parser reads it correctly, by comparing the parser's
 ## Two independent ground-truth sources
 
 {_leg_branch_summary()}
-- **{len(available)} other jurisdictions** — committee-recommended amounts parsed from the
+- **{len(available)} committee-report jurisdictions** — committee-recommended amounts parsed from the
   Senate Appropriations **committee reports** (govinfo `CRPT-…`), compared to what the parser
   extracts from each reported bill. The report is written by committee staff for a different
   purpose than the bill, so it is genuinely independent. (Committee reports, not CRS reports.)
