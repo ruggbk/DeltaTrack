@@ -468,7 +468,11 @@ def test_counter_follows_explicit_card_navigation(chromium, tmp_path):
     page.locator("#btn-next").click()
     assert counter.inner_text() == "3 / 3"
 
-    # 2. Financial Summary row link (only change-0 carries amounts).
+    # 2. Financial Summary row link (only change-0 carries amounts). The table
+    # ships collapsed, so open it before reaching a row.
+    fin = page.locator("details.financial-summary")
+    assert fin.evaluate("el => el.open") is False
+    fin.locator("summary").click()
     page.locator('.financial-table a[href="#change-0"]').first.click()
     assert counter.inner_text() == "1 / 3"
 
