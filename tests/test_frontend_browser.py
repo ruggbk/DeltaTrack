@@ -19,9 +19,10 @@ from __future__ import annotations
 import socket
 import threading
 from contextlib import closing
-from pathlib import Path
 
 import pytest
+
+from tests.corpus_paths import PROJECT_ROOT
 
 pytest.importorskip("playwright")
 from playwright.sync_api import sync_playwright  # noqa: E402
@@ -543,7 +544,7 @@ def test_sample_report_opens_in_new_tab(live_url, chromium):
 
 #: A committed bill XML (a 2.6 KB joint resolution), used as the start version so
 #: the XML path runs against the shape the engine actually sees.
-_XML_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "resolutions" / "BILLS-119hjres25ih.xml"
+_XML_FIXTURE = PROJECT_ROOT / "tests" / "fixtures" / "resolutions" / "BILLS-119hjres25ih.xml"
 #: The end version is this fixture with its one operative clause reworded. The
 #: repo's other committed version pairs of a single resolution diff to zero
 #: changes, which would leave the report with no card to assert on — and a test
@@ -564,27 +565,47 @@ _PDF_BODY_END = [
 ]
 
 
-def _pdf_pair(tmp_path):
+#: Lines a document needs before the engine will judge its layout at all
+#: (``compare.pdf._MIN_LINES_FOR_GUARD``); read from the engine so the unnumbered
+#: pair below stays over the threshold if the threshold moves.
+def _decline_threshold():
+    from deltatrack.compare.pdf import _MIN_LINES_FOR_GUARD
+
+    return _MIN_LINES_FOR_GUARD
+
+
+def _pdf_pair(tmp_path, *, numbered=True):
     """A start/end PDF pair written to ``tmp_path``, in GPO's numbered layout.
 
     Generated rather than committed: the pair is a few lines of source here
     instead of two binaries in the tree, and the layout is load-bearing — the
     engine declines an unnumbered layout outright, so the line-number gutter has
     to be there for the upload to reach a report at all.
+
+    ``numbered=False`` drops the gutter and pads the body past the length the
+    engine needs before it will judge a layout, producing the pair the engine
+    declines. That is how a test reaches the server-error path on purpose.
     """
     pytest.importorskip("reportlab")
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
 
     def write(path, body):
+        if not numbered:
+            # Enough lines to be judged, with no gutter: an enrolled-style print.
+            body = (body * (_decline_threshold() // len(body) + 2))[: _decline_threshold() + 10]
         c = canvas.Canvas(str(path), pagesize=letter)
         _, height = letter
-        y = height - 100
+        y = height - 60
         for i, line in enumerate(body, start=1):
             c.setFont("Times-Roman", 11)
-            c.drawString(54, y, str(i))  # the line-number gutter
+            if numbered:
+                c.drawString(54, y, str(i))  # the line-number gutter
             c.drawString(78, y, line)
-            y -= 22
+            y -= 22 if numbered else 12
+            if y < 60:
+                c.showPage()
+                y = height - 60
         c.showPage()
         c.save()
         return path
@@ -862,6 +883,40 @@ def test_blocked_popup_is_reported_instead_of_failing_silently(live_url, chromiu
     assert "Pop-up blocked" in error.inner_text()
     assert posts == [], "files were uploaded for a report that had nowhere to open"
     assert page.locator("#upload-success").is_hidden()
+    page.close()
+
+
+def test_a_server_rejection_is_shown_and_the_blank_tab_is_closed(live_url, chromium, tmp_path):
+    """When the server refuses the pair, the reader gets its reason and no empty
+    tab is left behind (#71).
+
+    This is the one path the pre-flight checks cannot reach: the files are
+    well-formed enough to send, and the refusal comes back after the report tab
+    has already been opened. Two things have to happen, and neither is visible
+    from the API tests — the server's own wording has to reach the page (it is
+    written for the reader, so ``detail`` is rendered rather than "HTTP 422"),
+    and the tab opened in advance has to be closed rather than stranded on
+    about:blank. The 422 here is the engine declining an unnumbered layout
+    (#141); the rate-limit and timeout replies come back through the same
+    branch.
+    """
+    start, end = _pdf_pair(tmp_path, numbered=False)
+    page = _upload_page(chromium, live_url)
+    page.locator("#start-input").set_input_files(start)
+    page.locator("#end-input").set_input_files(end)
+
+    page.locator("#compare-btn").click()
+
+    error = page.locator("#upload-error")
+    error.wait_for(state="visible")
+    # The engine's own sentence, not a status code: the generic fallback in
+    # compare.js would read "Request failed (HTTP 422)".
+    assert "no printed line numbers" in error.inner_text()
+    assert len(page.context.pages) == 1, "the blank report tab was left stranded"
+    assert page.locator("#upload-success").is_hidden()
+    # And the form is usable again for the next pair.
+    assert page.locator("#compare-btn").inner_text() == "Compare"
+    assert page.locator("#compare-btn").is_enabled()
     page.close()
 
 
