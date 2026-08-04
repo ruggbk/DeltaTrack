@@ -106,6 +106,7 @@ Every accepted ADR, title as written. The titles are claims, so this list is the
 - [15. Commit a curated corpus fixture set and collect the gates from a manifest](docs/decisions/0015-corpus-test-fixtures.md)
 - [16. Separate the product, the acquisition tooling, and the delivery channel in the layout](docs/decisions/0016-product-tooling-surface-split.md)
 - [17. Ship the diff engine as an installable `src/deltatrack` package](docs/decisions/0017-installable-engine-package.md)
+- [18. Read appropriations phrases for money, never for structure](docs/decisions/0018-text-triggers-are-financial-only.md)
 
 ## Key architecture concepts
 

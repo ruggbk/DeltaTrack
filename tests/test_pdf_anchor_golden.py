@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from deltatrack.parsers.pdf_anchors import extract_anchors
+from deltatrack.parsers.pdf_anchors import derive_size_bands, extract_anchors
 from tests.conftest import assert_manifest_committed
 from tests.corpus_paths import DATA_DIR, fixture_path
 from tests.pdf_corpus import cached_pages
@@ -394,6 +394,62 @@ class TestMajorLevelAcrossSubcommittees:
         pdf = SUBCOMMITTEE_FIXTURES[subc]
         golden = json.loads(MAJOR_VOCAB_GOLDEN.read_text())
         assert sorted(_pdf_major_texts(pdf)) == golden[subc]
+
+
+class TestSizeFailBillEmitsNoAccounts:
+    """The real bill behind #114, on a committed PDF rather than synthetic pages.
+
+    119-hr-1 is the corpus's only size-fail document with real content: its glyph
+    sizes are fully attached (coverage 1.0) but they are trimodal, so
+    `derive_size_bands` bails and no size-based account detection can run (#508).
+    That is exactly the state the retired `For necessary expenses of` backwalk used
+    to fill, and it is where the measurement found the trigger's whole output: one
+    account anchor, wrongly naming a fragment of a wrapped subsection catchline.
+
+    The golden snapshots pin three OTHER fixtures, all of which take the size path,
+    so they cannot witness this. Without this test the motivating failure has no
+    end-to-end regression at all.
+    """
+
+    PDF = fixture_path("119-hr-1", "1_reported-in-house.pdf")
+
+    def test_no_account_anchors_on_a_size_fail_bill(self):
+        # Fail closed if the fixture ever stops being committed: a missing PDF must
+        # not turn this gate into a silent pass (module-wide floor is
+        # test_manifest_fixtures_committed; this is the per-path guard).
+        assert self.PDF.exists(), f"{self.PDF} missing; this #114 regression would pass by absence"
+        pages = cached_pages(self.PDF)
+        # Pin the PRECONDITION, not just the outcome: if this bill ever moves onto
+        # the size path (#508), the assertions below would pass for a new reason and
+        # silently stop guarding the degrade. Then this test should be revisited,
+        # not deleted -- it becomes a coverage win to assert instead.
+        assert derive_size_bands(pages) is None, "119-hr-1 now derives bands; see #508 and re-aim this test"
+        anchors = extract_anchors(pages)
+        assert [a for a in anchors if a.kind == "account"] == []
+        assert [a for a in anchors if a.kind in ("major", "agency", "grouping")] == []
+
+    def test_universal_structure_survives_the_degrade(self):
+        # Losing the appropriations-specific interior levels must not cost the
+        # universal ones. TITLE/SEC. and enumerator-derived run-in subsections are
+        # the grammar of all legislation (#114's carve-out) and are emitted by the
+        # per-page pass, which never consults size bands.
+        anchors = extract_anchors(cached_pages(self.PDF))
+        kinds = {a.kind for a in anchors}
+        assert {"title", "section", "subsection"} <= kinds
+
+    def test_the_false_account_fragment_is_now_a_whole_subsection(self):
+        # The single anchor the retired trigger produced on this bill was
+        # `EXISTING ``FREE FILE'' PROGRAM AND ANY ``DIRECT` -- a mid-catchline
+        # fragment of a wrapped subsection heading, labelled `account`. The text is
+        # still recovered, but as the subsection it actually is, with its catchline
+        # whole. This pins both halves: the wrong reading is gone, and removing it
+        # cost no navigation.
+        anchors = extract_anchors(cached_pages(self.PDF))
+        matches = [a for a in anchors if "FREE FILE" in a.text]
+        assert len(matches) == 1, f"expected one FREE FILE anchor, got {[a.text for a in matches]}"
+        assert matches[0].kind == "subsection"
+        assert matches[0].text.startswith("(b) APPROPRIATION FOR TASK FORCE")
+        assert not matches[0].text.startswith("EXISTING")
 
 
 @pytest.mark.parametrize("name", sorted(FIXTURES))
