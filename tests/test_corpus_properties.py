@@ -381,6 +381,20 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # Real source duplicate, not a parser error; exposes the matcher's reliance on body
     # similarity over header (tracked in DeltaTrack#8). Committed + in the manifest, so CI runs it.
     "119-hr-1/1_reported-in-house.xml": 1,
+    # 118-hr-9468: two enum-less body-level sections — the enacting "the following sums
+    # are appropriated" lead-in and the closing short-title section — both address to the
+    # empty tuple, because walk_body_sections derives a section's path from its <enum> and
+    # these have none. A parser limitation rather than a source duplicate, and independent
+    # of appropriations: neither node is an account.
+    #
+    # Recorded rather than fixed here because it is a different defect from #485 (the
+    # accounts under such a section reaching no node at all) and wants its own change:
+    # giving an enum-less section an address means choosing one, which is a design call
+    # this fix does not need to make. #485's fix REDUCED this count from 2 to 1 by giving
+    # the appropriations section's content to named account nodes. The gate asserts a
+    # ceiling, not equality, so a later fix tightens this without a test edit.
+    "118-hr-9468/1_introduced-in-house.xml": 1,
+    "118-hr-9468/4_enrolled-bill.xml": 1,
 }
 
 
@@ -564,6 +578,32 @@ def _classify_sections(body: ET.Element, parents: dict[int, ET.Element]) -> tupl
     return in_scope, payload, empty
 
 
+def _section_reaches_a_node(section: ET.Element, node_ids: set[str]) -> bool:
+    """True when ``section``'s content is represented in the tree.
+
+    Normally that means the section's own id is a node id. A section whose every child
+    is an ``appropriations-*`` account has no text of its own, so it emits no node and
+    its accounts carry the content instead — the arrangement both section walkers use,
+    and the point of #485: an empty placeholder node here would be exactly the unnamed,
+    address-less entry that issue exists to remove, so requiring one would pin the
+    defect rather than the property.
+
+    It is one account node, not all of them, because a header-only element (the naming
+    half of a #474 split account) legitimately emits none. That is still enough to fail
+    closed on the loss this gate was built for: a walker that drops the section drops
+    its children with it, so nothing beneath it reaches a node either. What this does
+    NOT check is that every account arrived — that belongs to the account-level gates in
+    tests/test_bill_tree.py, which name the accounts rather than counting them.
+
+    Rare by measurement, not by assumption: 2 of the 1,467 sections with appropriations
+    children across the committed fixtures take this branch, both in 118-hr-9468, the
+    corpus's only bill written without TITLE divisions.
+    """
+    if section.attrib.get("id", "") in node_ids:
+        return True
+    return any(child.tag.startswith("appropriations-") and child.attrib.get("id", "") in node_ids for child in section)
+
+
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
@@ -640,7 +680,7 @@ def test_every_section_reaches_a_node(xml_path: Path) -> None:
         f"Sample: {[''.join(s.itertext())[:60] for s in idless[:3]]}"
     )
 
-    missing = [s for s in in_scope if s.attrib.get("id", "") not in node_ids]
+    missing = [s for s in in_scope if not _section_reaches_a_node(s, node_ids)]
     assert not missing, (
         f"{test_id}: {len(missing)} of {len(in_scope)} enacted sections reach no node "
         f"(payload excluded: {payload}, empty: {empty}). "
@@ -699,3 +739,34 @@ def test_idless_section_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="carry no id"):
         test_every_section_reaches_a_node(xml_path)
+
+
+def test_appropriations_section_relaxation_still_fails_closed(tmp_path: Path) -> None:
+    """The account-bearing branch of ``_section_reaches_a_node`` cannot wave a loss through.
+
+    That branch lets a section with no text of its own be represented by its accounts
+    instead of by a node of its own (#485). A relaxation is only safe if it still goes
+    RED on the loss the gate exists to catch, and this is the case the corpus cannot
+    supply: 118-hr-9468 is its only untitled appropriations bill, and there the accounts
+    do reach nodes, so the false arm of that ``any(...)`` never executes on real fixtures.
+
+    An accounts-only section whose accounts reach NO node is exactly the pre-#485
+    behaviour, so this is the shape a regression would take.
+    """
+    section = ET.fromstring(
+        '<section id="sec-1">'
+        '<appropriations-major id="maj-1"><header>Department Of Example</header></appropriations-major>'
+        '<appropriations-small id="acct-1"><text>For an additional amount, $1,000.</text></appropriations-small>'
+        "</section>"
+    )
+
+    # The account reached a node: represented, even though the section itself did not.
+    assert _section_reaches_a_node(section, {"acct-1"})
+    # The section itself reached a node: the ordinary path, unaffected by the relaxation.
+    assert _section_reaches_a_node(section, {"sec-1"})
+    # Nothing beneath it reached a node — the collapse. Must be reported as missing.
+    assert not _section_reaches_a_node(section, {"some-other-section"})
+    # A non-appropriations child cannot stand in for the section (the relaxation is
+    # scoped to accounts; a subsection reaching a node is not evidence for this shape).
+    plain = ET.fromstring('<section id="sec-2"><subsection id="sub-1"><text>x</text></subsection></section>')
+    assert not _section_reaches_a_node(plain, {"sub-1"})
