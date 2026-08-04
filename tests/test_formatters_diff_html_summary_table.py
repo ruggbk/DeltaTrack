@@ -55,7 +55,7 @@ def test_returns_empty_when_no_changes_have_amount_pairs():
 
 def test_table_includes_canonical_headers():
     html = _build_financial_summary(_view([_change(amount_pairs=((1000, 1500),))]))
-    assert "<h2>Financial Summary</h2>" in html
+    assert '<h2 class="disclosure">Financial Summary</h2>' in html
     assert "<th>Section</th>" in html
     assert "<th>Old Amount</th>" in html
     assert "<th>New Amount</th>" in html
