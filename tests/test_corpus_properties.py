@@ -416,9 +416,11 @@ _APPRO_TAGS = {"appropriations-major", "appropriations-intermediate", "appropria
 # Typically caused by elements nested inside divisions/titles the parser skips.
 _KNOWN_MISSING_APPRO: dict[str, int] = {
     "113-hr-3547/6_enrolled-bill.xml": 310,
-    # 115-hr-5895 enrolled previously missed 33 appropriations elements — exactly the
-    # top-level titles normalize_bill dropped (#146). Now fully walked; baseline is 0
-    # (entry removed) so any future regression trips the assertion.
+    # No entry for 115-hr-5895 enrolled: normalize_bill walks its top-level titles, so
+    # its baseline is 0 and any regression trips the assertion rather than being
+    # absorbed by a stored count.
+    # History: #146 — those titles were dropped, missing that file's appropriations
+    # elements.
     # Fresh bills added for Part C smoke test (2026-04-15)
     "116-hr-133/6_engrossed-amendment-house.xml": 1,
     "116-hr-133/7_enrolled-bill.xml": 1,
