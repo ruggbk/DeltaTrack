@@ -533,16 +533,22 @@ class TestCorpusAccountPrecision:
             "tests/corpus/115-hr-5895/1_reported-in-house.pdf",
             "tests/corpus/115-hr-5895/1_reported-in-house.xml",
         ),
-        ("117-hr-4432", "bills/117-hr-4432", None),
+        ("117-hr-4432", "tests/corpus/117-hr-4432", None),
         ("117-hr-4502", "tests/corpus/117-hr-4502", None),
         ("118-hr-4366", "tests/corpus/118-hr-4366", None),
-        ("118-hr-4820", "bills/118-hr-4820", None),
+        ("118-hr-4820", "tests/corpus/118-hr-4820", None),
         ("118-hr-8752", "tests/corpus/118-hr-8752", None),
         ("118-hr-8774", "tests/corpus/118-hr-8774", None),
         ("118-s-4795", "tests/data/BILLS-118s4795rs.pdf", "tests/corpus/118-s-4795/1_reported-in-senate.xml"),
     ]
-    # Set below the lowest measured value (118-hr-4820: vrec 0.64 / vprec 0.46) with
+    # Set below the lowest measured value (118-hr-4820: vrec 0.639 / vprec 0.500) with
     # margin for per-line median wobble; these are regression floors, not targets.
+    #
+    # Both floor-setting bills were named as `bills/<id>` until they were committed, so CI
+    # collected no case for either and the floors were calibrated on a bill CI could not
+    # measure. The precision figure recorded here had drifted to 0.46 in the meantime and
+    # nothing could catch it, because the only run that could check it was a developer's.
+    # Now that the pair is committed, these two numbers are re-derivable from the suite.
     RECALL_FLOOR = 0.60
     PRECISION_FLOOR = 0.45
 

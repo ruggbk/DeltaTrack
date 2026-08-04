@@ -289,3 +289,31 @@ covers = "Legislative Branch validation set (#278): enrolled FY2018 consolidated
 versions = [
   { stage = "6_enrolled-bill", formats = ["xml"] },
 ]
+
+# --- Account-vocabulary floor bills (previously fetch-only) --------------------
+# Both were named by tests/test_pdf_anchor_golden.py's account-vocab floor gate as
+# `bills/<id>` — the gitignored download tree — so CI collected NO case for either and 2
+# of that gate's 8 bills were permanently skipped there. 118-hr-4820 is the bill the
+# gate's floors are CALIBRATED on ("the lowest measured value: vrec 0.64 / vprec 0.46"),
+# so the floor was anchored to a measurement no CI run could reproduce. Committing the
+# pair is what turns that gate's stated coverage into its actual coverage.
+#
+# One version each, in both formats, because the gate measures PDF-detected account
+# vocabulary against the XML of the SAME version — a stage committed in one format
+# measures nothing.
+
+[[bill]]
+id = "117-hr-4432"
+subcommittee = "defense"
+covers = "Account-vocabulary precision/recall floor (reported-in-House, FY2022 Defense). Committed so test_pdf_anchor_golden's floor gate runs in CI instead of skipping on a bills/ reference."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+]
+
+[[bill]]
+id = "118-hr-4820"
+subcommittee = "transportation-hud"
+covers = "Account-vocabulary precision/recall floor (reported-in-House, FY2024 THUD). The bill the gate's RECALL_FLOOR/PRECISION_FLOOR are calibrated against, so it is the one entry whose absence from CI made the floors unverifiable there."
+versions = [
+  { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
+]

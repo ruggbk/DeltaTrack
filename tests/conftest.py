@@ -513,25 +513,16 @@ FAST_GATE_MODULES = (
     "tests/test_pdf_diff_recall.py",
 )
 
-ALLOWED_FAST_GATE_SKIPS = {
-    # --- Uncommitted fixture: a live coverage gap, not a property -----------------
-    # These two entries in TestAccountVocabFloors.BILLS point at `bills/`, which is wholly
-    # gitignored, so CI has never once measured them: 2 of the gate's 8 bills are
-    # permanently skipped there. That matters more than a usual absence, because the class
-    # docstring calibrates its floors on "the lowest measured value (118-hr-4820: vrec 0.64
-    # / vprec 0.46)" — the bill the floor is set from is one CI cannot check, so the floor
-    # is anchored to a number no CI run can reproduce.
-    #
-    # Declared rather than closed here: committing the pair (~1.5 MB for both bills) also
-    # means manifest entries, which enrolls them in the corpus property gates and needs
-    # their per-bill baselines calibrated — #126 curation work, not a test-audit fix.
-    "tests/test_pdf_anchor_golden.py::TestCorpusAccountPrecision::test_account_vocab_floors[117-hr-4432]": (
-        "117-hr-4432 pdf/xml pair not present (fetched-only corpus)"
-    ),
-    "tests/test_pdf_anchor_golden.py::TestCorpusAccountPrecision::test_account_vocab_floors[118-hr-4820]": (
-        "118-hr-4820 pdf/xml pair not present (fetched-only corpus)"
-    ),
-}
+# Deliberately EMPTY, and that is the useful state: these two modules have no skip channel
+# left. The entries this dict was created to hold were the account-vocab floor's 117-hr-4432
+# and 118-hr-4820, which pointed at gitignored `bills/` and so had never run in CI —
+# including the bill the floors are calibrated on. Both pairs are committed now, so the
+# cases assert instead of skipping and there is nothing to declare.
+#
+# An empty allowlist is not an inert one: the group stays in _SKIP_WATCH_GROUPS, so the
+# FIRST skip either module grows fails the session and has to be justified. Deleting the
+# dict instead would silently restore the fail-open channel these gates just came out of.
+ALLOWED_FAST_GATE_SKIPS: dict[str, str] = {}
 
 # (label, modules, allowlist) — each group's skips are watched and must be declared.
 _SKIP_WATCH_GROUPS = (
