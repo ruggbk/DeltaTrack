@@ -214,9 +214,21 @@ validation set and retired `REQUIRE_CORPUS` outright.
 
 To sweep every bill you have fetched locally -- broader than the committed set,
 and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`. It
-spans both trees (the committed fixtures in `tests/corpus/` *and* `bills/`), so it
-is a strict superset of what the gates collect. This is exploration, not a gate;
-CI never runs it.
+spans both trees (the committed fixtures in `tests/corpus/` *and* `bills/`). This
+is exploration, not a gate; CI never runs it.
+
+It widens by BILL, not by version, and so is **not** a strict superset: one
+directory is taken per bill id with the committed copy winning, so a
+download-only *version* of a bill committed at some other stage stays invisible
+even under the sweep (deliberate -- a download must not shadow committed bytes).
+
+Because the sweep is uncalibrated, a file it reaches that the manifest does not
+name is **reported rather than asserted** against a per-file baseline: it is
+parsed (so a crash or empty tree still fails), and `-rs` prints the measured
+count. Baselines calibrated on the committed corpus cannot be kept current for a
+bill no CI run sees, and pinning one anyway is what left four numbers failing the
+sweep for anyone who turned it on (#496). To hold a bill to a baseline, commit and
+manifest it (#126).
 
 ```bash
 # The committed corpus gates (what CI runs):

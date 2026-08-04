@@ -143,6 +143,19 @@ def manifest_xml_files() -> list[Path]:
     return _manifest_paths("xml")
 
 
+def manifest_xml_ids() -> frozenset[str]:
+    """``"<bill>/<stage>.xml"`` for every manifested XML fixture, IGNORING CORPUS_SWEEP.
+
+    For the staleness guards over baseline dicts. Those dicts are calibrated against the
+    committed corpus, so a guard asking "does this key still name a live fixture?" has to
+    key on the manifest itself. Reading the answer off ``manifest_xml_files()`` would widen
+    with the sweep, so on a machine with a fetched corpus a sweep-only key would look live
+    and the guard would pass — the fail-open #496 found, where four keys named a version no
+    run can evaluate and nothing said so.
+    """
+    return frozenset(f"{p.parent.name}/{p.name}" for p in _manifest_paths("xml"))
+
+
 def manifest_pdf_files() -> list[Path]:
     """PDF fixtures the corpus gates parametrize over (manifest, or the full local
     glob under CORPUS_SWEEP)."""

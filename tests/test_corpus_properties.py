@@ -18,7 +18,7 @@ from deltatrack.bill_tree import (
     find_bill_body,
     normalize_bill,
 )
-from tests.conftest import assert_manifest_committed, manifest_xml_files
+from tests.conftest import assert_manifest_committed, manifest_xml_files, manifest_xml_ids
 
 pytestmark = pytest.mark.slow
 
@@ -137,6 +137,33 @@ def test_known_uncovered_amounts_names_live_fixtures() -> None:
     assert not orphans, (
         f"KNOWN_UNCOVERED_AMOUNTS names {len(orphans)} fixture(s) not in the manifest: {orphans}. "
         f"Re-point each entry at the fixture's current id, or drop it if the bill is gone."
+    )
+
+
+def test_known_duplicate_counts_names_manifest_fixtures() -> None:
+    """Every ``_KNOWN_DUPLICATE_COUNTS`` key is a MANIFESTED fixture (#496).
+
+    The dict holds per-file ceilings, so a key nothing evaluates is a number nothing can
+    keep current — and it fails in the worst direction, because the parser reaching further
+    raises the true count until the entry starts failing whoever does run it. Four keys had
+    already drifted that way, unnoticed for as long as they existed, since the only people
+    who saw them were running CORPUS_SWEEP=1 while investigating something else.
+
+    Deliberately keyed on ``manifest_xml_ids()`` rather than the collected
+    ``ALL_XML_FILES``: that list widens to the local `bills/` tree under CORPUS_SWEEP=1, so
+    on a fetched machine a sweep-only key would resolve and this guard would pass — the
+    same fail-open it exists to close, and the reason the sibling guard above cannot be
+    reused as-is. Under the sweep this must still check the manifest, and it does.
+
+    A stale VALUE is a separate problem this cannot see: the assertion is `<=`, so a parser
+    change that reduces collisions leaves a ceiling silently loose (#474 did exactly that).
+    """
+    orphans = sorted(set(_KNOWN_DUPLICATE_COUNTS) - manifest_xml_ids())
+    assert not orphans, (
+        f"_KNOWN_DUPLICATE_COUNTS names {len(orphans)} fixture(s) not in the corpus manifest: "
+        f"{orphans}. Only CORPUS_SWEEP=1 could reach them and nothing keeps their numbers "
+        f"current, so commit and manifest the bill (#126) or drop the entry — a sweep-only "
+        f"file is reported rather than asserted by test_no_duplicate_match_paths."
     )
 
 
@@ -302,13 +329,21 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 # Values are ceilings, asserted as `total_dupes <= known`. Files not listed must have
 # zero duplicates.
 #
-# Every COMMITTED key below was re-measured in #482 and its value equals the count the
-# corpus produces now. The keys naming an UNCOMMITTED bill are reachable only under
-# CORPUS_SWEEP=1 (manifest_xml_files widens to sweep_bill_dirs), so no CI run and no
-# clean checkout ever evaluates them, and four are stale in the direction that FAILS:
-# measured against a fetched copy, 115-hr-5895 v3 is 22 not 20, both 116-hr-133 entries
-# are 206 not 160, and 116-hr-1865 v5 is 66 not 55. Re-measure a sweep-only value
-# before trusting it; recalibrating them is a coverage decision, not a comment fix (#496).
+# EVERY KEY NAMES A MANIFESTED FIXTURE, enforced by
+# test_known_duplicate_counts_names_manifest_fixtures. That is the #496 fix. Until then the
+# dict also carried keys for bills present only in a local `bills/` tree, reachable solely
+# under CORPUS_SWEEP=1 — so no CI run and no clean checkout ever evaluated them, nothing
+# could hold them current, and four had drifted below the true count, failing the sweep for
+# anyone who turned it on. Six were dropped rather than recalibrated (#496): a number no run
+# checks goes stale again, and half of them were unreachable even under the sweep, because
+# sweep_bill_dirs yields ONE directory per bill id with the committed copy winning, so a
+# download-only VERSION of a partly-committed bill is shadowed. A sweep-only file is now
+# reported, not asserted — see test_no_duplicate_match_paths.
+#
+# Values are CEILINGS, so they only fail upward and a parser change that REDUCES collisions
+# leaves them silently loose: #474 (joining an account split across two elements) cut several
+# committed counts well below their stored value, which is why #482's re-measurement was
+# accurate when written and stale days later. Re-measure before trusting a number here.
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # #465 note: a division's bare <section> children (a short-title/definitions preamble
     # ahead of TITLE I, or a whole policy division organised without titles) were reached
@@ -338,7 +373,6 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "115-hr-1625/6_enrolled-bill.xml": 196,
     "115-hr-244/6_enrolled-bill.xml": 170,
     "115-hr-5895/2_engrossed-in-house.xml": 22,
-    "115-hr-5895/3_placed-on-calendar-senate.xml": 20,
     "115-hr-5895/4_engrossed-amendment-senate.xml": 8,
     # Enrolled version places Division C's TITLE II-V at <legis-body> level beside the
     # divisions (not nested). Walking them (#146) surfaces genuine cross-division
@@ -346,10 +380,8 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # division-stripped match_path with Division A's "TITLE V—General provisions".
     # Real source structure, not a parser error (cf. 119-hr-1's twin Sec. 10012).
     "115-hr-5895/5_enrolled-bill.xml": 8,
-    "116-hr-1865/5_engrossed-amendment-house.xml": 55,
     "116-hr-1865/6_enrolled-bill.xml": 66,
     "118-hr-2882/5_engrossed-amendment-house.xml": 55,
-    "118-hr-2882/6_enrolled-bill.xml": 55,
     "118-hr-4366/4_engrossed-amendment-senate.xml": 9,
     "118-hr-4366/5_engrossed-amendment-house.xml": 33,
     "118-hr-4366/6_enrolled-bill.xml": 33,
@@ -357,11 +389,11 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "117-hr-4432/1_reported-in-house.xml": 1,
     "117-hr-4502/1_reported-in-house.xml": 1,
     "117-hr-4502/2_engrossed-in-house.xml": 39,
-    "117-hr-4502/3_received-in-senate.xml": 39,
     "118-hr-4820/1_reported-in-house.xml": 7,
-    # Fresh bills added for Part C smoke test (2026-04-15)
-    "116-hr-133/6_engrossed-amendment-house.xml": 160,
-    "116-hr-133/7_enrolled-bill.xml": 160,
+    # Fresh bill added for Part C smoke test (2026-04-15). Its 116-hr-133 companions were
+    # the only sweep-only keys that a sweep could actually reach, and both were stale (160
+    # against a measured 206); dropped in #496 rather than repinned, since committing that
+    # bill is #126's call and 206 is not a number CI can hold.
     "117-hr-2471/6_enrolled-bill.xml": 212,
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
@@ -395,6 +427,16 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     Duplicates indicate cross-division path collisions (issue #1).
     Files with known duplicates assert the count hasn't increased.
     Files with no known duplicates assert zero.
+
+    A file reachable only under CORPUS_SWEEP=1 is REPORTED, not asserted (#496). The
+    baselines here are calibrated against the committed corpus; the sweep is an
+    uncalibrated superset, so there is no trustworthy number to compare a sweep-only file
+    against — asserting zero would fail every real bill that has collisions, and pinning a
+    measured count would pin a number no run can keep current, which is how four of these
+    drifted into failing the sweep for anyone who turned it on. The same reasoning already
+    exempts the PDF-layout registry in test_corpus_tree_properties. The file is still
+    parsed, so a crash or an empty tree still surfaces here; only the comparison is
+    withheld, and -rs prints the count so exploration still sees it.
     """
     _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
@@ -406,6 +448,9 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     counts = Counter(node.match_path for node in bill_tree.nodes)
     dupes = {k: v for k, v in counts.items() if v > 1}
     total_dupes = sum(v - 1 for v in dupes.values())
+
+    if test_id not in manifest_xml_ids():
+        pytest.skip(f"Sweep-only file, no calibrated baseline: {total_dupes} duplicate match_paths (#496)")
 
     known = _KNOWN_DUPLICATE_COUNTS.get(test_id, 0)
 
