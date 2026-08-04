@@ -346,11 +346,7 @@
       "title": "LEGISLATIVE BRANCH APPROPRIATIONS",
       "bureau": "Office of Congressional Accessibility Services",
       "excel_name": "CAPITOL POLICE",
-      "match_path": [
-        "legislative branch",
-        "architect of the capitol",
-        "capitol police buildings, grounds and security"
-      ],
+      "match_path": null,
       "expected_amount": 832556000
     },
     {

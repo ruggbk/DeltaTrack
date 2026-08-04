@@ -52,12 +52,16 @@ quietly rise.
 now checked at amount-recall depth (the right amount under the right agency) on a
 single Senate-reported bill each via committee reports. Legislative Branch is *also*
 checked structurally (the right amount in the right place) across several bills and
-both chambers via the spreadsheet, giving it two independent validation layers. Two
-consequences follow, and we track both on purpose: an amount that landed on the
-wrong account inside the right agency would still pass the recall check, and the
+both chambers via the spreadsheet, giving it two independent validation layers. Three
+consequences follow, and we track all three on purpose: an amount that landed on the
+wrong account inside the right agency would still pass the recall check; the
 House versions of the eleven non-Legislative Branch subcommittees have no
 outside-source check at all, because House committee reports print their account
-tables as images we cannot read.
+tables as images we cannot read; and "the right agency" is a weaker constraint for
+the Legislative Branch bill than for the others, because that bill has only one
+top-level agency, so its recall check asks whether the amount appears anywhere in
+the bill. That is why the spreadsheet's structural check still carries the weight
+there, and why removing it would be a real loss of depth rather than a tidy-up.
 
 ### 2. Sanity checks across every bill we have
 
