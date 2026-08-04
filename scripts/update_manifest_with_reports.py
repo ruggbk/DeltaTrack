@@ -24,6 +24,7 @@ def load_manifest() -> dict:
 def sanitize_version_name(name: str) -> str:
     """Convert a version type like 'Reported in House' to 'reported-in-house'."""
     import re
+
     slug = name.lower()
     slug = re.sub(r"[^a-z0-9]+", "-", slug)
     slug = slug.strip("-")
@@ -41,14 +42,14 @@ def get_report_for_stage(reports: list[dict], stage: str, chamber: str, is_enrol
         return None
 
     stage_lower = stage.lower()
-    
+
     # For enrolled bills, check for conference reports
     if is_enrolled:
         # Group reports by chamber
         by_chamber: dict[str, list[dict]] = {"house": [], "senate": []}
         for r in reports:
             by_chamber[r["chamber"]].append(r)
-        
+
         # If a chamber has multiple reports, the highest-numbered is likely the conference report
         for ch in ("house", "senate"):
             chamber_reports = by_chamber[ch]
@@ -58,9 +59,9 @@ def get_report_for_stage(reports: list[dict], stage: str, chamber: str, is_enrol
                 # The highest-numbered report from either chamber is the conference report
                 # (conference reports are typically from the chamber that originated the bill)
                 return chamber_reports[0]
-        
+
         # If no chamber has multiple reports, fall through to chamber matching
-    
+
     # Standard chamber matching for non-enrolled stages
     if "house" in stage_lower:
         target_chamber = "house"
@@ -134,10 +135,10 @@ def main():
     with tempfile.NamedTemporaryFile(mode="wb", dir=manifest_path.parent, delete=False) as tf:
         tomli_w.dump(manifest, tf)
         temp_path = Path(tf.name)
-    
+
     # Atomic move
     temp_path.replace(manifest_path)
-    
+
     print("Manifest updated successfully!", file=sys.stderr)
 
 

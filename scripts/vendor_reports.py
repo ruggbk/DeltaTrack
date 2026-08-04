@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tomllib
+
 from tests.corpus_paths import DATA_DIR  # noqa: E402
 
 
@@ -45,11 +46,11 @@ def download_report(pkg: str, dest_dir: Path) -> Path:
     """Download a committee report HTML from govinfo."""
     url = f"https://www.govinfo.gov/content/pkg/{pkg}/html/{pkg}.htm"
     dest = dest_dir / f"{pkg}.htm"
-    
+
     if dest.exists():
         print(f"  Already exists: {dest.name}")
         return dest
-    
+
     print(f"  Downloading {pkg}...")
     dest.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as resp:  # noqa: S310 (govinfo, https)
@@ -64,17 +65,17 @@ def download_report(pkg: str, dest_dir: Path) -> Path:
 def main():
     manifest = load_manifest()
     pkgs = extract_report_pkgs(manifest)
-    
+
     print(f"Found {len(pkgs)} unique report packages to vendor:")
     for pkg in sorted(pkgs):
         print(f"  {pkg}")
-    
+
     dest_dir = DATA_DIR
     dest_dir.mkdir(parents=True, exist_ok=True)
-    
+
     for pkg in sorted(pkgs):
         download_report(pkg, dest_dir)  # Let exceptions propagate
-    
+
     print("\nAll reports downloaded successfully!")
 
 

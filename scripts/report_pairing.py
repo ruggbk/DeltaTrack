@@ -14,17 +14,19 @@ from typing import Optional
 @dataclass(frozen=True)
 class ReportSource:
     """One physical committee report package (e.g., one book of a multi-book report)."""
-    pkg: str          # govinfo package ID, e.g. "CRPT-119hrpt106"
-    citation: str     # Full citation, e.g. "H. Rept. 119-106,Book 1"
-    chamber: str      # "house" or "senate"
+
+    pkg: str  # govinfo package ID, e.g. "CRPT-119hrpt106"
+    citation: str  # Full citation, e.g. "H. Rept. 119-106,Book 1"
+    chamber: str  # "house" or "senate"
     book: Optional[str] = None  # "Book 1", "Book 2", etc. if applicable
 
 
 @dataclass(frozen=True)
 class ReportPairing:
     """The committee report pairing for one bill version."""
+
     sources: tuple[ReportSource, ...]  # Physical report packages (empty = no report)
-    reason: Optional[str] = None       # Why no report, if sources is empty
+    reason: Optional[str] = None  # Why no report, if sources is empty
 
 
 def parse_citation(citation: str) -> tuple[str, int, int, Optional[str]] | None:
@@ -34,6 +36,7 @@ def parse_citation(citation: str) -> tuple[str, int, int, Optional[str]] | None:
     or None if no book suffix.
     """
     import re
+
     # Match "H. Rept. 118-553" or "H. Rept. 119-106,Book 1" or "S. Rept. 114-57"
     m = re.match(r"^(H\.|S\.)\s*Rept\.\s*(\d+)-(\d+)(?:,Book\s*(\d+))?", citation)
     if not m:
@@ -46,7 +49,7 @@ def parse_citation(citation: str) -> tuple[str, int, int, Optional[str]] | None:
 
 def extract_report_sources(bill_elem) -> list[ReportSource]:
     """Extract all committee report sources from a BILLSTATUS bill element."""
-    import re
+
     sources = []
     for child in bill_elem:
         if child.tag == "committeeReports":
@@ -60,12 +63,14 @@ def extract_report_sources(bill_elem) -> list[ReportSource]:
                     if parsed:
                         chamber, congress, number, book = parsed
                         pkg = f"CRPT-{congress}{chamber[0]}rpt{number}"
-                        sources.append(ReportSource(
-                            pkg=pkg,
-                            citation=citation,
-                            chamber=chamber,
-                            book=book,
-                        ))
+                        sources.append(
+                            ReportSource(
+                                pkg=pkg,
+                                citation=citation,
+                                chamber=chamber,
+                                book=book,
+                            )
+                        )
     return sources
 
 
@@ -73,7 +78,7 @@ def get_report_pairing(
     report_sources: list[ReportSource],
     stage: str,
     bill_type: str,  # "hr" or "s"
-    is_enrolled: bool = False
+    is_enrolled: bool = False,
 ) -> ReportPairing:
     """Match committee report sources to a bill version stage.
 
@@ -86,11 +91,9 @@ def get_report_pairing(
     """
     if not report_sources:
         return ReportPairing(
-            sources=(),
-            reason="bill has no committee reports (introduced only or floor-amended omnibus)"
+            sources=(), reason="bill has no committee reports (introduced only or floor-amended omnibus)"
         )
 
-    stage_lower = stage.lower()
     target_chamber = "house" if bill_type == "hr" else "senate"
 
     # For enrolled bills, we want ALL report sources (both chambers if available)
@@ -101,11 +104,8 @@ def get_report_pairing(
 
     # For non-enrolled stages, match by chamber
     chamber_sources = [s for s in report_sources if s.chamber == target_chamber]
-    
+
     if not chamber_sources:
-        return ReportPairing(
-            sources=(),
-            reason=f"no {target_chamber} report for this stage"
-        )
+        return ReportPairing(sources=(), reason=f"no {target_chamber} report for this stage")
 
     return ReportPairing(sources=tuple(chamber_sources))

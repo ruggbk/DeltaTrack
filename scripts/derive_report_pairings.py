@@ -2,7 +2,7 @@
 """Derive committee report pairings for all corpus bills from BILLSTATUS metadata.
 
 This script fetches BILLSTATUS for each bill in the corpus manifest and extracts
-committee report citations. The pairings are keyed per (bill, version, chamber) 
+committee report citations. The pairings are keyed per (bill, version, chamber)
 since a bill can have different reports at different stages (e.g., House report
 for the reported-in-House version, Senate report for the reported-in-Senate version).
 
@@ -125,6 +125,7 @@ def main():
 
     # Output as JSON (handles None)
     import json
+
     print(json.dumps(pairings, indent=2))
 
 

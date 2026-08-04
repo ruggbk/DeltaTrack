@@ -12,16 +12,17 @@ parser generalization gate, not an amount-validation gate.
 
 from __future__ import annotations
 
-import pytest
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from deltatrack.parsers.committee_report import (
     extract_pre_text,
-    parse_summary_blocks,
     parse_comparative_statement,
+    parse_summary_blocks,
 )
-from tests.corpus_paths import DATA_DIR, FIXTURES_DIR
+from tests.corpus_paths import DATA_DIR
 
 
 def load_manifest() -> dict:
@@ -57,14 +58,16 @@ for (bill_id, stage), sources in _REPORT_PKGS.items():
     for src in sources:
         pkg = src["pkg"]
         if pkg not in [s["pkg"] for s in _ALL_REPORT_SOURCES]:
-            _ALL_REPORT_SOURCES.append({
-                "pkg": pkg,
-                "citation": src["citation"],
-                "chamber": src["chamber"],
-                "book": src.get("book"),
-                "bill_id": bill_id,
-                "stage": stage,
-            })
+            _ALL_REPORT_SOURCES.append(
+                {
+                    "pkg": pkg,
+                    "citation": src["citation"],
+                    "chamber": src["chamber"],
+                    "book": src.get("book"),
+                    "bill_id": bill_id,
+                    "stage": stage,
+                }
+            )
 
 
 @pytest.mark.slow
@@ -82,36 +85,36 @@ def test_committee_report_fixture_parses(src: dict):
     """
     pkg = src["pkg"]
     html_path = DATA_DIR / f"{pkg}.htm"
-    
+
     # Known unavailable fixtures (report exists in BILLSTATUS but full text not yet on govinfo)
     KNOWN_UNAVAILABLE = {
         "CRPT-119hrpt106": "119th Congress report not yet published in full text on govinfo",
         "CRPT-118hrpt364": "Report full text not available on govinfo (BILLSTATUS citation only)",
     }
-    
+
     if pkg in KNOWN_UNAVAILABLE:
         pytest.skip(KNOWN_UNAVAILABLE[pkg])
-    
+
     # Completeness floor: every manifested report fixture must be committed
     assert html_path.exists(), (
         f"Committee report fixture {pkg}.htm is referenced in corpus_manifest.toml "
         f"but not committed to tests/data/. Download with scripts/vendor_reports.py."
     )
-    
+
     # Parse the HTML
     html_content = html_path.read_text(encoding="utf-8", errors="replace")
     pre_text = extract_pre_text(html_content)
-    
+
     # Basic sanity checks on extracted text
     assert len(pre_text) > 1000, f"{pkg}: extracted text too short ({len(pre_text)} chars)"
     assert "APPROPRIATIONS" in pre_text.upper(), f"{pkg}: doesn't appear to be an appropriations report"
-    
+
     # Try parsing summary blocks (should work for Senate, yield 0 for House)
     summary_blocks = parse_summary_blocks(pre_text)
-    
+
     # Try parsing comparative statement (should work for tabular jurisdictions)
     comparative_rows = parse_comparative_statement(pre_text)
-    
+
     # Assertions based on chamber
     chamber = src["chamber"]
     if chamber == "house":
@@ -142,7 +145,7 @@ def test_all_manifested_reports_are_committed():
         html_path = DATA_DIR / f"{pkg}.htm"
         if not html_path.exists():
             missing.append(f"{pkg} (for {src['bill_id']} {src['stage']})")
-    
+
     assert not missing, (
         f"{len(missing)} committee report fixture(s) referenced in corpus_manifest.toml "
         f"are not committed to tests/data/:\n" + "\n".join(f"  {m}" for m in missing)
@@ -160,20 +163,20 @@ def test_119_hr_1_has_both_books():
     # Find 119-hr-1 reported-in-house version
     bill_id = "119-hr-1"
     stage = "1_reported-in-house"
-    
+
     key = (bill_id, stage)
     assert key in _REPORT_PKGS, f"{bill_id} {stage} missing committee_report in manifest"
-    
+
     sources = _REPORT_PKGS[key]
     assert len(sources) == 2, (
         f"{bill_id} {stage}: expected 2 report sources (Book 1 and Book 2), "
         f"got {len(sources)}: {[s['citation'] for s in sources]}"
     )
-    
+
     books = {s.get("book") for s in sources}
     assert "Book 1" in books, "Missing Book 1"
     assert "Book 2" in books, "Missing Book 2"
-    
+
     # Fixtures not yet available on govinfo (known limitation)
     # When they become available, download with scripts/vendor_reports.py
 
@@ -187,16 +190,16 @@ def test_115_hr_5895_enrolled_has_conference_report():
     """
     bill_id = "115-hr-5895"
     stage = "5_enrolled-bill"
-    
+
     key = (bill_id, stage)
     assert key in _REPORT_PKGS, f"{bill_id} {stage} missing committee_report in manifest"
-    
+
     sources = _REPORT_PKGS[key]
     citations = {s["citation"] for s in sources}
-    
+
     assert "H. Rept. 115-697" in citations, "Missing House report H. Rept. 115-697"
     assert "H. Rept. 115-929" in citations, "Missing conference report H. Rept. 115-929"
-    
+
     # Both must be committed fixtures
     for s in sources:
         pkg = s["pkg"]
@@ -209,12 +212,12 @@ def test_114_hr_2029_enrolled_has_both_chambers():
     """Regression test for 114-hr-2029 enrolled having both House and Senate reports."""
     bill_id = "114-hr-2029"
     stage = "7_enrolled-bill"
-    
+
     key = (bill_id, stage)
     assert key in _REPORT_PKGS, f"{bill_id} {stage} missing committee_report in manifest"
-    
+
     sources = _REPORT_PKGS[key]
     chambers = {s["chamber"] for s in sources}
-    
+
     assert "house" in chambers, "Missing House report"
     assert "senate" in chambers, "Missing Senate report"

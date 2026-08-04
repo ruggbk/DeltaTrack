@@ -10,10 +10,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import httpx
-
-from tools.fetch_govinfo import fetch_billstatus_bill  # noqa: E402
-from scripts.report_pairing import extract_report_sources, get_report_pairing, ReportSource  # noqa: E402
 import tomlkit
+
+from scripts.report_pairing import ReportSource, extract_report_sources, get_report_pairing  # noqa: E402
+from tools.fetch_govinfo import fetch_billstatus_bill  # noqa: E402
 
 
 def load_manifest_doc() -> tomlkit.TOMLDocument:
@@ -73,7 +73,10 @@ def main():
             continue
 
         report_sources = extract_report_sources(bill_elem)
-        print(f"  Found {len(report_sources)} report source(s): {', '.join(s.citation for s in report_sources)}", file=sys.stderr)
+        print(
+            f"  Found {len(report_sources)} report source(s): {', '.join(s.citation for s in report_sources)}",
+            file=sys.stderr,
+        )
 
         versions = bill_entry.get("versions", [])
         for ver in versions:
