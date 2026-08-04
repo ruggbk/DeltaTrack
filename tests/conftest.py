@@ -453,6 +453,7 @@ CI_SLOW_MODULES = (
     "tests/test_financial_diff.py",
     "tests/test_pipeline_parity.py",
     "tests/test_pdf_xml_amount_recall.py",
+    "tests/test_pdf_xml_prose_recall.py",
     "tests/test_front_matter_parity.py",
     "tests/test_xml_compare.py",
     "tests/test_toc_tree.py",
@@ -582,6 +583,8 @@ _CORPUS_EXPANDING_MODULES = {
     "tests/test_pdf_corpus_smoke.py": ("pdf",),
     # dual_format_versions(): a stage present in BOTH formats.
     "tests/test_pdf_xml_amount_recall.py": ("xml", "pdf"),
+    # dual_format_versions() as well: the same stage-in-both-formats denominator.
+    "tests/test_pdf_xml_prose_recall.py": ("xml", "pdf"),
 }
 
 # The two id shapes these modules generate: "<bill>/<stem>" and, for a pair case,

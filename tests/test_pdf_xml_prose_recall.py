@@ -49,6 +49,13 @@ accommodate them, they are not evidence the comparison is too strict:
 
 Neither is visible to the amount cross-check, since neither figure is a dollar amount.
 
+What this CANNOT see, established by injecting each fault and watching the result:
+making `normalize_glyphs` a no-op leaves all 24 cases green, because the comparison
+runs the same normalization over both sides, so a change there cancels out. Glyph
+handling is gated by the golden prints (test_pdf_extraction_golden.py), not here.
+Dropping extracted lines, extracting no fragments at all, a stale `_KNOWN_DEGRADED`
+entry, and a `_SHELL_VERSIONS` entry that no longer describes a shell all do fail.
+
 Marked @slow: parses bill XML and extracts every PDF page.
 """
 

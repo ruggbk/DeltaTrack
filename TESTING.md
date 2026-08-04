@@ -103,7 +103,9 @@ including where each change appears (page and line) and what kind of change it
 is. The tool's PDF comparison is then checked against that list.
 
 **Limit:** this is the newest and thinnest area, and the hand-built list so far
-covers a single draft bill.
+covers a single draft bill. It is also the only place the wording of a bill is
+checked against a human reading of it: for published bills, check 6 uses the
+official text instead, which no draft has.
 
 ### 5. Cross-checking the PDF reading against the official text
 
@@ -126,6 +128,28 @@ cross-check earlier surfaced a quirk in the official-text reader, where it
 merged a dollar figure with an adjacent percentage in non-spending statutory
 tables; that has since been fixed.) The soundness pass covers every bill,
 including the largest omnibus in the collection.
+
+### 6. Cross-checking the PDF reading against the official *wording*
+
+Check 5 asks whether the dollar figures survive when the tool reads a PDF. This
+one asks the same question of the words. The official machine-readable version of
+a bill is an independent transcription of the same document, so for every bill we
+have in both forms we take its sentences and confirm each one turns up in what
+the tool read out of the PDF. Punctuation, capitalisation, accents, and hyphens
+are ignored: the two formats set them differently, and the question here is
+whether the sentence survived at all, not whether it was reproduced character for
+character.
+
+Most versions score 100%. Where a version falls short, the shortfall is written
+down in the check itself, along with the specific reading defect that causes it,
+so the number is never a mystery to be explained away later.
+
+**Limit:** because the same clean-up is applied to both sides before comparing,
+this check is blind to changes in that clean-up — it confirms the words are
+there, not that they are rendered exactly as printed. Exact rendering is held in
+place separately, by frozen copies of what the tool reads out of specific pages
+(`tests/test_pdf_extraction_golden.py`). It also cannot cover draft bills at all,
+which have no official version to compare against; that is check 4's job.
 
 ## Known soft spots
 
