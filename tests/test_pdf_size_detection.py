@@ -1002,9 +1002,22 @@ class TestMajorLevel:
 
 
 class TestFallbackWhenNoBands:
-    def test_legacy_trigger_used_when_no_sizes(self):
-        # No glyph sizes (e.g. a draft/odd PDF): derive_size_bands -> None, so the
-        # legacy "For necessary expenses" backwalk still finds the account.
+    """When size bands are not derivable, structure degrades to the universal
+    legislative tokens (TITLE / SEC.) and emits NO account-level anchors (#114).
+
+    An appropriations-specific English phrase (``For necessary expenses of``) used to
+    name accounts here by walking back to the nearest uppercase heading. That made an
+    appropriations-phrase trigger load-bearing for *structure*, which #114 rules out:
+    text triggers may interpret dollar amounts, never name accounts or build the
+    hierarchy. Measured over the 68-PDF corpus before removal, the trigger's entire
+    output on bills that reach this path was one anchor, and it was wrong (a wrapped
+    section-heading fragment on 119-hr-1 labelled ``account``), so no correct
+    structure is lost by degrading instead of guessing.
+    """
+
+    def test_no_account_anchors_when_no_sizes(self):
+        # The phrase is present and a heading precedes it -- the exact shape the
+        # retired backwalk keyed on. No account anchor may be emitted from it.
         pages = [
             Page(
                 1,
@@ -1014,34 +1027,34 @@ class TestFallbackWhenNoBands:
                 ),
             )
         ]
-        assert isinstance(derive_size_bands(pages), (type(None), SizeBands))
-        accounts = _accounts(extract_anchors(pages))
-        assert any(a.text == "OPERATIONS AND SUPPORT" for a in accounts)
+        assert derive_size_bands(pages) is None  # no sizes -> no size path
+        assert _accounts(extract_anchors(pages)) == []
 
-    def test_two_triggers_under_one_heading_emit_one_account(self):
-        # Two `For necessary expenses of` lines inside the 3-position backwalk of the
-        # same heading resolve to the same account anchor. Only one is emitted -- the
-        # legacy path dedupes, and without that every consumer walking anchors sees the
-        # account twice. Pinned because the dedup was covered but its *duplicate*
-        # branch was not, so a change to how it is done had nothing holding it (#19).
+    def test_fallback_still_emits_universal_tokens(self):
+        # TITLE/SEC. are the grammar of all legislation, not appropriations-specific
+        # (#114 category D), and are detected per page independently of size bands.
+        # They must survive the degrade -- otherwise a size-fail bill loses ALL
+        # structure rather than just its account level.
         pages = [
             Page(
                 1,
                 (
-                    Line(1, "OPERATIONS AND SUPPORT"),
-                    Line(2, "For necessary expenses of the agency, $1,000."),
-                    Line(3, "For necessary expenses of the same agency, $2,000."),
+                    Line(1, "TITLE I"),
+                    Line(2, "OPERATIONS AND SUPPORT"),
+                    Line(3, "For necessary expenses of the agency, $1,000."),
+                    Line(4, "SEC. 101. The Secretary shall report annually."),
                 ),
             )
         ]
-        assert derive_size_bands(pages) is None  # no sizes -> legacy path
-        accounts = _accounts(extract_anchors(pages))
-        assert [a.text for a in accounts] == ["OPERATIONS AND SUPPORT"]
+        assert derive_size_bands(pages) is None
+        anchors = extract_anchors(pages)
+        assert [a.text for a in _by_kind(anchors, "title")] == ["TITLE I"]
+        assert [a.text for a in _by_kind(anchors, "section")] == ["SEC. 101"]
 
-    def test_legacy_path_emits_no_major(self):
-        # Majors are a size-band-path feature: a no-glyph-size doc (legacy fallback)
-        # emits the account but NO major, and the account breadcrumb has no major
-        # segment. Pins the "breadcrumb depth is detection-path dependent" contract.
+    def test_fallback_emits_no_major_or_agency(self):
+        # Majors/agencies are size-path features; with the account trigger retired the
+        # fallback emits no interior appropriations level at all. Pins the "breadcrumb
+        # depth is detection-path dependent" contract that the legacy test held.
         pages = [
             Page(
                 1,
@@ -1053,8 +1066,9 @@ class TestFallbackWhenNoBands:
                 ),
             )
         ]
-        assert derive_size_bands(pages) is None  # no sizes -> legacy path
+        assert derive_size_bands(pages) is None
         anchors = extract_anchors(pages)
         assert _by_kind(anchors, "major") == []
-        account = next(a for a in anchors if a.kind == "account")
-        assert "DEPARTMENTAL MANAGEMENT" not in breadcrumb_for(account, anchors)
+        assert _by_kind(anchors, "agency") == []
+        section = next(a for a in anchors if a.kind == "title")
+        assert breadcrumb_for(section, anchors) == ("TITLE I",)

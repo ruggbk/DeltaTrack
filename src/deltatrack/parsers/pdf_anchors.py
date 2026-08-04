@@ -60,8 +60,9 @@ class SizeBands:
 # exceed that rounding granularity. Body↔heading separation must exceed 2·eps.
 _SIZE_EPS = 0.3
 # A document needs at least this fraction of its numbered lines to carry an
-# attached glyph size before we trust size-based detection; below it we fall back
-# to the legacy text trigger (a partial join would silently drop headings).
+# attached glyph size before we trust size-based detection; below it no account
+# anchors are emitted at all (a partial join would silently drop headings, and
+# there is no text-trigger fallback to degrade to — #114).
 _COVERAGE_MIN = 0.85
 
 
@@ -75,7 +76,6 @@ _TITLE_PATTERN = re.compile(r"^TITLE\s+([IVXLC]+)\b.*$")
 # for an inline-named title.
 _INLINE_TITLE_NAME = re.compile(r"^TITLE\s+[IVXLC]+\s*[—–]\s*\S")
 _SECTION_PATTERN = re.compile(r"^(SEC(?:TION)?\.?\s+\d+)\b")
-_FOR_NECESSARY_EXPENSES = re.compile(r"^For necessary expenses of\b", re.IGNORECASE)
 # A run-in subsection header ("(B) Current visas revoked.—") renders small-caps,
 # so it lands in the heading band, but it is NOT an account: it opens with a
 # parenthesized enumerator, which appropriations account headings never do. Used
@@ -271,7 +271,7 @@ def _sized_lines(pages: list[Page]):
 def derive_size_bands(pages: list[Page]) -> SizeBands | None:
     """Derive the per-document body/heading glyph-size bands, or None.
 
-    Returns None (→ legacy text-trigger fallback) when the signal isn't a clean
+    Returns None (→ no account-level anchors at all) when the signal isn't a clean
     body+single-heading-band split: no sized prose lines, no sub-body heading
     cluster, more than one strong heading cluster (trimodal, e.g. reconciliation
     bills), or a body↔heading gap within 2·eps.
@@ -281,7 +281,7 @@ def derive_size_bands(pages: list[Page]) -> SizeBands | None:
         return None
     # body = the most common prose size; on a tie take the LARGER (body is the
     # dominant, larger cluster in GPO bills — picking a smaller tied size would
-    # exclude real sub-body headings and silently force the legacy fallback).
+    # exclude real sub-body headings and silently lose the account level entirely).
     body = max(statistics.multimode(round(s, 1) for s in body_sizes))
 
     head_sizes = sorted(
@@ -314,9 +314,10 @@ def _scan_anchors_in_page(page_number: int, raw_text: str) -> list[Anchor]:
     """Scan one page's raw chrome-stripped, line-numbered text for anchors.
 
     Test-only entry point that takes a raw `<n> content` string per line. Runs the
-    full `extract_anchors` pipeline on the single page so account detection (size
-    path, or legacy fallback when the synthetic page carries no glyph sizes) is
-    exercised. Production path uses `extract_anchors(pages)`.
+    full `extract_anchors` pipeline on the single page. Note the synthetic page
+    carries no glyph sizes, so the size path cannot run: these cases exercise the
+    TITLE/SEC/subsection pass only and never yield account anchors (#114).
+    Production path uses `extract_anchors(pages)`.
     """
     page = Page(page_number, parse_lines(strip_page_chrome(raw_text)))
     return extract_anchors([page])
@@ -377,9 +378,9 @@ def _match_runin_subsection(first_text: str, next_texts: list[str]) -> str | Non
 def _anchors_from_page(page: Page) -> list[Anchor]:
     """TITLE, SEC and run-in subsection anchors for one page.
 
-    Emitted here (the per-page pass runs unconditionally, before the size/legacy
-    branch) so run-in subsections surface on BOTH the size path and the legacy
-    fallback — they render at body size and are never gated on a size band. Account
+    Emitted here (the per-page pass runs unconditionally, before the size branch)
+    so run-in subsections surface even when size bands are not derivable — they
+    render at body size and are never gated on a size band. Account
     anchors are emitted separately by `extract_anchors`, which needs the flattened
     document line stream for size-band classification and page-seam look-ahead.
 
@@ -583,36 +584,6 @@ def _account_anchors_by_size(pages: list[Page], bands: SizeBands) -> list[Anchor
                 anchors.append(agency)
         # else: candidate followed by another heading ⇒ part of a carry-over agency
         # run, emitted as one joined `agency` anchor at the leaf account above.
-    return anchors
-
-
-def _account_anchors_legacy(pages: list[Page]) -> list[Anchor]:
-    """Legacy fallback: per page, walk back ≤3 line positions from a `For necessary
-    expenses of` trigger to the nearest uppercase heading (parenthetical qualifiers
-    skipped). Used when size bands aren't derivable or attachment coverage is too
-    low. Per-page and 3-position to match the pre-#89 behavior exactly."""
-    anchors: list[Anchor] = []
-    # `seen` mirrors `anchors` purely for the membership test: several `For necessary
-    # expenses of` triggers can walk back to the same heading, and scanning the list
-    # made that check cost O(n) per hit on a document with thousands of accounts.
-    # Anchor is a frozen dataclass, so set membership is the same equality the list
-    # scan used, and the list still fixes the output order.
-    seen: set[Anchor] = set()
-    for page in pages:
-        lines = page.lines
-        for idx, line in enumerate(lines):
-            if line.line_number is None or not _FOR_NECESSARY_EXPENSES.match(line.text):
-                continue
-            for back in range(idx - 1, max(idx - 4, -1), -1):
-                bline = lines[back]
-                if bline.line_number is None or _is_parenthetical(bline.text):
-                    continue
-                if _is_uppercase_heading(bline.text):
-                    candidate = Anchor(page.page_number, bline.line_number, "account", bline.text.strip())
-                    if candidate not in seen:
-                        seen.add(candidate)
-                        anchors.append(candidate)
-                    break
     return anchors
 
 
@@ -885,7 +856,9 @@ def extract_anchors(pages: list[Page]) -> list[Anchor]:
 
     TITLE/SEC are detected per page. Accounts use size-band + position
     classification when the document yields clean bands and adequate glyph-size
-    attachment coverage; otherwise they fall back to the legacy text trigger.
+    attachment coverage; otherwise NO account-level anchors are emitted and the
+    structure degrades to those universal legislative tokens. Naming accounts from
+    an appropriations-specific English phrase is out (#114 / ADR 0012).
 
     On an omnibus/minibus, each anchor is finally tagged with its division
     (DeltaTrack#107) — a display field prepended in the breadcrumb, not a matching key.
@@ -898,8 +871,9 @@ def extract_anchors(pages: list[Page]) -> list[Anchor]:
     if bands is not None and _coverage(pages) >= _COVERAGE_MIN:
         anchors.extend(_account_anchors_by_size(pages, bands))
         anchors.extend(_major_anchors_by_size(pages, bands))
-    else:
-        anchors.extend(_account_anchors_legacy(pages))
+    # No else: when the size signal is absent, structure degrades to the universal
+    # TITLE/SEC. tokens already collected above rather than being guessed from an
+    # appropriations-specific English phrase (#114, ADR 0012).
 
     anchors.sort(key=lambda a: (a.page_number, a.line_number))
     return _assign_divisions(anchors, _flatten(pages))
@@ -953,15 +927,16 @@ def _breadcrumb_core(anchor: Anchor, all_anchors: tuple[Anchor, ...] | list[Anch
     just inside the TITLE.
 
     Breadcrumb DEPTH is detection-path dependent: major/agency/grouping parents exist
-    only on the size path, so a low-coverage/no-band bill (legacy fallback) yields a
-    shallower chain for the same logical account. Consumers must not assume a major or
-    agency segment is always present.
+    only on the size path, so a low-coverage/no-band bill has no account level at all
+    and its deepest chain is TITLE/SEC. Consumers must not assume a major, agency or
+    account segment is always present.
     """
     if anchor.kind in ("title", "preamble"):
         return (anchor.text,)
     # Resolve by value-equality .index(); relies on anchors being unique per
-    # (page, line) — the size path emits one per line and the legacy path dedups,
-    # so no two value-equal anchors exist. Keep that invariant if emitting more.
+    # (page, line) — the size path emits at most one per line, so no two value-equal
+    # anchors exist. Keep that invariant if emitting more; it is gated corpus-wide by
+    # test_pdf_anchor_golden.py::test_no_value_equal_duplicate_anchors.
     try:
         idx = list(all_anchors).index(anchor)
     except ValueError:
