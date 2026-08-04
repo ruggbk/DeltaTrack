@@ -35,6 +35,25 @@ DOLLAR_RE = re.compile(r"\$[\d,]+")
 # <header> text is stored in header_text, not body_text.
 _SKIP_TAGS = {"quote", "header"}
 
+# Amounts that reach no node, each traced to a filed defect rather than absorbed into a
+# tolerance. Keyed by fixture id, then by the amount's SOURCE spelling.
+#
+# The point of naming them individually is that the gate stays exact for everything else:
+# a new hole cannot hide behind slack left for an old one, which is what a ratio allows.
+# test_every_dollar_amount_appears_in_a_node also fails if an entry here stops being
+# missing, so a fix removes its entry rather than leaving dead tolerance behind.
+# Empty, and that is its intended resting state rather than a gap waiting to be filled:
+# every dollar amount in every committed bill reaches a node, so the assertion is exact
+# with nothing carved out of it.
+#
+# It held three entries while this branch was open, all three the same defect (#465, a
+# section sitting directly under a division was walked by nothing): the LIBOR findings
+# figure and "the sum of $700" in 117-hr-2471, and "$35 per coin for the $5 coin" in
+# 116-hr-1865. Fixing #465 made all three reachable, and the stale-entry assertion below
+# is what required their removal here rather than leaving three dead exemptions behind.
+# That is the mechanism doing its job once, in the situation it exists for.
+KNOWN_UNCOVERED_AMOUNTS: dict[str, dict[str, str]] = {}
+
 
 def _collect_body_text_excluding(body: ET.Element, skip_tags: set[str]) -> str:
     """Walk the element tree, collecting text but skipping subtrees with tags in skip_tags."""
@@ -54,14 +73,28 @@ def _collect_body_text_excluding(body: ET.Element, skip_tags: set[str]) -> str:
     return " ".join(parts)
 
 
-def _extract_dollar_amounts(text: str) -> list[int]:
-    """Find all non-zero dollar amounts in text."""
-    amounts = []
+def _extract_dollar_matches(text: str) -> list[tuple[int, str]]:
+    """Find all non-zero dollar amounts as ``(value, literal)`` pairs.
+
+    The literal is the source spelling. Callers that ask "did this amount reach a
+    node" must search for the literal rather than for a re-formatted ``f"${value:,}"``,
+    because the round trip through ``int`` is lossy on malformed source: 118-s-4797
+    carries ``$60,00,000``, which reformats to ``$6,000,000`` and is then findable in
+    no node, though the section holding it is present and intact. Comparing literals
+    removes that class of false positive; measured across the committed corpus it
+    drops the reported misses from 2 to 1 and introduces none.
+    """
+    matches = []
     for m in DOLLAR_RE.finditer(text):
         value = int(m.group().replace("$", "").replace(",", ""))
         if value > 0:
-            amounts.append(value)
-    return amounts
+            matches.append((value, m.group()))
+    return matches
+
+
+def _extract_dollar_amounts(text: str) -> list[int]:
+    """Find all non-zero dollar amounts in text."""
+    return [value for value, _literal in _extract_dollar_matches(text)]
 
 
 def _xml_id(xml_path: Path) -> str:
@@ -89,16 +122,49 @@ def test_manifest_fixtures_committed() -> None:
     assert_manifest_committed(ALL_XML_FILES, "corpus-properties")
 
 
+def test_known_uncovered_amounts_names_live_fixtures() -> None:
+    """Every ``KNOWN_UNCOVERED_AMOUNTS`` key is a fixture that still exists.
+
+    The allowlist is meant to be self-cleaning: ``test_every_dollar_amount_appears_in_a_node``
+    fails when an entry stops being missing, so a fixed defect forces its entry out. That
+    guarantee has one gap, and it is silent. Entries are read with
+    ``KNOWN_UNCOVERED_AMOUNTS.get(test_id, {})``, so a key naming a fixture that has since
+    been renamed or retired is consulted by no test case at all: it can never be reported
+    missing, and can never be reported stale either. It just sits there, and the next
+    reader takes it for a live exemption.
+
+    A typo made when the entry is written is already caught, because the real fixture then
+    fails with the amount unexplained. This covers the other direction, where the entry was
+    correct and the corpus moved underneath it, which has happened before (#10 renamed
+    corpus files).
+    """
+    orphans = sorted(set(KNOWN_UNCOVERED_AMOUNTS) - {_xml_id(path) for path in ALL_XML_FILES})
+    assert not orphans, (
+        f"KNOWN_UNCOVERED_AMOUNTS names {len(orphans)} fixture(s) not in the manifest: {orphans}. "
+        f"Re-point each entry at the fixture's current id, or drop it if the bill is gone."
+    )
+
+
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
     ids=[_xml_id(p) for p in ALL_XML_FILES],
 )
 def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
-    """Every dollar amount in the raw XML body should appear in at least one node's body_text.
+    """Every dollar amount in the raw XML body appears in at least one node's body_text.
 
     Excludes amounts inside <quote> and <header> elements (stored separately).
-    Uses a 0.95 coverage ratio tolerance for deeply nested clauses (issue #4).
+
+    The cap is absolute, not a ratio, because a ratio cannot express this property on
+    documents of this size. A percentage tolerance scales with the bill: at the 0.98 it
+    replaces, 117-hr-2471 could lose 67 of its 3,385 amounts and stay green, and the
+    slack was widest on the largest bills, which is where the money is. It also cannot
+    see loss that is large in sections but small in dollars -- 13 divisions of that bill
+    reach no node at all (#465) and it still scored 0.9997, because the missing divisions
+    are policy text carrying one dollar amount between them.
+
+    Anything genuinely uncovered belongs in ``KNOWN_UNCOVERED_AMOUNTS`` against a filed
+    defect, not inside a tolerance that also silently absorbs the next regression.
     """
     _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
@@ -112,49 +178,54 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
 
     # Collect dollar amounts from raw XML, excluding quote/header subtrees
     raw_text = _collect_body_text_excluding(body, _SKIP_TAGS)
-    raw_amounts = _extract_dollar_amounts(raw_text)
+    raw_matches = _extract_dollar_matches(raw_text)
 
-    if not raw_amounts:
+    if not raw_matches:
         pytest.skip("No dollar amounts in bill body")
 
-    if len(raw_amounts) < 3:
+    if len(raw_matches) < 3:
         # Shell bills (procedural placeholders later replaced with full text)
         # have 1-2 amounts. Missing 1 of 1 gives 0% coverage, which is noise.
-        pytest.skip(f"Shell bill: only {len(raw_amounts)} amounts, too few for meaningful coverage")
+        pytest.skip(f"Shell bill: only {len(raw_matches)} amounts, too few for meaningful coverage")
 
     # Parse with the actual parser
     bill_tree = normalize_bill(xml_path)
     all_body_text = " ".join(node.body_text for node in bill_tree.nodes)
 
-    # Check which raw amounts appear in at least one node's body_text
-    missing = []
-    for amount in raw_amounts:
-        # Check if the formatted amount string appears in any node text
-        amount_str = f"${amount:,}"
-        if amount_str not in all_body_text:
-            missing.append(amount)
-
-    total = len(raw_amounts)
-    found = total - len(missing)
-    ratio = found / total
-
-    # Calibrated on the committed corpus rather than left at a round number (#422/#459).
+    # Search for the source spelling, not a re-formatted f"${value:,}" -- see
+    # _extract_dollar_matches for why the round trip invents misses on malformed source.
     #
-    # This threshold was 0.80 while the docstring above claimed 0.95, and the gap was not
-    # academic: on `develop` before #422, the worst fixture scored 0.817 -- 42 of the 230
-    # dollar amounts in 118-hr-8774 v1 appeared in NO node at all -- and this gate passed
-    # it by 1.7 points. Nine fixtures sat below the 0.95 the docstring claimed. A gate
-    # named "every dollar amount appears in a node" was calibrated to tolerate exactly
-    # the defect it names, which is why $6.5B could go missing from reports with the
-    # suite green.
-    #
-    # Measured worst ratio across the 41 committed fixtures: 0.977 after #422, 0.997
-    # after #459. 0.98 leaves headroom for a new corpus bill with a genuinely awkward
-    # shape while still going red on either defect: it would have caught #459's 0.977
-    # and #422's 0.817. Raise it if the corpus stays clean; do not lower it without
-    # saying which bill needed the slack and why that is not a parser gap.
-    assert ratio >= 0.98, (
-        f"{test_id}: {len(missing)}/{total} amounts missing (ratio={ratio:.3f}). Sample missing: {missing[:5]}"
+    # The trailing lookahead is what makes this a search for the AMOUNT rather than for
+    # its digits. A plain containment test finds "$35" inside "$356,000", so a dropped
+    # small amount reads as present whenever some larger amount happens to start with the
+    # same digits, and the check then passes for a reason that has nothing to do with the
+    # amount it was asked about. Two live instances on the committed corpus, both real
+    # amounts reaching no node while this gate called them found: "$35 per coin for the
+    # $5 coin" (116-hr-1865) and "the sum of $700" (117-hr-2471), each masked by a longer
+    # amount elsewhere in the same bill.
+    missing = sorted(
+        {
+            literal
+            for _value, literal in raw_matches
+            if not re.search(re.escape(literal) + r"(?![\d,]*\d)", all_body_text)
+        }
+    )
+    allowed = KNOWN_UNCOVERED_AMOUNTS.get(test_id, {})
+
+    unexpected = [literal for literal in missing if literal not in allowed]
+    assert not unexpected, (
+        f"{test_id}: {len(unexpected)} of {len(raw_matches)} amounts appear in no node: {unexpected[:5]}. "
+        f"If this is a known defect, file it and add it to KNOWN_UNCOVERED_AMOUNTS with the issue."
+    )
+
+    # The allowlist is self-cleaning: an entry that stops being missing is a fixed defect,
+    # and leaving it behind would let the gate keep tolerating a hole that has closed.
+    # Without this, the allowlist decays into exactly the open-ended tolerance the ratio
+    # was, one entry at a time.
+    stale = [literal for literal in allowed if literal not in missing]
+    assert not stale, (
+        f"{test_id}: {stale} now reach a node, so their KNOWN_UNCOVERED_AMOUNTS entries "
+        f"are obsolete. Remove them (and close the issue they name if nothing else blocks it)."
     )
 
 
