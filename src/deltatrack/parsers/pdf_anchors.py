@@ -117,6 +117,27 @@ _RUNIN_QUOTED_LINE = re.compile(r"^[‘“'\"]")
 # removes all 29 false joins. (The anchor line's OWN enumerator is expected, so this
 # enumerator clause applies only to continuations, never the first line.)
 _RUNIN_CONTINUATION_STOP = re.compile(r"^[‘“'\"]|^\([0-9A-Za-z]{1,4}\)\s")
+# How many continuation lines a wrapped catchline may span before the join gives up.
+#
+# This is a bound on the LENGTH OF A TITLE, not a precision control. What stops a runaway
+# join is `_RUNIN_CONTINUATION_STOP` (any line opening a quote or an enumerator ends the
+# window) plus the required `.—` terminator; this number only decides how long a
+# legitimate catchline is allowed to be before it is abandoned unread.
+#
+# It was 2, which silently discarded every subsection whose title wrapped onto a third
+# line (#473). The cutoff was sharp because it is really a character budget: at GPO's
+# ~45 characters per line, 2 continuations fit a title of about 122 characters, and on
+# 119-hr-1 every title <=122 chars was found (929 of them) while every title >=127 chars
+# was missed (5 of them), with nothing in between. The longest real catchline measured is
+# 250 characters (119-hr-1 sec. 112207(b), a $15,000,000 appropriation), needing 5.
+#
+# Set to 6 with one line of headroom over that. Swept 2 through 8 over all 13 committed
+# PDF+XML fixture pairs: false positives stay at 2 (the known doubled-enum residue) and
+# quoted-block leaks stay at 0 at EVERY width, while detections rise 1041 -> 1051 and
+# plateau at 6. So the width trades nothing away here; it is capped rather than unbounded
+# only because an unbounded join would let a subsection with no catchline at all reach
+# forward indefinitely for an unrelated `.—`.
+_RUNIN_MAX_CONTINUATIONS = 6
 # Line-fullness split (DeltaTrack#130): two stacked majors vs one wrapped name. A run
 # line broke EARLY (its successor's first word would have fit) ⇒ an intentional break
 # between stacked headings; otherwise it wrapped because the next word didn't fit. The
@@ -256,11 +277,12 @@ def _match_runin_subsection(first_text: str, next_texts: list[str]) -> str | Non
     """Canonical `(enum) Catchline` for a run-in subsection at the start of `first_text`,
     or None (DeltaTrack#96).
 
-    Joins up to TWO continuation lines to recover a catchline whose terminal `.—` GPO
-    wrapped, de-hyphenating soft wraps via `_WRAP_HYPHENS` exactly as `_join_major_run`
-    does. The stop-rule (`_RUNIN_CONTINUATION_STOP`) and the quote self-exclusion guard
-    against fabricated anchors; roman-lookalike enumerators are rejected. Printed casing
-    is preserved (the PDF is source-of-truth), trailing `.—` and body stripped."""
+    Joins up to `_RUNIN_MAX_CONTINUATIONS` continuation lines to recover a catchline whose
+    terminal `.—` GPO wrapped, de-hyphenating soft wraps via `_WRAP_HYPHENS` exactly as
+    `_join_major_run` does. The stop-rule (`_RUNIN_CONTINUATION_STOP`) and the quote
+    self-exclusion guard against fabricated anchors; roman-lookalike enumerators are
+    rejected. Printed casing is preserved (the PDF is source-of-truth), trailing `.—` and
+    body stripped."""
     first = first_text.strip()
     if _RUNIN_QUOTED_LINE.match(first):  # quoted amendment target self-excludes
         return None
@@ -276,7 +298,7 @@ def _match_runin_subsection(first_text: str, next_texts: list[str]) -> str | Non
                 return None
             catchline = re.sub(r"\s+", " ", m.group(2).strip())
             return f"({m.group(1)}) {catchline}"
-        if conts_used >= 2 or conts_used >= len(next_texts):
+        if conts_used >= _RUNIN_MAX_CONTINUATIONS or conts_used >= len(next_texts):
             return None
         cont = next_texts[conts_used].strip()
         conts_used += 1
@@ -311,9 +333,12 @@ def _anchors_from_page(page: Page) -> list[Anchor]:
         if title_match:
             anchors.append(Anchor(page.page_number, line.line_number, "title", f"TITLE {title_match.group(1)}"))
             continue
-        # Up to two continuation lines for a wrapped catchline (page-local; a page-seam
-        # wrap is documented 0-measured residue — the per-page window never crosses pages).
-        next_texts = [ln.text for ln in lines[idx + 1 : idx + 3]]
+        # Continuation lines for a wrapped catchline (page-local; a page-seam wrap is
+        # documented 0-measured residue — the per-page window never crosses pages). Sized
+        # from `_RUNIN_MAX_CONTINUATIONS` so the slice and the join's own cap cannot drift
+        # apart: the two together decide how long a catchline may be, and when only the
+        # cap moved the slice silently kept the old limit (#473).
+        next_texts = [ln.text for ln in lines[idx + 1 : idx + 1 + _RUNIN_MAX_CONTINUATIONS]]
         section_match = _SECTION_PATTERN.match(line.text)
         if section_match:
             canonical = re.sub(r"\s+", " ", section_match.group(1))

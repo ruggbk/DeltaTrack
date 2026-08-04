@@ -445,13 +445,24 @@ def _subsection_label(sub: ET.Element) -> tuple[str, str]:
     text_el = sub.find("text")
     if text_el is not None:
         opening = extract_text_content(text_el)
-        # Mirror the PDF's physical bounds: its matcher sees one print line plus
-        # two continuations, so a probe over unbounded flattened text fabricates
-        # "catchlines" from a period+dash deep in plain prose (113-hr-83 §415(a):
-        # "…U.S.–E.U.…" produced a 335-char label). Window ≈ three print lines;
-        # cap ≈ the longest real catchline with wide margin (corpus max 90, the
-        # three fabrications 303–335). A quote-opening text is quoting other law —
-        # its catchline is not this subsection's (the PDF self-exclusion).
+        # Bound the probe in CHARACTERS: a probe over unbounded flattened text
+        # fabricates "catchlines" from a period+dash deep in plain prose (113-hr-83
+        # §415(a): "…U.S.–E.U.…" produced a 335-char label). Cap ≈ the longest real
+        # catchline ON THIS PATH with wide margin (corpus max 90, the three
+        # fabrications 303–335). A quote-opening text is quoting other law — its
+        # catchline is not this subsection's (the PDF self-exclusion).
+        #
+        # These bounds are independent of the PDF matcher's line window
+        # (`_RUNIN_MAX_CONTINUATIONS`), which does not apply here: this call passes NO
+        # continuation lines, so the character window is the only limit. They used to be
+        # described as mirroring that window at "one print line plus two continuations",
+        # which stopped being true when it widened to six (#473) — the numbers below did
+        # not move, because they were never derived from it.
+        #
+        # This path runs only for a subsection with NO <header> element; one that has a
+        # header returns above, uncapped. So the long catchlines #473 recovered on the PDF
+        # side (up to 250 chars) do not reach this cap. Whether a HEADERLESS subsection
+        # can carry an inline catchline longer than the cap is unmeasured.
         if not _RUNIN_QUOTED_LINE.match(opening):
             matched = _match_runin_subsection(f"{enum} {opening[:_RUNIN_PROBE_WINDOW]}", [])
             if matched is not None:

@@ -260,8 +260,9 @@ class TestRunInSubsection:
         assert subs == [Anchor(1, 5, "subsection", "(d) EMERGENCY ASSISTANCE")]
 
     def test_wrapped_catchline_two_lines(self):
-        # Real catchlines wrap up to two continuation lines (measured on 119-hr-1):
-        # a soft-hyphen join on line 1, a plain space-join on line 2.
+        # A two-continuation wrap: a soft-hyphen join on line 1, a plain space-join on
+        # line 2. Two was the matcher's whole budget until #473; see
+        # test_wrapped_catchline_five_lines for the long-title case it used to drop.
         text = (
             "7 (a) URBAN AND EMERGING AGRI-\n"
             "8 CULTURAL RESEARCH, EDUCATION, AND\n"
@@ -273,6 +274,42 @@ class TestRunInSubsection:
                 1, 7, "subsection", "(a) URBAN AND EMERGING AGRICULTURAL RESEARCH, EDUCATION, AND EXTENSION INITIATIVE"
             )
         ]
+
+    def test_wrapped_catchline_five_lines(self):
+        # A catchline wrapping onto FIVE continuation lines, transcribed from the case
+        # that exposed the old two-line budget: 119-hr-1 sec. 112207(b), whose 250-char
+        # title put its terminal `.—` out of reach and left a $15,000,000 appropriation
+        # with no anchor at all (#473). Long titles are not exotic; they attach to the
+        # specific, negotiated provisions, which is why dropping them was expensive.
+        text = (
+            "1 (b) APPROPRIATION FOR TASK FORCE TO DESIGN A\n"
+            "2 BETTER PUBLIC-PRIVATE PARTNERSHIP BETWEEN THE\n"
+            "3 IRS AND PRIVATE SECTOR TAX PREPARATION SERVICES\n"
+            "4 TO PROVIDE FOR FREE TAX FILING TO REPLACE THE\n"
+            "5 EXISTING FREE FILE PROGRAM AND ANY DIRECT\n"
+            "6 EFILE TAX RETURN SYSTEM.—Out of any money in the\n"
+        )
+        subs = self._subs(1, text)
+        assert subs == [
+            Anchor(
+                1,
+                1,
+                "subsection",
+                "(b) APPROPRIATION FOR TASK FORCE TO DESIGN A BETTER PUBLIC-PRIVATE PARTNERSHIP "
+                "BETWEEN THE IRS AND PRIVATE SECTOR TAX PREPARATION SERVICES TO PROVIDE FOR FREE "
+                "TAX FILING TO REPLACE THE EXISTING FREE FILE PROGRAM AND ANY DIRECT EFILE TAX "
+                "RETURN SYSTEM",
+            )
+        ]
+
+    def test_catchline_beyond_the_window_is_abandoned(self):
+        # The window is a bound, not an invitation: a catchline still running after
+        # `_RUNIN_MAX_CONTINUATIONS` continuations yields NO anchor rather than an
+        # ever-longer join. Without this, an unbounded matcher would let a subsection
+        # with no catchline reach forward indefinitely for an unrelated `.—`.
+        body = "".join(f"{i} WORDS THAT KEEP RUNNING ON AND ON AND ON\n" for i in range(2, 2 + 8))
+        text = "1 (b) A TITLE THAT NEVER TERMINATES\n" + body + "10 AT LAST.—The body begins here."
+        assert self._subs(1, text) == []
 
     def test_same_line_after_sec_collision(self):
         # A SEC. line can carry an inline (a) run-in: emit BOTH a section and a
