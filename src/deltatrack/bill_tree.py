@@ -49,10 +49,15 @@ class BillNode:
     display_text: str = ""
     # Which top-level <legis-body> this node came from, 0-based (#434). Almost always 0;
     # non-zero only for the second text of a reported bill carrying a committee
-    # substitute. Both texts restate the same section numbers, so without this the two
-    # copies of "section 1" are indistinguishable to the diff's collision resolver and
-    # pair arbitrarily. Kept separate from division_key because the two discriminate at
-    # different levels and a node can need both.
+    # substitute. Recorded because concatenating the bodies otherwise destroys the only
+    # record of which text a node belongs to, and #186 (marking where the second text
+    # begins) cannot be built without re-deriving it.
+    #
+    # NOT a cross-version identity, and must not be used to constrain diff matching. It
+    # is a position within ONE document: when a committee substitute is adopted, it moves
+    # from index 1 to index 0 by becoming the only body, so pairing on equal index maps
+    # the superseded base text onto its replacement. That was tried and reverted -- see
+    # the comment in diff_bill._match_collision_group. Nothing reads it yet.
     body_index: int = 0
 
 

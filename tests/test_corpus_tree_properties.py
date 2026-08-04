@@ -203,13 +203,19 @@ def _raw_xml_body_amounts(path: Path) -> Counter:
     counted one of the document's two texts -- the same text the tree was built from.
     Both sides then agreed, and the gate reported conservation over a document that had
     silently lost 126 amounts. A reference derived through the selector under test cannot
-    see that selector's mistakes, which is why this one now reads the document instead.
+    see that selector's mistakes.
+
+    So BODY SELECTION, the thing #434 changed, is done here with a direct ``findall``
+    rather than through production code: if ``find_bill_bodies`` ever starts skipping a
+    body again, this reference still counts it and the gate fails. Only the resolution
+    and amendment-doc shapes, which have no top-level ``legis-body`` at all, fall back to
+    production traversal -- reimplementing that lookup here would be a second copy free
+    to drift, and those shapes carry exactly one body, so the failure this guards against
+    cannot arise in them.
     """
-    return Counter(
-        amount
-        for body in find_bill_bodies(ET.parse(path).getroot())
-        for amount in extract_amounts(extract_text_content(body))
-    )
+    root = ET.parse(path).getroot()
+    bodies = root.findall("legis-body") or find_bill_bodies(root)
+    return Counter(amount for body in bodies for amount in extract_amounts(extract_text_content(body)))
 
 
 def _assert_schema_and_levels(roots: list[dict]) -> None:
