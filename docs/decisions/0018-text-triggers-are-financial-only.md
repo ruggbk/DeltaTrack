@@ -98,7 +98,7 @@ That makes size-band coverage the single thing standing between a bill and its
 account structure, with no second path behind it. Widening it is now a recall
 priority rather than a nicety — the trimodal case that sends reconciliation bills
 down the degraded path is tracked separately
-([#501](https://github.com/AgoraDMV/DeltaTrack/issues/501)), as is the
+([#508](https://github.com/AgoraDMV/DeltaTrack/issues/508)), as is the
 line-number-independent pass for unnumbered layouts (#261).
 
 The rule is enforced by a test that fails if an appropriations-vocabulary pattern
