@@ -42,22 +42,17 @@ _SKIP_TAGS = {"quote", "header"}
 # a new hole cannot hide behind slack left for an old one, which is what a ratio allows.
 # test_every_dollar_amount_appears_in_a_node also fails if an entry here stops being
 # missing, so a fix removes its entry rather than leaving dead tolerance behind.
-KNOWN_UNCOVERED_AMOUNTS: dict[str, dict[str, str]] = {
-    # Division U (the LIBOR Act folded into the FY2022 omnibus) is one of 13 divisions in
-    # this bill whose sections are not wrapped in a <title>, so the division walk reaches
-    # none of them. This is the only amount in the corpus that the defect hides, because
-    # the divisions it drops are policy text rather than appropriations.
-    "117-hr-2471/6_enrolled-bill.xml": {
-        "$200,000,000,000,000": "#465 division without a <title> child is dropped from the tree",
-        # "the sum of $700 (as increased from time to time...)". Reached no node, and this
-        # gate called it found until the search stopped matching it inside "$700,000".
-        "$700": "#465 section directly under a division is walked by nothing",
-    },
-    "116-hr-1865/6_enrolled-bill.xml": {
-        # "a surcharge of $35 per coin for the $5 coin", masked by "$356,000".
-        "$35": "#465 section directly under a division is walked by nothing",
-    },
-}
+# Empty, and that is its intended resting state rather than a gap waiting to be filled:
+# every dollar amount in every committed bill reaches a node, so the assertion is exact
+# with nothing carved out of it.
+#
+# It held three entries while this branch was open, all three the same defect (#465, a
+# section sitting directly under a division was walked by nothing): the LIBOR findings
+# figure and "the sum of $700" in 117-hr-2471, and "$35 per coin for the $5 coin" in
+# 116-hr-1865. Fixing #465 made all three reachable, and the stale-entry assertion below
+# is what required their removal here rather than leaving three dead exemptions behind.
+# That is the mechanism doing its job once, in the situation it exists for.
+KNOWN_UNCOVERED_AMOUNTS: dict[str, dict[str, str]] = {}
 
 
 def _collect_body_text_excluding(body: ET.Element, skip_tags: set[str]) -> str:
