@@ -5,7 +5,7 @@ isolation. They are NOT the proof that real PDFs produce the bands (that is
 tests/test_pdf_text.py::TestPageGlyphSizes) nor the end-to-end fix (that is the
 FEDERAL PROTECTIVE SERVICE test in test_pdf_anchor_golden.py). Since #114 the size
 path is the ONLY producer of account anchors — there is no text-trigger fallback
-behind it — so a case that omits glyph sizes asserts the degraded TITLE/SEC.
+behind it — so a case that omits glyph sizes asserts the degraded TITLE/SEC./subsection
 contract, not an alternative detector (see TestFallbackWhenNoBands).
 """
 
@@ -1003,17 +1003,22 @@ class TestMajorLevel:
 
 
 class TestFallbackWhenNoBands:
-    """When size bands are not derivable, structure degrades to the universal
-    legislative tokens (TITLE / SEC.) and emits NO account-level anchors (#114).
+    """When size bands are not derivable, the APPROPRIATIONS-SPECIFIC interior levels
+    disappear (account / agency / major / grouping) while everything derived from
+    universal legislative grammar survives: TITLE, SEC., and enumerator-based run-in
+    subsections, all emitted by a per-page pass that never consults size bands (#114).
 
     An appropriations-specific English phrase (``For necessary expenses of``) used to
     name accounts here by walking back to the nearest uppercase heading. That made an
     appropriations-phrase trigger load-bearing for *structure*, which #114 rules out:
     text triggers may interpret dollar amounts, never name accounts or build the
     hierarchy. Measured over the 68-PDF corpus before removal, the trigger's entire
-    output on bills that reach this path was one anchor, and it was wrong (a wrapped
-    section-heading fragment on 119-hr-1 labelled ``account``), so no correct
-    structure is lost by degrading instead of guessing.
+    output on bills that reach this path was one distinct anchor, and it was wrong (a
+    fragment of a wrapped subsection catchline on 119-hr-1 labelled ``account``), so
+    no correct structure is lost by degrading instead of guessing.
+
+    These cases are synthetic. The end-to-end proof on the real bill is
+    test_pdf_anchor_golden.py::TestSizeFailBillEmitsNoAccounts.
     """
 
     def test_no_account_anchors_when_no_sizes(self):
@@ -1032,10 +1037,13 @@ class TestFallbackWhenNoBands:
         assert _accounts(extract_anchors(pages)) == []
 
     def test_fallback_still_emits_universal_tokens(self):
-        # TITLE/SEC. are the grammar of all legislation, not appropriations-specific
-        # (#114 category D), and are detected per page independently of size bands.
-        # They must survive the degrade -- otherwise a size-fail bill loses ALL
-        # structure rather than just its account level.
+        # TITLE/SEC./enumerators are the grammar of all legislation, not
+        # appropriations-specific (#114 category D), and are detected per page
+        # independently of size bands. All three must survive the degrade -- otherwise
+        # a size-fail bill loses ALL structure rather than just its account level.
+        # The subsection case is the one most easily lost by mistake: it is the
+        # deepest level the degrade keeps, so a contract stated as "TITLE/SEC. only"
+        # would wrongly license dropping it.
         pages = [
             Page(
                 1,
@@ -1044,6 +1052,7 @@ class TestFallbackWhenNoBands:
                     Line(2, "OPERATIONS AND SUPPORT"),
                     Line(3, "For necessary expenses of the agency, $1,000."),
                     Line(4, "SEC. 101. The Secretary shall report annually."),
+                    Line(5, "(a) In general.—The report shall include costs."),
                 ),
             )
         ]
@@ -1051,6 +1060,9 @@ class TestFallbackWhenNoBands:
         anchors = extract_anchors(pages)
         assert [a.text for a in _by_kind(anchors, "title")] == ["TITLE I"]
         assert [a.text for a in _by_kind(anchors, "section")] == ["SEC. 101"]
+        assert [a.text for a in _by_kind(anchors, "subsection")] == ["(a) In general"]
+        # ...and still no account, from the trigger phrase sitting right there.
+        assert _accounts(anchors) == []
 
     def test_fallback_emits_no_major_or_agency(self):
         # Majors/agencies are size-path features; with the account trigger retired the
