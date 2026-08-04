@@ -85,20 +85,31 @@ def _render_report_with_toc() -> str:
 
     Pulls the renderer's embedded `<style>` from an actual rendered report (so the
     test tracks current CSS, not a committed artifact) and drops in the real
-    `_build_toc` markup for one single-line title — making `.toc-group > summary`
-    exactly one text line when laid out correctly. Built directly rather than
-    through the full report so the full-bill gating (`full_text.v2`) isn't needed.
+    `_build_toc_from_tree` markup for one single-line title — making
+    `.toc-group > summary` exactly one text line when laid out correctly. Built
+    directly rather than through the full report so the full-bill gating
+    (`full_text.v2`) isn't needed.
     """
     import re
 
     from deltatrack.diff_pdf import PdfDiff
     from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
-    from deltatrack.formatters.diff_html import _build_toc, format_diff_html
+    from deltatrack.formatters.diff_html import _build_toc_from_tree, format_diff_html
 
     canonical = pdf_diff_to_canonical(PdfDiff(hunks=()), bill_type="hr", bill_number=8752, congress=118)
     full_report = format_diff_html(view_from_canonical(canonical))
     style = re.search(r"<style>.*?</style>", full_report, re.DOTALL).group(0)
-    toc = _build_toc([{"kind": "title", "label": "Title I"}])  # short, no descriptor → one line
+    # A labeled parent with one labeled child is the shape that renders a
+    # <details class="toc-group"> toggle; a childless node renders a plain leaf.
+    full_text = "Title I\nSEC. 101."
+    tree = [
+        {
+            "label": "Title I",
+            "full_text_span": {"start": 0, "end": 7},
+            "children": [{"label": "SEC. 101.", "full_text_span": {"start": 8, "end": 17}, "children": []}],
+        }
+    ]
+    toc = _build_toc_from_tree(tree, full_text)
     return (
         f"<!DOCTYPE html><html><head><meta charset='utf-8'>{style}</head>"
         f"<body><div class='sidebar'>{toc}</div></body></html>"
