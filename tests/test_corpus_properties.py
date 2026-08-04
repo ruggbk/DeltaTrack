@@ -308,7 +308,7 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 # clean checkout ever evaluates them, and four are stale in the direction that FAILS:
 # measured against a fetched copy, 115-hr-5895 v3 is 22 not 20, both 116-hr-133 entries
 # are 206 not 160, and 116-hr-1865 v5 is 66 not 55. Re-measure a sweep-only value
-# before trusting it; recalibrating them is a coverage decision, not a comment fix.
+# before trusting it; recalibrating them is a coverage decision, not a comment fix (#496).
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # #465 note: a division's bare <section> children (a short-title/definitions preamble
     # ahead of TITLE I, or a whole policy division organised without titles) were reached
