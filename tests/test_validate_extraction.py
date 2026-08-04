@@ -223,6 +223,11 @@ _MAX_UNVALIDATED = {
     # (amount correctly extracted under the right agency), 2 absent (Coast Guard mandatory
     # health-care accrual, fee-funded USCIS Operations and Support).
     "homeland_security": 5,
+    # Legislative Branch FY2025: 5 unvalidated — Capitol Police (AOC bureau name mismatch:
+    # report says "Office of Congressional Accessibility Services", bill says "Architect of the
+    # Capitol"), 3x "SALARIES AND EXPENSES" under different bureaus where the report uses a
+    # generic account name the bill itemizes, Copyright Office name divergence.
+    "legislative_branch": 5,
 }
 
 # Parameterize over the registry directly, NOT `[j for j in JURISDICTIONS if
