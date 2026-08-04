@@ -326,8 +326,8 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 
 
 # Files known to have duplicate match_paths (cross-division collisions, issue #1).
-# Values are ceilings, asserted as `total_dupes <= known`. Files not listed must have
-# zero duplicates.
+# Values are EXACT, asserted as `total_dupes == known`. Files not listed must have zero
+# duplicates, so an entry that reaches zero is deleted rather than set to 0.
 #
 # EVERY KEY NAMES A MANIFESTED FIXTURE, enforced by
 # test_known_duplicate_counts_names_manifest_fixtures. That is the #496 fix. Until then the
@@ -340,10 +340,14 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 # download-only VERSION of a partly-committed bill is shadowed. A sweep-only file is now
 # reported, not asserted — see test_no_duplicate_match_paths.
 #
-# Values are CEILINGS, so they only fail upward and a parser change that REDUCES collisions
-# leaves them silently loose: #474 (joining an account split across two elements) cut several
-# committed counts well below their stored value, which is why #482's re-measurement was
-# accurate when written and stale days later. Re-measure before trusting a number here.
+# They were CEILINGS (`<= known`) until #513, which only fail upward: a parser change that
+# REDUCED collisions left the stored number above the truth with nothing red to say so, and
+# that dead slack then licensed exactly as many future regressions in silence. #474 (joining
+# an account split across two source elements) did it to 19 of these 30 keys at once, 272
+# duplicates of slack in total, days after #482 had measured every one of them correct.
+# Equality is the fix and it has a cost: a genuine parser improvement now reddens the suite
+# until the number is lowered here. That is the forcing function, not a nuisance — every
+# value below was re-measured when equality landed, and the assertion is what keeps them so.
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # #465 note: a division's bare <section> children (a short-title/definitions preamble
     # ahead of TITLE I, or a whole policy division organised without titles) were reached
@@ -359,54 +363,56 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # deeper. Every #188 count increase was verified to be exactly that class (new
     # duplicate keys are all subsection nodes under already-colliding sections) —
     # the same collision-group matching (#1) covers them.
-    "113-hr-3547/5_engrossed-amendment-house.xml": 168,
+    "113-hr-3547/5_engrossed-amendment-house.xml": 144,
     # Enrolled has 12 divisions whose later titles spill out as orphan <title>
     # siblings. Walking them (#146) surfaces genuine cross-division collisions
     # (general provisions, same-named bureaus across divisions) on division-stripped
-    # match_paths — now matching the engrossed-amendment version's 150 (was 73 when
+    # match_paths — now matching the engrossed-amendment version's count (was 73 when
     # the orphan titles were silently dropped). Real source structure, not a bug.
-    "113-hr-3547/6_enrolled-bill.xml": 168,
-    "113-hr-83/6_engrossed-amendment-house.xml": 139,
-    "113-hr-83/7_enrolled-bill.xml": 139,
-    "114-hr-2029/6_engrossed-amendment-house.xml": 184,
-    "114-hr-2029/7_enrolled-bill.xml": 186,
-    "115-hr-1625/6_enrolled-bill.xml": 196,
-    "115-hr-244/6_enrolled-bill.xml": 170,
+    "113-hr-3547/6_enrolled-bill.xml": 144,
+    "113-hr-83/6_engrossed-amendment-house.xml": 107,
+    "113-hr-83/7_enrolled-bill.xml": 107,
+    "114-hr-2029/6_engrossed-amendment-house.xml": 152,
+    "114-hr-2029/7_enrolled-bill.xml": 154,
+    "115-hr-1625/6_enrolled-bill.xml": 171,
+    "115-hr-244/6_enrolled-bill.xml": 147,
     "115-hr-5895/2_engrossed-in-house.xml": 22,
-    "115-hr-5895/4_engrossed-amendment-senate.xml": 8,
+    "115-hr-5895/4_engrossed-amendment-senate.xml": 7,
     # Enrolled version places Division C's TITLE II-V at <legis-body> level beside the
     # divisions (not nested). Walking them (#146) surfaces genuine cross-division
     # collisions: the orphaned "TITLE V—General provisions" (sec. 501-505) shares a
     # division-stripped match_path with Division A's "TITLE V—General provisions".
     # Real source structure, not a parser error (cf. 119-hr-1's twin Sec. 10012).
-    "115-hr-5895/5_enrolled-bill.xml": 8,
-    "116-hr-1865/6_enrolled-bill.xml": 66,
+    "115-hr-5895/5_enrolled-bill.xml": 7,
+    "116-hr-1865/6_enrolled-bill.xml": 44,
     "118-hr-2882/5_engrossed-amendment-house.xml": 55,
-    "118-hr-4366/4_engrossed-amendment-senate.xml": 9,
-    "118-hr-4366/5_engrossed-amendment-house.xml": 33,
-    "118-hr-4366/6_enrolled-bill.xml": 33,
+    "118-hr-4366/4_engrossed-amendment-senate.xml": 7,
+    "118-hr-4366/5_engrossed-amendment-house.xml": 30,
+    "118-hr-4366/6_enrolled-bill.xml": 30,
     # Fresh bills added for overfitting smoke test (2026-04-15)
     "117-hr-4432/1_reported-in-house.xml": 1,
     "117-hr-4502/1_reported-in-house.xml": 1,
-    "117-hr-4502/2_engrossed-in-house.xml": 39,
-    "118-hr-4820/1_reported-in-house.xml": 7,
+    "117-hr-4502/2_engrossed-in-house.xml": 33,
+    "118-hr-4820/1_reported-in-house.xml": 5,
     # Fresh bill added for Part C smoke test (2026-04-15). Its 116-hr-133 companions were
     # the only sweep-only keys that a sweep could actually reach, and both were stale (160
     # against a measured 206); dropped in #496 rather than repinned, since committing that
     # bill is #126's call and 206 is not a number CI can hold.
-    "117-hr-2471/6_enrolled-bill.xml": 212,
+    "117-hr-2471/6_enrolled-bill.xml": 210,
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
     # limitation/administrative-provisions section, and general provisions), not parser
     # errors. These Senate prints are committed (tests/corpus/118-s-*) and named in
     # the corpus manifest, so the gate runs them in CI; these counts are its baselines.
+    # 118-s-4927 (Energy-Water) is deliberately absent: it held 4 and now produces none, so
+    # it asserts zero as an unlisted file. Equality (#513) is what surfaced that; under the
+    # old ceiling it would have kept tolerating 4 collisions the parser no longer makes.
     "118-s-4795/1_reported-in-senate.xml": 2,  # CJS: DOJ general-provisions + NASA pair
-    "118-s-4796/1_reported-in-senate.xml": 7,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats
+    "118-s-4796/1_reported-in-senate.xml": 5,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats
     "118-s-4797/1_reported-in-senate.xml": 1,  # State-Foreign Ops: callable-capital limitation
     "118-s-4802/1_reported-in-senate.xml": 3,  # Interior-Environment: Forest Service repeats
     "118-s-4928/1_reported-in-senate.xml": 5,  # Financial Services: Treasury/OPM salaries, DC funds
     "118-s-4942/1_reported-in-senate.xml": 2,  # Labor-HHS: VETS employment-and-training lines
-    "118-s-4927/1_reported-in-senate.xml": 4,  # Energy-Water: Corps of Engineers heading repeats
     "118-s-2321/1_reported-in-senate.xml": 1,  # CJS FY2024 (out-of-corpus guard): NASA pair
     # 119-hr-1 (reconciliation): two genuinely-distinct Sec. 10012 in the reported version
     # (Alien SNAP eligibility + Emergency food assistance), one renumbered to 10013 later.
@@ -454,13 +460,26 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
 
     known = _KNOWN_DUPLICATE_COUNTS.get(test_id, 0)
 
-    if known == 0:
-        assert total_dupes == 0, (
-            f"{test_id}: unexpected {total_dupes} duplicate match_paths. Sample: {list(dupes.items())[:3]}"
+    # EXACT, not a ceiling (#513). `<= known` only fails upward, so a parser change that
+    # REDUCES collisions leaves the stored number above the truth with nothing red to say
+    # so — and that dead slack then licenses exactly as many future regressions silently.
+    # #474 (joining an account split across two source elements) did this to 19 of 30 keys
+    # at once, 272 duplicates of slack in total, days after #482 had measured them correct.
+    # Equality costs churn: a genuine parser improvement now reddens the suite until the
+    # number is lowered. That is the point, and it is the same forcing function the repo
+    # relies on elsewhere — a baseline is only worth having if a build makes it recalibrate.
+    if total_dupes > known:
+        raise AssertionError(
+            f"{test_id}: duplicate match_paths INCREASED from {known} to {total_dupes}. "
+            f"A section identity regression, or real new collisions in the source. "
+            f"Sample: {list(dupes.items())[:3]}"
         )
-    else:
-        assert total_dupes <= known, (
-            f"{test_id}: duplicate count increased from {known} to {total_dupes}. Sample: {list(dupes.items())[:3]}"
+    if total_dupes < known:
+        raise AssertionError(
+            f"{test_id}: duplicate match_paths DECREASED from {known} to {total_dupes}, so the "
+            f"stored baseline is stale and now tolerates {known - total_dupes} future regression(s) "
+            f"in silence. Lower the entry to {total_dupes}"
+            f"{' and drop it, since the file now has none' if total_dupes == 0 else ''}."
         )
 
 
