@@ -10,9 +10,10 @@ Fixture policy (#287): every fixture this module pins is committed, so the gate 
 in CI instead of silently skipping (the fail-open shape #287 removes). The bills/
 fixtures are in tests/corpus_manifest.toml; the tests/data/ fixtures (subcommittee
 prints, the CJS Senate print) sit outside the bills/-layout manifest and are floored
-directly by test_manifest_fixtures_committed. The ONE fetched-only case left is
-TestCorpusAccountPrecision, a tolerant net over the larger appropriations corpus that
-is not committed — it keeps an explicit, visible skip, like the other slow PDF suites.
+directly by test_manifest_fixtures_committed. TestCorpusAccountPrecision, a tolerant net
+over the larger appropriations corpus, was the last case reaching outside the committed
+set; its remaining two pairs are now manifested and committed, so every case in this
+module runs on a clean checkout and is fail-closed by the manifest floor (#489).
 """
 
 from __future__ import annotations
@@ -299,8 +300,11 @@ def test_manifest_fixtures_committed():
     the already-manifested 118-hr-8752 / 118-hr-8282 / 118-s-4795) are checked via the
     shared manifest helper; the tests/data/ golden fixtures (the 10 subcommittee prints and
     the CJS Senate print) sit outside the bills/-layout manifest (ADR 0015), so they are
-    floored here directly. TestCorpusAccountPrecision's larger corpus stays fetched-only
-    and is deliberately NOT floored — it keeps a visible per-case skip."""
+    floored here directly. TestCorpusAccountPrecision's larger corpus needs no separate
+    floor: its bills are manifested, and `missing_manifest_files` checks the whole manifest
+    rather than only the cases a caller collects, so they are covered by the assertion
+    above. Its per-case skip is a defensive fallback, not the mechanism that protects
+    them (#489)."""
     assert_manifest_committed(sorted(FIXTURES), "pdf-anchor-golden")
     committed = set(FIXTURES.values()) | set(SUBCOMMITTEE_FIXTURES.values())
     absent = sorted(str(p.relative_to(ROOT)) for p in committed if not p.exists())
@@ -546,17 +550,39 @@ class TestCarryoverAgencyVocabFloors:
 
 
 class TestCorpusAccountPrecision:
-    """Corpus-wide floor on size-detected account vocabulary precision/recall (#89).
+    """Corpus-wide smoke floor on account vocabulary precision/recall (#89).
 
-    Complements the exact golden snapshots (which pin three bills) with a tolerant
-    net over the appropriations corpus, so a future change can't silently flood
-    false accounts or drop real ones without tripping a gate. The floors sit below
-    today's measured values (see scripts/heading_precision.py for the live numbers).
+    Complements the exact golden snapshots (which pin three bills) with a tolerant net
+    over the appropriations corpus. The floors ARE enforced minima — the assertions below
+    fail under them — but they are corpus-wide smoke floors rather than tight per-bill
+    regression expectations. They catch a large degradation and leave substantial unused
+    margin on the easier bills: 118-hr-8752 scores 1.000/1.000 and would still pass having
+    lost 40% of its accounts.
 
-    Unlike the golden/subcommittee fixtures above, this corpus is FETCHED-ONLY and not
-    committed (larger omnibus PDFs, out of the #287 committed set), so it keeps an
-    explicit per-case skip when a pair is absent — a visible skip, like the other slow
-    PDF suites (TESTING.md), not the empty-parametrization fail-open #287 removes.
+    That looseness is deliberate for now. #489 carries the full nine-bill measurement and
+    the per-heading breakdown; the load-bearing conclusions are:
+
+    - The oracle is LEVEL-CORRECT BUT INCOMPLETE. Its vocabulary comes from
+      `normalize_bill`'s tree, and an account whose name sits in a header-only XML sibling
+      loses that name when the next sibling carries a header of its own, so the heading
+      reaches no node at all (#499 — `FEDERAL-AID HIGHWAYS` in 118-hr-4820 is absent from
+      the tree, and its appropriation is filed under `(INCLUDING TRANSFER OF FUNDS)`). The
+      PDF side finds such headings correctly and this gate scores them as false positives,
+      so PRECISION_FLOOR sits low partly to accommodate the gate penalising correct work.
+    - Reading the vocabulary straight from the XML instead is COMPLETE BUT LEVEL-BLIND:
+      GPO tags agency names (`COAST GUARD`, `U.S. CUSTOMS AND BORDER PROTECTION`) with the
+      same element types as accounts, and the PDF pipeline correctly calls those `agency`.
+      Scoring them as missed accounts drops 118-hr-8752 from 1.000 recall to 0.276.
+      Defining the account vocabulary needs the leveled tree, which is the #54 epic.
+    - So a per-bill band table (the #489 proposal, following `test_pipeline_parity`) would
+      pin numbers that do not yet mean what their names say. Reconsider once #499 and #54
+      land; until then the unused margin above is the accepted cost.
+
+    Every case runs on committed fixtures. 117-hr-4432 and 118-hr-4820 were the last
+    fetched-only pairs and are now in `tests/corpus_manifest.toml`, so they are fail-closed
+    by the shared manifest floor: `test_manifest_fixtures_committed` checks the whole
+    manifest, not only the cases this module collects. The per-case skip below is a
+    defensive fallback, not the mechanism that keeps these fixtures available.
 
     Why precision is well under 1.0 even when correct — the residual misses are
     KNOWN and accepted, deferred to #54, NOT bugs to chase here:
@@ -570,6 +596,13 @@ class TestCorpusAccountPrecision:
     The SEC.-catchline-continuation class is NOT among the accepted residue — it is
     fixed (see TestSectionCatchlineContinuation); a regression there would lower
     these numbers, but the targeted test catches it first.
+
+    That list predates the per-heading breakdown on #489, and the third bullet is where it
+    needs qualifying: on the one bill measured heading by heading (118-hr-4820), the
+    dominant cause is not normalization disagreement but the oracle lacking the heading
+    at all (#499). The first two bullets held up — the wrapped-fragment class is the 17
+    misses recorded on #489. The other eight bills were measured in aggregate only, so how
+    the causes divide on them is unknown rather than assumed to match.
     """
 
     # Appropriations bills with a paired XML; (bill id, pdf rel path, xml rel path).
@@ -583,7 +616,9 @@ class TestCorpusAccountPrecision:
         # version, which carries no printed line numbers and so has no size-detected
         # account vocabulary at all — the directory form would measure 0.000 recall in
         # CI while quietly measuring v1 locally. This gate is about account detection on
-        # a numbered print, so it names v1 and skips where v1 isn't fetched.
+        # a numbered print, so it names v1 explicitly. v1 is committed in both formats,
+        # so the naming now guards against the directory form resolving to the enrolled
+        # pair rather than against v1 being absent.
         (
             "115-hr-5895",
             "tests/corpus/115-hr-5895/1_reported-in-house.pdf",
@@ -597,8 +632,11 @@ class TestCorpusAccountPrecision:
         ("118-hr-8774", "tests/corpus/118-hr-8774", None),
         ("118-s-4795", "tests/data/BILLS-118s4795rs.pdf", "tests/corpus/118-s-4795/1_reported-in-senate.xml"),
     ]
-    # Set below the lowest measured value (118-hr-4820: vrec 0.639 / vprec 0.500) with
-    # margin for per-line median wobble; these are regression floors, not targets.
+    # Set below the lowest measured values, which are 118-hr-4820's. Recorded as vrec
+    # 0.639 / vprec 0.500 when the floors were last calibrated; measured 0.636 / 0.538 on
+    # the committed pair (#489), so the precision margin is wider than this comment used
+    # to imply. See the class docstring for why that gap is mostly the oracle rather than
+    # the parser, and why it is not being closed by tightening the number.
     #
     # Both floor-setting bills were named as `bills/<id>` until they were committed, so CI
     # collected no case for either and the floors were calibrated on a bill CI could not
@@ -625,7 +663,9 @@ class TestCorpusAccountPrecision:
     def test_account_vocab_floors(self, spec):
         pair = self._pair(spec)
         if pair is None:
-            pytest.skip(f"{spec[0]} pdf/xml pair not present (fetched-only corpus)")
+            # Defensive only: every bill here is committed and manifested, so reaching
+            # this means a fixture was lost, not that one was never fetched (#489).
+            pytest.skip(f"{spec[0]} pdf/xml pair not present — expected committed, see corpus_manifest.toml")
         from scripts.heading_precision import measure
 
         m = measure(*pair)
