@@ -733,9 +733,17 @@ class TestEffectiveHeadingVocabulary:
         assert normalize_header("FEDERAL-AID HIGHWAYS") in vocab
         # The qualifier must NOT be admitted as an account name in its own right.
         assert normalize_header("(HIGHWAY TRUST FUND)") not in vocab
-        # Unheaded nodes still contribute nothing: their path leaf is an inherited title
-        # or agency, and admitting it would put department names in the account vocab.
-        assert normalize_header("TITLE I—DEPARTMENT OF TRANSPORTATION") not in vocab
+        # Unheaded nodes still contribute nothing. Their path leaf is inherited from an
+        # enclosing group, so admitting it would put provision-group container names into
+        # the account vocabulary. These three are what 118-hr-4820 would leak if the
+        # `header_text` gate were dropped, so they are what makes this assertion able to
+        # fail rather than a name that was never a candidate.
+        for leaked in (
+            "General Provisions—Department of Transportation",
+            "General provisions—Department of housing and urban development",
+            "TITLE IV—GENERAL PROVISIONS—THIS ACT",
+        ):
+            assert normalize_header(leaked) not in vocab
 
 
 class TestPrecisionHarnessOracle:
