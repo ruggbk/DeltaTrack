@@ -32,10 +32,11 @@ which should stay true, rather than pinning a count that legitimately moves when
 fixture or the extractor changes. Investigate a drop; do not re-baseline the floor to
 whatever the run produced.
 
-What the residue currently is, as of the calibration run that set these floors: 18 of
-the 20 measured versions recall 100% of their prose. The two that do not are held down
-by extraction defects this cross-check found, each filed separately -- the floors
-accommodate them, they are not evidence the comparison is too strict:
+What the residue currently is, as of the calibration run that set these floors: of the
+19 measured versions (the other 5 are shells, see `_SHELL_VERSIONS`), 16 recall 100% of
+their prose, 119-hr-1 recalls 99.5% and 118-hr-8752 v2 recalls 99.8%, and the enrolled
+115-hr-5895 recalls 94.1%. What holds the last three short of 100% is extraction
+defects this cross-check found, not a comparison that is too strict:
 
   - The enrolled-bill layout carries no margin line numbers, so `extract_clean_pages`
     treats a line-initial integer as one and drops it: "not more than 25 percent"
@@ -46,8 +47,13 @@ accommodate them, they are not evidence the comparison is too strict:
     mid-line rather than at the start, where line-number stripping would catch it, so
     a stray integer welds itself into a number: "18 3/4 percent" reads as
     "183 15 /4 percent". That is the whole of 119-hr-1's residue.
+  - 118-hr-8752 v2's single miss is a lost space where a line wraps between two
+    parentheticals: "$5,000,000) (reduced by" extracts as "$5,000,000)(reduced by".
+    Left unnormalized deliberately -- a missing space is text the tool got wrong, and
+    folding it away here would be canonicalizing a defect rather than a convention.
 
-Neither is visible to the amount cross-check, since neither figure is a dollar amount.
+None of these is visible to the amount cross-check: the two figures the first two
+corrupt are not dollar amounts, and the third leaves its amounts intact.
 
 What this CANNOT see, established by injecting each fault and watching the result:
 making `normalize_glyphs` a no-op leaves all 24 cases green, because the comparison
