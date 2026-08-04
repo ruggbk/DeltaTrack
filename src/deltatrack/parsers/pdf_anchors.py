@@ -858,7 +858,7 @@ def extract_anchors(pages: list[Page]) -> list[Anchor]:
     classification when the document yields clean bands and adequate glyph-size
     attachment coverage; otherwise NO account-level anchors are emitted and the
     structure degrades to those universal legislative tokens. Naming accounts from
-    an appropriations-specific English phrase is out (#114 / ADR 0012).
+    an appropriations-specific English phrase is out (#114 / ADR 0018).
 
     On an omnibus/minibus, each anchor is finally tagged with its division
     (DeltaTrack#107) — a display field prepended in the breadcrumb, not a matching key.
@@ -873,7 +873,7 @@ def extract_anchors(pages: list[Page]) -> list[Anchor]:
         anchors.extend(_major_anchors_by_size(pages, bands))
     # No else: when the size signal is absent, structure degrades to the universal
     # TITLE/SEC. tokens already collected above rather than being guessed from an
-    # appropriations-specific English phrase (#114, ADR 0012).
+    # appropriations-specific English phrase (#114, ADR 0018).
 
     anchors.sort(key=lambda a: (a.page_number, a.line_number))
     return _assign_divisions(anchors, _flatten(pages))
