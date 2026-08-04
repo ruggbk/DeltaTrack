@@ -299,7 +299,16 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 
 
 # Files known to have duplicate match_paths (cross-division collisions, issue #1).
-# Values are the current duplicate counts. Files not listed must have zero duplicates.
+# Values are ceilings, asserted as `total_dupes <= known`. Files not listed must have
+# zero duplicates.
+#
+# Every COMMITTED key below was re-measured in #482 and its value equals the count the
+# corpus produces now. The keys naming an UNCOMMITTED bill are reachable only under
+# CORPUS_SWEEP=1 (manifest_xml_files widens to sweep_bill_dirs), so no CI run and no
+# clean checkout ever evaluates them, and four are stale in the direction that FAILS:
+# measured against a fetched copy, 115-hr-5895 v3 is 22 not 20, both 116-hr-133 entries
+# are 206 not 160, and 116-hr-1865 v5 is 66 not 55. Re-measure a sweep-only value
+# before trusting it; recalibrating them is a coverage decision, not a comment fix.
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # #465 note: a division's bare <section> children (a short-title/definitions preamble
     # ahead of TITLE I, or a whole policy division organised without titles) were reached
@@ -412,19 +421,18 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
 
 _APPRO_TAGS = {"appropriations-major", "appropriations-intermediate", "appropriations-small"}
 
-# Files with known missing appropriations elements (parser doesn't reach them).
-# Typically caused by elements nested inside divisions/titles the parser skips.
-_KNOWN_MISSING_APPRO: dict[str, int] = {
-    "113-hr-3547/6_enrolled-bill.xml": 310,
-    # No entry for 115-hr-5895 enrolled: normalize_bill walks its top-level titles, so
-    # its baseline is 0 and any regression trips the assertion rather than being
-    # absorbed by a stored count.
-    # History: #146 — those titles were dropped, missing that file's appropriations
-    # elements.
-    # Fresh bills added for Part C smoke test (2026-04-15)
-    "116-hr-133/6_engrossed-amendment-house.xml": 1,
-    "116-hr-133/7_enrolled-bill.xml": 1,
-}
+# Files whose appropriations elements the parser does not reach, with the count it
+# misses. EMPTY: every file now reaches all of them, so the gate asserts zero missing
+# everywhere and any regression trips the assertion rather than being absorbed by a
+# stored count. Add an entry only with a comment saying which elements are unreachable
+# and why; a baseline above the true count silently permits that many regressions.
+#
+# History: #146, #482 — three baselines outlived the gaps they recorded. 113-hr-3547
+# enrolled held 310 against a true count of 0 (it was the pre-#146 figure, from before
+# normalize_bill walked top-level titles); the two 116-hr-133 entries held 1 against 0.
+# 115-hr-5895 enrolled was the same shape, dropped in #479. Measured entry by entry in
+# #482 — the 116-hr-133 pair only under CORPUS_SWEEP=1, since neither is committed.
+_KNOWN_MISSING_APPRO: dict[str, int] = {}
 
 
 def _normalize_ws(text: str) -> str:
