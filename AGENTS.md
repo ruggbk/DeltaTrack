@@ -83,7 +83,29 @@ A comment describes the code as it is **now**. History and rejected alternatives
 - **Label anything that is not current.** `History:` for a state that existed and no longer does, `Why not X:` for an alternative considered and rejected. Both are then skippable by construction — unlabelled narrative is not, which is what forces a reader to reconstruct the timeline before they can trust the paragraph.
 - **The tail points, it does not narrate.** Issue numbers carry the story (`History: #365 divergence, #422 fix`). The measurement, the rejected design and the argument belong in the issue, which cannot silently contradict the code the way a comment can.
 - **A number describing current state needs a gate or a repro.** Counts, percentages and corpus measurements decay silently and cannot be checked at read time. Prefer an assertion that fails when the number changes; otherwise name the command that reproduces it. This is the same reasoning as "Gate the decision you had to argue for" under Test conventions, applied to evidence rather than to design. A number inside a `History:` tail is exempt — a measurement of a past experiment stays true, which is precisely why it belongs there rather than in the lead.
-- **Past about six lines, ask whether it is a decision.** A defended design choice belongs in an ADR, reached by a **self-contained** pointer: `# Sections process independently (ADR 0006)` still carries its claim when the ADR is never opened, `# see ADR 0006` does not. Nothing loads `docs/decisions/` into an agent's context automatically, so a bare cross-reference loses the decision rather than relocating it.
+- **Past about six lines, ask whether it is a decision.** A defended design choice belongs in an ADR, reached by a **self-contained** pointer: `# Sections process independently (ADR 0006)` still carries its claim when the ADR is never opened, `# see ADR 0006` does not. The index below names every decision, but only its title; the argument is in the file, and a bare cross-reference still asks a reader to go and get it.
+
+## Architecture decisions
+
+Every accepted ADR, title as written. The titles are claims, so this list is the decision set itself, not a table of contents: reading it tells you what has been settled without opening anything. Open the file for the argument, the alternatives and the consequences. `tests/test_adr_index.py` regenerates this from `docs/decisions/` and fails if the two disagree, so do not hand-edit an entry; change the ADR's heading and re-run. Adding a record means adding a line here (#481).
+
+- [1. Diff a structured model of the bill, not document text](docs/decisions/0001-structured-money-diff.md)
+- [2. Use pypdfium2 (PDFium) as the single PDF text engine](docs/decisions/0002-pdfium-single-engine.md)
+- [3. Client-side PDF.js extraction is viable for published bills](docs/decisions/0003-pdfjs-client-side-viability.md)
+- [4. Fetch bill discovery and text from govinfo bulk data, not the Congress.gov API](docs/decisions/0004-govinfo-bulk-data.md)
+- [5. Keep DeltaTrack a contained two-version tool; put analysis in BillTrax](docs/decisions/0005-deltatrack-billtrax-boundary.md)
+- [6. Make a versioned JSON document the contract between the diff engine and its consumers](docs/decisions/0006-canonical-diff-contract.md)
+- [7. Render every diff with one renderer, whatever source pipeline produced it](docs/decisions/0007-single-renderer.md)
+- [8. Keep the diff engine deterministic; a language model may read a diff, never compute one](docs/decisions/0008-deterministic-engine.md)
+- [9. Validate the parser against independently-authored committee reports](docs/decisions/0009-validation-ground-truth.md)
+- [10. Support a PDF pipeline for pre-publication bills; prefer XML once published](docs/decisions/0010-pdf-pipeline-pre-publication.md)
+- [11. Process user-provided bill content only on the user's machine; no channel may send it off-device](docs/decisions/0011-local-only-processing.md)
+- [12. Recover PDF heading levels from deterministic geometry; accept the prose-leading agency gap](docs/decisions/0012-pdf-heading-levels.md)
+- [13. Bill identity is the slug; version is a per-bill ordinal, not a universal one](docs/decisions/0013-bill-storage-and-version-identity.md)
+- [14. Ship the recoverable heading levels as a conservation-checked tree; defer semantic rollup](docs/decisions/0014-leveled-heading-tree-scope.md)
+- [15. Commit a curated corpus fixture set and collect the gates from a manifest](docs/decisions/0015-corpus-test-fixtures.md)
+- [16. Separate the product, the acquisition tooling, and the delivery channel in the layout](docs/decisions/0016-product-tooling-surface-split.md)
+- [17. Ship the diff engine as an installable `src/deltatrack` package](docs/decisions/0017-installable-engine-package.md)
 
 ## Key architecture concepts
 
