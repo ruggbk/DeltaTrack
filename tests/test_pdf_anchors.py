@@ -324,6 +324,51 @@ class TestRunInSubsection:
         )
         assert [a for a in self._subs(1, text) if a.line_number == 16] == []
 
+    def test_section_heading_ends_the_join_without_an_inline_enumerator(self):
+        # A heading is the start of the next provision, so a catchline can never continue
+        # through one. "SEC. 142. PURPOSE OF PROGRAMS.—" opens with neither a quote nor a
+        # `(a)`, so the older stop-rule clauses let it through, and the all-caps account
+        # heading before it is title-shaped — the join reached the heading's own `.—` and
+        # labelled this subsection with the NEXT section's title (#473).
+        text = (
+            "16 (c) A waiver under subsection (b) shall not apply here.\n"
+            "17 SECURITY PROGRAMS\n"
+            "18 SEC. 142. PURPOSE OF PROGRAMS.—The Secretary shall act.\n"
+        )
+        assert [a for a in self._subs(1, text) if a.line_number == 16] == []
+
+    def test_a_reference_to_a_section_is_not_a_heading(self):
+        # The converse of the guard above: "SECTION 1245" inside a title is ordinary
+        # vocabulary (119-hr-1 has a real one), and must not end the join. The heading rule
+        # keys on the period after the number, which a cross-reference does not carry.
+        text = "1 (b) TREATMENT OF PROPERTY AS\n2 SECTION 1245 PROPERTY.—For purposes of this part.\n"
+        assert self._subs(1, text) == [Anchor(1, 1, "subsection", "(b) TREATMENT OF PROPERTY AS SECTION 1245 PROPERTY")]
+
+    def test_an_amount_line_is_not_title_shaped(self):
+        # "No lowercase" is satisfied by a line with no letters at all, so an amount or a
+        # bare numeral would read as title and let a join walk through it into whatever
+        # follows. Title-shape requires positive evidence: at least one capital (#473).
+        text = (
+            "1 (c) For an additional amount for such purposes,\n"
+            "2 $15,000,000\n"
+            "3 $27,500,000\n"
+            "4 GENERAL PROVISIONS.—The following applies.\n"
+        )
+        assert [a for a in self._subs(1, text) if a.line_number == 1] == []
+
+    def test_an_abbreviation_dash_is_not_a_terminator(self):
+        # "U.S.–E.U." puts a period next to a dash mid-prose, which looks exactly like the
+        # `.—` that ends a catchline. Judging the line on the three characters before it
+        # ("U.S") would call plain prose a title. The same fabrication mode is documented
+        # on the XML side of this parser for 113-hr-83 sec. 415(a).
+        text = (
+            "1 (a) NOTHING IN THIS SECTION SHALL\n"
+            "2 BE CONSTRUED TO LIMIT ANY\n"
+            "3 U.S.–E.U. trade obligations shall be impaired by this\n"
+            "4 subsection or any other.—Provided further, that funds.\n"
+        )
+        assert [a for a in self._subs(1, text) if a.line_number == 1] == []
+
     def test_catchline_beyond_the_window_is_abandoned(self):
         # The window is a bound, not an invitation: a catchline still running after
         # `_RUNIN_MAX_CONTINUATIONS` continuations yields NO anchor rather than an

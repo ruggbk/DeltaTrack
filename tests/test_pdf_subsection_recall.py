@@ -57,6 +57,7 @@ from pathlib import Path
 
 import pytest
 
+from deltatrack.bill_tree import _RUNIN_PROBE_WINDOW
 from deltatrack.parsers.pdf_anchors import (
     _match_runin_subsection,
     _valid_subsection_enum,
@@ -81,6 +82,20 @@ FIXTURES = [
 # Denominator sanity so the gates can't pass vacuously on a broken extractor (#167).
 MIN_CATCHLINES = 3
 
+# The false positives on record, per fixture. Both are the documented doubled-two-letter
+# residue on the messy fixture: an (aa)/(bb) run-in that belongs to a deeper level and is
+# emitted at subsection level, which needs the leveled tree to tell apart (#54/#108). The
+# clean appropriations fixtures carry none, so their absence is pinned too.
+#
+# Self-cleaning, like KNOWN_UNCOVERED_AMOUNTS in tests/test_corpus_properties.py: an entry
+# that stops being a false positive is a fixed defect, and leaving it here would let the
+# gate keep tolerating a hole that has closed.
+KNOWN_FALSE_POSITIVES: dict[str, list[tuple[str, str]]] = {
+    "118-hr-8752": [],
+    "117-hr-4502": [],
+    "119-hr-1": [("80315", "aa"), ("80315", "bb")],
+}
+
 # A section HEADING has no business inside a subsection's catchline: reaching one means the
 # join left this subsection and ran into the next section (#473).
 #
@@ -91,10 +106,17 @@ MIN_CATCHLINES = 3
 # PROPERTY AS SECTION 1245 PROPERTY". Requiring the period is what separates "this anchor
 # ran into the next section" from "this provision talks about a section".
 _SECTION_IN_CATCHLINE = re.compile(r"\bSEC\.\s+\d|\bSECTION\s+\d+\.")
-# Backstop on catchline length. The longest real catchline on the committed corpus is 258
-# chars (119-hr-1 sec. 112207(b)); this sits above it with headroom. A runaway join blows
-# past it (the measured fabrications ran 284-874 chars) even when it stops short of a
-# section enumerator.
+# Backstop on catchline length, and honestly an unexercised one: the section-heading rule
+# above catches every runaway this corpus can produce, so this has never fired on a true
+# positive. It is kept for the runaway that stops short of a heading, which is constructible
+# (a join walking prose that carries an early period-dash) though not present here.
+#
+# It is NOT a tuning knob, and it is deliberately far above the data rather than fitted to
+# it. The longest real catchline is 258 chars (119-hr-1 sec. 112207(b)); with the shape rule
+# disabled the fabrications measure 136, 146, 256, 284, 295, 295, 874, 874, 874, so they
+# interleave with real catchlines and NO threshold separates the two populations. That is
+# exactly why length is the backstop and the heading rule is the gate: a length alone would
+# be the same arbitrary number this module is trying to get rid of.
 MAX_CATCHLINE_CHARS = 320
 
 # Recall and precision are asserted ABSOLUTELY: no catchline-bearing subsection may be
@@ -157,7 +179,16 @@ def _xml_index(xml_path: str) -> tuple[frozenset, frozenset, frozenset]:
             header = (sub.findtext("header") or "").strip()
             text_el = sub.find("text")
             text = "".join(text_el.itertext()).strip() if text_el is not None else ""
-            if header or _match_runin_subsection(f"({enum}) {text}", []) is not None:
+            # Probe the same slice of text the real producer probes. `bill_tree` caps this
+            # at _RUNIN_PROBE_WINDOW because an unbounded probe invents "catchlines" from a
+            # period-dash deep in prose; an oracle without that cap encodes a contract the
+            # producer was never held to, and since recall now has ZERO tolerance a single
+            # invented denominator entry fails the gate for something that is not a parser
+            # defect (#473). Two subsections in the wider committed corpus already trip it:
+            # 113-hr-83 sec. 415(a) (a 339-char phantom) and 118-s-2625 sec. 217(a) (307).
+            # Neither bill is in FIXTURES today, so this is a trap set for whoever adds one.
+            probe = f"({enum}) {text[:_RUNIN_PROBE_WINDOW]}"
+            if header or _match_runin_subsection(probe, []) is not None:
                 catchline_pairs.add((secn, enum))
     return frozenset(all_pairs), frozenset(catchline_pairs), frozenset(quoted_pairs)
 
@@ -192,13 +223,23 @@ def test_precision_no_false_subsections(bill, pdf_rel, xml_rel):
     pp = _pdf_pairs(pdf_rel)
     assert len(pp) > 0, f"{bill}: zero subsections detected (fail-open)"
     fp = pp - all_pairs
-    # Residue characterization, and now the whole gate: any false positive must be a
-    # doubled two-letter enum (a deeper-level (aa)/(bb) run-in, which cannot be told from
-    # a 27th subsection without the leveled tree). A single-letter FP is a NEW class —
-    # fail loud. This always was the real assertion; the ratio beside it only added slack
-    # on top of a rule that already admits a bounded, named shape (#473).
+    # Two assertions, because the shape alone is not a bound (#473).
+    #
+    # SHAPE: any false positive must be a doubled two-letter enum (a deeper-level (aa)/(bb)
+    # run-in, which cannot be told from a 27th subsection without the leveled tree,
+    # #54/#108). A single-letter FP is a NEW class — fail loud.
     assert all(enum is not None and len(enum) == 2 for _sec, enum in fp), (
         f"{bill}: unexpected non-doubled-enum false positive: {sorted(fp)}"
+    )
+    # COUNT: and there must be exactly the known ones. The shape assertion names the
+    # residue class but says nothing about its size, so on its own it would let that class
+    # grow from 2 to hundreds with this module green. The retired `precision >= 0.99`
+    # capped it at 9 on this fixture, loosely and as a side effect; pinning the pairs
+    # bounds it exactly, and makes a fixed one visible instead of silently absorbed.
+    assert sorted(fp) == KNOWN_FALSE_POSITIVES.get(bill, []), (
+        f"{bill}: false positives {sorted(fp)} != known {KNOWN_FALSE_POSITIVES.get(bill, [])}. "
+        f"A new one is a regression; a missing one means it was fixed, so drop it from "
+        f"KNOWN_FALSE_POSITIVES (and close the issue it names if nothing else blocks it)."
     )
 
 
@@ -230,17 +271,18 @@ def test_no_subsection_anchor_swallows_a_following_section() -> None:
     output: it becomes the node label and the breadcrumb a reader is shown.
 
     That is not hypothetical. Following a wrapped catchline by line COUNT alone made the
-    join walk out of five catchline-less subsections, across an account heading and a
+    join walk out of six catchline-less subsections, across an account heading and a
     ``SEC.`` line, onto the following section's ``.—``. Precision, recall and the
     quoted-block gate all stayed green throughout, which is why this one is written
     against the text.
 
-    Two absolute assertions, no ratio: a catchline never contains a section enumerator,
-    and it is bounded in length. The cap sits above the longest real catchline measured
-    (258 chars) with headroom; it is a backstop on the shape rule, not a tuning knob.
+    Two absolute assertions, no ratio: a catchline never contains a section heading, and it
+    is bounded in length. The heading rule does the work; the length cap is an unexercised
+    backstop (see MAX_CATCHLINE_CHARS).
     """
     offenders = []
     checked = 0
+    contributing_bills = set()
     for bill_dir in sorted(FIXTURES_DIR.iterdir()):
         if not bill_dir.is_dir():
             continue
@@ -249,12 +291,19 @@ def test_no_subsection_anchor_swallows_a_following_section() -> None:
                 if anchor.kind != "subsection":
                     continue
                 checked += 1
+                contributing_bills.add(bill_dir.name)
                 if _SECTION_IN_CATCHLINE.search(anchor.text) or len(anchor.text) > MAX_CATCHLINE_CHARS:
                     where = f"{bill_dir.name}/{pdf.name} p{anchor.page_number}:{anchor.line_number}"
                     offenders.append(f"{where} -> {anchor.text[:120]!r}")
 
-    # Fail-closed floor: the sweep must actually have had anchors to judge.
+    # Fail-closed floor, on BREADTH as well as volume. A count alone is nearly a one-bill
+    # floor here: 119-hr-1 supplies ~88% of all subsection anchors in the corpus, so every
+    # other bill could stop emitting them and a volume-only floor would still pass.
     assert checked >= 500, f"only {checked} subsection anchors corpus-wide; this gate is not exercising anything"
+    assert len(contributing_bills) >= 4, (
+        f"only {sorted(contributing_bills)} contributed subsection anchors; the sweep has "
+        f"narrowed to too few bills to be a corpus gate"
+    )
     assert offenders == [], (
         f"{len(offenders)} of {checked} subsection anchors run past the catchline into following text: {offenders[:3]}"
     )
