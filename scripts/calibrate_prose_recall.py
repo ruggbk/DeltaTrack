@@ -23,6 +23,7 @@ sys.path.insert(0, str(_ROOT / "tests"))
 
 from pdf_corpus import dual_format_versions  # noqa: E402
 from test_pdf_xml_prose_recall import (  # noqa: E402
+    _KNOWN_DEGRADED,
     MIN_FRAGMENTS,
     RECALL_FLOOR,
     prose_recall,
@@ -37,26 +38,47 @@ def main() -> int:
     versions = dual_format_versions()
     print(f"{len(versions)} dual-format versions\n")
 
-    worst = 1.0
+    # Report each version against the floor the TEST would actually hold it to. Judging
+    # a version with an approved degraded floor against the healthy target prints a
+    # BELOW FLOOR on a case the suite passes, which trains the reader to discount the
+    # warning that matters. The two are shown as different things instead.
+    worst_healthy = 1.0
     rows = []
+    breaches = []
     for bill, xml_path, pdf_path in versions:
         fragments, missing = prose_recall(xml_path, pdf_path)
         label = f"{bill}/{xml_path.stem}"
         if len(fragments) < MIN_FRAGMENTS:
-            print(f"{label}: SKIP ({len(fragments)} fragments)")
+            print(f"{label}: SHELL ({len(fragments)} fragments, {len(missing)} missing)")
             continue
         recall = (len(fragments) - len(missing)) / len(fragments)
-        worst = min(worst, recall)
-        rows.append((recall, label))
-        flag = "  <-- BELOW FLOOR" if recall < RECALL_FLOOR else ""
+        floor = _KNOWN_DEGRADED.get(label)
+        if floor is None:
+            worst_healthy = min(worst_healthy, recall)
+            rows.append((recall, label))
+            flag = "  <-- BELOW FLOOR" if recall < RECALL_FLOOR else ""
+        elif recall < floor:
+            flag = f"  <-- BELOW ITS DEGRADED FLOOR ({floor:.0%})"
+        elif recall >= RECALL_FLOOR:
+            flag = "  <-- DEGRADED ENTRY NO LONGER NEEDED, remove it"
+        else:
+            flag = f"  (degraded floor {floor:.0%}, known defect)"
+        if "<--" in flag:
+            breaches.append(label)
         print(f"{label}: {recall:.1%} ({len(missing)}/{len(fragments)} missing){flag}")
         for miss in missing[: args.misses]:
             print(f"    MISS: {miss[:200]}")
 
-    print(f"\nworst: {worst:.1%}   floor: {RECALL_FLOOR:.0%}   headroom: {worst - RECALL_FLOOR:+.1%}")
+    print(
+        f"\nhealthy versions: worst {worst_healthy:.1%} against the {RECALL_FLOOR:.0%} "
+        f"floor, headroom {worst_healthy - RECALL_FLOOR:+.1%}"
+    )
     for recall, label in sorted(rows)[:5]:
         print(f"  lowest: {label} {recall:.1%}")
-    return 0
+    if _KNOWN_DEGRADED:
+        print(f"excluded from that figure, on a degraded floor: {', '.join(_KNOWN_DEGRADED)}")
+    print(f"needs attention: {', '.join(breaches) if breaches else 'nothing'}")
+    return 1 if breaches else 0
 
 
 if __name__ == "__main__":

@@ -134,11 +134,22 @@ including the largest omnibus in the collection.
 Check 5 asks whether the dollar figures survive when the tool reads a PDF. This
 one asks the same question of the words. The official machine-readable version of
 a bill is an independent transcription of the same document, so for every bill we
-have in both forms we take its sentences and confirm each one turns up in what
-the tool read out of the PDF. Punctuation, capitalisation, accents, and hyphens
-are ignored: the two formats set them differently, and the question here is
-whether the sentence survived at all, not whether it was reproduced character for
-character.
+have in both forms we take passages of its body text and confirm each one turns
+up in what the tool read out of the PDF. Punctuation, capitalisation, accents, and
+hyphens are ignored: the two formats set them differently, and the question here
+is whether the wording survived at all, not whether it was reproduced character
+for character.
+
+Not every word in the file is compared, and the gaps are deliberate. The passages
+are cut at sentence punctuation and only those of eight words or more are used, so
+a fragment too short to match distinctively is left out. Repeated passages are
+counted once, since bills repeat boilerplate provisos verbatim and counting them
+each time would weight the score toward whichever bill repeats itself most. Two
+kinds of text are excluded outright: the table of contents, which is set in a
+dot-leadered layout that reads as a different string entirely, and quoted blocks
+(the passages an amendment inserts into another law), which are set as indented
+block quotations with their own numbering. What remains is the body prose, which
+is the part a reader of the change report is actually reading.
 
 Most versions score 100%. Where a version falls short, the shortfall is written
 down in the check itself, along with the specific reading defect that causes it,
@@ -148,8 +159,10 @@ so the number is never a mystery to be explained away later.
 this check is blind to changes in that clean-up — it confirms the words are
 there, not that they are rendered exactly as printed. Exact rendering is held in
 place separately, by frozen copies of what the tool reads out of specific pages
-(`tests/test_pdf_extraction_golden.py`). It also cannot cover draft bills at all,
-which have no official version to compare against; that is check 4's job.
+(`tests/test_pdf_extraction_golden.py`). Matching is by containment rather than
+position, so it confirms a passage is present somewhere in the version, not that
+it appears in the right place. It also cannot cover draft bills at all, which have
+no official version to compare against; that is check 4's job.
 
 ## Known soft spots
 

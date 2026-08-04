@@ -100,17 +100,25 @@ _KNOWN_DEGRADED: dict[str, float] = {
 #: is a 50% recall that says nothing about the extractor.
 MIN_FRAGMENTS = 20
 
-#: Versions that genuinely carry less prose than `MIN_FRAGMENTS`, with the fragment
-#: count measured at calibration. 113-hr-3547 is a two-section shell bill: a short
-#: title and one amendment to title 51, and nothing else.
+#: Versions that genuinely carry less prose than `MIN_FRAGMENTS`, with the EXACT
+#: fragment count measured at calibration. 113-hr-3547 is a two-section shell bill: a
+#: short title and one amendment to title 51, and nothing else.
 #:
 #: Named rather than skipped, deliberately. A content-skip here would be the exact
 #: fail-open the corpus content-skip ceiling in conftest.py exists to close: if a
 #: regression dropped every version's fragments to zero, a skipping test would go
 #: quiet and green while asserting nothing. So these versions are asserted on from
-#: both sides instead -- they must still be small (a shell that grows prose is no
-#: longer a shell, and its entry is wrong) and they must recall ALL of what little
-#: prose they have, which is a stricter demand than the floor makes of anyone else.
+#: both sides instead -- an exact count, and full recall of what little prose they
+#: have, which is a stricter demand than the floor makes of anyone else.
+#:
+#: The count is asserted as EQUAL, not as an upper bound. An upper bound reopens the
+#: very channel this exists to close, because zero fragments satisfies it: a fragment
+#: extractor that found nothing would leave both assertions true (0 <= 2, and nothing
+#: missing out of nothing) and these five cases would go green while asserting nothing
+#: at all. Equality is safe here in a way it would not be for a recall budget: the
+#: fixtures are committed and immutable, so the count is a fact about a specific file,
+#: not a baseline that drifts. If one of these bills legitimately changes, the entry
+#: is wrong and should be recalibrated deliberately.
 _SHELL_VERSIONS = {
     "113-hr-3547/1_introduced-in-house": 2,
     "113-hr-3547/2_engrossed-in-house": 2,
@@ -209,10 +217,12 @@ def test_xml_prose_appears_in_pdf(bill: str, xml_path: Path, pdf_path: Path) -> 
     test_id = f"{bill}/{xml_path.stem}"
 
     if test_id in _SHELL_VERSIONS:
-        assert len(fragments) <= _SHELL_VERSIONS[test_id], (
-            f"{test_id} now yields {len(fragments)} prose fragments, more than the "
-            f"{_SHELL_VERSIONS[test_id]} that made it a shell version. It should be "
-            f"gated like any other version now: remove its _SHELL_VERSIONS entry."
+        expected = _SHELL_VERSIONS[test_id]
+        assert len(fragments) == expected, (
+            f"{test_id} yields {len(fragments)} prose fragments, not the {expected} "
+            f"measured when it was recorded as a shell version. More means it is no "
+            f"longer a shell and should be gated like any other version (remove its "
+            f"_SHELL_VERSIONS entry); fewer means fragment extraction has regressed."
         )
         assert not missing, (
             f"{test_id} is a shell version, so all {len(fragments)} of its prose "
