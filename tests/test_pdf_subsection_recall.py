@@ -8,35 +8,44 @@ and exposes no per-subsection node/enum. From it:
   ``(section, enum)`` must be a real, NON-quoted XML subsection. Precision-first —
   measured 0 false positives on the appropriations fixtures, 2 on the messy 119-hr-1
   (documented residue below).
-- **Recall** (``test_recall_floor``): the denominator is the true catchline-bearing
-  subsection set — a subsection with a non-empty ``<header>`` OR whose ``<text>`` opens
-  with the run-in pattern — built WITH the same roman-reject the PDF uses, and with
-  quoted-block subsections EXCLUDED (they self-exclude on the PDF side too). Recall =
-  PDF-detected / that denominator, over catchline-bearing subsections only.
+- **Recall** (``test_every_catchline_subsection_is_found``): the denominator is the true
+  catchline-bearing subsection set — a subsection with a non-empty ``<header>`` OR whose
+  ``<text>`` opens with the run-in pattern — built WITH the same roman-reject the PDF
+  uses, and with quoted-block subsections EXCLUDED (they self-exclude on the PDF side
+  too). Every member of that set must be detected; there is no tolerance and no
+  allowlist.
 - **Quoted-block leak** (``test_no_quoted_block_leak``): the PDF must detect ZERO
   subsections that live inside a ``<quoted-block>`` amendment (they render with GPO's
   ``‘‘`` and self-exclude). Measured 0 on 119-hr-1 (numbered, quote-heavy: 177 quoted
   subsections). The `<header>` element is inconsistently applied across bills, so it is
   NOT a usable denominator on its own — hence the header-OR-inline union above.
 
-Floors sit UNDER the measured values (regression floors, not targets; per
-feedback_validate_against_hard_fixture the clean fixtures are exact and the messy one
-carries documented residue):
+Both properties are asserted ABSOLUTELY (#473). Recall admits nothing: every
+catchline-bearing subsection must be found on every fixture. Precision admits exactly one
+named shape, below. Neither is a ratio, because a percentage on these fixtures says
+something different on each one — 2% of 119-hr-1's 934 subsections is about 18 losses,
+while 2% of 118-hr-8752's 3 is less than one — so the same constant was simultaneously
+too loose to protect the big bill and unable to describe the small ones.
 
-    fixture      precision  recall   (measured 2026-07-09)
-    118-hr-8752    1.000     1.000
-    117-hr-4502    1.000     1.000
-    119-hr-1       0.998     0.995
+    fixture      false positives  missed   (measured 2026-08-04)
+    118-hr-8752        0            0
+    117-hr-4502        0            0
+    119-hr-1           2            0
 
-Documented residue (on 119-hr-1, NOT chased — each needs the leveled tree / a wider
-window, both out of #96 scope):
-- Precision: doubled two-letter enumerators ``(aa)``/``(bb)`` that are a DEEPER-level
-  (paragraph/clause) run-in, mis-emitted at subsection level (2 of 931). The two-letter
-  doubled-enum rule can't tell a 27th subsection from a deep-list continuation without
-  the leveled tree (#54/#108). The precision test pins that every false positive is such
-  a two-letter enum — a single-letter FP would be a NEW class and fails loud.
-- Recall: a subsection whose catchline wraps beyond the 2-line window (a very long
-  ``<header>``; 5 of 934). Bounded look-ahead is the deliberate precision-first tradeoff.
+Recall carried 5 misses on 119-hr-1 until #473. They were subsections whose catchline
+wrapped past the parser's continuation window, so the longest-titled provisions in the
+bill were the ones silently dropped; widening the window
+(``pdf_anchors._RUNIN_MAX_CONTINUATIONS``) recovered all 5 and 5 more on fixtures this
+module does not parametrize. Nothing was left for a tolerance to hold, which is why the
+conversion needed no allowlist.
+
+Precision residue, still open (on 119-hr-1, NOT chased — needs the leveled tree, out of
+#96 scope): doubled two-letter enumerators ``(aa)``/``(bb)`` that are a DEEPER-level
+(paragraph/clause) run-in, mis-emitted at subsection level (2 of 936). The two-letter
+doubled-enum rule can't tell a 27th subsection from a deep-list continuation without the
+leveled tree (#54/#108). The precision test pins that every false positive is such a
+two-letter enum — a single-letter FP would be a NEW class and fails loud. That shape
+assertion, not a percentage, is what bounds the residue.
 """
 
 from __future__ import annotations
@@ -48,6 +57,7 @@ from pathlib import Path
 
 import pytest
 
+from deltatrack.bill_tree import _RUNIN_PROBE_WINDOW
 from deltatrack.parsers.pdf_anchors import (
     _match_runin_subsection,
     _valid_subsection_enum,
@@ -69,10 +79,62 @@ FIXTURES = [
     ("119-hr-1", "119-hr-1/1_reported-in-house.pdf", "119-hr-1/1_reported-in-house.xml"),
 ]
 
-PRECISION_FLOOR = 0.99
-RECALL_FLOOR = 0.98
-# Denominator sanity so a broken extractor can't make the ratios vacuously pass (#167).
+# Denominator sanity so the gates can't pass vacuously on a broken extractor (#167).
 MIN_CATCHLINES = 3
+
+# The false positives on record, per fixture. Both are the documented doubled-two-letter
+# residue on the messy fixture: an (aa)/(bb) run-in that belongs to a deeper level and is
+# emitted at subsection level, which needs the leveled tree to tell apart (#54/#108). The
+# clean appropriations fixtures carry none, so their absence is pinned too.
+#
+# Self-cleaning, like KNOWN_UNCOVERED_AMOUNTS in tests/test_corpus_properties.py: an entry
+# that stops being a false positive is a fixed defect, and leaving it here would let the
+# gate keep tolerating a hole that has closed.
+KNOWN_FALSE_POSITIVES: dict[str, list[tuple[str, str]]] = {
+    "118-hr-8752": [],
+    "117-hr-4502": [],
+    "119-hr-1": [("80315", "aa"), ("80315", "bb")],
+}
+
+# A section HEADING has no business inside a subsection's catchline: reaching one means the
+# join left this subsection and ran into the next section (#473).
+#
+# Matches the two forms GPO sets a heading in, both of which put a period immediately after
+# the enumerator: abbreviated "SEC. 307." and spelled-out "SECTION 1.". It deliberately does
+# NOT match a cross-REFERENCE to a section, which carries no such period and is ordinary
+# catchline vocabulary — 119-hr-1 has a real one, "(b) TREATMENT OF QUALIFIED PRODUCTION
+# PROPERTY AS SECTION 1245 PROPERTY". Requiring the period is what separates "this anchor
+# ran into the next section" from "this provision talks about a section".
+_SECTION_IN_CATCHLINE = re.compile(r"\bSEC\.\s+\d|\bSECTION\s+\d+\.")
+# Backstop on catchline length, and honestly an unexercised one: the section-heading rule
+# above catches every runaway this corpus can produce, so this has never fired on a true
+# positive. It is kept for the runaway that stops short of a heading, which is constructible
+# (a join walking prose that carries an early period-dash) though not present here.
+#
+# It is NOT a tuning knob, and it is deliberately far above the data rather than fitted to
+# it. The longest real catchline is 258 chars (119-hr-1 sec. 112207(b)); with the shape rule
+# disabled the fabrications measure 136, 146, 256, 284, 295, 295, 874, 874, 874, so they
+# interleave with real catchlines and NO threshold separates the two populations. That is
+# exactly why length is the backstop and the heading rule is the gate: a length alone would
+# be the same arbitrary number this module is trying to get rid of.
+MAX_CATCHLINE_CHARS = 320
+
+# Recall and precision are asserted ABSOLUTELY: no catchline-bearing subsection may be
+# missed, and every false positive must be a doubled two-letter enumerator. Neither is a
+# ratio any more (#473).
+#
+# They were `recall >= 0.98` and `precision >= 0.99`. A ratio cannot express either
+# property at this corpus's sizes. On 119-hr-1 the recall floor tolerated losing about 18
+# of 934 catchline-bearing subsections, of which 5 were actually spent, so roughly 13 more
+# could stop being found with this module still green. On the other two fixtures, which
+# carry 3 and 8 subsections, the same floor could not absorb even one loss, so the entire
+# tolerance lived on one bill and the number meant something different on every fixture.
+#
+# The 5 that were spent were not irreducible residue: they were subsections whose catchline
+# wrapped past the parser's continuation window, fixed in #473 by widening it. Nothing is
+# left for a tolerance to hold, so there is no allowlist here either. A subsection that
+# stops being found is a regression, and this module now says so in one case rather than
+# leaving it to erode a percentage.
 
 
 def _norm_sec(text: str | None) -> str | None:
@@ -117,7 +179,16 @@ def _xml_index(xml_path: str) -> tuple[frozenset, frozenset, frozenset]:
             header = (sub.findtext("header") or "").strip()
             text_el = sub.find("text")
             text = "".join(text_el.itertext()).strip() if text_el is not None else ""
-            if header or _match_runin_subsection(f"({enum}) {text}", []) is not None:
+            # Probe the same slice of text the real producer probes. `bill_tree` caps this
+            # at _RUNIN_PROBE_WINDOW because an unbounded probe invents "catchlines" from a
+            # period-dash deep in prose; an oracle without that cap encodes a contract the
+            # producer was never held to, and since recall now has ZERO tolerance a single
+            # invented denominator entry fails the gate for something that is not a parser
+            # defect (#473). Two subsections in the wider committed corpus already trip it:
+            # 113-hr-83 sec. 415(a) (a 339-char phantom) and 118-s-2625 sec. 217(a) (307).
+            # Neither bill is in FIXTURES today, so this is a trap set for whoever adds one.
+            probe = f"({enum}) {text[:_RUNIN_PROBE_WINDOW]}"
+            if header or _match_runin_subsection(probe, []) is not None:
                 catchline_pairs.add((secn, enum))
     return frozenset(all_pairs), frozenset(catchline_pairs), frozenset(quoted_pairs)
 
@@ -152,24 +223,90 @@ def test_precision_no_false_subsections(bill, pdf_rel, xml_rel):
     pp = _pdf_pairs(pdf_rel)
     assert len(pp) > 0, f"{bill}: zero subsections detected (fail-open)"
     fp = pp - all_pairs
-    precision = len(pp & all_pairs) / len(pp)
-    assert precision >= PRECISION_FLOOR, f"{bill} precision {precision:.3f}, FPs {sorted(fp)}"
-    # Residue characterization: any false positive must be a doubled two-letter enum
-    # (a deeper-level (aa)/(bb) run-in). A single-letter FP is a NEW class — fail loud.
+    # Two assertions, because the shape alone is not a bound (#473).
+    #
+    # SHAPE: any false positive must be a doubled two-letter enum (a deeper-level (aa)/(bb)
+    # run-in, which cannot be told from a 27th subsection without the leveled tree,
+    # #54/#108). A single-letter FP is a NEW class — fail loud.
     assert all(enum is not None and len(enum) == 2 for _sec, enum in fp), (
         f"{bill}: unexpected non-doubled-enum false positive: {sorted(fp)}"
+    )
+    # COUNT: and there must be exactly the known ones. The shape assertion names the
+    # residue class but says nothing about its size, so on its own it would let that class
+    # grow from 2 to hundreds with this module green. The retired `precision >= 0.99`
+    # capped it at 9 on this fixture, loosely and as a side effect; pinning the pairs
+    # bounds it exactly, and makes a fixed one visible instead of silently absorbed.
+    assert sorted(fp) == KNOWN_FALSE_POSITIVES.get(bill, []), (
+        f"{bill}: false positives {sorted(fp)} != known {KNOWN_FALSE_POSITIVES.get(bill, [])}. "
+        f"A new one is a regression; a missing one means it was fixed, so drop it from "
+        f"KNOWN_FALSE_POSITIVES (and close the issue it names if nothing else blocks it)."
     )
 
 
 @pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
-def test_recall_floor(bill, pdf_rel, xml_rel):
+def test_every_catchline_subsection_is_found(bill, pdf_rel, xml_rel):
+    """Every catchline-bearing subsection in the XML gets a PDF anchor. No tolerance.
+
+    Named for the property rather than for the mechanism it used to assert (#473): this
+    was ``test_recall_floor``, which is a statement about a number, not about the bill.
+    """
     _all, catchlines, _quoted = _xml_index(xml_rel)
     assert len(catchlines) >= MIN_CATCHLINES, f"{bill}: catchline denominator {len(catchlines)} too small (fail-open)"
     pp = _pdf_pairs(pdf_rel)
-    hit = pp & catchlines
-    recall = len(hit) / len(catchlines)
     missed = sorted(catchlines - pp)
-    assert recall >= RECALL_FLOOR, f"{bill} recall {recall:.3f}, missed {missed[:10]}"
+    assert missed == [], (
+        f"{bill}: {len(missed)} of {len(catchlines)} catchline-bearing subsections reach no "
+        f"PDF anchor: {missed[:10]}. A subsection with no anchor loses its breadcrumb, so a "
+        f"change inside it is reported by page and line only."
+    )
+
+
+def test_no_subsection_anchor_swallows_a_following_section() -> None:
+    """A subsection anchor's TEXT is a catchline, never a run into the next section (#473).
+
+    Swept over every committed PDF, because this is the one property the three gates above
+    are structurally unable to see. They compare ``(section, enum)`` pair identity and
+    never look at the anchor's text, so an anchor sitting at the right position with a
+    295-character garbage label is invisible to all of them — and the label is consumed
+    output: it becomes the node label and the breadcrumb a reader is shown.
+
+    That is not hypothetical. Following a wrapped catchline by line COUNT alone made the
+    join walk out of six catchline-less subsections, across an account heading and a
+    ``SEC.`` line, onto the following section's ``.—``. Precision, recall and the
+    quoted-block gate all stayed green throughout, which is why this one is written
+    against the text.
+
+    Two absolute assertions, no ratio: a catchline never contains a section heading, and it
+    is bounded in length. The heading rule does the work; the length cap is an unexercised
+    backstop (see MAX_CATCHLINE_CHARS).
+    """
+    offenders = []
+    checked = 0
+    contributing_bills = set()
+    for bill_dir in sorted(FIXTURES_DIR.iterdir()):
+        if not bill_dir.is_dir():
+            continue
+        for pdf in sorted(bill_dir.glob("*.pdf")):
+            for anchor in extract_anchors(cached_pages(pdf)):
+                if anchor.kind != "subsection":
+                    continue
+                checked += 1
+                contributing_bills.add(bill_dir.name)
+                if _SECTION_IN_CATCHLINE.search(anchor.text) or len(anchor.text) > MAX_CATCHLINE_CHARS:
+                    where = f"{bill_dir.name}/{pdf.name} p{anchor.page_number}:{anchor.line_number}"
+                    offenders.append(f"{where} -> {anchor.text[:120]!r}")
+
+    # Fail-closed floor, on BREADTH as well as volume. A count alone is nearly a one-bill
+    # floor here: 119-hr-1 supplies ~88% of all subsection anchors in the corpus, so every
+    # other bill could stop emitting them and a volume-only floor would still pass.
+    assert checked >= 500, f"only {checked} subsection anchors corpus-wide; this gate is not exercising anything"
+    assert len(contributing_bills) >= 4, (
+        f"only {sorted(contributing_bills)} contributed subsection anchors; the sweep has "
+        f"narrowed to too few bills to be a corpus gate"
+    )
+    assert offenders == [], (
+        f"{len(offenders)} of {checked} subsection anchors run past the catchline into following text: {offenders[:3]}"
+    )
 
 
 @pytest.mark.parametrize(("bill", "pdf_rel", "xml_rel"), FIXTURES, ids=[f[0] for f in FIXTURES])
