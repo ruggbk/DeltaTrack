@@ -228,12 +228,13 @@ A bill goes through several versions as it moves through the legislative process
 The shared data model the whole project rests on — the bill hierarchy, the glossary, and how the XML and PDF paths reconstruct it — is documented in [docs/bill-structure.md](docs/bill-structure.md). Start there.
 
 The engine is the `deltatrack` package under `src/`, installed rather than imported off
-disk (see [ADR 0017](docs/decisions/0017-installable-engine-package.md)). Four modules:
+disk (see [ADR 0017](docs/decisions/0017-installable-engine-package.md)). Both the XML and
+the PDF path run parse → diff → canonical JSON → one renderer, entered through
+`src/deltatrack/compare/`.
 
-- **`tools/fetch_bills.py`** - Downloads bill XML and PDF (`--format xml|pdf|both`, default `xml`). Defaults to keyless **govinfo** bulk data; `--source api` selects the Congress.gov API v3 instead. CLI commands: `versions`, `download`, `download-all`, `search` (keyless title discovery over a local BILLSTATUS index), `fetch-index` (download just the scoped BILLSTATUS ZIP `search` reads).
-- **`src/deltatrack/bill_tree.py`** - Normalizes bill XML into a `BillTree` of `BillNode` objects. Handles divisions, titles, and flat sections, plus structural containers within titles (subtitle, part, chapter, subchapter, subpart). Captures preamble sections that sit alongside divisions or titles.
-- **`src/deltatrack/diff_bill.py`** - Compares two `BillTree`s. Uses division-aware matching for omnibus bills (resolves cross-division path collisions by normalized division title). Detects false matches via text similarity, reconciles moved sections, and extracts dollar amounts (stripping floor amendment annotations before comparison, flagging their presence separately).
-- **`src/deltatrack/formatters/diff_html.py`** - Generates standalone HTML reports from diff output (via adapters that feed both XML and PDF diffs through one renderer) with sidebar navigation, financial summary table, and word-level inline diffs.
+[docs/architecture.md](docs/architecture.md) is the code map: the stage-by-stage pipeline
+tour, where the two paths converge, a suggested reading order, and the risk map of where
+a bug does the most damage.
 
 ## Design decisions
 

@@ -416,7 +416,18 @@ def _reconcile_moves(hunks: list[PdfHunk], threshold: float = _MOVE_SIMILARITY_T
 
     # Gated + matcher-reused pairwise similarity; _move_candidates returns local
     # indices, so map them back to absolute hunk indices. Identical result to the
-    # naive removed×added loop (same tuples; the sort below is what orders them).
+    # naive removed×added loop for every pair with text on both sides (same tuples;
+    # the sort below is what orders them).
+    #
+    # Text-free hunks yield no candidate, so they are never paired here (#357). That
+    # rule was added for the XML side, where a section whose subsections all became
+    # their own nodes keeps the SEC. heading and an empty body (#188); difflib scores
+    # two empty sequences as a perfect 1.0, so such pairs used to be claimed as moves
+    # on no evidence. Blocks here do not reach that state today -- `_strip_heading_lines`
+    # returns the lines untouched rather than empty a body -- and no committed PDF pair
+    # produces a text-free hunk, so this path is unchanged in practice. The rule is kept
+    # uniform across both callers because a hunk with no text carries no evidence of
+    # having moved anywhere either way.
     local = _move_candidates(
         [hunks[ri].v1_text for ri in removed_idx],
         [hunks[ai].v2_text for ai in added_idx],
