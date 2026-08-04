@@ -389,6 +389,25 @@ ALLOWED_CORPUS_SKIPS = {
     # the point of this allowlist, and collapsing the two would lose the distinction.
     "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
     "[117-hr-2471/1_introduced-in-house.xml]": ("Shell bill: only 2 amounts, too few for meaningful coverage"),
+    # 118-hr-9468 (both committed versions) trips the same "shell bill" threshold without
+    # being one. It is a complete, enacted supplemental appropriations act that simply
+    # appropriates to two accounts, so it carries exactly two amounts and falls under the
+    # gate's own <3 cutoff. The threshold is not wrong -- 0 or 1 miss out of 2 is noise as
+    # a coverage RATIO -- it just cannot distinguish "too small to measure" from "small
+    # because the bill is small".
+    #
+    # Unlike the entries above, this is NOT a coverage gap, and it should not be read as
+    # one when this list is next audited. Both amounts are asserted by name, against the
+    # named account each belongs to, in tests/test_bill_tree.py
+    # TestUntitledBillAppropriations -- a stronger claim than this gate makes, since it
+    # checks WHICH account holds each figure rather than only that the digits survive
+    # somewhere. That bill is committed for exactly that test (#485), so the fixture earns
+    # its place regardless of this gate's channel.
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[118-hr-9468/1_introduced-in-house.xml]": ("Shell bill: only 2 amounts, too few for meaningful coverage"),
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node[118-hr-9468/4_enrolled-bill.xml]": (
+        "Shell bill: only 2 amounts, too few for meaningful coverage"
+    ),
 }
 
 # --- The CI slow suite (#288) ---------------------------------------------------
