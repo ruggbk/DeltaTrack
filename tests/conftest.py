@@ -348,6 +348,47 @@ ALLOWED_CORPUS_SKIPS = {
     "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No appropriations elements with text",
     "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
     "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
+    # --- Introduced/early stages committed for per-version format parity -----------
+    # These six versions gained an XML so every committed version carries both formats,
+    # which is what lets the PDF-vs-XML gates run per version instead of only where a
+    # counterpart happened to exist. Each is an INTRODUCED or early-stage print, and an
+    # appropriations bill at that stage is a shell: the money is added later in markup, so
+    # they genuinely carry no <appropriations-*> elements and (mostly) no dollar amounts.
+    #
+    # Worth stating plainly, because the entry count is the honest cost of the parity
+    # change: of the nine XMLs added, the three substantive ones (114-hr-2029 v1 and v3,
+    # 118-hr-4366 v3) assert and appear nowhere below; these six only ever had shells to
+    # offer, so parity buys them no assertion in THESE gates and costs a declaration each.
+    # They still earn their place in the pdf/xml pair gates, which is why they are here
+    # rather than withheld.
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[113-hr-3547/1_introduced-in-house.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[113-hr-3547/2_engrossed-in-house.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[113-hr-3547/3_received-in-senate.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[117-hr-2471/1_introduced-in-house.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[118-hr-2882/1_introduced-in-house.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
+    "[118-hr-8282/1_introduced-in-house.xml]": "No appropriations elements with text",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[113-hr-3547/1_introduced-in-house.xml]": "No dollar amounts in bill body",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[113-hr-3547/2_engrossed-in-house.xml]": "No dollar amounts in bill body",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[113-hr-3547/3_received-in-senate.xml]": "No dollar amounts in bill body",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[118-hr-2882/1_introduced-in-house.xml]": "No dollar amounts in bill body",
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[118-hr-8282/1_introduced-in-house.xml]": "No dollar amounts in bill body",
+    # 117-hr-2471 v1 (the FY22 omnibus as introduced) is the one that is not quite empty:
+    # it carries two amounts, below the gate's own shell threshold, so it skips with a
+    # different reason than its five siblings. Recorded as-is -- matching on the reason is
+    # the point of this allowlist, and collapsing the two would lose the distinction.
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[117-hr-2471/1_introduced-in-house.xml]": ("Shell bill: only 2 amounts, too few for meaningful coverage"),
 }
 
 # --- The CI slow suite (#288) ---------------------------------------------------
@@ -418,15 +459,67 @@ ALLOWED_CI_SLOW_SKIPS = {
     # assert. This one will not go away by committing anything.
     "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
     "[113-hr-3547/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
+    # --- The same parity change, seen from the pair gate --------------------------
+    # Committing an XML beside an existing PDF makes this gate COLLECT the version for the
+    # first time, and for an introduced-stage shell there are no amounts to recall. The
+    # skip is the version's nature, not a fixture absence, so unlike the entries above it
+    # will not go away by committing anything -- these belong to the same six versions
+    # declared in ALLOWED_CORPUS_SKIPS.
+    #
+    # The gate is not thereby weakened: the three substantive XMLs added in the same change
+    # are collected here too and assert normally, so parity's net effect on this gate is
+    # more real comparisons, plus these four declarations.
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[113-hr-3547/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[113-hr-3547/2_engrossed-in-house]": "No amounts in XML (shell / procedural version)",
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[113-hr-3547/3_received-in-senate]": "No amounts in XML (shell / procedural version)",
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[118-hr-2882/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[118-hr-8282/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
 }
+
+# --- Fast-tier PDF gates -------------------------------------------------------
+# The two ceilings above watch the corpus gates and the modules the slow CI steps name.
+# Neither reaches these, because they carry no `slow` marker and so run in the FAST step
+# (`pytest -m "not slow and not browser"`) — they were RUNNING in CI all along, but their
+# skips were declared nowhere and could drift silently. That is the same fail-open channel
+# #220 and #288 closed, in the one tier neither covered.
+#
+# A THIRD group rather than more entries in CI_SLOW_MODULES, because that tuple's name is
+# load-bearing: it means "named by a slow CI step", and the comment above it reasons from
+# that. Filing fast-tier modules there would make the name false for a third of its
+# contents and quietly break the next reader's model of which step a skip belongs to.
+#
+# test_pdf_division_recall.py is deliberately ABSENT: its #141 zero-anchor channel is now
+# an assertion rather than a skip, so it has no skip surface to declare. Adding it would
+# be inert today and would invite re-opening the skip later as the cheap way to green it.
+FAST_GATE_MODULES = (
+    "tests/test_pdf_anchor_golden.py",
+    "tests/test_pdf_diff_recall.py",
+)
+
+# Deliberately EMPTY, and that is the useful state: these two modules have no skip channel
+# left. The entries this dict was created to hold were the account-vocab floor's 117-hr-4432
+# and 118-hr-4820, which pointed at gitignored `bills/` and so had never run in CI —
+# including the bill the floors are calibrated on. Both pairs are committed now, so the
+# cases assert instead of skipping and there is nothing to declare.
+#
+# An empty allowlist is not an inert one: the group stays in _SKIP_WATCH_GROUPS, so the
+# FIRST skip either module grows fails the session and has to be justified. Deleting the
+# dict instead would silently restore the fail-open channel these gates just came out of.
+ALLOWED_FAST_GATE_SKIPS: dict[str, str] = {}
 
 # (label, modules, allowlist) — each group's skips are watched and must be declared.
 _SKIP_WATCH_GROUPS = (
     ("corpus content-skip ceiling (#220)", CORPUS_GATE_MODULES, ALLOWED_CORPUS_SKIPS),
     ("CI slow-suite skip ceiling (#288)", CI_SLOW_MODULES, ALLOWED_CI_SLOW_SKIPS),
+    ("fast-tier PDF gate ceiling", FAST_GATE_MODULES, ALLOWED_FAST_GATE_SKIPS),
 )
 
-_WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES
+_WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES + FAST_GATE_MODULES
 
 # --- Cases CI can never collect ------------------------------------------------
 # Every watched module parametrizes over the committed manifest EXCEPT these two, which

@@ -349,9 +349,11 @@ def test_ci_slow_allowlisted_skips_name_watched_modules() -> None:
 def test_unmanifested_expanding_case_is_not_watched() -> None:
     """A glob-only case (its bill version is not committed) is ignored.
 
-    This is the exact shape that reddened a local full run: 113-hr-3547 v1 is fetch-only,
-    so CI never collects it and there is nothing to declare."""
-    nodeid = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/1_introduced-in-house]"
+    This is the exact shape that reddened a local full run: the bill version is fetch-only,
+    so CI never collects it and there is nothing to declare. Keyed on a bill that is not in
+    the manifest AT ALL, which is the property under test and cannot be invalidated by the
+    corpus gaining or losing a format the way a real single-format stage can."""
+    nodeid = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[118-hr-9999/1_introduced-in-house]"
     assert not conftest.is_watched_case(nodeid)
     assert conftest.classify_corpus_skips({nodeid: "No amounts in XML (shell / procedural version)"}) == {}
 
@@ -370,14 +372,16 @@ def test_manifested_expanding_case_is_still_watched() -> None:
 def test_expanding_case_resolves_per_version_and_per_format() -> None:
     """A bill id alone is not enough, and neither is a stage.
 
-    113-hr-3547 v1 IS manifested -- as pdf only. The amount-recall gate reads the xml and
-    the pdf of a stage, so CI collects no case for it; a check that collapsed format would
-    wave through the exact ids that reddened a local run. v4 is the stage committed in
-    both formats, and is the one real case."""
-    one = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/{}]"
-    assert not conftest.is_watched_case(one.format("1_introduced-in-house"))  # pdf only
-    assert not conftest.is_watched_case(one.format("6_enrolled-bill"))  # xml only
-    assert conftest.is_watched_case(one.format("4_engrossed-amendment-senate"))  # both
+    114-hr-2029 v4 IS manifested -- as pdf only (its xml is withheld while the
+    multi-<legis-body> section drop is open; see the manifest note). The amount-recall gate
+    reads the xml and the pdf of a stage, so CI collects no case for it; a check that
+    collapsed format would wave through the exact ids that reddened a local run.
+    113-hr-3547 v6 is the xml-only complement, and v4 the stage committed in both formats,
+    which is the one real case."""
+    recall = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[{}]"
+    assert not conftest.is_watched_case(recall.format("114-hr-2029/4_reported-in-senate"))  # pdf only
+    assert not conftest.is_watched_case(recall.format("113-hr-3547/6_enrolled-bill"))  # xml only
+    assert conftest.is_watched_case(recall.format("113-hr-3547/4_engrossed-amendment-senate"))  # both
 
 
 def test_pair_case_resolves_both_sides() -> None:
