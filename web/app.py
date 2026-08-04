@@ -183,10 +183,24 @@ async def security_headers(request: Request, call_next):
     headers reach redirects and error responses too, not only 200s.
 
     It also wraps the rate-limit middleware, so a 429 carries these headers.
+
+    Content-Security-Policy (#282): the diff report embeds inline <script>,
+    <style>, and <script type="application/json"> blocks and must also work
+    as a downloaded file:// document. A minimal policy with inline allowances
+    provides defense-in-depth behind the existing html.escape() guards.
     """
     response = await call_next(request)
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "object-src 'none'; "
+        "base-uri 'none'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
