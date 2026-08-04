@@ -75,6 +75,16 @@ The team meets in person every two weeks (Wednesdays); that meeting is the only 
 - **Watch for security-sensitive work.** Anything touching the public/deployed surface (e.g. `web/`, `/api/compare`) gets the `security` label and a hard look — that's the one outward-facing, abusable part of the project.
 - **Epics** carry the `epic` label and stay **untyped** (no issue type) until the org-level `Epic` type exists (#127); they are decomposed into native **sub-issues**; the parent's progress bar is its status. Pick up the sub-issues, not the epic. An epic stays open until all its sub-issues close, then a maintainer closes it by hand (the parent does not auto-close). Epics live on the Roadmap view and are filtered off the working board.
 
+## Comments and rationale
+
+A comment describes the code as it is **now**. History and rejected alternatives are not deleted — they are labelled, so a reader can tell at a glance which sentences describe live behaviour and which do not. Unlabelled prose about a state that no longer exists is the form that most reliably causes rework: an agent does not detect that a comment contradicts the code, it acts on it.
+
+- **Lead in the present tense.** The first sentence describes only what the file does today; a reader who stops there must not come away with a wrong picture. No `previously` / `used to` / `before this` above the fold.
+- **Label anything that is not current.** `History:` for a state that existed and no longer does, `Why not X:` for an alternative considered and rejected. Both are then skippable by construction — unlabelled narrative is not, which is what forces a reader to reconstruct the timeline before they can trust the paragraph.
+- **The tail points, it does not narrate.** Issue numbers carry the story (`History: #365 divergence, #422 fix`). The measurement, the rejected design and the argument belong in the issue, which cannot silently contradict the code the way a comment can.
+- **A number in a comment needs a gate or a repro.** Counts, percentages and corpus measurements decay silently and cannot be checked at read time. Prefer an assertion that fails when the number changes; otherwise name the command that reproduces it. This is the same reasoning as "Gate the decision you had to argue for" under Test conventions, applied to evidence rather than to design.
+- **Past about six lines, ask whether it is a decision.** A defended design choice belongs in an ADR, reached by a **self-contained** pointer: `# Sections process independently (ADR 0006)` still carries its claim when the ADR is never opened, `# see ADR 0006` does not. Nothing loads `docs/decisions/` into an agent's context automatically, so a bare cross-reference loses the decision rather than relocating it.
+
 ## Key architecture concepts
 
 - The shared bill data model (the two-tree hierarchy, the glossary, why the XML encodes nesting positionally, and the PDF↔XML parity goal) lives in [docs/bill-structure.md](docs/bill-structure.md). Read it before working on heading/anchor/account detection or DeltaTrack#54.
