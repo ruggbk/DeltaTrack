@@ -249,13 +249,20 @@ def _match_collision_group(
     the GPO form #66 asks for has no colon, so every division collapsed into one bucket
     and nodes silently paired across divisions.
     """
-    # Step 1: Sub-group by division
-    old_by_div: dict[str, list[BillNode]] = defaultdict(list)
-    new_by_div: dict[str, list[BillNode]] = defaultdict(list)
+    # Step 1: Sub-group by division, and by which top-level body the node came from.
+    #
+    # body_index joins the key for #434: a reported bill carrying a committee substitute
+    # holds two complete texts, both restating the same section numbers, so every section
+    # of such a document collides with its own counterpart in the other text. Grouping on
+    # the division alone puts both copies in one bucket and lets similarity pair either
+    # one against the previous version's single section, arbitrarily. It is almost always
+    # 0 on both sides, so this changes nothing for single-body documents.
+    old_by_div: dict[tuple[str, int], list[BillNode]] = defaultdict(list)
+    new_by_div: dict[tuple[str, int], list[BillNode]] = defaultdict(list)
     for node in old_nodes:
-        old_by_div[node.division_key].append(node)
+        old_by_div[(node.division_key, node.body_index)].append(node)
     for node in new_nodes:
-        new_by_div[node.division_key].append(node)
+        new_by_div[(node.division_key, node.body_index)].append(node)
 
     pairs: list[tuple[BillNode | None, BillNode | None]] = []
     unmatched_old: list[BillNode] = []
@@ -264,9 +271,9 @@ def _match_collision_group(
     all_divs = dict.fromkeys(list(old_by_div.keys()) + list(new_by_div.keys()))
 
     # Step 2: Pair within each division sub-group
-    for div_title in all_divs:
-        div_old = old_by_div.get(div_title, [])
-        div_new = new_by_div.get(div_title, [])
+    for group_key in all_divs:
+        div_old = old_by_div.get(group_key, [])
+        div_new = new_by_div.get(group_key, [])
 
         if not div_old:
             unmatched_new.extend(div_new)

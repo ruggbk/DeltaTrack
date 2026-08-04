@@ -2,7 +2,7 @@
 
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from deltatrack.parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subsection
@@ -47,6 +47,13 @@ class BillNode:
     # body_text stays collapsed for diff matching; display_text adds enum spacing and
     # list line breaks. Empty for nodes built without it (callers fall back to body_text).
     display_text: str = ""
+    # Which top-level <legis-body> this node came from, 0-based (#434). Almost always 0;
+    # non-zero only for the second text of a reported bill carrying a committee
+    # substitute. Both texts restate the same section numbers, so without this the two
+    # copies of "section 1" are indistinguishable to the diff's collision resolver and
+    # pair arbitrarily. Kept separate from division_key because the two discriminate at
+    # different levels and a node can need both.
+    body_index: int = 0
 
 
 def amount_text(node: BillNode) -> str:
@@ -166,6 +173,43 @@ def find_bill_body(root: ET.Element) -> ET.Element:
         return nested if nested is not None else block
 
     raise ValueError("Could not find bill body in XML")
+
+
+def find_bill_bodies(root: ET.Element) -> list[ET.Element]:
+    """Every top-level body of a bill, in document order (#434).
+
+    A reported bill carrying a committee substitute prints TWO complete texts, held as
+    two sibling <legis-body> elements. ``find_bill_body`` returns the first, so the
+    second reached no node, no full-bill view and no money diff: 459 documents in the
+    local collection, 3,736 sections and 1,180 dollar amounts, silently.
+
+    All of them are walked, in document order, because that is what GPO's own stylesheet
+    does — ``print-legis-body`` has an explicit ``preceding-sibling::legis-body`` branch
+    wrapping later bodies in their own block rather than skipping them. Rendering both is
+    also the only handling correct for every shape the corpus actually holds. A corpus
+    audit found four, and no attribute selects the right single body across them:
+
+    - 427 base text + committee substitute (body[0] struck, body[1] the reported text)
+    - 11 TWO competing committee substitutes, from a bill sequentially referred to two
+      committees ("Report No. 118-167, Parts I and II"). Both carry changed="added" with
+      their own committee-id; neither is struck and nothing says which prevails.
+    - 13 where one body is an empty <legis-body/>. In 10 of those the EMPTY one is
+      first, so taking the first lost the whole bill rather than half of it.
+    - 8 where the two bodies are complementary rather than alternative — one bill split
+      in two (118-s-79: body[0] is section 1, body[1] is sections 2-4; 118-s-2226:
+      body[0] is divisions A-D, body[1] the funding tables). Selecting either loses
+      real text.
+
+    Which of two alternative texts is authoritative, and how to mark where the second
+    begins, is #186's question. This function only guarantees no text is dropped.
+
+    Falls back to ``find_bill_body`` for the resolution and amendment-doc shapes, which
+    are single-body (and, for paired resolution variants, still fail loudly per #427).
+    """
+    bodies = root.findall("legis-body")
+    if bodies:
+        return bodies
+    return [find_bill_body(root)]
 
 
 _LIST_MARKER_RE = re.compile(r" (?=\((?:[0-9]{1,2}|[a-z]{1,4}|[A-Z])\))")
@@ -1425,14 +1469,34 @@ def normalize_bill(xml_path: Path) -> BillTree:
     - With divisions: body > division > title > appropriations-*
     - Without divisions, with titles: body > title > appropriations-*
     - Without titles: body > section (simple bills)
+
+    A document may carry more than one top-level <legis-body> (#434); every one is
+    walked, in document order. See ``find_bill_bodies``.
     """
     tree = ET.parse(xml_path)
     root = tree.getroot()
-    body = find_bill_body(root)
+    bodies = find_bill_bodies(root)
     congress, bill_type, bill_number, version, official_title = _extract_metadata(root, xml_path)
 
     # Front matter (form block + enacting clause) renders above the bill body (#48).
-    all_nodes: list[BillNode] = extract_front_matter_nodes(root, body)
+    # Built from the FIRST body only: it is the enacting clause and form block of the
+    # document, printed once, and GPO suppresses it on later bodies through
+    # display-enacting-clause="no-display-enacting-clause" (carried by the second body
+    # in 459 of 459 audited documents).
+    all_nodes: list[BillNode] = extract_front_matter_nodes(root, bodies[0])
+
+    for index, body in enumerate(bodies):
+        body_nodes = _walk_one_body(body)
+        # Stamped here rather than threaded through the ~10 BillNode construction sites
+        # in the walk, so a new site cannot silently ship without it.
+        all_nodes.extend(replace(node, body_index=index) for node in body_nodes)
+
+    return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
+
+
+def _walk_one_body(body: ET.Element) -> list[BillNode]:
+    """Every content node under one top-level body, in document order."""
+    all_nodes: list[BillNode] = []
 
     # Check for divisions first
     divisions = body.findall("division")
@@ -1488,7 +1552,7 @@ def normalize_bill(xml_path: Path) -> BillTree:
             elif child.tag == "title":
                 title_header = build_title_label(child)
                 all_nodes.extend(walk_title(child, title_header, current_division))
-        return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
+        return all_nodes
 
     # Check for titles directly under body
     titles = body.findall("title")
@@ -1497,8 +1561,8 @@ def normalize_bill(xml_path: Path) -> BillTree:
         for title in titles:
             title_header = build_title_label(title)
             all_nodes.extend(walk_title(title, title_header, NO_DIVISION))
-        return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
+        return all_nodes
 
     # Fallback: sections directly under body
     all_nodes.extend(walk_body_sections(body))
-    return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
+    return all_nodes
