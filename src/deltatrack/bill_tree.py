@@ -1050,15 +1050,23 @@ def _extract_section_text(section: ET.Element, exclude: frozenset[int] = frozens
     return text
 
 
-def walk_body_sections(body: ET.Element) -> list[BillNode]:
-    """Walk sections directly under a body element (no titles).
+def walk_body_sections(parent: ET.Element, division: Division = NO_DIVISION) -> list[BillNode]:
+    """Walk sections directly under a body or division element (no titles).
 
-    Used for simple bills like HR 2882 v1-3 where the structure is
-    just legis-body > section with no title or division wrappers.
+    Used for simple bills like HR 2882 v1-3 where the structure is just
+    legis-body > section with no title or division wrappers, and for the same shape
+    one level down: a <division> whose sections are bare rather than gathered into
+    a <title> (#465). Both are the same arrangement, so both use this walk.
+
+    ``division`` is ``NO_DIVISION`` for the body-level call and the enclosing division
+    for the division-level one. Its label leads the display_path breadcrumb; its key
+    travels on the node so the diff can group on it (#468). Neither reaches match_path,
+    which excludes the division everywhere, so a section moving between divisions still
+    matches: the key discriminates only when several nodes already share a match path.
     """
     nodes: list[BillNode] = []
 
-    for child in body:
+    for child in parent:
         if child.tag != "section":
             continue
 
@@ -1077,7 +1085,7 @@ def walk_body_sections(body: ET.Element) -> list[BillNode]:
 
         sec_label = section_num.lower() if section_num else ""
         match_path = (sec_label,) if sec_label else ()
-        display_path = (section_num,) if section_num else ()
+        display_path = ((division.label,) if division.label else ()) + ((section_num,) if section_num else ())
 
         nodes.append(
             BillNode(
@@ -1089,10 +1097,11 @@ def walk_body_sections(body: ET.Element) -> list[BillNode]:
                 body_text=body_text,
                 display_text=display_text,
                 section_number=section_num,
-                division_label="",
+                division_label=division.label,
+                division_key=division.key,
             )
         )
-        _append_subsection_nodes(sub_specs, match_path, display_path, section_num, NO_DIVISION, nodes)
+        _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division, nodes)
 
     return nodes
 
@@ -1331,6 +1340,33 @@ def normalize_bill(xml_path: Path) -> BillTree:
                     label=build_division_label(div_enum_text, div_header_text),
                     key=normalize_header(div_header_text),
                 )
+
+                # A division's own bare sections, before its titles. Reaching them only
+                # through <title> children left every section that is a direct child of a
+                # <division> walked by nothing, so it entered no node, no full-bill view
+                # and no money diff, silently (#465). That is the same arrangement
+                # walk_body_sections already handles one level up, which is why it is the
+                # same call: the body-level path has always done this for bare sections,
+                # and the division branch simply never did.
+                #
+                # It is not only divisions that lack titles entirely. A division can carry
+                # titles AND bare sections (a short-title/definitions preamble ahead of
+                # TITLE I), and that mixed shape looked complete while dropping the
+                # preamble. Measured on the committed corpus: 177 sections, across both
+                # shapes, reached no node before this.
+                #
+                # Ordered before the titles because that is where these sections sit in
+                # the document, and it mirrors the body-level call, which likewise emits
+                # bare sections ahead of the structures that follow them. No bill in the
+                # committed fixtures or the local collection places a bare section after
+                # a title inside one division, so this ordering is not a choice between
+                # two real arrangements.
+                #
+                # Passed the whole Division, not just its label: these sections share a
+                # division-stripped match_path with the same-numbered section of every
+                # other division, so the key is what tells them apart when the diff
+                # resolves that collision (#468).
+                all_nodes.extend(walk_body_sections(child, current_division))
 
                 for title in child.findall("title"):
                     title_header = build_title_label(title)
