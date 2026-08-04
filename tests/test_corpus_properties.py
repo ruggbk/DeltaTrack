@@ -16,6 +16,7 @@ from deltatrack.bill_tree import (
     Division,
     _extract_appropriations_text,
     _extract_section_text,
+    amount_text,
     extract_text_content,
     find_bill_body,
     normalize_bill,
@@ -328,6 +329,65 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
     assert dropped == [], f"{len(dropped)} of {checked} money-bearing siblings appear in no node: {dropped[:3]}"
 
 
+def test_no_top_level_legis_body_is_silently_discarded() -> None:
+    """Every top-level <legis-body> contributes to the tree (#434).
+
+    A reported bill carrying a committee substitute prints two complete texts as two
+    sibling <legis-body> elements. ``find_bill_body`` returned the first and nothing
+    looked for the rest, so the second text reached no node, no full-bill view and no
+    money diff -- 459 documents in the local collection, 3,736 sections, silently.
+
+    Asserted as text reaching the tree rather than as a body COUNT, because a count is
+    satisfied by walking a body and dropping everything in it. The check is that a
+    distinctive amount from each body is present, which is the property a reader depends
+    on and the one that broke.
+
+    This is the invariant that survives whichever direction #186 takes for representing
+    the duality: whether the second text ends up marked, sectioned off or diffed
+    separately, no body may contribute nothing. It deliberately does NOT assert which
+    body is authoritative -- a corpus audit found four different shapes here (base plus
+    substitute; two competing committee substitutes from sequential referral; an empty
+    body paired with a real one; and complementary halves of one bill), and no attribute
+    picks the right single body across them.
+
+    Carries a fail-closed floor for the same reason the sweep above does: "nothing
+    discarded" must never be able to mean "no multi-body document was looked at".
+    """
+    multi_body_files = 0
+    missing: list[str] = []
+    for xml_path in ALL_XML_FILES:
+        if not xml_path.exists():
+            continue
+        root = ET.parse(xml_path).getroot()
+        bodies = root.findall("legis-body")
+        if len(bodies) < 2:
+            continue
+        multi_body_files += 1
+
+        tree_text = " ".join(amount_text(node) for node in normalize_bill(xml_path).nodes)
+        for index, body in enumerate(bodies):
+            # Amounts unique to THIS body. An amount also present in a sibling body
+            # cannot show that this body was walked, since the sibling would supply it.
+            own = set(DOLLAR_RE.findall(extract_text_content(body)))
+            others = set()
+            for other_index, other in enumerate(bodies):
+                if other_index != index:
+                    others |= set(DOLLAR_RE.findall(extract_text_content(other)))
+            distinctive = own - others
+            if not distinctive:
+                continue
+            absent = [amount for amount in sorted(distinctive) if amount not in tree_text]
+            if absent:
+                missing.append(f"{xml_path.parent.name}/{xml_path.name} body[{index}]: {absent[:3]}")
+
+    # The floor. 114-hr-2029/4 is the committed two-body fixture; it was withheld from
+    # the corpus while #434 was open precisely because committing it reddened the suite.
+    assert multi_body_files >= 1, (
+        "no multi-<legis-body> document in the committed corpus; this gate is not exercising anything"
+    )
+    assert missing == [], f"{len(missing)} of {multi_body_files} multi-body documents lose a body's text: {missing[:3]}"
+
+
 # Files known to have duplicate match_paths (cross-division collisions, issue #1).
 # Values are ceilings, asserted as `total_dupes <= known`. Files not listed must have
 # zero duplicates.
@@ -371,6 +431,14 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "113-hr-3547/6_enrolled-bill.xml": 168,
     "113-hr-83/6_engrossed-amendment-house.xml": 139,
     "113-hr-83/7_enrolled-bill.xml": 139,
+    # #434 note: this version is a reported bill carrying a committee substitute, so the
+    # document prints TWO complete texts as sibling <legis-body> elements and both are now
+    # walked. The collisions are the two texts restating the same accounts ("military
+    # construction, army" in each), not a parser fault: they are what the source contains,
+    # and they would vanish only by dropping one of the texts again. Collision-group
+    # matching resolves them on body_index the way it resolves the cross-division entries
+    # above on division_key, so the two copies do not pair against each other.
+    "114-hr-2029/4_reported-in-senate.xml": 119,
     "114-hr-2029/6_engrossed-amendment-house.xml": 184,
     "114-hr-2029/7_enrolled-bill.xml": 186,
     "115-hr-1625/6_enrolled-bill.xml": 196,

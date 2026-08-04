@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 
-from deltatrack.bill_tree import extract_text_content, find_bill_body, normalize_bill
+from deltatrack.bill_tree import extract_text_content, find_bill_bodies, normalize_bill
 from deltatrack.diff_bill import extract_amounts
 from deltatrack.formatters.canonical import _pdf_tree_payload
 from deltatrack.formatters.diff_html import _build_toc_from_tree
@@ -196,9 +196,20 @@ def _walk(nodes: list[dict]):
 
 def _raw_xml_body_amounts(path: Path) -> Counter:
     """Independent reference: amounts in the raw XML body, parsed directly (NOT via
-    the tree's nodes) so the gate can't tautologically pass over dropped money."""
-    body = find_bill_body(ET.parse(path).getroot())
-    return Counter(extract_amounts(extract_text_content(body)))
+    the tree's nodes) so the gate can't tautologically pass over dropped money.
+
+    Sums EVERY top-level body (#434). It used to call ``find_bill_body``, which returns
+    only the first, so for a reported bill carrying a committee substitute the reference
+    counted one of the document's two texts -- the same text the tree was built from.
+    Both sides then agreed, and the gate reported conservation over a document that had
+    silently lost 126 amounts. A reference derived through the selector under test cannot
+    see that selector's mistakes, which is why this one now reads the document instead.
+    """
+    return Counter(
+        amount
+        for body in find_bill_bodies(ET.parse(path).getroot())
+        for amount in extract_amounts(extract_text_content(body))
+    )
 
 
 def _assert_schema_and_levels(roots: list[dict]) -> None:
