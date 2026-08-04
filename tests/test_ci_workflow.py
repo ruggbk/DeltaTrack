@@ -222,10 +222,14 @@ def _is_slow_marker(node: ast.AST) -> bool:
 #: files. That step runs, so restricting to `run:` blocks alone does not exclude it.
 _TEST_MODULE_ARGUMENT = re.compile(r"(?:^|\s)(?:[\w./-]*/)?(test_[A-Za-z0-9_]+\.py)(?=\s|$)", re.MULTILINE)
 
-#: A command counts only if it invokes pytest. The same issue-filing step above is the
-#: reason: it is executable and names a module, but it runs `gh issue create`, so the
-#: module it mentions is documentation, not coverage.
+#: A command counts only if it invokes pytest. The issue-filing step above is the reason:
+#: it is executable and names a module, but it runs `gh issue create`, so the module it
+#: mentions is documentation, not coverage.
 _INVOKES_PYTEST = re.compile(r"\bpytest\b")
+
+#: Shell operators that end one logical command and begin the next. A pipe is included so
+#: `pytest ... | tail` splits, leaving the modules with the pytest side.
+_COMMAND_SEPARATOR = re.compile(r"&&|\|\||;|\|")
 
 
 def _workflow_files(directory: Path) -> list[Path]:
@@ -233,25 +237,78 @@ def _workflow_files(directory: Path) -> list[Path]:
     return sorted([*directory.glob("*.yml"), *directory.glob("*.yaml")])
 
 
+def _strip_shell_comment(line: str) -> str:
+    """Drop a trailing shell comment, ignoring a `#` inside quotes.
+
+    YAML parsing removes YAML comments; it does NOT touch a `#` inside a block scalar,
+    which is ordinary shell text. So `# uv run pytest tests/test_x.py` survives parsing
+    intact and reads exactly like a live invocation -- the way a gate gets retired
+    without the guard noticing.
+    """
+    quote = None
+    for index, char in enumerate(line):
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#" and (index == 0 or line[index - 1].isspace()):
+            return line[:index]
+    return line
+
+
+def _logical_commands(block: str) -> list[str]:
+    """Split a `run:` block into the individual commands a shell would execute.
+
+    Splitting is what ties a module argument to the command that actually runs it.
+    Searching the block as one string cannot: it only knows that `pytest` and some
+    module name both occur somewhere inside, which is equally true of a block whose
+    pytest line is commented out and whose live line runs something else.
+
+    A backslash continuation is joined first, so an invocation wrapped over several
+    lines stays one command. A YAML folded scalar (`run: >`, which every slow step in
+    ci.yml uses) has already been joined into one line by the parser.
+    """
+    joined = block.replace("\\\n", " ")
+    commands: list[str] = []
+    for raw_line in joined.splitlines():
+        line = _strip_shell_comment(raw_line)
+        if line.strip():
+            commands.extend(_COMMAND_SEPARATOR.split(line))
+    return commands
+
+
 def _modules_run_by_workflows(directory: Path) -> set[str]:
     """Test module filenames that some workflow step actually EXECUTES.
 
-    Three filters, each removing a way a name can appear without being run. Only
-    ``jobs.<id>.steps[*].run`` is read, so a comment, a step ``name:``, a job id or the
-    workflow's own ``name:`` do not count -- PyYAML discards comments before this sees
-    the file, which is the difference between this and a text search. The command must
-    then invoke pytest, and the name must sit in it as an argument rather than inside
-    prose. The last two are not hypothetical: corpus-parity.yml has an executable step
-    that files a tracker issue whose body names a test module in a sentence.
+    Four filters, each removing a way a name can appear without being run:
+
+    1. Only ``jobs.<id>.steps[*].run`` is read, so a YAML comment, a step ``name:``, a
+       job id or the workflow's own ``name:`` do not count. Parsing rather than grepping
+       is what draws this line -- PyYAML discards YAML comments before this sees them.
+    2. The block is split into logical commands, so a module is credited only to the
+       command it is an argument of, not to anything else in the same block.
+    3. Shell comments are stripped from each line. YAML parsing leaves them untouched
+       inside a block scalar, so a commented-out invocation otherwise reads as live.
+    4. Within a command, it must invoke pytest and the module must sit in it as an
+       argument rather than inside prose.
+
+    None of these are hypothetical. corpus-parity.yml has an executable step that files a
+    tracker issue whose body names a test module in a sentence, which motivated 1 and 4;
+    2 and 3 came from review of #507, and both are the shape of a gate being disabled
+    temporarily and never re-enabled.
     """
     executed: set[str] = set()
     for path in _workflow_files(directory):
         workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for job in (workflow.get("jobs") or {}).values():
             for step in (job or {}).get("steps") or []:
-                command = (step or {}).get("run")
-                if isinstance(command, str) and _INVOKES_PYTEST.search(command):
-                    executed.update(_TEST_MODULE_ARGUMENT.findall(command))
+                block = (step or {}).get("run")
+                if not isinstance(block, str):
+                    continue
+                for command in _logical_commands(block):
+                    if _INVOKES_PYTEST.search(command):
+                        executed.update(_TEST_MODULE_ARGUMENT.findall(command))
     return executed
 
 
@@ -323,4 +380,80 @@ def test_a_module_named_only_in_a_comment_is_not_covered(tmp_path: Path) -> None
     assert "test_example_gate.py" in _modules_run_by_workflows(tmp_path), (
         "a module invoked by a real `run:` step was not detected, so the guard rejects "
         "everything and proves nothing (the .yaml suffix is covered here too)"
+    )
+
+
+def test_a_commented_out_invocation_is_not_covered(tmp_path: Path) -> None:
+    """Commenting a gate out must retire it visibly, not silently.
+
+    This is the disable-and-forget path, and it is the one a text search cannot see at
+    all: YAML parsing strips YAML comments but leaves a `#` inside a block scalar alone,
+    because there it is ordinary shell text. The commented line still contains the word
+    pytest and the module name, so a guard that searches the block as one string reads
+    it as a live invocation.
+    """
+    (tmp_path / "disabled.yml").write_text(
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          # uv run pytest -m slow tests/test_example_gate.py\n"
+        '          echo "temporarily disabled"\n',
+        encoding="utf-8",
+    )
+    covered = _modules_run_by_workflows(tmp_path)
+    assert "test_example_gate.py" not in covered, (
+        "a commented-out pytest invocation counted as coverage, so a slow gate can be "
+        f"retired while this guard stays green: {sorted(covered)}"
+    )
+
+    # Uncommenting the same line must register, or the assertion above would also hold
+    # on a guard that never counts anything inside a `run: |` block.
+    (tmp_path / "disabled.yml").write_text(
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          uv run pytest -m slow tests/test_example_gate.py\n"
+        '          echo "back on"\n',
+        encoding="utf-8",
+    )
+    assert "test_example_gate.py" in _modules_run_by_workflows(tmp_path), (
+        "the same invocation, uncommented, was not detected -- the guard is not reading "
+        "block scalars at all rather than reading their comments correctly"
+    )
+
+
+def test_a_module_named_beside_a_real_invocation_is_not_covered(tmp_path: Path) -> None:
+    """A module credited to a neighbour's pytest command is coverage that does not exist.
+
+    The block runs pytest and mentions two modules, but only one is an argument to that
+    command; the other sits in an `echo` saying it is disabled. Matching the block as a
+    whole cannot tell them apart, so the disabled module inherits its neighbour's
+    invocation. Splitting into logical commands is what separates them.
+
+    The echo is deliberately UNQUOTED. Quoting the path puts a `"` immediately before it,
+    which the argument pattern already rejects on its own -- so a quoted version of this
+    fixture passes under both the whole-block and the per-command implementation, and
+    would assert nothing about the change it exists to pin.
+    """
+    (tmp_path / "mixed.yml").write_text(
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          echo tests/test_example_gate.py is disabled\n"
+        "          uv run pytest -m slow tests/test_other_gate.py\n",
+        encoding="utf-8",
+    )
+    covered = _modules_run_by_workflows(tmp_path)
+    assert "test_example_gate.py" not in covered, (
+        "a module named in an echo inherited the coverage of a real pytest command in "
+        f"the same block: {sorted(covered)}"
+    )
+    assert "test_other_gate.py" in covered, (
+        f"the genuinely invoked module in that block was not detected: {sorted(covered)}"
     )
