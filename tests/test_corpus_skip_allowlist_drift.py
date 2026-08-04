@@ -228,16 +228,23 @@ def test_allowlist_fixture_id_extracts_extensionless_stage_refs() -> None:
 def test_guard_flags_a_stale_extensionless_stage_entry() -> None:
     """#331's missing case, proven to fire: inject an entry keyed on the extensionless
     ``<bill>/<stage>`` form whose stage is NOT manifested in every format the case
-    reads. 113-hr-3547 v1 is manifested pdf-only, and the amount-recall gate reads
+    reads. 114-hr-2029 v4 is manifested pdf-only, and the amount-recall gate reads
     the xml AND the pdf of a stage, so CI can never collect that case — the entry is
     stale and must be named. (A naive second ``stale_allowlist_entries`` call without
     per-format resolution validated 0 of the allowlist's 4 entries and read
-    permanently green — the vacuous decoration this guard exists to prevent.)"""
-    nodeid = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[113-hr-3547/1_introduced-in-house]"
+    permanently green — the vacuous decoration this guard exists to prevent.)
+
+    The example used to be 113-hr-3547 v1, which gained its xml when the corpus moved to
+    per-version format parity. 114-hr-2029 v4 is the deliberate single-format entry: its
+    xml is withheld while the multi-<legis-body> section drop is open, and the manifest
+    records why. If that defect is fixed and the xml lands, this test needs a new
+    pdf-only stage — and parity means there may be none, in which case the honest fix is
+    a synthetic unmanifested id rather than hunting for a real one."""
+    nodeid = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[114-hr-2029/4_reported-in-senate]"
     allowlist = dict(conftest.ALLOWED_CI_SLOW_SKIPS)
     allowlist[nodeid] = "injected stale entry"
     stale = stale_allowlist_entries(allowlist, manifest_fixture_ids())
-    assert stale == {nodeid: "113-hr-3547/1_introduced-in-house"}
+    assert stale == {nodeid: "114-hr-2029/4_reported-in-senate"}
 
 
 def test_guard_passes_a_live_extensionless_stage_entry() -> None:

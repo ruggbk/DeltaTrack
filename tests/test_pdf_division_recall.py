@@ -12,8 +12,10 @@ skip, matching the other corpus suites):
      division, proving anchor identity survives the rebuild in `extract_anchors`
      (fresh-eyes #6).
 
-Enrolled bills are skipped (typeset without margin line numbers, so they yield no
-TITLE anchors — DeltaTrack#141), not counted as failures.
+Enrolled bills are typeset without margin line numbers, so they yield no TITLE anchors
+(DeltaTrack#141). They are ASSERTED rather than skipped: the version must be a declared
+zero-anchor layout in `_PDF_NO_TITLE_ANCHOR_LAYOUTS` and must still classify as unnumbered,
+so a numbered print that silently stops producing anchors reddens instead of going green.
 """
 
 from __future__ import annotations
@@ -37,10 +39,46 @@ _KNOWN_NAME_RESIDUE = {
 }
 
 
+# Versions whose print carries no margin line numbers, so the anchor pipeline yields no
+# TITLE anchors (#141). Keyed the way `_IDS` builds a case id, value is the reason.
+#
+# These used to `pytest.skip`, which asserted nothing: a corpus-wide anchor regression
+# would have turned every case into a green skip. Following the #262 treatment of the same
+# layout in test_corpus_tree_properties, a zero-anchor document is now ASSERTED rather than
+# skipped — the document must be a documented layout AND still classify as unnumbered, so
+# "this print has no line numbers" stays distinguishable from "anchor extraction broke".
+_PDF_NO_TITLE_ANCHOR_LAYOUTS: dict[str, str] = {
+    "115-hr-5895/5_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+}
+
+
 def _has_structure(pdf_path) -> bool:
     """A PDF the anchor pipeline can read — has TITLE anchors. Enrolled bills are
-    typeset without margin line numbers, so they yield none (#141) and are skipped."""
+    typeset without margin line numbers, so they yield none (#141)."""
     return any(a.kind == "title" for a in extract_anchors(cached_pages(pdf_path)))
+
+
+def _assert_documented_zero_anchor(case_id: str, pdf_path) -> None:
+    """A version with no TITLE anchors must be a KNOWN unnumbered layout, not a regression.
+
+    Two assertions, because the registry alone would accept a numbered print that simply
+    stopped producing anchors: the id must be declared, and the print must independently
+    still look unnumbered. A numbered print losing its anchors fails the second even if
+    someone adds it to the registry.
+    """
+    assert case_id in _PDF_NO_TITLE_ANCHOR_LAYOUTS, (
+        f"{case_id}: produced no TITLE anchors but is not a documented zero-anchor layout. "
+        "A numbered print that stops producing anchors is an extraction regression — add it "
+        "to _PDF_NO_TITLE_ANCHOR_LAYOUTS only with a reason."
+    )
+    # The production classifier, not a second heuristic: if these two ever disagree about
+    # what "unnumbered" means, the gate would certify a layout the shipped code rejects.
+    from deltatrack.compare.pdf import _is_unnumbered_layout  # test-only import
+
+    assert _is_unnumbered_layout(cached_pages(pdf_path)), (
+        f"{case_id}: registered as a zero-anchor layout but classifies as NUMBERED — the "
+        "anchor pipeline, not the layout, is why there are no TITLE anchors"
+    )
 
 
 def _xml_divisions(xml_path) -> dict[str, str]:
@@ -85,7 +123,8 @@ def test_division_count_matches_xml(name, xml, pdf):
     `engrossed-amendment-house` reprint (where a front-matter table of divisions
     must NOT shadow the real, content-bearing banners)."""
     if not _has_structure(pdf):
-        pytest.skip(f"{name}/{pdf.stem}: PDF has no TITLE anchors (unnumbered/enrolled — #141)")
+        _assert_documented_zero_anchor(f"{name}/{pdf.stem}", pdf)
+        return
     assert set(_pdf_divisions(pdf)) == set(_xml_divisions(xml))
 
 
@@ -98,7 +137,8 @@ def test_division_names_match_xml(name, xml, pdf):
     residues are catalogued in `_KNOWN_NAME_RESIDUE` (a wrapped genuine compound; an
     XML-side hyphen artifact) — asserted to stay confined to those (bill, letter)."""
     if not _has_structure(pdf):
-        pytest.skip(f"{name}/{pdf.stem}: PDF has no TITLE anchors (unnumbered/enrolled — #141)")
+        _assert_documented_zero_anchor(f"{name}/{pdf.stem}", pdf)
+        return
     truth, found = _xml_divisions(xml), _pdf_divisions(pdf)
     mismatches = {
         letter: (truth[letter], found.get(letter, ""))

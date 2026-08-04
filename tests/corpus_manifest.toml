@@ -46,7 +46,7 @@ covers = "Primary diff-validation baselines: controlled small diff (v1->v2, same
 versions = [
   { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
   { stage = "2_engrossed-in-house", formats = ["xml", "pdf"] },
-  { stage = "3_placed-on-calendar-senate", formats = ["pdf"] },
+  { stage = "3_placed-on-calendar-senate", formats = ["pdf", "xml"] },
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "5_engrossed-amendment-house", formats = ["xml"] },
   { stage = "6_enrolled-bill", formats = ["xml"] },
@@ -70,9 +70,9 @@ id = "113-hr-3547"
 subcommittee = "full-year omnibus (enrolled)"
 covers = "Enrolled multi-division omnibus whose later titles spill out as orphan <title> siblings — the #146/#167 duplicate-match_path proof case (its cross-division duplicate-count and money-drop baselines are pinned in test_corpus_properties / test_corpus_tree_properties). Stages 1-5 added in #220: the node-join gates pin 4->5 and 5->6 as XML amendment-shape pairs and 1->2 / 3->4 as PDF pairs."
 versions = [
-  { stage = "1_introduced-in-house", formats = ["pdf"] },
-  { stage = "2_engrossed-in-house", formats = ["pdf"] },
-  { stage = "3_received-in-senate", formats = ["pdf"] },
+  { stage = "1_introduced-in-house", formats = ["pdf", "xml"] },
+  { stage = "2_engrossed-in-house", formats = ["pdf", "xml"] },
+  { stage = "3_received-in-senate", formats = ["pdf", "xml"] },
   { stage = "4_engrossed-amendment-senate", formats = ["xml", "pdf"] },
   { stage = "5_engrossed-amendment-house", formats = ["xml"] },
   { stage = "6_enrolled-bill", formats = ["xml"] },
@@ -83,8 +83,17 @@ id = "114-hr-2029"
 subcommittee = "full-year omnibus"
 covers = "Omnibus span-geometry case (#172/#175). The 5->6 XML pair is the node-join amendment-shape gate; the 3->4 PDF pair is its anchor-agreement gate. Committed in #220 as part of retiring REQUIRE_CORPUS; also a #126 curation candidate. The enrolled text (v7) joined in #278 with the Legislative Branch validation set, extending the XML chain to a 6->7 pair."
 versions = [
-  { stage = "1_reported-in-house", formats = ["pdf"] },
-  { stage = "3_referred-in-senate", formats = ["pdf"] },
+  { stage = "1_reported-in-house", formats = ["pdf", "xml"] },
+  { stage = "3_referred-in-senate", formats = ["pdf", "xml"] },
+  # XML deliberately WITHHELD while the multi-<legis-body> drop is open. A
+  # reported-in-senate bill carries the reported text AND the committee substitute as two
+  # sibling <legis-body> elements; find_bill_body returns the first and the second is
+  # walked by nothing, so this version loses 91 sections outright -- among them the second
+  # Sec. 129, whose <list> rescinds $85,000,000 / $86,400,000 / $133,000,000. Committing
+  # the XML makes test_no_section_sibling_is_dropped_from_every_node red, and the only way
+  # to green it would be an allowlist entry recording a live money-losing defect as
+  # normal. Withheld for the same reason as 115-hr-244 v5 below. The PDF stays: it is the
+  # 3->4 anchor-agreement pair and reads the printed page, so it is unaffected.
   { stage = "4_reported-in-senate", formats = ["pdf"] },
   { stage = "5_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "6_engrossed-amendment-house", formats = ["xml"] },
@@ -125,7 +134,7 @@ id = "118-hr-8282"
 subcommittee = "non-appropriations House bill"
 covers = "Introduced-in-House PDF used as the PDF-pipeline generalization case (a bill outside the appropriations shape must still extract and level without spurious accounts/majors)."
 versions = [
-  { stage = "1_introduced-in-house", formats = ["pdf"] },
+  { stage = "1_introduced-in-house", formats = ["pdf", "xml"] },
 ]
 
 # --- PDF-golden SEC.-catchline false-positive repros (#89, committed by #287) ---
@@ -138,7 +147,7 @@ id = "117-hr-2471"
 subcommittee = "non-appropriations House bill (catchline repro)"
 covers = "SEC.-catchline continuation repro (#89): the wrapped catchline 'AND ASSEMBLY IN HAITI.' must not become a false account/major (test_pdf_anchor_golden)."
 versions = [
-  { stage = "1_introduced-in-house", formats = ["pdf"] },
+  { stage = "1_introduced-in-house", formats = ["pdf", "xml"] },
   { stage = "6_enrolled-bill", formats = ["xml"] },
 ]
 
@@ -147,7 +156,7 @@ id = "118-hr-2882"
 subcommittee = "non-appropriations House bill (catchline repro)"
 covers = "SEC.-catchline continuation repro (#89): the wrapped catchline 'TRUST FUND.' must not become a false account/major (test_pdf_anchor_golden)."
 versions = [
-  { stage = "1_introduced-in-house", formats = ["pdf"] },
+  { stage = "1_introduced-in-house", formats = ["pdf", "xml"] },
   { stage = "4_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "5_engrossed-amendment-house", formats = ["xml"] },
 ]
