@@ -49,6 +49,13 @@ KNOWN_UNCOVERED_AMOUNTS: dict[str, dict[str, str]] = {
     # the divisions it drops are policy text rather than appropriations.
     "117-hr-2471/6_enrolled-bill.xml": {
         "$200,000,000,000,000": "#465 division without a <title> child is dropped from the tree",
+        # "the sum of $700 (as increased from time to time...)". Reached no node, and this
+        # gate called it found until the search stopped matching it inside "$700,000".
+        "$700": "#465 section directly under a division is walked by nothing",
+    },
+    "116-hr-1865/6_enrolled-bill.xml": {
+        # "a surcharge of $35 per coin for the $5 coin", masked by "$356,000".
+        "$35": "#465 section directly under a division is walked by nothing",
     },
 }
 
@@ -169,7 +176,22 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
 
     # Search for the source spelling, not a re-formatted f"${value:,}" -- see
     # _extract_dollar_matches for why the round trip invents misses on malformed source.
-    missing = sorted({literal for _value, literal in raw_matches if literal not in all_body_text})
+    #
+    # The trailing lookahead is what makes this a search for the AMOUNT rather than for
+    # its digits. A plain containment test finds "$35" inside "$356,000", so a dropped
+    # small amount reads as present whenever some larger amount happens to start with the
+    # same digits, and the check then passes for a reason that has nothing to do with the
+    # amount it was asked about. Two live instances on the committed corpus, both real
+    # amounts reaching no node while this gate called them found: "$35 per coin for the
+    # $5 coin" (116-hr-1865) and "the sum of $700" (117-hr-2471), each masked by a longer
+    # amount elsewhere in the same bill.
+    missing = sorted(
+        {
+            literal
+            for _value, literal in raw_matches
+            if not re.search(re.escape(literal) + r"(?![\d,]*\d)", all_body_text)
+        }
+    )
     allowed = KNOWN_UNCOVERED_AMOUNTS.get(test_id, {})
 
     unexpected = [literal for literal in missing if literal not in allowed]
