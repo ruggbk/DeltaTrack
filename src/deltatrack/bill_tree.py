@@ -793,6 +793,57 @@ def _process_appro_element(
     return current_major, current_intermediate, prev_name, pending_header
 
 
+def _walk_section_appro_children(
+    section: ET.Element,
+    title_header: str,
+    division: Division,
+    current_major: str | None,
+    current_intermediate: str | None,
+    prev_name: str | None,
+    nodes: list[BillNode],
+) -> None:
+    """Walk a section's ``appropriations-*`` children, emitting a node for each.
+
+    Shared by both section walkers. A section holding appropriations children is the
+    same arrangement wherever it sits, so the account naming (#474's split-account
+    pending header) and the address rules must not depend on whether a <title> happens
+    to wrap it: ``walk_body_sections`` had no appropriations branch at all, so for a
+    bill written without TITLE divisions ``_extract_section_text`` absorbed the whole
+    account hierarchy into the section's own text and no account node was ever created
+    (#485).
+
+    Only this walk is shared, not the section's own node. The two callers build that
+    node's display_path by different conventions (``walk_body_sections`` keeps the
+    section number cased as "Sec. 101", the title path lowercases it through
+    ``_build_paths``), and unifying them here would have re-cased 24,662 of the 25,191
+    plain body-level sections in the corpus to fix 7 — a cosmetic regression far wider
+    than the defect. That difference is real but separate; it is not this function's to
+    settle.
+
+    Context (``current_major`` / ``current_intermediate`` / ``prev_name``) is scoped to
+    the caller and not written back: the callers pass their own copies and neither wants
+    a section's internal agency context leaking into its siblings.
+    """
+    sec_major = current_major
+    sec_intermediate = current_intermediate
+    sec_prev = prev_name
+    # A split pair is a pair of siblings, so the pending name never crosses into a
+    # section from outside it.
+    sec_pending: str | None = None
+    for sub in section:
+        if sub.tag.startswith("appropriations-"):
+            sec_major, sec_intermediate, sec_prev, sec_pending = _process_appro_element(
+                sub,
+                title_header,
+                division,
+                sec_major,
+                sec_intermediate,
+                sec_prev,
+                sec_pending,
+                nodes,
+            )
+
+
 def _process_section_element(
     section: ET.Element,
     title_header: str,
@@ -856,25 +907,15 @@ def _process_section_element(
                 )
             )
 
-        # Walk appropriations children with scoped context
-        sec_major = current_major
-        sec_intermediate = current_intermediate
-        sec_prev = prev_name
-        # A split pair is a pair of siblings, so the pending name never crosses into a
-        # section from outside it.
-        sec_pending: str | None = None
-        for sub in section:
-            if sub.tag.startswith("appropriations-"):
-                sec_major, sec_intermediate, sec_prev, sec_pending = _process_appro_element(
-                    sub,
-                    title_header,
-                    division,
-                    sec_major,
-                    sec_intermediate,
-                    sec_prev,
-                    sec_pending,
-                    nodes,
-                )
+        _walk_section_appro_children(
+            section,
+            title_header,
+            division,
+            current_major,
+            current_intermediate,
+            prev_name,
+            nodes,
+        )
     else:
         sub_specs = _node_subsections(section)
         carve = frozenset(id(el) for el, _label, _catch in sub_specs)
@@ -1123,12 +1164,24 @@ def walk_body_sections(parent: ET.Element, division: Division = NO_DIVISION) -> 
         if child.tag != "section":
             continue
 
-        sub_specs = _node_subsections(child)
-        carve = frozenset(id(el) for el, _label, _catch in sub_specs)
+        # A section holding appropriations children carves those out instead of its
+        # subsections, mirroring the title path: each account becomes its own node
+        # below, so leaving them in the section's own text would both hide the accounts
+        # and double-count their money (#485).
+        appro_carve = frozenset(id(c) for c in child if c.tag.startswith("appropriations-"))
+        if appro_carve:
+            sub_specs: list[tuple[ET.Element, str, str]] = []
+            carve = appro_carve
+        else:
+            sub_specs = _node_subsections(child)
+            carve = frozenset(id(el) for el, _label, _catch in sub_specs)
         body_text = _extract_section_text(child, carve)
         display_text = extract_display_text(child, skip_children=carve)
-        # Empty own body is fine when the section parents node-ized subsections (#188).
-        if not body_text and not sub_specs:
+        # Empty own body is fine when the section parents node-ized subsections (#188)
+        # or appropriations accounts (#485) — both emit their own nodes below. Without
+        # the appropriations arm here a section that is nothing but accounts, which is
+        # exactly 118-hr-9468's shape, would `continue` before they were ever walked.
+        if not body_text and not sub_specs and not appro_carve:
             continue
 
         enum_el = child.find("enum")
@@ -1140,20 +1193,34 @@ def walk_body_sections(parent: ET.Element, division: Division = NO_DIVISION) -> 
         match_path = (sec_label,) if sec_label else ()
         display_path = ((division.label,) if division.label else ()) + ((section_num,) if section_num else ())
 
-        nodes.append(
-            BillNode(
-                match_path=match_path,
-                display_path=display_path,
-                tag="section",
-                element_id=child.attrib.get("id", ""),
-                header_text=get_header_text(child),
-                body_text=body_text,
-                display_text=display_text,
-                section_number=section_num,
-                division_label=division.label,
-                division_key=division.key,
+        # An appropriations section with no text of its own emits no node, exactly as the
+        # title path does: the accounts below carry the content, and an empty node here
+        # would be a second address competing with theirs. 118-hr-9468's section is that
+        # case — every child is an account — so the collapsed unnamed entry the reader
+        # sees today is replaced by the accounts rather than joined by them.
+        if body_text or not appro_carve:
+            nodes.append(
+                BillNode(
+                    match_path=match_path,
+                    display_path=display_path,
+                    tag="section",
+                    element_id=child.attrib.get("id", ""),
+                    header_text=get_header_text(child),
+                    body_text=body_text,
+                    display_text=display_text,
+                    section_number=section_num,
+                    division_label=division.label,
+                    division_key=division.key,
+                )
             )
-        )
+        if appro_carve:
+            # No title context here, which is the shape `_build_paths` already handles by
+            # omitting an empty title from both paths. The accounts therefore address off
+            # their own agency names — ("department of veterans affairs", "veterans
+            # benefits administration", "compensation and pensions") — rather than off the
+            # section, which is what makes them addressable at all: this section carries no
+            # <enum>, so its own match_path is empty and could anchor nothing.
+            _walk_section_appro_children(child, "", division, None, None, None, nodes)
         _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division, nodes)
 
     return nodes

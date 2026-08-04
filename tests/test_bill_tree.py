@@ -10,6 +10,7 @@ from deltatrack.bill_tree import (
     _extract_appropriations_text,
     _extract_metadata,
     _extract_section_text,
+    amount_text,
     build_division_label,
     build_title_label,
     extract_display_text,
@@ -2489,3 +2490,99 @@ class TestDivisionBareSectionsOnARealBill:
         tree = normalize_bill(fixture_path("114-hr-2029", "7_enrolled-bill.xml"))
         bare = [n for n in tree.nodes if n.division_label and n.match_path == ("sec. 2",)]
         assert bare, "a division's bare preamble section is absent from the tree"
+
+
+class TestUntitledBillAppropriations:
+    """A bill with no TITLE headings must still resolve its accounts (#485).
+
+    118-hr-9468 is the Veterans Benefits Continuity and Accountability Supplemental
+    Appropriations Act: short enough to be written without TITLE divisions, so its
+    accounts hang off a bare `<section>` under the bill body and are walked by
+    ``walk_body_sections`` rather than the title path. That walker had no
+    appropriations branch, so ``_extract_section_text`` absorbed the entire hierarchy
+    into the section's own text and emitted one 382-character node whose name was blank
+    and whose ``match_path`` was empty — the section carries no ``<enum>``.
+
+    These assert the account NAMES and ADDRESSES, deliberately, not the amounts. Both
+    amounts landed inside that collapsed node's text all along, so every
+    amount-conservation gate passed on this bill while the defect was present; a test
+    that watched the money would have gone green on the broken build. What was lost was
+    the attribution — which account each figure belongs to.
+
+    The published print (GPO's own rendering of this bill) shows these as separate
+    headed accounts, each heading directly above its own money paragraph:
+
+        DEPARTMENT OF VETERANS AFFAIRS
+              Veterans Benefits Administration
+                 compensation and pensions
+        For an additional amount for ``Compensation and Pensions'', $2,285,513,000, ...
+
+    so treating them as one block of prose is a departure from the source, not a
+    defensible simplification of it.
+
+    Both accounts are also #474 split pairs — the name is in one
+    ``<appropriations-small>`` and the money in the next — so these hold that the
+    split-account naming rule reaches this path too, not only the title path.
+    """
+
+    ACCOUNTS = [
+        ("compensation and pensions", "Compensation and Pensions", "$2,285,513,000"),
+        ("readjustment benefits", "Readjustment Benefits", "$596,969,000"),
+    ]
+
+    @staticmethod
+    def _tree(stage="1_introduced-in-house.xml"):
+        return normalize_bill(fixture_path("118-hr-9468", stage))
+
+    @pytest.mark.parametrize("leaf,name,amount", ACCOUNTS)
+    def test_each_account_is_its_own_named_addressed_node(self, leaf, name, amount):
+        tree = self._tree()
+        matches = [n for n in tree.nodes if n.match_path and n.match_path[-1] == leaf]
+        assert len(matches) == 1, (
+            f"{name!r} does not resolve to exactly one node "
+            f"(got {[n.match_path for n in matches]}); its account is collapsed into "
+            f"the enclosing section"
+        )
+        node = matches[0]
+        assert node.header_text == name, f"account node carries no name (header={node.header_text!r})"
+        assert amount in amount_text(node), f"{amount} is not filed under {name!r}"
+
+    def test_accounts_address_off_their_agency_not_the_enum_less_section(self):
+        """The address answer: the section has no ``<enum>`` and so no path of its own.
+
+        The accounts therefore hang off the agency names above them, which is what makes
+        them addressable at all. Pinned because an address that silently degraded to the
+        empty tuple is precisely the failure being fixed, and an empty tuple is falsy —
+        a laxer assertion would pass on it.
+        """
+        tree = self._tree()
+        for leaf, name, _amount in self.ACCOUNTS:
+            node = next(n for n in tree.nodes if n.match_path and n.match_path[-1] == leaf)
+            assert node.match_path == (
+                "department of veterans affairs",
+                "veterans benefits administration",
+                leaf,
+            ), f"{name!r} has address {node.match_path!r}"
+
+    def test_no_node_swallows_the_whole_account_hierarchy(self):
+        """The collapsed entry itself, named rather than inferred from a count.
+
+        Before the fix one unnamed node held both account names and both amounts at
+        once. Assert that no single node does, so the test fails on the old build for
+        the reason it exists rather than on an incidental node tally.
+        """
+        tree = self._tree()
+        for node in tree.nodes:
+            text = amount_text(node)
+            both = "$2,285,513,000" in text and "$596,969,000" in text
+            assert not both, (
+                f"one node (match_path={node.match_path!r}) holds both accounts' money; "
+                f"the account hierarchy is collapsed into it"
+            )
+
+    def test_the_shape_survives_to_the_enrolled_version(self):
+        """The same bill at the other end of its life, so the fixture pair is not
+        pinning a quirk of the introduced print alone."""
+        tree = self._tree("4_enrolled-bill.xml")
+        leaves = {n.match_path[-1] for n in tree.nodes if n.match_path}
+        assert {"compensation and pensions", "readjustment benefits"} <= leaves

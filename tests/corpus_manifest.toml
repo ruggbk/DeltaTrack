@@ -321,3 +321,26 @@ covers = "Account-vocabulary precision/recall floor (reported-in-House, FY2024 T
 versions = [
   { stage = "1_reported-in-house", formats = ["xml", "pdf"] },
 ]
+
+# --- Untitled-bill appropriations shape ----------------------------------------
+# A supplemental appropriations act written with no TITLE divisions, so its accounts
+# hang directly off a <section> under the bill body. That section is walked by
+# `walk_body_sections` rather than the title path, and until #485 that walker had no
+# appropriations branch at all: the whole account hierarchy was absorbed into the
+# section's own text and no account node was created. The money still landed in a
+# node, so every amount-conservation gate passed on it — which is why this shape needs
+# a fixture that watches the account NAMES and ADDRESSES, not the amounts.
+#
+# Two versions so the shape is exercised at both ends of the bill's life (introduced
+# and enrolled) and so an adjacent-version diff case exists. XML only: the collapse is
+# an XML-walker defect, and no PDF for this bill is present locally (whether the PDF
+# pipeline shows the same collapse is recorded as unverified on #485).
+
+[[bill]]
+id = "118-hr-9468"
+subcommittee = "milcon-va / supplemental (no TITLE divisions)"
+covers = "The corpus's untitled-appropriations shape: accounts as children of a bare body-level <section> with no <enum>, including a #474 split-account pair (name and money in separate sibling elements). Pins that `Compensation and Pensions` and `Readjustment Benefits` reach their own named, addressed nodes (test_bill_tree.py TestUntitledBillAppropriations) rather than collapsing into one unnamed entry (#485)."
+versions = [
+  { stage = "1_introduced-in-house", formats = ["xml"] },
+  { stage = "4_enrolled-bill", formats = ["xml"] },
+]
