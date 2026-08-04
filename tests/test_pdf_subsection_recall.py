@@ -81,6 +81,22 @@ FIXTURES = [
 # Denominator sanity so the gates can't pass vacuously on a broken extractor (#167).
 MIN_CATCHLINES = 3
 
+# A section HEADING has no business inside a subsection's catchline: reaching one means the
+# join left this subsection and ran into the next section (#473).
+#
+# Matches the two forms GPO sets a heading in, both of which put a period immediately after
+# the enumerator: abbreviated "SEC. 307." and spelled-out "SECTION 1.". It deliberately does
+# NOT match a cross-REFERENCE to a section, which carries no such period and is ordinary
+# catchline vocabulary — 119-hr-1 has a real one, "(b) TREATMENT OF QUALIFIED PRODUCTION
+# PROPERTY AS SECTION 1245 PROPERTY". Requiring the period is what separates "this anchor
+# ran into the next section" from "this provision talks about a section".
+_SECTION_IN_CATCHLINE = re.compile(r"\bSEC\.\s+\d|\bSECTION\s+\d+\.")
+# Backstop on catchline length. The longest real catchline on the committed corpus is 258
+# chars (119-hr-1 sec. 112207(b)); this sits above it with headroom. A runaway join blows
+# past it (the measured fabrications ran 284-874 chars) even when it stops short of a
+# section enumerator.
+MAX_CATCHLINE_CHARS = 320
+
 # Recall and precision are asserted ABSOLUTELY: no catchline-bearing subsection may be
 # missed, and every false positive must be a doubled two-letter enumerator. Neither is a
 # ratio any more (#473).
@@ -201,6 +217,46 @@ def test_every_catchline_subsection_is_found(bill, pdf_rel, xml_rel):
         f"{bill}: {len(missed)} of {len(catchlines)} catchline-bearing subsections reach no "
         f"PDF anchor: {missed[:10]}. A subsection with no anchor loses its breadcrumb, so a "
         f"change inside it is reported by page and line only."
+    )
+
+
+def test_no_subsection_anchor_swallows_a_following_section() -> None:
+    """A subsection anchor's TEXT is a catchline, never a run into the next section (#473).
+
+    Swept over every committed PDF, because this is the one property the three gates above
+    are structurally unable to see. They compare ``(section, enum)`` pair identity and
+    never look at the anchor's text, so an anchor sitting at the right position with a
+    295-character garbage label is invisible to all of them — and the label is consumed
+    output: it becomes the node label and the breadcrumb a reader is shown.
+
+    That is not hypothetical. Following a wrapped catchline by line COUNT alone made the
+    join walk out of five catchline-less subsections, across an account heading and a
+    ``SEC.`` line, onto the following section's ``.—``. Precision, recall and the
+    quoted-block gate all stayed green throughout, which is why this one is written
+    against the text.
+
+    Two absolute assertions, no ratio: a catchline never contains a section enumerator,
+    and it is bounded in length. The cap sits above the longest real catchline measured
+    (258 chars) with headroom; it is a backstop on the shape rule, not a tuning knob.
+    """
+    offenders = []
+    checked = 0
+    for bill_dir in sorted(FIXTURES_DIR.iterdir()):
+        if not bill_dir.is_dir():
+            continue
+        for pdf in sorted(bill_dir.glob("*.pdf")):
+            for anchor in extract_anchors(cached_pages(pdf)):
+                if anchor.kind != "subsection":
+                    continue
+                checked += 1
+                if _SECTION_IN_CATCHLINE.search(anchor.text) or len(anchor.text) > MAX_CATCHLINE_CHARS:
+                    where = f"{bill_dir.name}/{pdf.name} p{anchor.page_number}:{anchor.line_number}"
+                    offenders.append(f"{where} -> {anchor.text[:120]!r}")
+
+    # Fail-closed floor: the sweep must actually have had anchors to judge.
+    assert checked >= 500, f"only {checked} subsection anchors corpus-wide; this gate is not exercising anything"
+    assert offenders == [], (
+        f"{len(offenders)} of {checked} subsection anchors run past the catchline into following text: {offenders[:3]}"
     )
 
 

@@ -232,7 +232,9 @@ class TestRunInSubsection:
     DEFINED.—`) renders inline at body size, so the size path can't see it. A
     dedicated format-grammatical detector emits a `subsection` anchor from the
     parenthesized lower-case enumerator + capitalized catchline + `.—` signature,
-    matched over a 2-line de-hyphenating continuation window with a stop-rule.
+    matched over a de-hyphenating continuation window with a stop-rule: two lines join
+    unconditionally, and past that a line joins only while it is still title-shaped, so a
+    long title is followed but body prose ends the join (#473).
     """
 
     def _subs(self, page_number, text):
@@ -301,6 +303,26 @@ class TestRunInSubsection:
                 "RETURN SYSTEM",
             )
         ]
+
+    def test_catchline_less_subsection_does_not_run_into_the_next_section(self):
+        # Transcribed from 115-hr-5895 p49 lines 16-21. This subsection has NO catchline:
+        # it opens straight into prose. Nothing in it should anchor, but with a pure
+        # line-count budget the join walked the prose, crossed the `SEC.` line, and
+        # terminated on the FOLLOWING section's `.—`, producing a 295-char anchor labelled
+        # "(c) A waiver under subsection (b) … SEC. 307. (a) NEW REGIONAL RESERVES".
+        #
+        # It is the counterpart to test_wrapped_catchline_five_lines: both need to look
+        # more than two lines ahead, and only the case-shape of the continuation tells
+        # them apart. A count cannot, which is why one is not enough (#473).
+        text = (
+            "16 (c) A waiver under subsection (b) shall not be effective\n"
+            "17 until 15 days after the date on which the Secretary submits\n"
+            "18 to the Committees on Appropriations of both Houses of\n"
+            "19 Congress a report on the justification for the waiver.\n"
+            "20 SEC. 307. (a) NEW REGIONAL RESERVES.—The Secretary\n"
+            "21 shall establish reserves.\n"
+        )
+        assert [a for a in self._subs(1, text) if a.line_number == 16] == []
 
     def test_catchline_beyond_the_window_is_abandoned(self):
         # The window is a bound, not an invitation: a catchline still running after

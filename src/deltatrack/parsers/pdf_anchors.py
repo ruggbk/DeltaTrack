@@ -117,27 +117,53 @@ _RUNIN_QUOTED_LINE = re.compile(r"^[‘“'\"]")
 # removes all 29 false joins. (The anchor line's OWN enumerator is expected, so this
 # enumerator clause applies only to continuations, never the first line.)
 _RUNIN_CONTINUATION_STOP = re.compile(r"^[‘“'\"]|^\([0-9A-Za-z]{1,4}\)\s")
-# How many continuation lines a wrapped catchline may span before the join gives up.
+# How far a wrapped catchline may be followed, and on what evidence (#473).
 #
-# This is a bound on the LENGTH OF A TITLE, not a precision control. What stops a runaway
-# join is `_RUNIN_CONTINUATION_STOP` (any line opening a quote or an enumerator ends the
-# window) plus the required `.—` terminator; this number only decides how long a
-# legitimate catchline is allowed to be before it is abandoned unread.
+# A catchline wraps because GPO ran out of column, so its continuations are still TITLE:
+# set in caps, no lowercase, until the `.—` hands over to body prose. That shape is the
+# real signal that the title is still going, and `_catchline_shaped` tests for it.
 #
-# It was 2, which silently discarded every subsection whose title wrapped onto a third
-# line (#473). The cutoff was sharp because it is really a character budget: at GPO's
-# ~45 characters per line, 2 continuations fit a title of about 122 characters, and on
-# 119-hr-1 every title <=122 chars was found (929 of them) while every title >=127 chars
-# was missed (5 of them), with nothing in between. The longest real catchline measured is
-# 250 characters (119-hr-1 sec. 112207(b), a $15,000,000 appropriation), needing 5.
+# Why the shape test rather than simply a bigger line budget. The budget used to be 2,
+# which silently discarded every subsection whose title wrapped onto a third line: at
+# GPO's ~45 characters per line it fit about 122 characters, and on 119-hr-1 every title
+# <=122 chars was found (929 of them) while every title >=127 chars was missed (5),
+# nothing in between. But raising the number is not free, because a subsection with NO
+# catchline at all is only stopped from reaching forward by that same number. At 6 the
+# join ran out of five such subsections, across an account heading and a `SEC.` line, and
+# terminated on the FOLLOWING section's `.—`:
 #
-# Set to 6 with one line of headroom over that. Swept 2 through 8 over all 13 committed
-# PDF+XML fixture pairs: false positives stay at 2 (the known doubled-enum residue) and
-# quoted-block leaks stay at 0 at EVERY width, while detections rise 1041 -> 1051 and
-# plateau at 6. So the width trades nothing away here; it is capped rather than unbounded
-# only because an unbounded join would let a subsection with no catchline at all reach
-# forward indefinitely for an unrelated `.—`.
-_RUNIN_MAX_CONTINUATIONS = 6
+#   115-hr-5895 p49:16 -> "(c) A waiver under subsection (b) shall not be effective
+#                          until 15 days ... SEC. 307. (a) NEW REGIONAL RESERVES"  (295 ch)
+#
+# `_RUNIN_CONTINUATION_STOP` does not catch those: it ends the window at a quote or an
+# enumerator, and none of those runaways opens with either. Measured over the committed
+# corpus, subsection anchors whose text contains "SEC." went 0 at budget 2, to 6 at budget
+# 6, to more as the budget grows. The count was doing the precision work, so spending it
+# on title length alone traded one silent defect for another.
+#
+# So: the first two continuations are still unconditional, which is exactly the behaviour
+# that measured 0 fabrications, making this a strict superset of the old rule that cannot
+# regress a case it used to get right. From the third onward a continuation must still
+# look like a title. That recovers all 5 genuine long catchlines (including the 250-char
+# 119-hr-1 sec. 112207(b), a $15,000,000 appropriation) and fabricates none.
+_RUNIN_FREE_CONTINUATIONS = 2
+# Backstop only. With the shape test doing the bounding this is not reached on the corpus
+# (budgets 8 and 100 measure identically); it exists so a pathological all-caps run cannot
+# make the join unbounded.
+_RUNIN_MAX_CONTINUATIONS = 8
+# The catchline/body boundary: everything up to the terminating `.—` is title. A line is
+# still title if that leading part carries no lowercase. Split on the terminator first, so
+# the line that HANDS OVER ("...SYSTEM.—Out of any money in the") is judged on its title
+# half and correctly accepted, while a line of plain prose is not.
+_RUNIN_TERMINATOR_SPLIT = re.compile(r"[.]\s*[—–]")
+
+
+def _catchline_shaped(line: str) -> bool:
+    """Is `line` still part of a wrapped catchline (title case-shape, not body prose)?"""
+    head = _RUNIN_TERMINATOR_SPLIT.split(line, maxsplit=1)[0]
+    return not any(c.islower() for c in head)
+
+
 # Line-fullness split (DeltaTrack#130): two stacked majors vs one wrapped name. A run
 # line broke EARLY (its successor's first word would have fit) ⇒ an intentional break
 # between stacked headings; otherwise it wrapped because the next word didn't fit. The
@@ -277,12 +303,14 @@ def _match_runin_subsection(first_text: str, next_texts: list[str]) -> str | Non
     """Canonical `(enum) Catchline` for a run-in subsection at the start of `first_text`,
     or None (DeltaTrack#96).
 
-    Joins up to `_RUNIN_MAX_CONTINUATIONS` continuation lines to recover a catchline whose
-    terminal `.—` GPO wrapped, de-hyphenating soft wraps via `_WRAP_HYPHENS` exactly as
-    `_join_major_run` does. The stop-rule (`_RUNIN_CONTINUATION_STOP`) and the quote
-    self-exclusion guard against fabricated anchors; roman-lookalike enumerators are
-    rejected. Printed casing is preserved (the PDF is source-of-truth), trailing `.—` and
-    body stripped."""
+    Follows a catchline whose terminal `.—` GPO wrapped, de-hyphenating soft wraps via
+    `_WRAP_HYPHENS` exactly as `_join_major_run` does. The first
+    `_RUNIN_FREE_CONTINUATIONS` lines join unconditionally; past that a line must still be
+    `_catchline_shaped`, so the join follows a long TITLE but stops where body prose
+    begins. `_RUNIN_MAX_CONTINUATIONS` is a backstop behind that. The stop-rule
+    (`_RUNIN_CONTINUATION_STOP`) and the quote self-exclusion guard against fabricated
+    anchors; roman-lookalike enumerators are rejected. Printed casing is preserved (the
+    PDF is source-of-truth), trailing `.—` and body stripped."""
     first = first_text.strip()
     if _RUNIN_QUOTED_LINE.match(first):  # quoted amendment target self-excludes
         return None
@@ -303,6 +331,10 @@ def _match_runin_subsection(first_text: str, next_texts: list[str]) -> str | Non
         cont = next_texts[conts_used].strip()
         conts_used += 1
         if not cont or _RUNIN_CONTINUATION_STOP.match(cont):
+            return None
+        # Past the free window, keep going only while the line is still title-shaped.
+        # This is what stops a catchline-less subsection running into the next section.
+        if conts_used > _RUNIN_FREE_CONTINUATIONS and not _catchline_shaped(cont):
             return None
         joined = joined[:-1] + cont if joined.endswith(_WRAP_HYPHENS) else f"{joined} {cont}"
 
@@ -333,12 +365,12 @@ def _anchors_from_page(page: Page) -> list[Anchor]:
         if title_match:
             anchors.append(Anchor(page.page_number, line.line_number, "title", f"TITLE {title_match.group(1)}"))
             continue
-        # Continuation lines for a wrapped catchline (page-local; a page-seam wrap is
-        # documented 0-measured residue — the per-page window never crosses pages). Sized
-        # from `_RUNIN_MAX_CONTINUATIONS` so the slice and the join's own cap cannot drift
-        # apart: the two together decide how long a catchline may be, and when only the
-        # cap moved the slice silently kept the old limit (#473).
-        next_texts = [ln.text for ln in lines[idx + 1 : idx + 1 + _RUNIN_MAX_CONTINUATIONS]]
+        # Every remaining line on the page is offered; the matcher alone decides where to
+        # stop (page-local, so a page-seam wrap is documented 0-measured residue). This
+        # used to be pre-truncated to the matcher's own limit, which put the bound in two
+        # places that had to agree: when only one moved, the other silently kept the old
+        # limit, and the matcher's cap became unreachable dead code (#473).
+        next_texts = [ln.text for ln in lines[idx + 1 :]]
         section_match = _SECTION_PATTERN.match(line.text)
         if section_match:
             canonical = re.sub(r"\s+", " ", section_match.group(1))
