@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from deltatrack.bill_tree import BillNode, BillTree, amount_text, normalize_bill, normalize_division_title
+from deltatrack.bill_tree import BillNode, BillTree, amount_text, normalize_bill
 from deltatrack.version_stems import (
     label_from_stem,
     local_versions,
@@ -236,15 +236,20 @@ def _match_collision_group(
 ) -> list[tuple[BillNode | None, BillNode | None]]:
     """Resolve a collision group (multiple nodes sharing one match_path).
 
-    Uses division titles to sub-group, then text similarity as fallback.
+    Uses each node's division key to sub-group, then text similarity as fallback.
+
+    The key is carried on the node (#468). It used to be recovered from the division's
+    display label by splitting on ``":"``, which tied matching to a presentation choice:
+    the GPO form #66 asks for has no colon, so every division collapsed into one bucket
+    and nodes silently paired across divisions.
     """
-    # Step 1: Sub-group by normalized division title
+    # Step 1: Sub-group by division
     old_by_div: dict[str, list[BillNode]] = defaultdict(list)
     new_by_div: dict[str, list[BillNode]] = defaultdict(list)
     for node in old_nodes:
-        old_by_div[normalize_division_title(node.division_label)].append(node)
+        old_by_div[node.division_key].append(node)
     for node in new_nodes:
-        new_by_div[normalize_division_title(node.division_label)].append(node)
+        new_by_div[node.division_key].append(node)
 
     pairs: list[tuple[BillNode | None, BillNode | None]] = []
     unmatched_old: list[BillNode] = []
