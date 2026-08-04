@@ -511,6 +511,14 @@ ALLOWED_CI_SLOW_SKIPS = {
     "[118-hr-2882/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
     "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
     "[118-hr-8282/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
+    # Same shape, seen from the other direction: #126 committed this version's PDF beside
+    # its existing XML, so the pair gate collects it for the first time. 118-hr-2882 v4 is
+    # the 4 KB procedural Senate amendment already declared in ALLOWED_CORPUS_SKIPS above
+    # for carrying no dollar amounts, so there is nothing for the recall case to assert
+    # either. A property of the document, not a fixture absence — committing more cannot
+    # retire it. Its PDF is carried for the v4->v5 anchor pair, not for amounts.
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[118-hr-2882/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
 }
 
 # --- Fast-tier PDF gates -------------------------------------------------------
