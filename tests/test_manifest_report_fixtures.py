@@ -63,8 +63,23 @@ def _report_sources_by_version(manifest: dict) -> dict[tuple[str, str], list[dic
     return result
 
 
+def _every_version(manifest: dict) -> list[tuple[str, str, list[str], list[dict] | None]]:
+    """(bill_id, stage, formats, raw committee_report) for every manifested version.
+
+    Raw and unfiltered, unlike ``_report_sources_by_version``: the completeness gate
+    has to see the "no report" sentinel and the absence of any entry as different
+    things, and both are invisible once the sentinel is dropped.
+    """
+    return [
+        (bill_entry["id"], ver["stage"], ver.get("formats", []), ver.get("committee_report"))
+        for bill_entry in manifest.get("bill", [])
+        for ver in bill_entry.get("versions", [])
+    ]
+
+
 _MANIFEST = load_manifest()
 _REPORT_PKGS = _report_sources_by_version(_MANIFEST)
+_ALL_VERSIONS = _every_version(_MANIFEST)
 
 # One entry per distinct report, keyed by citation rather than pkg: a report with no
 # published text has no pkg, and keying on pkg would silently collapse every such
@@ -448,6 +463,25 @@ def test_118_hr_2882_house_amendment_has_no_report():
     assert ("118-hr-2882", "1_introduced-in-house") not in _REPORT_PKGS
     assert ("118-hr-2882", "4_engrossed-amendment-senate") not in _REPORT_PKGS
 
+    # The reasons must stay specific. This bill HAS a committee report; the reports
+    # simply explain none of its committed versions, and each version says which of
+    # the three rules excluded it. Offline regeneration recovers a bill's sources
+    # from the pairings still recorded, so once the last pairing is dropped it can
+    # only see "no reports at all" -- and would overwrite these with the generic
+    # "bill has no committee reports", which is false and reads as authoritative.
+    reasons = {
+        stage: (report[0].get("reason") or "")
+        for bill_id, stage, _formats, report in _ALL_VERSIONS
+        if bill_id == "118-hr-2882" and report
+    }
+    assert "predates" in reasons["1_introduced-in-house"], reasons
+    assert "senate" in reasons["4_engrossed-amendment-senate"].lower(), reasons
+    assert "other chamber" in reasons["5_engrossed-amendment-house"], reasons
+    assert not any("has no committee reports" in r for r in reasons.values()), (
+        f"118-hr-2882 has H. Rept. 118-364; a reason claiming it has no reports is "
+        f"wrong and points at a lossy offline regeneration: {reasons}"
+    )
+
 
 @pytest.mark.slow
 def test_reported_and_transit_versions_keep_their_report():
@@ -510,4 +544,82 @@ def test_no_committed_report_fixture_is_orphaned():
         "validation source, so nothing reads them:\n"
         + "\n".join(f"  {o}.htm" for o in orphans)
         + "\n\nDelete them, or attach the report to the version it explains."
+    )
+
+
+@pytest.mark.slow
+def test_every_manifested_version_has_a_committee_report_entry():
+    """Report metadata describes the legislative version, not the formats we hold.
+
+    The updater used to skip versions without XML, so a PDF-only version silently
+    got no pairing at all: 114-hr-2029's reported-in-Senate print, which is the
+    version/chamber example #295 exists to establish. Absence is the failure mode
+    worth gating, because it is indistinguishable from "no report applies" once the
+    entry is missing -- a reader cannot tell an unanswered version from an answered
+    one.
+
+    Every version must carry an entry. Whether that entry names reports or states a
+    reason for none is the next test's business.
+    """
+    missing = [
+        f"{bill_id} {stage} (formats={formats})" for bill_id, stage, formats, report in _ALL_VERSIONS if not report
+    ]
+    assert not missing, (
+        f"{len(missing)} manifested version(s) have no committee_report entry. Report "
+        f"metadata must not depend on which formats are committed:\n"
+        + "\n".join(f"  {m}" for m in missing)
+        + "\n\nRe-run scripts/update_manifest_with_reports.py."
+    )
+
+    # A floor, so an empty or mis-parsed manifest cannot satisfy the check above by
+    # having nothing to check.
+    assert len(_ALL_VERSIONS) >= 50, f"expected the full corpus, saw {len(_ALL_VERSIONS)} versions"
+    assert any("xml" not in formats for _b, _s, formats, _r in _ALL_VERSIONS), (
+        "no PDF-only version in the corpus, so this gate would not prove the format-independence it exists for"
+    )
+
+
+@pytest.mark.slow
+def test_every_version_entry_is_either_sources_or_a_stated_reason():
+    """An entry must say something: which reports apply, or why none does.
+
+    Guards the shape the completeness gate above does not: an entry could exist and
+    still be empty, or carry the "none" sentinel with no reason, which answers the
+    reader no better than a missing key.
+    """
+    problems = []
+    for bill_id, stage, _formats, report in _ALL_VERSIONS:
+        if not report:
+            continue  # covered by the completeness gate
+        real = [s for s in report if s.get("citation") != "none"]
+        if real:
+            continue
+        sentinels = [s for s in report if s.get("citation") == "none"]
+        if len(sentinels) != 1 or not sentinels[0].get("reason"):
+            problems.append(f"{bill_id} {stage}: {report}")
+
+    assert not problems, "these versions record neither a report nor a reason for none:\n" + "\n".join(
+        f"  {p}" for p in problems
+    )
+
+
+@pytest.mark.slow
+def test_114_hr_2029_reported_in_senate_pairs_with_the_senate_report():
+    """The PDF-only version #295 uses to establish version/chamber pairing.
+
+    Its formats are ["pdf"], and it was skipped entirely by the XML-only filter. It
+    is a Senate-reported print, so the Senate committee report explains it -- the
+    same report the Senate amendment that follows already carried.
+    """
+    key = ("114-hr-2029", "4_reported-in-senate")
+    assert key in _REPORT_PKGS, f"{key} has no committee report pairing"
+
+    citations = {s["citation"] for s in _REPORT_PKGS[key]}
+    assert citations == {"S. Rept. 114-57"}, f"expected S. Rept. 114-57, got {sorted(citations)}"
+
+    # The point of the fix: this version has no XML, and that must not matter.
+    formats = next(f for b, s, f, _r in _ALL_VERSIONS if (b, s) == key)
+    assert "xml" not in formats, (
+        "this regression is about a PDF-only version; if it gained XML, pick another "
+        "non-XML version so the gate keeps testing format independence"
     )

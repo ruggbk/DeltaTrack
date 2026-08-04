@@ -259,10 +259,31 @@ def main():
             file=sys.stderr,
         )
 
+        # Offline recovery is lossy in one direction and it matters here: sources are
+        # read back from the pairings still recorded, so a bill whose every pairing
+        # was dropped (which the lineage rule does on purpose -- 118-hr-2882 keeps
+        # H. Rept. 118-364 on no version) reads as a bill with no reports at all.
+        # Rewriting it then replaces an accurate reason with "bill has no committee
+        # reports", which is false and looks authoritative. So when offline recovery
+        # finds nothing, only FILL versions that lack an entry; never overwrite one
+        # computed when the sources were known. --refresh has the real answer.
+        blind = not args.refresh and not report_sources
+        if blind:
+            print(
+                f"  {bill_id}: no sources recoverable offline; filling only versions "
+                f"with no entry (re-run with --refresh for an authoritative answer)",
+                file=sys.stderr,
+            )
+
+        # Every manifested version, whatever formats we hold for it. Which report
+        # explains a version is a fact about the legislative text, not about whether
+        # DeltaTrack happens to have its XML: skipping PDF-only versions left
+        # 114-hr-2029's reported-in-Senate print with no pairing, which is the exact
+        # version/chamber example #295 exists to establish.
         for ver in bill_entry.get("versions", []):
-            if "xml" not in ver.get("formats", []):
-                continue
             stage = ver["stage"]
+            if blind and ver.get("committee_report"):
+                continue
             pairing = get_report_pairing(report_sources, stage, bill_type)
             ver["committee_report"] = format_report_pairing(pairing)
             desc = ", ".join(s.citation for s in pairing.sources) if pairing.sources else "none"

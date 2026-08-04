@@ -203,6 +203,7 @@ stage = "4_reported-in-senate"
 formats = [
     "pdf",
 ]
+committee_report = [{pkg = "CRPT-114srpt57", citation = "S. Rept. 114-57", chamber = "senate"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-senate"
