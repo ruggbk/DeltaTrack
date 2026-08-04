@@ -48,11 +48,10 @@ def _build_from_trees(
     include_unchanged: bool = False,
     filter_text: str | None = None,
     financial_only: bool = False,
-) -> tuple[dict, list[dict], str]:
+) -> tuple[dict, str]:
     """Diff and serialize two parsed versions.
 
-    Returns ``(canonical, sections, title)``: the canonical diff JSON, the v2 section
-    jump-list for the full-bill TOC, and the report heading.
+    Returns ``(canonical, title)``: the canonical diff JSON and the report heading.
 
     ``start_label``/``end_label`` override the XML's embedded version names so the
     report reflects the file the caller actually supplied (matching the PDF path); pass
@@ -77,10 +76,10 @@ def _build_from_trees(
     if new_version_number is not None:
         diff_dict["new_version_number"] = new_version_number
 
-    # Readable full text + per-side element_id spans + the v2 TOC offsets.
-    full_text, full_text_spans, sections, tree = build_xml_full_text(old_tree, new_tree)
+    # Readable full text + per-side element_id spans + the leveled structure tree.
+    full_text, full_text_spans, tree = build_xml_full_text(old_tree, new_tree)
     canonical = xml_diff_to_canonical(diff_dict, full_text=full_text, full_text_spans=full_text_spans, tree=tree)
-    return canonical, sections, bill_title(new_tree)
+    return canonical, bill_title(new_tree)
 
 
 def _build(
@@ -88,7 +87,7 @@ def _build(
     end_bytes: bytes,
     start_label: str,
     end_label: str,
-) -> tuple[dict, list[dict], str]:
+) -> tuple[dict, str]:
     """Parse two uploaded blobs, then diff them.
 
     Temp files exist only long enough for ``normalize_bill`` to read them.
@@ -130,17 +129,17 @@ def compare_xml_html(
     The XML full-bill view renders gutterless (no PDF line-number column), with a
     section TOC and bill-title heading matching the PDF report.
     """
-    canonical, sections, title = _build(start_bytes, end_bytes, start_label, end_label)
-    return _render(canonical, sections, title)
+    canonical, title = _build(start_bytes, end_bytes, start_label, end_label)
+    return _render(canonical, title)
 
 
-def _render(canonical: dict, sections: list[dict], title: str) -> str:
+def _render(canonical: dict, title: str) -> str:
     """Canonical diff JSON → standalone HTML report.
 
     The DiffView is rebuilt from the canonical (``view_from_canonical``) so the rendered
     report and the embedded ``diff.json`` come from one source of truth.
     """
-    return format_diff_html(view_from_canonical(canonical), canonical=canonical, title=title, sections=sections)
+    return format_diff_html(view_from_canonical(canonical), canonical=canonical, title=title)
 
 
 def compare_xml_trees_html(
@@ -161,7 +160,7 @@ def compare_xml_trees_html(
     the assembly chain — the CLI and ``render_examples.py``. See
     :func:`_build_from_trees` for what the version metadata does.
     """
-    canonical, sections, title = _build_from_trees(
+    canonical, title = _build_from_trees(
         old_tree,
         new_tree,
         start_label=start_label,
@@ -172,7 +171,7 @@ def compare_xml_trees_html(
         filter_text=filter_text,
         financial_only=financial_only,
     )
-    return _render(canonical, sections, title)
+    return _render(canonical, title)
 
 
 def compare_xml_files_html(old_path: Path, new_path: Path) -> str:

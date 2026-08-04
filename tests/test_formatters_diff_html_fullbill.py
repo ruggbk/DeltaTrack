@@ -120,46 +120,34 @@ def test_no_find_bar_without_canonical():
     assert 'id="find-input"' not in html
 
 
-def test_full_bill_toc_links():
-    # section start 0 lands on the first display row ("ADD0"), which gets id="sec-0".
-    sections = [{"label": "TITLE I", "kind": "title", "start": 0}]
-    html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert 'class="sidebar-toc"' in html
-    assert 'href="#sec-0"' in html
-    assert 'id="sec-0"' in html
-    assert "TITLE I" in html
+def test_treeless_canonical_renders_the_toc_empty_state():
+    """Full text but no structure tree renders a navigation pane saying it is empty.
 
+    This is the behaviour #462 introduced. Before it, a canonical with no tree fell
+    through to a second, flat TOC builder, and the pane appeared only when the caller
+    also passed a `sections` jump-list; with no jump-list there was no pane at all.
+    The tree builder now owns the pane outright, so the reader is told the navigation
+    is empty rather than losing it silently.
 
-def test_full_bill_toc_nests_sections_under_titles():
-    # starts 0 / 12 land on display rows 1 ("ADD0") and 2 ("MOD1").
-    sections = [
-        {"label": "TITLE I", "kind": "title", "start": 0, "descriptor": "DEPARTMENT OF DEFENSE"},
-        {"label": "SEC. 101", "kind": "section", "start": 12},
-    ]
-    html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert '<details class="toc-group">' in html
-    assert "TITLE I &mdash; DEPARTMENT OF DEFENSE" in html  # descriptor labels the bare title
-    assert 'href="#sec-0"' in html  # title is itself a jump target
-    assert '<li class="toc-child"><a href="#sec-1">SEC. 101</a></li>' in html  # section nested under it
-    assert 'id="sec-0"' in html and 'id="sec-1"' in html
-
-
-def test_full_bill_toc_links_front_matter():
-    # The synthesized front-matter entry (issue #33) sits at offset 0, before any
-    # title, so it renders as a top-level jump link to the first display row.
-    sections = [
-        {"label": "Front Matter", "kind": "preamble", "start": 0},
-        {"label": "TITLE I", "kind": "title", "start": 12},
-    ]
-    html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert '<li class="toc-child"><a href="#sec-0">Front Matter</a></li>' in html
-    assert 'id="sec-0"' in html
-
-
-def test_toc_empty_state_when_no_sections():
-    html = format_diff_html(_view(), _canonical(), sections=[])
+    This test fails on the pre-#462 renderer, which is the point: the empty-state test
+    it replaced passed identically on both, because the removed builder returned the
+    same string for an empty list.
+    """
+    html = format_diff_html(_view(), _canonical())
     assert 'class="sidebar-toc"' in html
     assert "No sections detected." in html
+
+
+def test_full_bill_rows_carry_no_orphan_section_ids():
+    """Heading rows are only ever id'd from the structure tree.
+
+    The flat jump-list used to stamp `id="sec-N"` on rows, matched by `href="#sec-N"`
+    links from the flat TOC. #462 removed both. A regression that reinstated the ids
+    without the links would put anchors on the page that nothing can reach, which is
+    unobservable from the rendered output unless something asserts on it.
+    """
+    html = format_diff_html(_view(), _canonical())
+    assert 'id="sec-' not in html
 
 
 def test_no_toc_without_canonical():

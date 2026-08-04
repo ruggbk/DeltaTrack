@@ -341,38 +341,6 @@ def _build_change_groups(view: DiffView, order_map: dict[tuple, int] | None = No
     return "".join(blocks)
 
 
-def _build_toc(sections: list[dict]) -> str:
-    """Full-bill section navigation: each TITLE (labelled with its descriptor) is
-    a collapsible group; its sections/accounts nest beneath and link to their row.
-    Collapsed by default; clicking a title expands it and jumps to it."""
-    if not sections:
-        return '<p class="toc-empty">No sections detected.</p>'
-
-    def child_li(i: int, s: dict) -> str:
-        return f'<li class="toc-child"><a href="#sec-{i}">{escape(s["label"])}</a></li>'
-
-    pre: list[str] = []  # any sections before the first title (uncommon)
-    groups: list[tuple[str, list[str]]] = []  # (title summary, child <li>s)
-    for i, s in enumerate(sections):
-        if s.get("kind") == "title":
-            desc = s.get("descriptor") or ""
-            label = escape(s["label"]) + (f" &mdash; {escape(desc)}" if desc else "")
-            groups.append((f'<summary><a href="#sec-{i}">{label}</a></summary>', []))
-        elif groups:
-            groups[-1][1].append(child_li(i, s))
-        else:
-            pre.append(child_li(i, s))
-
-    blocks: list[str] = []
-    if pre:
-        blocks.append(f'<ul class="toc">{"".join(pre)}</ul>')
-    blocks.extend(
-        f'<details class="toc-group">{summary}<ul class="toc">{"".join(children)}</ul></details>'
-        for summary, children in groups
-    )
-    return f'<div class="toc__title">Sections</div>{"".join(blocks)}'
-
-
 def _walk_tree(nodes: list[dict]):
     """Depth-first walk over canonical structure-tree nodes (#108)."""
     for n in nodes:
@@ -386,8 +354,8 @@ def _node_anchor_offset(full_text: str, node: dict) -> int | None:
     A node's ``full_text_span`` locates its *content*: for an interior node that is
     its own heading line, but for a content node (account/section) it's the body,
     which sits below an own-line heading equal to the node's ``label``. To land the
-    TOC on the heading (matching the flat ``sections`` anchors and the PDF pipeline,
-    not one line into the body), resolve the anchor from the label:
+    TOC on the heading rather than one line into the body, resolve the anchor from
+    the label:
 
       - if the span's own line already starts with the label, it IS the heading;
       - else jump to the nearest preceding line equal to the label (the own-line
@@ -455,7 +423,6 @@ def _build_toc_from_tree(tree_nodes: list[dict], full_text: str) -> str:
 def _build_sidebar(
     view: DiffView,
     canonical: dict | None = None,
-    sections: list[dict] | None = None,
     order_map: dict[tuple, int] | None = None,
 ) -> str:
     """Render the sidebar with both view variants inside one ``<nav>``.
@@ -463,11 +430,15 @@ def _build_sidebar(
     ``.sidebar-changes`` (filters + changes grouped by section) is shown in the
     Changes view; ``.sidebar-toc`` (full-bill section jump list) in the Full bill
     view — the JS view toggle swaps them. The TOC is built from ``canonical``'s
-    leveled structure tree when present (#108 — the renderer that surfaces the tree
-    in the contract; its anchors and nesting come from the same canonical the
-    full-bill view renders from, so they line up). It falls back to the flat
-    ``sections`` jump-list, and is omitted entirely (the swap no-ops) when neither
-    is available (XML/no full bill).
+    leveled structure tree (#108 — the renderer that surfaces the tree in the
+    contract; its anchors and nesting come from the same canonical the full-bill
+    view renders from, so they line up), and is omitted entirely (the swap no-ops)
+    when there is no full text to index into.
+
+    A second, flat builder used to render the TOC from a separate ``sections``
+    jump-list whenever the tree was absent. The tree won for every bill the renderer
+    accepts, so that builder, its ``descriptor`` field, and the jump-list that fed it
+    were removed together (#462).
     """
     tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
     if order_map is None:
@@ -484,12 +455,10 @@ def _build_sidebar(
         "</div>"
     )
     full_text_v2 = (canonical.get("full_text") or {}).get("v2") if canonical else None
-    if tree_v2 and full_text_v2:
-        toc_html = _build_toc_from_tree(tree_v2, full_text_v2)
-    elif sections is not None:
-        toc_html = _build_toc(sections)
-    else:
-        toc_html = None
+    # The tree builder owns the navigation outright (#462). It also renders the
+    # "no sections" empty state, so a canonical carrying full text but no usable tree
+    # still gets a pane saying so rather than silently losing the navigation.
+    toc_html = _build_toc_from_tree(tree_v2 or [], full_text_v2) if full_text_v2 else None
     toc_pane = "" if toc_html is None else f'<div class="sidebar-toc" hidden>{toc_html}</div>'
     return f'<nav class="sidebar">\n{changes_pane}\n{toc_pane}\n</nav>'
 
@@ -839,16 +808,15 @@ def _removed_appendix_html(removed: list[dict], v1_text: str) -> str:
     )
 
 
-def _full_bill_html(canonical: dict, sections: list[dict] | None = None) -> str:
+def _full_bill_html(canonical: dict) -> str:
     """Project the change set inline onto the end-version full text.
 
     Mirrors the canonical full-text view: end-version text with each change's
     span wrapped as a tracked change, removals collected in an appendix, and a
     meta line accounting for any change whose span couldn't be placed.
 
-    ``sections`` (when given) carries each heading's char offset into the same
-    text; the row at that offset is given an ``id="sec-{i}"`` so the sidebar TOC
-    can jump to it.
+    Each heading row is given an ``id="fb-off-{offset}"``, keyed by its char offset
+    in the full text, so the sidebar TOC can jump to it.
     """
     full_text = canonical.get("full_text") or {}
     v2_text = full_text.get("v2") or ""
@@ -879,18 +847,17 @@ def _full_bill_html(canonical: dict, sections: list[dict] | None = None) -> str:
     placed = len(marks)
 
     # Heading row char offset -> its DOM id, so the sidebar TOC can jump to it.
-    # Prefer the canonical structure tree (leveled, #155-correct anchors); fall
-    # back to the flat sections list when no tree is present (legacy / no full
-    # text). Both schemes are internally consistent with their matching TOC.
+    # The canonical structure tree is the only source (leveled, #155-correct anchors).
+    # A flat jump-list used to supply `sec-N` ids when no tree was present; it was
+    # removed with the flat TOC that emitted the matching links (#462), because ids
+    # nothing links to are unreachable by construction. With no tree there is no
+    # navigation, so heading rows need no ids.
     tree_v2 = (canonical.get("tree") or {}).get("v2") if canonical.get("tree") else None
-    if tree_v2:
-        row_ids: dict[int, str] = {}
-        for node in _walk_tree(tree_v2):
-            off = _node_anchor_offset(v2_text, node)
-            if off is not None:
-                row_ids.setdefault(off, f"fb-off-{off}")
-    else:
-        row_ids = {s["start"]: f"sec-{i}" for i, s in enumerate(sections or [])}
+    row_ids: dict[int, str] = {}
+    for node in _walk_tree(tree_v2 or []):
+        off = _node_anchor_offset(v2_text, node)
+        if off is not None:
+            row_ids.setdefault(off, f"fb-off-{off}")
 
     guttered = _full_text_is_guttered(canonical)
     emitted_ids: set[str] = set()
@@ -928,7 +895,6 @@ def _views_html(
     view: DiffView,
     canonical: dict | None,
     display_canonical: dict | None = None,
-    sections: list[dict] | None = None,
     order_map: dict[tuple, int] | None = None,
 ) -> str:
     """Main content: classic cards, or the toggled changes/full-bill pair.
@@ -944,7 +910,7 @@ def _views_html(
     )
     if not _has_full_bill(canonical):
         return changes_inner
-    full_bill = _full_bill_html(display_canonical or canonical, sections)
+    full_bill = _full_bill_html(display_canonical or canonical)
     return f'<div class="view view-changes">{changes_inner}</div><div class="view view-full" hidden>{full_bill}</div>'
 
 
@@ -1043,7 +1009,6 @@ def format_diff_html(
     title: str | None = None,
     *,
     display_canonical: dict | None = None,
-    sections: list[dict] | None = None,
 ) -> str:
     """Assemble a complete standalone HTML report from a DiffView.
 
@@ -1077,7 +1042,7 @@ def format_diff_html(
     # One order map for both panes, from the join's canonical — guarantees the
     # sidebar and cards can never sort their shared groups from different trees.
     order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
-    sidebar = _build_sidebar(view, sidebar_canonical, sections if _has_full_bill(canonical) else None, order_map)
+    sidebar = _build_sidebar(view, sidebar_canonical, order_map)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1108,7 +1073,7 @@ def format_diff_html(
 {_export_button_html(canonical)}
 </div>
 </div>
-{_views_html(view, canonical, display_canonical, sections, order_map)}
+{_views_html(view, canonical, display_canonical, order_map)}
 </div>
 </div>
 {_export_modal_html(canonical)}
@@ -1733,53 +1698,206 @@ document.addEventListener('DOMContentLoaded', function() {
     if (findPrev) findPrev.disabled = findHits.length === 0;
     if (findNext) findNext.disabled = findHits.length === 0;
   }
+  // A hit is a group of <mark>s: one match can span several text nodes (a
+  // phrase crossing a printed line break, or a change mark mid-line), so the
+  // whole group carries the current-hit styling and the counter counts matches.
   function setCurrentHit(i) {
     if (!findHits.length) { updateFindCounter(); return; }
-    if (findHits[findIdx]) findHits[findIdx].classList.remove('find-hit--current');
+    var prev = findHits[findIdx];
+    if (prev) prev.forEach(function(m) { m.classList.remove('find-hit--current'); });
     findIdx = (i % findHits.length + findHits.length) % findHits.length;
     var cur = findHits[findIdx];
-    cur.classList.add('find-hit--current');
-    revealCard(cur);  // a hit inside a collapsed card group must open it, like goTo
-    cur.scrollIntoView({behavior: 'smooth', block: 'center'});
+    cur.forEach(function(m) { m.classList.add('find-hit--current'); });
+    revealCard(cur[0]);  // a hit inside a collapsed card group must open it, like goTo
+    cur[0].scrollIntoView({behavior: 'smooth', block: 'center'});
     updateFindCounter();
+  }
+  // Elements that don't interrupt the flow of a printed line. Anything else
+  // (a new .fb-row, a card, a paragraph) starts a new display line.
+  var FIND_INLINE = {SPAN: 1, MARK: 1, INS: 1, DEL: 1, EM: 1, STRONG: 1, A: 1, B: 1,
+                     I: 1, U: 1, S: 1, CODE: 1, SUP: 1, SUB: 1, SMALL: 1, ABBR: 1};
+  // Separates text that is adjacent on screen but not continuous prose: a card's
+  // deleted text and the insertion that replaces it are alternatives, not a
+  // sequence, so joining them with a space would let a query match wording that
+  // exists in no version of the bill. Nothing a user can type contains it.
+  var FIND_BREAK = '\\u0000';
+  // One walk up the inline ancestors answers everything the flattener needs, so
+  // no per-node closest() or layout read (this runs over every text node in the
+  // view, and reports get large — see #169).
+  function findSegment(node) {
+    var el = node.parentElement, del = null, gutter = false;
+    while (el && FIND_INLINE[el.tagName]) {
+      if (el.tagName === 'DEL') del = el;
+      if (el.classList.contains('fb-gutter')) gutter = true;
+      el = el.parentElement;
+    }
+    return {block: el, del: del, gutter: gutter};
+  }
+  // Flatten the active view into one searchable string, with a map back to the
+  // text nodes it came from. Searching this instead of each text node is what
+  // lets a phrase match across a printed line break (#162): the PDF full-bill
+  // view is print-faithful, so GPO's line breaks and its soft-hyphenated word
+  // splits are real DOM boundaries, and every row is its own text node.
+  //
+  // Normalizations, following the parser's own handling of the printed page
+  // (parsers/pdf_text.py `_merge_print_lines`):
+  //   - a word split at a syllable break (`Serv-` + lowercase continuation) is
+  //     rejoined into one word, hyphen dropped
+  //   - a real compound broken at its own hyphen (`Child-` + uppercase `Rescue`)
+  //     keeps the hyphen and closes up. The parser leaves these two lines
+  //     separate, so this is deliberately MORE than it does: on screen the
+  //     compound reads as one word, so search should treat it as one.
+  //   - display lines joined with a single space
+  //   - whitespace runs collapsed (GPO pads columns with runs of spaces)
+  // The line-number gutter and page markers are print furniture, not bill text,
+  // so they're left out of the searchable string entirely.
+  function buildFindIndex(root) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    // `pieces` are the runs where the flat string and a node's own text advance
+    // in lockstep, so a flat char range resolves back to exact node offsets.
+    var parts = [], pieces = [], flatLen = 0, lastCh = '', node;
+    var block = null, del = null, visBlock = null, visible = true;
+    function push(node, nodeStart, str) {
+      if (!str) return;
+      pieces.push({node: node, flatStart: flatLen, nodeStart: nodeStart, len: str.length});
+      parts.push(str);
+      flatLen += str.length;
+      lastCh = str.charAt(str.length - 1);
+    }
+    function pushSpace(node, nodeStart) {
+      if (!flatLen || lastCh === ' ') return;  // no leading or doubled spaces
+      // Map the space onto a real source char when there is one, so a match
+      // spanning it highlights continuously instead of leaving a gap.
+      if (node) { push(node, nodeStart, ' '); return; }
+      parts.push(' '); flatLen += 1; lastCh = ' ';
+    }
+    function pushBreak() {
+      if (!flatLen || lastCh === FIND_BREAK) return;
+      parts.push(FIND_BREAK); flatLen += 1; lastCh = FIND_BREAK;
+    }
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue) continue;
+      var seg = findSegment(node);
+      if (seg.gutter || !seg.block) continue;
+      if (seg.block !== visBlock) {  // one layout read per block, not per node
+        visBlock = seg.block;
+        visible = !seg.block.classList.contains('fb-page')
+                  && (seg.block.offsetParent !== null || seg.block.tagName === 'BODY');
+      }
+      if (!visible) continue;
+      var b = seg.block;
+      if (block !== null && seg.del !== del) {
+        // Crossing into or out of deleted text: alternatives, not a sequence.
+        pushBreak();
+      } else if (block !== null && b !== block) {
+        // Consecutive rows of the bill are one flowing text; anything else
+        // (card to card, the meta line, the removed-text appendix) is not.
+        if (!b.classList.contains('fb-row') || !block.classList.contains('fb-row')) {
+          pushBreak();
+        } else {
+          var cont = node.nodeValue.replace(/^\\s+/, '').charAt(0);
+          var hyphenated = /[A-Za-z0-9]-$/.test(parts[parts.length - 1] || '');
+          if (hyphenated && cont && cont !== cont.toUpperCase()) {
+            // Soft hyphen (lowercase continuation): drop it, `Serv-`+`ices` is one word.
+            var tail = parts[parts.length - 1];
+            parts[parts.length - 1] = tail.slice(0, -1);
+            flatLen -= 1;
+            var lastPiece = pieces[pieces.length - 1];
+            if (--lastPiece.len === 0) pieces.pop();
+            if (!parts[parts.length - 1]) parts.pop();
+            lastCh = tail.charAt(tail.length - 2);
+          } else if (hyphenated && cont) {
+            // A real compound broken at its own hyphen (`Child-` / `Rescue`): keep
+            // the hyphen and close the gap, so the reader's `Child-Rescue` matches.
+          } else {
+            pushSpace(null, 0);
+          }
+        }
+      }
+      block = b;
+      del = seg.del;
+      var text = node.nodeValue, ws = /\\s+/g, m, cursor = 0;
+      while ((m = ws.exec(text)) !== null) {
+        push(node, cursor, text.slice(cursor, m.index));
+        pushSpace(node, m.index);
+        cursor = m.index + m[0].length;
+      }
+      push(node, cursor, text.slice(cursor));
+    }
+    var flat = parts.join('');
+    return {lower: flat.toLowerCase(), pieces: pieces};
+  }
+  // First piece whose flat range reaches past `pos` (matches are resolved in
+  // order, so a binary search keeps this linear-ish on long documents).
+  function findPieceAt(pieces, pos) {
+    var lo = 0, hi = pieces.length - 1, ans = pieces.length;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (pieces[mid].flatStart + pieces[mid].len > pos) { ans = mid; hi = mid - 1; } else { lo = mid + 1; }
+    }
+    return ans;
   }
   function runFind() {
     clearFind();
-    var q = (findInput ? findInput.value : '').trim();
+    var q = (findInput ? findInput.value : '').trim().replace(/\\s+/g, ' ');
     if (q.length < 2) { updateFindCounter(); return; }
-    var root = activeView();
+    // A query pasted off the screen can end at a line-break hyphen
+    // ("House of Representa-"). That hyphen is gone from the searchable text,
+    // so drop it rather than return nothing for a phrase the reader copied.
+    if (/[A-Za-z0-9]-$/.test(q) && q.length > 3) q = q.slice(0, -1);
+    var idx = buildFindIndex(activeView());
     var ql = q.toLowerCase();
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: function(node) {
-        if (!node.nodeValue || node.nodeValue.toLowerCase().indexOf(ql) === -1) return NodeFilter.FILTER_REJECT;
-        var el = node.parentElement;  // skip filter-hidden subtrees
-        if (!el || (el.offsetParent === null && el.tagName !== 'BODY')) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+    var hits = [], ranges = [], at = 0;
+    while ((at = idx.lower.indexOf(ql, at)) !== -1) {
+      var end = at + ql.length, group = [];
+      hits.push(group);
+      for (var i = findPieceAt(idx.pieces, at); i < idx.pieces.length; i++) {
+        var p = idx.pieces[i], ps = p.flatStart, pe = ps + p.len;
+        if (ps >= end) break;
+        var a = Math.max(at, ps), b = Math.min(end, pe);
+        if (b > a) {
+          var s = p.nodeStart + (a - ps), e2 = p.nodeStart + (b - ps);
+          // Pieces break at every whitespace run, so one match spans several of
+          // them; re-join the contiguous ones to get one <mark> per display row
+          // rather than one per word.
+          var tailR = ranges[ranges.length - 1];
+          if (tailR && tailR.group === group && tailR.node === p.node && tailR.end === s) {
+            tailR.end = e2;
+          } else {
+            ranges.push({node: p.node, start: s, end: e2, group: group});
+          }
+        }
       }
-    });
-    var nodes = [];  // snapshot before mutating the tree
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-    nodes.forEach(function(node) {
-      var text = node.nodeValue, lower = text.toLowerCase();
-      // Rebuild the node as [text, <mark>, text, …] in one replaceChild — no
-      // splitText juggling, no index invalidation.
-      var frag = document.createDocumentFragment();
-      var last = 0, at;
-      while ((at = lower.indexOf(ql, last)) !== -1) {
-        if (at > last) frag.appendChild(document.createTextNode(text.slice(last, at)));
-        var mark = document.createElement('mark');
-        mark.className = 'find-hit';
-        mark.textContent = text.slice(at, at + ql.length);
-        frag.appendChild(mark);
-        last = at + ql.length;
-      }
-      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-      node.parentNode.replaceChild(frag, node);
-    });
-    findHits = [].slice.call(root.querySelectorAll('mark.find-hit'));
+      at = end;
+    }
+    // Rebuild each text node once, in one replaceChild — no splitText juggling,
+    // no index invalidation. Ranges are in document order, so a node's ranges
+    // are consecutive.
+    var j = 0;
+    while (j < ranges.length) {
+      var k = j, target = ranges[j].node;
+      while (k < ranges.length && ranges[k].node === target) k++;
+      wrapFindRanges(target, ranges.slice(j, k));
+      j = k;
+    }
+    findHits = hits.filter(function(g) { return g.length; });
     findIdx = -1;
     updateFindCounter();
     if (findHits.length) setCurrentHit(0);
+  }
+  function wrapFindRanges(node, ranges) {
+    var text = node.nodeValue, frag = document.createDocumentFragment(), last = 0;
+    ranges.forEach(function(r) {
+      if (r.start > last) frag.appendChild(document.createTextNode(text.slice(last, r.start)));
+      var mark = document.createElement('mark');
+      mark.className = 'find-hit';
+      mark.textContent = text.slice(r.start, r.end);
+      frag.appendChild(mark);
+      r.group.push(mark);
+      last = r.end;
+    });
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
   }
   if (findInput) {
     var findTimer;

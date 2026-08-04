@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skipif(not _V1.exists(), reason="bill corpus not presen
 def _canonical(v1_path: Path, v2_path: Path) -> tuple[dict, dict]:
     v1, v2 = normalize_bill(v1_path), normalize_bill(v2_path)
     diff_dict = bill_diff_to_dict(diff_bills(v1, v2), financial=True)
-    full_text, spans, _sections, tree = build_xml_full_text(v1, v2)
+    full_text, spans, tree = build_xml_full_text(v1, v2)
     canonical = xml_diff_to_canonical(diff_dict, full_text=full_text, full_text_spans=spans, tree=tree)
     return canonical, full_text
 
@@ -62,7 +62,7 @@ def test_canonical_validates_against_published_schema():
 def test_tree_requires_full_text_copresence():
     v1, v2 = normalize_bill(_V1), normalize_bill(_V2)
     diff_dict = bill_diff_to_dict(diff_bills(v1, v2), financial=True)
-    _ft, spans, _sections, tree = build_xml_full_text(v1, v2)
+    _ft, spans, tree = build_xml_full_text(v1, v2)
     # A tree with spans but no full_text would carry dangling offsets: rejected.
     with pytest.raises(ValueError, match="tree requires full_text"):
         xml_diff_to_canonical(diff_dict, full_text=None, full_text_spans=spans, tree=tree)

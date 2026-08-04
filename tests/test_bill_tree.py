@@ -4,17 +4,19 @@ from pathlib import Path
 import pytest
 
 from deltatrack.bill_tree import (
+    NO_DIVISION,
     BillNode,
+    Division,
     _extract_appropriations_text,
     _extract_metadata,
     _extract_section_text,
+    build_division_label,
     build_title_label,
     extract_display_text,
     extract_text_content,
     find_bill_body,
     get_header_text,
     normalize_bill,
-    normalize_division_title,
     normalize_header,
     title_match_header,
     walk_body_sections,
@@ -591,7 +593,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPARTMENT OF DEFENSE", "")
+        nodes = walk_title(title, "DEPARTMENT OF DEFENSE", NO_DIVISION)
         assert len(nodes) == 1
         node = nodes[0]
         assert node.match_path == ("department of defense", "military construction, army")
@@ -617,7 +619,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "VETERANS AFFAIRS", "")
+        nodes = walk_title(title, "VETERANS AFFAIRS", NO_DIVISION)
         assert len(nodes) == 1
         node = nodes[0]
         assert node.match_path == (
@@ -643,7 +645,7 @@ class TestWalkTitle:
             "</appropriations-major>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 1
         assert nodes[0].match_path == ("dept", "big agency")
         assert nodes[0].header_text == "Big Agency"
@@ -659,7 +661,7 @@ class TestWalkTitle:
             "</appropriations-major>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 0
 
     def test_parenthetical_header_inherits_previous(self):
@@ -678,7 +680,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 2
         # Second node inherits previous sibling's header for matching
         assert nodes[1].match_path == ("dept", "regular account")
@@ -704,7 +706,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 3
         # Third node is parenthetical; should inherit "Real Account" from first,
         # not empty string from second
@@ -726,7 +728,7 @@ class TestWalkTitle:
             "</section>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 1
         node = nodes[0]
         assert node.section_number == "Sec. 124"
@@ -745,7 +747,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "Division A: MilCon-VA")
+        nodes = walk_title(title, "DEPT", Division("Division A: MilCon-VA", "milcon-va"))
         assert len(nodes) == 1
         assert nodes[0].display_path == ("Division A: MilCon-VA", "DEPT", "Account")
         # match_path never includes division
@@ -766,7 +768,7 @@ class TestWalkTitle:
             "</appropriations-small>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 1
         assert nodes[0].match_path == ("dept", "sub-agency", "tiny program")
 
@@ -785,7 +787,7 @@ class TestWalkTitle:
             "</section>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 1
         assert "President shall impose sanctions" in nodes[0].body_text
 
@@ -811,7 +813,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 2
         assert nodes[0].match_path == ("dept", "agency a", "sub a")
         assert nodes[1].match_path == ("dept", "agency b", "sub b")
@@ -833,7 +835,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "JOINT ITEMS", "")
+        nodes = walk_title(title, "JOINT ITEMS", NO_DIVISION)
         assert len(nodes) == 1
         node = nodes[0]
         assert "For medical supplies, including:" in node.body_text
@@ -862,7 +864,7 @@ class TestWalkTitle:
             "</section>"
             "</title>"
         )
-        nodes = walk_title(title, "LEGISLATIVE BRANCH", "")
+        nodes = walk_title(title, "LEGISLATIVE BRANCH", NO_DIVISION)
         # Should produce: 1 section node + 2 intermediate nodes (major has no text)
         assert len(nodes) == 3
         assert nodes[0].tag == "section"
@@ -895,7 +897,7 @@ class TestWalkTitle:
             "</section>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 2
         assert nodes[0].tag == "section"
         assert nodes[0].body_text == "General provision text."
@@ -913,7 +915,7 @@ class TestWalkTitle:
             "</section>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 1
         assert nodes[0].tag == "section"
         assert nodes[0].body_text == "No funds may be used for X."
@@ -947,7 +949,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "LEG BRANCH", "")
+        nodes = walk_title(title, "LEG BRANCH", NO_DIVISION)
         # Pre-section: intermediate under Senate context
         assert nodes[0].match_path == ("leg branch", "senate", "senate salaries")
         # Section node
@@ -983,7 +985,7 @@ class TestWalkTitle:
             "</subtitle>"
             "</title>"
         )
-        nodes = walk_title(title, "POLICY PROVISIONS", "")
+        nodes = walk_title(title, "POLICY PROVISIONS", NO_DIVISION)
         assert len(nodes) == 2
         assert nodes[0].section_number == "Sec. 101"
         assert nodes[0].match_path == ("policy provisions", "tax relief", "sec. 101")
@@ -1015,7 +1017,7 @@ class TestWalkTitle:
             "</subtitle>"
             "</title>"
         )
-        nodes = walk_title(title, "EXTENSIONS", "")
+        nodes = walk_title(title, "EXTENSIONS", NO_DIVISION)
         assert len(nodes) == 2
         # Path should include both subtitle and part headers
         assert nodes[0].match_path == ("extensions", "health programs", "medicare", "sec. 101")
@@ -1048,7 +1050,7 @@ class TestWalkTitle:
             "</appropriations-intermediate>"
             "</title>"
         )
-        nodes = walk_title(title, "DEPT", "")
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
         assert len(nodes) == 3
         # First node: Sub Agency under Agency A
         assert nodes[0].match_path == ("dept", "agency a", "sub agency")
@@ -1625,31 +1627,76 @@ class TestBillNodeDivisionLabel:
         assert "Military Construction" in div_a_nodes[0].division_label
 
 
-class TestNormalizeDivisionTitle:
-    def test_basic(self):
-        assert normalize_division_title("Division A: Military Construction") == "military construction"
+class TestDivisionKey:
+    """The match key is built from the source header, never read back out of the label (#468)."""
 
-    def test_letter_insensitive(self):
-        result_a = normalize_division_title("Division A: Military Construction")
-        result_c = normalize_division_title("Division C: Military Construction")
-        assert result_a == result_c
+    DIVISIONS_XML = """
+    <legis-body>
+      <division id="dA"><enum>A</enum><header>Military Construction</header>
+        <title id="tA"><enum>I</enum><header>DEPARTMENT OF DEFENSE</header>
+          <section id="sA"><enum>101.</enum><header>Findings</header><text>Alpha text.</text></section>
+        </title>
+      </division>
+      <division id="dC"><enum>C</enum><header>MILITARY   CONSTRUCTION</header>
+        <title id="tC"><enum>I</enum><header>DEPARTMENT OF DEFENSE</header>
+          <section id="sC"><enum>101.</enum><header>Findings</header><text>Charlie text.</text></section>
+        </title>
+      </division>
+      <division id="dF"><enum>F</enum>
+        <title id="tF"><enum>I</enum><header>OTHER MATTERS</header>
+          <section id="sF"><enum>101.</enum><header>Findings</header><text>Foxtrot text.</text></section>
+        </title>
+      </division>
+    </legis-body>
+    """
 
-    def test_long_title(self):
-        label = "Division B: Agriculture, Rural Development, Food and Drug Administration, and Related Agencies"
-        assert (
-            normalize_division_title(label)
-            == "agriculture, rural development, food and drug administration, and related agencies"
+    @staticmethod
+    def _keys_by_element(xml_path):
+        return {n.element_id: n.division_key for n in normalize_bill(xml_path).nodes}
+
+    @pytest.fixture
+    def keys(self, tmp_path):
+        path = tmp_path / "118-hr-1_reported-in-house.xml"
+        path.write_text(f"<bill>{self.DIVISIONS_XML}</bill>")
+        return self._keys_by_element(path)
+
+    def test_key_is_the_normalized_header(self, keys):
+        assert keys["sA"] == "military construction"
+
+    def test_key_ignores_the_division_letter(self, keys):
+        """Division A and Division C carrying the same subcommittee share one key."""
+        assert keys["sA"] == keys["sC"]
+
+    def test_key_collapses_whitespace(self, keys):
+        """Source headers wrap across lines, so the raw text is not comparable as-is."""
+        assert keys["sC"] == "military construction"
+
+    def test_headerless_division_has_no_key(self, keys):
+        """A bare "Division F" carries nothing to discriminate on, in either direction."""
+        assert keys["sF"] == ""
+
+    def test_key_does_not_change_when_the_label_does(self, tmp_path, monkeypatch):
+        """The whole point: display form and match key are independent (#66 changes the former)."""
+        path = tmp_path / "118-hr-1_reported-in-house.xml"
+        path.write_text(f"<bill>{self.DIVISIONS_XML}</bill>")
+        before = self._keys_by_element(path)
+
+        monkeypatch.setattr(
+            "deltatrack.bill_tree.build_division_label",
+            lambda enum, header: f"DIVISION {enum.upper()}—{header}",
         )
+        relabelled = normalize_bill(path)
+        assert any(n.division_label.startswith("DIVISION ") for n in relabelled.nodes), "the label did not change"
 
-    def test_empty_string(self):
-        assert normalize_division_title("") == ""
+        assert {n.element_id: n.division_key for n in relabelled.nodes} == before
 
-    def test_no_colon(self):
-        assert normalize_division_title("Division F") == ""
 
-    def test_embedded_newline(self):
-        label = "Division B: LEGISLATIVE BRANCH\nAPPROPRIATIONS ACT, 2019"
-        assert normalize_division_title(label) == "legislative branch appropriations act, 2019"
+class TestBuildDivisionLabel:
+    def test_enum_and_header(self):
+        assert build_division_label("A", "Military Construction") == "Division A: Military Construction"
+
+    def test_headerless(self):
+        assert build_division_label("F", "") == "Division F"
 
 
 # --- Subsection nodes (#188): every direct non-quoted <subsection> becomes its own
@@ -1813,7 +1860,7 @@ class TestSubsectionNodes:
         title = ET.fromstring(
             "<title><enum>V</enum><header>GENERAL PROVISIONS</header>" + _SEC547_SUBS_XML + "</title>"
         )
-        nodes = walk_title(title, "TITLE V—GENERAL PROVISIONS", "")
+        nodes = walk_title(title, "TITLE V—GENERAL PROVISIONS", NO_DIVISION)
         subs = [n for n in nodes if n.tag == "subsection"]
         assert len(subs) == 3
         assert subs[0].display_path == ("TITLE V—GENERAL PROVISIONS", "sec. 547", "(a) In general")
@@ -2183,3 +2230,146 @@ class TestResolutionDiff:
         assert diff.bill_type == "hconres"
         assert diff.bill_number == 58
         assert diff.congress == 119
+
+
+class TestDivisionBareSections:
+    """A division's own <section> children reach the tree (#465).
+
+    A division's content used to be reached only through its <title> children, so a
+    <section> sitting directly under a <division> was walked by nothing: it entered no
+    node, and therefore no full-bill view, no comparison and no money table, with nothing
+    failing. On the committed corpus that hid 151 sections.
+
+    Both shapes below are real and were both affected. A policy division folded into an
+    omnibus is often organised as bare sections with no titles at all; an appropriations
+    division more often carries a short-title/definitions preamble ahead of TITLE I, and
+    that mixed shape looked complete while dropping the preamble.
+    """
+
+    TITLELESS = """
+    <legis-body>
+      <division><enum>U</enum><header>Adjustable Interest Rate Act</header>
+        <section id="s1"><enum>101.</enum><header>Short title</header>
+          <text>This division may be cited as the Example Act.</text></section>
+        <section id="s2"><enum>102.</enum><header>Findings</header>
+          <text>Congress finds that $200,000,000,000,000 of contracts are affected.</text></section>
+      </division>
+    </legis-body>
+    """
+
+    MIXED = """
+    <legis-body>
+      <division><enum>A</enum><header>Agriculture</header>
+        <section id="pre"><enum>1.</enum><header>Short title</header>
+          <text>This division may be cited as the Example Appropriations Act.</text></section>
+        <title><enum>I</enum><header>Departmental Management</header>
+          <section id="t1"><enum>101.</enum><header>Salaries</header>
+            <text>For necessary expenses, $5,000,000.</text></section>
+        </title>
+      </division>
+    </legis-body>
+    """
+
+    @staticmethod
+    def _nodes(xml: str) -> list[BillNode]:
+        body = ET.fromstring(xml)
+        nodes: list[BillNode] = []
+        for div in body:
+            enum, header = div.find("enum"), div.find("header")
+            division = Division(
+                label=build_division_label(enum.text.strip(), header.text.strip()),
+                key=normalize_header(header.text.strip()),
+            )
+            nodes.extend(walk_body_sections(div, division))
+        return nodes
+
+    def test_titleless_division_sections_become_nodes(self):
+        nodes = self._nodes(self.TITLELESS)
+        assert [n.element_id for n in nodes] == ["s1", "s2"]
+
+    def test_the_money_in_such_a_section_reaches_its_node(self):
+        """The failure that made this worth finding: an amount present in the bill and
+        present in no node at all, so no comparison could ever surface it."""
+        nodes = self._nodes(self.TITLELESS)
+        assert "$200,000,000,000,000" in " ".join(n.body_text for n in nodes)
+
+    def test_the_division_shows_in_the_breadcrumb_but_not_the_matching_key(self):
+        """display_path carries the division so a reader can place the section;
+        match_path stays division-free, because that is the rule everywhere else and
+        collision-group matching (#1) resolves same-named sections by the division key,
+        which these nodes carry as its own value rather than recovering it from the
+        label (#468) -- so a display-only change to the label cannot move them."""
+        first = self._nodes(self.TITLELESS)[0]
+        assert first.display_path == ("Division U: Adjustable Interest Rate Act", "Sec. 101")
+        assert first.match_path == ("sec. 101",)
+        assert first.division_label == "Division U: Adjustable Interest Rate Act"
+        assert first.division_key == "adjustable interest rate act"
+
+    def test_a_division_with_titles_keeps_its_bare_preamble_section(self):
+        """The mixed shape. Walking only <title> children dropped the preamble while the
+        division still looked complete, which is why this was invisible for so long."""
+        body = ET.fromstring(self.MIXED)
+        div = body.find("division")
+        division = Division(label="Division A: Agriculture", key="agriculture")
+        bare = walk_body_sections(div, division)
+        assert [n.element_id for n in bare] == ["pre"]
+        titled = walk_title(div.find("title"), build_title_label(div.find("title")), division)
+        assert "t1" in [n.element_id for n in titled]
+
+    def test_body_level_sections_are_unchanged_by_the_division_parameter(self):
+        """The body-level caller passes no division, and must key exactly as before."""
+        body = ET.fromstring(
+            '<legis-body><section id="b1"><enum>1.</enum><header>Short title</header>'
+            "<text>Bare section under the body.</text></section></legis-body>"
+        )
+        node = walk_body_sections(body)[0]
+        assert node.display_path == ("Sec. 1",)
+        assert node.match_path == ("sec. 1",)
+        assert node.division_label == ""
+        assert node.division_key == ""
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not fixture_path("117-hr-2471", "6_enrolled-bill.xml").exists(),
+    reason="Real XML not present",
+)
+class TestDivisionBareSectionsOnARealBill:
+    """The same defect through ``normalize_bill``, which is what actually wires it up.
+
+    The unit tests above call ``walk_body_sections`` directly, so they would pass on a
+    build where the division walk never calls it. These go through the whole parser on
+    real GPO XML, so they fail if the wiring is removed, which is the property worth
+    holding: the fix is one call in ``normalize_bill``, and a test that cannot see that
+    call missing is not testing the fix.
+
+    Division U of the FY2022 omnibus is the Adjustable Interest Rate (LIBOR) Act, folded
+    in as a policy division organised without titles. 23,109 characters and 10 sections
+    reached no node.
+    """
+
+    @staticmethod
+    def _tree():
+        return normalize_bill(fixture_path("117-hr-2471", "6_enrolled-bill.xml"))
+
+    def test_a_titleless_divisions_sections_are_in_the_tree(self):
+        tree = self._tree()
+        libor = [n for n in tree.nodes if n.division_label.startswith("Division U")]
+        assert libor, "Division U reaches no node; its sections are absent from the bill tree"
+
+    def test_the_libor_findings_amount_reaches_a_node(self):
+        """The single dollar amount on the whole committed corpus that reached no node.
+
+        It is a findings figure rather than an appropriation, which is exactly why the
+        money gates could not see the loss: the divisions this defect dropped are policy
+        text, so 66 missing sections cost this bill one dollar amount.
+        """
+        tree = self._tree()
+        assert "$200,000,000,000,000" in " ".join(n.body_text for n in tree.nodes)
+
+    def test_a_division_with_titles_keeps_its_bare_preamble(self):
+        """The mixed shape on a real bill: a division that carries titles AND bare
+        sections looked complete while dropping the bare ones."""
+        tree = normalize_bill(fixture_path("114-hr-2029", "7_enrolled-bill.xml"))
+        bare = [n for n in tree.nodes if n.division_label and n.match_path == ("sec. 2",)]
+        assert bare, "a division's bare preamble section is absent from the tree"
