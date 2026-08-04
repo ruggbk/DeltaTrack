@@ -28,30 +28,23 @@ while 2% of 118-hr-8752's 3 is less than one — so the same constant was simult
 too loose to protect the big bill and unable to describe the small ones.
 
 The document set is DERIVED, not hand-listed (#488). Every committed PDF with a
-same-version XML beside it is a usable pair, and for most of this module's life three of
-the thirteen were named. That was not a judgement about the other ten: two of the six
-fabricated anchors found while reviewing #473 sat on documents this module did not read,
-and no tolerance could have caught them because the files were never opened. Hand
+same-version XML beside it is a usable pair, and for most of this module's life three
+were named. That was not a judgement about the rest: two of the six fabricated anchors
+found while reviewing #473 sat on documents this module did not read, and no tolerance
+could have caught them because the files were never opened. The corpus has since grown
+to 24 such pairs, which is the point — the derived list picked all of them up on the
+rebase that introduced them, and the coverage guard below required each to be measured
+and recorded before this module would go green again. Hand
 maintenance is the failure mode, so ``_discover_pairs`` walks the corpus and ``EXPECTED``
 records what each document should do. A pair with no entry still runs, and
 ``test_expectations_cover_every_committed_pair`` fails until someone records it — the
 same two-lists-pinned-to-each-other idiom as
 ``test_pipeline_parity.test_band_table_covers_every_parity_bill``.
 
-    document                                    subsecs  catchlines  FP  missed  (2026-08-04)
-    113-hr-3547/4_engrossed-amendment-senate.pdf      0        0      0     0
-    115-hr-5895/1_reported-in-house.pdf             39        5      0     0
-    115-hr-5895/2_engrossed-in-house.pdf            93       29      0     0
-    115-hr-5895/5_enrolled-bill.pdf                112       36      0    36  (declines, below)
-    117-hr-4502/1_reported-in-house.pdf             55        8      0     0
-    117-hr-4502/2_engrossed-in-house.pdf           336       48      0     0
-    118-hr-4366/1_reported-in-house.pdf             37        4      0     0
-    118-hr-4366/2_engrossed-in-house.pdf            37        4      0     0
-    118-hr-8752/1_reported-in-house.pdf            131        3      0     0
-    118-hr-8752/2_engrossed-in-house.pdf           133        3      0     0
-    118-hr-8774/1_reported-in-house.pdf             90        3      0     0
-    118-hr-8774/2_engrossed-in-house.pdf            90        3      0     0
-    119-hr-1/1_reported-in-house.pdf               952      934      2     0
+``EXPECTED`` is that table: one entry per document, recording the oracle's two
+denominators and any false positive on record. It is not duplicated in prose here,
+because a copy of it in this docstring would be a second list to keep in step, which is
+the failure this change exists to remove.
 
 Two documents are not ordinary members, and both are asserted rather than excluded:
 
@@ -63,9 +56,11 @@ Two documents are not ordinary members, and both are asserted rather than exclud
   positively, so a document that starts producing anchors fails just as loudly as one
   that stops. (``test_corpus_tree_properties`` owns the wider class registry and the
   text-layer-is-still-whole property; this module asserts only the subsection view.)
-- ``113-hr-3547/4_engrossed-amendment-senate.pdf`` genuinely has zero catchline-bearing
-  subsections. That is the case a bare anti-vacuity floor cannot express: "no subsections
-  of this shape exist" and "the extractor returned nothing" are identical to a
+- Several documents genuinely have zero catchline-bearing subsections. Some carry no
+  subsections at all (113-hr-3547's House prints, 118-hr-2882); more tellingly,
+  ``117-hr-4432/1_reported-in-house.pdf`` carries 74 subsections and not one of them
+  bears a catchline. That is the case a bare anti-vacuity floor cannot express: "no
+  subsections of this shape exist" and "the extractor returned nothing" are identical to a
   ``>= MIN_CATCHLINES`` guard. So the floor was replaced by an exact per-document pin of
   the oracle's count (see ``EXPECTED``), which distinguishes the two by construction.
 
@@ -173,6 +168,9 @@ class Expected:
 # tree to tell apart (#54/#108). Every other document carries none, so their absence is
 # pinned too.
 EXPECTED: dict[str, Expected] = {
+    "113-hr-3547/1_introduced-in-house.pdf": Expected(subsections=0, catchlines=0),
+    "113-hr-3547/2_engrossed-in-house.pdf": Expected(subsections=0, catchlines=0),
+    "113-hr-3547/3_received-in-senate.pdf": Expected(subsections=0, catchlines=0),
     "113-hr-3547/4_engrossed-amendment-senate.pdf": Expected(
         subsections=0,
         catchlines=0,
@@ -180,6 +178,8 @@ EXPECTED: dict[str, Expected] = {
         "catchline-bearing subsection exists to find. Pinned at 0 rather than excluded: "
         "the recall and leak gates are vacuous here by fact, and the precision gate is not.",
     ),
+    "114-hr-2029/1_reported-in-house.pdf": Expected(subsections=14, catchlines=2),
+    "114-hr-2029/3_referred-in-senate.pdf": Expected(subsections=14, catchlines=2),
     "115-hr-5895/1_reported-in-house.pdf": Expected(subsections=39, catchlines=5),
     "115-hr-5895/2_engrossed-in-house.pdf": Expected(subsections=93, catchlines=29),
     "115-hr-5895/5_enrolled-bill.pdf": Expected(
@@ -191,10 +191,16 @@ EXPECTED: dict[str, Expected] = {
         "subsections are real and unreachable, which is why this is asserted as a decline "
         "instead of counted as 36 misses.",
     ),
+    "117-hr-2471/1_introduced-in-house.pdf": Expected(subsections=7, catchlines=7),
+    "117-hr-4432/1_reported-in-house.pdf": Expected(subsections=74, catchlines=0),
     "117-hr-4502/1_reported-in-house.pdf": Expected(subsections=55, catchlines=8),
     "117-hr-4502/2_engrossed-in-house.pdf": Expected(subsections=336, catchlines=48),
+    "118-hr-2882/1_introduced-in-house.pdf": Expected(subsections=0, catchlines=0),
     "118-hr-4366/1_reported-in-house.pdf": Expected(subsections=37, catchlines=4),
     "118-hr-4366/2_engrossed-in-house.pdf": Expected(subsections=37, catchlines=4),
+    "118-hr-4366/3_placed-on-calendar-senate.pdf": Expected(subsections=37, catchlines=4),
+    "118-hr-4820/1_reported-in-house.pdf": Expected(subsections=49, catchlines=11),
+    "118-hr-8282/1_introduced-in-house.pdf": Expected(subsections=5, catchlines=5),
     "118-hr-8752/1_reported-in-house.pdf": Expected(subsections=131, catchlines=3),
     "118-hr-8752/2_engrossed-in-house.pdf": Expected(subsections=133, catchlines=3),
     "118-hr-8774/1_reported-in-house.pdf": Expected(subsections=90, catchlines=3),
