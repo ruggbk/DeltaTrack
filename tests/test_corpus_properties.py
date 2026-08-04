@@ -422,6 +422,64 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
 }
 
 
+def _assert_duplicate_baseline(test_id: str, total_dupes: int, known: int, dupes: dict[str, int]) -> None:
+    """Compare a measured duplicate count against its stored baseline, EXACTLY.
+
+    Extracted from the gate below so the downward branch can be exercised directly:
+    every committed fixture sits at ``total_dupes == known``, so a corpus run never
+    reaches the staleness case, and an assertion that has never once fired is
+    indistinguishable from one that cannot. ``test_duplicate_baseline_compares_both
+    _directions`` supplies the cases the corpus does not.
+    """
+    # EXACT, not a ceiling (#513). `<= known` only fails upward, so a parser change that
+    # REDUCES collisions leaves the stored number above the truth with nothing red to say
+    # so — and that dead slack then licenses exactly as many future regressions silently.
+    # #474 (joining an account split across two source elements) did this to 19 of 30 keys
+    # at once, 272 duplicates of slack in total, days after #482 had measured them correct.
+    # Equality costs churn: a genuine parser improvement now reddens the suite until the
+    # number is lowered. That is the point, and it is the same forcing function the repo
+    # relies on elsewhere — a baseline is only worth having if a build makes it recalibrate.
+    if total_dupes > known:
+        raise AssertionError(
+            f"{test_id}: duplicate match_paths INCREASED from {known} to {total_dupes}. "
+            f"A section identity regression, or real new collisions in the source. "
+            f"Sample: {list(dupes.items())[:3]}"
+        )
+    if total_dupes < known:
+        raise AssertionError(
+            f"{test_id}: duplicate match_paths DECREASED from {known} to {total_dupes}, so the "
+            f"stored baseline is stale and now tolerates {known - total_dupes} future regression(s) "
+            f"in silence. Lower the entry to {total_dupes}"
+            f"{' and drop it, since the file now has none' if total_dupes == 0 else ''}."
+        )
+
+
+def test_duplicate_baseline_compares_both_directions() -> None:
+    """The baseline comparison goes RED above AND below the stored number.
+
+    The downward (stale-baseline) branch is the whole point of #513, and no committed
+    fixture can reach it: recalibrating the baselines put every one of them at equality,
+    which is exactly the state in which a silent reversion to `<= known` would leave the
+    suite green. These are the cases the corpus cannot supply.
+    """
+    dupes = {"/div-a/sec-1": 2}
+
+    # At the baseline: passes.
+    _assert_duplicate_baseline("t", 3, 3, dupes)
+
+    # Above it: the regression the ceiling already caught.
+    with pytest.raises(AssertionError, match="INCREASED from 3 to 4"):
+        _assert_duplicate_baseline("t", 4, 3, dupes)
+
+    # Below it: the staleness #513 exists to catch.
+    with pytest.raises(AssertionError, match="DECREASED from 3 to 1"):
+        _assert_duplicate_baseline("t", 1, 3, dupes)
+
+    # A baseline that has fallen to zero says to remove the entry, not lower it to 0.
+    with pytest.raises(AssertionError, match="drop it, since the file now has none"):
+        _assert_duplicate_baseline("t", 0, 3, dupes)
+
+
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
@@ -431,8 +489,8 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     """Each node's match_path should be unique within a bill.
 
     Duplicates indicate cross-division path collisions (issue #1).
-    Files with known duplicates assert the count hasn't increased.
-    Files with no known duplicates assert zero.
+    Files with known duplicates assert the count matches the stored baseline exactly,
+    in both directions (#513). Files with no known duplicates assert zero.
 
     A file reachable only under CORPUS_SWEEP=1 is REPORTED, not asserted (#496). The
     baselines here are calibrated against the committed corpus; the sweep is an
@@ -459,28 +517,7 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
         pytest.skip(f"Sweep-only file, no calibrated baseline: {total_dupes} duplicate match_paths (#496)")
 
     known = _KNOWN_DUPLICATE_COUNTS.get(test_id, 0)
-
-    # EXACT, not a ceiling (#513). `<= known` only fails upward, so a parser change that
-    # REDUCES collisions leaves the stored number above the truth with nothing red to say
-    # so — and that dead slack then licenses exactly as many future regressions silently.
-    # #474 (joining an account split across two source elements) did this to 19 of 30 keys
-    # at once, 272 duplicates of slack in total, days after #482 had measured them correct.
-    # Equality costs churn: a genuine parser improvement now reddens the suite until the
-    # number is lowered. That is the point, and it is the same forcing function the repo
-    # relies on elsewhere — a baseline is only worth having if a build makes it recalibrate.
-    if total_dupes > known:
-        raise AssertionError(
-            f"{test_id}: duplicate match_paths INCREASED from {known} to {total_dupes}. "
-            f"A section identity regression, or real new collisions in the source. "
-            f"Sample: {list(dupes.items())[:3]}"
-        )
-    if total_dupes < known:
-        raise AssertionError(
-            f"{test_id}: duplicate match_paths DECREASED from {known} to {total_dupes}, so the "
-            f"stored baseline is stale and now tolerates {known - total_dupes} future regression(s) "
-            f"in silence. Lower the entry to {total_dupes}"
-            f"{' and drop it, since the file now has none' if total_dupes == 0 else ''}."
-        )
+    _assert_duplicate_baseline(test_id, total_dupes, known, dupes)
 
 
 _APPRO_TAGS = {"appropriations-major", "appropriations-intermediate", "appropriations-small"}
