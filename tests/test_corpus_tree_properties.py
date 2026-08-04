@@ -382,3 +382,87 @@ def test_enrolled_pdf_text_layer_is_whole_though_its_tree_is_empty() -> None:
     assert len(re.findall(r"\bDIVISION [A-Z]\b", full_text)) >= 5
     assert len(re.findall(r"\bTITLE [IVXL]+\b", full_text)) >= 10
     assert len(re.findall(r"\bSEC\. \d+", full_text)) >= 100
+
+
+# --- Split accounts (#474) -----------------------------------------------------
+
+
+def _has_appropriations_body(element: ET.Element) -> bool:
+    """True if an appropriations element carries body text of its own.
+
+    Deliberately reimplemented here rather than importing the parser's own
+    ``_extract_appropriations_text``: a gate that calls the same helper the parser
+    calls cannot see that helper change underneath it, and would pass by agreeing
+    with the code it is meant to check.
+    """
+    return any(extract_text_content(child).strip() for child in element if child.tag not in ("enum", "header"))
+
+
+def _split_account_pairs(xml_path: Path) -> dict[str, str]:
+    """Map each split account's moneyed element id -> the name its other half carries.
+
+    GPO sometimes marks one account up as two adjacent siblings, the first holding the
+    ``<header>`` and no body and the second the body and no header, where the print shows
+    a single account (#474). Adjacency is in DOCUMENT order: an intervening ``<section>``
+    means the two are not one printed block, so they are not a pair.
+    """
+    pairs: dict[str, str] = {}
+    root = ET.parse(xml_path).getroot()
+    for parent in root.iter():
+        children = list(parent)
+        for i, child in enumerate(children):
+            if i == 0 or not child.tag.startswith("appropriations-"):
+                continue
+            if child.find("header") is not None and extract_text_content(child.find("header")).strip():
+                continue
+            if not _has_appropriations_body(child):
+                continue
+            prev = children[i - 1]
+            if not prev.tag.startswith("appropriations-") or _has_appropriations_body(prev):
+                continue
+            header = prev.find("header")
+            name = extract_text_content(header).strip() if header is not None else ""
+            if name:
+                pairs[child.attrib.get("id", "")] = name
+    return pairs
+
+
+def test_split_accounts_keep_their_name_corpus_wide() -> None:
+    """Every split account is addressed under its own name, corpus-wide (#474).
+
+    Before the join, the half carrying the money had no header, so its address stopped at
+    the agency above it and the money read as the agency's own — in 118-hr-8998,
+    ``RESOURCE MANAGEMENT`` vanished from the report and its $1,385,096,000 was filed
+    under ``United States fish and wildlife service``.
+
+    Not parametrized per bill, because the floors below are the point: a per-bill gate
+    that found zero pairs would pass, and this whole class of defect is invisible when the
+    check silently measures nothing (``feedback_property_tests_fail_open``). The floors
+    assert the gate actually ran on real pairs before it asserts they are all named.
+    """
+    total = 0
+    bills: set[str] = set()
+    unnamed: list[str] = []
+    for xml_path in ALL_XML_FILES:
+        if not xml_path.exists():
+            continue
+        pairs = _split_account_pairs(xml_path)
+        if not pairs:
+            continue
+        bills.add(xml_path.parent.name)
+        by_id = {n.element_id: n for n in normalize_bill(xml_path).nodes}
+        for element_id, name in pairs.items():
+            total += 1
+            node = by_id.get(element_id)
+            if node is None or not node.header_text:
+                got = "no node emitted" if node is None else "node has no name"
+                unnamed.append(f"{_corpus_id(xml_path)}: {name!r} -> {got}")
+
+    # Observed 841 pairs across 21 bills on the committed manifest. The floors sit well
+    # under those so ordinary corpus curation does not trip them, while a collapse to a
+    # handful of pairs — the way this gate would go quietly vacuous — does.
+    assert total >= 700, f"only {total} split pairs found; the gate is no longer measuring the corpus"
+    assert len(bills) >= 18, f"only {len(bills)} bills carry split pairs; expected the gate to span the corpus"
+    assert unnamed == [], f"{len(unnamed)} of {total} split accounts lost their name:\n" + "\n".join(
+        f"  {u}" for u in unnamed[:10]
+    )
