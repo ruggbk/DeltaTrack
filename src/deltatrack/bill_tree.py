@@ -514,6 +514,17 @@ def build_title_label(title: ET.Element) -> str:
     return f"TITLE {enum}—{header}" if header else f"TITLE {enum}"
 
 
+def build_division_label(enum: str, header: str) -> str:
+    """Build a <division>'s display label.
+
+    Sibling of :func:`build_title_label`. The published bill renders divisions as
+    ``DIVISION <enum>—<header>``; ours is ``Division <enum>: <header>``, which #66
+    tracks. Extracted so the display form lives in one function that #66 can change
+    without touching anything that matches nodes across versions (#468).
+    """
+    return f"Division {enum}: {header}" if header else f"Division {enum}"
+
+
 _TITLE_LABEL_RE = re.compile(r"^TITLE\s+[^\s—]+(?:—(.*))?$")
 
 
@@ -1296,10 +1307,7 @@ def normalize_bill(xml_path: Path) -> BillTree:
                 div_header = child.find("header")
                 div_enum_text = div_enum.text.strip() if div_enum is not None and div_enum.text else ""
                 div_header_text = extract_text_content(div_header).strip() if div_header is not None else ""
-                if div_header_text:
-                    current_division_label = f"Division {div_enum_text}: {div_header_text}"
-                else:
-                    current_division_label = f"Division {div_enum_text}"
+                current_division_label = build_division_label(div_enum_text, div_header_text)
 
                 for title in child.findall("title"):
                     title_header = build_title_label(title)
