@@ -32,8 +32,13 @@ def amount_text(node: BillNode) -> str:
     One function rather than the same ``display_text or body_text`` expression written
     out at each call site, because the two money views disagreeing is exactly the defect
     #365 was filed for: the leveled tree read ``display_text`` while the amount-change
-    table read ``body_text``, which ``_extract_section_text`` truncates. Two copies of a
-    rule can drift; one cannot, so both callers import this.
+    table read ``body_text``, which ``_extract_section_text`` truncated at the time. Two
+    copies of a rule can drift; one cannot, so both callers import this.
+
+    ``_extract_section_text`` no longer truncates (#422), so the two renderings now carry
+    the same amounts and the choice is no longer load-bearing for correctness. It is kept
+    because ``display_text`` is still the more faithful rendering, and because one named
+    rule is what stops the two views drifting apart again.
 
     The ``or`` is load-bearing: a node built without a ``display_text`` falls back to
     ``body_text`` rather than extracting from an empty string and losing its amounts.
@@ -733,9 +738,22 @@ def _process_section_element(
     """Process a <section> element, emitting BillNode(s).
 
     Handles two cases:
-    - Sections with appropriations-* children: emit section text node,
+    - Sections with appropriations-* children: emit a node for the section's OWN text,
       then walk appropriations children with scoped context.
     - Plain sections: emit a single node with all section text.
+
+    Both cases read the section's own text through ``_extract_section_text``, carving out
+    the children that become their own nodes by element identity. That is what keeps each
+    character of a section in exactly one node, and it is the same carve used for
+    subsections promoted to their own nodes (#188).
+
+    The appropriations branch used to build its node from ``section.find("text")`` alone,
+    which is not the same thing: any sibling that was neither the opening <text> nor an
+    ``appropriations-*`` child, i.e. a <list>, <continuation-text> or <quoted-block>, was
+    dropped from this node and picked up by no other. It went missing from BOTH
+    renderings, so nothing downstream could recover it. That is the same failure mode as
+    #422 in a second location (#459): 8 money-bearing elements on the committed corpus,
+    including $45,000,000 / $46,400,000 / $80,500,000 in 114-hr-2029 v5 sec. 129.
     """
     has_appro_children = any(c.tag.startswith("appropriations-") for c in section)
 
@@ -745,8 +763,9 @@ def _process_section_element(
         section_num = f"Sec. {enum_el.text.strip().rstrip('.')}"
 
     if has_appro_children:
-        text_el = section.find("text")
-        if text_el is not None:
+        appro_carve = frozenset(id(c) for c in section if c.tag.startswith("appropriations-"))
+        own_body = _extract_section_text(section, appro_carve)
+        if own_body:
             sec_label = section_num.lower() if section_num else ""
             match_path, display_path = _build_paths(
                 title_header,
@@ -762,8 +781,8 @@ def _process_section_element(
                     tag="section",
                     element_id=section.attrib.get("id", ""),
                     header_text=get_header_text(section),
-                    body_text=extract_text_content(text_el),
-                    display_text=extract_display_text(text_el),
+                    body_text=own_body,
+                    display_text=extract_display_text(section, skip_children=appro_carve),
                     section_number=section_num,
                     division_label=division_label,
                 )
@@ -949,28 +968,34 @@ def _extract_appropriations_text(element: ET.Element) -> str:
 def _extract_section_text(section: ET.Element, exclude: frozenset[int] = frozenset()) -> str:
     """Extract text from a section element.
 
-    If the section is a simple lead-in line (a direct <text> child with no
-    subsections or quoted-block payload), use that text directly.
-    Otherwise, extract all text recursively from the section
-    (excluding the enum and header), which captures subsections and the
-    <quoted-block> body of "amend ... by adding the following" sections.
+    Extracts all text recursively from the section (excluding the enum and header),
+    which captures subsections, list payloads, and the <quoted-block> body of
+    "amend ... by adding the following" sections.
     ``exclude`` drops direct children by ``id()`` — the element-exact carve for
     subsections that became their own nodes (#188), so each character of the
     section lives in exactly one node (money conservation by construction).
     Returns empty string if no text content found.
-    """
-    text_el = section.find("text")
-    has_subsections = section.find("subsection") is not None
-    # A <quoted-block> holds the amendment payload (the text being inserted into
-    # existing law); its subsections are nested inside it, not direct children of
-    # the section, so has_subsections misses them. Without this guard an amendment
-    # section returns only its lead-in line and the payload is silently dropped.
-    has_quoted_block = section.find("quoted-block") is not None
-    if text_el is not None and not has_subsections and not has_quoted_block:
-        return extract_text_content(text_el)
 
-    # No direct <text> child, or the section carries a subsection / quoted-block
-    # payload. Extract text from everything except enum and header.
+    There used to be a fast path here for what it called a simple lead-in: a section
+    with a direct <text> child and no <subsection> or <quoted-block> returned that one
+    element and stopped. For an appropriations section that is precisely the wrong
+    stopping point, because the account-by-account dollar figures routinely sit AFTER
+    the lead-in in a <list>, <continuation-text> or <paragraph>, none of which the guard
+    named. body_text therefore ended at the lead-in and the money never entered it (#422).
+
+    That mattered most where it was least visible. body_text is what the comparison
+    diffs, so two versions of such a section produced byte-identical body_text whenever
+    the only edit was in the dropped payload, the section was classified ``unchanged``,
+    and the entry was filtered out before any money filter ran. The reader saw no
+    section rather than a wrong one, and nothing failed: on 118-hr-4366 v2 -> v4 alone
+    that hid a $4.93B/$1.91B/$0.25B rescission collapsing to $1.00B/$0.98B.
+
+    Reading the whole section is also what keeps the two money views from disagreeing.
+    ``amount_text`` reaches for ``display_text`` because this function used to truncate
+    (#365); with the truncation gone the two renderings carry the same amounts, which is
+    the invariant tests/test_financial_diff.py now pins rather than the old gap.
+    """
+    # Extract text from everything except enum and header.
     parts = []
     for child in section:
         if child.tag in ("enum", "header") or id(child) in exclude:
@@ -983,10 +1008,16 @@ def _extract_section_text(section: ET.Element, exclude: frozenset[int] = frozens
     # extract_text_content already applied _LIST_MARKER_RE inside each part, but
     # the space-join can put a fresh space in front of a marker at a part
     # boundary (part ends "...funds.", next part starts "(b)Whoever" -> joined
-    # "...funds. (b)Whoever"). Re-applying it here strips that boundary space so
-    # the output matches the single-<text> branch and avoids golden churn. The
-    # second pass is intentional, not redundant: it only touches the new join
-    # boundaries, and _LIST_MARKER_RE is idempotent on the already-clean parts.
+    # "...funds. (b)Whoever"). Re-applying it here strips that boundary space, so a
+    # section reads the same whether its content arrived as one <text> or as several
+    # siblings. The second pass is intentional, not redundant: it only touches the new
+    # join boundaries, and _LIST_MARKER_RE is idempotent on the already-clean parts.
+    #
+    # It normalizes only the space BEFORE a marker, not the one after, so two versions
+    # that differ in whether the source XML puts whitespace after an enum still read as
+    # a textual change ("(1) paragraph" vs "(1)paragraph"). That is a separate defect in
+    # this normalizer, tracked in #456; it predates #422 and is merely more visible now
+    # that the payload holding those markers reaches body_text at all.
     text = _LIST_MARKER_RE.sub("", " ".join(part for part in parts if part)).strip()
     return text
 

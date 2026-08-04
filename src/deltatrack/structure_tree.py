@@ -186,10 +186,12 @@ def build_xml_tree(bill: BillTree) -> list[TreeNode]:
     Returns the ordered top-level nodes (divisions, or bare titles for a
     no-division bill, plus any empty-path front-matter/preamble leaves). Leaf
     level comes from the XML tag; interior structure from display_path nesting.
-    ``own_amounts`` come from ``bill_tree.amount_text`` (the locked decision: NOT
-    the lossy body_text — display_text keeps trailing content body_text drops).
-    The amount-change table reads the same function, so the two money views cannot
-    disagree about a section (#365).
+    ``own_amounts`` come from ``bill_tree.amount_text``, and the amount-change table
+    reads the same function, so the two money views cannot disagree about a section
+    (#365). That used to matter because body_text was truncated at a section's lead-in
+    and display_text was not; #422 removed the truncation, so the two now carry the same
+    amounts and the shared function is what keeps them from drifting apart again rather
+    than what repairs a difference.
 
     The leading run of empty-path front-matter nodes (masthead / enacting clause /
     leading boilerplate, and any short-title/definitions sections that precede the

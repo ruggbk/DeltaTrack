@@ -476,10 +476,15 @@ class TestCorpusDiffSmoke:
     def test_amount_source_never_hides_a_change(self, old_path, new_path):
         """Reading amounts from the display rendering is strictly additive (#365).
 
-        The safety property behind #365: the amount-change table now extracts from
-        ``display_text``, which is a superset of the ``body_text`` the matching key uses
-        (``_extract_section_text`` truncates a section at its lead-in, #422). So the
-        switch may SURFACE an amount change, never hide one.
+        The safety property behind #365: the amount-change table extracts from
+        ``display_text``, so the switch may SURFACE an amount change, never hide one.
+
+        The gap it was measuring is closed. ``display_text`` used to be a strict superset
+        of the ``body_text`` the matching key uses, because ``_extract_section_text``
+        truncated a section at its lead-in; #422 removed that truncation, so on today's
+        corpus the two renderings agree and this finds nothing. It is kept as a
+        one-directional safety net over every bill: it costs nothing to run, and it is
+        the check that would catch either rendering starting to drop content again.
 
         This is the invariant that must hold for every bill, which is why it lives here
         rather than beside the single pinned instance in test_financial_diff.py: a

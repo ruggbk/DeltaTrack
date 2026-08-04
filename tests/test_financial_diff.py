@@ -355,8 +355,16 @@ class TestAmountSanityChecks:
         # 567 -> 584 with #188: amounts redistribute from section blobs onto
         # subsection nodes (more, finer holders). Verified pure redistribution —
         # the amount MULTISET over all body_texts is identical (1676 amounts).
+        #
+        # 584 -> 600 with #422, and this one is recovery rather than redistribution:
+        # body_text stopped truncating sections at their lead-in, so amounts that were
+        # in the bill but in no node are now in one. Verified against the same multiset,
+        # which is what distinguishes recovery from double-counting: 1676 -> 1734
+        # instances, 58 gained, 0 lost. A section carving out subsection nodes (#188)
+        # excludes them by element identity, so re-reading the whole section cannot
+        # count a carved child twice.
         count = sum(1 for n in hr4366_v6.nodes if extract_amounts(n.body_text))
-        assert count == 584
+        assert count == 600
 
     def test_all_amounts_in_valid_range(self, hr4366_v6):
         # Lower bound is 0: $0 is kept as real budget data (#60).
@@ -516,11 +524,13 @@ class TestMatchAmounts:
 class TestAmountSourceIsDisplayText:
     """The financial diff extracts amounts from display_text, not body_text (#365).
 
-    body_text is normalized for MATCHING and drops section payload that sits after the
-    lead-in <text> (bill_tree._extract_section_text's "simple lead-in" fast path), so
-    extracting amounts from it loses money the leveled tree shows. structure_tree already
-    reads display_text for its own_amounts; these lock the diff onto the same source so
-    the two money views cannot disagree.
+    Originally because body_text dropped section payload sitting after the lead-in
+    <text>, so extracting amounts from it lost money the leveled tree showed. That
+    truncation is gone (#422) and the two renderings now carry the same amounts, so these
+    no longer guard a difference in CONTENT. What they still pin is the routing: which
+    field each money view reads, and that a hand-built NodeDiff with no amount fields
+    falls back rather than reading an empty string. Both matter to any future change that
+    repoints either view.
     """
 
     def _node_diff(self, **kw):
@@ -598,8 +608,172 @@ class TestAmountSourceIsDisplayText:
     or not fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml").exists(),
     reason="Real XML not present",
 )
+class TestSectionsWhoseOnlyChangeIsMoney:
+    """A section whose only edit is its dollar amounts must reach the report (#422).
+
+    Before this, ``_extract_section_text`` stopped at a section's lead-in ``<text>``
+    whenever the section carried no ``<subsection>`` or ``<quoted-block>``, so an
+    appropriations payload sitting in ``<list>``/``<continuation-text>``/``<paragraph>``
+    never entered ``body_text``. Two versions of such a section produced byte-identical
+    ``body_text``, the comparison classified them ``unchanged``, and ``filter_diff``
+    dropped the entry before any money filter ran. The section was not shown as wrong;
+    it was not shown.
+
+    #365 repointed amount EXTRACTION at ``display_text``, which fixes the amounts on
+    entries already classified ``changed``. It could not reach these, because the entry
+    is discarded at classification, before any amount field is read.
+
+    Asserted against the rendered HTML rather than the diff structure on purpose: what
+    the issue reports is a section missing from the report a reader opens, and a
+    structural assertion would pass on an entry that the renderer still filtered out.
+    """
+
+    OLD = "2_engrossed-in-house.xml"
+    NEW = "4_engrossed-amendment-senate.xml"
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def change_cards():
+        """The report's change cards, as (breadcrumb heading, card markup) pairs.
+
+        Scoped to the changes view deliberately. The report also carries a full-bill
+        view, which renders every section whether or not it changed, so asserting a
+        section name or an amount against the whole document passes with the defect
+        present -- verified: the first draft of these tests did exactly that and was
+        green before the fix. What #422 is about is a section missing from the list of
+        changes, so that is what is read here.
+        """
+        import re
+
+        from deltatrack.compare.xml import compare_xml_files_html
+
+        html = compare_xml_files_html(
+            fixture_path("118-hr-4366", TestSectionsWhoseOnlyChangeIsMoney.OLD),
+            fixture_path("118-hr-4366", TestSectionsWhoseOnlyChangeIsMoney.NEW),
+        )
+        views = [(m.start(), m.group(1)) for m in re.finditer(r'class="view view-(\w+)"', html)]
+        start = next(pos for pos, name in views if name == "changes")
+        later = [pos for pos, _ in views if pos > start]
+        changes_view = html[start : later[0] if later else len(html)]
+
+        cards = []
+        for chunk in changes_view.split('class="change-card')[1:]:
+            heading = re.search(r"<h3>(.*?)</h3>", chunk, re.S)
+            cards.append((heading.group(1) if heading else "", chunk))
+        return cards
+
+    @staticmethod
+    def _cards_for(cards, department, section):
+        return [c for h, c in cards if department in h.lower() and h.lower().rstrip().endswith(section)]
+
+    def test_va_sec_256_rescission_reaches_the_change_list(self, change_cards):
+        """VA sec. 256 rescinds from three accounts in v2 and two in v4.
+
+        The largest single instance found: $7.09B of rescissions on the old side become
+        $1.98B on the new side, and none of it reached the reader.
+        """
+        cards = self._cards_for(change_cards, "veterans affairs", "sec. 256")
+        assert cards, "no change card for VA sec. 256; the section is absent from the report"
+
+        markup = "".join(cards)
+        for amount in ("$4,933,113,000", "$1,909,069,000", "$250,515,000"):
+            assert amount in markup, f"old-side amount {amount} missing from the sec. 256 card"
+        for amount in ("$1,000,000,000", "$976,005,000"):
+            assert amount in markup, f"new-side amount {amount} missing from the sec. 256 card"
+
+    def test_dod_sec_124_reallocation_reaches_the_change_list(self, change_cards):
+        """DoD sec. 124 moves across nine military construction accounts.
+
+        Named in #422 alongside sec. 256, and a different shape: the account list changes
+        length as well as value, so it is not a straight nine-to-nine value swap.
+        """
+        cards = self._cards_for(change_cards, "defense", "sec. 124")
+        assert cards, "no change card for DoD sec. 124; the section is absent from the report"
+
+        markup = "".join(cards)
+        assert "$689,409,000" in markup, "old-side amount missing from the sec. 124 card"
+        assert "$351,100,000" in markup, "new-side amount missing from the sec. 124 card"
+
+    def test_an_untouched_section_has_no_change_card(self, change_cards):
+        """Control for the two tests above, whose scoping is what makes them mean anything.
+
+        DoD sec. 101 is identical in both versions, text and amounts. If it were to
+        acquire a card, the changes view would be carrying sections that did not change,
+        and finding sec. 256 there would no longer be evidence of anything.
+        """
+        assert change_cards, "no change cards parsed at all; the tests above cannot fire"
+        assert self._cards_for(change_cards, "defense", "sec. 101") == [], (
+            "an unchanged section has a change card, so a card is not evidence of a change"
+        )
+
+    def test_no_committed_pair_still_hides_an_amount_change(self):
+        """Corpus-wide: no entry is classified ``unchanged`` while its amounts differ.
+
+        The two cases above are the named instances; this is the class. Every adjacent
+        committed version pair, so a new corpus bill that reintroduces the shape fails
+        here rather than passing unnoticed.
+
+        The floor matters as much as the assertion: an ``unchanged`` entry is only
+        checkable if some pair produces ``unchanged`` entries at all, and a gate that
+        cannot tell "fixed" from "nothing to check" is not a gate.
+
+        KNOWN BLIND SPOT, stated here rather than left to be discovered: this compares
+        what the two sides of a comparison EXPOSE, so it cannot see a drop that happens
+        identically on both sides. `_process_section_element` takes a different path for
+        a section with ``appropriations-*`` children and builds its node from the opening
+        <text> alone, dropping any <list> / <continuation-text> / <quoted-block> sibling
+        from every node in both renderings -- 8 money-bearing instances on this corpus.
+        Both versions truncate the same way, so the amounts always agree and this passes.
+        Tracked in #459; closing it wants a gate that compares node amounts against the
+        source XML rather than against the other side.
+        """
+        from pathlib import Path
+
+        from deltatrack.bill_tree import normalize_bill
+        from deltatrack.diff_bill import diff_bills
+        from tests.conftest import manifest_version_pairs
+
+        checked = 0
+        offenders = []
+        for old_path, new_path in manifest_version_pairs():
+            if not (Path(old_path).exists() and Path(new_path).exists()):
+                continue
+            diff = diff_bills(normalize_bill(Path(old_path)), normalize_bill(Path(new_path)))
+            for change in diff.changes:
+                if change.change_type != "unchanged":
+                    continue
+                checked += 1
+                old_amounts = extract_amounts(change.amount_source_old or "")
+                new_amounts = extract_amounts(change.amount_source_new or "")
+                if old_amounts != new_amounts:
+                    offenders.append((f"{Path(old_path).parent.name} {Path(old_path).stem}", change.match_path))
+
+        assert checked, "no pair produced an `unchanged` entry, so the assertion below cannot fire"
+        assert offenders == [], (
+            f"{len(offenders)} sections classified `unchanged` while their amounts differ: {offenders[:5]}"
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not fixture_path("118-hr-4366", "2_engrossed-in-house.xml").exists()
+    or not fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml").exists(),
+    reason="Real XML not present",
+)
 class TestAmountSourceCorpusRegression:
-    """The live instance #365 was filed for, pinned against the committed corpus."""
+    """The live instance #365 was filed for, pinned against the committed corpus.
+
+    #365 was that the two money views could disagree, because the amount-change table
+    read ``body_text`` while the leveled tree read ``display_text``, and ``body_text``
+    was truncated. It was fixed by pointing amount extraction at ``display_text``.
+
+    #422 then removed the truncation, so the two renderings now carry the same amounts
+    and the gap this class used to measure is closed. These tests are kept and restated
+    rather than deleted: what they were reaching for is that the two money views agree,
+    and that is an invariant worth holding whichever rendering each view reads. Two of
+    them used to assert the SIZE of the gap, which is why they had to change; a test
+    pinned to a defect's existence stops being able to pass once the defect is gone.
+    """
 
     @staticmethod
     @pytest.fixture(scope="class")
@@ -615,9 +789,11 @@ class TestAmountSourceCorpusRegression:
     def test_dod_sec_128_reallocation_reaches_the_amount_table(self, v2_v4_diff):
         """DoD sec. 128 splits $30M/$30M/$30M into $15M/$7.5M/$7.5M across v2->v4.
 
-        Its payload lives in <list>/<continuation-text>, which body_text drops entirely --
-        so before #365 this section was emitted as `modified` carrying NO financial change
-        at all, and a $90M -> $30M reallocation never reached the headline table.
+        Its payload lives in <list>/<continuation-text>. That used to be dropped from
+        ``body_text`` entirely, so the section was emitted as `modified` carrying NO
+        financial change at all and a $90M -> $30M reallocation never reached the
+        headline table. It is the live instance both #365 and #422 were filed for, so it
+        stays pinned by value.
         """
         c = next(
             x
@@ -626,8 +802,13 @@ class TestAmountSourceCorpusRegression:
         )
         assert c.change_type == "modified"
 
-        # The regression itself: body_text sees no money here.
-        assert compute_financial_change(c.old_text, c.new_text) is None
+        # Both renderings now see the money. The assertion here used to be the opposite,
+        # `compute_financial_change(c.old_text, c.new_text) is None`, pinning that
+        # body_text was blind to it (#365). #422 completed body_text, so that is no
+        # longer true, and the useful claim is that neither rendering is blind.
+        from_body = compute_financial_change(c.old_text, c.new_text)
+        assert from_body is not None, "body_text no longer sees this section's amounts"
+        assert from_body.amounts_changed is True
 
         fc = compute_financial_change(c.amount_source_old, c.amount_source_new)
         assert fc is not None, "sec. 128 must carry a financial change"
@@ -635,35 +816,44 @@ class TestAmountSourceCorpusRegression:
         assert fc.old_amounts == (30000000, 30000000, 30000000)
         assert fc.new_amounts == (15000000, 7500000, 7500000)
 
-    def test_switching_source_only_adds_amount_changes(self, v2_v4_diff):
-        """Reading display_text is strictly additive: it surfaces changes, never hides one.
+    def test_the_two_money_views_agree_on_every_entry(self, v2_v4_diff):
+        """The two renderings of a section report the same amount changes.
 
-        Guards the direction of the fix. body_text only ever DROPS content relative to
-        display_text (267 nodes / 1662 amount-instances corpus-wide, no case of the
-        reverse), so no change visible via body_text may disappear.
+        This is what #365 was actually about. The amount-change table and the leveled
+        money tree read different renderings of the same section, so they could disagree
+        about whether a section's money moved, and a reader comparing the two views had
+        no way to tell which was right.
+
+        It used to be asserted one-directionally, as "switching to display_text is
+        strictly additive", with the number of newly surfaced changes pinned at 8 for
+        this pair. That number was a measurement of how much body_text was dropping, so
+        completing body_text (#422) took it to 0 and the assertion could no longer pass.
+        Agreement is the durable claim: it held before #422 in the weak form (display_text
+        never hid a change body_text saw), and holds now in the strong form (neither hides
+        one from the other), and it stays true regardless of which rendering either view
+        is later pointed at.
         """
 
         def changed(fc):
             return fc is not None and fc.amounts_changed
 
-        lost = [
-            c
+        disagreements = [
+            (c.match_path, changed(compute_financial_change(c.old_text, c.new_text)))
             for c in v2_v4_diff.changes
             if changed(compute_financial_change(c.old_text, c.new_text))
-            and not changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
+            != changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
         ]
-        assert lost == [], f"display_text hid an amount change body_text saw: {[c.match_path for c in lost]}"
+        assert disagreements == [], (
+            f"{len(disagreements)} entries where the two money views disagree "
+            f"(match_path, seen_by_body_text): {disagreements[:5]}"
+        )
 
-        gained = [
-            c
-            for c in v2_v4_diff.changes
-            if changed(compute_financial_change(c.amount_source_old, c.amount_source_new))
-            and not changed(compute_financial_change(c.old_text, c.new_text))
-        ]
-        # 8 on this pair. Pinned rather than bounded: a drop means the fix stopped
-        # reaching entries it used to reach, and a rise means extraction changed shape --
-        # both are worth a look, neither is silent. This pin is scoped to ONE pair on
-        # purpose; the corpus-wide safety invariant (never HIDE a change, on every
-        # manifest pair) is TestCorpusDiffSmoke::test_amount_source_never_hides_a_change
-        # in test_diff_validation.py, so a new corpus bill does not fail this count.
-        assert len(gained) == 8, f"expected 8 newly surfaced amount changes, got {len(gained)}"
+        # A floor, because "no disagreements" is also what an empty change list produces.
+        # The corpus-wide safety half (display_text never HIDES a change, on every
+        # manifest pair) stays in test_diff_validation.py's
+        # TestCorpusDiffSmoke::test_amount_source_never_hides_a_change.
+        with_money = [c for c in v2_v4_diff.changes if changed(compute_financial_change(c.old_text, c.new_text))]
+        assert len(with_money) > 100, (
+            f"only {len(with_money)} entries carry an amount change on this pair; "
+            f"the agreement assertion above is close to vacuous"
+        )

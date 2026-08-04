@@ -12,7 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from deltatrack.bill_tree import _extract_appropriations_text, find_bill_body, normalize_bill
+from deltatrack.bill_tree import (
+    _extract_appropriations_text,
+    extract_text_content,
+    find_bill_body,
+    normalize_bill,
+)
 from tests.conftest import assert_manifest_committed, manifest_xml_files
 
 pytestmark = pytest.mark.slow
@@ -133,9 +138,86 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
     found = total - len(missing)
     ratio = found / total
 
-    assert ratio >= 0.80, (
+    # Calibrated on the committed corpus rather than left at a round number (#422/#459).
+    #
+    # This threshold was 0.80 while the docstring above claimed 0.95, and the gap was not
+    # academic: on `develop` before #422, the worst fixture scored 0.817 -- 42 of the 230
+    # dollar amounts in 118-hr-8774 v1 appeared in NO node at all -- and this gate passed
+    # it by 1.7 points. Nine fixtures sat below the 0.95 the docstring claimed. A gate
+    # named "every dollar amount appears in a node" was calibrated to tolerate exactly
+    # the defect it names, which is why $6.5B could go missing from reports with the
+    # suite green.
+    #
+    # Measured worst ratio across the 41 committed fixtures: 0.977 after #422, 0.997
+    # after #459. 0.98 leaves headroom for a new corpus bill with a genuinely awkward
+    # shape while still going red on either defect: it would have caught #459's 0.977
+    # and #422's 0.817. Raise it if the corpus stays clean; do not lower it without
+    # saying which bill needed the slack and why that is not a parser gap.
+    assert ratio >= 0.98, (
         f"{test_id}: {len(missing)}/{total} amounts missing (ratio={ratio:.3f}). Sample missing: {missing[:5]}"
     )
+
+
+def test_no_section_sibling_is_dropped_from_every_node() -> None:
+    """A section with appropriations children keeps its other children too (#459).
+
+    The ratio gate above is a whole-bill coverage floor, so a handful of dropped amounts
+    hides inside its tolerance no matter how the tolerance is set. This one is exact and
+    scoped to the shape that produced the loss: when a section carries ``appropriations-*``
+    children (the elements holding an account and its amount), its other children -- a
+    <list>, a <continuation-text>, a <quoted-block> -- must still reach some node.
+
+    They used to reach none, because that branch built the section's node from the opening
+    <text> alone. The money vanished from both renderings, which is why no comparison
+    between two views could detect it, and why the loss had to be measured against the
+    source XML instead.
+
+    Swept across the whole corpus in ONE case rather than parametrized per fixture, and
+    that is deliberate. Most fixtures contain no section of this shape, so a per-fixture
+    gate would content-skip roughly 35 of 41 cases, and every one of those skips would
+    have to be declared in ALLOWED_CORPUS_SKIPS (#220) to say nothing at all. A single
+    sweep carries its own fail-closed floor instead: it asserts that the corpus actually
+    presented instances to check, so "nothing dropped" can never mean "nothing looked at".
+    """
+    checked = 0
+    dropped = []
+    for xml_path in ALL_XML_FILES:
+        if not xml_path.exists():
+            continue
+        root = ET.parse(xml_path).getroot()
+        try:
+            find_bill_body(root)
+        except ValueError:
+            continue
+
+        sections = [s for s in root.iter("section") if any(c.tag.startswith("appropriations-") for c in s)]
+        if not sections:
+            continue
+
+        tree = normalize_bill(xml_path)
+        all_text = " ".join(f"{n.body_text} {n.display_text}" for n in tree.nodes)
+
+        for section in sections:
+            for child in section:
+                if child.tag in ("enum", "header", "text") or child.tag.startswith("appropriations-"):
+                    continue
+                amounts = _extract_dollar_amounts(extract_text_content(child))
+                if not amounts:
+                    continue
+                checked += 1
+                missing = [a for a in amounts if f"${a:,}" not in all_text]
+                if missing:
+                    enum = section.find("enum")
+                    label = (enum.text or "").strip() if enum is not None else "?"
+                    dropped.append(f"{_xml_id(xml_path)} sec.{label} <{child.tag}> {[f'${a:,}' for a in missing[:3]]}")
+
+    # The floor. 19 money-bearing siblings exist across the committed fixtures, 8 of which
+    # were dropped before #459. Requiring most of them keeps the gate honest if a fixture
+    # is retired, while still going red if the corpus stops exercising this shape at all.
+    assert checked >= 15, (
+        f"only {checked} money-bearing siblings found corpus-wide; this gate is not exercising anything"
+    )
+    assert dropped == [], f"{len(dropped)} of {checked} money-bearing siblings appear in no node: {dropped[:3]}"
 
 
 # Files known to have duplicate match_paths (cross-division collisions, issue #1).
