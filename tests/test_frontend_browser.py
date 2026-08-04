@@ -861,6 +861,49 @@ def test_compare_button_reports_progress_while_the_diff_runs(live_url, chromium,
     page.close()
 
 
+def test_report_tab_shows_progress_until_the_report_arrives(live_url, chromium, tmp_path):
+    """The report tab says a diff is running, and the report replaces it (#490).
+
+    The tab has to be opened on the click itself, since a pop-up opened later is
+    blocked (#41), so it necessarily sits empty for the whole render. Left on
+    about:blank that is indistinguishable from a crash, and the reader's move is
+    to close it or re-click, throwing away a render that was about to finish.
+    The test above covers the *button*'s in-flight state on the upload page;
+    this covers the tab, which is where the reader is actually looking.
+
+    Same held-``fetch`` trick as above, so the mid-flight state is observed at a
+    fixed point rather than raced against a real request.
+    """
+    hold_fetch = """
+        window.__release = null;
+        const original = window.fetch;
+        window.fetch = (...args) => new Promise((resolve, reject) => {
+            window.__release = () => original(...args).then(resolve, reject);
+        });
+    """
+    start, end = _pdf_pair(tmp_path)
+    page = _upload_page(chromium, live_url, init_script=hold_fetch)
+    page.locator("#start-input").set_input_files(start)
+    page.locator("#end-input").set_input_files(end)
+
+    with page.context.expect_page() as report_info:
+        page.locator("#compare-btn").click()
+    report = report_info.value
+    page.wait_for_function("() => window.__release !== null")
+
+    report.wait_for_selector(".spinner")
+    assert "Diff in progress" in report.locator("h1").inner_text()
+    # A real animation, not a static glyph: a frozen circle would read as hung.
+    assert report.locator(".spinner").evaluate("el => getComputedStyle(el).animationName") != "none"
+
+    # And the placeholder is replaced by the report rather than left alongside it.
+    page.evaluate("() => window.__release()")
+    report.wait_for_selector(".change-card", timeout=60_000)
+    assert report.locator(".spinner").count() == 0
+    report.close()
+    page.close()
+
+
 def test_blocked_popup_is_reported_instead_of_failing_silently(live_url, chromium, tmp_path):
     """When the browser blocks the report tab, the user is told (#71).
 
@@ -895,8 +938,8 @@ def test_a_server_rejection_is_shown_and_the_blank_tab_is_closed(live_url, chrom
     has already been opened. Two things have to happen, and neither is visible
     from the API tests — the server's own wording has to reach the page (it is
     written for the reader, so ``detail`` is rendered rather than "HTTP 422"),
-    and the tab opened in advance has to be closed rather than stranded on
-    about:blank. The 422 here is the engine declining an unnumbered layout
+    and the tab opened in advance has to be closed rather than stranded on its
+    in-progress placeholder. The 422 here is the engine declining an unnumbered layout
     (#141); the rate-limit and timeout replies come back through the same
     branch.
     """
@@ -912,7 +955,7 @@ def test_a_server_rejection_is_shown_and_the_blank_tab_is_closed(live_url, chrom
     # The engine's own sentence, not a status code: the generic fallback in
     # compare.js would read "Request failed (HTTP 422)".
     assert "no printed line numbers" in error.inner_text()
-    assert len(page.context.pages) == 1, "the blank report tab was left stranded"
+    assert len(page.context.pages) == 1, "the report tab was left stranded on the placeholder"
     assert page.locator("#upload-success").is_hidden()
     # And the form is usable again for the next pair.
     assert page.locator("#compare-btn").inner_text() == "Compare"
