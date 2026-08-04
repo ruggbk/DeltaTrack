@@ -126,7 +126,10 @@ uses:
   hidden — TESTING.md's ["Known soft spots"](../TESTING.md#known-soft-spots) has the
   current state, including the pairs recorded as `xfail`.
 - **Omnibus bills**, where section numbers repeat across divisions. Handled, but it is the
-  hardest case and the one that has hidden the most bugs.
+  hardest case and the one that has hidden the most bugs. A division's display label and
+  its match key are two separate values on the node (`Division` in `bill_tree.py`), built
+  side by side from the source and never from each other, so changing how a division is
+  rendered cannot change which sections the diff compares (#468).
 
 ## Dev tooling
 

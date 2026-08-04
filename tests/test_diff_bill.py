@@ -5,11 +5,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import HR4366_V1_PATH, HR4366_V6_PATH
+from conftest import HR4366_V1_PATH, HR4366_V4_PATH, HR4366_V5_PATH, HR4366_V6_PATH
 from conftest import make_bill_node as _node
 from conftest import make_bill_tree as _tree
 
-from deltatrack.bill_tree import BillTree, normalize_division_title
+from deltatrack import bill_tree
+from deltatrack.bill_tree import BillTree, normalize_bill
 from deltatrack.diff_bill import (
     BillDiff,
     NodeDiff,
@@ -21,6 +22,7 @@ from deltatrack.diff_bill import (
     main,
     match_nodes,
 )
+from tests.division_labels import cross_division_mismatches
 
 
 class TestMatchNodes:
@@ -1153,17 +1155,76 @@ class TestCrossDivisionIntegration:
 
     def test_cross_division_mismatches_below_target(self, hr4366_v4_v5_diff):
         """Issue #1/#9: cross-division mismatches reduced from 226 to <50."""
-        result = hr4366_v4_v5_diff
-
-        cross_div = 0
-        for c in result.changes:
-            if c.display_path_old and c.display_path_new:
-                old_first = c.display_path_old[0] if c.display_path_old else ""
-                new_first = c.display_path_new[0] if c.display_path_new else ""
-                if old_first.startswith("Division") and new_first.startswith("Division"):
-                    old_title = normalize_division_title(old_first)
-                    new_title = normalize_division_title(new_first)
-                    if old_title and new_title and old_title != new_title:
-                        cross_div += 1
-
+        cross_div = cross_division_mismatches(hr4366_v4_v5_diff)
         assert cross_div < 50, f"Cross-division mismatches: {cross_div} (target: <50)"
+
+
+class TestCrossDivisionMismatchGuard:
+    """The cross-division baselines must not read a broken measurement as a clean one."""
+
+    class _FakeChange:
+        def __init__(self, old, new):
+            self.display_path_old = (old, "SEC. 101")
+            self.display_path_new = (new, "SEC. 101")
+
+    class _FakeDiff:
+        def __init__(self, changes):
+            self.changes = changes
+
+    def test_counts_differing_titles(self):
+        diff = self._FakeDiff(
+            [
+                self._FakeChange("Division A: Military Construction", "Division C: Energy And Water"),
+                self._FakeChange("Division A: Military Construction", "Division C: MILITARY CONSTRUCTION"),
+            ]
+        )
+        assert cross_division_mismatches(diff) == 1
+
+    def test_raises_when_no_label_parses(self):
+        """A format the pattern cannot read must fail loudly, not report zero mismatches.
+
+        Every caller asserts ``<= baseline``, so a silent 0 passes each of them while
+        measuring nothing. This is the case #66 will hit if it changes the label without
+        updating tests/division_labels.py.
+        """
+        diff = self._FakeDiff([self._FakeChange("Division A Military Construction", "Division C Energy")])
+        with pytest.raises(RuntimeError, match="not one title parsed"):
+            cross_division_mismatches(diff)
+
+
+@pytest.mark.slow
+class TestDivisionMatchKeyIndependence:
+    """The division match key must not be recoverable-only from the display label (#468).
+
+    A division's label is what the reader sees; the diff also uses it to decide which
+    sections are the same section across two versions. While one string does both jobs,
+    a display-only change (#66 renders divisions GPO's way, ``DIVISION A—<header>``)
+    silently rewires matching, with nothing raising and no test failing.
+
+    This case is the gate for that. It changes only the display form and asserts the
+    pairing is byte-for-byte the one produced before, keyed on ``element_id``, which is
+    the XML's own id: unique and non-empty on both fixtures, and unaffected by display.
+    """
+
+    GPO_LABEL = staticmethod(lambda enum, header: f"DIVISION {enum.upper()}—{header}" if header else f"DIVISION {enum}")
+
+    @staticmethod
+    def _pairing() -> list[tuple[str | None, str | None]]:
+        old = normalize_bill(HR4366_V4_PATH)
+        new = normalize_bill(HR4366_V5_PATH)
+        return [(o.element_id if o else None, n.element_id if n else None) for o, n in match_nodes(old, new)]
+
+    def test_display_format_change_does_not_move_matches(self, monkeypatch):
+        if not (HR4366_V4_PATH.exists() and HR4366_V5_PATH.exists()):
+            pytest.skip("Real XML not present")
+
+        baseline = self._pairing()
+        assert baseline, "fixture produced no pairs, so this gate would assert nothing"
+
+        monkeypatch.setattr(bill_tree, "build_division_label", self.GPO_LABEL)
+        relabelled = normalize_bill(HR4366_V5_PATH)
+        assert any(n.division_label.startswith("DIVISION ") for n in relabelled.nodes), (
+            "the display form did not actually change, so the rest of this test proves nothing"
+        )
+
+        assert self._pairing() == baseline

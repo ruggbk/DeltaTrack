@@ -9,6 +9,25 @@ from deltatrack.parsers.pdf_anchors import _RUNIN_QUOTED_LINE, _match_runin_subs
 
 
 @dataclass(frozen=True)
+class Division:
+    """A division's display label and its match key, as two independent values (#468).
+
+    The label is what a reader sees ("Division A: Military Construction"); the key is
+    what the diff groups on when several nodes share a match path. Deriving one from the
+    other is what made a display-only change (#66 renders divisions as GPO does,
+    ``DIVISION A—<header>``) silently rewire which sections the diff compares, with
+    nothing raising. They travel together so the two cannot drift apart, and neither is
+    computed from the other: both come from the source ``<enum>``/``<header>``.
+    """
+
+    label: str = ""
+    key: str = ""
+
+
+NO_DIVISION = Division()
+
+
+@dataclass(frozen=True)
 class BillNode:
     """A single content-bearing node from a bill XML."""
 
@@ -20,6 +39,10 @@ class BillNode:
     body_text: str
     section_number: str
     division_label: str
+    # The division's match key (#468). Not derivable from division_label: that string is
+    # display form, and #53/#66 change it. Empty for nodes outside any division, and for
+    # a division with no <header>, which contributes no discrimination either way.
+    division_key: str = ""
     # Readable multi-line rendering of body_text for the full-bill view (#51).
     # body_text stays collapsed for diff matching; display_text adds enum spacing and
     # list line breaks. Empty for nodes built without it (callers fall back to body_text).
@@ -87,19 +110,6 @@ def bill_title(tree: BillTree) -> str:
 def normalize_header(text: str) -> str:
     """Normalize a header for matching: lowercase, collapse whitespace."""
     return " ".join(text.lower().split())
-
-
-def normalize_division_title(division_label: str) -> str:
-    """Extract and normalize the descriptive title from a division label.
-
-    'Division A: Military Construction' -> 'military construction'
-    'Division F' -> ''
-    '' -> ''
-    """
-    if ":" not in division_label:
-        return ""
-    title = division_label.split(":", 1)[1]
-    return normalize_header(title)
 
 
 def _variant_summary(bodies: list[ET.Element], preambles: list[ET.Element]) -> str:
@@ -474,7 +484,7 @@ def _append_subsection_nodes(
     match_path: tuple[str, ...],
     display_path: tuple[str, ...],
     section_num: str,
-    division_label: str,
+    division: Division,
     nodes: list[BillNode],
 ) -> None:
     """Emit one BillNode per node-worthy subsection, nested under the section's
@@ -492,7 +502,8 @@ def _append_subsection_nodes(
                 body_text=extract_text_content(el),
                 display_text=extract_display_text(el, skip_header_enum=False),
                 section_number=section_num,
-                division_label=division_label,
+                division_label=division.label,
+                division_key=division.key,
             )
         )
 
@@ -512,6 +523,17 @@ def build_title_label(title: ET.Element) -> str:
     if not enum:
         return header
     return f"TITLE {enum}—{header}" if header else f"TITLE {enum}"
+
+
+def build_division_label(enum: str, header: str) -> str:
+    """Build a <division>'s display label.
+
+    Sibling of :func:`build_title_label`. The published bill renders divisions as
+    ``DIVISION <enum>—<header>``; ours is ``Division <enum>: <header>``, which #66
+    tracks. Extracted so the display form lives in one function that #66 can change
+    without touching anything that matches nodes across versions (#468).
+    """
+    return f"Division {enum}: {header}" if header else f"Division {enum}"
 
 
 _TITLE_LABEL_RE = re.compile(r"^TITLE\s+[^\s—]+(?:—(.*))?$")
@@ -613,7 +635,7 @@ def _build_paths(
 def _process_appro_element(
     child: ET.Element,
     title_header: str,
-    division_label: str,
+    division: Division,
     current_major: str | None,
     current_intermediate: str | None,
     prev_name: str | None,
@@ -635,7 +657,7 @@ def _process_appro_element(
         if body_text:
             match_path, display_path = _build_paths(
                 title_header,
-                division_label,
+                division.label,
                 current_major,
                 None,
                 None,
@@ -650,7 +672,8 @@ def _process_appro_element(
                     body_text=body_text,
                     display_text=display_text,
                     section_number="",
-                    division_label=division_label,
+                    division_label=division.label,
+                    division_key=division.key,
                 )
             )
 
@@ -670,7 +693,7 @@ def _process_appro_element(
         if body_text:
             match_path, display_path = _build_paths(
                 title_header,
-                division_label,
+                division.label,
                 current_major,
                 effective_header,
                 None,
@@ -685,7 +708,8 @@ def _process_appro_element(
                     body_text=body_text,
                     display_text=display_text,
                     section_number="",
-                    division_label=division_label,
+                    division_label=division.label,
+                    division_key=division.key,
                 )
             )
 
@@ -704,7 +728,7 @@ def _process_appro_element(
         if body_text:
             match_path, display_path = _build_paths(
                 title_header,
-                division_label,
+                division.label,
                 current_major,
                 current_intermediate,
                 effective_header,
@@ -719,7 +743,8 @@ def _process_appro_element(
                     body_text=body_text,
                     display_text=display_text,
                     section_number="",
-                    division_label=division_label,
+                    division_label=division.label,
+                    division_key=division.key,
                 )
             )
 
@@ -729,7 +754,7 @@ def _process_appro_element(
 def _process_section_element(
     section: ET.Element,
     title_header: str,
-    division_label: str,
+    division: Division,
     current_major: str | None,
     current_intermediate: str | None,
     prev_name: str | None,
@@ -769,7 +794,7 @@ def _process_section_element(
             sec_label = section_num.lower() if section_num else ""
             match_path, display_path = _build_paths(
                 title_header,
-                division_label,
+                division.label,
                 current_major,
                 current_intermediate,
                 sec_label,
@@ -784,7 +809,8 @@ def _process_section_element(
                     body_text=own_body,
                     display_text=extract_display_text(section, skip_children=appro_carve),
                     section_number=section_num,
-                    division_label=division_label,
+                    division_label=division.label,
+                    division_key=division.key,
                 )
             )
 
@@ -797,7 +823,7 @@ def _process_section_element(
                 sec_major, sec_intermediate, sec_prev = _process_appro_element(
                     sub,
                     title_header,
-                    division_label,
+                    division,
                     sec_major,
                     sec_intermediate,
                     sec_prev,
@@ -815,7 +841,7 @@ def _process_section_element(
             sec_label = section_num.lower() if section_num else ""
             match_path, display_path = _build_paths(
                 title_header,
-                division_label,
+                division.label,
                 current_major,
                 current_intermediate,
                 sec_label,
@@ -830,10 +856,11 @@ def _process_section_element(
                     body_text=body_text,
                     display_text=display_text,
                     section_number=section_num,
-                    division_label=division_label,
+                    division_label=division.label,
+                    division_key=division.key,
                 )
             )
-            _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division_label, nodes)
+            _append_subsection_nodes(sub_specs, match_path, display_path, section_num, division, nodes)
 
 
 _STRUCTURAL_TAGS = {"subtitle", "part", "chapter", "subchapter", "subpart"}
@@ -842,7 +869,7 @@ _STRUCTURAL_TAGS = {"subtitle", "part", "chapter", "subchapter", "subpart"}
 def _walk_structural_children(
     parent: ET.Element,
     title_header: str,
-    division_label: str,
+    division: Division,
     current_major: str | None,
     current_intermediate: str | None,
     prev_name: str | None,
@@ -866,7 +893,7 @@ def _walk_structural_children(
             current_major, current_intermediate, prev_name = _process_appro_element(
                 child,
                 title_header,
-                division_label,
+                division,
                 current_major,
                 current_intermediate,
                 prev_name,
@@ -877,7 +904,7 @@ def _walk_structural_children(
             _process_section_element(
                 child,
                 title_header,
-                division_label,
+                division,
                 current_major,
                 current_intermediate,
                 prev_name,
@@ -908,7 +935,7 @@ def _walk_structural_children(
             _walk_structural_children(
                 child,
                 title_header,
-                division_label,
+                division,
                 sub_major,
                 sub_intermediate,
                 None,
@@ -925,7 +952,7 @@ def _walk_structural_children(
 def walk_title(
     title_element: ET.Element,
     title_header: str,
-    division_label: str,
+    division: Division,
 ) -> list[BillNode]:
     """Walk a <title> element, tracking flat-sibling context.
 
@@ -935,13 +962,14 @@ def walk_title(
     Args:
         title_element: A <title> XML element.
         title_header: The title's header text (may be empty for headerless titles).
-        division_label: Division label for display_path (empty if no division).
+        division: The enclosing division's display label and match key, or
+            ``NO_DIVISION`` for a title that sits directly under the body.
     """
     nodes: list[BillNode] = []
     _walk_structural_children(
         title_element,
         title_header,
-        division_label,
+        division,
         None,
         None,
         None,
@@ -1064,7 +1092,7 @@ def walk_body_sections(body: ET.Element) -> list[BillNode]:
                 division_label="",
             )
         )
-        _append_subsection_nodes(sub_specs, match_path, display_path, section_num, "", nodes)
+        _append_subsection_nodes(sub_specs, match_path, display_path, section_num, NO_DIVISION, nodes)
 
     return nodes
 
@@ -1289,24 +1317,27 @@ def normalize_bill(xml_path: Path) -> BillTree:
         # at the bill's end with no division breadcrumb. match_path excludes the
         # division, so cross-version diff matching is unaffected; only the
         # display_path (breadcrumb) and document order change.
-        current_division_label = ""
+        current_division = NO_DIVISION
         for child in body:
             if child.tag == "division":
                 div_enum = child.find("enum")
                 div_header = child.find("header")
                 div_enum_text = div_enum.text.strip() if div_enum is not None and div_enum.text else ""
                 div_header_text = extract_text_content(div_header).strip() if div_header is not None else ""
-                if div_header_text:
-                    current_division_label = f"Division {div_enum_text}: {div_header_text}"
-                else:
-                    current_division_label = f"Division {div_enum_text}"
+                # Label and key are built side by side from the source, not from each
+                # other (#468): the key is the header alone, so changing the label's
+                # wrapper, separator or casing cannot move a node into another bucket.
+                current_division = Division(
+                    label=build_division_label(div_enum_text, div_header_text),
+                    key=normalize_header(div_header_text),
+                )
 
                 for title in child.findall("title"):
                     title_header = build_title_label(title)
-                    all_nodes.extend(walk_title(title, title_header, current_division_label))
+                    all_nodes.extend(walk_title(title, title_header, current_division))
             elif child.tag == "title":
                 title_header = build_title_label(child)
-                all_nodes.extend(walk_title(child, title_header, current_division_label))
+                all_nodes.extend(walk_title(child, title_header, current_division))
         return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
 
     # Check for titles directly under body
@@ -1315,7 +1346,7 @@ def normalize_bill(xml_path: Path) -> BillTree:
         all_nodes.extend(walk_body_sections(body))
         for title in titles:
             title_header = build_title_label(title)
-            all_nodes.extend(walk_title(title, title_header, ""))
+            all_nodes.extend(walk_title(title, title_header, NO_DIVISION))
         return BillTree(congress, bill_type, bill_number, version, all_nodes, official_title)
 
     # Fallback: sections directly under body
