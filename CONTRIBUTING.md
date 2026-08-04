@@ -221,7 +221,7 @@ uv run pytest -m slow \
 
 CI splits gate 5 across three steps so a red build names the area it came from; run whole it covers all of them, against vendored and committed fixtures, with no downloads or API key. The deselection is CI's one deliberate omission: a live-network gate that cannot run offline.
 
-This used to enumerate each step's modules, and it fell out of date every time one was added, because nothing ties prose to the workflow. Selecting by marker instead means a module joining a CI step is covered here automatically.
+Selecting by marker means a module joining a CI step is covered here automatically. History: #220, #320, #288 — this block enumerated each step's modules and went stale in three consecutive pull requests, because nothing ties prose to the workflow.
 
 The pre-commit hooks cover gates 1 and 2 on each commit, but `ruff format --check` still fails CI if you committed without them.
 
@@ -258,7 +258,7 @@ the merge that is actually about to happen.
 
 What it changes for you:
 
-- **Merging is no longer instant.** Your pull request waits while its merge-group
+- **Merging is not instant.** Your pull request waits while its merge-group
   checks run — roughly the length of one CI run.
 - **You still don't rebase on `develop` before merging.** The queue does that work,
   which is why it was chosen over requiring every branch to be up to date; that

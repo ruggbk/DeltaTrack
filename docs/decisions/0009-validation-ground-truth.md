@@ -1,4 +1,4 @@
- # 9. Validate the parser against independently-authored committee reports
+# 9. Validate the parser against independently-authored committee reports
 
 - Status: Accepted
 - Date: 2026-06-27

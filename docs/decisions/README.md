@@ -5,6 +5,18 @@ that capture a non-obvious choice, why it was made, and what follows from it. Th
 keep the reasoning from being lost and stop settled questions from being
 relitigated.
 
+**Where a rationale belongs.** A comment states the live rule; a defended design
+choice past about six lines belongs here, reached by a self-contained pointer that
+still carries its claim if the record is never opened (see "Comments and rationale"
+in [AGENTS.md](../../AGENTS.md)). Because nothing loads this directory
+automatically, AGENTS.md also carries an index of every record under "Architecture
+decisions", so the decision set is visible in a session that never opens a file
+here. Write the heading as `# N. <the decision, as a claim>`: the titles are what
+the index shows, and a topic label ("Deterministic Diff Engine") tells a reader
+nothing that was decided. `tests/test_adr_index.py` regenerates both that index and
+the Records table below from these files and fails if either disagrees, so adding a
+record means updating both.
+
 ## How to propose a decision
 
 1. Copy [TEMPLATE.md](TEMPLATE.md) to `NNNN-short-title.md`, using the next free
@@ -43,11 +55,11 @@ relitigated.
 | [0001](0001-structured-money-diff.md) | Diff a structured model of the bill, not document text |
 | [0002](0002-pdfium-single-engine.md) | Use pypdfium2 (PDFium) as the single PDF text engine |
 | [0003](0003-pdfjs-client-side-viability.md) | Client-side PDF.js extraction is viable for published bills |
-| [0004](0004-govinfo-bulk-data.md) | Fetch discovery and text from govinfo bulk data, not the Congress.gov API |
+| [0004](0004-govinfo-bulk-data.md) | Fetch bill discovery and text from govinfo bulk data, not the Congress.gov API |
 | [0005](0005-deltatrack-billtrax-boundary.md) | Keep DeltaTrack a contained two-version tool; put analysis in BillTrax |
 | [0006](0006-canonical-diff-contract.md) | Make a versioned JSON document the contract between the diff engine and its consumers |
 | [0007](0007-single-renderer.md) | Render every diff with one renderer, whatever source pipeline produced it |
-| [0008](0008-deterministic-engine.md) | Deterministic Diff Engine |
+| [0008](0008-deterministic-engine.md) | Keep the diff engine deterministic; a language model may read a diff, never compute one |
 | [0009](0009-validation-ground-truth.md) | Validate the parser against independently-authored committee reports |
 | [0010](0010-pdf-pipeline-pre-publication.md) | Support a PDF pipeline for pre-publication bills; prefer XML once published |
 | [0011](0011-local-only-processing.md) | Process user-provided bill content only on the user's machine; no channel may send it off-device |
