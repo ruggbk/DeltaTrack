@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Download and vendor committee report HTMLs for the corpus."""
+"""Download and vendor committee report HTMLs for the corpus.
+
+Exits with non-zero code if any download fails, so CI catches missing fixtures.
+"""
 
 from __future__ import annotations
 
@@ -27,8 +30,14 @@ def extract_report_pkgs(manifest: dict) -> set[str]:
     for bill_entry in manifest.get("bill", []):
         for ver in bill_entry.get("versions", []):
             cr = ver.get("committee_report")
-            if cr and cr.get("pkg") and cr["pkg"] != "none":
-                pkgs.add(cr["pkg"])
+            # Handle both single object and list of report sources
+            if cr:
+                if isinstance(cr, list):
+                    for src in cr:
+                        if src.get("pkg") and src["pkg"] != "none":
+                            pkgs.add(src["pkg"])
+                elif cr.get("pkg") and cr["pkg"] != "none":
+                    pkgs.add(cr["pkg"])
     return pkgs
 
 
@@ -45,6 +54,8 @@ def download_report(pkg: str, dest_dir: Path) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as resp:  # noqa: S310 (govinfo, https)
         content = resp.read()
+    if not content:
+        raise RuntimeError(f"Empty response for {pkg}")
     dest.write_bytes(content)
     print(f"  Saved: {dest.name} ({len(content):,} bytes)")
     return dest
@@ -62,12 +73,9 @@ def main():
     dest_dir.mkdir(parents=True, exist_ok=True)
     
     for pkg in sorted(pkgs):
-        try:
-            download_report(pkg, dest_dir)
-        except Exception as e:
-            print(f"  ERROR downloading {pkg}: {e}", file=sys.stderr)
+        download_report(pkg, dest_dir)  # Let exceptions propagate
     
-    print("\nDone!")
+    print("\nAll reports downloaded successfully!")
 
 
 if __name__ == "__main__":

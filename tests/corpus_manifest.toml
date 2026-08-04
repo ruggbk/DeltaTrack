@@ -1,3 +1,44 @@
+# Corpus test-fixture manifest — the single source of truth for the committed bill
+# set the CI correctness gates run against. See docs/decisions/0015-corpus-test-fixtures.md.
+#
+# WHY THIS FILE EXISTS
+# The corpus correctness gates (tests/test_corpus_properties.py,
+# tests/test_corpus_tree_properties.py, tests/test_diff_validation.py) used to
+# parametrize over `bills/*/[0-9]*_*.xml` discovered at collection time. `bills/` is
+# gitignored, so the collected set was whatever each machine had fetched: counts were
+# not reproducible, and on an unfetched checkout (including CI) the gates collected
+# zero cases and passed green with no assertions — the fail-open trap ADR 0009 exists
+# to prevent. This manifest replaces that glob: the gates parametrize over exactly the
+# bills named here, every one of which is committed to git, so the collected set is
+# byte-identical on every machine and in CI.
+#
+# HOW THE GATES READ IT
+# tests/conftest.py loads this file once (stdlib tomllib) and derives the XML-file
+# list, the PDF-file list, and the adjacent-version pairs the gates parametrize over.
+# A file `tests/corpus/<id>/<stage>.<format>` is built for every (bill, version, format)
+# below. Because those files are committed, a normal checkout always has them; the
+# per-module completeness floor (test_manifest_fixtures_committed) fails closed if any
+# is absent — that is the CI signal that a manifested fixture was not committed.
+#
+# ADDING A FIXTURE — see the "Adding a corpus fixture" recipe in TESTING.md. In short:
+# put the bill files under tests/corpus/<id>/ and `git add` them, add a [[bill]] entry
+# here, and run the gates so any per-bill baseline (_KNOWN_DUPLICATE_COUNTS,
+# _XML_DROP_BUDGET, ...) is calibrated. Manifest and committed files must move together.
+# NOT bills/ — that tree is wholly gitignored since #308, so `git add` there is a silent
+# no-op and the fixture would live only on your disk.
+# An entry here also ENROLLS the bill in the corpus property gates, which may then
+# content-skip on it; an undeclared skip fails the session. TESTING.md's "When a skip
+# has to be declared" covers which allowlist applies, and when the right answer is to
+# withhold the fixture instead — see this file's 115-hr-244 note for that case (#330).
+#
+# SCOPE (#217 / #126): this is the initial curated floor — the bills the gates encode
+# hand-pinned baselines for, plus one bill per appropriations subcommittee and the
+# key structural shapes (omnibus, enrolled, minibus, reconciliation, Senate print).
+# Broadening the curation (e.g. per-subcommittee reported-House PDFs) is #126. The
+# opt-in `CORPUS_SWEEP=1` exploratory mode still sweeps every locally-fetched bill.
+
+# --- Diff-validation baselines -------------------------------------------------
+
 [[bill]]
 id = "118-hr-4366"
 subcommittee = "milcon-va / full-year omnibus"
@@ -9,11 +50,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt122"
-citation = "H. Rept. 118-122"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -21,11 +58,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt122"
-citation = "H. Rept. 118-122"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
 
 [[bill.versions]]
 stage = "3_placed-on-calendar-senate"
@@ -33,47 +66,28 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "no hr report for this stage"
+committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
 
 [[bill.versions]]
 stage = "4_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "no hr report for this stage"
+committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt122"
-citation = "H. Rept. 118-122"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
 
 [[bill.versions]]
 stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "enrolled bill; no conference report identified"
+committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
 
 [[bill]]
 id = "115-hr-5895"
@@ -85,12 +99,7 @@ stage = "4_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "no hr report for this stage"
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
 
 [[bill.versions]]
 stage = "5_enrolled-bill"
@@ -98,11 +107,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-115hrpt929"
-citation = "H. Rept. 115-929"
-chamber = "house"
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
 
 [[bill.versions]]
 stage = "1_reported-in-house"
@@ -110,11 +115,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-115hrpt697"
-citation = "H. Rept. 115-697"
-chamber = "house"
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -122,11 +123,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-115hrpt697"
-citation = "H. Rept. 115-697"
-chamber = "house"
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
 
 [[bill]]
 id = "113-hr-3547"
@@ -139,12 +136,7 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -152,12 +144,7 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "3_received-in-senate"
@@ -165,12 +152,7 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "4_engrossed-amendment-senate"
@@ -178,36 +160,21 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "114-hr-2029"
@@ -220,11 +187,7 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-114hrpt92"
-citation = "H. Rept. 114-92"
-chamber = "house"
+committee_report = [{pkg = "CRPT-114hrpt92", citation = "H. Rept. 114-92", chamber = "house"}]
 
 [[bill.versions]]
 stage = "3_referred-in-senate"
@@ -232,11 +195,7 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-114srpt57"
-citation = "S. Rept. 114-57"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-114hrpt92", citation = "H. Rept. 114-92", chamber = "house"}]
 
 [[bill.versions]]
 stage = "4_reported-in-senate"
@@ -249,34 +208,21 @@ stage = "5_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-114srpt57"
-citation = "S. Rept. 114-57"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-114hrpt92", citation = "H. Rept. 114-92", chamber = "house"}]
 
 [[bill.versions]]
 stage = "6_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-114hrpt92"
-citation = "H. Rept. 114-92"
-chamber = "house"
+committee_report = [{pkg = "CRPT-114hrpt92", citation = "H. Rept. 114-92", chamber = "house"}]
 
 [[bill.versions]]
 stage = "7_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "enrolled bill; no conference report identified"
+committee_report = [{pkg = "CRPT-114hrpt92", citation = "H. Rept. 114-92", chamber = "house"}, {pkg = "CRPT-114srpt57", citation = "S. Rept. 114-57", chamber = "senate"}]
 
 [[bill]]
 id = "117-hr-4502"
@@ -289,11 +235,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-117hrpt96"
-citation = "H. Rept. 117-96"
-chamber = "house"
+committee_report = [{pkg = "CRPT-117hrpt96", citation = "H. Rept. 117-96", chamber = "house"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -301,11 +243,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-117hrpt96"
-citation = "H. Rept. 117-96"
-chamber = "house"
+committee_report = [{pkg = "CRPT-117hrpt96", citation = "H. Rept. 117-96", chamber = "house"}]
 
 [[bill]]
 id = "119-hr-1"
@@ -318,22 +256,14 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-119hrpt106"
-citation = "H. Rept. 119-106,Book 1"
-chamber = "house"
+committee_report = [{pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 1", chamber = "house", book = "Book 1"}, {pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 2", chamber = "house", book = "Book 2"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-119hrpt106"
-citation = "H. Rept. 119-106,Book 1"
-chamber = "house"
+committee_report = [{pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 1", chamber = "house", book = "Book 1"}, {pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 2", chamber = "house", book = "Book 2"}]
 
 [[bill]]
 id = "118-hr-8752"
@@ -346,11 +276,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt553"
-citation = "H. Rept. 118-553"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt553", citation = "H. Rept. 118-553", chamber = "house"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -358,11 +284,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt553"
-citation = "H. Rept. 118-553"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt553", citation = "H. Rept. 118-553", chamber = "house"}]
 
 [[bill]]
 id = "118-hr-8282"
@@ -375,12 +297,7 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "117-hr-2471"
@@ -393,24 +310,14 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "118-hr-2882"
@@ -423,34 +330,21 @@ formats = [
     "pdf",
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt364"
-citation = "H. Rept. 118-364"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt364", citation = "H. Rept. 118-364", chamber = "house"}]
 
 [[bill.versions]]
 stage = "4_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "no hr report for this stage"
+committee_report = [{pkg = "CRPT-118hrpt364", citation = "H. Rept. 118-364", chamber = "house"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt364"
-citation = "H. Rept. 118-364"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt364", citation = "H. Rept. 118-364", chamber = "house"}]
 
 [[bill]]
 id = "118-s-4690"
@@ -462,11 +356,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt193"
-citation = "S. Rept. 118-193"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt193", citation = "S. Rept. 118-193", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4795"
@@ -478,11 +368,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt198"
-citation = "S. Rept. 118-198"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt198", citation = "S. Rept. 118-198", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-2321"
@@ -494,11 +380,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt62"
-citation = "S. Rept. 118-62"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt62", citation = "S. Rept. 118-62", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4921"
@@ -510,11 +392,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt204"
-citation = "S. Rept. 118-204"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt204", citation = "S. Rept. 118-204", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4927"
@@ -526,11 +404,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt205"
-citation = "S. Rept. 118-205"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt205", citation = "S. Rept. 118-205", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4928"
@@ -542,11 +416,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt206"
-citation = "S. Rept. 118-206"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt206", citation = "S. Rept. 118-206", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-2625"
@@ -558,11 +428,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt85"
-citation = "S. Rept. 118-85"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt85", citation = "S. Rept. 118-85", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4802"
@@ -574,11 +440,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt201"
-citation = "S. Rept. 118-201"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt201", citation = "S. Rept. 118-201", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4942"
@@ -590,11 +452,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt207"
-citation = "S. Rept. 118-207"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt207", citation = "S. Rept. 118-207", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4677"
@@ -606,11 +464,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt191"
-citation = "S. Rept. 118-191"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt191", citation = "S. Rept. 118-191", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4797"
@@ -622,11 +476,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt200"
-citation = "S. Rept. 118-200"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt200", citation = "S. Rept. 118-200", chamber = "senate"}]
 
 [[bill]]
 id = "118-s-4796"
@@ -638,11 +488,7 @@ stage = "1_reported-in-senate"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118srpt199"
-citation = "S. Rept. 118-199"
-chamber = "senate"
+committee_report = [{pkg = "CRPT-118srpt199", citation = "S. Rept. 118-199", chamber = "senate"}]
 
 [[bill]]
 id = "118-hr-8774"
@@ -655,11 +501,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt557"
-citation = "H. Rept. 118-557"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt557", citation = "H. Rept. 118-557", chamber = "house"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -667,11 +509,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt557"
-citation = "H. Rept. 118-557"
-chamber = "house"
+committee_report = [{pkg = "CRPT-118hrpt557", citation = "H. Rept. 118-557", chamber = "house"}]
 
 [[bill]]
 id = "113-hr-83"
@@ -683,23 +521,14 @@ stage = "6_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-113hrpt483"
-citation = "H. Rept. 113-483"
-chamber = "house"
+committee_report = [{pkg = "CRPT-113hrpt483", citation = "H. Rept. 113-483", chamber = "house"}]
 
 [[bill.versions]]
 stage = "7_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "enrolled bill; no conference report identified"
+committee_report = [{pkg = "CRPT-113hrpt483", citation = "H. Rept. 113-483", chamber = "house"}]
 
 [[bill]]
 id = "116-hr-1865"
@@ -711,12 +540,7 @@ stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "115-hr-1625"
@@ -728,12 +552,7 @@ stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "115-hr-244"
@@ -745,12 +564,7 @@ stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-
-[bill.versions.committee_report]
-pkg = "none"
-citation = "none"
-chamber = "none"
-reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
+committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "117-hr-4432"
@@ -763,11 +577,7 @@ formats = [
     "xml",
     "pdf",
 ]
-
-[bill.versions.committee_report]
-pkg = "CRPT-117hrpt88"
-citation = "H. Rept. 117-88"
-chamber = "house"
+committee_report = [{pkg = "CRPT-117hrpt88", citation = "H. Rept. 117-88", chamber = "house"}]
 
 [[bill]]
 id = "118-hr-4820"
@@ -780,8 +590,5 @@ formats = [
     "xml",
     "pdf",
 ]
+committee_report = [{pkg = "CRPT-118hrpt154", citation = "H. Rept. 118-154", chamber = "house"}]
 
-[bill.versions.committee_report]
-pkg = "CRPT-118hrpt154"
-citation = "H. Rept. 118-154"
-chamber = "house"
