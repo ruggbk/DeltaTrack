@@ -18,6 +18,11 @@ version of this module (see #295 review):
    enrolled bill only -- never with the as-reported House text it precedes by
    months. Chamber alone cannot separate them: a House conference report and a
    House committee report are both ``house``.
+3. **A report cannot explain text that predates it.** The chamber is only half of
+   "which report explains this text"; the other half is when. A committee report
+   is filed *at* the reported stage, so the introduced text -- written before the
+   committee acted, and the thing the report recommends changing -- has no report
+   at all. Chamber alone pairs them, because both are House-authored.
 """
 
 from __future__ import annotations
@@ -50,6 +55,31 @@ _TRANSIT = (
     "placed-on-calendar-house",
 )
 
+# Where a version sits in the bill's life. A committee report is filed AT the
+# reported stage, so it explains text from that point on and nothing earlier.
+# Ordered, and compared as an ordering -- the point is temporal, not categorical.
+PRE_COMMITTEE = 0  # introduced: written before the committee acted
+REPORTED = 1  # as reported out of committee: the text the report accompanies
+POST_COMMITTEE = 2  # engrossed, amended, in transit to the other chamber
+ENROLLED = 3  # the final agreed text
+
+
+def stage_class(stage: str) -> int:
+    """Where this stage sits in the ordering above.
+
+    Read from the stage name rather than the manifest's numeric prefix: the prefix
+    numbers a bill's *committed* versions, so it shifts when a fixture is added and
+    means different things in different bills.
+    """
+    key = stage.lower()
+    if "enrolled" in key:
+        return ENROLLED
+    if "introduced" in key:
+        return PRE_COMMITTEE
+    if "reported" in key:
+        return REPORTED
+    return POST_COMMITTEE
+
 
 @dataclass(frozen=True)
 class ReportSource:
@@ -58,10 +88,14 @@ class ReportSource:
     citation: str  # Full citation, e.g. "H. Rept. 119-106,Book 1"
     chamber: str  # "house" or "senate"
     number: int  # Report number within the congress, e.g. 929
-    # govinfo package ID, e.g. "CRPT-118hrpt553". None when govinfo publishes no
-    # text rendition for this report -- see ``text_available``. Never guess one:
+    # govinfo PARENT package ID, e.g. "CRPT-118hrpt553". None when govinfo publishes
+    # no text rendition for this report -- see ``text_available``. Never guess one:
     # a fabricated package ID reads as a vendorable fixture and silently is not.
     pkg: Optional[str] = None
+    # govinfo granule ID within ``pkg``, e.g. "CRPT-119hrpt106-pt1". A multi-book
+    # report is one package holding one granule per book, each with its own text
+    # rendition. None when the package holds a single undivided document.
+    granule: Optional[str] = None
     book: Optional[str] = None  # "Book 1", "Book 2", etc. if applicable
     conference: bool = False  # True if this is the conference report
     # False when govinfo serves no text rendition for this report. Recorded as data
@@ -93,6 +127,40 @@ def parse_citation(citation: str) -> tuple[str, int, int, Optional[str]] | None:
     chamber = "house" if prefix == "H." else "senate"
     book = f"Book {book_num}" if book_num else None
     return chamber, int(congress_str), int(number_str), book
+
+
+def fixture_stem(pkg: str, granule: Optional[str] = None) -> str:
+    """The committed fixture's basename for a package/granule pair.
+
+    The granule when there is one, so two books of a report land in two files. Naming
+    both books after their shared parent package would overwrite one with the other --
+    the collapse that made multi-book support nominal in the first place.
+    """
+    return granule or pkg
+
+
+def rendition_url(pkg: str, granule: Optional[str] = None) -> str:
+    """The govinfo text-rendition URL for a package, or for a granule within it.
+
+    Granules are addressed *inside* the parent package's path
+    (``/content/pkg/CRPT-119hrpt106/html/CRPT-119hrpt106-pt1.htm``); there is no
+    standalone ``CRPT-119hrpt106-pt1`` package, and asking for one lands on the
+    error page.
+    """
+    return f"https://www.govinfo.gov/content/pkg/{pkg}/html/{fixture_stem(pkg, granule)}.htm"
+
+
+def granule_id(pkg: str, part: int) -> str:
+    """The Nth granule of a package: ``CRPT-119hrpt106`` + 1 -> ``CRPT-119hrpt106-pt1``."""
+    return f"{pkg}-pt{part}"
+
+
+def book_number(book: Optional[str]) -> Optional[int]:
+    """The integer in "Book 2", or None."""
+    if not book:
+        return None
+    m = re.search(r"(\d+)", book)
+    return int(m.group(1)) if m else None
 
 
 def predicted_pkg(chamber: str, congress: int, number: int) -> str:
@@ -196,6 +264,9 @@ def get_report_pairing(
 
     - Enrolled: every report source, both chambers. The enrolled text is the
       agreed product of all of them, and the conference report explains it.
+    - Introduced: nothing. The text predates the committee report, which is filed
+      at the reported stage; the report recommends changing this text rather than
+      explaining it.
     - Every other stage: the reports authored by the chamber that wrote this text,
       excluding conference reports (which postdate the stage).
     """
@@ -207,6 +278,12 @@ def get_report_pairing(
 
     if is_enrolled_stage(stage):
         return ReportPairing(sources=tuple(report_sources))
+
+    if stage_class(stage) < REPORTED:
+        return ReportPairing(
+            sources=(),
+            reason="version predates the committee report, which is filed at the reported stage",
+        )
 
     chamber = authoring_chamber(stage, bill_type)
     candidates = [s for s in report_sources if s.chamber == chamber and not s.conference]

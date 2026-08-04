@@ -43,11 +43,14 @@ import tomlkit  # noqa: E402
 
 from scripts.report_pairing import (  # noqa: E402
     ReportSource,
+    book_number,
     extract_report_sources,
     get_report_pairing,
+    granule_id,
     mark_conference_reports,
     parse_citation,
     predicted_pkg,
+    rendition_url,
 )
 from tools.fetch_govinfo import fetch_billstatus_bill  # noqa: E402
 
@@ -64,39 +67,88 @@ def write_manifest_doc(doc: tomlkit.TOMLDocument) -> None:
     MANIFEST_PATH.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
 
-def pkg_resolves(pkg: str) -> bool:
-    """Whether govinfo serves a text rendition for this package.
+def rendition_resolves(pkg: str, granule: str | None = None) -> bool:
+    """Whether govinfo serves a text rendition for this package or granule.
 
     Checking the status code is not enough: an unknown package 302s to an error
     page that answers 200. Follow the redirect and require the final URL to still
-    be under ``/content/pkg/``, which the error page is not.
+    be under this package's ``/content/pkg/`` path, which the error page is not.
     """
-    url = f"https://www.govinfo.gov/content/pkg/{pkg}/html/{pkg}.htm"
     try:
-        with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310 (govinfo, https)
+        with urllib.request.urlopen(rendition_url(pkg, granule), timeout=60) as resp:  # noqa: S310
             return f"/content/pkg/{pkg}/" in resp.geturl()
     except urllib.error.URLError:
         return False
 
 
+# A package split into parts is not expected to run long; the ceiling only stops an
+# unbounded probe loop if govinfo ever starts answering every -ptN.
+MAX_GRANULE_PROBE = 12
+
+
+def discover_granules(pkg: str) -> list[str]:
+    """Every ``-ptN`` granule the package serves, in order, stopping at the first gap."""
+    found = []
+    for part in range(1, MAX_GRANULE_PROBE + 1):
+        gid = granule_id(pkg, part)
+        if not rendition_resolves(pkg, gid):
+            break
+        found.append(gid)
+    return found
+
+
 def resolve_pkgs(sources: list[ReportSource], congress: int) -> list[ReportSource]:
-    """Attach a confirmed ``pkg`` to each source, or mark it text-unavailable."""
+    """Attach a confirmed ``pkg`` (and granule, if the package is split) to each source.
+
+    A report is published either as one undivided document or as a package holding
+    one granule per book. Both shapes are resolved by asking govinfo rather than by
+    predicting: the prediction is the thing that produced a package ID pointing at
+    nothing. Anything that cannot be confirmed is marked text-unavailable with the
+    reason, so it stays explicit instead of becoming a fixture that never arrives.
+    """
     out = []
     for s in sources:
-        if s.book:
-            # Multi-book reports have no known per-book package ID, and the
-            # single-book prediction would point both books at one file.
+        pkg = predicted_pkg(s.chamber, congress, s.number)
+        book_n = book_number(s.book)
+
+        # A cited book is granule N of the package.
+        if book_n is not None:
+            gid = granule_id(pkg, book_n)
+            if rendition_resolves(pkg, gid):
+                out.append(replace(s, pkg=pkg, granule=gid))
+            else:
+                out.append(
+                    replace(
+                        s,
+                        text_available=False,
+                        unavailable_reason=f"govinfo serves no text rendition for granule {gid}",
+                    )
+                )
+            continue
+
+        # No book cited: the usual undivided package.
+        if rendition_resolves(pkg):
+            out.append(replace(s, pkg=pkg))
+            continue
+
+        # Some packages are split into parts without BILLSTATUS citing books.
+        granules = discover_granules(pkg)
+        if len(granules) == 1:
+            out.append(replace(s, pkg=pkg, granule=granules[0]))
+        elif len(granules) > 1:
+            # BILLSTATUS cited one report but the package holds several parts, so
+            # which part this citation means is not established. Fail closed rather
+            # than picking one.
             out.append(
                 replace(
                     s,
                     text_available=False,
-                    unavailable_reason="multi-book report: no per-book govinfo package ID is known",
+                    unavailable_reason=(
+                        f"{pkg} is split into {len(granules)} granules but BILLSTATUS cites no book; "
+                        f"which part this citation refers to is unresolved"
+                    ),
                 )
             )
-            continue
-        pkg = predicted_pkg(s.chamber, congress, s.number)
-        if pkg_resolves(pkg):
-            out.append(replace(s, pkg=pkg))
         else:
             out.append(
                 replace(
@@ -128,6 +180,7 @@ def sources_from_manifest(bill_entry) -> list[ReportSource]:
                     number=number,
                     book=book,
                     pkg=raw.get("pkg"),
+                    granule=raw.get("granule"),
                     text_available=raw.get("text_available", True),
                     unavailable_reason=raw.get("unavailable_reason"),
                 ),
@@ -140,6 +193,8 @@ def format_report_source(source: ReportSource) -> tomlkit.items.InlineTable:
     table = tomlkit.inline_table()
     if source.pkg:
         table["pkg"] = source.pkg
+    if source.granule:
+        table["granule"] = source.granule
     table["citation"] = source.citation
     table["chamber"] = source.chamber
     if source.book:

@@ -66,13 +66,33 @@ Which committee report explains a given bill version, recorded per version in
 
 | Script | What it does |
 |--------|--------------|
-| `report_pairing.py` | Not a runnable script — the shared pairing rules both of the others import. Defines the authoring chamber of a stage and which reports are conference reports. Change a rule here, then re-run the updater. |
-| `update_manifest_with_reports.py [--refresh]` | Rewrite the manifest's `committee_report` entries. Default is offline: re-applies the pairing rules to the report sources already recorded. `--refresh` re-fetches BILLSTATUS and re-confirms each govinfo package. Edits via tomlkit so the manifest's documentation comments survive. |
+| `report_pairing.py` | Not a runnable script — the shared pairing rules both of the others import. Defines a stage's authoring chamber, where it sits in the bill's life, and which reports are conference reports. Change a rule here, then re-run the updater. |
+| `update_manifest_with_reports.py [--refresh]` | Rewrite the manifest's `committee_report` entries. Default is offline: re-applies the pairing rules to the report sources already recorded. `--refresh` re-fetches BILLSTATUS and re-confirms each package and granule against govinfo. Edits via tomlkit so the manifest's documentation comments survive. |
 | `vendor_reports.py` | Download the committed report HTML fixtures named by the manifest, and re-validate the ones already present. Rejects govinfo's error page, which it serves as HTTP 200 for an unknown package. |
+
+Which report explains a version turns on two things, not one: the chamber that
+**authored** that text, and **when** the text exists. A committee report is filed at
+the reported stage, so it explains text from there on — never the introduced text it
+recommends changing — and a conference report explains only the enrolled result.
+
+A report is published either as one undivided document or as a package holding one
+granule per book, which is how `H. Rept. 119-106` Books 1 and 2 are separately
+addressable:
+
+```
+pkg     = "CRPT-119hrpt106"        # parent package
+granule = "CRPT-119hrpt106-pt1"    # Book 1; -pt2 is Book 2
+```
+
+Granules are addressed inside the parent's path
+(`/content/pkg/CRPT-119hrpt106/html/CRPT-119hrpt106-pt1.htm`); there is no standalone
+`CRPT-119hrpt106-pt1` package. Fixtures are named after the granule when there is one,
+so each book is its own committed file.
 
 A report govinfo publishes no text for is recorded as `text_available = false` with a
 reason and **no** `pkg`, and must have no fixture — `tests/test_manifest_report_fixtures.py`
-asserts both directions, so the exception cannot outlive its reason.
+asserts both directions, so the exception cannot outlive its reason. Nothing is
+predicted: a package or granule is recorded only after govinfo is asked and answers.
 
 ## PDF / rendering
 

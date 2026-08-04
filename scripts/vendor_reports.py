@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tomllib
 
+from scripts.report_pairing import fixture_stem, rendition_url  # noqa: E402
 from tests.corpus_paths import DATA_DIR  # noqa: E402
 
 
@@ -38,19 +39,23 @@ def load_manifest() -> dict:
         return tomllib.load(f)
 
 
-def vendorable_pkgs(manifest: dict) -> set[str]:
-    """Package IDs the manifest says are downloadable.
+def vendorable_renditions(manifest: dict) -> set[tuple[str, str | None]]:
+    """(package, granule) pairs the manifest says are downloadable.
+
+    Keyed on the pair, not the package: a multi-book report is ONE package holding a
+    separate granule per book, so keying on the package alone collapses the books
+    into a single download and one of them is silently never vendored.
 
     A source without a ``pkg``, or with ``text_available = false``, is one govinfo
     publishes no text for; it is deliberately absent rather than missing.
     """
-    pkgs = set()
+    out = set()
     for bill_entry in manifest.get("bill", []):
         for ver in bill_entry.get("versions", []):
             for src in ver.get("committee_report", []) or []:
                 if src.get("pkg") and src.get("text_available", True):
-                    pkgs.add(src["pkg"])
-    return pkgs
+                    out.add((src["pkg"], src.get("granule")))
+    return out
 
 
 def validate_rendition(pkg: str, content: bytes) -> None:
@@ -78,24 +83,28 @@ def validate_rendition(pkg: str, content: bytes) -> None:
         )
 
 
-def download_report(pkg: str, dest_dir: Path) -> Path:
-    """Download a committee report HTML from govinfo, or validate the committed copy."""
-    url = f"https://www.govinfo.gov/content/pkg/{pkg}/html/{pkg}.htm"
-    dest = dest_dir / f"{pkg}.htm"
+def download_report(pkg: str, dest_dir: Path, granule: str | None = None) -> Path:
+    """Download one committee report rendition, or validate the committed copy.
+
+    ``granule`` addresses one book within a multi-book package; the fixture is named
+    after it, so each book lands in its own file.
+    """
+    stem = fixture_stem(pkg, granule)
+    dest = dest_dir / f"{stem}.htm"
 
     if dest.exists():
         # Re-validate rather than trusting presence: a previously-saved error page
         # would otherwise be permanent, since nothing would ever re-fetch it.
-        validate_rendition(pkg, dest.read_bytes())
+        validate_rendition(stem, dest.read_bytes())
         print(f"  Already exists (validated): {dest.name}")
         return dest
 
-    print(f"  Downloading {pkg}...")
+    print(f"  Downloading {stem}...")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(url, timeout=120) as resp:  # noqa: S310 (govinfo, https)
+    with urllib.request.urlopen(rendition_url(pkg, granule), timeout=120) as resp:  # noqa: S310
         content = resp.read()
 
-    validate_rendition(pkg, content)  # before the write, so nothing bad lands on disk
+    validate_rendition(stem, content)  # before the write, so nothing bad lands on disk
 
     dest.write_bytes(content)
     print(f"  Saved: {dest.name} ({len(content):,} bytes)")
@@ -104,17 +113,17 @@ def download_report(pkg: str, dest_dir: Path) -> Path:
 
 def main():
     manifest = load_manifest()
-    pkgs = vendorable_pkgs(manifest)
+    renditions = vendorable_renditions(manifest)
 
-    print(f"Found {len(pkgs)} unique report packages to vendor:")
-    for pkg in sorted(pkgs):
-        print(f"  {pkg}")
+    print(f"Found {len(renditions)} report renditions to vendor:")
+    for pkg, granule in sorted(renditions):
+        print(f"  {fixture_stem(pkg, granule)}")
 
     dest_dir = DATA_DIR
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    for pkg in sorted(pkgs):
-        download_report(pkg, dest_dir)  # Let exceptions propagate
+    for pkg, granule in sorted(renditions):
+        download_report(pkg, dest_dir, granule)  # Let exceptions propagate
 
     print("\nAll reports downloaded and validated successfully!")
 
