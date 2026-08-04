@@ -372,16 +372,20 @@ def test_manifested_expanding_case_is_still_watched() -> None:
 def test_expanding_case_resolves_per_version_and_per_format() -> None:
     """A bill id alone is not enough, and neither is a stage.
 
-    114-hr-2029 v4 IS manifested -- as pdf only (its xml is withheld while the
-    multi-<legis-body> section drop is open; see the manifest note). The amount-recall gate
-    reads the xml and the pdf of a stage, so CI collects no case for it; a check that
-    collapsed format would wave through the exact ids that reddened a local run.
-    113-hr-3547 v6 is the xml-only complement, and v4 the stage committed in both formats,
-    which is the one real case."""
+    The amount-recall gate reads the xml AND the pdf of a stage, so a stage committed in
+    one format collects no case; a check that collapsed format would wave through the
+    exact ids that reddened a local run.
+
+    The pdf-only example used to be 114-hr-2029 v4, whose xml was withheld while #434 (the
+    multi-<legis-body> text drop) was open. That xml is now committed, and per-version
+    format parity leaves the corpus with no pdf-only stage to name. The xml-only direction
+    still has one, so the single-format case is still covered from that side; both
+    directions run through the same format resolution, so what is checked here is
+    unchanged."""
     recall = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[{}]"
-    assert not conftest.is_watched_case(recall.format("114-hr-2029/4_reported-in-senate"))  # pdf only
     assert not conftest.is_watched_case(recall.format("113-hr-3547/6_enrolled-bill"))  # xml only
     assert conftest.is_watched_case(recall.format("113-hr-3547/4_engrossed-amendment-senate"))  # both
+    assert conftest.is_watched_case(recall.format("114-hr-2029/4_reported-in-senate"))  # both, since #434
 
 
 def test_pair_case_resolves_both_sides() -> None:

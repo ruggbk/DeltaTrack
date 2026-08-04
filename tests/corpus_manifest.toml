@@ -85,20 +85,19 @@ covers = "Omnibus span-geometry case (#172/#175). The 5->6 XML pair is the node-
 versions = [
   { stage = "1_reported-in-house", formats = ["pdf", "xml"] },
   { stage = "3_referred-in-senate", formats = ["pdf", "xml"] },
-  # XML deliberately WITHHELD while #434 (reported bills carrying a committee substitute
-  # lose the second bill text entirely) is open. Such a bill holds the reported text AND
-  # the substitute as two sibling <legis-body> elements; find_bill_body returns the first
-  # and the second is walked by nothing, so this version loses 91 sections outright --
+  # XML committed when #434 landed, as the note here said it should be. It holds the
+  # reported text AND the committee substitute as two sibling <legis-body> elements, and
+  # while find_bill_body returned only the first this version lost 91 sections outright --
   # among them the second Sec. 129, whose <list> rescinds $85,000,000 / $86,400,000 /
-  # $133,000,000. Committing the XML makes test_no_section_sibling_is_dropped_from_every_node
-  # red, and the only way to green it would be an allowlist entry recording a live
-  # money-losing defect as normal. Withheld for the same reason as 115-hr-244 v5 below.
+  # $133,000,000. It was withheld because committing it reddened
+  # test_no_section_sibling_is_dropped_from_every_node and the only way to green it would
+  # have been an allowlist entry recording a live money-losing defect as normal.
   #
-  # Worth committing the moment #434 lands: this version is a ready-made regression test
-  # for it, and the gate that catches it already exists and needs no new assertion.
-  # The PDF stays regardless -- it is the 3->4 anchor-agreement pair and reads the printed
-  # page, so it is unaffected.
-  { stage = "4_reported-in-senate", formats = ["pdf"] },
+  # It is now the regression test for #434 rather than a withheld one: normalize_bill
+  # walks every top-level body, so the rescission reaches a node and the gate greens on
+  # the fix rather than on an exemption. Verified red-then-green against the pre-#434
+  # parser, so the gate is known to be able to fail rather than assumed to be.
+  { stage = "4_reported-in-senate", formats = ["pdf", "xml"] },
   { stage = "5_engrossed-amendment-senate", formats = ["xml"] },
   { stage = "6_engrossed-amendment-house", formats = ["xml"] },
   { stage = "7_enrolled-bill", formats = ["xml"] },

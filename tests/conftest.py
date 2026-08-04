@@ -948,6 +948,7 @@ def make_bill_node(
     header_text="",
     tag="appropriations-intermediate",
     division_label="",
+    body_index=0,
 ):
     """Build a BillNode with defaults for testing."""
     return BillNode(
@@ -959,6 +960,7 @@ def make_bill_node(
         body_text=body_text,
         section_number="",
         division_label=division_label,
+        body_index=body_index,
     )
 
 

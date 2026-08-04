@@ -249,7 +249,28 @@ def _match_collision_group(
     the GPO form #66 asks for has no colon, so every division collapsed into one bucket
     and nodes silently paired across divisions.
     """
-    # Step 1: Sub-group by division
+    # Step 1: Sub-group by division.
+    #
+    # Deliberately NOT also by body_index (#434), though nodes now carry one. A document
+    # with two top-level bodies makes every section collide with its counterpart in the
+    # other text, so partitioning on the body looks like the matching fix. It is not:
+    # body_index is a node's POSITION IN ITS OWN DOCUMENT, and the same position does not
+    # mean the same text across versions.
+    #
+    # A reported bill holds the base text at body[0] and the committee substitute at
+    # body[1]. When the substitute is adopted, the NEXT version is a single body holding
+    # that substitute -- at index 0, because it is now the only body. Partitioning on the
+    # index pairs old body[0] (the base, superseded) with it and reports old body[1] (the
+    # text that actually survived) as removed. 114-hr-2029 is exactly this: v5 scores
+    # 0.809 similarity to v4's body[1] and 0.532 to body[0], and the partition inverted
+    # that pairing on a committed corpus pair.
+    #
+    # Similarity already resolves both directions without the constraint, because it
+    # compares text rather than position: going one body to two, the unchanged base text
+    # wins its pairing on being identical, and the substitute is left over as added. So
+    # the constraint was not earning the direction it was added for, while breaking the
+    # other one. division_key is safe here in a way body_index is not -- a division's key
+    # is its header text, which is a name that travels with the content across versions.
     old_by_div: dict[str, list[BillNode]] = defaultdict(list)
     new_by_div: dict[str, list[BillNode]] = defaultdict(list)
     for node in old_nodes:
@@ -264,9 +285,9 @@ def _match_collision_group(
     all_divs = dict.fromkeys(list(old_by_div.keys()) + list(new_by_div.keys()))
 
     # Step 2: Pair within each division sub-group
-    for div_title in all_divs:
-        div_old = old_by_div.get(div_title, [])
-        div_new = new_by_div.get(div_title, [])
+    for group_key in all_divs:
+        div_old = old_by_div.get(group_key, [])
+        div_new = new_by_div.get(group_key, [])
 
         if not div_old:
             unmatched_new.extend(div_new)
