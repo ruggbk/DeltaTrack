@@ -23,6 +23,15 @@ version of this module (see #295 review):
    is filed *at* the reported stage, so the introduced text -- written before the
    committee acted, and the thing the report recommends changing -- has no report
    at all. Chamber alone pairs them, because both are House-authored.
+4. **A report does not survive the other chamber rewriting the bill.** Chamber plus
+   "at or after reported" still lets an old report come back: the House reports a
+   bill, the Senate amends it, the House then amends *that*, and the original
+   report re-attaches because the House authored both. It does not explain the
+   later text. H.R. 2882 is the clean case -- H. Rept. 118-364 accompanies the
+   Udall Foundation Reauthorization Act, and the House's amendment to the Senate
+   amendment is the Further Consolidated Appropriations Act, 2024. Same bill
+   number, same chamber, unrelated text. So a report belongs to a *lineage*, and
+   the lineage ends when the other chamber amends.
 """
 
 from __future__ import annotations
@@ -195,6 +204,36 @@ def authoring_chamber(stage: str, bill_type: str) -> str:
     return origin
 
 
+def lineage_round(stage: str, bill_type: str) -> int:
+    """Which of its chamber's authoring rounds this version belongs to.
+
+    ``0`` is the chamber's own original text -- what it introduced, reported, and
+    engrossed, plus transit stages where the text has not been touched. ``1`` is
+    text the chamber wrote in *response* to the other chamber, which is a different
+    document that the earlier committee report does not describe.
+
+    Read from the stage name rather than from the bill's version list, because the
+    manifest holds the committed fixtures, not every version a bill had. Counting
+    authoring runs over a curated subset infers the wrong round whenever an earlier
+    version is not committed -- 113-hr-83 commits only its House amendment, which
+    would read as that chamber's first text when it is in fact its second.
+
+    The name carries the answer on its own. An ``engrossed-amendment-<C>`` stage
+    for the chamber the bill originated in can only be an amendment to the OTHER
+    chamber's amendment, because that chamber's own first pass is engrossed, not
+    engrossed-amendment. For the other chamber, the same stage is its first
+    authored text.
+    """
+    key = stage.lower()
+    origin = "house" if bill_type == "hr" else "senate"
+
+    if "engrossed-amendment-house" in key:
+        return 1 if origin == "house" else 0
+    if "engrossed-amendment-senate" in key:
+        return 1 if origin == "senate" else 0
+    return 0
+
+
 def is_enrolled_stage(stage: str) -> bool:
     """Whether this stage is the enrolled (final, agreed) text."""
     return "enrolled" in stage.lower()
@@ -267,6 +306,10 @@ def get_report_pairing(
     - Introduced: nothing. The text predates the committee report, which is filed
       at the reported stage; the report recommends changing this text rather than
       explaining it.
+    - Text authored after the other chamber amended the bill: nothing. That is a
+      new document in a new lineage, and no committee reported it. If a report
+      does explain such a version, it has to be recorded deliberately -- this
+      returns none rather than reaching back for the chamber's earlier report.
     - Every other stage: the reports authored by the chamber that wrote this text,
       excluding conference reports (which postdate the stage).
     """
@@ -283,6 +326,15 @@ def get_report_pairing(
         return ReportPairing(
             sources=(),
             reason="version predates the committee report, which is filed at the reported stage",
+        )
+
+    if lineage_round(stage, bill_type) > 0:
+        return ReportPairing(
+            sources=(),
+            reason=(
+                "text was authored in response to the other chamber's amendment, so no "
+                "committee report of this chamber accompanies it"
+            ),
         )
 
     chamber = authoring_chamber(stage, bill_type)

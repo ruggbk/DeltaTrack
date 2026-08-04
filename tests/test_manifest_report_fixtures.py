@@ -404,3 +404,110 @@ def test_114_hr_2029_enrolled_has_both_chambers():
 
     assert "house" in chambers, "Missing House report"
     assert "senate" in chambers, "Missing Senate report"
+
+
+@pytest.mark.slow
+def test_no_report_survives_the_other_chamber_amending():
+    """A report must not re-attach to text authored after the other chamber amended.
+
+    The regression this locks: pairing on (at-or-after-reported, authoring chamber)
+    let an old report come back. 118-hr-2882's House amendment to the Senate
+    amendment is the Further Consolidated Appropriations Act, 2024, while
+    H. Rept. 118-364 accompanies the Udall Foundation Reauthorization Act -- same
+    bill number and same chamber, unrelated text. Three other bills in the corpus
+    have the same shape (113-hr-83, 114-hr-2029, 118-hr-4366), each an omnibus
+    carried by a House amendment onto an unrelated reported bill.
+
+    Enrolled text is exempt: it is the agreed product of every source.
+    """
+    from scripts.report_pairing import is_enrolled_stage, lineage_round
+
+    offenders = {
+        f"{bill_id} {stage}": sorted(s["citation"] for s in sources)
+        for (bill_id, stage), sources in _REPORT_PKGS.items()
+        if not is_enrolled_stage(stage) and lineage_round(stage, bill_id.split("-")[1]) > 0
+    }
+    assert not offenders, (
+        "these versions were authored after the other chamber amended the bill, so no "
+        "committee report of their chamber explains them:\n"
+        + "\n".join(f"  {k}: {v}" for k, v in sorted(offenders.items()))
+    )
+
+
+@pytest.mark.slow
+def test_118_hr_2882_house_amendment_has_no_report():
+    """The named regression case, pinned directly.
+
+    Also pins what must NOT change: the introduced version and the Senate
+    amendment stay empty, and the bill keeps no stray pairing anywhere.
+    """
+    assert ("118-hr-2882", "5_engrossed-amendment-house") not in _REPORT_PKGS, (
+        "the Further Consolidated Appropriations Act text is paired with the Udall "
+        "Foundation Reauthorization Act's committee report"
+    )
+    assert ("118-hr-2882", "1_introduced-in-house") not in _REPORT_PKGS
+    assert ("118-hr-2882", "4_engrossed-amendment-senate") not in _REPORT_PKGS
+
+
+@pytest.mark.slow
+def test_reported_and_transit_versions_keep_their_report():
+    """The other direction: the lineage rule must not strip reports it should keep.
+
+    A rule that returned nothing everywhere would pass every assertion above. These
+    are corpus versions whose report is correct and must survive.
+    """
+    expected = {
+        ("118-hr-4366", "1_reported-in-house"): "H. Rept. 118-122",
+        ("118-hr-4366", "2_engrossed-in-house"): "H. Rept. 118-122",
+        ("118-hr-4366", "3_placed-on-calendar-senate"): "H. Rept. 118-122",
+        ("114-hr-2029", "1_reported-in-house"): "H. Rept. 114-92",
+        ("114-hr-2029", "3_referred-in-senate"): "H. Rept. 114-92",
+        ("114-hr-2029", "5_engrossed-amendment-senate"): "S. Rept. 114-57",
+        ("118-hr-8774", "1_reported-in-house"): "H. Rept. 118-557",
+    }
+    for key, citation in expected.items():
+        assert key in _REPORT_PKGS, f"{key} lost its committee report entirely"
+        assert citation in {s["citation"] for s in _REPORT_PKGS[key]}, (
+            f"{key} should carry {citation}, got {[s['citation'] for s in _REPORT_PKGS[key]]}"
+        )
+
+
+@pytest.mark.slow
+def test_no_committed_report_fixture_is_orphaned():
+    """Every committed CRPT-*.htm must be referenced by something that reads it.
+
+    The reverse of the completeness floor. That one catches a manifest entry with no
+    fixture; this catches a fixture no longer named by any manifest entry, which no
+    gate reads and nothing would ever notice. It is a live case rather than a
+    hypothetical: tightening the pairing rule left H. Rept. 118-364 attached to no
+    version, orphaning the fixture that had just been vendored for it.
+
+    Two reference sources, because report fixtures serve two consumers:
+    corpus_manifest.toml (the pairing gates) and tests/validation_sources.py (the
+    amount-validation tiers), which builds its package IDs by f-string and so cannot
+    be found by grepping for them.
+    """
+    import tests.validation_sources as validation_sources
+    from scripts.report_pairing import fixture_stem
+
+    referenced = {
+        fixture_stem(s["pkg"], s.get("granule")) for sources in _REPORT_PKGS.values() for s in sources if s.get("pkg")
+    }
+    for name in dir(validation_sources):
+        obj = getattr(validation_sources, name)
+        if isinstance(obj, (list, tuple, dict)):
+            for item in obj.values() if isinstance(obj, dict) else obj:
+                pkg = getattr(item, "report_pkg", None)
+                if pkg:
+                    referenced.add(pkg)
+
+    assert referenced, "found no referenced report packages; the scan is broken, not the corpus"
+
+    on_disk = {p.stem for p in DATA_DIR.glob("CRPT-*.htm")}
+    orphans = sorted(on_disk - referenced)
+    assert not orphans, (
+        "these committed report fixtures are referenced by no manifest entry and no "
+        "validation source, so nothing reads them:\n"
+        + "\n".join(f"  {o}.htm" for o in orphans)
+        + "\n\nDelete them, or attach the report to the version it explains."
+    )

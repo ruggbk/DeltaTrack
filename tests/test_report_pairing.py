@@ -23,6 +23,7 @@ from scripts.report_pairing import (
     ReportSource,
     authoring_chamber,
     get_report_pairing,
+    lineage_round,
     mark_conference_reports,
     stage_class,
 )
@@ -102,10 +103,81 @@ def test_senate_authored_amendment_without_a_senate_report_is_explicitly_none() 
     assert "senate" in (pairing.reason or "").lower(), f"reason should name the chamber: {pairing.reason!r}"
 
 
-def test_house_authored_version_after_the_senate_gets_the_house_report() -> None:
-    """The House's post-Senate text is back to being explained by the House report."""
+# --- lineage ------------------------------------------------------------------
+#
+# A report belongs to the text its committee reported, and that lineage ends when
+# the other chamber amends the bill. These five cases are the distinctions the rule
+# has to make; the previous version of this file asserted the opposite of the fourth.
+
+
+def test_report_propagates_through_its_own_lineage() -> None:
+    """Case 1: the reported text and the engrossment derived from it share a report."""
+    for stage in ("1_reported-in-house", "2_engrossed-in-house"):
+        pairing = get_report_pairing([HOUSE_REPORT], stage, "hr")
+        assert citations(pairing) == {"H. Rept. 118-364"}, f"{stage} lost its own report"
+
+
+def test_report_survives_transit_to_the_other_chamber() -> None:
+    """Case 2: arriving in the Senate is not an amendment; the text is still the House's."""
+    for stage in ("3_received-in-senate", "3_referred-in-senate", "3_placed-on-calendar-senate"):
+        pairing = get_report_pairing([HOUSE_REPORT], stage, "hr")
+        assert citations(pairing) == {"H. Rept. 118-364"}, f"{stage} dropped the report in transit"
+
+
+def test_the_other_chamber_amending_breaks_the_lineage() -> None:
+    """Case 3: the Senate's substitute is the Senate's text, and no House report covers it."""
+    pairing = get_report_pairing([HOUSE_REPORT], "4_engrossed-amendment-senate", "hr")
+    assert pairing.sources == ()
+
+
+def test_an_older_report_does_not_resurrect_for_a_later_amendment() -> None:
+    """Case 4: the regression, and the assumption this file used to lock in.
+
+    H. Rept. 118-364 accompanies the Udall Foundation Reauthorization Act. The
+    House's amendment to the Senate amendment of H.R. 2882 is the Further
+    Consolidated Appropriations Act, 2024. Both are House-authored and both sit at
+    or after the reported stage, so chamber-plus-timing pairs them; they are
+    unrelated documents.
+    """
     pairing = get_report_pairing([HOUSE_REPORT, SENATE_REPORT], "5_engrossed-amendment-house", "hr")
-    assert citations(pairing) == {"H. Rept. 118-364"}
+
+    assert pairing.sources == (), f"an older House report re-attached: {citations(pairing)}"
+    assert "other chamber" in (pairing.reason or ""), f"expected a lineage reason, got {pairing.reason!r}"
+
+
+def test_lineage_break_is_not_repaired_by_the_other_chambers_report_either() -> None:
+    """The post-amendment House text is not the Senate's either -- it is nobody's report."""
+    pairing = get_report_pairing([SENATE_REPORT], "5_engrossed-amendment-house", "hr")
+    assert pairing.sources == ()
+
+
+@pytest.mark.parametrize(
+    ("stage", "bill_type", "expected_round"),
+    [
+        # The originating chamber's own text is always round 0.
+        ("1_reported-in-house", "hr", 0),
+        ("2_engrossed-in-house", "hr", 0),
+        ("3_received-in-senate", "hr", 0),
+        # The other chamber's first authored text is ITS round 0.
+        ("4_engrossed-amendment-senate", "hr", 0),
+        # The originating chamber answering that amendment is a later round.
+        ("5_engrossed-amendment-house", "hr", 1),
+        ("6_engrossed-amendment-house", "hr", 1),
+        # Mirrored for a Senate bill.
+        ("1_reported-in-senate", "s", 0),
+        ("4_engrossed-amendment-house", "s", 0),
+        ("5_engrossed-amendment-senate", "s", 1),
+    ],
+)
+def test_lineage_round(stage: str, bill_type: str, expected_round: int) -> None:
+    """Which authoring round a stage belongs to, read from the stage name alone.
+
+    Not from the bill's version list: the manifest holds committed fixtures, not
+    every version. 113-hr-83 commits only its House amendment, so counting
+    authoring runs over the committed subset would call that the House's first
+    text when it is its second, and keep the wrong report.
+    """
+    assert lineage_round(stage, bill_type) == expected_round
 
 
 def test_enrolled_version_gets_every_source_including_the_conference_report() -> None:
@@ -115,10 +187,27 @@ def test_enrolled_version_gets_every_source_including_the_conference_report() ->
 
 
 def test_conference_report_is_excluded_before_enrollment() -> None:
-    """A conference report postdates every pre-conference stage, same chamber or not."""
-    for stage in ("1_reported-in-house", "2_engrossed-in-house", "5_engrossed-amendment-house"):
+    """Case 5: a conference report postdates every pre-conference stage.
+
+    Asserted as an absence across every non-enrolled stage, which is the invariant.
+    What each stage keeps varies -- the reported text keeps the committee report,
+    the post-amendment text keeps nothing because its lineage broke -- but none of
+    them may pull in the conference report.
+    """
+    for stage in (
+        "1_introduced-in-house",
+        "1_reported-in-house",
+        "2_engrossed-in-house",
+        "3_received-in-senate",
+        "4_engrossed-amendment-senate",
+        "5_engrossed-amendment-house",
+    ):
         pairing = get_report_pairing([HOUSE_EARLIER, HOUSE_CONFERENCE], stage, "hr")
-        assert citations(pairing) == {"H. Rept. 115-697"}, f"{stage} pulled in the conference report"
+        assert "H. Rept. 115-929" not in citations(pairing), f"{stage} pulled in the conference report"
+
+    # And the ordinary committee report is still there for its own lineage.
+    lineage_intact = get_report_pairing([HOUSE_EARLIER, HOUSE_CONFERENCE], "1_reported-in-house", "hr")
+    assert citations(lineage_intact) == {"H. Rept. 115-697"}
 
 
 def test_a_bill_with_no_reports_pairs_nothing_anywhere() -> None:

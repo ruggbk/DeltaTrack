@@ -70,10 +70,28 @@ Which committee report explains a given bill version, recorded per version in
 | `update_manifest_with_reports.py [--refresh]` | Rewrite the manifest's `committee_report` entries. Default is offline: re-applies the pairing rules to the report sources already recorded. `--refresh` re-fetches BILLSTATUS and re-confirms each package and granule against govinfo. Edits via tomlkit so the manifest's documentation comments survive. |
 | `vendor_reports.py` | Download the committed report HTML fixtures named by the manifest, and re-validate the ones already present. Rejects govinfo's error page, which it serves as HTTP 200 for an unknown package. |
 
-Which report explains a version turns on two things, not one: the chamber that
-**authored** that text, and **when** the text exists. A committee report is filed at
-the reported stage, so it explains text from there on — never the introduced text it
-recommends changing — and a conference report explains only the enrolled result.
+Which report explains a version turns on three things: the chamber that **authored**
+that text, **when** the text exists, and which **lineage** it belongs to.
+
+- A committee report is filed at the reported stage, so it explains text from there
+  on, never the introduced text it recommends changing.
+- It propagates forward only through its own lineage: the reported text, the
+  engrossment derived from it, and transit to the other chamber (which amends
+  nothing). Once the other chamber amends, the lineage ends — and it does not
+  resume when the first chamber later amends *that*. Such a version gets no report
+  unless one explaining it is recorded deliberately.
+- A conference report explains only the enrolled result.
+
+The lineage rule is what stops an unrelated report re-attaching to a repurposed
+shell bill. Four corpus bills are that shape: an omnibus carried by a House
+amendment onto a reported bill about something else entirely (H. Rept. 118-364
+accompanies the Udall Foundation Reauthorization Act; the House amendment to
+H.R. 2882 is the Further Consolidated Appropriations Act, 2024).
+
+The round is read from the stage NAME, not by counting authoring runs over the
+manifest's versions: the manifest holds committed fixtures, not every version a bill
+had. 113-hr-83 commits only its House amendment, which a run-count would read as
+that chamber's first text when it is its second.
 
 A report is published either as one undivided document or as a package holding one
 granule per book, which is how `H. Rept. 119-106` Books 1 and 2 are separately
