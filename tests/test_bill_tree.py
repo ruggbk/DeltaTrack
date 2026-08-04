@@ -2183,3 +2183,141 @@ class TestResolutionDiff:
         assert diff.bill_type == "hconres"
         assert diff.bill_number == 58
         assert diff.congress == 119
+
+
+class TestDivisionBareSections:
+    """A division's own <section> children reach the tree (#465).
+
+    A division's content used to be reached only through its <title> children, so a
+    <section> sitting directly under a <division> was walked by nothing: it entered no
+    node, and therefore no full-bill view, no comparison and no money table, with nothing
+    failing. On the committed corpus that hid 151 sections.
+
+    Both shapes below are real and were both affected. A policy division folded into an
+    omnibus is often organised as bare sections with no titles at all; an appropriations
+    division more often carries a short-title/definitions preamble ahead of TITLE I, and
+    that mixed shape looked complete while dropping the preamble.
+    """
+
+    TITLELESS = """
+    <legis-body>
+      <division><enum>U</enum><header>Adjustable Interest Rate Act</header>
+        <section id="s1"><enum>101.</enum><header>Short title</header>
+          <text>This division may be cited as the Example Act.</text></section>
+        <section id="s2"><enum>102.</enum><header>Findings</header>
+          <text>Congress finds that $200,000,000,000,000 of contracts are affected.</text></section>
+      </division>
+    </legis-body>
+    """
+
+    MIXED = """
+    <legis-body>
+      <division><enum>A</enum><header>Agriculture</header>
+        <section id="pre"><enum>1.</enum><header>Short title</header>
+          <text>This division may be cited as the Example Appropriations Act.</text></section>
+        <title><enum>I</enum><header>Departmental Management</header>
+          <section id="t1"><enum>101.</enum><header>Salaries</header>
+            <text>For necessary expenses, $5,000,000.</text></section>
+        </title>
+      </division>
+    </legis-body>
+    """
+
+    @staticmethod
+    def _nodes(xml: str) -> list[BillNode]:
+        from deltatrack.bill_tree import walk_body_sections
+
+        body = ET.fromstring(xml)
+        nodes: list[BillNode] = []
+        for div in body:
+            enum, header = div.find("enum"), div.find("header")
+            label = f"Division {enum.text.strip()}: {header.text.strip()}"
+            nodes.extend(walk_body_sections(div, label))
+        return nodes
+
+    def test_titleless_division_sections_become_nodes(self):
+        nodes = self._nodes(self.TITLELESS)
+        assert [n.element_id for n in nodes] == ["s1", "s2"]
+
+    def test_the_money_in_such_a_section_reaches_its_node(self):
+        """The failure that made this worth finding: an amount present in the bill and
+        present in no node at all, so no comparison could ever surface it."""
+        nodes = self._nodes(self.TITLELESS)
+        assert "$200,000,000,000,000" in " ".join(n.body_text for n in nodes)
+
+    def test_the_division_shows_in_the_breadcrumb_but_not_the_matching_key(self):
+        """display_path carries the division so a reader can place the section;
+        match_path stays division-free, because that is the rule everywhere else and
+        collision-group matching (#1) resolves same-named sections by division_label."""
+        first = self._nodes(self.TITLELESS)[0]
+        assert first.display_path == ("Division U: Adjustable Interest Rate Act", "Sec. 101")
+        assert first.match_path == ("sec. 101",)
+        assert first.division_label == "Division U: Adjustable Interest Rate Act"
+
+    def test_a_division_with_titles_keeps_its_bare_preamble_section(self):
+        """The mixed shape. Walking only <title> children dropped the preamble while the
+        division still looked complete, which is why this was invisible for so long."""
+        body = ET.fromstring(self.MIXED)
+        div = body.find("division")
+        label = "Division A: Agriculture"
+        bare = walk_body_sections(div, label)
+        assert [n.element_id for n in bare] == ["pre"]
+        titled = walk_title(div.find("title"), build_title_label(div.find("title")), label)
+        assert "t1" in [n.element_id for n in titled]
+
+    def test_body_level_sections_are_unchanged_by_the_division_parameter(self):
+        """The body-level caller passes no division, and must key exactly as before."""
+        body = ET.fromstring(
+            '<legis-body><section id="b1"><enum>1.</enum><header>Short title</header>'
+            "<text>Bare section under the body.</text></section></legis-body>"
+        )
+        node = walk_body_sections(body)[0]
+        assert node.display_path == ("Sec. 1",)
+        assert node.match_path == ("sec. 1",)
+        assert node.division_label == ""
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not fixture_path("117-hr-2471", "6_enrolled-bill.xml").exists(),
+    reason="Real XML not present",
+)
+class TestDivisionBareSectionsOnARealBill:
+    """The same defect through ``normalize_bill``, which is what actually wires it up.
+
+    The unit tests above call ``walk_body_sections`` directly, so they would pass on a
+    build where the division walk never calls it. These go through the whole parser on
+    real GPO XML, so they fail if the wiring is removed, which is the property worth
+    holding: the fix is one call in ``normalize_bill``, and a test that cannot see that
+    call missing is not testing the fix.
+
+    Division U of the FY2022 omnibus is the Adjustable Interest Rate (LIBOR) Act, folded
+    in as a policy division organised without titles. 23,109 characters and 10 sections
+    reached no node.
+    """
+
+    @staticmethod
+    def _tree():
+        return normalize_bill(fixture_path("117-hr-2471", "6_enrolled-bill.xml"))
+
+    def test_a_titleless_divisions_sections_are_in_the_tree(self):
+        tree = self._tree()
+        libor = [n for n in tree.nodes if n.division_label.startswith("Division U")]
+        assert libor, "Division U reaches no node; its sections are absent from the bill tree"
+
+    def test_the_libor_findings_amount_reaches_a_node(self):
+        """The single dollar amount on the whole committed corpus that reached no node.
+
+        It is a findings figure rather than an appropriation, which is exactly why the
+        money gates could not see the loss: the divisions this defect dropped are policy
+        text, so 66 missing sections cost this bill one dollar amount.
+        """
+        tree = self._tree()
+        assert "$200,000,000,000,000" in " ".join(n.body_text for n in tree.nodes)
+
+    def test_a_division_with_titles_keeps_its_bare_preamble(self):
+        """The mixed shape on a real bill: a division that carries titles AND bare
+        sections looked complete while dropping the bare ones."""
+        tree = normalize_bill(fixture_path("114-hr-2029", "7_enrolled-bill.xml"))
+        bare = [n for n in tree.nodes if n.division_label and n.match_path == ("sec. 2",)]
+        assert bare, "a division's bare preamble section is absent from the tree"
