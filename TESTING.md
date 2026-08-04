@@ -29,17 +29,16 @@ what each layer does and does not establish.
 This is the strongest check. It now covers all twelve regular appropriations
 subcommittees, through two kinds of independent source:
 
-- **A separately maintained spreadsheet (Legislative Branch).** We took an
-  appropriations spreadsheet kept by other people for Legislative Branch bills,
-  covering both the House and Senate across several years, and confirmed that the
-  dollar amounts our tool pulls out of the official bill text match the amounts in
-  that spreadsheet, in the right place in the bill's structure.
-- **Senate committee reports (the other eleven subcommittees).** For each of the
-  remaining subcommittees we read the account-level amounts out of the Senate
-  Appropriations committee report and confirmed that each amount the committee
-  recommended appears in what our tool extracts from the reported bill. A committee
-  report is written by different people for a different purpose than the bill, so
-  it is a genuinely outside source.
+- **Senate committee reports (all twelve subcommittees).** For each subcommittee we
+  read the account-level amounts out of the Senate Appropriations committee report
+  and confirmed that each amount the committee recommended appears in what our tool
+  extracts from the reported bill. A committee report is written by different people
+  for a different purpose than the bill, so it is a genuinely outside source.
+- **A separately maintained spreadsheet (Legislative Branch).** In addition to the
+  committee report, Legislative Branch is also checked against an appropriations
+  spreadsheet kept by other people, covering both the House and Senate across
+  several years, confirming that the dollar amounts match in the right place in the
+  bill's structure.
 
 Because every source was built independently of our tool, this catches mistakes
 that checking the tool against itself never could. Across the committee-report
@@ -49,16 +48,16 @@ their parts, and a few report typos the report's own summary tables contradict),
 not extraction errors. The per-subcommittee counts are tracked so they cannot
 quietly rise.
 
-**Limit:** the twelve subcommittees are checked to different depths. Legislative
-Branch is checked structurally, meaning the right amount in the right place,
-across several bills and both chambers. The other eleven are checked as
-amount-recall, meaning the right amounts are present under the right agency, on a
-single Senate-reported bill each, because the report and the bill name accounts
-differently. Two consequences follow, and we track both on purpose: an amount that
-landed on the wrong account inside the right agency would still pass the recall
-check, and the House versions of those eleven subcommittees have no outside-source
-check at all, because House committee reports print their account tables as images
-we cannot read.
+**Limit:** the twelve subcommittees are checked to different depths. All twelve are
+now checked at amount-recall depth (the right amount under the right agency) on a
+single Senate-reported bill each via committee reports. Legislative Branch is *also*
+checked structurally (the right amount in the right place) across several bills and
+both chambers via the spreadsheet, giving it two independent validation layers. Two
+consequences follow, and we track both on purpose: an amount that landed on the
+wrong account inside the right agency would still pass the recall check, and the
+House versions of the eleven non-Legislative Branch subcommittees have no
+outside-source check at all, because House committee reports print their account
+tables as images we cannot read.
 
 ### 2. Sanity checks across every bill we have
 
@@ -144,9 +143,10 @@ We keep these in the open rather than papering over them:
   section numbers repeat across areas, which makes matching harder. The tool
   handles this, but it is the trickiest case.
 - **Outside-source depth varies.** As noted in check 1, all twelve subcommittees
-  now have an outside-source check, but only Legislative Branch is checked for the
-  right place rather than just the right amount, and only it is checked on the
-  House side. The other eleven rest on a single Senate-reported bill each.
+  now have an outside-source committee-report check at amount-recall depth.
+  Legislative Branch additionally has a structural check via the spreadsheet across
+  several bills and both chambers, making it the most strongly validated
+  jurisdiction. The other eleven rest on a single Senate-reported bill each.
 
 ## Running the tests
 
