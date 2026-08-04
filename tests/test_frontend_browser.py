@@ -518,3 +518,267 @@ def test_sample_report_opens_in_new_tab(live_url, chromium):
 
     report.close()
     page.close()
+
+
+# --- Find across printed line breaks (#162) ---------------------------------
+#
+# The PDF full-bill view is print-faithful: GPO's line breaks and its soft-
+# hyphenated word splits are real DOM boundaries, one `.fb-row` per printed
+# line. Matching per text node therefore made every printed line an island, so
+# a phrase the reader can see on screen returned `0 / 0`.
+
+# Printed page text in GPO's `<line number> <content>` layout. Deliberately
+# contains all four boundary cases the find bar has to cross (or refuse to):
+#   line 1/2   soft hyphen, lowercase continuation  -> join ("Services")
+#   line 2/3   plain wrap, no hyphen                -> join with a space
+#   line 4/5   real compound, uppercase continuation -> must NOT join
+#   line 6     column padding (a run of spaces)      -> collapses to one space
+_FIND_PAGE_SRC = (
+    "1 for expenses of the Administrator of General Serv-\n"
+    "2 ices for vehicles the Administrator of General\n"
+    "3 Services does not provide for lease under this\n"
+    "4 heading, and for grants under the Child-\n"
+    "5 Rescue Act of 2019, to remain available until\n"
+    "6 expended                                    $5,000,000\n"
+)
+
+
+def _find_fixture_texts() -> tuple[str, str]:
+    """(printed display text, merged whole-word text) from the real parser.
+
+    Both come from the producer the browser has to agree with — `pdf_full_text`
+    is the de-hyphenated ground truth the flattened search string must
+    reproduce, so the fixture can't encode a belief about GPO's line-joining
+    that the parser doesn't share.
+    """
+    from deltatrack.parsers.pdf_text import (
+        Page,
+        _merge_print_lines,
+        _parse_print_lines,
+        pdf_full_text,
+        pdf_full_text_print,
+    )
+
+    print_lines = _parse_print_lines(_FIND_PAGE_SRC.rstrip("\n"))
+    merged, ranges = _merge_print_lines(print_lines)
+    page = Page(1, tuple(merged), tuple(print_lines), tuple(ranges))
+    printed_text, _ = pdf_full_text_print([page])
+    merged_text, _ = pdf_full_text([page])
+    return printed_text, merged_text
+
+
+def _render_find_report() -> str:
+    """A real report whose full-bill view is the print-faithful page above.
+
+    One change span sits mid-line on the word "vehicles", so that row's text is
+    split across sibling text nodes by the tracked-change mark — the in-line
+    counterpart of the cross-row case.
+    """
+    from deltatrack.formatters.canonical import view_from_canonical
+    from deltatrack.formatters.diff_html import format_diff_html
+
+    printed_text, _ = _find_fixture_texts()
+    start = printed_text.index("vehicles")
+    canonical = {
+        "schema_version": "2.0",
+        "bill": {"type": "hr", "number": 8752, "congress": 118},
+        "versions": {
+            "v1": {"label": "Reported", "version_number": 1, "source": "pdf"},
+            "v2": {"label": "Enrolled", "version_number": 2, "source": "pdf"},
+        },
+        "summary": {"added": 0, "removed": 0, "modified": 1},
+        "full_text": {"v1": "", "v2": printed_text},
+        "changes": [
+            {
+                "id": "c0",
+                "change_type": "modified",
+                "section_number": "",
+                "path": {"v1": [], "v2": []},
+                "location": None,
+                "anchor_resolution": "resolved",
+                "text": {"old": "cars", "new": "vehicles"},
+                "amount_entries": [],
+                "move": None,
+                "full_text_span": {"v1": None, "v2": {"start": start, "end": start + len("vehicles")}},
+            }
+        ],
+    }
+    return format_diff_html(view_from_canonical(canonical), canonical=canonical)
+
+
+def _open_full_bill(chromium, tmp_path, name="find_report.html"):
+    report = tmp_path / name
+    report.write_text(_render_find_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")
+    page.locator('.view-toggle__btn[data-view="full"]').click()
+    return page
+
+
+def _find(page, query):
+    """Type a query and settle the 150ms debounce; returns the counter text."""
+    page.locator("#find-input").fill(query)
+    page.wait_for_timeout(300)
+    return page.locator("#find-counter").inner_text()
+
+
+def test_find_matches_across_printed_line_breaks(chromium, tmp_path):
+    """Phrases that wrap across printed lines are findable (#162).
+
+    Pre-fix each of these returned `0 / 0` — the silent failure mode, since the
+    reader can see the phrase on screen.
+    """
+    page = _open_full_bill(chromium, tmp_path)
+
+    # Soft hyphen: the page reads "Serv-" / "ices" across two rows.
+    assert _find(page, "General Services") == "1 / 2"
+    # Plain wrap, no hyphen involved: "…of General" / "Services does not…".
+    assert _find(page, "Administrator of General Services does not") == "1 / 1"
+    # A match crossing a tracked-change mark inside ONE printed line: the <ins>
+    # around "vehicles" splits that row into sibling text nodes.
+    assert _find(page, "for vehicles the") == "1 / 1"
+    page.close()
+
+
+def test_find_does_not_join_real_compounds(chromium, tmp_path):
+    """The soft-hyphen rejoin must not weld a real compound together.
+
+    GPO breaks syllables with a lowercase continuation; "Child-" / "Rescue"
+    keeps its uppercase continuation and is a real hyphenated name. Without this
+    the rejoin looks correct on every positive case while silently corrupting
+    compounds — the join would fire, but wrongly.
+    """
+    page = _open_full_bill(chromium, tmp_path)
+    assert _find(page, "childrescue") == "0 / 0"
+    assert _find(page, "Child-Rescue Act") == "1 / 1"
+    page.close()
+
+
+def test_find_ignores_line_number_gutter(chromium, tmp_path):
+    """Line numbers are print furniture, not bill text, so they aren't searched.
+
+    Flattening the view would otherwise splice the gutter into the middle of the
+    text ("…Serv- 2 ices…"), both creating false hits and breaking real ones.
+    """
+    page = _open_full_bill(chromium, tmp_path)
+    # A phrase crossing rows 5 -> 6: with the gutter in the searchable text this
+    # would read "…available until 6 expended" and never match. This is the
+    # assertion that makes the test discriminating — the two negatives below
+    # both hold on the pre-fix per-node search as well.
+    assert _find(page, "available until expended") == "1 / 1"
+    # Runs of column padding collapse to a single space, as they do in the
+    # parser's merged text.
+    assert _find(page, "expended $5,000,000") == "1 / 1"
+    # The rejoined hyphen is gone from the searchable text, and no gutter digit
+    # is ever itself a hit.
+    assert _find(page, "Serv- ices") == "0 / 0"
+    hits_in_gutter = page.evaluate("() => document.querySelectorAll('.fb-gutter mark.find-hit').length")
+    assert hits_in_gutter == 0
+    page.close()
+
+
+def test_find_counts_matches_not_marks_and_steps_across_rows(chromium, tmp_path):
+    """A match spanning two rows is one hit, and stepping lands on its first row.
+
+    The match is highlighted with one <mark> per row it covers; counting marks
+    would report a two-row phrase as two separate hits and make prev/next step
+    through half-matches.
+    """
+    page = _open_full_bill(chromium, tmp_path)
+    assert _find(page, "General Services") == "1 / 2"
+
+    marks = page.evaluate("() => document.querySelectorAll('mark.find-hit--current').length")
+    assert marks == 2, "the two-row match should carry current styling on both of its marks"
+
+    # Both marks belong to the current hit, and the first sits on the earlier row.
+    rows = page.evaluate(
+        """() => Array.from(document.querySelectorAll('mark.find-hit--current'))
+                     .map(m => m.closest('.fb-row').querySelector('.fb-gutter').textContent.trim())"""
+    )
+    assert rows == ["1", "2"]
+
+    page.locator("#find-next").click()
+    assert page.locator("#find-counter").inner_text() == "2 / 2"
+    page.close()
+
+
+def test_find_agrees_with_the_parser_merged_text(chromium, tmp_path):
+    """Every phrase in the parser's merged text is findable in the browser.
+
+    The JS rejoin re-implements one parser rule (`_merge_print_lines`), so the
+    two can drift. Rather than assert the flattened string against a
+    hand-written expectation — which would only encode a belief about what the
+    parser does — this walks every 5-word window of `pdf_full_text`'s output,
+    the de-hyphenated ground truth, and requires the browser to find each one.
+    A missing join, a wrong join, or a gutter spliced into the text all break
+    some window.
+    """
+    import re as _re
+
+    _, merged_text = _find_fixture_texts()
+    # Windows stay inside one merged line. Each merged line is already whole-word
+    # (the parser rejoined its soft hyphens), so this pins the de-hyphenation
+    # contract without asserting how the JS joins one display line to the next.
+    windows = []
+    for line in merged_text.splitlines():
+        words = _re.sub(r"\s+", " ", line[7:]).strip().split(" ")
+        windows += [" ".join(words[i : i + 5]) for i in range(0, len(words) - 4)]
+    assert len(windows) > 10, "fixture too small to be evidence of anything"
+
+    page = _open_full_bill(chromium, tmp_path)
+    missing = [w for w in windows if _find(page, w) == "0 / 0"]
+
+    # The check must be able to fail: a phrase the merged text does NOT contain
+    # has to come back empty, otherwise a green run above proves nothing.
+    control = _find(page, "vehicles for grants under expended")
+    page.close()
+
+    assert not missing, f"phrases in the merged text that Find cannot locate: {missing}"
+    assert control == "0 / 0", "control phrase matched — the search is not discriminating"
+
+
+def test_find_does_not_match_across_a_deletion_and_its_replacement(chromium, tmp_path):
+    """In the changes view, old and new wording are alternatives, not a sequence.
+
+    A card shows the removed text next to the text that replaces it. Flattening
+    the view for search puts them side by side, so joining them with a space
+    would let a query match wording that appears in no version of the bill —
+    a false positive, which is worse than the missed match this all started
+    with. A separator no query can contain keeps them apart.
+    """
+    report = tmp_path / "changes_view.html"
+    report.write_text(_render_find_report(), encoding="utf-8")
+    page = chromium.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(report.as_uri(), wait_until="domcontentloaded")  # changes view is the default
+
+    # The card reads "cars" (removed) immediately followed by "vehicles" (added).
+    card = page.locator(".change-card").first.inner_text()
+    assert "cars" in card and "vehicles" in card, "fixture no longer shows both sides"
+
+    assert _find(page, "cars vehicles") == "0 / 0"
+    # Each side is still findable on its own.
+    assert _find(page, "vehicles") != "0 / 0"
+    assert _find(page, "cars") != "0 / 0"
+    page.close()
+
+
+def test_find_accepts_a_query_pasted_off_the_screen(chromium, tmp_path):
+    """A phrase copied from the page can end at a line-break hyphen.
+
+    The reader sees "…Administrator of General Serv-" at the end of a printed
+    line and pastes exactly that. The hyphen is not in the searchable text
+    (it was rejoined away), so without handling this the query returns 0 / 0 —
+    the same silent miss, in the opposite direction.
+    """
+    page = _open_full_bill(chromium, tmp_path)
+    # Dropping the trailing hyphen leaves "…General Serv", which is a prefix of
+    # both the split occurrence on rows 1-2 and the whole "Services" on row 3,
+    # so two matches is correct here — the point is that it is no longer zero.
+    assert _find(page, "Administrator of General Serv-") == "1 / 2"
+    # The first hit is the line the reader copied from.
+    row = page.evaluate(
+        """() => document.querySelector('mark.find-hit--current')
+                        .closest('.fb-row').querySelector('.fb-gutter').textContent.trim()"""
+    )
+    assert row == "1"
+    page.close()
