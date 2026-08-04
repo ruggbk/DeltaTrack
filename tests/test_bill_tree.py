@@ -712,6 +712,122 @@ class TestWalkTitle:
         # not empty string from second
         assert nodes[2].match_path == ("dept", "real account")
 
+    def test_header_only_sibling_names_the_untitled_body(self):
+        """GPO sometimes splits one account across two siblings: the first carries the
+        <header> and no body, the second the body and no header. The print renders them
+        as one account (heading directly above its own text), so the body node takes the
+        split-off name rather than losing it and filing its money under the agency (#474).
+        """
+        title = ET.fromstring(
+            '<title id="T1">'
+            "<enum>I</enum>"
+            "<header>DEPT</header>"
+            '<appropriations-intermediate id="AI1">'
+            "<header>United States fish and wildlife service</header>"
+            "</appropriations-intermediate>"
+            '<appropriations-small id="AS1">'
+            "<header>RESOURCE MANAGEMENT</header>"
+            "</appropriations-small>"
+            '<appropriations-small id="AS2">'
+            "<text>For necessary expenses, $1,385,096,000, to remain available.</text>"
+            "</appropriations-small>"
+            "</title>"
+        )
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
+        # Still exactly one node for one body-bearing element: the header-only halves
+        # contribute no node of their own, so conservation is unchanged.
+        assert len(nodes) == 1
+        node = nodes[0]
+        assert node.element_id == "AS2"
+        assert node.header_text == "RESOURCE MANAGEMENT"
+        assert node.match_path == (
+            "dept",
+            "united states fish and wildlife service",
+            "resource management",
+        )
+        assert node.display_path == (
+            "DEPT",
+            "United States fish and wildlife service",
+            "RESOURCE MANAGEMENT",
+        )
+        assert "$1,385,096,000" in node.body_text
+
+    def test_header_only_sibling_names_across_levels(self):
+        """The split is not confined to one tag: a header-only element at any
+        appropriations level names the untitled body element that follows it (#474).
+        Measured on the committed corpus as intermediate->small, intermediate->
+        intermediate, major->small and small->intermediate pairs.
+        """
+        title = ET.fromstring(
+            '<title id="T1">'
+            "<enum>I</enum>"
+            "<header>DEPT</header>"
+            '<appropriations-intermediate id="AI1">'
+            "<header>Nuclear Energy</header>"
+            "</appropriations-intermediate>"
+            '<appropriations-small id="AS1">'
+            "<text>For nuclear energy activities, $1,783,000,000.</text>"
+            "</appropriations-small>"
+            "</title>"
+        )
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
+        assert len(nodes) == 1
+        assert nodes[0].element_id == "AS1"
+        assert nodes[0].header_text == "Nuclear Energy"
+        assert nodes[0].match_path == ("dept", "nuclear energy")
+
+    def test_untitled_body_after_a_named_account_keeps_its_parent_address(self):
+        """The join reaches back exactly one sibling, and only to a header-only one.
+        An untitled body following an account that already has BOTH header and body is a
+        continuation of that account, not a split of it: 35 such elements on the
+        committed corpus, 18 carrying amounts. Naming it after its predecessor would
+        collide it with the account it continues, so it keeps today's parent address.
+        """
+        title = ET.fromstring(
+            '<title id="T1">'
+            "<enum>I</enum>"
+            "<header>DEPT</header>"
+            '<appropriations-intermediate id="AI1">'
+            "<header>Real Account</header>"
+            "<text>For expenses, $100,000.</text>"
+            "</appropriations-intermediate>"
+            '<appropriations-intermediate id="AI2">'
+            "<text>Additional amount, $200,000.</text>"
+            "</appropriations-intermediate>"
+            "</title>"
+        )
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
+        assert len(nodes) == 2
+        assert nodes[0].match_path == ("dept", "real account")
+        assert nodes[1].header_text == ""
+        assert nodes[1].match_path == ("dept",)
+
+    def test_parenthetical_header_only_sibling_passes_on_the_real_name(self):
+        """A header-only element whose header is parenthetical carries no name of its
+        own; it resolves to the previous real name, and that is what the untitled body
+        inherits — not the literal "(INCLUDING TRANSFER OF FUNDS)" (#474).
+        """
+        title = ET.fromstring(
+            '<title id="T1">'
+            "<enum>I</enum>"
+            "<header>DEPT</header>"
+            '<appropriations-small id="AS1">'
+            "<header>Real Account</header>"
+            "<text>For expenses, $100,000.</text>"
+            "</appropriations-small>"
+            '<appropriations-small id="AS2">'
+            "<header>(INCLUDING TRANSFER OF FUNDS)</header>"
+            "</appropriations-small>"
+            '<appropriations-small id="AS3">'
+            "<text>Of the funds, $50,000 may transfer.</text>"
+            "</appropriations-small>"
+            "</title>"
+        )
+        nodes = walk_title(title, "DEPT", NO_DIVISION)
+        assert len(nodes) == 2
+        assert nodes[1].element_id == "AS3"
+        assert nodes[1].match_path == ("dept", "real account")
+
     def test_section_with_enum(self):
         """A section produces a node with section_number in the path."""
         title = ET.fromstring(
