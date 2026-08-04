@@ -1162,7 +1162,11 @@ h1, h2, h3, h4 { font-family: var(--font-serif); letter-spacing: -0.02em; }
   font-size: 13px; font-weight: 600; color: var(--foreground); list-style: none;
   display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .nav-group > summary::-webkit-details-marker { display: none; }
-.nav-group > summary::before { content: "\\25b8"; color: var(--muted-foreground); font-size: 10px; margin-right: 2px; }
+/* Every disclosure caret on the page is sized in `em` against the label it opens,
+   never a fixed px. Pinned to a number, the same marker read as a control beside
+   13px sidebar text and as decoration beside a 24px heading. */
+.nav-group > summary::before { content: "\\25b8"; color: var(--muted-foreground);
+  font-size: 0.85em; margin-right: 2px; }
 .nav-group[open] > summary::before { content: "\\25be"; }
 .nav-group > summary:hover { background: var(--secondary); }
 .nav-group__count { color: var(--muted-foreground); font-weight: 400; font-variant-numeric: tabular-nums; }
@@ -1233,7 +1237,7 @@ tr.decrease .change-amount { color: var(--destructive); }
 .card-group > summary { cursor: pointer; font-weight: 600; padding: 6px 8px;
   border-radius: var(--radius); list-style: none; display: flex; align-items: center; gap: 6px; }
 .card-group > summary::-webkit-details-marker { display: none; }
-.card-group > summary::before { content: "\\25be"; color: var(--muted-foreground); font-size: 10px; }
+.card-group > summary::before { content: "\\25be"; color: var(--muted-foreground); font-size: 0.85em; }
 .card-group:not([open]) > summary::before { content: "\\25b8"; }
 .card-group > summary:hover { background: var(--secondary); }
 .card-group .card-group { margin-left: 16px; }
@@ -1396,7 +1400,7 @@ mark.find-hit--current { background: var(--gold); color: #fff; }
   font-size: 13px; font-weight: 600; color: var(--foreground); list-style: none;
   display: flex; align-items: baseline; gap: 4px; }
 .toc-group > summary::-webkit-details-marker { display: none; }
-.toc-group > summary::before { content: "\\25b8"; color: var(--muted-foreground); font-size: 10px; flex: 0 0 auto; }
+.toc-group > summary::before { content: "\\25b8"; color: var(--muted-foreground); font-size: 0.85em; flex: 0 0 auto; }
 .toc-group[open] > summary::before { content: "\\25be"; }
 .toc-group > summary:hover { background: var(--secondary); }
 .toc-group > summary a { color: inherit; text-decoration: none; }
