@@ -412,9 +412,68 @@ def test_every_appropriations_element_with_text_produces_node(xml_path: Path) ->
         )
 
 
-# Tags excluded from character coverage: parser stores these in separate fields,
-# not in body_text.
-_CHAR_SKIP_TAGS = {"quote", "header", "enum"}
+# Ancestor tags that mark AMENDMENT PAYLOAD: text the document proposes to insert
+# somewhere else, rather than text this bill enacts. <quoted-block> holds the block an
+# amendment inserts; the <amendment-doc>/<amendment-block>/<amendment> family is the
+# amendment wrapper itself. The parser does not node-ize either, so their <section>
+# descendants are outside the coverage property below (#11 tracks the amendment-doc gap).
+#
+# This is deliberately expressed as a set of SOURCE STRUCTURE tags, not as anything
+# derived from which sections the parser currently misses. An exclusion phrased as "the
+# sections we know we drop" restates the defect as the specification, and the gate can
+# then never fail: every new drop looks like a member of its own exemption. These tags
+# come from the GPO bill DTD and would mean the same thing if the parser were rewritten.
+_PAYLOAD_ANCESTOR_TAGS = frozenset({"quoted-block"})
+_PAYLOAD_ANCESTOR_PREFIX = "amendment"
+
+# Floor for the corpus-wide sweep below. The committed corpus presents 12,555 in-scope
+# sections; this is a floor rather than a pinned count so retiring a fixture does not
+# break it, and it sits far enough below to leave room for curation (#126) while still
+# going red if section classification ever swallows the corpus wholesale.
+_MIN_CORPUS_SECTIONS = 10_000
+
+
+def _parent_map(root: ET.Element) -> dict[int, ET.Element]:
+    """Map id(child) -> parent for every element under root.
+
+    ElementTree elements carry no parent pointer, and the payload exclusion below is an
+    ANCESTOR property, so the walk has to be reconstructed once per document.
+    """
+    parents: dict[int, ET.Element] = {}
+    for parent in root.iter():
+        for child in parent:
+            parents[id(child)] = parent
+    return parents
+
+
+def _is_amendment_payload(section: ET.Element, parents: dict[int, ET.Element]) -> bool:
+    """True when any ancestor of ``section`` marks it as amendment payload."""
+    current = parents.get(id(section))
+    while current is not None:
+        if current.tag in _PAYLOAD_ANCESTOR_TAGS or current.tag.startswith(_PAYLOAD_ANCESTOR_PREFIX):
+            return True
+        current = parents.get(id(current))
+    return False
+
+
+def _classify_sections(body: ET.Element, parents: dict[int, ET.Element]) -> tuple[list[ET.Element], int, int]:
+    """Split a body's <section> elements into (in_scope, payload_count, empty_count).
+
+    A section is EMPTY when it has no child elements and no text at all -- a bare
+    ``<section/>`` placeholder. It carries nothing that could reach a node, so requiring
+    it to produce one would assert on the absence of content.
+    """
+    in_scope: list[ET.Element] = []
+    payload = 0
+    empty = 0
+    for section in body.iter("section"):
+        if _is_amendment_payload(section, parents):
+            payload += 1
+        elif not len(section) and not "".join(section.itertext()).strip():
+            empty += 1
+        else:
+            in_scope.append(section)
+    return in_scope, payload, empty
 
 
 @pytest.mark.parametrize(
@@ -422,34 +481,133 @@ _CHAR_SKIP_TAGS = {"quote", "header", "enum"}
     ALL_XML_FILES,
     ids=[_xml_id(p) for p in ALL_XML_FILES],
 )
-def test_character_coverage_ratio(xml_path: Path) -> None:
-    """Parser should capture a high ratio of the bill body's text content.
+def test_every_section_reaches_a_node(xml_path: Path) -> None:
+    """Every <section> the bill enacts reaches some node, checked against the source XML.
 
-    Compares total characters in the body (excluding quote/header/enum subtrees)
-    against total characters across all node body_text fields.
+    This replaces ``test_character_coverage_ratio`` (#9), which asserted
+    ``node_chars / raw_chars >= 0.10``. That number could not be recalibrated into a
+    useful gate, for two measured reasons:
+
+    1. It is not a coverage fraction. 42 of the 43 committed fixtures score ABOVE 1.0
+       (range 0.970 to 1.516 on the corpus as of this change), because the numerator
+       counts text the denominator does not. A quantity that routinely exceeds 1 cannot
+       be read as "the share of the bill we captured", so no threshold on it means what
+       the test name claimed.
+    2. It cannot see section loss. Re-injecting #465 (deleting the ``walk_body_sections``
+       call for a division's bare sections) drops 151 whole sections across 7 fixtures.
+       Six of those seven still score above 0.9698 -- the healthy corpus MINIMUM -- so
+       any threshold loose enough to keep the corpus green passes six of the seven
+       corrupted files. The loss is real and the aggregate absorbs it, because whole-bill
+       character totals dilute a section that vanished.
+
+    So the property is asserted directly and exactly instead: enumerate the sections in
+    the SOURCE XML, and require each one to appear as a parsed node. Measured against the
+    source rather than against another rendering of the parser's own output, because two
+    views derived from the same dropped node agree with each other perfectly (#459).
+
+    Sections are matched on the ``id`` attribute, which is the source's own identifier
+    for the element and survives any renumbering the parser does to match_path.
     """
     _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
+    root = ET.parse(xml_path).getroot()
 
+    # No skip on a missing body, deliberately. Every manifested fixture has one, so this
+    # can only fire on a document that is not the shape this gate was built for -- which
+    # is a finding, not a case to wave through. (Cf. #262, which turned the PDF gate's
+    # zero-anchor skip into an assertion for the same reason.)
     try:
         body = find_bill_body(root)
-    except ValueError:
-        pytest.skip("No bill body found")
+    except ValueError as exc:
+        pytest.fail(f"{test_id}: no bill body found ({exc})")
 
-    raw_text = _collect_body_text_excluding(body, _CHAR_SKIP_TAGS)
-    raw_chars = len(raw_text.strip())
+    parents = _parent_map(root)
+    in_scope, payload, empty = _classify_sections(body, parents)
 
-    if raw_chars == 0:
-        pytest.skip("No text content in bill body")
+    if not in_scope:
+        # An engrossed amendment is payload end to end: its whole body is the text it
+        # proposes, so it has no enacted section to check. That is asserted rather than
+        # skipped, both because the repo's content-skip ceiling (#220) would otherwise
+        # need an entry declaring the #11 amendment-doc gap as normal, and because the
+        # all-payload SHAPE is the real claim -- a fixture that quietly lost its sections
+        # some other way would also present zero in-scope sections, and a skip could not
+        # tell the two apart. 10 of the 43 committed fixtures take this branch.
+        assert payload > 0, (
+            f"{test_id}: no sections to check and none are amendment payload either "
+            f"({empty} empty). This fixture asserts nothing; it has lost its sections."
+        )
+        return
 
     bill_tree = normalize_bill(xml_path)
-    node_chars = sum(len(node.body_text) for node in bill_tree.nodes)
+    node_ids = {node.element_id for node in bill_tree.nodes if node.element_id}
 
-    ratio = node_chars / raw_chars if raw_chars > 0 else 0.0
+    # Fail CLOSED on a section the gate cannot key on. Skipping it would make a future
+    # bill's id-less sections invisible to this check exactly when they stop being
+    # covered -- the gate would go green having quietly stopped looking at them.
+    # No committed fixture has one; test_idless_section_fails_closed proves this fires.
+    idless = [s for s in in_scope if not s.attrib.get("id")]
+    assert not idless, (
+        f"{test_id}: {len(idless)} of {len(in_scope)} in-scope sections carry no id, so this gate "
+        f"cannot verify them. Give the gate another key rather than letting them pass unchecked. "
+        f"Sample: {[''.join(s.itertext())[:60] for s in idless[:3]]}"
+    )
 
-    # Low floor catches only catastrophic failures. Actual ratios range from
-    # ~0.12 (amendment docs) to ~1.0+ (full bills). Shell bills and early
-    # versions with little appropriations text have legitimately low ratios.
-    assert ratio >= 0.10, f"{test_id}: character coverage ratio {ratio:.3f} ({node_chars}/{raw_chars} chars)"
+    missing = [s for s in in_scope if s.attrib.get("id", "") not in node_ids]
+    assert not missing, (
+        f"{test_id}: {len(missing)} of {len(in_scope)} enacted sections reach no node "
+        f"(payload excluded: {payload}, empty: {empty}). "
+        f"Sample: {[(s.attrib.get('id', ''), ''.join(s.itertext())[:60]) for s in missing[:3]]}"
+    )
+
+
+def test_section_coverage_gate_sees_the_corpus() -> None:
+    """Fail-closed floor for ``test_every_section_reaches_a_node``.
+
+    That gate excludes amendment payload, and its all-payload branch passes without
+    checking anything. Both are correct, and together they leave one way for it to go
+    green while asserting nothing: if the payload classification ever widened to swallow
+    ordinary sections, every case would take the empty branch and the suite would stay
+    green with zero sections verified.
+
+    This counts the in-scope sections the corpus presents, without invoking the parser,
+    so it measures the gate's INPUT rather than its verdict -- a parser regression cannot
+    move it.
+    """
+    total = 0
+    contributing = 0
+    for xml_path in ALL_XML_FILES:
+        if not xml_path.exists():
+            continue
+        root = ET.parse(xml_path).getroot()
+        try:
+            body = find_bill_body(root)
+        except ValueError:
+            continue
+        in_scope, _payload, _empty = _classify_sections(body, _parent_map(root))
+        total += len(in_scope)
+        contributing += 1 if in_scope else 0
+
+    assert total >= _MIN_CORPUS_SECTIONS, (
+        f"only {total} in-scope sections corpus-wide (floor {_MIN_CORPUS_SECTIONS}); "
+        f"test_every_section_reaches_a_node is barely checking anything"
+    )
+    assert contributing >= 25, f"only {contributing} fixtures present an enacted section to check"
+
+
+def test_idless_section_fails_closed(tmp_path: Path) -> None:
+    """The id-less branch above goes RED rather than passing the section over.
+
+    No committed fixture carries an id-less section, so that assertion would otherwise
+    never execute, and an assertion that has never once fired is indistinguishable from
+    one that cannot. This builds the case the corpus does not supply.
+    """
+    xml_path = tmp_path / "1_reported-in-house.xml"
+    xml_path.write_text(
+        "<bill><legis-body>"
+        '<section id="id-s1"><enum>1.</enum><text>With an id.</text></section>'
+        "<section><enum>2.</enum><text>Without an id.</text></section>"
+        "</legis-body></bill>"
+    )
+
+    with pytest.raises(AssertionError, match="carry no id"):
+        test_every_section_reaches_a_node(xml_path)
