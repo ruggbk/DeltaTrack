@@ -263,36 +263,4 @@ def compare_pdfs_html(
         pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress, printed=True, **numbers
     )
     title = _derive_bill_title(canonical)
-    sections = _section_nav(pdf_diff, new_pages)
-    return format_diff_html(
-        view, canonical=canonical, display_canonical=display_canonical, title=title, sections=sections
-    )
-
-
-def _section_nav(pdf_diff: PdfDiff, new_pages: list[Page]) -> list[dict]:
-    """Row-id map for the full-bill view.
-
-    Maps each v2 anchor (TITLE / SEC. / account heading) to its char offset in the
-    print-faithful display text, so `_full_bill_html` can id the matching row and the
-    navigation can link to it. `pdf_full_text_print`'s offsets are keyed by the same
-    (page, merged-line) coordinates the anchors use; unresolved anchors are skipped.
-    The synthesized front-matter anchor (issue #33) has no printed line number to
-    resolve against, so it maps to offset 0 — the front matter always sits at the very
-    top of the text.
-
-    Entries used to carry a `descriptor` naming the heading below a bare "TITLE I".
-    Its only reader was the flat navigation builder, which the structure-tree builder
-    (#108) superseded for every bill the renderer accepts; both were removed in #462.
-    """
-    _, offsets = pdf_full_text_print(new_pages)
-    sections: list[dict] = []
-    for a in pdf_diff.v2_anchors:
-        if a.kind == "preamble":
-            start = 0
-        else:
-            rng = offsets.get((a.page_number, a.line_number))
-            if rng is None:
-                continue
-            start = rng[0]
-        sections.append({"label": a.text, "kind": a.kind, "start": start})
-    return sections
+    return format_diff_html(view, canonical=canonical, display_canonical=display_canonical, title=title)

@@ -354,8 +354,8 @@ def _node_anchor_offset(full_text: str, node: dict) -> int | None:
     A node's ``full_text_span`` locates its *content*: for an interior node that is
     its own heading line, but for a content node (account/section) it's the body,
     which sits below an own-line heading equal to the node's ``label``. To land the
-    TOC on the heading (matching the flat ``sections`` anchors and the PDF pipeline,
-    not one line into the body), resolve the anchor from the label:
+    TOC on the heading rather than one line into the body, resolve the anchor from
+    the label:
 
       - if the span's own line already starts with the label, it IS the heading;
       - else jump to the nearest preceding line equal to the label (the own-line
@@ -423,7 +423,6 @@ def _build_toc_from_tree(tree_nodes: list[dict], full_text: str) -> str:
 def _build_sidebar(
     view: DiffView,
     canonical: dict | None = None,
-    sections: list[dict] | None = None,
     order_map: dict[tuple, int] | None = None,
 ) -> str:
     """Render the sidebar with both view variants inside one ``<nav>``.
@@ -436,10 +435,10 @@ def _build_sidebar(
     view renders from, so they line up), and is omitted entirely (the swap no-ops)
     when there is no full text to index into.
 
-    ``sections`` no longer feeds the TOC. A second, flat builder used to render it
-    from that list whenever the tree was absent, but the tree won for every bill the
-    renderer accepts, so it and its `descriptor` field were removed (#462).
-    ``sections`` is still what assigns the full-bill row ids the TOC links land on.
+    A second, flat builder used to render the TOC from a separate ``sections``
+    jump-list whenever the tree was absent. The tree won for every bill the renderer
+    accepts, so that builder, its ``descriptor`` field, and the jump-list that fed it
+    were removed together (#462).
     """
     tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
     if order_map is None:
@@ -809,16 +808,15 @@ def _removed_appendix_html(removed: list[dict], v1_text: str) -> str:
     )
 
 
-def _full_bill_html(canonical: dict, sections: list[dict] | None = None) -> str:
+def _full_bill_html(canonical: dict) -> str:
     """Project the change set inline onto the end-version full text.
 
     Mirrors the canonical full-text view: end-version text with each change's
     span wrapped as a tracked change, removals collected in an appendix, and a
     meta line accounting for any change whose span couldn't be placed.
 
-    ``sections`` (when given) carries each heading's char offset into the same
-    text; the row at that offset is given an ``id="sec-{i}"`` so the sidebar TOC
-    can jump to it.
+    Each heading row is given an ``id="fb-off-{offset}"``, keyed by its char offset
+    in the full text, so the sidebar TOC can jump to it.
     """
     full_text = canonical.get("full_text") or {}
     v2_text = full_text.get("v2") or ""
@@ -849,18 +847,17 @@ def _full_bill_html(canonical: dict, sections: list[dict] | None = None) -> str:
     placed = len(marks)
 
     # Heading row char offset -> its DOM id, so the sidebar TOC can jump to it.
-    # Prefer the canonical structure tree (leveled, #155-correct anchors); fall
-    # back to the flat sections list when no tree is present (legacy / no full
-    # text). Both schemes are internally consistent with their matching TOC.
+    # The canonical structure tree is the only source (leveled, #155-correct anchors).
+    # A flat jump-list used to supply `sec-N` ids when no tree was present; it was
+    # removed with the flat TOC that emitted the matching links (#462), because ids
+    # nothing links to are unreachable by construction. With no tree there is no
+    # navigation, so heading rows need no ids.
     tree_v2 = (canonical.get("tree") or {}).get("v2") if canonical.get("tree") else None
-    if tree_v2:
-        row_ids: dict[int, str] = {}
-        for node in _walk_tree(tree_v2):
-            off = _node_anchor_offset(v2_text, node)
-            if off is not None:
-                row_ids.setdefault(off, f"fb-off-{off}")
-    else:
-        row_ids = {s["start"]: f"sec-{i}" for i, s in enumerate(sections or [])}
+    row_ids: dict[int, str] = {}
+    for node in _walk_tree(tree_v2 or []):
+        off = _node_anchor_offset(v2_text, node)
+        if off is not None:
+            row_ids.setdefault(off, f"fb-off-{off}")
 
     guttered = _full_text_is_guttered(canonical)
     emitted_ids: set[str] = set()
@@ -898,7 +895,6 @@ def _views_html(
     view: DiffView,
     canonical: dict | None,
     display_canonical: dict | None = None,
-    sections: list[dict] | None = None,
     order_map: dict[tuple, int] | None = None,
 ) -> str:
     """Main content: classic cards, or the toggled changes/full-bill pair.
@@ -914,7 +910,7 @@ def _views_html(
     )
     if not _has_full_bill(canonical):
         return changes_inner
-    full_bill = _full_bill_html(display_canonical or canonical, sections)
+    full_bill = _full_bill_html(display_canonical or canonical)
     return f'<div class="view view-changes">{changes_inner}</div><div class="view view-full" hidden>{full_bill}</div>'
 
 
@@ -1013,7 +1009,6 @@ def format_diff_html(
     title: str | None = None,
     *,
     display_canonical: dict | None = None,
-    sections: list[dict] | None = None,
 ) -> str:
     """Assemble a complete standalone HTML report from a DiffView.
 
@@ -1047,7 +1042,7 @@ def format_diff_html(
     # One order map for both panes, from the join's canonical — guarantees the
     # sidebar and cards can never sort their shared groups from different trees.
     order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
-    sidebar = _build_sidebar(view, sidebar_canonical, sections if _has_full_bill(canonical) else None, order_map)
+    sidebar = _build_sidebar(view, sidebar_canonical, order_map)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1078,7 +1073,7 @@ def format_diff_html(
 {_export_button_html(canonical)}
 </div>
 </div>
-{_views_html(view, canonical, display_canonical, sections, order_map)}
+{_views_html(view, canonical, display_canonical, order_map)}
 </div>
 </div>
 {_export_modal_html(canonical)}

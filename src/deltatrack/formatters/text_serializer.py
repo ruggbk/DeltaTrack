@@ -48,18 +48,18 @@ def serialize_tree_for_diff(tree: BillTree) -> tuple[str, list[dict], dict[str, 
 
 def build_xml_full_text(
     old_tree: BillTree, new_tree: BillTree
-) -> tuple[dict[str, str], dict[str, dict], list[dict], dict[str, list[dict]]]:
+) -> tuple[dict[str, str], dict[str, dict], dict[str, list[dict]]]:
     """Build the inputs the XML pipeline feeds to ``xml_diff_to_canonical`` (#51, #108).
 
-    Returns ``(full_text, full_text_spans, sections, tree)`` where ``full_text`` is the
+    Returns ``(full_text, full_text_spans, tree)`` where ``full_text`` is the
     readable per-side text, ``full_text_spans`` is the per-side ``{element_id:
-    (start, end)}`` index for structural change anchoring, ``sections`` is the v2
-    TOC jump-list, and ``tree`` is the per-side leveled structure tree (#108) as
-    canonical JSON nodes, with each node's ``full_text_span`` into ``full_text``.
+    (start, end)}`` index for structural change anchoring, and ``tree`` is the per-side
+    leveled structure tree (#108) as canonical JSON nodes, with each node's
+    ``full_text_span`` into ``full_text``.
     Centralizes the idiom shared by the CLI, examples, and servers.
     """
     v1_text, _v1_sections, v1_spans, v1_ho = serialize_tree_for_tree(old_tree)
-    v2_text, v2_sections, v2_spans, v2_ho = serialize_tree_for_tree(new_tree)
+    v2_text, _v2_sections, v2_spans, v2_ho = serialize_tree_for_tree(new_tree)
     tree = {
         "v1": _xml_tree_payload(old_tree, v1_spans, v1_ho),
         "v2": _xml_tree_payload(new_tree, v2_spans, v2_ho),
@@ -67,7 +67,6 @@ def build_xml_full_text(
     return (
         {"v1": v1_text, "v2": v2_text},
         {"v1": v1_spans, "v2": v2_spans},
-        v2_sections,
         tree,
     )
 
@@ -133,10 +132,11 @@ def _serialize(
     (falling back to ``body_text``) follows on its own line(s), then a trailing blank
     line before the next node.
 
-    The section jump-list mirrors the PDF path's ``_section_nav`` output: a list of
-    ``{"label", "kind", "start", "descriptor"?}`` in document order, where ``start`` is
-    the char offset of the heading line. Kinds use the PDF anchor vocabulary —
-    ``title`` / ``section`` / ``account`` — so ``_build_toc`` consumes both identically.
+    The section jump-list is a list of ``{"label", "kind", "start"}`` in document
+    order, where ``start`` is the char offset of the heading line. Kinds use the PDF
+    anchor vocabulary — ``title`` / ``section`` / ``account``. Nothing in the render
+    path reads it since #462 removed the flat TOC builder; it is retained because the
+    serializer's other outputs share this walk, and it is exercised by tests.
 
     The body-span index maps ``element_id -> (start, end)`` covering each node's body
     (excluding the ``SEC. NN.  `` run-in prefix), for structural change anchoring (#51).

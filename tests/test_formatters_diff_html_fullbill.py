@@ -120,39 +120,34 @@ def test_no_find_bar_without_canonical():
     assert 'id="find-input"' not in html
 
 
-def test_sections_assign_full_bill_row_ids():
-    """`sections` maps each heading's char offset to a display row id.
+def test_treeless_canonical_renders_the_toc_empty_state():
+    """Full text but no structure tree renders a navigation pane saying it is empty.
 
-    This is the job `sections` still has after the flat navigation builder was removed
-    (#462): the ids it assigns are what the navigation links land on. Offset 0 lands on
-    the first display row ("ADD0"), which gets id="sec-0".
+    This is the behaviour #462 introduced. Before it, a canonical with no tree fell
+    through to a second, flat TOC builder, and the pane appeared only when the caller
+    also passed a `sections` jump-list; with no jump-list there was no pane at all.
+    The tree builder now owns the pane outright, so the reader is told the navigation
+    is empty rather than losing it silently.
+
+    This test fails on the pre-#462 renderer, which is the point: the empty-state test
+    it replaced passed identically on both, because the removed builder returned the
+    same string for an empty list.
     """
-    sections = [{"label": "TITLE I", "kind": "title", "start": 0}]
-    html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert 'id="sec-0"' in html
-
-
-def test_sections_assign_row_ids_in_order():
-    """A second entry gets the next id, so ids follow document order."""
-    sections = [
-        {"label": "Front Matter", "kind": "preamble", "start": 0},
-        {"label": "TITLE I", "kind": "title", "start": 12},
-    ]
-    html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert 'id="sec-0"' in html
-    assert 'id="sec-1"' in html
-
-
-def test_toc_empty_state_when_canonical_has_no_tree():
-    """Full text but no structure tree still renders a pane saying so.
-
-    Before #462 this empty state came from the flat builder. It now comes from the
-    tree builder, so the reader is told the navigation is empty rather than the pane
-    disappearing.
-    """
-    html = format_diff_html(_view(), _canonical(), sections=[])
+    html = format_diff_html(_view(), _canonical())
     assert 'class="sidebar-toc"' in html
     assert "No sections detected." in html
+
+
+def test_full_bill_rows_carry_no_orphan_section_ids():
+    """Heading rows are only ever id'd from the structure tree.
+
+    The flat jump-list used to stamp `id="sec-N"` on rows, matched by `href="#sec-N"`
+    links from the flat TOC. #462 removed both. A regression that reinstated the ids
+    without the links would put anchors on the page that nothing can reach, which is
+    unobservable from the rendered output unless something asserts on it.
+    """
+    html = format_diff_html(_view(), _canonical())
+    assert 'id="sec-' not in html
 
 
 def test_no_toc_without_canonical():

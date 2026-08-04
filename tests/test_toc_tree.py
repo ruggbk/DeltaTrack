@@ -94,17 +94,24 @@ def test_account_named_title_is_not_promoted_to_a_toc_group():
 
 @pytest.mark.slow
 def test_tree_toc_covers_every_flat_section_heading():
-    # Superset / no coverage regression: every heading offset the flat `sections`
-    # jump-list carried is reachable as a tree node's anchor offset. (Asserts the
-    # DATA reproduces the old TOC's reach — NOT new-TOC-HTML == old-flat-HTML.)
+    # Superset / no coverage regression: every heading offset the flat jump-list
+    # carried is reachable as a tree node's anchor offset. (Asserts the DATA
+    # reproduces the old TOC's reach — NOT new-TOC-HTML == old-flat-HTML.)
+    #
+    # #462 removed the flat list from the render path, so this reads it straight from
+    # the serializer that still computes it. That keeps the guard meaningful: it is
+    # the evidence that dropping the flat list loses no heading, which is exactly the
+    # claim the removal rests on.
     from deltatrack.bill_tree import normalize_bill
-    from deltatrack.formatters.text_serializer import build_xml_full_text
+    from deltatrack.formatters.text_serializer import build_xml_full_text, serialize_tree_for_tree
 
     v1, v2 = normalize_bill(_V1), normalize_bill(_V2)
-    full_text, _spans, sections, tree = build_xml_full_text(v1, v2)
+    full_text, _spans, tree = build_xml_full_text(v1, v2)
+    _v2_text, flat_sections, _v2_spans, _v2_ho = serialize_tree_for_tree(v2)
     ft_v2 = full_text["v2"]
     node_offsets = {_node_anchor_offset(ft_v2, n) for n in _walk_tree(tree["v2"]) if n["full_text_span"] is not None}
-    section_starts = {s["start"] for s in sections}
+    section_starts = {s["start"] for s in flat_sections}
+    assert section_starts, "flat jump-list was empty — the coverage check never ran"
     missing = section_starts - node_offsets
     assert not missing, f"leveled TOC dropped {len(missing)} heading(s) the flat sections list reached"
 

@@ -94,11 +94,9 @@ def _render_xml_diff_html(v1_path: Path, v2_path: Path) -> str:
         num = version_number_from_stem(stem)
         if num is not None:
             diff_dict[key] = num
-    full_text, full_text_spans, sections, tree = build_xml_full_text(v1, v2)
+    full_text, full_text_spans, tree = build_xml_full_text(v1, v2)
     canonical = xml_diff_to_canonical(diff_dict, full_text=full_text, full_text_spans=full_text_spans, tree=tree)
-    return format_diff_html(
-        view_from_canonical(canonical), canonical=canonical, title=bill_title(v2), sections=sections
-    )
+    return format_diff_html(view_from_canonical(canonical), canonical=canonical, title=bill_title(v2))
 
 
 def _index_html(bill_label: str, v1_label: str, v2_label: str) -> str:
