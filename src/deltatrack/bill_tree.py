@@ -1341,31 +1341,25 @@ def normalize_bill(xml_path: Path) -> BillTree:
                     key=normalize_header(div_header_text),
                 )
 
-                # A division's own bare sections, before its titles. Reaching them only
-                # through <title> children left every section that is a direct child of a
-                # <division> walked by nothing, so it entered no node, no full-bill view
-                # and no money diff, silently (#465). That is the same arrangement
-                # walk_body_sections already handles one level up, which is why it is the
-                # same call: the body-level path has always done this for bare sections,
-                # and the division branch simply never did.
-                #
-                # It is not only divisions that lack titles entirely. A division can carry
-                # titles AND bare sections (a short-title/definitions preamble ahead of
-                # TITLE I), and that mixed shape looked complete while dropping the
-                # preamble. Measured on the committed corpus: 177 sections, across both
-                # shapes, reached no node before this.
+                # A division's own bare sections, before its titles. Reached through the
+                # same walk_body_sections call the body-level path uses, because it is
+                # the same arrangement one level up: a division can hold sections
+                # directly, either with no titles at all or as a short-title/definitions
+                # preamble ahead of TITLE I.
                 #
                 # Ordered before the titles because that is where these sections sit in
-                # the document, and it mirrors the body-level call, which likewise emits
-                # bare sections ahead of the structures that follow them. No bill in the
-                # committed fixtures or the local collection places a bare section after
-                # a title inside one division, so this ordering is not a choice between
-                # two real arrangements.
+                # the document, mirroring the body-level call. No bill in the committed
+                # fixtures or the local collection places a bare section after a title
+                # inside one division, so this ordering is not a choice between two real
+                # arrangements.
                 #
                 # Passed the whole Division, not just its label: these sections share a
                 # division-stripped match_path with the same-numbered section of every
                 # other division, so the key is what tells them apart when the diff
                 # resolves that collision (#468).
+                #
+                # History: #465 — reaching these sections only through <title> children
+                # left them in no node, no full-bill view and no money diff, silently.
                 all_nodes.extend(walk_body_sections(child, current_division))
 
                 for title in child.findall("title"):

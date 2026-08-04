@@ -385,29 +385,23 @@ class NodeDiff:
     element_id_old: str
     element_id_new: str
     # --- Amount-extraction source (#365, #422) ---------------------------------
-    # The text each money view extracts dollar amounts from. These exist because the
-    # amount-change table and the leveled money tree once read DIFFERENT renderings of
-    # the same section and could therefore disagree about whether its money moved (#365):
-    # structure_tree read display_text, this table read body_text, and body_text was
-    # truncated by bill_tree._extract_section_text's "simple lead-in" fast path, which
-    # returned only a section's first <text> when the payload sat in
-    # <list>/<continuation-text>/<paragraph>. Measured then: 267 nodes / 1662
-    # amount-instances dropped, 83 amount changes missing from the table.
-    #
-    # #422 removed that fast path, so body_text carries the whole section and the two
-    # renderings now agree on amounts. These fields are consequently a no-op on today's
-    # corpus, and they are kept rather than removed for two reasons: display_text remains
-    # the more faithful rendering of a section (body_text stays collapsed for matching),
-    # and deleting them would re-open the divergence by letting the two views drift apart
-    # again with nothing naming the rule. The agreement itself is pinned by
+    # The text each money view extracts dollar amounts from. Both views must read the
+    # same rendering, or the amount-change table and the leveled money tree can
+    # disagree about whether a section's money moved. Pinned by
     # TestAmountSourceCorpusRegression in tests/test_financial_diff.py.
     #
-    # old_text/new_text deliberately stay body_text: they feed matching, text_diff and
-    # the JSON payload, none of which this is trying to change.
+    # A no-op on the current corpus, and kept deliberately: display_text is the more
+    # faithful rendering of a section (body_text stays collapsed for matching), and
+    # removing these fields lets the two views drift apart again with nothing naming
+    # the rule. old_text/new_text stay body_text — they feed matching, text_diff and
+    # the JSON payload, which this does not touch. None means "no separate source
+    # recorded" (a hand-built NodeDiff); the amount_source_* properties then fall back
+    # to old_text/new_text.
     #
-    # None means "no separate source recorded" (a hand-built NodeDiff), and the
-    # amount_source_* properties fall back to old_text/new_text so such callers behave
-    # exactly as they did before this field existed.
+    # Why not remove them: see above — the no-op is the pinned agreement, not dead code.
+    # History: #365 the two views read different renderings, because body_text was
+    # truncated by a "simple lead-in" fast path in bill_tree._extract_section_text;
+    # #422 removed that fast path.
     old_amount_text: str | None = None
     new_amount_text: str | None = None
 

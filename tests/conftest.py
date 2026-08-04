@@ -13,42 +13,30 @@ import pytest
 from tests.corpus_paths import FIXTURES_DIR, PROJECT_ROOT, fixture_path, sweep_bill_dirs
 from tests.engine_guard import engine_is_foreign
 
-# --- The suite must import the tree it is running in (#435) --------------------
-# `pythonpath` deliberately excludes `src` (see pyproject), so the engine is importable
-# only through the installed package -- which records ONE absolute path, the checkout
-# where `uv sync` last ran. Running from a git worktree against another checkout's
-# interpreter therefore collects this worktree's tests (`pythonpath = ["."]`) while
-# `deltatrack` comes from somewhere else entirely, and the suite reports green about
-# code nobody is editing. Red-green is then meaningless: reverting the file under review
-# changes nothing the run can see.
-#
-# Measured, not hypothetical: a top-level `raise RuntimeError` in a worktree's
-# src/deltatrack/bill_tree.py left tests/test_bill_tree.py at 133 passed.
+# --- The suite must import the tree it is running in (#435, #439) --------------
+# `pythonpath` deliberately excludes `src` (see pyproject), so the engine resolves only
+# through the installed package, which records ONE absolute path: the checkout where
+# `uv sync` last ran. A run whose `deltatrack` resolves outside this checkout's own
+# `src/` is reporting on code nobody is editing, so it is refused here. Red-green is
+# otherwise meaningless: reverting the file under review changes nothing the run sees.
 #
 # Checked at conftest import rather than in a test, because a guard *test* is only as
-# reachable as the selection that collects it. `pytest tests/test_bill_tree.py` never
-# collects it, and neither does any `-k` or `-m` run -- and a single-module run is exactly
-# the scenario measured above. conftest imports on every selection under `tests/`, so it
-# is the one place the check cannot be selected away.
+# reachable as the selection that collects it -- a single-module run, `-k` and `-m` all
+# skip past one. conftest imports on every selection under `tests/`, so it is the one
+# place the check cannot be selected away.
 #
-# Rejecting the violation rather than adding `src` to `pythonpath`, which would resolve
-# the engine off disk and make this symptom disappear. Not for wheel fidelity -- under an
-# editable install the suite already reports on the working tree, which is exactly why
-# tests/test_engine_installs.py exists and says so. The reason is that `pythonpath` would
-# make pytest the ONLY consumer with its own import story: in an env-less worktree the
-# suite would quietly pass against that worktree while `./diff_bill.py` beside it imports
-# another checkout or fails outright. A split brain is worse than a hard stop, and the
-# stop names the real problem (a tree running on a foreign environment) instead of
-# papering over the one symptom that happened to surface.
+# Checked on `import deltatrack` ALONE, before any submodule (#439). A foreign engine
+# whose layout does not match this tree (a partial install, or one rolled back past a
+# submodule) otherwise dies on the submodule import below, raising a
+# `ModuleNotFoundError` named `deltatrack.bill_tree` that the handler correctly reads as
+# a branch fault -- sending the developer to inspect their own diff over an environment
+# fault. The two submodules below are long-standing, so this is narrow today; nothing
+# holds the import list at two.
 #
-# Checked on `import deltatrack` ALONE, before anything is imported off the engine (#439).
-# A foreign engine whose layout does not match this tree -- a partial install, or one rolled
-# back past a submodule -- would otherwise die on the submodule import below, and that
-# exception is a `ModuleNotFoundError` named `deltatrack.bill_tree`, which the handler
-# correctly re-raises as a branch fault because by that test it genuinely is one. The
-# developer then inspects their own diff over an environment fault. The two submodules named
-# below are long-standing, so this is narrow today; nothing holds the import list at two, and
-# the first addition makes it reachable for anyone reviewing THAT change from a worktree.
+# Why not add `src` to `pythonpath`: it would make pytest the only consumer with its own
+# import story, so an env-less worktree would pass here while `./diff_bill.py` beside it
+# imports another checkout or fails outright. A split brain is worse than a hard stop.
+# AGENTS.md ("Test conventions") carries the anchoring details and the measurement.
 try:
     import deltatrack
 
@@ -292,30 +280,29 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 # that any ASSERTION ran. The corpus gates skip per-case on content conditions ("no
 # bill body", "no dollar amounts", "no anchors / no offset table"), so a corpus-wide
 # parser regression that turned every case into a content-skip would keep CI green
-# while asserting nothing — the one structural fail-open left after #217.
+# while asserting nothing — the one structural fail-open the manifest floor leaves open.
 #
-# This closes that channel: every content-skip in the three corpus gate modules must
-# be named in ALLOWED_CORPUS_SKIPS below, AND skip for the reason recorded there. An
-# unlisted skip fails the session; so does an allowlisted nodeid that starts skipping
-# for a different reason (a bare count, or a nodeid-only match, would miss both — the
-# second is precisely a regression on a case already known to be fragile).
+# This closes that channel: every content-skip in the modules below must be named in
+# ALLOWED_CORPUS_SKIPS, AND skip for the reason recorded there. An unlisted skip fails
+# the session; so does an allowlisted nodeid that starts skipping for a different
+# reason (a bare count, or a nodeid-only match, would miss both — the second is
+# precisely a regression on a case already known to be fragile).
 #
 # Adding an entry is a deliberate act: it records a fixture the gates cannot assert
 # on, which is a coverage gap, not a neutral fact. Say why in the comment.
 #
 # Scope: the three gates that skip per-case on content, plus
 # test_financial_callout_whole_item, whose channel is fixture ABSENCE rather than
-# content: its three XML cases carry skipif(not (_V1.exists() and _V2.exists())). That
-# skip used to be routine, because v2 was uncommitted; now that both versions are
-# committed and manifested, an absent fixture means someone deleted it, and the #86
-# headline gate going quiet is exactly what this ceiling exists to catch. It is not a
-# manifest-parametrized module, so the #217 fixture floor does not cover it.
+# content — its three XML cases carry skipif(not (_V1.exists() and _V2.exists())).
+# Both versions are committed and manifested, so an absent fixture means someone
+# deleted it, and the #86 headline gate going quiet is what this ceiling exists to
+# catch. It is not a manifest-parametrized module, so the #217 fixture floor does not
+# cover it.
 #
-# The other corpus modules migrated onto the manifest in #220 Part 1
-# (test_node_join_corpus, test_xml_subsection_nodes, test_pdf_subsection_recall)
-# hard-assert denominators instead of skipping, so they have no content-skip channel to
-# watch — they are left out deliberately rather than by oversight. Add one here if it
-# ever grows a content-skip.
+# Why not watch the other corpus modules: test_node_join_corpus,
+# test_xml_subsection_nodes and test_pdf_subsection_recall hard-assert denominators
+# instead of skipping, so they have no content-skip channel. Left out deliberately;
+# add one here if it ever grows a content-skip.
 CORPUS_GATE_MODULES = (
     "tests/test_corpus_properties.py",
     "tests/test_corpus_tree_properties.py",
@@ -336,12 +323,12 @@ ALLOWED_CORPUS_SKIPS = {
     # uncovered, only outside this one gate's channel.
     "tests/test_corpus_properties.py::test_every_appropriations_element_with_text_produces_node"
     "[119-hr-1/2_engrossed-in-house.xml]": "No appropriations elements with text",
-    # 115-hr-5895 v5 (the ENROLLED print, no GPO margin line numbers) used to live here:
-    # its tree comes back empty, so the PDF gate skipped it and this entry recorded why.
-    # #262 closed that — the gate now ASSERTS on a zero-anchor document instead of
-    # skipping it (_assert_zero_anchor_layout in test_corpus_tree_properties.py), so
-    # there is no skip left to allow. The layout reason it used to carry lives in
-    # _PDF_NO_ANCHOR_LAYOUTS, next to the assertions that now check it.
+    # No entry for 115-hr-5895 v5 (the ENROLLED print, no GPO margin line numbers): the
+    # PDF gate ASSERTS on a zero-anchor document rather than skipping it
+    # (_assert_zero_anchor_layout in test_corpus_tree_properties.py), so there is no skip
+    # to allow. Its layout reason lives in _PDF_NO_ANCHOR_LAYOUTS, beside those
+    # assertions.
+    # History: #262 — an allowlisted skip before the gate learned to assert.
     # --- 113-hr-3547 v4 (added to the manifest by #220 Part 1 / #277) -----------
     # 113-hr-3547 v4 is the Senate's FIRST engrossed amendment to what was then a
     # shell bill: a single section extending commercial space-launch liability (2.6 KB,
@@ -364,10 +351,11 @@ ALLOWED_CORPUS_SKIPS = {
 }
 
 # --- The CI slow suite (#288) ---------------------------------------------------
-# These @slow modules run against committed fixtures and were named by no CI step, so
-# ~95 real assertions passed on any fresh clone in about 20 seconds and never once ran
-# in CI. Committing a fixture makes a gate RUNNABLE; only naming its module in the
-# workflow makes it RUN — the same distinction #220 called out for the corpus gates.
+# These @slow modules run against committed fixtures and are named by a CI step.
+# Committing a fixture makes a gate RUNNABLE; only naming its module in the workflow
+# makes it RUN — the same distinction #220 called out for the corpus gates.
+# History: #288 — named by no CI step, their assertions passed on any fresh clone and
+# never once ran in CI.
 #
 # They are watched here for the same reason the corpus gates are: adding a module to CI
 # also adds its skip channel to CI, and a skip asserts nothing. Kept as a SEPARATE
@@ -610,12 +598,12 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
 
 # --- Live-network opt-in (#278) ------------------------------------------------
-# REQUIRE_CORPUS used to live here. #220 put every corpus correctness gate on the
-# committed manifest and #278 committed the Legislative Branch validation set, so the
-# only requirement left that a fixture cannot satisfy is a NETWORK: test_govinfo_corpus
-# _parity fetches live BILLSTATUS per bill to confirm the on-disk filenames are still
-# what govinfo enumeration produces today. That is a real requirement, so it gets a
-# marker that says so rather than an env var whose name described neither consumer.
+# The only requirement a committed fixture cannot satisfy is a NETWORK: test_govinfo
+# _corpus_parity fetches live BILLSTATUS per bill to confirm the on-disk filenames are
+# still what govinfo enumeration produces today. It carries a marker saying so, rather
+# than an env var whose name would describe neither consumer.
+# History: #220 put every corpus correctness gate on the committed manifest and #278
+# committed the Legislative Branch validation set, retiring REQUIRE_CORPUS from here.
 #
 # The marker alone does not deselect: `-m slow` (what CI runs) would select the parity
 # gate right along with everything else, so the requirement has to be enforced at
