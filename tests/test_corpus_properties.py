@@ -13,12 +13,15 @@ from pathlib import Path
 import pytest
 
 from deltatrack.bill_tree import (
+    Division,
     _extract_appropriations_text,
+    _extract_section_text,
     extract_text_content,
     find_bill_body,
     normalize_bill,
+    walk_body_sections,
 )
-from tests.conftest import assert_manifest_committed, manifest_xml_files
+from tests.conftest import assert_manifest_committed, manifest_xml_files, manifest_xml_ids
 
 pytestmark = pytest.mark.slow
 
@@ -137,6 +140,33 @@ def test_known_uncovered_amounts_names_live_fixtures() -> None:
     assert not orphans, (
         f"KNOWN_UNCOVERED_AMOUNTS names {len(orphans)} fixture(s) not in the manifest: {orphans}. "
         f"Re-point each entry at the fixture's current id, or drop it if the bill is gone."
+    )
+
+
+def test_known_duplicate_counts_names_manifest_fixtures() -> None:
+    """Every ``_KNOWN_DUPLICATE_COUNTS`` key is a MANIFESTED fixture (#496).
+
+    The dict holds per-file ceilings, so a key nothing evaluates is a number nothing can
+    keep current — and it fails in the worst direction, because the parser reaching further
+    raises the true count until the entry starts failing whoever does run it. Four keys had
+    already drifted that way, unnoticed for as long as they existed, since the only people
+    who saw them were running CORPUS_SWEEP=1 while investigating something else.
+
+    Deliberately keyed on ``manifest_xml_ids()`` rather than the collected
+    ``ALL_XML_FILES``: that list widens to the local `bills/` tree under CORPUS_SWEEP=1, so
+    on a fetched machine a sweep-only key would resolve and this guard would pass — the
+    same fail-open it exists to close, and the reason the sibling guard above cannot be
+    reused as-is. Under the sweep this must still check the manifest, and it does.
+
+    A stale VALUE is a separate problem this cannot see: the assertion is `<=`, so a parser
+    change that reduces collisions leaves a ceiling silently loose (#474 did exactly that).
+    """
+    orphans = sorted(set(_KNOWN_DUPLICATE_COUNTS) - manifest_xml_ids())
+    assert not orphans, (
+        f"_KNOWN_DUPLICATE_COUNTS names {len(orphans)} fixture(s) not in the corpus manifest: "
+        f"{orphans}. Only CORPUS_SWEEP=1 could reach them and nothing keeps their numbers "
+        f"current, so commit and manifest the bill (#126) or drop the entry — a sweep-only "
+        f"file is reported rather than asserted by test_no_duplicate_match_paths."
     )
 
 
@@ -302,13 +332,21 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 # Values are ceilings, asserted as `total_dupes <= known`. Files not listed must have
 # zero duplicates.
 #
-# Every COMMITTED key below was re-measured in #482 and its value equals the count the
-# corpus produces now. The keys naming an UNCOMMITTED bill are reachable only under
-# CORPUS_SWEEP=1 (manifest_xml_files widens to sweep_bill_dirs), so no CI run and no
-# clean checkout ever evaluates them, and four are stale in the direction that FAILS:
-# measured against a fetched copy, 115-hr-5895 v3 is 22 not 20, both 116-hr-133 entries
-# are 206 not 160, and 116-hr-1865 v5 is 66 not 55. Re-measure a sweep-only value
-# before trusting it; recalibrating them is a coverage decision, not a comment fix (#496).
+# EVERY KEY NAMES A MANIFESTED FIXTURE, enforced by
+# test_known_duplicate_counts_names_manifest_fixtures. That is the #496 fix. Until then the
+# dict also carried keys for bills present only in a local `bills/` tree, reachable solely
+# under CORPUS_SWEEP=1 — so no CI run and no clean checkout ever evaluated them, nothing
+# could hold them current, and four had drifted below the true count, failing the sweep for
+# anyone who turned it on. Six were dropped rather than recalibrated (#496): a number no run
+# checks goes stale again, and half of them were unreachable even under the sweep, because
+# sweep_bill_dirs yields ONE directory per bill id with the committed copy winning, so a
+# download-only VERSION of a partly-committed bill is shadowed. A sweep-only file is now
+# reported, not asserted — see test_no_duplicate_match_paths.
+#
+# Values are CEILINGS, so they only fail upward and a parser change that REDUCES collisions
+# leaves them silently loose: #474 (joining an account split across two elements) cut several
+# committed counts well below their stored value, which is why #482's re-measurement was
+# accurate when written and stale days later. Re-measure before trusting a number here.
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # #465 note: a division's bare <section> children (a short-title/definitions preamble
     # ahead of TITLE I, or a whole policy division organised without titles) were reached
@@ -338,7 +376,6 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "115-hr-1625/6_enrolled-bill.xml": 196,
     "115-hr-244/6_enrolled-bill.xml": 170,
     "115-hr-5895/2_engrossed-in-house.xml": 22,
-    "115-hr-5895/3_placed-on-calendar-senate.xml": 20,
     "115-hr-5895/4_engrossed-amendment-senate.xml": 8,
     # Enrolled version places Division C's TITLE II-V at <legis-body> level beside the
     # divisions (not nested). Walking them (#146) surfaces genuine cross-division
@@ -346,10 +383,8 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # division-stripped match_path with Division A's "TITLE V—General provisions".
     # Real source structure, not a parser error (cf. 119-hr-1's twin Sec. 10012).
     "115-hr-5895/5_enrolled-bill.xml": 8,
-    "116-hr-1865/5_engrossed-amendment-house.xml": 55,
     "116-hr-1865/6_enrolled-bill.xml": 66,
     "118-hr-2882/5_engrossed-amendment-house.xml": 55,
-    "118-hr-2882/6_enrolled-bill.xml": 55,
     "118-hr-4366/4_engrossed-amendment-senate.xml": 9,
     "118-hr-4366/5_engrossed-amendment-house.xml": 33,
     "118-hr-4366/6_enrolled-bill.xml": 33,
@@ -357,11 +392,11 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     "117-hr-4432/1_reported-in-house.xml": 1,
     "117-hr-4502/1_reported-in-house.xml": 1,
     "117-hr-4502/2_engrossed-in-house.xml": 39,
-    "117-hr-4502/3_received-in-senate.xml": 39,
     "118-hr-4820/1_reported-in-house.xml": 7,
-    # Fresh bills added for Part C smoke test (2026-04-15)
-    "116-hr-133/6_engrossed-amendment-house.xml": 160,
-    "116-hr-133/7_enrolled-bill.xml": 160,
+    # Fresh bill added for Part C smoke test (2026-04-15). Its 116-hr-133 companions were
+    # the only sweep-only keys that a sweep could actually reach, and both were stale (160
+    # against a measured 206); dropped in #496 rather than repinned, since committing that
+    # bill is #126's call and 206 is not a number CI can hold.
     "117-hr-2471/6_enrolled-bill.xml": 212,
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
@@ -381,6 +416,20 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # Real source duplicate, not a parser error; exposes the matcher's reliance on body
     # similarity over header (tracked in DeltaTrack#8). Committed + in the manifest, so CI runs it.
     "119-hr-1/1_reported-in-house.xml": 1,
+    # 118-hr-9468: two enum-less body-level sections — the enacting "the following sums
+    # are appropriated" lead-in and the closing short-title section — both address to the
+    # empty tuple, because walk_body_sections derives a section's path from its <enum> and
+    # these have none. A parser limitation rather than a source duplicate, and independent
+    # of appropriations: neither node is an account.
+    #
+    # Recorded rather than fixed here because it is a different defect from #485 (the
+    # accounts under such a section reaching no node at all) and wants its own change:
+    # giving an enum-less section an address means choosing one, which is a design call
+    # this fix does not need to make. #485's fix REDUCED this count from 2 to 1 by giving
+    # the appropriations section's content to named account nodes. The gate asserts a
+    # ceiling, not equality, so a later fix tightens this without a test edit.
+    "118-hr-9468/1_introduced-in-house.xml": 1,
+    "118-hr-9468/4_enrolled-bill.xml": 1,
 }
 
 
@@ -395,6 +444,16 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     Duplicates indicate cross-division path collisions (issue #1).
     Files with known duplicates assert the count hasn't increased.
     Files with no known duplicates assert zero.
+
+    A file reachable only under CORPUS_SWEEP=1 is REPORTED, not asserted (#496). The
+    baselines here are calibrated against the committed corpus; the sweep is an
+    uncalibrated superset, so there is no trustworthy number to compare a sweep-only file
+    against — asserting zero would fail every real bill that has collisions, and pinning a
+    measured count would pin a number no run can keep current, which is how four of these
+    drifted into failing the sweep for anyone who turned it on. The same reasoning already
+    exempts the PDF-layout registry in test_corpus_tree_properties. The file is still
+    parsed, so a crash or an empty tree still surfaces here; only the comparison is
+    withheld, and -rs prints the count so exploration still sees it.
     """
     _skip_if_absent(xml_path)
     test_id = _xml_id(xml_path)
@@ -406,6 +465,9 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     counts = Counter(node.match_path for node in bill_tree.nodes)
     dupes = {k: v for k, v in counts.items() if v > 1}
     total_dupes = sum(v - 1 for v in dupes.values())
+
+    if test_id not in manifest_xml_ids():
+        pytest.skip(f"Sweep-only file, no calibrated baseline: {total_dupes} duplicate match_paths (#496)")
 
     known = _KNOWN_DUPLICATE_COUNTS.get(test_id, 0)
 
@@ -564,6 +626,57 @@ def _classify_sections(body: ET.Element, parents: dict[int, ET.Element]) -> tupl
     return in_scope, payload, empty
 
 
+def _section_reaches_a_node(section: ET.Element, node_ids: set[str]) -> bool:
+    """True when ``section``'s content is represented in the tree.
+
+    Normally that means the section's own id is a node id. A section whose every child
+    is an ``appropriations-*`` account has no text of its own, so it emits no node and
+    its accounts carry the content instead — the arrangement both section walkers use,
+    and the point of #485: an empty placeholder node here would be exactly the unnamed,
+    address-less entry that issue exists to remove, so requiring one would pin the
+    defect rather than the property.
+
+    The stand-in is allowed ONLY when the section has no body of its own, and that is
+    decided with the parser's own carve and extractor rather than by looking at tags. A
+    section can hold both prose and accounts:
+
+        <section id="sec-1">
+          <text>Important section-level text.</text>
+          <appropriations-small id="acct-1">...</appropriations-small>
+        </section>
+
+    There the parser does emit a node for the section, carrying that prose. Accepting any
+    account as a stand-in would let a regression drop the section node, and with it the
+    only copy of the prose, while this gate stayed green because ``acct-1`` survived.
+    Asking ``_extract_section_text`` under the appropriations carve — the exact expression
+    ``walk_body_sections`` uses to decide whether to emit the node at all — makes the
+    condition here the same condition as the parser's, so the two cannot drift into
+    disagreeing about which sections are allowed to be absent.
+
+    It is one account node, not all of them, because a header-only element (the naming
+    half of a #474 split account) legitimately emits none. That is still enough to fail
+    closed on the loss this gate was built for: a walker that drops the section drops
+    its children with it, so nothing beneath it reaches a node either. What this does
+    NOT check is that every account arrived — that belongs to the account-level gates in
+    tests/test_bill_tree.py, which name the accounts rather than counting them.
+
+    Rare by measurement, not by assumption: 2 of the 1,467 sections with appropriations
+    children across the committed fixtures take this branch, both in 118-hr-9468, the
+    corpus's only bill written without TITLE divisions.
+    """
+    if section.attrib.get("id", "") in node_ids:
+        return True
+
+    appro_carve = frozenset(id(c) for c in section if c.tag.startswith("appropriations-"))
+    if not appro_carve:
+        return False
+    # Own body text of its own => the parser emits a node for it, so its absence is a
+    # real loss and no account may answer for it.
+    if _extract_section_text(section, appro_carve):
+        return False
+    return any(id(child) in appro_carve and child.attrib.get("id", "") in node_ids for child in section)
+
+
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
@@ -640,7 +753,7 @@ def test_every_section_reaches_a_node(xml_path: Path) -> None:
         f"Sample: {[''.join(s.itertext())[:60] for s in idless[:3]]}"
     )
 
-    missing = [s for s in in_scope if s.attrib.get("id", "") not in node_ids]
+    missing = [s for s in in_scope if not _section_reaches_a_node(s, node_ids)]
     assert not missing, (
         f"{test_id}: {len(missing)} of {len(in_scope)} enacted sections reach no node "
         f"(payload excluded: {payload}, empty: {empty}). "
@@ -699,3 +812,111 @@ def test_idless_section_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="carry no id"):
         test_every_section_reaches_a_node(xml_path)
+
+
+def test_appropriations_section_relaxation_still_fails_closed(tmp_path: Path) -> None:
+    """The account-bearing branch of ``_section_reaches_a_node`` cannot wave a loss through.
+
+    That branch lets a section with no text of its own be represented by its accounts
+    instead of by a node of its own (#485). A relaxation is only safe if it still goes
+    RED on the loss the gate exists to catch, and this is the case the corpus cannot
+    supply: 118-hr-9468 is its only untitled appropriations bill, and there the accounts
+    do reach nodes, so the false arm of that ``any(...)`` never executes on real fixtures.
+
+    An accounts-only section whose accounts reach NO node is exactly the pre-#485
+    behaviour, so this is the shape a regression would take.
+    """
+    section = ET.fromstring(
+        '<section id="sec-1">'
+        '<appropriations-major id="maj-1"><header>Department Of Example</header></appropriations-major>'
+        '<appropriations-small id="acct-1"><text>For an additional amount, $1,000.</text></appropriations-small>'
+        "</section>"
+    )
+
+    # The account reached a node: represented, even though the section itself did not.
+    assert _section_reaches_a_node(section, {"acct-1"})
+    # The section itself reached a node: the ordinary path, unaffected by the relaxation.
+    assert _section_reaches_a_node(section, {"sec-1"})
+    # Nothing beneath it reached a node — the collapse. Must be reported as missing.
+    assert not _section_reaches_a_node(section, {"some-other-section"})
+    # A non-appropriations child cannot stand in for the section (the relaxation is
+    # scoped to accounts; a subsection reaching a node is not evidence for this shape).
+    plain = ET.fromstring('<section id="sec-2"><subsection id="sub-1"><text>x</text></subsection></section>')
+    assert not _section_reaches_a_node(plain, {"sub-1"})
+
+
+def test_an_account_cannot_stand_in_for_a_section_that_has_its_own_text() -> None:
+    """A section holding BOTH prose and accounts must still reach its own node.
+
+    This is the case the stand-in must not swallow. The parser emits a node for such a
+    section, carrying the prose, so the section's absence from the tree is a real loss of
+    the only copy of that text — and it is invisible to the money gates, because the
+    accounts and their dollar figures survive in their own nodes either way.
+
+    Without the ``_extract_section_text`` guard the gate accepted any surviving account
+    as proof the section arrived, so a regression that dropped the section node while
+    keeping ``acct-1`` passed green with the section-level prose gone.
+    """
+    section = ET.fromstring(
+        '<section id="sec-1">'
+        "<text>section-level prose</text>"
+        '<appropriations-small id="acct-1"><text>$1,000</text></appropriations-small>'
+        "</section>"
+    )
+
+    assert not _section_reaches_a_node(section, {"acct-1"})
+    # Only the section's own node answers for it, which is the pre-#485 rule unchanged
+    # for every section that has a body.
+    assert _section_reaches_a_node(section, {"sec-1"})
+
+    # The distinction is the section's OWN text, not the presence of a <text> element:
+    # a section whose only text lives inside its accounts still has an empty own body,
+    # so it keeps the stand-in.
+    accounts_only = ET.fromstring(
+        '<section id="sec-2">'
+        "<enum>2.</enum><header>Ignored by the extractor</header>"
+        '<appropriations-small id="acct-2"><text>$1,000</text></appropriations-small>'
+        "</section>"
+    )
+    assert _section_reaches_a_node(accounts_only, {"acct-2"})
+
+
+def test_bare_division_sections_emit_their_appropriations_accounts() -> None:
+    """The ``division > section > appropriations-*`` shape, which no local bill supplies.
+
+    ``walk_body_sections`` serves two arrangements: sections directly under the bill body,
+    and the bare sections of a division that does not wrap them in a <title> (#465). #485
+    recorded the division form as untested because the corpus contains no such bill, so
+    the fix's reach into it rested on the two callers sharing one function rather than on
+    a measurement. This builds the case synthetically and checks it directly.
+
+    The division label must also travel onto the account nodes, since that is what the
+    diff groups on (#468); an account that arrived without it would be addressable but
+    would not group with the division it belongs to.
+    """
+    division = ET.fromstring(
+        '<division id="div-a">'
+        "<enum>A</enum><header>Example Division</header>"
+        '<section id="sec-1">'
+        '<appropriations-major id="maj-1"><header>Department Of Example</header></appropriations-major>'
+        '<appropriations-small id="acct-1"><header>Salaries And Expenses</header>'
+        "<text>For necessary expenses, $1,000.</text></appropriations-small>"
+        "</section>"
+        "</division>"
+    )
+    div = Division(label="Division A: Example Division", key="a")
+
+    nodes = walk_body_sections(division, div)
+
+    accounts = [n for n in nodes if n.tag == "appropriations-small"]
+    assert len(accounts) == 1, f"the division's account reached no node of its own: {[n.match_path for n in nodes]}"
+    account = accounts[0]
+    assert account.header_text == "Salaries And Expenses"
+    assert "$1,000" in account.body_text
+    # Addressed off its agency, exactly as on the body-level path. The division is
+    # excluded from match_path everywhere, so it does not appear here.
+    assert account.match_path == ("department of example", "salaries and expenses")
+    assert account.division_label == "Division A: Example Division"
+    assert account.division_key == "a"
+    # The accounts-only section contributes no node of its own, same as at body level.
+    assert not [n for n in nodes if n.element_id == "sec-1"]

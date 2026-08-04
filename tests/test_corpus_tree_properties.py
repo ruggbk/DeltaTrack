@@ -223,7 +223,7 @@ def _assert_no_blank_toc_rows(roots: list[dict], full_text: str) -> None:
     leaves = re.findall(r'<li class="toc-child">(.*?)</li>', html, re.S)
     blank_leaves = [leaf for leaf in leaves if not re.sub(r"<[^>]+>", "", leaf).strip()]
     assert not blank_leaves, f"{len(blank_leaves)} blank TOC leaf row(s)"
-    summaries = re.findall(r"<summary>(.*?)</summary>", html, re.S)
+    summaries = re.findall(r"<summary[^>]*>(.*?)</summary>", html, re.S)
     blank_groups = [s for s in summaries if not re.sub(r"<[^>]+>", "", s).strip()]
     assert not blank_groups, f"{len(blank_groups)} blank TOC group heading(s)"
     # Completeness floor: the renderer DROPS unlabeled leaves and HOISTS the children

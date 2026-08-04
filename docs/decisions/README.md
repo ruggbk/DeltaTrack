@@ -69,3 +69,4 @@ record means updating both.
 | [0015](0015-corpus-test-fixtures.md) | Commit a curated corpus fixture set and collect the gates from a manifest |
 | [0016](0016-product-tooling-surface-split.md) | Separate the product, the acquisition tooling, and the delivery channel in the layout |
 | [0017](0017-installable-engine-package.md) | Ship the diff engine as an installable `src/deltatrack` package |
+| [0018](0018-text-triggers-are-financial-only.md) | Read appropriations phrases for money, never for structure |

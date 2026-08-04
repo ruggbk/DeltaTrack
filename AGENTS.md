@@ -106,6 +106,7 @@ Every accepted ADR, title as written. The titles are claims, so this list is the
 - [15. Commit a curated corpus fixture set and collect the gates from a manifest](docs/decisions/0015-corpus-test-fixtures.md)
 - [16. Separate the product, the acquisition tooling, and the delivery channel in the layout](docs/decisions/0016-product-tooling-surface-split.md)
 - [17. Ship the diff engine as an installable `src/deltatrack` package](docs/decisions/0017-installable-engine-package.md)
+- [18. Read appropriations phrases for money, never for structure](docs/decisions/0018-text-triggers-are-financial-only.md)
 
 ## Key architecture concepts
 
@@ -141,7 +142,7 @@ Every accepted ADR, title as written. The titles are claims, so this list is the
 - `tools/fetch_bills.py` tests use `respx.mock` decorator and monkeypatch `time.sleep`
 - `src/deltatrack/bill_tree.py` tests use inline XML snippets; integration tests use session fixtures
 - `tests/test_diff_validation.py` holds the hand-curated cross-version correctness assertions plus `TestCorpusDiffSmoke`, which runs invariant checks across every adjacent committed-manifest version pair
-- `tests/test_corpus_properties.py` parametrizes over the committed corpus manifest (`tests/corpus_manifest.toml`), broadened to every local XML file under `CORPUS_SWEEP=1`; uses `_KNOWN_DUPLICATE_COUNTS` and `_KNOWN_MISSING_APPRO` dicts for per-file baselines
+- `tests/test_corpus_properties.py` parametrizes over the committed corpus manifest (`tests/corpus_manifest.toml`), broadened to every local XML file under `CORPUS_SWEEP=1`; uses `_KNOWN_DUPLICATE_COUNTS` and `_KNOWN_MISSING_APPRO` dicts for per-file baselines. **Every baseline key must name a manifested fixture** (`test_known_duplicate_counts_names_manifest_fixtures`): a key only `CORPUS_SWEEP=1` can reach is a number no run keeps current, and four silently drifted into failing the sweep before the guard existed (#496). A sweep-only file is reported, not asserted — to hold a bill to a baseline, commit and manifest it (#126). Both dicts are `<=` ceilings, so they only fail upward: a parser change that *reduces* collisions leaves them loose with nothing red (#474 did), so re-measure rather than trusting a stored number.
 - Bill DTD XML uses flat-sibling `appropriations-major/intermediate/small` tags (not nested)
 - Dollar amounts are embedded in prose `<text>` elements, extracted via regex
 - HTML formatter functions (`word_diff`, `build_financial_table`, etc.) are individually testable

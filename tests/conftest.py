@@ -143,6 +143,19 @@ def manifest_xml_files() -> list[Path]:
     return _manifest_paths("xml")
 
 
+def manifest_xml_ids() -> frozenset[str]:
+    """``"<bill>/<stage>.xml"`` for every manifested XML fixture, IGNORING CORPUS_SWEEP.
+
+    For the staleness guards over baseline dicts. Those dicts are calibrated against the
+    committed corpus, so a guard asking "does this key still name a live fixture?" has to
+    key on the manifest itself. Reading the answer off ``manifest_xml_files()`` would widen
+    with the sweep, so on a machine with a fetched corpus a sweep-only key would look live
+    and the guard would pass — the fail-open #496 found, where four keys named a version no
+    run can evaluate and nothing said so.
+    """
+    return frozenset(f"{p.parent.name}/{p.name}" for p in _manifest_paths("xml"))
+
+
 def manifest_pdf_files() -> list[Path]:
     """PDF fixtures the corpus gates parametrize over (manifest, or the full local
     glob under CORPUS_SWEEP)."""
@@ -389,6 +402,25 @@ ALLOWED_CORPUS_SKIPS = {
     # the point of this allowlist, and collapsing the two would lose the distinction.
     "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
     "[117-hr-2471/1_introduced-in-house.xml]": ("Shell bill: only 2 amounts, too few for meaningful coverage"),
+    # 118-hr-9468 (both committed versions) trips the same "shell bill" threshold without
+    # being one. It is a complete, enacted supplemental appropriations act that simply
+    # appropriates to two accounts, so it carries exactly two amounts and falls under the
+    # gate's own <3 cutoff. The threshold is not wrong -- 0 or 1 miss out of 2 is noise as
+    # a coverage RATIO -- it just cannot distinguish "too small to measure" from "small
+    # because the bill is small".
+    #
+    # Unlike the entries above, this is NOT a coverage gap, and it should not be read as
+    # one when this list is next audited. Both amounts are asserted by name, against the
+    # named account each belongs to, in tests/test_bill_tree.py
+    # TestUntitledBillAppropriations -- a stronger claim than this gate makes, since it
+    # checks WHICH account holds each figure rather than only that the digits survive
+    # somewhere. That bill is committed for exactly that test (#485), so the fixture earns
+    # its place regardless of this gate's channel.
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
+    "[118-hr-9468/1_introduced-in-house.xml]": ("Shell bill: only 2 amounts, too few for meaningful coverage"),
+    "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node[118-hr-9468/4_enrolled-bill.xml]": (
+        "Shell bill: only 2 amounts, too few for meaningful coverage"
+    ),
 }
 
 # --- The CI slow suite (#288) ---------------------------------------------------
