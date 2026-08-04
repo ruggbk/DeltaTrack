@@ -92,11 +92,6 @@ def _extract_dollar_matches(text: str) -> list[tuple[int, str]]:
     return matches
 
 
-def _extract_dollar_amounts(text: str) -> list[int]:
-    """Find all non-zero dollar amounts in text."""
-    return [value for value, _literal in _extract_dollar_matches(text)]
-
-
 def _xml_id(xml_path: Path) -> str:
     """Create a readable test ID from a bill XML path."""
     return f"{xml_path.parent.name}/{xml_path.name}"
@@ -232,9 +227,7 @@ def test_every_dollar_amount_appears_in_a_node(xml_path: Path) -> None:
 def test_no_section_sibling_is_dropped_from_every_node() -> None:
     """A section with appropriations children keeps its other children too (#459).
 
-    The ratio gate above is a whole-bill coverage floor, so a handful of dropped amounts
-    hides inside its tolerance no matter how the tolerance is set. This one is exact and
-    scoped to the shape that produced the loss: when a section carries ``appropriations-*``
+    Scoped to the shape that produced the loss: when a section carries ``appropriations-*``
     children (the elements holding an account and its amount), its other children -- a
     <list>, a <continuation-text>, a <quoted-block> -- must still reach some node.
 
@@ -245,10 +238,20 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 
     Swept across the whole corpus in ONE case rather than parametrized per fixture, and
     that is deliberate. Most fixtures contain no section of this shape, so a per-fixture
-    gate would content-skip roughly 35 of 41 cases, and every one of those skips would
-    have to be declared in ALLOWED_CORPUS_SKIPS (#220) to say nothing at all. A single
-    sweep carries its own fail-closed floor instead: it asserts that the corpus actually
-    presented instances to check, so "nothing dropped" can never mean "nothing looked at".
+    gate would content-skip the large majority of cases, and every one of those skips
+    would have to be declared in ALLOWED_CORPUS_SKIPS (#220) to say nothing at all. A
+    single sweep carries its own fail-closed floor instead: it asserts that the corpus
+    actually presented instances to check, so "nothing dropped" can never mean "nothing
+    looked at".
+
+    Amounts are matched the same way ``test_every_dollar_amount_appears_in_a_node`` matches
+    them: on the SOURCE literal, with a trailing boundary so the search is for the amount
+    rather than for its digits. The two failure modes that motivated it there apply here
+    unchanged -- a plain containment test finds "$35" inside "$356,000", so a dropped
+    sibling can read as present, and re-formatting through ``int`` invents misses on
+    malformed source such as ``$60,00,000``. Measured across the committed corpus this
+    changes no current result (both forms report zero drops); it removes two ways for this
+    gate to be wrong later, rather than fixing something visible today.
     """
     checked = 0
     dropped = []
@@ -272,15 +275,19 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
             for child in section:
                 if child.tag in ("enum", "header", "text") or child.tag.startswith("appropriations-"):
                     continue
-                amounts = _extract_dollar_amounts(extract_text_content(child))
-                if not amounts:
+                matches = _extract_dollar_matches(extract_text_content(child))
+                if not matches:
                     continue
                 checked += 1
-                missing = [a for a in amounts if f"${a:,}" not in all_text]
+                missing = [
+                    literal
+                    for _value, literal in matches
+                    if not re.search(re.escape(literal) + r"(?![\d,]*\d)", all_text)
+                ]
                 if missing:
                     enum = section.find("enum")
                     label = (enum.text or "").strip() if enum is not None else "?"
-                    dropped.append(f"{_xml_id(xml_path)} sec.{label} <{child.tag}> {[f'${a:,}' for a in missing[:3]]}")
+                    dropped.append(f"{_xml_id(xml_path)} sec.{label} <{child.tag}> {missing[:3]}")
 
     # The floor. 19 money-bearing siblings exist across the committed fixtures, 8 of which
     # were dropped before #459. Requiring most of them keeps the gate honest if a fixture
