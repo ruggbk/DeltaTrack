@@ -650,21 +650,44 @@ def _process_appro_element(
     current_major: str | None,
     current_intermediate: str | None,
     prev_name: str | None,
+    pending_header: str | None,
     nodes: list[BillNode],
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, str | None]:
     """Process one appropriations-* element, updating context and appending nodes.
 
-    Returns updated (current_major, current_intermediate, prev_name).
+    Returns updated (current_major, current_intermediate, prev_name, pending_header).
+
+    ``pending_header`` carries the name of the immediately preceding header-only sibling,
+    the half of a split account that holds the ``<header>`` and no body. GPO sometimes
+    marks one account up as two siblings — name in the first, money in the second — while
+    the print renders them as a single account, its heading directly above its own text,
+    identical to the un-split accounts around it. Because a node is emitted only for an
+    element with body text, the named half produced nothing and the moneyed half had no
+    header to end its address with, so it took its parent agency's address and the money
+    read as the agency's own (#474: ``RESOURCE MANAGEMENT`` and its $1,385,096,000 in
+    118-hr-8998). Adopting the pending name joins the two into the one account the bill
+    prints, and since the named half never produced a node, the node count is unchanged.
+
+    The reach is deliberately one sibling, and only to a header-only one. An untitled
+    element following a sibling that has BOTH header and body is a continuation of that
+    account rather than a split of it, and naming it would collide it with the account it
+    continues; those keep the parent address they have today.
     """
     tag = child.tag
 
+    own_header = get_header_text(child)
+    body_text = _extract_appropriations_text(child)
+    display_text = extract_display_text(child)
+    # An element with neither name nor body is not part of a split pair; it emits no node
+    # and leaves the pending name for whichever sibling does carry the body.
+    inherited = pending_header if not own_header and body_text else None
+
     if tag == "appropriations-major":
-        current_major = get_header_text(child)
+        current_major = own_header or inherited or ""
         current_intermediate = None
         prev_name = current_major
+        effective_header = current_major
 
-        body_text = _extract_appropriations_text(child)
-        display_text = extract_display_text(child)
         if body_text:
             match_path, display_path = _build_paths(
                 title_header,
@@ -689,7 +712,7 @@ def _process_appro_element(
             )
 
     elif tag == "appropriations-intermediate":
-        header = get_header_text(child)
+        header = own_header or inherited or ""
         current_intermediate = header
 
         if header and _PARENTHETICAL_RE.match(header):
@@ -699,8 +722,6 @@ def _process_appro_element(
                 prev_name = header
             effective_header = header
 
-        body_text = _extract_appropriations_text(child)
-        display_text = extract_display_text(child)
         if body_text:
             match_path, display_path = _build_paths(
                 title_header,
@@ -725,7 +746,7 @@ def _process_appro_element(
             )
 
     elif tag == "appropriations-small":
-        header = get_header_text(child)
+        header = own_header or inherited or ""
 
         if header and _PARENTHETICAL_RE.match(header):
             effective_header = prev_name
@@ -734,8 +755,6 @@ def _process_appro_element(
                 prev_name = header
             effective_header = header
 
-        body_text = _extract_appropriations_text(child)
-        display_text = extract_display_text(child)
         if body_text:
             match_path, display_path = _build_paths(
                 title_header,
@@ -759,7 +778,19 @@ def _process_appro_element(
                 )
             )
 
-    return current_major, current_intermediate, prev_name
+    else:
+        effective_header = None
+
+    # A body ends any pending name (it either consumed one or is a named account in its
+    # own right); a header-only element becomes the pending name for its next sibling.
+    # ``effective_header`` rather than the raw header, so a parenthetical header-only
+    # element passes on the real account name it stands for, not the parenthetical.
+    if body_text:
+        pending_header = None
+    elif own_header:
+        pending_header = effective_header
+
+    return current_major, current_intermediate, prev_name, pending_header
 
 
 def _process_section_element(
@@ -829,15 +860,19 @@ def _process_section_element(
         sec_major = current_major
         sec_intermediate = current_intermediate
         sec_prev = prev_name
+        # A split pair is a pair of siblings, so the pending name never crosses into a
+        # section from outside it.
+        sec_pending: str | None = None
         for sub in section:
             if sub.tag.startswith("appropriations-"):
-                sec_major, sec_intermediate, sec_prev = _process_appro_element(
+                sec_major, sec_intermediate, sec_prev, sec_pending = _process_appro_element(
                     sub,
                     title_header,
                     division,
                     sec_major,
                     sec_intermediate,
                     sec_prev,
+                    sec_pending,
                     nodes,
                 )
     else:
@@ -884,10 +919,11 @@ def _walk_structural_children(
     current_major: str | None,
     current_intermediate: str | None,
     prev_name: str | None,
+    pending_header: str | None,
     nodes: list[BillNode],
     *,
     _in_structural_container: bool = False,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, str | None]:
     """Walk children of a structural element, dispatching by tag.
 
     Handles appropriations-*, section, and structural containers
@@ -901,17 +937,19 @@ def _walk_structural_children(
         tag = child.tag
 
         if tag.startswith("appropriations-"):
-            current_major, current_intermediate, prev_name = _process_appro_element(
+            current_major, current_intermediate, prev_name, pending_header = _process_appro_element(
                 child,
                 title_header,
                 division,
                 current_major,
                 current_intermediate,
                 prev_name,
+                pending_header,
                 nodes,
             )
 
         elif tag == "section":
+            pending_header = None
             _process_section_element(
                 child,
                 title_header,
@@ -928,6 +966,7 @@ def _walk_structural_children(
             saved_major = current_major
             saved_intermediate = current_intermediate
             saved_prev = prev_name
+            saved_pending = pending_header
             # Container header always becomes new major for its children.
             # If we're already inside a container (major was set by parent
             # container), push the existing major to intermediate.
@@ -950,14 +989,16 @@ def _walk_structural_children(
                 sub_major,
                 sub_intermediate,
                 None,
+                None,
                 nodes,
                 _in_structural_container=True,
             )
             current_major = saved_major
             current_intermediate = saved_intermediate
             prev_name = saved_prev
+            pending_header = saved_pending
 
-    return current_major, current_intermediate, prev_name
+    return current_major, current_intermediate, prev_name, pending_header
 
 
 def walk_title(
@@ -981,6 +1022,7 @@ def walk_title(
         title_element,
         title_header,
         division,
+        None,
         None,
         None,
         None,

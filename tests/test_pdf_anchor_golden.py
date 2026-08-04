@@ -581,7 +581,12 @@ class TestPrecisionHarnessOracle:
 
         m = measure(pdf, xml)
         # XML-side counts are stable (independent of PDF detection method).
-        assert m["xml_small"] == 35
+        # 35 before #474: OPERATIONS AND SUPPORT (CBP) and FEDERAL ASSISTANCE (FEMA) are
+        # each marked up as a header-only element plus an untitled body element, so the
+        # moneyed half carried no header and was not counted as a named account. The PDF
+        # side always found all 37 — the print shows the heading — so joining the split
+        # pairs brings the two pipelines into exact agreement on this bill.
+        assert m["xml_small"] == 37
         # count_ratio is accounts / (small + intermediate); verify the arithmetic.
         denom = m["xml_small"] + m["xml_intermediate"]
         assert m["count_ratio"] == pytest.approx(m["pdf_accounts"] / denom)
