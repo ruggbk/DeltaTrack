@@ -13,14 +13,31 @@ from __future__ import annotations
 import pytest
 
 from deltatrack.parsers.pdf_anchors import SizeBands, breadcrumb_for, derive_size_bands, extract_anchors
-from deltatrack.parsers.pdf_text import Line, Page
+from deltatrack.parsers.pdf_text import Line, LineGeom, Page
 
 BODY = 14.0
 HEAD = 11.2
 
+# Synthetic page geometry for the major detector's stacked-vs-wrapped split (#130),
+# which reads each line's horizontal extent. COLUMN is the justified body width GPO
+# prints (335-339 pt on the corpus subcommittee prints); the body-prose lines below
+# run the full width, which is what the detector derives the column from.
+CONTENT_LEFT = 100.0
+COLUMN = 339.0
+
 
 def _page(page_number: int, rows: list[tuple[int | None, str, float | None]]) -> Page:
     return Page(page_number, tuple(Line(ln, txt, sz) for ln, txt, sz in rows))
+
+
+def _geom(width: float, first_word: float) -> LineGeom:
+    """A line starting at the left margin, `width` pt of content, `first_word` pt of it
+    in the first word (the extent the line-fullness split measures)."""
+    return LineGeom(CONTENT_LEFT, CONTENT_LEFT + width, CONTENT_LEFT + first_word)
+
+
+def _geom_page(page_number: int, rows: list[tuple[int | None, str, float | None, LineGeom]]) -> Page:
+    return Page(page_number, tuple(Line(ln, txt, sz, gm) for ln, txt, sz, gm in rows))
 
 
 class TestDeriveSizeBands:
@@ -187,7 +204,7 @@ class TestSizePositionClassification:
         assert "OPERATIONS AND SUPPORT" in names
 
     @pytest.mark.xfail(
-        reason="Known #89 residual deferred to #54: a SEC. catchline directly "
+        reason="DeltaTrack#500: a SEC. catchline directly "
         "abutting an agency heading with NO body between false-skips the account. "
         "Confirmed NOT closeable by #103 (grouping headers): this input is "
         "structurally identical to test_multiline_section_catchline_continuation_"
@@ -195,9 +212,11 @@ class TestSizePositionClassification:
         "emits this account re-emits that false one. #104 (carry-over agencies) does "
         "NOT close it either: the catchline guard suppresses both MANAGEMENT "
         "DIRECTORATE and OPERATIONS AND SUPPORT before agency/account emission, so "
-        "the account still never surfaces. Disambiguation needs the leveled tree "
-        "(#108). Does not occur in the corpus (catchline wraps appear only in "
-        "account-free authorization bills).",
+        "the account still never surfaces. The tree (#108) shipped without closing it "
+        "either; #500 carries the open options, line geometry among them. Does not "
+        "occur in the corpus: a scan of all 23 committed PDFs finds the shape only in "
+        "117-hr-2471, an authorization bill with no accounts, where suppressing is "
+        "correct.",
         strict=True,
     )
     def test_account_directly_after_section_catchline_no_body(self):
@@ -649,26 +668,48 @@ class TestMajorLevel:
         majors = {a.text for a in _by_kind(extract_anchors([_page(1, rows)]), "major")}
         assert not any("CHINA" in m or "ENCE" in m for m in majors)
 
+    def _stacked_rows(self, upper_width: float):
+        # 118-hr-8998 (Interior) TITLE III shape: two DISTINCT body-size header levels
+        # stacked under one title. Size and casing cannot tell them from one wrapped
+        # name — both are body-size all-caps — so the split is decided by how full the
+        # upper line is (#130): a name wraps only because the next word did not fit.
+        # `upper_width` is the whole variable under test; the lower line's first word
+        # ("DEPARTMENT", 90 pt) is what has to fit after it for a hard break to show.
+        return [
+            (1, "TITLE III", BODY, _geom(60, 40)),
+            (2, "RELATED AGENCIES", BODY, _geom(upper_width, 70)),  # heading level 1
+            (3, "DEPARTMENT OF AGRICULTURE", BODY, _geom(200, 90)),  # heading level 2
+            (4, "FOREST SERVICE", HEAD, _geom(120, 60)),  # agency
+            (5, "FOREST AND RANGELAND RESEARCH", HEAD, _geom(220, 60)),  # account
+            (6, "For necessary expenses of the Forest Service, $100.", BODY, _geom(COLUMN, 30)),
+        ] + [(n, f"more body prose line {n} runs here", BODY, _geom(COLUMN, 40)) for n in range(7, 17)]
+
+    def test_stacked_distinct_headings_split_into_two_majors(self):
+        # The upper line stops 127 pt short of the column, so the lower line's first
+        # word would have fit: an intentional break between two headings, not a wrap.
+        majors = {a.text for a in _by_kind(extract_anchors([_geom_page(1, self._stacked_rows(212))]), "major")}
+        assert majors == {"RELATED AGENCIES", "DEPARTMENT OF AGRICULTURE"}
+
+    def test_stacked_headings_join_without_geometry(self):
+        # Documented conservative fallback: with no geometry attached (the string
+        # pipeline, or a line the size sidecar could not match) the split has nothing
+        # to measure and the run stays one major, as it did before #130. Pinned so the
+        # fallback is a choice the suite records, not an accident.
+        rows = [(ln, txt, sz) for ln, txt, sz, _gm in self._stacked_rows(212)]
+        majors = {a.text for a in _by_kind(extract_anchors([_page(1, rows)]), "major")}
+        assert majors == {"RELATED AGENCIES DEPARTMENT OF AGRICULTURE"}
+
     @pytest.mark.xfail(
-        reason="Documented slice-C residue (DeltaTrack#105): two DISTINCT body-size "
-        "header levels stacked under one title (e.g. 118-hr-8998 Interior TITLE III "
-        "'RELATED AGENCIES' / 'DEPARTMENT OF AGRICULTURE') are indistinguishable from a "
-        "single wrapped name by size/casing alone — both are centered body-size all-caps. "
-        "The greedy join mashes them into one major; splitting needs the geometric "
-        "(centering / vertical-leading) signal deferred to the bbox plumbing (#106) and "
-        "the tree (#108). Flips to pass when that lands.",
+        reason="DeltaTrack#501: a stacked upper line that nearly fills the column leaves "
+        "no early break to detect, so the pair reads as one wrapped name and merges into "
+        "a department that was never printed. Known limitation recorded when the "
+        "line-fullness split shipped (#130) and left unsolved: no corpus bill triggers it "
+        "(the tightest real split clears by 20 pt of 335). Pins the wanted behavior as an "
+        "executable spec; flips to pass when a second signal lands.",
         strict=True,
     )
-    def test_stacked_distinct_headings_split_into_two_majors(self):
-        rows = [
-            (1, "TITLE III", BODY),
-            (2, "RELATED AGENCIES", BODY),  # heading level 1 (complete)
-            (3, "DEPARTMENT OF AGRICULTURE", BODY),  # heading level 2 (distinct)
-            (4, "FOREST SERVICE", HEAD),  # agency
-            (5, "FOREST AND RANGELAND RESEARCH", HEAD),  # account
-            (6, "For necessary expenses of the Forest Service, $100.", BODY),
-        ]
-        majors = {a.text for a in _by_kind(extract_anchors([_page(1, rows)]), "major")}
+    def test_near_full_upper_line_still_splits(self):
+        majors = {a.text for a in _by_kind(extract_anchors([_geom_page(1, self._stacked_rows(250))]), "major")}
         assert majors == {"RELATED AGENCIES", "DEPARTMENT OF AGRICULTURE"}
 
     def test_title_directly_followed_by_heading_band_emits_no_major(self):
