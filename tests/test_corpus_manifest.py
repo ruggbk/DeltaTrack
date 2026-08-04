@@ -373,7 +373,7 @@ def test_manifested_expanding_case_is_still_watched() -> None:
 # property under test is the RESOLUTION LOGIC rather than the corpus's current shape.
 #
 # These two tests used to key on real single-format stages (113-hr-3547 v6 as the xml-only
-# case, and a v5->v6 pair whose second side had no pdf). #126 took format parity to 51 of
+# case, and a v5->v6 pair whose second side had no pdf). #126 took format parity to 52 of
 # 57 versions, and those particular examples were among the ones that gained a pdf, so both
 # became dual-format and the assertions inverted — the tests failed while the code they
 # cover was unchanged. That is the fragility test_unmanifested_expanding_case_is_not_watched
@@ -383,8 +383,8 @@ def test_manifested_expanding_case_is_still_watched() -> None:
 # from the other side ("parity means there may be none, in which case the honest fix is a
 # synthetic unmanifested id rather than hunting for a real one"). Stubbing gets that
 # guarantee for the format-resolution cases, which genuinely need a single-format stage to
-# point at. Six real ones do remain — one pdf-only version and the five xml-only versions
-# whose pdfs are withheld for #519 — but every one of them is single-format only until the
+# point at. Five real ones do remain — the five xml-only versions whose pdfs are withheld
+# for #519 — but every one of them is single-format only until the
 # issue that withholds its counterpart is resolved, so keying on any of them would reset
 # this same trap with a later fuse.
 _STUB_MANIFEST = frozenset(

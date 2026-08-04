@@ -365,7 +365,7 @@ ALLOWED_CORPUS_SKIPS = {
     "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
     "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
     # --- Introduced/early stages committed for per-version format parity -----------
-    # These six versions gained an XML, taking format parity to 51 of 57 versions, which
+    # These six versions gained an XML, taking format parity to 52 of 57 versions, which
     # is what lets the PDF-vs-XML gates run per version instead of only where a
     # counterpart happened to exist. Each is an INTRODUCED or early-stage print, and an
     # appropriations bill at that stage is a shell: the money is added later in markup, so
@@ -584,9 +584,8 @@ _WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES + FAST_GATE_MODULE
 # construction.
 #
 # Format matters, and collapsing it is the trap here. The manifest declares (bill, stage,
-# FORMAT), and six of the 57 manifested versions are deliberately committed in one format
-# only -- 114-hr-2029 v4 is pdf-only (its xml is withheld for the multi-<legis-body>
-# section drop), and the five #519 engrossed amendments are xml-only. The amount-recall
+# FORMAT), and five of the 57 manifested versions are deliberately committed in one format
+# only -- the five #519 engrossed amendments are xml-only. The amount-recall
 # gate reads the xml AND the pdf of a stage, so a single-format stage yields no case in CI
 # even though the manifest names it. Each module therefore declares which formats its
 # cases actually need.

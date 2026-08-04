@@ -16,6 +16,7 @@ from deltatrack.bill_tree import (
     Division,
     _extract_appropriations_text,
     _extract_section_text,
+    amount_text,
     extract_text_content,
     find_bill_body,
     normalize_bill,
@@ -328,9 +329,68 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
     assert dropped == [], f"{len(dropped)} of {checked} money-bearing siblings appear in no node: {dropped[:3]}"
 
 
+def test_no_top_level_legis_body_is_silently_discarded() -> None:
+    """Every top-level <legis-body> contributes to the tree (#434).
+
+    A reported bill carrying a committee substitute prints two complete texts as two
+    sibling <legis-body> elements. ``find_bill_body`` returned the first and nothing
+    looked for the rest, so the second text reached no node, no full-bill view and no
+    money diff -- 459 documents in the local collection, 3,736 sections, silently.
+
+    Asserted as text reaching the tree rather than as a body COUNT, because a count is
+    satisfied by walking a body and dropping everything in it. The check is that a
+    distinctive amount from each body is present, which is the property a reader depends
+    on and the one that broke.
+
+    This is the invariant that survives whichever direction #186 takes for representing
+    the duality: whether the second text ends up marked, sectioned off or diffed
+    separately, no body may contribute nothing. It deliberately does NOT assert which
+    body is authoritative -- a corpus audit found four different shapes here (base plus
+    substitute; two competing committee substitutes from sequential referral; an empty
+    body paired with a real one; and complementary halves of one bill), and no attribute
+    picks the right single body across them.
+
+    Carries a fail-closed floor for the same reason the sweep above does: "nothing
+    discarded" must never be able to mean "no multi-body document was looked at".
+    """
+    multi_body_files = 0
+    missing: list[str] = []
+    for xml_path in ALL_XML_FILES:
+        if not xml_path.exists():
+            continue
+        root = ET.parse(xml_path).getroot()
+        bodies = root.findall("legis-body")
+        if len(bodies) < 2:
+            continue
+        multi_body_files += 1
+
+        tree_text = " ".join(amount_text(node) for node in normalize_bill(xml_path).nodes)
+        for index, body in enumerate(bodies):
+            # Amounts unique to THIS body. An amount also present in a sibling body
+            # cannot show that this body was walked, since the sibling would supply it.
+            own = set(DOLLAR_RE.findall(extract_text_content(body)))
+            others = set()
+            for other_index, other in enumerate(bodies):
+                if other_index != index:
+                    others |= set(DOLLAR_RE.findall(extract_text_content(other)))
+            distinctive = own - others
+            if not distinctive:
+                continue
+            absent = [amount for amount in sorted(distinctive) if amount not in tree_text]
+            if absent:
+                missing.append(f"{xml_path.parent.name}/{xml_path.name} body[{index}]: {absent[:3]}")
+
+    # The floor. 114-hr-2029/4 is the committed two-body fixture; it was withheld from
+    # the corpus while #434 was open precisely because committing it reddened the suite.
+    assert multi_body_files >= 1, (
+        "no multi-<legis-body> document in the committed corpus; this gate is not exercising anything"
+    )
+    assert missing == [], f"{len(missing)} of {multi_body_files} multi-body documents lose a body's text: {missing[:3]}"
+
+
 # Files known to have duplicate match_paths (cross-division collisions, issue #1).
-# Values are ceilings, asserted as `total_dupes <= known`. Files not listed must have
-# zero duplicates.
+# Values are EXACT, asserted as `total_dupes == known`. Files not listed must have zero
+# duplicates, so an entry that reaches zero is deleted rather than set to 0.
 #
 # EVERY KEY NAMES A MANIFESTED FIXTURE, enforced by
 # test_known_duplicate_counts_names_manifest_fixtures. That is the #496 fix. Until then the
@@ -343,10 +403,14 @@ def test_no_section_sibling_is_dropped_from_every_node() -> None:
 # download-only VERSION of a partly-committed bill is shadowed. A sweep-only file is now
 # reported, not asserted — see test_no_duplicate_match_paths.
 #
-# Values are CEILINGS, so they only fail upward and a parser change that REDUCES collisions
-# leaves them silently loose: #474 (joining an account split across two elements) cut several
-# committed counts well below their stored value, which is why #482's re-measurement was
-# accurate when written and stale days later. Re-measure before trusting a number here.
+# They were CEILINGS (`<= known`) until #513, which only fail upward: a parser change that
+# REDUCED collisions left the stored number above the truth with nothing red to say so, and
+# that dead slack then licensed exactly as many future regressions in silence. #474 (joining
+# an account split across two source elements) did it to 19 of these 30 keys at once, 272
+# duplicates of slack in total, days after #482 had measured every one of them correct.
+# Equality is the fix and it has a cost: a genuine parser improvement now reddens the suite
+# until the number is lowered here. That is the forcing function, not a nuisance — every
+# value below was re-measured when equality landed, and the assertion is what keeps them so.
 _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # #465 note: a division's bare <section> children (a short-title/definitions preamble
     # ahead of TITLE I, or a whole policy division organised without titles) were reached
@@ -362,55 +426,65 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
     # deeper. Every #188 count increase was verified to be exactly that class (new
     # duplicate keys are all subsection nodes under already-colliding sections) —
     # the same collision-group matching (#1) covers them.
-    "113-hr-3547/5_engrossed-amendment-house.xml": 168,
+    "113-hr-3547/5_engrossed-amendment-house.xml": 144,
     # Enrolled has 12 divisions whose later titles spill out as orphan <title>
     # siblings. Walking them (#146) surfaces genuine cross-division collisions
     # (general provisions, same-named bureaus across divisions) on division-stripped
-    # match_paths — now matching the engrossed-amendment version's 150 (was 73 when
+    # match_paths — now matching the engrossed-amendment version's count (was 73 when
     # the orphan titles were silently dropped). Real source structure, not a bug.
-    "113-hr-3547/6_enrolled-bill.xml": 168,
-    "113-hr-83/6_engrossed-amendment-house.xml": 139,
-    "113-hr-83/7_enrolled-bill.xml": 139,
-    "114-hr-2029/6_engrossed-amendment-house.xml": 184,
-    "114-hr-2029/7_enrolled-bill.xml": 186,
+    "113-hr-3547/6_enrolled-bill.xml": 144,
+    "113-hr-83/6_engrossed-amendment-house.xml": 107,
+    "113-hr-83/7_enrolled-bill.xml": 107,
+    # #434 note: this version is a reported bill carrying a committee substitute, so
+    # the document prints TWO complete texts as sibling <legis-body> elements and both
+    # are now walked. The collisions are the two texts restating the same accounts
+    # ("military construction, army" appears in each), not a parser fault: they are what
+    # the source contains, and they would vanish only by dropping one of the texts
+    # again. Collision-group matching separates them by text similarity, NOT by which
+    # body they came from -- pairing on the body position is a false cross-version
+    # match, see diff_bill._match_collision_group.
     "114-hr-2029/4_reported-in-senate.xml": 119,
-    "115-hr-1625/6_enrolled-bill.xml": 196,
-    "115-hr-244/6_enrolled-bill.xml": 170,
+    "114-hr-2029/6_engrossed-amendment-house.xml": 152,
+    "114-hr-2029/7_enrolled-bill.xml": 154,
+    "115-hr-1625/6_enrolled-bill.xml": 171,
+    "115-hr-244/6_enrolled-bill.xml": 147,
     "115-hr-5895/2_engrossed-in-house.xml": 22,
-    "115-hr-5895/4_engrossed-amendment-senate.xml": 8,
+    "115-hr-5895/4_engrossed-amendment-senate.xml": 7,
     # Enrolled version places Division C's TITLE II-V at <legis-body> level beside the
     # divisions (not nested). Walking them (#146) surfaces genuine cross-division
     # collisions: the orphaned "TITLE V—General provisions" (sec. 501-505) shares a
     # division-stripped match_path with Division A's "TITLE V—General provisions".
     # Real source structure, not a parser error (cf. 119-hr-1's twin Sec. 10012).
-    "115-hr-5895/5_enrolled-bill.xml": 8,
-    "116-hr-1865/6_enrolled-bill.xml": 66,
+    "115-hr-5895/5_enrolled-bill.xml": 7,
+    "116-hr-1865/6_enrolled-bill.xml": 44,
     "118-hr-2882/5_engrossed-amendment-house.xml": 55,
-    "118-hr-4366/4_engrossed-amendment-senate.xml": 9,
-    "118-hr-4366/5_engrossed-amendment-house.xml": 33,
-    "118-hr-4366/6_enrolled-bill.xml": 33,
+    "118-hr-4366/4_engrossed-amendment-senate.xml": 7,
+    "118-hr-4366/5_engrossed-amendment-house.xml": 30,
+    "118-hr-4366/6_enrolled-bill.xml": 30,
     # Fresh bills added for overfitting smoke test (2026-04-15)
     "117-hr-4432/1_reported-in-house.xml": 1,
     "117-hr-4502/1_reported-in-house.xml": 1,
-    "117-hr-4502/2_engrossed-in-house.xml": 39,
-    "118-hr-4820/1_reported-in-house.xml": 7,
+    "117-hr-4502/2_engrossed-in-house.xml": 33,
+    "118-hr-4820/1_reported-in-house.xml": 5,
     # Fresh bill added for Part C smoke test (2026-04-15). Its 116-hr-133 companions were
     # the only sweep-only keys that a sweep could actually reach, and both were stale (160
     # against a measured 206); dropped in #496 rather than repinned, since committing that
     # bill is #126's call and 206 is not a number CI can hold.
-    "117-hr-2471/6_enrolled-bill.xml": 212,
+    "117-hr-2471/6_enrolled-bill.xml": 210,
     # Committee-report external-validation bills (#8/#44). All duplicates are benign
     # cross-section heading collisions (a heading repeated across the appropriation, a
     # limitation/administrative-provisions section, and general provisions), not parser
     # errors. These Senate prints are committed (tests/corpus/118-s-*) and named in
     # the corpus manifest, so the gate runs them in CI; these counts are its baselines.
+    # 118-s-4927 (Energy-Water) is deliberately absent: it held 4 and now produces none, so
+    # it asserts zero as an unlisted file. Equality (#513) is what surfaced that; under the
+    # old ceiling it would have kept tolerating 4 collisions the parser no longer makes.
     "118-s-4795/1_reported-in-senate.xml": 2,  # CJS: DOJ general-provisions + NASA pair
-    "118-s-4796/1_reported-in-senate.xml": 7,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats
+    "118-s-4796/1_reported-in-senate.xml": 5,  # Transportation-HUD: FAA/FHWA/NHTSA/HUD repeats
     "118-s-4797/1_reported-in-senate.xml": 1,  # State-Foreign Ops: callable-capital limitation
     "118-s-4802/1_reported-in-senate.xml": 3,  # Interior-Environment: Forest Service repeats
     "118-s-4928/1_reported-in-senate.xml": 5,  # Financial Services: Treasury/OPM salaries, DC funds
     "118-s-4942/1_reported-in-senate.xml": 2,  # Labor-HHS: VETS employment-and-training lines
-    "118-s-4927/1_reported-in-senate.xml": 4,  # Energy-Water: Corps of Engineers heading repeats
     "118-s-2321/1_reported-in-senate.xml": 1,  # CJS FY2024 (out-of-corpus guard): NASA pair
     # 119-hr-1 (reconciliation): two genuinely-distinct Sec. 10012 in the reported version
     # (Alien SNAP eligibility + Emergency food assistance), one renumbered to 10013 later.
@@ -434,6 +508,64 @@ _KNOWN_DUPLICATE_COUNTS: dict[str, int] = {
 }
 
 
+def _assert_duplicate_baseline(test_id: str, total_dupes: int, known: int, dupes: dict[str, int]) -> None:
+    """Compare a measured duplicate count against its stored baseline, EXACTLY.
+
+    Extracted from the gate below so the downward branch can be exercised directly:
+    every committed fixture sits at ``total_dupes == known``, so a corpus run never
+    reaches the staleness case, and an assertion that has never once fired is
+    indistinguishable from one that cannot. ``test_duplicate_baseline_compares_both
+    _directions`` supplies the cases the corpus does not.
+    """
+    # EXACT, not a ceiling (#513). `<= known` only fails upward, so a parser change that
+    # REDUCES collisions leaves the stored number above the truth with nothing red to say
+    # so — and that dead slack then licenses exactly as many future regressions silently.
+    # #474 (joining an account split across two source elements) did this to 19 of 30 keys
+    # at once, 272 duplicates of slack in total, days after #482 had measured them correct.
+    # Equality costs churn: a genuine parser improvement now reddens the suite until the
+    # number is lowered. That is the point, and it is the same forcing function the repo
+    # relies on elsewhere — a baseline is only worth having if a build makes it recalibrate.
+    if total_dupes > known:
+        raise AssertionError(
+            f"{test_id}: duplicate match_paths INCREASED from {known} to {total_dupes}. "
+            f"A section identity regression, or real new collisions in the source. "
+            f"Sample: {list(dupes.items())[:3]}"
+        )
+    if total_dupes < known:
+        raise AssertionError(
+            f"{test_id}: duplicate match_paths DECREASED from {known} to {total_dupes}, so the "
+            f"stored baseline is stale and now tolerates {known - total_dupes} future regression(s) "
+            f"in silence. Lower the entry to {total_dupes}"
+            f"{' and drop it, since the file now has none' if total_dupes == 0 else ''}."
+        )
+
+
+def test_duplicate_baseline_compares_both_directions() -> None:
+    """The baseline comparison goes RED above AND below the stored number.
+
+    The downward (stale-baseline) branch is the whole point of #513, and no committed
+    fixture can reach it: recalibrating the baselines put every one of them at equality,
+    which is exactly the state in which a silent reversion to `<= known` would leave the
+    suite green. These are the cases the corpus cannot supply.
+    """
+    dupes = {"/div-a/sec-1": 2}
+
+    # At the baseline: passes.
+    _assert_duplicate_baseline("t", 3, 3, dupes)
+
+    # Above it: the regression the ceiling already caught.
+    with pytest.raises(AssertionError, match="INCREASED from 3 to 4"):
+        _assert_duplicate_baseline("t", 4, 3, dupes)
+
+    # Below it: the staleness #513 exists to catch.
+    with pytest.raises(AssertionError, match="DECREASED from 3 to 1"):
+        _assert_duplicate_baseline("t", 1, 3, dupes)
+
+    # A baseline that has fallen to zero says to remove the entry, not lower it to 0.
+    with pytest.raises(AssertionError, match="drop it, since the file now has none"):
+        _assert_duplicate_baseline("t", 0, 3, dupes)
+
+
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
@@ -443,8 +575,8 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
     """Each node's match_path should be unique within a bill.
 
     Duplicates indicate cross-division path collisions (issue #1).
-    Files with known duplicates assert the count hasn't increased.
-    Files with no known duplicates assert zero.
+    Files with known duplicates assert the count matches the stored baseline exactly,
+    in both directions (#513). Files with no known duplicates assert zero.
 
     A file reachable only under CORPUS_SWEEP=1 is REPORTED, not asserted (#496). The
     baselines here are calibrated against the committed corpus; the sweep is an
@@ -471,15 +603,7 @@ def test_no_duplicate_match_paths(xml_path: Path) -> None:
         pytest.skip(f"Sweep-only file, no calibrated baseline: {total_dupes} duplicate match_paths (#496)")
 
     known = _KNOWN_DUPLICATE_COUNTS.get(test_id, 0)
-
-    if known == 0:
-        assert total_dupes == 0, (
-            f"{test_id}: unexpected {total_dupes} duplicate match_paths. Sample: {list(dupes.items())[:3]}"
-        )
-    else:
-        assert total_dupes <= known, (
-            f"{test_id}: duplicate count increased from {known} to {total_dupes}. Sample: {list(dupes.items())[:3]}"
-        )
+    _assert_duplicate_baseline(test_id, total_dupes, known, dupes)
 
 
 _APPRO_TAGS = {"appropriations-major", "appropriations-intermediate", "appropriations-small"}

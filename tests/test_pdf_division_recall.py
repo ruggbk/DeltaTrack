@@ -49,7 +49,7 @@ _KNOWN_NAME_RESIDUE = {
 # "this print has no line numbers" stays distinguishable from "anchor extraction broke".
 _PDF_NO_TITLE_ANCHOR_LAYOUTS: dict[str, str] = {
     "115-hr-5895/5_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
-    # The enrolled prints committed by #126, which took format parity to 51 of 57
+    # The enrolled prints committed by #126, which took format parity to 52 of 57
     # manifested versions so far more pairings can be tested. They are carried for the
     # dollar-amount cross-check (which reads PDF text and needs no anchors) and for the
     # enacted text itself, not for structure: they contribute no anchors for the same #141 reason as

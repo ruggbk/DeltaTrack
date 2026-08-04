@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 
-from deltatrack.bill_tree import extract_text_content, find_bill_body, find_bill_bodies, normalize_bill
+from deltatrack.bill_tree import extract_text_content, find_bill_bodies, find_bill_body, normalize_bill
 from deltatrack.diff_bill import extract_amounts
 from deltatrack.formatters.canonical import _pdf_tree_payload
 from deltatrack.formatters.diff_html import _build_toc_from_tree
@@ -159,7 +159,7 @@ _PDF_MONEY_SKIP: set[str] = {"116-hr-133/7_enrolled-bill.pdf"}
 # direction. Value is the reason the layout carries no anchors.
 _PDF_NO_ANCHOR_LAYOUTS: dict[str, str] = {
     "115-hr-5895/5_enrolled-bill.pdf": "enrolled print — no GPO margin line numbers (#141)",
-    # The enrolled prints committed by #126, which took format parity to 51 of 57
+    # The enrolled prints committed by #126, which took format parity to 52 of 57
     # manifested versions so far more pairings can be tested. Carried for the
     # dollar-amount cross-check (that gate reads PDF text, so it needs no anchors) and for
     # the enacted text itself,
