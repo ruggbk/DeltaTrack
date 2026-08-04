@@ -308,6 +308,7 @@ CORPUS_GATE_MODULES = (
     "tests/test_corpus_tree_properties.py",
     "tests/test_diff_validation.py",
     "tests/test_financial_callout_whole_item.py",
+    "tests/test_pdf_draft_extraction_recall.py",
 )
 
 ALLOWED_CORPUS_SKIPS = {
