@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 
-from deltatrack.bill_tree import extract_text_content, find_bill_body, normalize_bill
+from deltatrack.bill_tree import extract_text_content, find_bill_body, find_bill_bodies, normalize_bill
 from deltatrack.diff_bill import extract_amounts
 from deltatrack.formatters.canonical import _pdf_tree_payload
 from deltatrack.formatters.diff_html import _build_toc_from_tree
@@ -212,9 +212,26 @@ def _walk(nodes: list[dict]):
 
 def _raw_xml_body_amounts(path: Path) -> Counter:
     """Independent reference: amounts in the raw XML body, parsed directly (NOT via
-    the tree's nodes) so the gate can't tautologically pass over dropped money."""
-    body = find_bill_body(ET.parse(path).getroot())
-    return Counter(extract_amounts(extract_text_content(body)))
+    the tree's nodes) so the gate can't tautologically pass over dropped money.
+
+    Sums EVERY top-level body (#434). It used to call ``find_bill_body``, which returns
+    only the first, so for a reported bill carrying a committee substitute the reference
+    counted one of the document's two texts -- the same text the tree was built from.
+    Both sides then agreed, and the gate reported conservation over a document that had
+    silently lost 126 amounts. A reference derived through the selector under test cannot
+    see that selector's mistakes.
+
+    So BODY SELECTION, the thing #434 changed, is done here with a direct ``findall``
+    rather than through production code: if ``find_bill_bodies`` ever starts skipping a
+    body again, this reference still counts it and the gate fails. Only the resolution
+    and amendment-doc shapes, which have no top-level ``legis-body`` at all, fall back to
+    production traversal -- reimplementing that lookup here would be a second copy free
+    to drift, and those shapes carry exactly one body, so the failure this guards against
+    cannot arise in them.
+    """
+    root = ET.parse(path).getroot()
+    bodies = root.findall("legis-body") or find_bill_bodies(root)
+    return Counter(amount for body in bodies for amount in extract_amounts(extract_text_content(body)))
 
 
 def _assert_schema_and_levels(roots: list[dict]) -> None:

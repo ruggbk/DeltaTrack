@@ -313,9 +313,12 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 # cover it.
 #
 # Why not watch the other corpus modules: test_node_join_corpus,
-# test_xml_subsection_nodes and test_pdf_subsection_recall hard-assert denominators
-# instead of skipping, so they have no content-skip channel. Left out deliberately;
-# add one here if it ever grows a content-skip.
+# test_xml_subsection_nodes, test_pdf_subsection_recall and
+# test_pdf_xml_withheld_recall hard-assert denominators instead of skipping, so
+# they have no content-skip channel. The last of those reads one fixture named in the
+# manifest and carries no skipif at all: a deleted fixture raises rather than skips,
+# so there is nothing here to allow. Left out deliberately; add one here if any of
+# them ever grows a content-skip.
 CORPUS_GATE_MODULES = (
     "tests/test_corpus_properties.py",
     "tests/test_corpus_tree_properties.py",
@@ -958,6 +961,7 @@ def make_bill_node(
     header_text="",
     tag="appropriations-intermediate",
     division_label="",
+    body_index=0,
 ):
     """Build a BillNode with defaults for testing."""
     return BillNode(
@@ -969,6 +973,7 @@ def make_bill_node(
         body_text=body_text,
         section_number="",
         division_label=division_label,
+        body_index=body_index,
     )
 
 

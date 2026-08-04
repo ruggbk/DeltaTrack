@@ -198,6 +198,7 @@ EXPECTED: dict[str, Expected] = {
     ),
     "114-hr-2029/1_reported-in-house.pdf": Expected(subsections=14, catchlines=2),
     "114-hr-2029/3_referred-in-senate.pdf": Expected(subsections=14, catchlines=2),
+    "114-hr-2029/4_reported-in-senate.pdf": Expected(subsections=30, catchlines=3),
     "114-hr-2029/7_enrolled-bill.pdf": Expected(
         subsections=1082,
         catchlines=787,

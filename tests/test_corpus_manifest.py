@@ -407,17 +407,16 @@ def test_expanding_case_resolves_per_version_and_per_format(monkeypatch) -> None
     through the exact ids that reddened a local run. Both single-format directions are
     covered: xml-only and pdf-only.
 
-    The real corpus carries one pdf-only stage (114-hr-2029 v4, whose xml is withheld while
-    the multi-<legis-body> section drop is open; see the manifest note), asserted below
-    against the live manifest. Real xml-only stages exist too — the five engrossed
-    amendments whose pdfs are withheld for #519 — but each is single-format only until its
-    issue is resolved, so the rest runs against the stub rather than keying on an example
-    that is scheduled to stop being one.
-    """
+    The pdf-only example used to be 114-hr-2029 v4, whose xml was withheld while #434 (the
+    multi-<legis-body> text drop) was open. That xml is now committed, and per-version
+    format parity leaves the corpus with no pdf-only stage to name. The xml-only direction
+    still has one, so the single-format case is still covered from that side; both
+    directions run through the same format resolution, so what is checked here is
+    unchanged."""
     recall = "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf[{}]"
-
-    # Live manifest: the corpus's only pdf-only version.
-    assert not conftest.is_watched_case(recall.format("114-hr-2029/4_reported-in-senate"))  # pdf only
+    assert not conftest.is_watched_case(recall.format("113-hr-3547/5_engrossed-amendment-house"))  # xml only
+    assert conftest.is_watched_case(recall.format("113-hr-3547/4_engrossed-amendment-senate"))  # both
+    assert conftest.is_watched_case(recall.format("114-hr-2029/4_reported-in-senate"))  # both, since #434
 
     monkeypatch.setattr(conftest, "_manifest_case_refs", lambda: _STUB_MANIFEST)
     assert not conftest.is_watched_case(recall.format("000-xx-1/2_xml_only"))

@@ -119,6 +119,79 @@ class TestMatchNodes:
         assert len(added) == 1
 
 
+class TestCommitteeSubstituteMatching:
+    """Matching across a document that carries two complete bill texts (#434).
+
+    A reported bill holds the base text and the committee substitute as two top-level
+    bodies, so both restate the same section numbers and every section collides with its
+    counterpart. Nodes record which body they came from, and the tempting fix is to pair
+    only within equal body positions. These two tests are why that is wrong: the index is
+    a position within ONE document, and the same position is not the same text across
+    versions.
+
+    Both directions are locked, because a rule can be right in one and wrong in the other
+    -- which is exactly what happened. Pairing on equal index was added for the one-body
+    to two-bodies direction, did not change its result (similarity already had it right),
+    and inverted the two-bodies to one-body direction.
+    """
+
+    BASE = "the base provision concerning aviation safety inspections and reporting"
+    SUBSTITUTE = "the committee substitute concerning maritime commerce and port funding"
+
+    def test_one_body_becomes_two_pairs_the_base_text(self):
+        """Referred (one text) to reported (base + substitute).
+
+        The surviving base text must pair with its unchanged self, and the substitute
+        must read as added rather than claiming the pairing.
+        """
+        old = _tree([_node(("sec. 1",), self.BASE, body_index=0)])
+        new = _tree(
+            [
+                _node(("sec. 1",), self.BASE, body_index=0),
+                _node(("sec. 1",), self.SUBSTITUTE, body_index=1),
+            ]
+        )
+        pairs = match_nodes(old, new)
+        matched = [(o, n) for o, n in pairs if o is not None and n is not None]
+        added = [n for o, n in pairs if o is None]
+
+        assert len(matched) == 1
+        assert matched[0][0].body_text == self.BASE
+        assert matched[0][1].body_text == self.BASE, "the base text must pair with itself, not the substitute"
+        assert [n.body_text for n in added] == [self.SUBSTITUTE]
+
+    def test_two_bodies_become_one_pairs_the_surviving_substitute(self):
+        """Reported (base + substitute) to the next version, which adopted the substitute.
+
+        The adopted text is now the ONLY body, so it sits at index 0 -- the index the
+        superseded base text held in the previous version. Pairing on equal index maps
+        the base onto its own replacement and reports the text that actually survived as
+        removed, which is a false match in both directions at once.
+
+        Measured on the committed corpus, not only here: 114-hr-2029 v5 scores 0.809
+        word-similarity to v4's body[1] and 0.532 to body[0], and pairing on the index
+        turned 145 unchanged sections into 76 unchanged plus 41 modified and 30 moved.
+        """
+        old = _tree(
+            [
+                _node(("sec. 1",), self.BASE, body_index=0),
+                _node(("sec. 1",), self.SUBSTITUTE, body_index=1),
+            ]
+        )
+        new = _tree([_node(("sec. 1",), self.SUBSTITUTE, body_index=0)])
+        pairs = match_nodes(old, new)
+        matched = [(o, n) for o, n in pairs if o is not None and n is not None]
+        removed = [o for o, n in pairs if n is None]
+
+        assert len(matched) == 1
+        assert matched[0][0].body_text == self.SUBSTITUTE, (
+            "the adopted substitute must pair with itself; pairing on body_index maps the "
+            "superseded base text onto it instead"
+        )
+        assert matched[0][1].body_text == self.SUBSTITUTE
+        assert [o.body_text for o in removed] == [self.BASE]
+
+
 @pytest.mark.slow
 class TestMatchNodesIntegration:
     """Integration: match nodes across structurally different versions."""
