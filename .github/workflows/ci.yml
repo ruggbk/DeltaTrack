@@ -9,7 +9,19 @@ name: CI
 # which is why the branch showed green marks after that merge while the suite was
 # uncollectable. This step is DETECTION, not prevention -- `develop` still goes red, but
 # within minutes and attributed to the merge commit that caused it, instead of surfacing
-# later on an unrelated pull request. Prevention (a merge queue) is a separate decision.
+# later on an unrelated pull request.
+#
+# Prevention arrived separately: a merge queue is now enabled on `develop`, and it tests
+# the exact merge commit BEFORE it lands. That makes the `develop` push run a re-test of
+# a commit `merge_group` just passed -- verified identical, not merely equivalent: the
+# queue's merge commit reappears verbatim as the push SHA on every merge, batched entries
+# included. KEEP IT ANYWAY. The queue is a branch-protection setting that does not appear
+# in the REST protection payload, is absent from rulesets, and is pinned by no test, so if
+# it is ever switched off nothing else would notice and this run becomes the only verdict
+# on `develop` again. Roughly seven runner-minutes per merge, on free hosted runners, buys
+# insurance against a silent config change. `main` has NO queue, so its push run is not
+# redundant at all -- it is the only test of the promotion merge commit, whose
+# pull-request run tested a preview rather than what landed.
 #
 # A push to a branch that also has an open pull request runs this workflow twice, once
 # per event. Feature branches are unaffected: `develop` and `main` are only pushed to by
@@ -23,10 +35,11 @@ name: CI
 # to be copied. `tests/test_ci_workflow.py` fails if either half of this is undone.
 #
 # `merge_group` reports the required `test` check for pull requests sitting in a merge
-# queue (#416). It is INERT until a queue is actually enabled in branch protection,
-# because the event never fires otherwise -- which is why it lands first: enabling the
-# queue while the workflows lack this trigger means the required checks are never
-# reported, so nothing merges until someone works out why. `checks_requested` is the only
+# queue (#416). The queue is ENABLED on `develop`, so this trigger is live and fires on
+# every merge; it is not enabled on `main`, where the event never fires. The trigger
+# landed BEFORE the queue was turned on, deliberately: enabling the queue while the
+# workflows lack this trigger means the required checks are never reported, so nothing
+# merges until someone works out why. `checks_requested` is the only
 # activity type the event has; it is named rather than defaulted so the file says what it
 # responds to. `security.yml` carries the same trigger for the other required check.
 on:
