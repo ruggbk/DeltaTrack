@@ -301,7 +301,7 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 #
 # Why not watch the other corpus modules: test_node_join_corpus,
 # test_xml_subsection_nodes, test_pdf_subsection_recall and
-# test_pdf_draft_extraction_recall hard-assert denominators instead of skipping, so
+# test_pdf_xml_withheld_recall hard-assert denominators instead of skipping, so
 # they have no content-skip channel. The last of those reads one fixture named in the
 # manifest and carries no skipif at all: a deleted fixture raises rather than skips,
 # so there is nothing here to allow. Left out deliberately; add one here if any of

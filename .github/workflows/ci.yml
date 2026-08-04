@@ -227,7 +227,7 @@ jobs:
           tests/test_reconcile.py
           tests/test_pdf_watermark_recall.py
           tests/test_formatters_text_serializer.py
-          tests/test_pdf_draft_extraction_recall.py
+          tests/test_pdf_xml_withheld_recall.py
 
   # The required status check on `develop` and `main` is a context named exactly
   # `test`. The matrix above reports per-leg contexts (`test-suite (3.12)`, ...),

@@ -1,7 +1,7 @@
 {
   "bill_id": "114-hr-2029",
   "version": "4_reported-in-senate",
-  "description": "Military Construction/VA appropriations bill, Senate reported print. The only committed version whose XML is deliberately withheld (see the #434 note in tests/corpus_manifest.toml), so it is the corpus's one genuine PDF-with-no-XML-twin and the only place this recall claim is not already made by test_pdf_xml_amount_recall.py. Values below were transcribed from the rendered pages (Title I, printed pages 2-10), not from extractor output, so the fixture is an oracle independent of the code it gates.",
+  "description": "Military Construction/VA appropriations bill, Senate reported print. This is a PUBLISHED GPO print whose XML this repository deliberately withholds while #434 is open (see the note in tests/corpus_manifest.toml); it is NOT a draft and is not PDF-only upstream, so it is not evidence about draft-PDF extraction and does not close #6. It is the only committed version with no XML available, and so the only place this recall claim is not already made by test_pdf_xml_amount_recall.py. Values below were transcribed from the rendered pages (Title I, printed pages 2-10), not from extractor output, so the fixture is an oracle independent of the code it gates.",
   "amounts": [
     663245000,
     109245000,
