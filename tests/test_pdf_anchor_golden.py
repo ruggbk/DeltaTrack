@@ -562,21 +562,22 @@ class TestCorpusAccountPrecision:
     That looseness is deliberate for now. #489 carries the full nine-bill measurement and
     the per-heading breakdown; the load-bearing conclusions are:
 
-    - The oracle is LEVEL-CORRECT BUT INCOMPLETE. Its vocabulary comes from
-      `normalize_bill`'s tree, and an account whose name sits in a header-only XML sibling
-      loses that name when the next sibling carries a header of its own, so the heading
-      reaches no node at all (#499 — `FEDERAL-AID HIGHWAYS` in 118-hr-4820 is absent from
-      the tree, and its appropriation is filed under `(INCLUDING TRANSFER OF FUNDS)`). The
-      PDF side finds such headings correctly and this gate scores them as false positives,
-      so PRECISION_FLOOR sits low partly to accommodate the gate penalising correct work.
+    - The oracle is LEVEL-CORRECT, and since #499 it reads the tree's EFFECTIVE heading
+      (the `display_path` leaf) rather than the raw `header_text`. It previously asked for
+      the one field that keeps a parenthetical qualifier in place of the account's name,
+      so accounts the PDF side had found correctly scored as false positives. The tree
+      itself was right throughout: `FEDERAL-AID HIGHWAYS` in 118-hr-4820 is an
+      account-level node carrying its appropriation, which `TestEffectiveHeadingVocabulary`
+      now pins. Correcting the oracle raised precision and recall on every corpus bill,
+      which is why the floors below are higher than the numbers #489 recorded.
     - Reading the vocabulary straight from the XML instead is COMPLETE BUT LEVEL-BLIND:
       GPO tags agency names (`COAST GUARD`, `U.S. CUSTOMS AND BORDER PROTECTION`) with the
       same element types as accounts, and the PDF pipeline correctly calls those `agency`.
       Scoring them as missed accounts drops 118-hr-8752 from 1.000 recall to 0.276.
       Defining the account vocabulary needs the leveled tree, which is the #54 epic.
     - So a per-bill band table (the #489 proposal, following `test_pipeline_parity`) would
-      pin numbers that do not yet mean what their names say. Reconsider once #499 and #54
-      land; until then the unused margin above is the accepted cost.
+      pin numbers that do not yet mean what their names say. #499 has landed; reconsider
+      once #54 does. Until then the unused margin above is the accepted cost.
 
     Every case runs on committed fixtures. 117-hr-4432 and 118-hr-4820 were the last
     fetched-only pairs and are now in `tests/corpus_manifest.toml`, so they are fail-closed
@@ -598,11 +599,11 @@ class TestCorpusAccountPrecision:
     these numbers, but the targeted test catches it first.
 
     That list predates the per-heading breakdown on #489, and the third bullet is where it
-    needs qualifying: on the one bill measured heading by heading (118-hr-4820), the
-    dominant cause is not normalization disagreement but the oracle lacking the heading
-    at all (#499). The first two bullets held up — the wrapped-fragment class is the 17
-    misses recorded on #489. The other eight bills were measured in aggregate only, so how
-    the causes divide on them is unknown rather than assumed to match.
+    needed qualifying: on the one bill measured heading by heading (118-hr-4820), the
+    dominant cause was not normalization disagreement but the oracle reading the wrong
+    field, which #499 fixed. The first two bullets held up — the wrapped-fragment class is
+    the 17 misses recorded on #489. The other eight bills were measured in aggregate only,
+    so how the causes divide on them is unknown rather than assumed to match.
     """
 
     # Appropriations bills with a paired XML; (bill id, pdf rel path, xml rel path).
@@ -632,19 +633,19 @@ class TestCorpusAccountPrecision:
         ("118-hr-8774", "tests/corpus/118-hr-8774", None),
         ("118-s-4795", "tests/data/BILLS-118s4795rs.pdf", "tests/corpus/118-s-4795/1_reported-in-senate.xml"),
     ]
-    # Set below the lowest measured values, which are 118-hr-4820's. Recorded as vrec
-    # 0.639 / vprec 0.500 when the floors were last calibrated; measured 0.636 / 0.538 on
-    # the committed pair (#489), so the precision margin is wider than this comment used
-    # to imply. See the class docstring for why that gap is mostly the oracle rather than
-    # the parser, and why it is not being closed by tightening the number.
+    # Set below the lowest measured values across the nine bills. Since #499 corrected the
+    # oracle to read the tree's effective heading, the floor-setting bill is 117-hr-4502
+    # (vrec 0.744 / vprec 0.750) rather than 118-hr-4820, whose precision moved 0.538 ->
+    # 0.782. Recall and precision rose on every bill, so no floor here is a relaxation.
+    # The class docstring carries what the remaining gap to 1.0 is made of.
     #
     # Both floor-setting bills were named as `bills/<id>` until they were committed, so CI
     # collected no case for either and the floors were calibrated on a bill CI could not
     # measure. The precision figure recorded here had drifted to 0.46 in the meantime and
     # nothing could catch it, because the only run that could check it was a developer's.
     # Now that the pair is committed, these two numbers are re-derivable from the suite.
-    RECALL_FLOOR = 0.60
-    PRECISION_FLOOR = 0.45
+    RECALL_FLOOR = 0.70
+    PRECISION_FLOOR = 0.70
 
     @staticmethod
     def _pair(spec) -> tuple[Path, Path] | None:
@@ -671,6 +672,70 @@ class TestCorpusAccountPrecision:
         m = measure(*pair)
         assert m["vocab_recall"] >= self.RECALL_FLOOR, f"{spec[0]} recall {m['vocab_recall']:.3f}"
         assert m["vocab_precision"] >= self.PRECISION_FLOOR, f"{spec[0]} precision {m['vocab_precision']:.3f}"
+
+
+class TestEffectiveHeadingVocabulary:
+    """#499: an account named in a header-only sibling keeps that name, and the
+    heading vocabulary reads it.
+
+    GPO splits one printed account across sibling `<appropriations-small>` elements:
+    the name in one, parenthetical qualifiers in the next, the money in a later one.
+    `FEDERAL-AID HIGHWAYS` in 118-hr-4820 is the reference case — three siblings, the
+    moneyed one headed `(HIGHWAY TRUST FUND)`.
+
+    `normalize_bill` resolves this correctly and always did: the money lands on an
+    `account`-level node labelled `FEDERAL-AID HIGHWAYS`. What #499 actually found was
+    that the heading-precision harness asked for `header_text`, the one field that
+    holds the raw parenthetical, so the account's real name never reached the oracle.
+
+    Both halves are pinned because the fix depends on both: the tree putting the name
+    on the moneyed node, and the harness reading that field rather than the raw header.
+    """
+
+    def test_federal_aid_highways_labels_its_appropriation(self):
+        """The money is filed under the account's name, not under a qualifier."""
+        from deltatrack.bill_tree import normalize_bill
+        from deltatrack.structure_tree import build_xml_tree
+
+        xml = fixture_path("118-hr-4820", "1_reported-in-house.xml")
+        roots = build_xml_tree(normalize_bill(xml))
+
+        def walk(node):
+            yield node
+            for child in node.children:
+                yield from walk(child)
+
+        named = [n for r in roots for n in walk(r) if n.label == "FEDERAL-AID HIGHWAYS"]
+        assert named, "no node carries the account name FEDERAL-AID HIGHWAYS"
+        assert {n.level for n in named} == {"account"}, (
+            f"FEDERAL-AID HIGHWAYS must be an account, got {sorted({n.level for n in named})}"
+        )
+        # The appropriation itself must hang off that name. Both reported-in-house
+        # occurrences carry an amount; asserting the money is present is what makes this
+        # about attribution rather than about a bare label existing somewhere.
+        assert all(n.own_amounts for n in named), (
+            "FEDERAL-AID HIGHWAYS carries no amount — its appropriation is filed elsewhere"
+        )
+        # The raw header on the moneyed element is the parenthetical it is named despite.
+        assert any(n.source is not None and n.source.header_text.startswith("(") for n in named), (
+            "expected the moneyed sibling's own header to be a parenthetical qualifier"
+        )
+
+    def test_vocabulary_prefers_the_effective_heading(self):
+        """The harness oracle carries the account name, not the qualifier."""
+        from deltatrack.bill_tree import normalize_header
+        from scripts.heading_precision import _xml_headings
+
+        xml = fixture_path("118-hr-4820", "1_reported-in-house.xml")
+        _counts, unique = _xml_headings(xml)
+        vocab = unique["appropriations-small"] | unique["appropriations-intermediate"]
+
+        assert normalize_header("FEDERAL-AID HIGHWAYS") in vocab
+        # The qualifier must NOT be admitted as an account name in its own right.
+        assert normalize_header("(HIGHWAY TRUST FUND)") not in vocab
+        # Unheaded nodes still contribute nothing: their path leaf is an inherited title
+        # or agency, and admitting it would put department names in the account vocab.
+        assert normalize_header("TITLE I—DEPARTMENT OF TRANSPORTATION") not in vocab
 
 
 class TestPrecisionHarnessOracle:
