@@ -127,6 +127,29 @@ def test_manifest_fixtures_committed() -> None:
     assert_manifest_committed(ALL_XML_FILES, "corpus-properties")
 
 
+def test_known_uncovered_amounts_names_live_fixtures() -> None:
+    """Every ``KNOWN_UNCOVERED_AMOUNTS`` key is a fixture that still exists.
+
+    The allowlist is meant to be self-cleaning: ``test_every_dollar_amount_appears_in_a_node``
+    fails when an entry stops being missing, so a fixed defect forces its entry out. That
+    guarantee has one gap, and it is silent. Entries are read with
+    ``KNOWN_UNCOVERED_AMOUNTS.get(test_id, {})``, so a key naming a fixture that has since
+    been renamed or retired is consulted by no test case at all: it can never be reported
+    missing, and can never be reported stale either. It just sits there, and the next
+    reader takes it for a live exemption.
+
+    A typo made when the entry is written is already caught, because the real fixture then
+    fails with the amount unexplained. This covers the other direction, where the entry was
+    correct and the corpus moved underneath it, which has happened before (#10 renamed
+    corpus files).
+    """
+    orphans = sorted(set(KNOWN_UNCOVERED_AMOUNTS) - {_xml_id(path) for path in ALL_XML_FILES})
+    assert not orphans, (
+        f"KNOWN_UNCOVERED_AMOUNTS names {len(orphans)} fixture(s) not in the manifest: {orphans}. "
+        f"Re-point each entry at the fixture's current id, or drop it if the bill is gone."
+    )
+
+
 @pytest.mark.parametrize(
     "xml_path",
     ALL_XML_FILES,
