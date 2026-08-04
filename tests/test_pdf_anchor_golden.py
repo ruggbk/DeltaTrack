@@ -10,9 +10,10 @@ Fixture policy (#287): every fixture this module pins is committed, so the gate 
 in CI instead of silently skipping (the fail-open shape #287 removes). The bills/
 fixtures are in tests/corpus_manifest.toml; the tests/data/ fixtures (subcommittee
 prints, the CJS Senate print) sit outside the bills/-layout manifest and are floored
-directly by test_manifest_fixtures_committed. The ONE fetched-only case left is
-TestCorpusAccountPrecision, a tolerant net over the larger appropriations corpus that
-is not committed — it keeps an explicit, visible skip, like the other slow PDF suites.
+directly by test_manifest_fixtures_committed. TestCorpusAccountPrecision, a tolerant net
+over the larger appropriations corpus, was the last fetched-only case; its remaining two
+pairs are now committed, so every case in this module runs on a clean checkout. It keeps
+a per-case skip as a fail-safe, but no longer relies on one (#489).
 """
 
 from __future__ import annotations
@@ -299,8 +300,9 @@ def test_manifest_fixtures_committed():
     the already-manifested 118-hr-8752 / 118-hr-8282 / 118-s-4795) are checked via the
     shared manifest helper; the tests/data/ golden fixtures (the 10 subcommittee prints and
     the CJS Senate print) sit outside the bills/-layout manifest (ADR 0015), so they are
-    floored here directly. TestCorpusAccountPrecision's larger corpus stays fetched-only
-    and is deliberately NOT floored — it keeps a visible per-case skip."""
+    floored here directly. TestCorpusAccountPrecision's larger corpus is deliberately NOT
+    floored here and keeps a visible per-case skip; since #489 that skip is a fail-safe
+    rather than the expected path, because its last two fetched-only pairs are committed."""
     assert_manifest_committed(sorted(FIXTURES), "pdf-anchor-golden")
     committed = set(FIXTURES.values()) | set(SUBCOMMITTEE_FIXTURES.values())
     absent = sorted(str(p.relative_to(ROOT)) for p in committed if not p.exists())
@@ -490,17 +492,78 @@ class TestCarryoverAgencyVocabFloors:
 
 
 class TestCorpusAccountPrecision:
-    """Corpus-wide floor on size-detected account vocabulary precision/recall (#89).
+    """Corpus-wide CHARACTERISATION floor on account vocabulary precision/recall (#89).
+
+    Read the word characterisation literally (#489). These two numbers describe what the
+    cross-format comparison currently produces; they are not a statement that the parser
+    is required to score this well, and a per-bill band cannot be written from them yet.
+    Why, measured on all nine bills, is the substance of this docstring — the wording it
+    replaces ("regression floors, not targets") read as though the numbers bite, and they
+    largely do not.
 
     Complements the exact golden snapshots (which pin three bills) with a tolerant
     net over the appropriations corpus, so a future change can't silently flood
     false accounts or drop real ones without tripping a gate. The floors sit below
     today's measured values (see scripts/heading_precision.py for the live numbers).
 
-    Unlike the golden/subcommittee fixtures above, this corpus is FETCHED-ONLY and not
-    committed (larger omnibus PDFs, out of the #287 committed set), so it keeps an
-    explicit per-case skip when a pair is absent — a visible skip, like the other slow
-    PDF suites (TESTING.md), not the empty-parametrization fail-open #287 removes.
+    **What the oracle can and cannot see.** The vocabulary comes from `normalize_bill`'s
+    tree, which is level-correct but INCOMPLETE: an account whose name sits in a
+    header-only XML sibling loses that name when the next sibling carries a header of its
+    own, so the heading reaches no node (#499 — `FEDERAL-AID HIGHWAYS` in 118-hr-4820 is
+    absent from the tree, and its appropriation is filed under `(INCLUDING TRANSFER OF
+    FUNDS)`). The PDF side finds those headings correctly, and this gate then counts them
+    as false positives. On 118-hr-4820, 22 of 36 false positives are that: real
+    `<appropriations-small>` headers the oracle never knew about. Precision on that bill
+    is 0.782 against a raw-XML vocabulary versus 0.538 against this one.
+
+    That is why PRECISION_FLOOR is as low as it is. It was calibrated to accommodate a
+    bill whose precision is substantially the oracle scoring correct detections as wrong.
+
+    **Swapping the oracle does not fix it**, which is why this is recorded rather than
+    repaired here. A vocabulary read straight from the XML is complete but LEVEL-BLIND:
+    GPO tags agency names (`COAST GUARD`, `U.S. CUSTOMS AND BORDER PROTECTION`) as
+    `appropriations-small`/`-intermediate` too, and the PDF pipeline correctly classifies
+    those as `agency` anchors rather than accounts. Scoring them as missed accounts drops
+    118-hr-8752's recall from 1.000 to 0.276; excluding pure parentheticals recovers
+    almost none of it (0.320). Defining the true account vocabulary needs the leveled
+    tree, which is the #54 epic.
+
+    Measured 2026-08-04, `tree` being this gate's oracle and `raw` the XML headers direct:
+
+        bill          tree_rec  tree_pre  raw_rec  raw_pre
+        114-hr-2029     0.769     0.732    0.571    0.780
+        115-hr-5895     0.796     0.782    0.719    0.836
+        117-hr-4432     0.763     0.703    0.735    0.781
+        117-hr-4502     0.719     0.683    0.559    0.750
+        118-hr-4366     0.767     0.717    0.617    0.804
+        118-hr-4820     0.636     0.538    0.484    0.782
+        118-hr-8752     1.000     1.000    0.276    1.000
+        118-hr-8774     0.767     0.708    0.729    0.785
+        118-s-4795      0.820     0.695    0.510    0.864
+
+    **The one real parser defect the numbers do contain.** 17 of 118-hr-4820's 24 missed
+    headings are a heading that wraps across two printed lines being read as a STACK of
+    two headings — the first line becomes an `agency` anchor and the second an `account`,
+    so `PRESERVATION AND REINVESTMENT INITIATIVE FOR` / `COMMUNITY ENHANCEMENT` yields an
+    agency plus an account called "community enhancement". That single class costs recall
+    and precision at once (the tail fragment is 14 of the 36 false positives), which is
+    why this bill is worst on both. It is the wrap-vs-stack geometry gap in #54/#106. The
+    remaining 7 misses are pure parentheticals the PDF deliberately declines.
+
+    **Why no per-bill band table** (the #489 proposal, following `test_pipeline_parity`).
+    A band records a bill's expected normal, and these numbers do not yet mean what their
+    names say: 118-hr-4820's 0.538 would be pinned as a property of the parser when most
+    of it is the oracle, and 118-hr-8752's exact 1.000/1.000 is exact only against a
+    vocabulary holding 8 of the bill's 29 appropriations headers. #499 and #54 are what
+    would have to land before a band could be calibrated to mean something. The cost of
+    waiting is stated plainly: 118-hr-8752 could lose 40% of its accounts and still pass.
+
+    Every one of the nine cases now runs on a clean checkout. 117-hr-4432 and 118-hr-4820
+    were the last fetched-only pairs and are committed under tests/corpus/; verified by
+    deleting bills/ from the worktree and re-running (9 passed, 0 skipped). The per-case
+    skip below is kept as the fail-safe for a fixture that goes missing, but it is no
+    longer the expected path for any bill — a skip appearing here now means a fixture was
+    lost, not that one was never fetched.
 
     Why precision is well under 1.0 even when correct — the residual misses are
     KNOWN and accepted, deferred to #54, NOT bugs to chase here:
@@ -514,6 +577,13 @@ class TestCorpusAccountPrecision:
     The SEC.-catchline-continuation class is NOT among the accepted residue — it is
     fixed (see TestSectionCatchlineContinuation); a regression there would lower
     these numbers, but the targeted test catches it first.
+
+    That list predates the per-heading breakdown above and the third bullet is where it
+    needs qualifying: on the one bill measured heading by heading (118-hr-4820), the
+    dominant cause is not normalization disagreement but the oracle lacking the heading
+    at all (#499). The first two bullets held up — the wrapped-fragment class is the 17
+    misses quantified above. The remaining six bills were measured in aggregate only, so
+    how the causes divide on them is unknown rather than assumed to match.
     """
 
     # Appropriations bills with a paired XML; (bill id, pdf rel path, xml rel path).
