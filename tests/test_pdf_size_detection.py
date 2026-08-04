@@ -231,8 +231,13 @@ class TestSizePositionClassification:
             (4, "the account body prose follows here", BODY),
         ]
         rows += [(n, f"more body prose line {n}", BODY) for n in range(5, 15)]
-        names = {a.text for a in _accounts(extract_anchors([_page(1, rows)]))}
-        assert "OPERATIONS AND SUPPORT" in names
+        anchors = extract_anchors([_page(1, rows)])
+
+        accounts = {a.text for a in anchors if a.kind == "account"}
+        agencies = {a.text for a in anchors if a.kind == "agency"}
+
+        assert "OPERATIONS AND SUPPORT" in accounts
+        assert "MANAGEMENT DIRECTORATE" in agencies
 
     def test_multiline_section_catchline_continuation_not_account(self):
         # A catchline wrapping onto two heading-band lines: both continuations must
