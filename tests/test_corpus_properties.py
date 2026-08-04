@@ -13,10 +13,13 @@ from pathlib import Path
 import pytest
 
 from deltatrack.bill_tree import (
+    Division,
     _extract_appropriations_text,
+    _extract_section_text,
     extract_text_content,
     find_bill_body,
     normalize_bill,
+    walk_body_sections,
 )
 from tests.conftest import assert_manifest_committed, manifest_xml_files
 
@@ -588,6 +591,23 @@ def _section_reaches_a_node(section: ET.Element, node_ids: set[str]) -> bool:
     address-less entry that issue exists to remove, so requiring one would pin the
     defect rather than the property.
 
+    The stand-in is allowed ONLY when the section has no body of its own, and that is
+    decided with the parser's own carve and extractor rather than by looking at tags. A
+    section can hold both prose and accounts:
+
+        <section id="sec-1">
+          <text>Important section-level text.</text>
+          <appropriations-small id="acct-1">...</appropriations-small>
+        </section>
+
+    There the parser does emit a node for the section, carrying that prose. Accepting any
+    account as a stand-in would let a regression drop the section node, and with it the
+    only copy of the prose, while this gate stayed green because ``acct-1`` survived.
+    Asking ``_extract_section_text`` under the appropriations carve — the exact expression
+    ``walk_body_sections`` uses to decide whether to emit the node at all — makes the
+    condition here the same condition as the parser's, so the two cannot drift into
+    disagreeing about which sections are allowed to be absent.
+
     It is one account node, not all of them, because a header-only element (the naming
     half of a #474 split account) legitimately emits none. That is still enough to fail
     closed on the loss this gate was built for: a walker that drops the section drops
@@ -601,7 +621,15 @@ def _section_reaches_a_node(section: ET.Element, node_ids: set[str]) -> bool:
     """
     if section.attrib.get("id", "") in node_ids:
         return True
-    return any(child.tag.startswith("appropriations-") and child.attrib.get("id", "") in node_ids for child in section)
+
+    appro_carve = frozenset(id(c) for c in section if c.tag.startswith("appropriations-"))
+    if not appro_carve:
+        return False
+    # Own body text of its own => the parser emits a node for it, so its absence is a
+    # real loss and no account may answer for it.
+    if _extract_section_text(section, appro_carve):
+        return False
+    return any(id(child) in appro_carve and child.attrib.get("id", "") in node_ids for child in section)
 
 
 @pytest.mark.parametrize(
@@ -770,3 +798,80 @@ def test_appropriations_section_relaxation_still_fails_closed(tmp_path: Path) ->
     # scoped to accounts; a subsection reaching a node is not evidence for this shape).
     plain = ET.fromstring('<section id="sec-2"><subsection id="sub-1"><text>x</text></subsection></section>')
     assert not _section_reaches_a_node(plain, {"sub-1"})
+
+
+def test_an_account_cannot_stand_in_for_a_section_that_has_its_own_text() -> None:
+    """A section holding BOTH prose and accounts must still reach its own node.
+
+    This is the case the stand-in must not swallow. The parser emits a node for such a
+    section, carrying the prose, so the section's absence from the tree is a real loss of
+    the only copy of that text — and it is invisible to the money gates, because the
+    accounts and their dollar figures survive in their own nodes either way.
+
+    Without the ``_extract_section_text`` guard the gate accepted any surviving account
+    as proof the section arrived, so a regression that dropped the section node while
+    keeping ``acct-1`` passed green with the section-level prose gone.
+    """
+    section = ET.fromstring(
+        '<section id="sec-1">'
+        "<text>section-level prose</text>"
+        '<appropriations-small id="acct-1"><text>$1,000</text></appropriations-small>'
+        "</section>"
+    )
+
+    assert not _section_reaches_a_node(section, {"acct-1"})
+    # Only the section's own node answers for it, which is the pre-#485 rule unchanged
+    # for every section that has a body.
+    assert _section_reaches_a_node(section, {"sec-1"})
+
+    # The distinction is the section's OWN text, not the presence of a <text> element:
+    # a section whose only text lives inside its accounts still has an empty own body,
+    # so it keeps the stand-in.
+    accounts_only = ET.fromstring(
+        '<section id="sec-2">'
+        "<enum>2.</enum><header>Ignored by the extractor</header>"
+        '<appropriations-small id="acct-2"><text>$1,000</text></appropriations-small>'
+        "</section>"
+    )
+    assert _section_reaches_a_node(accounts_only, {"acct-2"})
+
+
+def test_bare_division_sections_emit_their_appropriations_accounts() -> None:
+    """The ``division > section > appropriations-*`` shape, which no local bill supplies.
+
+    ``walk_body_sections`` serves two arrangements: sections directly under the bill body,
+    and the bare sections of a division that does not wrap them in a <title> (#465). #485
+    recorded the division form as untested because the corpus contains no such bill, so
+    the fix's reach into it rested on the two callers sharing one function rather than on
+    a measurement. This builds the case synthetically and checks it directly.
+
+    The division label must also travel onto the account nodes, since that is what the
+    diff groups on (#468); an account that arrived without it would be addressable but
+    would not group with the division it belongs to.
+    """
+    division = ET.fromstring(
+        '<division id="div-a">'
+        "<enum>A</enum><header>Example Division</header>"
+        '<section id="sec-1">'
+        '<appropriations-major id="maj-1"><header>Department Of Example</header></appropriations-major>'
+        '<appropriations-small id="acct-1"><header>Salaries And Expenses</header>'
+        "<text>For necessary expenses, $1,000.</text></appropriations-small>"
+        "</section>"
+        "</division>"
+    )
+    div = Division(label="Division A: Example Division", key="a")
+
+    nodes = walk_body_sections(division, div)
+
+    accounts = [n for n in nodes if n.tag == "appropriations-small"]
+    assert len(accounts) == 1, f"the division's account reached no node of its own: {[n.match_path for n in nodes]}"
+    account = accounts[0]
+    assert account.header_text == "Salaries And Expenses"
+    assert "$1,000" in account.body_text
+    # Addressed off its agency, exactly as on the body-level path. The division is
+    # excluded from match_path everywhere, so it does not appear here.
+    assert account.match_path == ("department of example", "salaries and expenses")
+    assert account.division_label == "Division A: Example Division"
+    assert account.division_key == "a"
+    # The accounts-only section contributes no node of its own, same as at body level.
+    assert not [n for n in nodes if n.element_id == "sec-1"]
