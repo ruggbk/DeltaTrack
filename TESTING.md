@@ -200,15 +200,17 @@ counts are reproducible. Every bill the manifest names is committed to git
 Each of those modules carries a `test_manifest_fixtures_committed` floor that
 **fails closed**: if a manifested bill is missing from the checkout, the gate
 goes red rather than silently collecting fewer cases. That is what CI relies on.
-It replaces the old opt-in `REQUIRE_CORPUS=1` mode *for these three gates*, which
-existed only because they used to parametrize over a fetched glob that was empty --
-and so green, asserting nothing -- on a clean checkout (the fail-open pattern).
-(#220 brought the last three modules -- `test_node_join_corpus`,
-`test_xml_subsection_nodes`, `test_pdf_subsection_recall` -- onto the same manifest
-and the same fail-closed floor, and deleted `require_corpus_or_skip` /
-`REQUIRED_CORPUS_BILLS` with them. #278 committed the Legislative Branch validation
-set and retired `REQUIRE_CORPUS` outright; the one requirement no fixture can supply
-is a live network, and that is now the `network` marker.)
+The one requirement no fixture can supply is a live network, and that is the
+`network` marker.
+
+History: #220, #278 -- an opt-in `REQUIRE_CORPUS=1` mode covered these three
+gates, and existed only because they parametrized over a fetched glob that was
+empty -- and so green, asserting nothing -- on a clean checkout (the fail-open
+pattern). #220 brought the last three modules (`test_node_join_corpus`,
+`test_xml_subsection_nodes`, `test_pdf_subsection_recall`) onto the same manifest
+and the same fail-closed floor, deleting `require_corpus_or_skip` /
+`REQUIRED_CORPUS_BILLS` with them; #278 committed the Legislative Branch
+validation set and retired `REQUIRE_CORPUS` outright.
 
 To sweep every bill you have fetched locally -- broader than the committed set,
 and useful for finding bugs a few clean bills don't -- set `CORPUS_SWEEP=1`. It
@@ -360,10 +362,11 @@ they resolve through `resolve_bill_file`, which returns the `bills/` path when n
 fixture exists precisely so the caller's own `.exists()` check reports on the file it
 would really read.
 
-The Legislative Branch validation set used to be on that list. #278 committed its
-five remaining bills, so its completeness floor is now an ordinary fail-closed
-check that runs everywhere, and CI validates all seven of the fixture's bills
-instead of the two that happened to be committed.
+The Legislative Branch validation set is not on that list: its completeness floor
+is an ordinary fail-closed check that runs everywhere, and CI validates all seven
+of the fixture's bills. History: #278 -- it was listed above until its five
+remaining bills were committed, leaving CI to validate only the two that happened
+to be.
 
 Everything else in the slow group asserts on a clean clone, against
 `tests/corpus/`. A download never changes what those gates assert, and since #308
