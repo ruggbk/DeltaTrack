@@ -1,8 +1,9 @@
 """Guardrails on the triggers of the workflows that own a required status check.
 
-Two properties are pinned here: that the test suite runs when a commit lands on the
-integration branch (#412), and that both required checks answer the merge_group event so
-a merge queue can complete a merge (#416).
+Three properties are pinned here: that the test suite runs when a commit lands on the
+integration branch (#412), that both required checks answer the merge_group event so
+a merge queue can complete a merge (#416), and that every module carrying a @slow test
+is named by some workflow, since the marker alone makes a gate runnable but never run.
 
 
 Nothing ran the test suite when a commit landed on ``develop``, so a broken integration
@@ -22,6 +23,7 @@ nothing about the rest of the workflow, so adding a job or a step does not touch
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -149,4 +151,71 @@ def test_ci_does_not_cancel_in_progress_runs() -> None:
     assert concurrency.get("cancel-in-progress") is not True, (
         "ci.yml cancels in-progress runs. On develop that means a merge commit finishes "
         "with no verdict, recreating the gap #412 closed. Use cancel-in-progress: false."
+    )
+
+
+# --- Every @slow module is named by a workflow ---------------------------------
+# Every slow step in ci.yml selects modules by PATH, not by marker: the fast step
+# deselects `-m slow`, and each slow step lists the files it runs. So a new @slow module
+# is collected by no step at all and reports nothing, while the author sees it pass
+# locally and CI go green. The failure is silent in the worst direction -- a gate that
+# has never run looks identical to a gate that runs and passes.
+#
+# ci.yml already argues this in prose at three separate steps ("the marker makes a gate
+# runnable, naming its module is what makes it RUN"), which is precisely the situation
+# this repository treats as under-gated: a convention carried only in comments. It has
+# been rediscovered twice, by the packaging gate (#398) and by the draft extraction
+# recall gate (#6 review).
+#
+# Scanning EVERY workflow, not just ci.yml, is deliberate: test_govinfo_corpus_parity.py
+# is excluded from ci.yml on purpose because it fetches live, and runs from
+# corpus-parity.yml instead. Naming a module in any workflow satisfies this.
+
+
+def _slow_test_modules() -> list[Path]:
+    """Test modules that define at least one @slow test, found by AST, not by grep.
+
+    A text search for "pytest.mark.slow" also matches the many modules that only
+    discuss the marker in a docstring or comment (test_corpus_manifest.py explains at
+    length why it is deliberately NOT slow). Those are not gaps, and a false positive
+    here would be an unfixable failure, so the marker is read from the syntax tree.
+    """
+    modules = []
+    for path in sorted(Path(__file__).parent.glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(_is_slow_marker(node) for node in ast.walk(tree)):
+            modules.append(path)
+    return modules
+
+
+def _is_slow_marker(node: ast.AST) -> bool:
+    """True for the `pytest.mark.slow` attribute chain, wherever it appears.
+
+    This covers all three spellings the suite uses -- a `@pytest.mark.slow` decorator, a
+    module-level `pytestmark = pytest.mark.slow`, and a list of marks -- because every
+    one of them contains this attribute access. Walking for the access rather than
+    matching each shape means a fourth spelling is caught too.
+    """
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "slow"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "mark"
+    )
+
+
+def test_every_slow_module_is_named_by_a_workflow() -> None:
+    """A @slow module named by no workflow runs nowhere and reports green by absence."""
+    slow_modules = _slow_test_modules()
+    # Fails closed: an AST change or a moved directory that found nothing would
+    # otherwise satisfy the assertion below while checking no module at all.
+    assert slow_modules, "found no @slow test modules, so this gate asserted nothing"
+
+    workflow_text = "\n".join(path.read_text(encoding="utf-8") for path in sorted(WORKFLOWS.glob("*.yml")))
+    unnamed = [path.name for path in slow_modules if path.name not in workflow_text]
+    assert not unnamed, (
+        f"{len(unnamed)} module(s) define @slow tests but are named by no workflow in "
+        f".github/workflows, so those tests run nowhere in CI: {unnamed}. Add each to a "
+        "slow step in ci.yml -- the marker makes the gate runnable, naming the module is "
+        "what makes it run."
     )

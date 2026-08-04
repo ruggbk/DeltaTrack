@@ -1,7 +1,7 @@
 {
   "bill_id": "114-hr-2029",
-  "version": "3_referred-in-senate",
-  "description": "Military Construction/Veterans Affairs appropriations bill (Senate referred version). Pure PDF input with no XML twin — tests extraction recall on real draft layout.",
+  "version": "4_reported-in-senate",
+  "description": "Military Construction/VA appropriations bill, Senate reported print. The only committed version whose XML is deliberately withheld (see the #434 note in tests/corpus_manifest.toml), so it is the corpus's one genuine PDF-with-no-XML-twin and the only place this recall claim is not already made by test_pdf_xml_amount_recall.py. Values below were transcribed from the rendered pages (Title I, printed pages 2-10), not from extractor output, so the fixture is an oracle independent of the code it gates.",
   "amounts": [
     663245000,
     109245000,
@@ -22,27 +22,31 @@
     2208000,
     65021000,
     13400000,
-    99695000
+    150000000,
+    99695000,
+    393511000,
+    16541000,
+    353036000,
+    160498000
   ],
   "clauses": [
-    "TITLE I",
-    "DEPARTMENT OF DEFENSE",
-    "MILITARY CONSTRUCTION, ARMY",
-    "MILITARY CONSTRUCTION, NAVY AND MARINE CORPS",
-    "MILITARY CONSTRUCTION, AIR FORCE",
-    "MILITARY CONSTRUCTION, DEFENSE-WIDE",
+    "TITLE I DEPARTMENT OF DEFENSE MILITARY CONSTRUCTION, ARMY",
+    "MILITARY CONSTRUCTION, ARMY For acquisition, construction, installation",
+    "MILITARY CONSTRUCTION, NAVY AND MARINE CORPS For acquisition",
+    "MILITARY CONSTRUCTION, AIR FORCE For acquisition",
+    "MILITARY CONSTRUCTION, DEFENSE-WIDE (INCLUDING TRANSFER OF FUNDS)",
     "MILITARY CONSTRUCTION, ARMY NATIONAL GUARD",
     "MILITARY CONSTRUCTION, AIR NATIONAL GUARD",
     "MILITARY CONSTRUCTION, ARMY RESERVE",
     "MILITARY CONSTRUCTION, NAVY RESERVE",
     "MILITARY CONSTRUCTION, AIR FORCE RESERVE",
+    "NORTH ATLANTIC TREATY ORGANIZATION SECURITY INVESTMENT PROGRAM",
     "FAMILY HOUSING CONSTRUCTION, ARMY",
-    "Provided, That of this amount, not to exceed",
-    "Provided, That of the amount appropriated, not to exceed",
-    "Provided further, That",
-    "(increased by $30,000,000)",
-    "to remain available until September 30, 2020",
-    "(reduced by $30,000,000)",
-    "(increased by $30,000,000)"
+    "FAMILY HOUSING OPERATION AND MAINTENANCE, ARMY",
+    "FAMILY HOUSING CONSTRUCTION, NAVY AND MARINE CORPS",
+    "Provided, That of this amount, not to exceed $109,245,000",
+    "Provided, That of the amount appropriated, not to exceed $20,337,000",
+    "$1,931,456,000 (reduced by $30,000,000) (increased by $30,000,000)",
+    "Provided further, That of the amount appropriated, not to exceed $160,404,000 (increased by $30,000,000)"
   ]
 }
