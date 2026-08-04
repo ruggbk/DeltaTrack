@@ -3,16 +3,17 @@
 These use SYNTHETIC glyph sizes to exercise the classifier/position logic in
 isolation. They are NOT the proof that real PDFs produce the bands (that is
 tests/test_pdf_text.py::TestPageGlyphSizes) nor the end-to-end fix (that is the
-FEDERAL PROTECTIVE SERVICE test in test_pdf_anchor_golden.py). Body text is
-deliberately non-"For necessary expenses" so detection cannot fall through to the
-legacy trigger — only the size path can satisfy these.
+FEDERAL PROTECTIVE SERVICE test in test_pdf_anchor_golden.py). Since #114 the size
+path is the ONLY producer of account anchors — there is no text-trigger fallback
+behind it — so a case that omits glyph sizes asserts the degraded TITLE/SEC.
+contract, not an alternative detector (see TestFallbackWhenNoBands).
 """
 
 from __future__ import annotations
 
 import pytest
 
-from deltatrack.parsers.pdf_anchors import SizeBands, breadcrumb_for, derive_size_bands, extract_anchors
+from deltatrack.parsers.pdf_anchors import breadcrumb_for, derive_size_bands, extract_anchors
 from deltatrack.parsers.pdf_text import Line, LineGeom, Page
 
 BODY = 14.0
