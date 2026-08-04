@@ -1,145 +1,220 @@
 #!/usr/bin/env python3
-"""Update corpus_manifest.toml with committee report pairings."""
+"""Update corpus_manifest.toml with committee report pairings.
+
+Comment-preserving: the manifest carries 40+ lines of documentation (why the file
+exists, how the gates read it, how to add a fixture) that a load-and-dump through
+a plain TOML writer silently deletes. tomlkit edits the document in place instead.
+
+Two modes:
+
+default (offline)
+    Re-derive pairings from the report sources already recorded in the manifest.
+    BILLSTATUS said which reports a bill has; that answer does not change, so
+    re-applying the *pairing rules* needs no network. This is the mode to run
+    after editing scripts/report_pairing.py.
+
+``--refresh``
+    Re-fetch BILLSTATUS for every bill and rebuild the source list from scratch.
+    Needed only when a bill gains a report.
+
+Package IDs are confirmed against govinfo before being recorded (``--refresh``
+only): a predicted ID that does not resolve is stored as ``text_available =
+false`` rather than as a fixture that will never exist.
+"""
 
 from __future__ import annotations
 
+import argparse
 import sys
-import tempfile
-import tomllib
+import urllib.error
+import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
-# Run-from-anywhere: put the repo root on the path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Run-from-anywhere. Both roots, mirroring pytest's `pythonpath = [".", "tools"]`:
+# tools/fetch_govinfo.py resolves its sibling as a bare `shared.http`, so the repo
+# root alone is not enough to import it.
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(1, str(_ROOT / "tools"))
 
-from tools.fetch_govinfo import extract_committee_reports, fetch_billstatus_bill  # noqa: E402
+import httpx  # noqa: E402
+import tomlkit  # noqa: E402
+
+from scripts.report_pairing import (  # noqa: E402
+    ReportSource,
+    extract_report_sources,
+    get_report_pairing,
+    mark_conference_reports,
+    parse_citation,
+    predicted_pkg,
+)
+from tools.fetch_govinfo import fetch_billstatus_bill  # noqa: E402
+
+MANIFEST_PATH = Path(__file__).resolve().parents[1] / "tests" / "corpus_manifest.toml"
 
 
-def load_manifest() -> dict:
-    """Load the corpus manifest."""
-    manifest_path = Path(__file__).resolve().parents[1] / "tests" / "corpus_manifest.toml"
-    with manifest_path.open("rb") as f:
-        return tomllib.load(f)
+def load_manifest_doc() -> tomlkit.TOMLDocument:
+    """Load the corpus manifest as a tomlkit document (preserves comments)."""
+    return tomlkit.parse(MANIFEST_PATH.read_text(encoding="utf-8"))
 
 
-def sanitize_version_name(name: str) -> str:
-    """Convert a version type like 'Reported in House' to 'reported-in-house'."""
-    import re
-
-    slug = name.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug or "unknown"
+def write_manifest_doc(doc: tomlkit.TOMLDocument) -> None:
+    """Write the manifest document."""
+    MANIFEST_PATH.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
 
-def get_report_for_stage(reports: list[dict], stage: str, chamber: str, is_enrolled: bool = False) -> dict | None:
-    """Match a committee report to a bill version stage.
+def pkg_resolves(pkg: str) -> bool:
+    """Whether govinfo serves a text rendition for this package.
 
-    For enrolled bills, try to find a conference report (highest-numbered report
-    from either chamber when there are multiple reports from the same chamber).
-    For other stages, match by chamber.
+    Checking the status code is not enough: an unknown package 302s to an error
+    page that answers 200. Follow the redirect and require the final URL to still
+    be under ``/content/pkg/``, which the error page is not.
     """
-    if not reports:
-        return None
+    url = f"https://www.govinfo.gov/content/pkg/{pkg}/html/{pkg}.htm"
+    try:
+        with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310 (govinfo, https)
+            return f"/content/pkg/{pkg}/" in resp.geturl()
+    except urllib.error.URLError:
+        return False
 
-    stage_lower = stage.lower()
 
-    # For enrolled bills, check for conference reports
-    if is_enrolled:
-        # Group reports by chamber
-        by_chamber: dict[str, list[dict]] = {"house": [], "senate": []}
-        for r in reports:
-            by_chamber[r["chamber"]].append(r)
+def resolve_pkgs(sources: list[ReportSource], congress: int) -> list[ReportSource]:
+    """Attach a confirmed ``pkg`` to each source, or mark it text-unavailable."""
+    out = []
+    for s in sources:
+        if s.book:
+            # Multi-book reports have no known per-book package ID, and the
+            # single-book prediction would point both books at one file.
+            out.append(
+                replace(
+                    s,
+                    text_available=False,
+                    unavailable_reason="multi-book report: no per-book govinfo package ID is known",
+                )
+            )
+            continue
+        pkg = predicted_pkg(s.chamber, congress, s.number)
+        if pkg_resolves(pkg):
+            out.append(replace(s, pkg=pkg))
+        else:
+            out.append(
+                replace(
+                    s,
+                    text_available=False,
+                    unavailable_reason=f"govinfo serves no text rendition for {pkg}",
+                )
+            )
+    return out
 
-        # If a chamber has multiple reports, the highest-numbered is likely the conference report
-        for ch in ("house", "senate"):
-            chamber_reports = by_chamber[ch]
-            if len(chamber_reports) > 1:
-                # Sort by report number, highest first
-                chamber_reports.sort(key=lambda r: r["number"], reverse=True)
-                # The highest-numbered report from either chamber is the conference report
-                # (conference reports are typically from the chamber that originated the bill)
-                return chamber_reports[0]
 
-        # If no chamber has multiple reports, fall through to chamber matching
+def sources_from_manifest(bill_entry) -> list[ReportSource]:
+    """Every distinct report source already recorded across a bill's versions."""
+    seen: dict[str, ReportSource] = {}
+    for ver in bill_entry.get("versions", []):
+        for raw in ver.get("committee_report", []) or []:
+            citation = raw.get("citation")
+            if not citation or citation == "none":
+                continue
+            parsed = parse_citation(citation)
+            if not parsed:
+                continue
+            chamber, _congress, number, book = parsed
+            seen.setdefault(
+                citation,
+                ReportSource(
+                    citation=citation,
+                    chamber=chamber,
+                    number=number,
+                    book=book,
+                    pkg=raw.get("pkg"),
+                    text_available=raw.get("text_available", True),
+                    unavailable_reason=raw.get("unavailable_reason"),
+                ),
+            )
+    return mark_conference_reports(list(seen.values()))
 
-    # Standard chamber matching for non-enrolled stages
-    if "house" in stage_lower:
-        target_chamber = "house"
-    elif "senate" in stage_lower:
-        target_chamber = "senate"
+
+def format_report_source(source: ReportSource) -> tomlkit.items.InlineTable:
+    """Format a report source as an inline table, omitting defaulted keys."""
+    table = tomlkit.inline_table()
+    if source.pkg:
+        table["pkg"] = source.pkg
+    table["citation"] = source.citation
+    table["chamber"] = source.chamber
+    if source.book:
+        table["book"] = source.book
+    if source.conference:
+        table["conference"] = True
+    if not source.text_available:
+        table["text_available"] = False
+        table["unavailable_reason"] = source.unavailable_reason or "no govinfo text rendition"
+    return table
+
+
+def format_report_pairing(pairing) -> tomlkit.items.Array:
+    """Format a ReportPairing as an array of inline tables.
+
+    "No report" is a single entry carrying only a reason -- deliberately with no
+    ``pkg`` key, so nothing downstream can mistake a sentinel string for a
+    vendorable package.
+    """
+    arr = tomlkit.array()
+    if not pairing.sources:
+        table = tomlkit.inline_table()
+        table["citation"] = "none"
+        table["chamber"] = "none"
+        table["reason"] = pairing.reason or "no report available"
+        arr.append(table)
     else:
-        return None
-
-    for r in reports:
-        if r["chamber"] == target_chamber:
-            return r
-
-    return None
+        for s in pairing.sources:
+            arr.append(format_report_source(s))
+    return arr
 
 
 def main():
-    import httpx
-    import tomli_w
+    ap = argparse.ArgumentParser(description="Update corpus_manifest.toml committee report pairings.")
+    ap.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-fetch BILLSTATUS and re-confirm package IDs (network); default is offline re-pairing",
+    )
+    args = ap.parse_args()
 
-    manifest = load_manifest()
-    bills = manifest.get("bill", [])
+    doc = load_manifest_doc()
 
-    # For each bill, fetch BILLSTATUS and extract reports
-    for bill_entry in bills:
+    for bill_entry in doc.get("bill", []):
         bill_id = bill_entry["id"]
-        congress, btype, number = bill_id.split("-")
+        congress, bill_type, number = bill_id.split("-")
 
-        print(f"Fetching BILLSTATUS for {bill_id}...", file=sys.stderr)
-        with httpx.Client(timeout=30) as client:
-            bill_elem = fetch_billstatus_bill(client, int(congress), btype, int(number))
+        if args.refresh:
+            print(f"Fetching BILLSTATUS for {bill_id}...", file=sys.stderr)
+            with httpx.Client(timeout=30) as client:
+                bill_elem = fetch_billstatus_bill(client, int(congress), bill_type, int(number))
+            if bill_elem is None:
+                print(f"  WARNING: No BILLSTATUS found for {bill_id}", file=sys.stderr)
+                continue
+            report_sources = resolve_pkgs(extract_report_sources(bill_elem), int(congress))
+        else:
+            report_sources = sources_from_manifest(bill_entry)
 
-        if bill_elem is None:
-            print(f"  WARNING: No BILLSTATUS found for {bill_id}", file=sys.stderr)
-            continue
+        print(
+            f"{bill_id}: {len(report_sources)} report source(s): "
+            f"{', '.join(s.citation for s in report_sources) or 'none'}",
+            file=sys.stderr,
+        )
 
-        reports = extract_committee_reports(bill_elem)
-        print(f"  Found {len(reports)} report(s): {', '.join(r['citation'] for r in reports)}", file=sys.stderr)
-
-        # For each version in the manifest, determine its report pairing
         for ver in bill_entry.get("versions", []):
+            if "xml" not in ver.get("formats", []):
+                continue
             stage = ver["stage"]
-            formats = ver.get("formats", [])
-            has_xml = "xml" in formats
-            is_enrolled = "enrolled" in stage.lower()
+            pairing = get_report_pairing(report_sources, stage, bill_type)
+            ver["committee_report"] = format_report_pairing(pairing)
+            desc = ", ".join(s.citation for s in pairing.sources) if pairing.sources else "none"
+            print(f"    {stage}: {desc} ({pairing.reason or 'ok'})", file=sys.stderr)
 
-            if has_xml:
-                report = get_report_for_stage(reports, stage, btype, is_enrolled)
-                if report:
-                    ver["committee_report"] = {
-                        "pkg": report["pkg"],
-                        "citation": report["citation"],
-                        "chamber": report["chamber"],
-                    }
-                else:
-                    # Determine the reason for no report
-                    if not reports:
-                        reason = "bill has no committee reports (introduced only or floor-amended omnibus)"
-                    elif is_enrolled:
-                        reason = "enrolled bill; no conference report identified"
-                    else:
-                        reason = f"no {btype} report for this stage"
-                    ver["committee_report"] = {
-                        "pkg": "none",
-                        "citation": "none",
-                        "chamber": "none",
-                        "reason": reason,
-                    }
-
-    # Write to temp file first, then move
-    manifest_path = Path(__file__).resolve().parents[1] / "tests" / "corpus_manifest.toml"
-    with tempfile.NamedTemporaryFile(mode="wb", dir=manifest_path.parent, delete=False) as tf:
-        tomli_w.dump(manifest, tf)
-        temp_path = Path(tf.name)
-
-    # Atomic move
-    temp_path.replace(manifest_path)
-
-    print("Manifest updated successfully!", file=sys.stderr)
+    write_manifest_doc(doc)
+    print("Manifest updated (comments preserved).", file=sys.stderr)
 
 
 if __name__ == "__main__":

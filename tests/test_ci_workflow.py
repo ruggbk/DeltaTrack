@@ -22,6 +22,7 @@ nothing about the rest of the workflow, so adding a job or a step does not touch
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -149,4 +150,76 @@ def test_ci_does_not_cancel_in_progress_runs() -> None:
     assert concurrency.get("cancel-in-progress") is not True, (
         "ci.yml cancels in-progress runs. On develop that means a merge commit finishes "
         "with no verdict, recreating the gap #412 closed. Use cancel-in-progress: false."
+    )
+
+
+# Slow modules CI deliberately does not run, each with the reason it is exempt.
+# An entry here is a claim that the module is covered somewhere else or is not an
+# offline gate -- not a place to park a module nobody wired up.
+SLOW_MODULES_NOT_IN_CI_YML = {
+    "tests/test_govinfo_corpus_parity.py": (
+        "fetches BILLSTATUS live, so it is not an offline gate; it runs in corpus-parity.yml"
+    ),
+}
+
+
+# A real marker: the decorator on its own line, or a module-level `pytestmark`.
+# Matched structurally rather than as a substring, so a module that merely mentions
+# the marker in prose (this one does, at length) is not counted as carrying it.
+_SLOW_MARKER = re.compile(r"^\s*@pytest\.mark\.slow\b|^pytestmark\s*=.*\bpytest\.mark\.slow\b", re.MULTILINE)
+
+
+def _slow_test_modules() -> set[str]:
+    """Every tests/*.py module that marks at least one case @pytest.mark.slow."""
+    root = Path(__file__).parent
+    return {
+        f"tests/{path.name}"
+        for path in sorted(root.glob("test_*.py"))
+        if _SLOW_MARKER.search(path.read_text(encoding="utf-8"))
+    }
+
+
+def _modules_named_in_ci() -> set[str]:
+    """Every tests/*.py path named by any step's `run:` block in ci.yml."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    return {token.strip() for token in text.split() if token.strip().startswith("tests/") and token.endswith(".py")}
+
+
+def test_every_slow_module_is_named_by_a_ci_step() -> None:
+    """A @slow module named by no step is collected by nothing and passes by absence.
+
+    Every slow step in ci.yml selects modules BY PATH, and the fast step excludes the
+    slow marker, so adding a @slow file wires it into no job at all. The suite goes
+    green because the file's assertions never ran -- indistinguishable, from the outside,
+    from a file whose assertions all passed.
+
+    ci.yml argues this in prose in three separate step comments, and it had still
+    happened at least twice (the packaging gate, then the committee-report fixture gate
+    in #295). Prose that no test enforces reads as settled while being ungated, which is
+    the same reasoning that put the trigger assertions above in this file.
+    """
+    slow_modules = _slow_test_modules()
+    named = _modules_named_in_ci()
+
+    # Neither half may be empty, or the comparison below passes having compared nothing.
+    assert slow_modules, "found no @slow test modules; the scan is broken, not the workflow"
+    assert named, "found no tests/*.py paths in ci.yml; the parse is broken, not the workflow"
+
+    unwired = slow_modules - named - set(SLOW_MODULES_NOT_IN_CI_YML)
+    assert not unwired, (
+        "these @slow test modules are named by no ci.yml step, so CI collects none of "
+        "their cases and they pass green-by-absence:\n"
+        + "\n".join(f"  {m}" for m in sorted(unwired))
+        + "\n\nAdd each to a slow step's `run:` list, or declare it in "
+        "SLOW_MODULES_NOT_IN_CI_YML with the reason it is covered elsewhere."
+    )
+
+
+def test_slow_module_exemptions_still_exist() -> None:
+    """An exemption naming a deleted or de-marked module is stale, and hides the next one."""
+    slow_modules = _slow_test_modules()
+    stale = {m for m in SLOW_MODULES_NOT_IN_CI_YML if m not in slow_modules}
+    assert not stale, (
+        f"SLOW_MODULES_NOT_IN_CI_YML names module(s) that no longer exist or no longer "
+        f"mark any case @slow: {sorted(stale)}. Remove the entry."
     )

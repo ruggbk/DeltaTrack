@@ -58,6 +58,22 @@ Things worth knowing before running any of it:
 The commands run unattended; the `git diff` review before committing is the part that
 waits on a person.
 
+## Committee report pairing
+
+Which committee report explains a given bill version, recorded per version in
+[tests/corpus_manifest.toml](../tests/corpus_manifest.toml) as `committee_report`
+(DeltaTrack#295).
+
+| Script | What it does |
+|--------|--------------|
+| `report_pairing.py` | Not a runnable script — the shared pairing rules both of the others import. Defines the authoring chamber of a stage and which reports are conference reports. Change a rule here, then re-run the updater. |
+| `update_manifest_with_reports.py [--refresh]` | Rewrite the manifest's `committee_report` entries. Default is offline: re-applies the pairing rules to the report sources already recorded. `--refresh` re-fetches BILLSTATUS and re-confirms each govinfo package. Edits via tomlkit so the manifest's documentation comments survive. |
+| `vendor_reports.py` | Download the committed report HTML fixtures named by the manifest, and re-validate the ones already present. Rejects govinfo's error page, which it serves as HTTP 200 for an unknown package. |
+
+A report govinfo publishes no text for is recorded as `text_available = false` with a
+reason and **no** `pkg`, and must have no fixture — `tests/test_manifest_report_fixtures.py`
+asserts both directions, so the exception cannot outlive its reason.
+
 ## PDF / rendering
 
 | Script | What it does |

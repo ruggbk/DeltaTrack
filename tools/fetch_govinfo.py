@@ -878,38 +878,6 @@ def require_supported_congress(congress: int) -> None:
         )
 
 
-def extract_committee_reports(bill: ET.Element) -> list[dict]:
-    """Extract committee report citations from a BILLSTATUS ``<bill>`` element.
-
-    Returns a list of dicts with keys: ``citation`` (e.g. "H. Rept. 118-553"),
-    ``chamber`` ("house" or "senate"), ``congress`` (int), ``number`` (int),
-    and ``pkg`` (govinfo package id, e.g. "CRPT-118hrpt553").
-    """
-    reports = []
-    for child in bill:
-        if child.tag == "committeeReports":
-            for subchild in child:
-                citation = None
-                for subsub in subchild:
-                    if subsub.tag == "citation":
-                        citation = subsub.text
-                if citation:
-                    m = re.match(r"^(H\.|S\.)\s*Rept\.\s*(\d+)-(\d+)", citation)
-                    if m:
-                        prefix, congress_str, number_str = m.groups()
-                        chamber = "house" if prefix == "H." else "senate"
-                        reports.append(
-                            {
-                                "citation": citation,
-                                "chamber": chamber,
-                                "congress": int(congress_str),
-                                "number": int(number_str),
-                                "pkg": f"CRPT-{congress_str}{chamber[0]}rpt{number_str}",
-                            }
-                        )
-    return reports
-
-
 def fetch_billstatus_bill(client: httpx.Client, congress: int, bill_type: str, number: int) -> ET.Element | None:
     """Fetch and parse one bill's BILLSTATUS; the ``<bill>`` element, or None if absent.
 

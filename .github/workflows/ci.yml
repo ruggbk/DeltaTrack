@@ -223,6 +223,7 @@ jobs:
           tests/test_xml_compare.py
           tests/test_toc_tree.py
           tests/test_format_html.py
+          tests/test_manifest_report_fixtures.py
           tests/test_canonical_tree.py
           tests/test_reconcile.py
           tests/test_pdf_watermark_recall.py

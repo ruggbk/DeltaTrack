@@ -73,7 +73,7 @@ stage = "4_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "CRPT-118hrpt122", citation = "H. Rept. 118-122", chamber = "house"}]
+committee_report = [{citation = "none", chamber = "none", reason = "no senate committee report explains this stage"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-house"
@@ -99,7 +99,7 @@ stage = "4_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
+committee_report = [{citation = "none", chamber = "none", reason = "no senate committee report explains this stage"}]
 
 [[bill.versions]]
 stage = "5_enrolled-bill"
@@ -107,7 +107,7 @@ formats = [
     "xml",
     "pdf",
 ]
-committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house", conference = true}]
 
 [[bill.versions]]
 stage = "1_reported-in-house"
@@ -115,7 +115,7 @@ formats = [
     "xml",
     "pdf",
 ]
-committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -123,8 +123,9 @@ formats = [
     "xml",
     "pdf",
 ]
-committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house"}]
+committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}]
 
+# --- Structural-shape coverage -------------------------------------------------
 [[bill]]
 id = "113-hr-3547"
 subcommittee = "full-year omnibus (enrolled)"
@@ -136,7 +137,7 @@ formats = [
     "pdf",
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
@@ -144,7 +145,7 @@ formats = [
     "pdf",
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "3_received-in-senate"
@@ -152,7 +153,7 @@ formats = [
     "pdf",
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "4_engrossed-amendment-senate"
@@ -160,21 +161,21 @@ formats = [
     "xml",
     "pdf",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "114-hr-2029"
@@ -208,7 +209,7 @@ stage = "5_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "CRPT-114hrpt92", citation = "H. Rept. 114-92", chamber = "house"}]
+committee_report = [{pkg = "CRPT-114srpt57", citation = "S. Rept. 114-57", chamber = "senate"}]
 
 [[bill.versions]]
 stage = "6_engrossed-amendment-house"
@@ -256,15 +257,16 @@ formats = [
     "xml",
     "pdf",
 ]
-committee_report = [{pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 1", chamber = "house", book = "Book 1"}, {pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 2", chamber = "house", book = "Book 2"}]
+committee_report = [{citation = "H. Rept. 119-106,Book 1", chamber = "house", book = "Book 1", text_available = false, unavailable_reason = "multi-book report: no per-book govinfo package ID is known"}, {citation = "H. Rept. 119-106,Book 2", chamber = "house", book = "Book 2", text_available = false, unavailable_reason = "multi-book report: no per-book govinfo package ID is known"}]
 
 [[bill.versions]]
 stage = "2_engrossed-in-house"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 1", chamber = "house", book = "Book 1"}, {pkg = "CRPT-119hrpt106", citation = "H. Rept. 119-106,Book 2", chamber = "house", book = "Book 2"}]
+committee_report = [{citation = "H. Rept. 119-106,Book 1", chamber = "house", book = "Book 1", text_available = false, unavailable_reason = "multi-book report: no per-book govinfo package ID is known"}, {citation = "H. Rept. 119-106,Book 2", chamber = "house", book = "Book 2", text_available = false, unavailable_reason = "multi-book report: no per-book govinfo package ID is known"}]
 
+# --- PDF pipeline + XML/PDF diff ----------------------------------------------
 [[bill]]
 id = "118-hr-8752"
 subcommittee = "commerce-justice-science / homeland (reported + engrossed House)"
@@ -297,8 +299,12 @@ formats = [
     "pdf",
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
+# --- PDF-golden SEC.-catchline false-positive repros (#89, committed by #287) ---
+# Introduced-in-House PDFs pinned by test_pdf_anchor_golden: a wrapped SEC. catchline
+# rendered in the heading band must NOT surface as a false `account`/`major`. Committed
+# and manifested so that gate fails closed rather than skipping on a CI checkout (#287).
 [[bill]]
 id = "117-hr-2471"
 subcommittee = "non-appropriations House bill (catchline repro)"
@@ -310,14 +316,14 @@ formats = [
     "pdf",
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "118-hr-2882"
@@ -330,22 +336,26 @@ formats = [
     "pdf",
     "xml",
 ]
-committee_report = [{pkg = "CRPT-118hrpt364", citation = "H. Rept. 118-364", chamber = "house"}]
+committee_report = [{citation = "H. Rept. 118-364", chamber = "house", text_available = false, unavailable_reason = "govinfo serves no text rendition for CRPT-118hrpt364"}]
 
 [[bill.versions]]
 stage = "4_engrossed-amendment-senate"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "CRPT-118hrpt364", citation = "H. Rept. 118-364", chamber = "house"}]
+committee_report = [{citation = "none", chamber = "none", reason = "no senate committee report explains this stage"}]
 
 [[bill.versions]]
 stage = "5_engrossed-amendment-house"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "CRPT-118hrpt364", citation = "H. Rept. 118-364", chamber = "house"}]
+committee_report = [{citation = "H. Rept. 118-364", chamber = "house", text_available = false, unavailable_reason = "govinfo serves no text rendition for CRPT-118hrpt364"}]
 
+# --- One Senate reported print per appropriations subcommittee -----------------
+# FY2025 (118th) unless noted. Reported-in-Senate prints exercise small-caps heading
+# bands and per-subcommittee department/major heading vocabulary — the overfitting
+# guard #126 asks for. Committed under tests/corpus/118-s-*/ like every other fixture.
 [[bill]]
 id = "118-s-4690"
 subcommittee = "agriculture"
@@ -530,6 +540,14 @@ formats = [
 ]
 committee_report = [{pkg = "CRPT-113hrpt483", citation = "H. Rept. 113-483", chamber = "house"}]
 
+# --- Legislative Branch external-validation set (#278) -------------------------
+# The enrolled bills tests/data/validation_leg_branch.json checks extracted amounts
+# against, committed in #278 so that validation runs whole in CI instead of over the two
+# bills that happened to be committed. Manifested for the same reason every other
+# committed bill is: the manifest is the record of the committed fixture set, and its
+# floor is what keeps a fixture from silently rotting out of the checkout. They add
+# corpus-gate coverage of enrolled full-year omnibus text across FY2014-FY2020 at no
+# calibration cost — each was added one at a time and needed no new baseline or skip.
 [[bill]]
 id = "116-hr-1865"
 subcommittee = "full-year omnibus (enrolled, FY2020)"
@@ -540,7 +558,7 @@ stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "115-hr-1625"
@@ -552,7 +570,7 @@ stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill]]
 id = "115-hr-244"
@@ -564,8 +582,19 @@ stage = "6_enrolled-bill"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
+# --- Account-vocabulary floor bills (previously fetch-only) --------------------
+# Both were named by tests/test_pdf_anchor_golden.py's account-vocab floor gate as
+# `bills/<id>` — the gitignored download tree — so CI collected NO case for either and 2
+# of that gate's 8 bills were permanently skipped there. 118-hr-4820 is the bill the
+# gate's floors are CALIBRATED on ("the lowest measured value: vrec 0.64 / vprec 0.46"),
+# so the floor was anchored to a measurement no CI run could reproduce. Committing the
+# pair is what turns that gate's stated coverage into its actual coverage.
+#
+# One version each, in both formats, because the gate measures PDF-detected account
+# vocabulary against the XML of the SAME version — a stage committed in one format
+# measures nothing.
 [[bill]]
 id = "117-hr-4432"
 subcommittee = "defense"
@@ -616,11 +645,11 @@ stage = "1_introduced-in-house"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
 
 [[bill.versions]]
 stage = "4_enrolled-bill"
 formats = [
     "xml",
 ]
-committee_report = [{pkg = "none", citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
+committee_report = [{citation = "none", chamber = "none", reason = "bill has no committee reports (introduced only or floor-amended omnibus)"}]
