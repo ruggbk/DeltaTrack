@@ -1236,8 +1236,7 @@ def test_csp_blocks_object_element(live_url, chromium):
     )
 
     assert csp_violation["loaded"] is False, (
-        "<object> element loaded (onload fired) despite object-src 'none' — "
-        "CSP enforcement is not working"
+        "<object> element loaded (onload fired) despite object-src 'none' — CSP enforcement is not working"
     )
 
     # If we got CSP violations, that's proof the browser enforced it
