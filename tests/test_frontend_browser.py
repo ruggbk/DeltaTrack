@@ -1212,18 +1212,18 @@ def test_csp_blocks_object_element(live_url, chromium):
                 }
                 originalError.apply(console, args);
             };
-            
+
             const obj = document.createElement('object');
             obj.type = 'text/html';
             obj.data = '/index.html';  // Same-origin, would load without CSP
             obj.style.width = '100px';
             obj.style.height = '100px';
-            
+
             let loaded = false;
             obj.onload = () => { loaded = true; };
-            
+
             document.body.appendChild(obj);
-            
+
             // Wait for load or CSP violation
             setTimeout(() => {
                 console.error = originalError;
@@ -1239,7 +1239,7 @@ def test_csp_blocks_object_element(live_url, chromium):
         "<object> element loaded (onload fired) despite object-src 'none' — "
         "CSP enforcement is not working"
     )
-    
+
     # If we got CSP violations, that's proof the browser enforced it
     # If not, the browser may have silently blocked without firing events
     # Both cases indicate CSP is working (object didn't load)
@@ -1269,27 +1269,27 @@ def test_csp_base_uri_none_ignores_base_tag(live_url, chromium):
             const base = document.createElement('base');
             base.href = '/different/path/';
             document.head.appendChild(base);
-            
+
             // Now try to load a relative resource (no leading slash)
             const img = document.createElement('img');
             img.src = 'test.jpg';  // Relative URL
             img.style.display = 'none';
-            
+
             let loaded = false;
             let errored = false;
             img.onload = () => { loaded = true; };
             img.onerror = () => { errored = true; };
-            
+
             document.body.appendChild(img);
-            
+
             setTimeout(() => {
                 // With base-uri 'none', currentSrc should be relative to document origin
                 // (i.e., /sample/test.jpg), not the base path (/different/path/test.jpg)
-                resolve({ 
-                    loaded, 
-                    errored, 
+                resolve({
+                    loaded,
+                    errored,
                     currentSrc: img.currentSrc,
-                    ignoredBase: img.currentSrc.includes('/sample/') 
+                    ignoredBase: img.currentSrc.includes('/sample/')
                 });
             }, 3000);
         })"""
