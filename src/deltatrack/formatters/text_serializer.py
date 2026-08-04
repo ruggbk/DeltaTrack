@@ -242,18 +242,4 @@ def _serialize(
         if idx < len(out):
             start = line_starts[idx] + prefix_len
             spans[element_id] = (start, start + body_len)
-    # Descriptor: only for a bare "TITLE I"-style enum (PDF carries these as the
-    # title text), labelled with the account heading directly below it, mirroring
-    # PDF `_title_descriptor`. XML title labels are now "TITLE I—<header>" (#50),
-    # which already carry the descriptive header inline — the em-dash distinguishes
-    # them from a bare PDF enum, so they get no (duplicate) descriptor.
-    for i, entry in enumerate(sections):
-        if (
-            entry["kind"] == "title"
-            and entry["label"].upper().startswith("TITLE ")
-            and "—" not in entry["label"]
-            and i + 1 < len(sections)
-            and sections[i + 1]["kind"] == "account"
-        ):
-            entry["descriptor"] = sections[i + 1]["label"]
     return text, sections, spans, heading_offsets

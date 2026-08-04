@@ -233,22 +233,15 @@ def test_sections_carry_label_kind_and_offset_on_the_heading_line():
     assert text[by_label["Sec. 101"]["start"] :].startswith("SEC. 101.")
 
 
-def test_title_section_gets_account_descriptor():
-    _, sections = serialize_tree_with_offsets(_toc_tree())
-    title = next(s for s in sections if s["kind"] == "title")
-    assert title.get("descriptor") == "DEPARTMENT OF DEFENSE"
-
-
-def test_combined_title_label_gets_no_duplicate_descriptor():
-    """An XML "TITLE I—<header>" label already carries the header, so it must not
-    also pull the next account in as a descriptor (the em-dash guard, #50)."""
+def test_combined_title_label_keeps_its_inline_header():
+    """An XML "TITLE I—<header>" label carries the header inline (#50) and is emitted
+    whole, rather than being split across the label and a separate field."""
     nodes = [
         _node(path=("TITLE I—DEPARTMENTAL MANAGEMENT", "Office of the Secretary"), body="x"),
     ]
     text, sections = serialize_tree_with_offsets(_tree(nodes))
     title = next(s for s in sections if s["kind"] == "title")
     assert title["label"] == "TITLE I—DEPARTMENTAL MANAGEMENT"
-    assert "descriptor" not in title
     # The title line still appears in the full-bill text.
     assert "TITLE I—DEPARTMENTAL MANAGEMENT" in text
 
@@ -352,7 +345,7 @@ def test_empty_body_section_still_emits_its_heading_line():
 
 def test_subsection_jump_list_entries_carry_subsection_kind():
     # PDF's _section_nav includes subsection anchors (kind="subsection", #96);
-    # the XML jump list mirrors it so _build_toc consumes both identically.
+    # the XML jump list mirrors it so both pipelines assign row ids identically.
     _text, sections = serialize_tree_with_offsets(_tree(_sec_with_subs()))
     kinds = [(s["label"], s["kind"]) for s in sections]
     assert ("Sec. 547", "section") in kinds

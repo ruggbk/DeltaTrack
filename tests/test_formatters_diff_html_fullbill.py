@@ -120,43 +120,36 @@ def test_no_find_bar_without_canonical():
     assert 'id="find-input"' not in html
 
 
-def test_full_bill_toc_links():
-    # section start 0 lands on the first display row ("ADD0"), which gets id="sec-0".
+def test_sections_assign_full_bill_row_ids():
+    """`sections` maps each heading's char offset to a display row id.
+
+    This is the job `sections` still has after the flat navigation builder was removed
+    (#462): the ids it assigns are what the navigation links land on. Offset 0 lands on
+    the first display row ("ADD0"), which gets id="sec-0".
+    """
     sections = [{"label": "TITLE I", "kind": "title", "start": 0}]
     html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert 'class="sidebar-toc"' in html
-    assert 'href="#sec-0"' in html
     assert 'id="sec-0"' in html
-    assert "TITLE I" in html
 
 
-def test_full_bill_toc_nests_sections_under_titles():
-    # starts 0 / 12 land on display rows 1 ("ADD0") and 2 ("MOD1").
-    sections = [
-        {"label": "TITLE I", "kind": "title", "start": 0, "descriptor": "DEPARTMENT OF DEFENSE"},
-        {"label": "SEC. 101", "kind": "section", "start": 12},
-    ]
-    html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert '<details class="toc-group">' in html
-    assert "TITLE I &mdash; DEPARTMENT OF DEFENSE" in html  # descriptor labels the bare title
-    assert 'href="#sec-0"' in html  # title is itself a jump target
-    assert '<li class="toc-child"><a href="#sec-1">SEC. 101</a></li>' in html  # section nested under it
-    assert 'id="sec-0"' in html and 'id="sec-1"' in html
-
-
-def test_full_bill_toc_links_front_matter():
-    # The synthesized front-matter entry (issue #33) sits at offset 0, before any
-    # title, so it renders as a top-level jump link to the first display row.
+def test_sections_assign_row_ids_in_order():
+    """A second entry gets the next id, so ids follow document order."""
     sections = [
         {"label": "Front Matter", "kind": "preamble", "start": 0},
         {"label": "TITLE I", "kind": "title", "start": 12},
     ]
     html = format_diff_html(_view(), _canonical(), sections=sections)
-    assert '<li class="toc-child"><a href="#sec-0">Front Matter</a></li>' in html
     assert 'id="sec-0"' in html
+    assert 'id="sec-1"' in html
 
 
-def test_toc_empty_state_when_no_sections():
+def test_toc_empty_state_when_canonical_has_no_tree():
+    """Full text but no structure tree still renders a pane saying so.
+
+    Before #462 this empty state came from the flat builder. It now comes from the
+    tree builder, so the reader is told the navigation is empty rather than the pane
+    disappearing.
+    """
     html = format_diff_html(_view(), _canonical(), sections=[])
     assert 'class="sidebar-toc"' in html
     assert "No sections detected." in html

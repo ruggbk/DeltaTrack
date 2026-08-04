@@ -341,38 +341,6 @@ def _build_change_groups(view: DiffView, order_map: dict[tuple, int] | None = No
     return "".join(blocks)
 
 
-def _build_toc(sections: list[dict]) -> str:
-    """Full-bill section navigation: each TITLE (labelled with its descriptor) is
-    a collapsible group; its sections/accounts nest beneath and link to their row.
-    Collapsed by default; clicking a title expands it and jumps to it."""
-    if not sections:
-        return '<p class="toc-empty">No sections detected.</p>'
-
-    def child_li(i: int, s: dict) -> str:
-        return f'<li class="toc-child"><a href="#sec-{i}">{escape(s["label"])}</a></li>'
-
-    pre: list[str] = []  # any sections before the first title (uncommon)
-    groups: list[tuple[str, list[str]]] = []  # (title summary, child <li>s)
-    for i, s in enumerate(sections):
-        if s.get("kind") == "title":
-            desc = s.get("descriptor") or ""
-            label = escape(s["label"]) + (f" &mdash; {escape(desc)}" if desc else "")
-            groups.append((f'<summary><a href="#sec-{i}">{label}</a></summary>', []))
-        elif groups:
-            groups[-1][1].append(child_li(i, s))
-        else:
-            pre.append(child_li(i, s))
-
-    blocks: list[str] = []
-    if pre:
-        blocks.append(f'<ul class="toc">{"".join(pre)}</ul>')
-    blocks.extend(
-        f'<details class="toc-group">{summary}<ul class="toc">{"".join(children)}</ul></details>'
-        for summary, children in groups
-    )
-    return f'<div class="toc__title">Sections</div>{"".join(blocks)}'
-
-
 def _walk_tree(nodes: list[dict]):
     """Depth-first walk over canonical structure-tree nodes (#108)."""
     for n in nodes:
@@ -463,11 +431,15 @@ def _build_sidebar(
     ``.sidebar-changes`` (filters + changes grouped by section) is shown in the
     Changes view; ``.sidebar-toc`` (full-bill section jump list) in the Full bill
     view — the JS view toggle swaps them. The TOC is built from ``canonical``'s
-    leveled structure tree when present (#108 — the renderer that surfaces the tree
-    in the contract; its anchors and nesting come from the same canonical the
-    full-bill view renders from, so they line up). It falls back to the flat
-    ``sections`` jump-list, and is omitted entirely (the swap no-ops) when neither
-    is available (XML/no full bill).
+    leveled structure tree (#108 — the renderer that surfaces the tree in the
+    contract; its anchors and nesting come from the same canonical the full-bill
+    view renders from, so they line up), and is omitted entirely (the swap no-ops)
+    when there is no full text to index into.
+
+    ``sections`` no longer feeds the TOC. A second, flat builder used to render it
+    from that list whenever the tree was absent, but the tree won for every bill the
+    renderer accepts, so it and its `descriptor` field were removed (#462).
+    ``sections`` is still what assigns the full-bill row ids the TOC links land on.
     """
     tree_v2 = (canonical.get("tree") or {}).get("v2") if (canonical and canonical.get("tree")) else None
     if order_map is None:
@@ -484,12 +456,10 @@ def _build_sidebar(
         "</div>"
     )
     full_text_v2 = (canonical.get("full_text") or {}).get("v2") if canonical else None
-    if tree_v2 and full_text_v2:
-        toc_html = _build_toc_from_tree(tree_v2, full_text_v2)
-    elif sections is not None:
-        toc_html = _build_toc(sections)
-    else:
-        toc_html = None
+    # The tree builder owns the navigation outright (#462). It also renders the
+    # "no sections" empty state, so a canonical carrying full text but no usable tree
+    # still gets a pane saying so rather than silently losing the navigation.
+    toc_html = _build_toc_from_tree(tree_v2 or [], full_text_v2) if full_text_v2 else None
     toc_pane = "" if toc_html is None else f'<div class="sidebar-toc" hidden>{toc_html}</div>'
     return f'<nav class="sidebar">\n{changes_pane}\n{toc_pane}\n</nav>'
 
