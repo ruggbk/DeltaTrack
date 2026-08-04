@@ -872,7 +872,7 @@ def extract_anchors(pages: list[Page]) -> list[Anchor]:
         anchors.extend(_account_anchors_by_size(pages, bands))
         anchors.extend(_major_anchors_by_size(pages, bands))
     # No else: when the size signal is absent, structure degrades to the universal
-    # TITLE/SEC. tokens already collected above rather than being guessed from an
+    # TITLE/SEC./enumerator tokens already collected above rather than being guessed from an
     # appropriations-specific English phrase (#114, ADR 0018).
 
     anchors.sort(key=lambda a: (a.page_number, a.line_number))
@@ -928,7 +928,7 @@ def _breadcrumb_core(anchor: Anchor, all_anchors: tuple[Anchor, ...] | list[Anch
 
     Breadcrumb DEPTH is detection-path dependent: major/agency/grouping parents exist
     only on the size path, so a low-coverage/no-band bill has no account level at all
-    and its deepest chain is TITLE/SEC. Consumers must not assume a major, agency or
+    and its deepest chain runs TITLE/SEC./subsection. Consumers must not assume a major, agency or
     account segment is always present.
     """
     if anchor.kind in ("title", "preamble"):

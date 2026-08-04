@@ -55,10 +55,15 @@ class TestAccountAnchor:
     appropriations-specific English phrase load-bearing for structure, which #114
     rules out — text triggers may interpret dollar amounts, never name accounts.
     Account detection is now glyph-size based, and `_scan_anchors_in_page` builds
-    pages from raw text with no sizes attached, so this entry point is structurally
-    incapable of producing one. Account-level assertions live in
-    test_pdf_size_detection.py and test_pdf_anchor_golden.py, against sized pages
-    and real PDFs respectively.
+    pages from raw text with no sizes attached, so no size-based account can arise
+    here. These are not vacuous, though: reintroducing a text trigger would make
+    them fail immediately, which is exactly how the superseded versions of these
+    cases used to pass.
+
+    What still emits from raw text is the universal grammar — TITLE, SEC., and
+    enumerator-derived run-in subsections. Positive account assertions live in
+    test_pdf_size_detection.py (sized synthetic pages) and test_pdf_anchor_golden.py
+    (real PDFs).
     """
 
     def test_for_necessary_expenses_does_not_name_an_account(self):
@@ -83,7 +88,8 @@ class TestAccountAnchor:
     def test_section_break_still_yields_its_section_anchor(self):
         # Losing the account level must not cost the universal SEC. token beside it
         # (#114 category D) — that is the whole point of degrading rather than
-        # guessing: TITLE/SEC survive, the appropriations-specific guess does not.
+        # guessing: TITLE/SEC./enumerator-derived structure survives, the
+        # appropriations-specific guess does not.
         text = (
             "5 SEC. 101. Short title.\n"
             "6 U.S. CUSTOMS AND BORDER PROTECTION\n"
