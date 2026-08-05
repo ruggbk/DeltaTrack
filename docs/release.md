@@ -1,7 +1,7 @@
 # Release: promoting `develop` to `main`
 
 `develop` is the integration branch and `main` is the protected release branch (see
-[CONTRIBUTING.md](../CONTRIBUTING.md#branching)). Promotion is the only way work reaches
+[CONTRIBUTING.md](../CONTRIBUTING.md#branch-workflow)). Promotion is the only way work reaches
 either public surface, and it is a deliberate, human-initiated step.
 
 **Promotion is the maintainer's call to initiate.** A runbook step saying "open the
@@ -15,11 +15,23 @@ Promotion updates both at once. Neither tracks `develop`.
 | Surface | What it is | How it updates |
 |---|---|---|
 | The hosted comparison app | The FastAPI upload app | The server pulls from `main`, then a redeploy (below) |
-| The example reports | Static reports linked from the README's "See it in action" | `.github/workflows/update-examples.yml`, on push to `main`. Regenerates the examples and deploys to Pages |
+| The example reports | Static reports linked from the README's "See it in action" | `.github/workflows/update-examples.yml`, on push to `main`. Copies the already-committed `examples/` directory into a Pages artifact and deploys it |
 
-Because the example reports regenerate from `main`, they lag whatever is on `develop`.
-A long gap between promotions means the project's front page shows visitors an older
-build of the renderer than the one the code produces.
+**The workflow does not render anything.** It used to, and that is worth stating plainly
+because the older behaviour is still what is running on `main` today and is the version
+most people will have seen. Since #42, rendering happens in exactly one place,
+`scripts/render_examples.py`, run by a human and committed to `develop`.
+`tests/test_committed_examples.py` (#284) re-renders from the committed corpus in the
+normal CI job and fails if `examples/` no longer matches what the renderer produces, so
+the files being published are already proven current before promotion.
+
+One consequence is easy to miss: a promotion replaces `update-examples.yml` itself before
+the push run executes, so the workflow that publishes is always `develop`'s, never the one
+that was sitting on `main`.
+
+Because Pages publishes what is on `main`, the reports lag whatever is on `develop`. A
+long gap between promotions means the project's front page shows visitors an older build
+of the renderer than the one the code produces.
 
 ## Sequence
 
@@ -42,39 +54,70 @@ attributable.
    an earlier commit says nothing about the one going to `main`. A local full run is a
    fallback if no run exists for that commit, not the gate.
 
-2. **Check the example-generation workflow can still run.** `update-examples.yml` fetches
-   a bill and runs two comparisons. It executes only on `main`, so any change to fetching
-   or to the comparison entry points that landed on `develop` has never run in this
-   workflow's environment. Exercise those commands against the current `develop` before
-   promoting rather than discovering it in a Pages deploy.
+2. **Confirm the committed examples are current, and check whether the Pages action
+   versions have moved.** The first half needs no separate work: step 1's green run
+   includes `tests/test_committed_examples.py`, which re-renders and compares, so a green
+   `develop` already means `examples/` matches the renderer. If it had drifted, CI would
+   be red.
+
+   The second half does need a look. Diff `.github/workflows/update-examples.yml` between
+   `main` and `develop` and note whether the `actions/*` versions changed. They are
+   pinned by major version and the promotion is the first time the new pins execute in
+   the Pages environment, so a bump turns step 4 from a formality into a real gate. This
+   is a one-command check and it decides how closely to watch the deploy.
 
 3. **Open the promotion pull request** from `develop` to `main`. `main` is protected; the
    maintainer merges.
 
-4. **Redeploy the hosted app.** The server pulls from `main` and restarts. The command is
+4. **Watch the Pages workflow finish.** The merge triggers `update-examples.yml` on
+   `main`. Treat its completion as a release gate rather than assuming it, particularly
+   when step 2 found changed action versions: the publishing steps run only on `main` and
+   in the Pages environment, so this run is the first evidence anyone has about them. A
+   failure here leaves the previous Pages deploy serving, which is stale rather than
+   broken, so it is recoverable and does not by itself justify rolling back the merge.
+
+5. **Redeploy the hosted app.** The server pulls from `main` and restarts. The command is
    in [docs/web-compare.md](web-compare.md); hosting specifics live outside this
    repository.
 
-5. **Smoke both surfaces.** Run a real comparison on the hosted app, and open the
-   README's "See it in action" links to confirm they now serve the newly generated
-   reports. Checking only one surface leaves the other unverified, and they fail
-   independently.
+6. **Smoke both surfaces.** Run a real comparison on the hosted app, and open the
+   README's "See it in action" links to confirm they serve the promoted reports. Checking
+   only one surface leaves the other unverified, and they fail independently.
 
-6. **Leave a rollback window.** Rollback is reverting the promotion pull request and
-   redeploying. Do not start unrelated work on `main` inside that window.
+7. **Leave a rollback window.** Do not start unrelated work on `main` inside it.
+
+   Rollback is reverting the promotion pull request and redeploying, and it has a
+   consequence worth knowing before you need it. Promotions land on `main` as merge
+   commits, so reverting one restores the files while leaving the promoted commits in
+   `main`'s ancestry. Git then treats them as already merged, and **the next promotion
+   will not bring them back.** Recovering forward is a deliberate act: revert the revert,
+   or otherwise reapply the release, as part of the following promotion. Nobody should be
+   left assuming the next merge will quietly restore what the rollback removed.
 
 ## What the workflow does not exercise
 
-Step 1 reads a continuous-integration run and step 2 can be run locally. The Pages
-publishing steps in `update-examples.yml`
-(`configure-pages`, `upload-pages-artifact`, `deploy-pages`) cannot: they need the Pages
-environment and only run on `main`. They are unchanged from previous successful runs, so
-they are low risk, but a promotion has no local evidence about them. If Pages publishing
-fails, that is where to look first.
+Steps 1 and 2 read evidence that already exists. The Pages publishing steps in
+`update-examples.yml` (`checkout`, `configure-pages`, `upload-pages-artifact`,
+`deploy-pages`) produce none: they need the Pages environment and run only on `main`, so
+no local run and no pull-request run says anything about them.
+
+Do not assume they carry over from the last successful publish. These actions are pinned
+by major version, and dependency updates move those pins on `develop` between promotions,
+where nothing executes them. When the pins have changed, the promotion is the **first**
+execution of the new versions, not a repeat of a proven one. At the time this was written
+every one of the four had moved since the previous release, which is why step 2 asks for
+the diff rather than treating the publish as routine. If Pages publishing fails, look here
+first.
 
 ## Files that look disposable and are not
 
 The committed example reports are the README's front-page demo and a live Pages surface.
-They regenerate on promotion, which makes them look like build output that can be deleted
-or moved freely. Deleting or relocating them without repointing the README leaves dead
-links on the project's front page, and no continuous-integration check catches it.
+Being generated files checked into the repository, they read as build output that can be
+deleted or moved freely. Nothing regenerates them on promotion; the publish step only
+copies what is already committed, so whatever is in `examples/` at merge time is exactly
+what the public gets.
+
+`tests/test_committed_examples.py` keeps them *current*, failing CI when they no longer
+match the renderer. It does not keep them *present*, and it does not know the README links
+to them. Deleting or relocating them without repointing the README leaves dead links on
+the project's front page, and no continuous-integration check catches that.
