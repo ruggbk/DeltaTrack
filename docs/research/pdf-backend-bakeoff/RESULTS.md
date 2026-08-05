@@ -181,6 +181,13 @@ Zero errors: every backend opened every document.
 | pdfjs | 0.9126 | 1.0000 | **0.4664** | 82.2 s |
 | pypdf | 0.8729 | 0.9875 | 0.4137 | 90.0 s |
 
+**This table is the full 52; the gate table above is the 42 documents production
+accepts.** The only figure that moves between them is pypdf's line-number recall,
+0.9875 → **1.0000**: all nine of its shortfalls are enrolled prints, which
+`compare/pdf.py` declines. Both populations are reported because they answer different
+questions — this one "how good are the glyph facts", the gate table "would the product
+ship worse than it does today".
+
 **Text F1 does not discriminate.** Five of six backends land within 0.0005 of each other.
 A bake-off that measured only text would have called this a tie and picked on speed.
 
@@ -560,3 +567,27 @@ already exists.
    highest-value follow-up for anything OS-dependent.
 5. **Take the WebRTC finding to whoever writes the IT story.** It changes a claim that was
    previously believed absolute into one that is precise and defensible.
+
+### What would change the recommendation
+
+Stated so the conclusion is falsifiable rather than merely asserted:
+
+- **A Tier B failure.** PDFium-WASM's case rests on published GPO material. If real
+  pre-publication documents break it, the recommendation changes, and nothing measured
+  here would have predicted that.
+- **A Windows result that differs.** Everything here is macOS/arm64.
+- **The bundle-size story.** PDFium-WASM adds 4.6 MB of WASM to an artifact the delivery
+  spike already measured at 17.8 MB. This spike did not build the combined artifact or
+  measure its load time from `file://`, and that is the most obvious unmeasured cost of
+  the recommended option. pdfminer adds no binary at all, which is the axis on which it
+  could still win despite being ~8x slower.
+- **PDFium's vendored third-party licenses.** Flagged as an open item in
+  [`LICENSING.md`](LICENSING.md), not cleared.
+
+### One thing this spike did not do
+
+It did **not** build the PDF.js operator-list adapter, so PDF.js's result is a measurement
+of `getTextContent()` rather than of PDF.js. Given the operator stream demonstrably
+carries the size signal, a fair reading is "PDF.js was not fully tested", not "PDF.js
+failed". That distinction matters if bundle size later argues for a JS-native backend over
+a 4.6 MB WASM one.
