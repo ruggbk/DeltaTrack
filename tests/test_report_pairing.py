@@ -361,3 +361,167 @@ def test_rendition_url_addresses_a_granule_inside_its_parent_package() -> None:
     assert rendition_url("CRPT-118hrpt122") == (
         "https://www.govinfo.gov/content/pkg/CRPT-118hrpt122/html/CRPT-118hrpt122.htm"
     )
+
+
+def test_blind_offline_mode_fails_closed_for_new_version(monkeypatch):
+    """When offline mode has no recoverable sources and a version lacks an entry, fail closed.
+
+    Scenario: a bill has report history (H. Rept. 118-364 for 118-hr-2882) but the
+    lineage rule correctly drops all pairings (the report explains none of the
+    committed versions). Offline recovery from the manifest sees no sources at all.
+    If we then try to add a new manifested version, we cannot determine its pairing
+    -- the real answer requires --refresh to re-fetch BILLSTATUS.
+
+    The current code would call get_report_pairing([], stage, bill_type) and write
+    "bill has no committee reports", which is false. This test ensures we fail
+    with a clear error instead.
+    """
+    import scripts.update_manifest_with_reports as updater
+
+    # This is what sources_from_manifest returns when all pairings are "none" with reasons
+    bill_entry = {
+        "id": "118-hr-2882",
+        "versions": [
+            {
+                "stage": "1_introduced-in-house",
+                "committee_report": [
+                    {
+                        "citation": "none",
+                        "chamber": "none",
+                        "reason": ("version predates the committee report, which is filed at the reported stage"),
+                    }
+                ],
+            },
+            {
+                "stage": "4_engrossed-amendment-senate",
+                "committee_report": [
+                    {
+                        "citation": "none",
+                        "chamber": "none",
+                        "reason": (
+                            "text was authored in response to the other "
+                            "chamber's amendment, so no committee report "
+                            "of this chamber accompanies it"
+                        ),
+                    }
+                ],
+            },
+            {
+                "stage": "5_engrossed-amendment-house",
+                "committee_report": [
+                    {
+                        "citation": "none",
+                        "chamber": "none",
+                        "reason": (
+                            "text was authored in response to the other "
+                            "chamber's amendment, so no committee report "
+                            "of this chamber accompanies it"
+                        ),
+                    }
+                ],
+            },
+            # A NEW version that has NO committee_report entry at all
+            {"stage": "7_enrolled-bill"},
+        ],
+    }
+
+    report_sources = updater.sources_from_manifest(bill_entry)
+
+    # sources_from_manifest should return empty because all recorded pairings are "none"
+    assert report_sources == [], f"Expected empty sources, got {report_sources}"
+
+    # Find the version with no entry
+    new_version = None
+    for ver in bill_entry["versions"]:
+        if "committee_report" not in ver:
+            new_version = ver
+            break
+
+    assert new_version is not None
+    assert "committee_report" not in new_version
+
+    # Now call the production updater logic directly -- this is what exercises
+    # the actual fail-closed branch in update_bill_version_pairing()
+    import sys
+
+    old_exit = sys.exit
+    exit_msg = None
+
+    def mock_exit(msg):
+        nonlocal exit_msg
+        exit_msg = msg
+
+    sys.exit = mock_exit
+    try:
+        updater.update_bill_version_pairing(
+            ver=new_version,
+            report_sources=report_sources,
+            bill_id="118-hr-2882",
+            bill_type="hr",
+            blind=True,  # offline mode with no recoverable sources
+        )
+    finally:
+        sys.exit = old_exit
+
+    assert exit_msg is not None
+    assert "cannot determine committee report for new version" in exit_msg
+    assert "7_enrolled-bill" in exit_msg
+    assert "--refresh" in exit_msg
+
+    # Verify existing valid entries remain untouched
+    for ver in bill_entry["versions"]:
+        if "committee_report" in ver:
+            assert ver["committee_report"] is not None
+
+
+def test_updater_offline_format_independence():
+    """Format independence: pairing depends on legislative version/stage, not on XML presence.
+
+    The updater used to skip versions without XML, leaving PDF-only versions with
+    no committee_report entry at all. This test exercises the production updater
+    logic directly with a synthetic version that has formats = ["pdf"] plus a
+    known report source, asserting it receives the correct committee_report.
+
+    This test does not depend on the live corpus containing a PDF-only version.
+    The real corpus no longer has one (114-hr-2029/4_reported-in-senate gained
+    XML when #434 landed), so the invariant is protected at the rule level.
+    """
+    import scripts.update_manifest_with_reports as updater
+    from scripts.report_pairing import ReportSource
+
+    # A synthetic PDF-only version (the format that used to be skipped)
+    synthetic_version = {
+        "stage": "4_reported-in-senate",
+        "formats": ["pdf"],  # no XML
+    }
+
+    # A known report source for this bill/chamber -- with pkg as it would be
+    # after --refresh resolves it. The offline updater just copies what it's given.
+    report_sources = [
+        ReportSource(
+            citation="S. Rept. 114-57",
+            chamber="senate",
+            number=57,
+            pkg="CRPT-114srpt57",
+        )
+    ]
+
+    # Call the production updater logic directly
+    updater.update_bill_version_pairing(
+        ver=synthetic_version,
+        report_sources=report_sources,
+        bill_id="114-hr-2029",
+        bill_type="hr",
+        blind=False,  # we have report sources, so not blind
+    )
+
+    # The version should now have a committee_report entry
+    assert "committee_report" in synthetic_version
+    report_entry = synthetic_version["committee_report"]
+
+    # It should be an array with the Senate report
+    assert isinstance(report_entry, list)
+    assert len(report_entry) == 1
+    assert report_entry[0]["citation"] == "S. Rept. 114-57"
+    assert report_entry[0]["chamber"] == "senate"
+    assert report_entry[0]["pkg"] == "CRPT-114srpt57"

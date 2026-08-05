@@ -281,16 +281,49 @@ def main():
         # 114-hr-2029's reported-in-Senate print with no pairing, which is the exact
         # version/chamber example #295 exists to establish.
         for ver in bill_entry.get("versions", []):
-            stage = ver["stage"]
-            if blind and ver.get("committee_report"):
-                continue
-            pairing = get_report_pairing(report_sources, stage, bill_type)
-            ver["committee_report"] = format_report_pairing(pairing)
-            desc = ", ".join(s.citation for s in pairing.sources) if pairing.sources else "none"
-            print(f"    {stage}: {desc} ({pairing.reason or 'ok'})", file=sys.stderr)
+            update_bill_version_pairing(
+                ver=ver,
+                report_sources=report_sources,
+                bill_id=bill_id,
+                bill_type=bill_type,
+                blind=blind,
+            )
 
     write_manifest_doc(doc)
     print("Manifest updated (comments preserved).", file=sys.stderr)
+
+
+def update_bill_version_pairing(
+    *,
+    ver: dict,
+    report_sources: list,
+    bill_id: str,
+    bill_type: str,
+    blind: bool,
+) -> None:
+    """Update a single version's committee_report entry.
+
+    This is the core per-version pairing logic, extracted for direct testability.
+    Both ``main()`` and the regression tests call this function.
+    """
+    stage = ver["stage"]
+    if blind and ver.get("committee_report"):
+        return
+    if blind and not ver.get("committee_report"):
+        # Blind offline mode cannot determine the pairing for a version
+        # that has no existing entry. The report sources for this bill are
+        # not recoverable from the manifest (the lineage rule correctly
+        # dropped all pairings), so calling get_report_pairing([], ...)
+        # would write an invented "bill has no committee reports" reason
+        # that is known to be potentially false. Fail closed instead.
+        sys.exit(
+            f"{bill_id}: cannot determine committee report for new version "
+            f"{stage} offline; run scripts/update_manifest_with_reports.py --refresh"
+        )
+    pairing = get_report_pairing(report_sources, stage, bill_type)
+    ver["committee_report"] = format_report_pairing(pairing)
+    desc = ", ".join(s.citation for s in pairing.sources) if pairing.sources else "none"
+    print(f"    {stage}: {desc} ({pairing.reason or 'ok'})", file=sys.stderr)
 
 
 if __name__ == "__main__":

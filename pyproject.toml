@@ -51,6 +51,7 @@ requires-python = ">=3.12"
 # and separate groups below. This list is what a consumer of the engine actually gets.
 dependencies = [
     "pypdfium2>=5.12.1",
+    "tomlkit>=0.15.1",
 ]
 
 [dependency-groups]

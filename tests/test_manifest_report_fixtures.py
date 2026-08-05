@@ -577,12 +577,10 @@ def test_every_manifested_version_has_a_committee_report_entry():
     # The format-independence invariant (report metadata generated regardless of
     # committed formats) is tested by test_updater_offline_format_independence in
     # test_report_pairing.py, which uses a synthetic version with formats = ["pdf"]
-    # and does not depend on the live corpus containing a PDF-only version. The
-    # corpus no longer has a PDF-only version since #434 committed XML for
-    # 114-hr-2029 / 4_reported-in-senate.
-    assert any("xml" not in formats or "pdf" not in formats for _b, _s, formats, _r in _ALL_VERSIONS), (
-        "corpus has no single-format versions; format independence not exercised in live data"
-    )
+    # and does not depend on the live corpus containing a PDF-only version. That
+    # version existed when the test was written (114-hr-2029 v4) but #434 has since
+    # committed its XML, so the corpus may have no PDF-only versions at any given
+    # time. The invariant is tested at the rule level, not by corpus shape.
 
 
 @pytest.mark.slow
@@ -629,8 +627,3 @@ def test_114_hr_2029_reported_in_senate_pairs_with_the_senate_report():
     # regardless of which formats we hold for the version. The format-independence
     # invariant is tested separately by test_updater_offline_format_independence
     # (a synthetic unit test that does not depend on live corpus shape).
-    formats = next(f for b, s, f, _r in _ALL_VERSIONS if (b, s) == key)
-    assert "xml" in formats and "pdf" in formats, (
-        "this version now has both formats; the format-independence invariant is "
-        "protected by test_updater_offline_format_independence in test_report_pairing.py"
-    )
