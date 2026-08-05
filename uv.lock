@@ -259,6 +259,7 @@ dev = [
     { name = "reportlab" },
     { name = "respx" },
     { name = "ruff" },
+    { name = "tomlkit" },
     { name = "xmldiff" },
 ]
 fetch = [
@@ -290,6 +291,7 @@ dev = [
     { name = "reportlab", specifier = ">=5.0.0" },
     { name = "respx", specifier = ">=0.22" },
     { name = "ruff", specifier = "==0.16.0" },
+    { name = "tomlkit", specifier = ">=0.13" },
     { name = "xmldiff", specifier = ">=3.0" },
 ]
 fetch = [
