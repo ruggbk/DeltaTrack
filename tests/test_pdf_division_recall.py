@@ -49,6 +49,22 @@ _KNOWN_NAME_RESIDUE = {
 # "this print has no line numbers" stays distinguishable from "anchor extraction broke".
 _PDF_NO_TITLE_ANCHOR_LAYOUTS: dict[str, str] = {
     "115-hr-5895/5_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    # The enrolled prints committed by #126, which took format parity to 52 of 57
+    # manifested versions so far more pairings can be tested. They are carried for the
+    # dollar-amount cross-check (which reads PDF text and needs no anchors) and for the
+    # enacted text itself, not for structure: they contribute no anchors for the same #141 reason as
+    # the entry above. The assertions around this registry still hold each one to
+    # classifying as the unnumbered layout with an intact text layer, so the registry
+    # cannot go stale in the quiet direction.
+    "117-hr-2471/6_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "116-hr-1865/6_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "115-hr-1625/6_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "115-hr-244/6_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "118-hr-4366/6_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "113-hr-3547/6_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "114-hr-2029/7_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "113-hr-83/7_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
+    "118-hr-9468/4_enrolled-bill": "enrolled print — no GPO margin line numbers (#141)",
 }
 
 
