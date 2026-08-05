@@ -69,12 +69,25 @@ attributable.
 3. **Open the promotion pull request** from `develop` to `main`. `main` is protected; the
    maintainer merges.
 
-4. **Watch the Pages workflow finish.** The merge triggers `update-examples.yml` on
-   `main`. Treat its completion as a release gate rather than assuming it, particularly
-   when step 2 found changed action versions: the publishing steps run only on `main` and
-   in the Pages environment, so this run is the first evidence anyone has about them. A
-   failure here leaves the previous Pages deploy serving, which is stale rather than
-   broken, so it is recoverable and does not by itself justify rolling back the merge.
+4. **Watch the post-merge runs on `main` finish.** Three land: CI, security, and
+   `update-examples.yml`. Confirm all three against the actual merge commit before
+   treating the promotion as done.
+
+   CI and security are the ones easiest to skip, because both already reported green on
+   the pull request. That green describes a *preview* merge, not the commit that landed.
+   `develop` is protected from this by a merge queue that tests the real merge commit
+   before it lands; **`main` has no queue**, so its push run is the only test the actual
+   promotion merge ever gets. `.github/workflows/ci.yml` says so directly, and
+   `pip-audit (production deps)` is a required check on `main`. Skipping them here means
+   the largest merge the project performs is the one merge nothing verifies as landed.
+
+   The Pages run is the release gate for the published demo, and step 2 decides how
+   closely to watch it: the publishing steps run only on `main` and only in the Pages
+   environment, so when the action versions have moved, this run is the first evidence
+   anyone has about them. A failure there leaves the previous Pages deploy serving, which
+   is stale rather than broken. That is recoverable and does not by itself justify rolling
+   back. A red CI or security run on `main` is a different matter and belongs in the
+   rollback conversation at step 7.
 
 5. **Redeploy the hosted app.** The server pulls from `main` and restarts. The command is
    in [docs/web-compare.md](web-compare.md); hosting specifics live outside this
@@ -117,7 +130,14 @@ deleted or moved freely. Nothing regenerates them on promotion; the publish step
 copies what is already committed, so whatever is in `examples/` at merge time is exactly
 what the public gets.
 
-`tests/test_committed_examples.py` keeps them *current*, failing CI when they no longer
-match the renderer. It does not keep them *present*, and it does not know the README links
-to them. Deleting or relocating them without repointing the README leaves dead links on
-the project's front page, and no continuous-integration check catches that.
+`tests/test_committed_examples.py` covers more than freshness. It fails when a rendered
+file is missing from `examples/`, and `test_no_committed_example_is_orphaned` fails in the
+other direction, on a committed file the renderer no longer produces. So deleting one, or
+adding a stray, goes red.
+
+The gap it cannot close is narrower and easy to walk into. Nothing knows which filenames
+the README links to. Its "See it in action" line points at absolute Pages URLs naming
+specific files, and a coordinated change, renaming an output in `render_examples.py` and
+committing the regenerated results, satisfies every example test while leaving the front
+page pointing at a URL that no longer exists. Repoint the README in the same commit as any
+rename, because no gate will remind you.
