@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,10 +142,30 @@ def run_backend(backend: str, pdf: Path, limit: int | None = None) -> tuple[list
         return mod.extract(pdf, limit)
 
     script = NODE_BACKENDS[backend]
-    cmd = ["node", str(script), str(Path(pdf).resolve())]
+    cmd = ["node", "--max-old-space-size=8192", str(script), str(Path(pdf).resolve())]
     if limit is not None:
         cmd += ["--limit", str(limit)]
-    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(script.parent), check=False)
+    # Streamed, not captured. A 1000-page enrolled bill is ~3M glyphs; buffering the
+    # whole JSONL document as one string before parsing costs hundreds of megabytes on
+    # top of the parsed result. Reading page-by-page keeps one page's JSON alive at a
+    # time. stderr is drained in a thread so a chatty backend cannot deadlock on a full
+    # pipe buffer while we are still reading stdout.
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(script.parent),
+        bufsize=1024 * 1024,
+    )
+    assert proc.stdout is not None and proc.stderr is not None
+    errbuf: list[str] = []
+    drain = threading.Thread(target=lambda: errbuf.append(proc.stderr.read()))
+    drain.start()
+    pages, summary = read_stream(proc.stdout)
+    proc.stdout.close()
+    drain.join()
+    proc.wait()
     if proc.returncode != 0:
-        raise RuntimeError(f"{backend} failed on {pdf}: {proc.stderr[-2000:]}")
-    return read_stream(iter(proc.stdout.splitlines()))
+        raise RuntimeError(f"{backend} failed on {pdf}: {''.join(errbuf)[-2000:]}")
+    return pages, summary
