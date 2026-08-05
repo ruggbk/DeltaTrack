@@ -60,12 +60,30 @@ def main() -> int:
         floor = layout_floor(xml_path)
         total_fragments += len(fragments)
 
+        # Mirror the test's own branching exactly. A script that reports a version the
+        # gate would fail as fine is worse than no script: it is consulted precisely
+        # when someone is deciding whether a red run is real.
+        if not fragments:
+            breaches.append(label)
+            print(f"{label} [{layout}]: NO FRAGMENTS -- extraction found nothing to compare")
+            continue
+
         if len(fragments) < MIN_FRAGMENTS:
-            # Too short for a ratio. The test demands full recall of these on a healthy
-            # layout, so report them the same way rather than scoring them.
-            status = "SHORT OK" if not missing or floor < RECALL_FLOOR else "SHORT INCOMPLETE"
-            if status == "SHORT INCOMPLETE":
-                breaches.append(label)
+            if floor == RECALL_FLOOR:
+                # Healthy layout: the gate demands every fragment, so report that, not a
+                # ratio it does not apply.
+                status = "SHORT OK" if not missing else "SHORT INCOMPLETE"
+                if missing:
+                    breaches.append(label)
+            else:
+                # Degraded layout: the gate still holds these to the layout floor, so
+                # score them against it rather than waving them through for being short.
+                recall = (len(fragments) - len(missing)) / len(fragments)
+                if recall < floor:
+                    status = f"SHORT BELOW ITS {floor:.0%} FLOOR ({recall:.1%})"
+                    breaches.append(label)
+                else:
+                    status = f"SHORT OK ({recall:.1%}, degraded layout floor {floor:.0%})"
             print(f"{label} [{layout}]: {status} ({len(fragments)} fragments, {len(missing)} missing)")
             for miss in missing[: args.misses]:
                 print(f"    MISS: {miss[:200]}")

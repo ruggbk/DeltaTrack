@@ -258,11 +258,23 @@ def test_xml_prose_appears_in_pdf(bill: str, xml_path: Path, pdf_path: Path) -> 
             f"margin line numbers. The exemption does not apply to this document."
         )
 
+    # Unconditional, and it has to come before every branch below: with no fragments
+    # there is nothing to be missing, so "all of them survived" and "recall is 100%" are
+    # both vacuously true and this version drops out of the oracle in silence. The
+    # corpus-level guard does not cover this -- it tolerates a minority of the corpus
+    # going quiet by design, so one version, or a handful, can vanish while it stays
+    # green. Costs no calibration: a genuine two-fragment shell bill still satisfies it.
+    assert fragments, (
+        f"{test_id} yielded no prose fragments at all. Every bill version carries some "
+        f"body prose, so this is fragment extraction failing on this document rather "
+        f"than a property of the bill -- and it would otherwise pass every check below "
+        f"vacuously."
+    )
+
     if len(fragments) < MIN_FRAGMENTS:
         # Too few fragments for a ratio to mean anything, so demand all of them. Not
-        # skipped: a skip asserts nothing, and a fragment extractor that quietly found
-        # nothing would land every version here. On a degraded layout the same defect
-        # applies to these short documents, so they keep their layout's floor.
+        # skipped: a skip asserts nothing. On a degraded layout the same defect applies
+        # to these short documents, so they fall through to their layout's floor.
         if floor == RECALL_FLOOR:
             assert not missing, (
                 f"{test_id} carries only {len(fragments)} prose fragments, too few to "
@@ -270,7 +282,6 @@ def test_xml_prose_appears_in_pdf(bill: str, xml_path: Path, pdf_path: Path) -> 
                 f"{len(missing)} did not:\n    {sample}"
             )
             return
-        assert fragments, f"{test_id} yielded no prose fragments at all."
 
     recall = (len(fragments) - len(missing)) / len(fragments)
     assert recall >= floor, (
