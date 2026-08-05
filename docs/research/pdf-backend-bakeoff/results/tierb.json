@@ -1,0 +1,885 @@
+{
+ "documents": {
+  "tests/data/CRPT-118srpt198.pdf": {
+   "pdfium-native": {
+    "extract_s": 4.036,
+    "n_pages": 231,
+    "reconstruction": {
+     "visual_lines": 10503,
+     "chrome_lines": 229,
+     "numbered_lines": 11,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 2609,
+     "repaired_line_ends": 2609
+    },
+    "n_anchors": 0,
+    "anchor_kinds": {},
+    "glyphs": 823613,
+    "undecodable_glyphs": 2609,
+    "vs_incumbent": null
+   },
+   "pdfminer": {
+    "extract_s": 44.88,
+    "n_pages": 231,
+    "reconstruction": {
+     "visual_lines": 10503,
+     "chrome_lines": 229,
+     "numbered_lines": 11,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 0,
+    "anchor_kinds": {},
+    "glyphs": 817855,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 0,
+     "anchors_cand": 0,
+     "breadcrumb_agreement": null
+    }
+   },
+   "pymupdf": {
+    "extract_s": 7.413,
+    "n_pages": 231,
+    "reconstruction": {
+     "visual_lines": 10503,
+     "chrome_lines": 229,
+     "numbered_lines": 11,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 0,
+    "anchor_kinds": {},
+    "glyphs": 820955,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 0,
+     "anchors_cand": 0,
+     "breadcrumb_agreement": null
+    }
+   },
+   "pypdf": {
+    "extract_s": 2.577,
+    "n_pages": 231,
+    "reconstruction": {
+     "visual_lines": 10484,
+     "chrome_lines": 223,
+     "numbered_lines": 16,
+     "ambiguous_numbers": 1,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 0,
+    "anchor_kinds": {},
+    "glyphs": 825447,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": false,
+     "line_number_recall": 1.0,
+     "anchors_ref": 0,
+     "anchors_cand": 0,
+     "breadcrumb_agreement": null
+    }
+   },
+   "pdfium-wasm": {
+    "extract_s": 3.757,
+    "n_pages": 231,
+    "reconstruction": {
+     "visual_lines": 10503,
+     "chrome_lines": 229,
+     "numbered_lines": 11,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 2609,
+     "repaired_line_ends": 2609
+    },
+    "n_anchors": 0,
+    "anchor_kinds": {},
+    "glyphs": 815188,
+    "undecodable_glyphs": 2609,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 0,
+     "anchors_cand": 0,
+     "breadcrumb_agreement": null
+    }
+   },
+   "pdfjs": {
+    "extract_s": 2.264,
+    "n_pages": 231,
+    "reconstruction": {
+     "visual_lines": 10503,
+     "chrome_lines": 229,
+     "numbered_lines": 11,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 0,
+    "anchor_kinds": {},
+    "glyphs": 814996,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 0,
+     "anchors_cand": 0,
+     "breadcrumb_agreement": null
+    }
+   }
+  },
+  "tests/data/BILLS-118s4795rs.pdf": {
+   "pdfium-native": {
+    "extract_s": 0.949,
+    "n_pages": 142,
+    "reconstruction": {
+     "visual_lines": 3707,
+     "chrome_lines": 280,
+     "numbered_lines": 3410,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 817,
+     "repaired_line_ends": 817
+    },
+    "n_anchors": 212,
+    "anchor_kinds": {
+     "title": 5,
+     "major": 5,
+     "agency": 37,
+     "account": 84,
+     "grouping": 2,
+     "section": 79
+    },
+    "glyphs": 183565,
+    "undecodable_glyphs": 817,
+    "vs_incumbent": null
+   },
+   "pdfminer": {
+    "extract_s": 2.257,
+    "n_pages": 142,
+    "reconstruction": {
+     "visual_lines": 3707,
+     "chrome_lines": 280,
+     "numbered_lines": 3410,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 212,
+    "anchor_kinds": {
+     "title": 5,
+     "major": 5,
+     "agency": 37,
+     "account": 84,
+     "grouping": 2,
+     "section": 79
+    },
+    "glyphs": 179934,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 212,
+     "anchors_cand": 212,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pymupdf": {
+    "extract_s": 1.052,
+    "n_pages": 142,
+    "reconstruction": {
+     "visual_lines": 3707,
+     "chrome_lines": 280,
+     "numbered_lines": 3410,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 212,
+    "anchor_kinds": {
+     "title": 5,
+     "major": 5,
+     "agency": 37,
+     "account": 84,
+     "grouping": 2,
+     "section": 79
+    },
+    "glyphs": 180317,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 212,
+     "anchors_cand": 212,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pypdf": {
+    "extract_s": 0.694,
+    "n_pages": 142,
+    "reconstruction": {
+     "visual_lines": 3707,
+     "chrome_lines": 280,
+     "numbered_lines": 3410,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 178,
+    "anchor_kinds": {
+     "title": 5,
+     "major": 9,
+     "account": 80,
+     "section": 79,
+     "agency": 5
+    },
+    "glyphs": 180427,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 212,
+     "anchors_cand": 178,
+     "breadcrumb_agreement": 0.26887
+    }
+   },
+   "pdfium-wasm": {
+    "extract_s": 0.97,
+    "n_pages": 142,
+    "reconstruction": {
+     "visual_lines": 3707,
+     "chrome_lines": 280,
+     "numbered_lines": 3410,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 817,
+     "repaired_line_ends": 817
+    },
+    "n_anchors": 212,
+    "anchor_kinds": {
+     "title": 5,
+     "major": 5,
+     "agency": 37,
+     "account": 84,
+     "grouping": 2,
+     "section": 79
+    },
+    "glyphs": 180987,
+    "undecodable_glyphs": 817,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 212,
+     "anchors_cand": 212,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pdfjs": {
+    "extract_s": 0.789,
+    "n_pages": 142,
+    "reconstruction": {
+     "visual_lines": 3707,
+     "chrome_lines": 280,
+     "numbered_lines": 3410,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 178,
+    "anchor_kinds": {
+     "title": 5,
+     "major": 9,
+     "account": 80,
+     "section": 79,
+     "agency": 5
+    },
+    "glyphs": 177577,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 212,
+     "anchors_cand": 178,
+     "breadcrumb_agreement": 0.27358
+    }
+   }
+  },
+  "tests/data/subcommittee/BILLS-118hr8580rh.pdf": {
+   "pdfium-native": {
+    "extract_s": 0.67,
+    "n_pages": 94,
+    "reconstruction": {
+     "visual_lines": 2511,
+     "chrome_lines": 276,
+     "numbered_lines": 2217,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 553,
+     "repaired_line_ends": 553
+    },
+    "n_anchors": 203,
+    "anchor_kinds": {
+     "title": 4,
+     "major": 4,
+     "account": 50,
+     "agency": 18,
+     "grouping": 4,
+     "section": 117,
+     "subsection": 6
+    },
+    "glyphs": 133419,
+    "undecodable_glyphs": 553,
+    "vs_incumbent": null
+   },
+   "pdfminer": {
+    "extract_s": 1.71,
+    "n_pages": 94,
+    "reconstruction": {
+     "visual_lines": 2511,
+     "chrome_lines": 276,
+     "numbered_lines": 2217,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 203,
+    "anchor_kinds": {
+     "title": 4,
+     "major": 4,
+     "account": 50,
+     "agency": 18,
+     "grouping": 4,
+     "section": 117,
+     "subsection": 6
+    },
+    "glyphs": 130399,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 203,
+     "anchors_cand": 203,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pymupdf": {
+    "extract_s": 0.781,
+    "n_pages": 94,
+    "reconstruction": {
+     "visual_lines": 2511,
+     "chrome_lines": 276,
+     "numbered_lines": 2217,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 203,
+    "anchor_kinds": {
+     "title": 4,
+     "major": 4,
+     "account": 50,
+     "agency": 18,
+     "grouping": 4,
+     "section": 117,
+     "subsection": 6
+    },
+    "glyphs": 130644,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 203,
+     "anchors_cand": 203,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pypdf": {
+    "extract_s": 0.5,
+    "n_pages": 94,
+    "reconstruction": {
+     "visual_lines": 2511,
+     "chrome_lines": 276,
+     "numbered_lines": 2217,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 167,
+    "anchor_kinds": {
+     "title": 4,
+     "major": 7,
+     "section": 117,
+     "account": 29,
+     "agency": 3,
+     "subsection": 6,
+     "grouping": 1
+    },
+    "glyphs": 131358,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 203,
+     "anchors_cand": 167,
+     "breadcrumb_agreement": 0.18227
+    }
+   },
+   "pdfium-wasm": {
+    "extract_s": 0.758,
+    "n_pages": 94,
+    "reconstruction": {
+     "visual_lines": 2511,
+     "chrome_lines": 276,
+     "numbered_lines": 2217,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 553,
+     "repaired_line_ends": 553
+    },
+    "n_anchors": 203,
+    "anchor_kinds": {
+     "title": 4,
+     "major": 4,
+     "account": 50,
+     "agency": 18,
+     "grouping": 4,
+     "section": 117,
+     "subsection": 6
+    },
+    "glyphs": 131729,
+    "undecodable_glyphs": 553,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 203,
+     "anchors_cand": 203,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pdfjs": {
+    "extract_s": 0.746,
+    "n_pages": 94,
+    "reconstruction": {
+     "visual_lines": 2511,
+     "chrome_lines": 276,
+     "numbered_lines": 2217,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 167,
+    "anchor_kinds": {
+     "title": 4,
+     "major": 7,
+     "section": 117,
+     "account": 29,
+     "agency": 3,
+     "subsection": 6,
+     "grouping": 1
+    },
+    "glyphs": 129512,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 203,
+     "anchors_cand": 167,
+     "breadcrumb_agreement": 0.19704
+    }
+   }
+  },
+  "tests/data/subcommittee/BILLS-118hr8771rh.pdf": {
+   "pdfium-native": {
+    "extract_s": 2.141,
+    "n_pages": 300,
+    "reconstruction": {
+     "visual_lines": 8254,
+     "chrome_lines": 896,
+     "numbered_lines": 7339,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 1918,
+     "repaired_line_ends": 1918
+    },
+    "n_anchors": 533,
+    "anchor_kinds": {
+     "title": 8,
+     "major": 8,
+     "agency": 22,
+     "account": 92,
+     "grouping": 72,
+     "section": 73,
+     "subsection": 258
+    },
+    "glyphs": 420511,
+    "undecodable_glyphs": 1918,
+    "vs_incumbent": null
+   },
+   "pdfminer": {
+    "extract_s": 5.83,
+    "n_pages": 300,
+    "reconstruction": {
+     "visual_lines": 8254,
+     "chrome_lines": 896,
+     "numbered_lines": 7339,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 533,
+    "anchor_kinds": {
+     "title": 8,
+     "major": 8,
+     "agency": 22,
+     "account": 92,
+     "grouping": 72,
+     "section": 73,
+     "subsection": 258
+    },
+    "glyphs": 410089,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 533,
+     "anchors_cand": 533,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pymupdf": {
+    "extract_s": 2.601,
+    "n_pages": 300,
+    "reconstruction": {
+     "visual_lines": 8254,
+     "chrome_lines": 896,
+     "numbered_lines": 7339,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 533,
+    "anchor_kinds": {
+     "title": 8,
+     "major": 8,
+     "agency": 22,
+     "account": 92,
+     "grouping": 72,
+     "section": 73,
+     "subsection": 258
+    },
+    "glyphs": 411171,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 533,
+     "anchors_cand": 533,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pypdf": {
+    "extract_s": 1.622,
+    "n_pages": 300,
+    "reconstruction": {
+     "visual_lines": 8253,
+     "chrome_lines": 896,
+     "numbered_lines": 7339,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 511,
+    "anchor_kinds": {
+     "title": 8,
+     "major": 15,
+     "account": 80,
+     "agency": 5,
+     "grouping": 72,
+     "section": 73,
+     "subsection": 258
+    },
+    "glyphs": 414043,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 533,
+     "anchors_cand": 511,
+     "breadcrumb_agreement": 0.52345
+    }
+   },
+   "pdfium-wasm": {
+    "extract_s": 2.095,
+    "n_pages": 300,
+    "reconstruction": {
+     "visual_lines": 8254,
+     "chrome_lines": 896,
+     "numbered_lines": 7339,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 1918,
+     "repaired_line_ends": 1918
+    },
+    "n_anchors": 533,
+    "anchor_kinds": {
+     "title": 8,
+     "major": 8,
+     "agency": 22,
+     "account": 92,
+     "grouping": 72,
+     "section": 73,
+     "subsection": 258
+    },
+    "glyphs": 414999,
+    "undecodable_glyphs": 1918,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 533,
+     "anchors_cand": 533,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pdfjs": {
+    "extract_s": 1.556,
+    "n_pages": 300,
+    "reconstruction": {
+     "visual_lines": 8254,
+     "chrome_lines": 896,
+     "numbered_lines": 7339,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 506,
+    "anchor_kinds": {
+     "title": 8,
+     "major": 12,
+     "account": 78,
+     "agency": 5,
+     "grouping": 72,
+     "section": 73,
+     "subsection": 258
+    },
+    "glyphs": 407660,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 533,
+     "anchors_cand": 506,
+     "breadcrumb_agreement": 0.79925
+    }
+   }
+  },
+  "tests/data/subcommittee/BILLS-118hr8772rh.pdf": {
+   "pdfium-native": {
+    "extract_s": 0.347,
+    "n_pages": 48,
+    "reconstruction": {
+     "visual_lines": 1268,
+     "chrome_lines": 140,
+     "numbered_lines": 1111,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 249,
+     "repaired_line_ends": 249
+    },
+    "n_anchors": 119,
+    "anchor_kinds": {
+     "title": 2,
+     "major": 3,
+     "agency": 13,
+     "account": 41,
+     "grouping": 21,
+     "section": 24,
+     "subsection": 15
+    },
+    "glyphs": 65702,
+    "undecodable_glyphs": 249,
+    "vs_incumbent": null
+   },
+   "pdfminer": {
+    "extract_s": 0.898,
+    "n_pages": 48,
+    "reconstruction": {
+     "visual_lines": 1268,
+     "chrome_lines": 140,
+     "numbered_lines": 1111,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 119,
+    "anchor_kinds": {
+     "title": 2,
+     "major": 3,
+     "agency": 13,
+     "account": 41,
+     "grouping": 21,
+     "section": 24,
+     "subsection": 15
+    },
+    "glyphs": 64051,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 119,
+     "anchors_cand": 119,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pymupdf": {
+    "extract_s": 0.404,
+    "n_pages": 48,
+    "reconstruction": {
+     "visual_lines": 1268,
+     "chrome_lines": 140,
+     "numbered_lines": 1111,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 119,
+    "anchor_kinds": {
+     "title": 2,
+     "major": 3,
+     "agency": 13,
+     "account": 41,
+     "grouping": 21,
+     "section": 24,
+     "subsection": 15
+    },
+    "glyphs": 64335,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 119,
+     "anchors_cand": 119,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pypdf": {
+    "extract_s": 0.273,
+    "n_pages": 48,
+    "reconstruction": {
+     "visual_lines": 1268,
+     "chrome_lines": 140,
+     "numbered_lines": 1111,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 73,
+    "anchor_kinds": {
+     "title": 2,
+     "major": 5,
+     "agency": 1,
+     "account": 5,
+     "grouping": 21,
+     "section": 24,
+     "subsection": 15
+    },
+    "glyphs": 64741,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": false,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 119,
+     "anchors_cand": 73,
+     "breadcrumb_agreement": 0.31933
+    }
+   },
+   "pdfium-wasm": {
+    "extract_s": 0.416,
+    "n_pages": 48,
+    "reconstruction": {
+     "visual_lines": 1268,
+     "chrome_lines": 140,
+     "numbered_lines": 1111,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 249,
+     "repaired_line_ends": 249
+    },
+    "n_anchors": 119,
+    "anchor_kinds": {
+     "title": 2,
+     "major": 3,
+     "agency": 13,
+     "account": 41,
+     "grouping": 21,
+     "section": 24,
+     "subsection": 15
+    },
+    "glyphs": 64862,
+    "undecodable_glyphs": 249,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 119,
+     "anchors_cand": 119,
+     "breadcrumb_agreement": 1.0
+    }
+   },
+   "pdfjs": {
+    "extract_s": 0.54,
+    "n_pages": 48,
+    "reconstruction": {
+     "visual_lines": 1268,
+     "chrome_lines": 140,
+     "numbered_lines": 1111,
+     "ambiguous_numbers": 0,
+     "unnamed_glyphs": 0,
+     "repaired_line_ends": 0
+    },
+    "n_anchors": 72,
+    "anchor_kinds": {
+     "title": 2,
+     "major": 4,
+     "agency": 1,
+     "account": 5,
+     "grouping": 21,
+     "section": 24,
+     "subsection": 15
+    },
+    "glyphs": 63751,
+    "undecodable_glyphs": 0,
+    "vs_incumbent": {
+     "text_identical": true,
+     "line_numbers_identical": true,
+     "line_number_recall": 1.0,
+     "anchors_ref": 119,
+     "anchors_cand": 72,
+     "breadcrumb_agreement": 0.33613
+    }
+   }
+  }
+ },
+ "n_documents": 12,
+ "note": "WHAT THIS IS, AND WHAT IT IS NOT. The spec's Tier B asks for pre-publication material --\ncommittee prints, chair's marks, discussion drafts. **The repository contains none, and\nthis probe does not manufacture any.** What it covers is the nearest available material:"
+}

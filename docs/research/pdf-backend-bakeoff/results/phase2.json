@@ -12949,6 +12949,2576 @@
      "identical_amounts": false
     }
    }
+  },
+  "118-hr-4366/5->6": {
+   "pdfium-native/strict": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfminer/strict": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pymupdf/strict": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pypdf/strict": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfium-wasm/strict": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfjs/strict": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfium-native/repaired": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfminer/repaired": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pymupdf/repaired": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pypdf/repaired": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfium-wasm/repaired": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   },
+   "pdfjs/repaired": {
+    "error": "UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair",
+    "traceback": "Traceback (most recent call last):\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 291, in main\n    canon, timings = pdf_canonical(backend, pdf1, pdf2, bill, mode)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/williamhea/Documents/Code/civictech/appropriations_bills/.claude/worktrees/pdf-bakeoff/./docs/research/pdf-backend-bakeoff/probes/score_phase2.py\", line 189, in pdf_canonical\n    raise UnsupportedLayoutError(\ndeltatrack.compare.pdf.UnsupportedLayoutError: unnumbered (enrolled) layout on v2; production declines this pair\n"
+   }
+  },
+  "118-hr-8752/1->2": {
+   "pdfium-native/strict": {
+    "T1_change_signatures": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 39,
+     "n_candidate": 48
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.46046,
+     "recall": 0.96469,
+     "f1": 0.62337,
+     "matched": 2486,
+     "n_reference": 2577,
+     "n_candidate": 5399
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.54376,
+     "recall": 0.96314,
+     "f1": 0.69509,
+     "matched": 3554,
+     "n_reference": 3690,
+     "n_candidate": 6536
+    },
+    "T2_amount_entries": {
+     "precision": 0.10345,
+     "recall": 1.0,
+     "f1": 0.1875,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 29
+    },
+    "T3_material_disagreements": 86,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Se curity for the fiscal year ending September 30, 2025, and for other purposes. Be"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000, of which $22,151,000 shall remain avail able until Sept",
+      "new": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000 (reduced by $20,000,000) (reduced by $5,000,000) (increa"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Management Direc torate for operations and support, $1,637,290,000: Pro vided, That not to exceed $2,000 shall be for official recep tion and represen",
+      "new": "For necessary expenses of the Management Direc torate for operations and support, $1,637,290,000 (re duced by $3,000,000) (reduced by $4,000,000) (reduced by $3,000,000) (reduced b"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Management Direc torate for procurement, construction, and improvements, $54,337,000, to remain available until September 30, 2027.",
+      "new": "For necessary expenses of the Management Direc torate for procurement, construction, and improvements, $54,337,000 (increased by $1,000,000) (reduced by $1,000,000), to remain avai"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 106. (a) None of the funds made available to the Department of Homeland Security in this Act or prior appropriations Acts may be obligated for any new pilot or demonstration u",
+      "new": "SEC. 106. (a) None of the funds made available to the Department of Homeland Security in this Act or prior appropriations Acts may be obligated for any new pilot or demonstration u"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the trans portation of unaccompanied alien minors; the provision of air and marin",
+      "new": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the trans portation of unaccompanied alien minors; the provision of air and marin"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Customs and Border Protection for procurement, construction, and improve ments, including procurement of marine vessels, aircraft, and unmanned aeria",
+      "new": "For necessary expenses of U.S. Customs and Border Protection for procurement, construction, and improve ments, including procurement of marine vessels, aircraft, and unmanned aeria"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, includ ing the purchase and lease of up to 3,790 (2,350 for re placement only) police",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, includ ing the purchase and lease of up to 3,790 (2,350 for re placement only) police"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 48,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 29,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.72,
+     "v2_extract_s": 0.677,
+     "diff_s": 0.039
+    },
+    "T4_vs_incumbent": null
+   },
+   "pdfminer/strict": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 1.852,
+     "v2_extract_s": 1.563,
+     "diff_s": 0.036
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.24324,
+      "recall": 0.1875,
+      "f1": 0.21176,
+      "matched": 9,
+      "n_reference": 48,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.58621,
+      "f1": 0.73913,
+      "matched": 17,
+      "n_reference": 29,
+      "n_candidate": 17
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pymupdf/strict": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.827,
+     "v2_extract_s": 0.774,
+     "diff_s": 0.027
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.24324,
+      "recall": 0.1875,
+      "f1": 0.21176,
+      "matched": 9,
+      "n_reference": 48,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.58621,
+      "f1": 0.73913,
+      "matched": 17,
+      "n_reference": 29,
+      "n_candidate": 17
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pypdf/strict": {
+    "T1_change_signatures": {
+     "precision": 0.13514,
+     "recall": 0.12821,
+     "f1": 0.13158,
+     "matched": 5,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.82937,
+     "recall": 0.96197,
+     "f1": 0.89077,
+     "matched": 2479,
+     "n_reference": 2577,
+     "n_candidate": 2989
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.863,
+     "recall": 0.9645,
+     "f1": 0.91093,
+     "matched": 3559,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 65,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000, of which $22,151,000 shall remain available until Septe",
+      "new": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000 (reduced by $20,000,000) (reduced by $5,000,000) (increa"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Management Directorate for operations and support, $1,637,290P,r0o0-0: vided,T hat not to exceed $2,000 shall be for official reception and representa",
+      "new": "For necessary expenses of the Management Directorate for operations and support, $1,637,290,000 (reduced by $3,000,000) (reduced by $4,000,000) (reduced by $3,000,000) (reduced by "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the transportation of unaccompanied alien minors; the provision of air and marine",
+      "new": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the transportation of unaccompanied alien minors; the provision of air and marine"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Transportation Security Administration for operations and support, $10,817,225,000, of which $300,000,000 shall remain available until September 30, 2",
+      "new": "For necessary expenses of the Transportation Security Administration for operations and support, $10,817,225,000 (increased by $50,000,000) (reduced by $50,000,000), of which $300,"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Coast Guard for operations and support including the Coast Guard Reserve; purchase or lease of not to exceed 25 passenger motor vehicles, which shall ",
+      "new": "For necessary expenses of the Coast Guard for operations and support including the Coast Guard Reserve; purchase or lease of not to exceed 25 passenger motor vehicles, which shall "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the United States Secret Service for operations and support, including purchase of not to exceed 652 vehicles for police-type use; hire of passenger motor",
+      "new": "For necessary expenses of the United States Secret Service for operations and support, including purchase of not to exceed 652 vehicles for police-type use; hire of passenger motor"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.617,
+     "v2_extract_s": 0.481,
+     "diff_s": 0.045
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.21622,
+      "recall": 0.16667,
+      "f1": 0.18824,
+      "matched": 8,
+      "n_reference": 48,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 0.94118,
+      "recall": 0.55172,
+      "f1": 0.69565,
+      "matched": 16,
+      "n_reference": 29,
+      "n_candidate": 17
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pdfium-wasm/strict": {
+    "T1_change_signatures": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 39,
+     "n_candidate": 48
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.46046,
+     "recall": 0.96469,
+     "f1": 0.62337,
+     "matched": 2486,
+     "n_reference": 2577,
+     "n_candidate": 5399
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.54376,
+     "recall": 0.96314,
+     "f1": 0.69509,
+     "matched": 3554,
+     "n_reference": 3690,
+     "n_candidate": 6536
+    },
+    "T2_amount_entries": {
+     "precision": 0.10345,
+     "recall": 1.0,
+     "f1": 0.1875,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 29
+    },
+    "T3_material_disagreements": 86,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Se curity for the fiscal year ending September 30, 2025, and for other purposes. Be"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000, of which $22,151,000 shall remain avail able until Sept",
+      "new": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000 (reduced by $20,000,000) (reduced by $5,000,000) (increa"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Management Direc torate for operations and support, $1,637,290,000: Pro vided, That not to exceed $2,000 shall be for official recep tion and represen",
+      "new": "For necessary expenses of the Management Direc torate for operations and support, $1,637,290,000 (re duced by $3,000,000) (reduced by $4,000,000) (reduced by $3,000,000) (reduced b"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Management Direc torate for procurement, construction, and improvements, $54,337,000, to remain available until September 30, 2027.",
+      "new": "For necessary expenses of the Management Direc torate for procurement, construction, and improvements, $54,337,000 (increased by $1,000,000) (reduced by $1,000,000), to remain avai"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 106. (a) None of the funds made available to the Department of Homeland Security in this Act or prior appropriations Acts may be obligated for any new pilot or demonstration u",
+      "new": "SEC. 106. (a) None of the funds made available to the Department of Homeland Security in this Act or prior appropriations Acts may be obligated for any new pilot or demonstration u"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the trans portation of unaccompanied alien minors; the provision of air and marin",
+      "new": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the trans portation of unaccompanied alien minors; the provision of air and marin"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Customs and Border Protection for procurement, construction, and improve ments, including procurement of marine vessels, aircraft, and unmanned aeria",
+      "new": "For necessary expenses of U.S. Customs and Border Protection for procurement, construction, and improve ments, including procurement of marine vessels, aircraft, and unmanned aeria"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, includ ing the purchase and lease of up to 3,790 (2,350 for re placement only) police",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, includ ing the purchase and lease of up to 3,790 (2,350 for re placement only) police"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 48,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 29,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.755,
+     "v2_extract_s": 0.767,
+     "diff_s": 0.039
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 48,
+      "n_reference": 48,
+      "n_candidate": 48
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 29,
+      "n_reference": 29,
+      "n_candidate": 29
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pdfjs/strict": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.904,
+     "v2_extract_s": 0.685,
+     "diff_s": 0.025
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.24324,
+      "recall": 0.1875,
+      "f1": 0.21176,
+      "matched": 9,
+      "n_reference": 48,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.58621,
+      "f1": 0.73913,
+      "matched": 17,
+      "n_reference": 29,
+      "n_candidate": 17
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pdfium-native/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.694,
+     "v2_extract_s": 0.664,
+     "diff_s": 0.044
+    },
+    "T4_vs_incumbent": null
+   },
+   "pdfminer/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 1.748,
+     "v2_extract_s": 1.63,
+     "diff_s": 0.028
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 37,
+      "n_reference": 37,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 17,
+      "n_reference": 17,
+      "n_candidate": 17
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pymupdf/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.846,
+     "v2_extract_s": 0.779,
+     "diff_s": 0.046
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 37,
+      "n_reference": 37,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 17,
+      "n_reference": 17,
+      "n_candidate": 17
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pypdf/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.13514,
+     "recall": 0.12821,
+     "f1": 0.13158,
+     "matched": 5,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.82937,
+     "recall": 0.96197,
+     "f1": 0.89077,
+     "matched": 2479,
+     "n_reference": 2577,
+     "n_candidate": 2989
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.863,
+     "recall": 0.9645,
+     "f1": 0.91093,
+     "matched": 3559,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 65,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000, of which $22,151,000 shall remain available until Septe",
+      "new": "For necessary expenses of the Office of the Secretary and for executive management for operations and support, $281,358,000 (reduced by $20,000,000) (reduced by $5,000,000) (increa"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Management Directorate for operations and support, $1,637,290P,r0o0-0: vided,T hat not to exceed $2,000 shall be for official reception and representa",
+      "new": "For necessary expenses of the Management Directorate for operations and support, $1,637,290,000 (reduced by $3,000,000) (reduced by $4,000,000) (reduced by $3,000,000) (reduced by "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the transportation of unaccompanied alien minors; the provision of air and marine",
+      "new": "For necessary expenses of U.S. Customs and Border Protection for operations and support, including the transportation of unaccompanied alien minors; the provision of air and marine"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Transportation Security Administration for operations and support, $10,817,225,000, of which $300,000,000 shall remain available until September 30, 2",
+      "new": "For necessary expenses of the Transportation Security Administration for operations and support, $10,817,225,000 (increased by $50,000,000) (reduced by $50,000,000), of which $300,"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Coast Guard for operations and support including the Coast Guard Reserve; purchase or lease of not to exceed 25 passenger motor vehicles, which shall ",
+      "new": "For necessary expenses of the Coast Guard for operations and support including the Coast Guard Reserve; purchase or lease of not to exceed 25 passenger motor vehicles, which shall "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the United States Secret Service for operations and support, including purchase of not to exceed 652 vehicles for police-type use; hire of passenger motor",
+      "new": "For necessary expenses of the United States Secret Service for operations and support, including purchase of not to exceed 652 vehicles for police-type use; hire of passenger motor"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.568,
+     "v2_extract_s": 0.458,
+     "diff_s": 0.026
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.72973,
+      "recall": 0.72973,
+      "f1": 0.72973,
+      "matched": 27,
+      "n_reference": 37,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 0.94118,
+      "recall": 0.94118,
+      "f1": 0.94118,
+      "matched": 16,
+      "n_reference": 17,
+      "n_candidate": 17
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pdfium-wasm/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.78,
+     "v2_extract_s": 0.711,
+     "diff_s": 0.025
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 37,
+      "n_reference": 37,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 17,
+      "n_reference": 17,
+      "n_candidate": 17
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pdfjs/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.2973,
+     "recall": 0.28205,
+     "f1": 0.28947,
+     "matched": 11,
+     "n_reference": 39,
+     "n_candidate": 37
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.85107,
+     "recall": 0.98681,
+     "f1": 0.91393,
+     "matched": 2543,
+     "n_reference": 2577,
+     "n_candidate": 2988
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.87779,
+     "recall": 0.98103,
+     "f1": 0.92654,
+     "matched": 3620,
+     "n_reference": 3690,
+     "n_candidate": 4124
+    },
+    "T2_amount_entries": {
+     "precision": 0.17647,
+     "recall": 1.0,
+     "f1": 0.3,
+     "matched": 3,
+     "n_reference": 3,
+     "n_candidate": 17
+    },
+    "T3_material_disagreements": 53,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 456 118TH CONGRESS 2D SESSION H. R. 8752 [Report No. 118 - 553] Making appropriations for the Department of Homeland Security for the fiscal year ending Septe",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8752 AN ACT Making appropriations for the Department of Homeland Security for the fiscal year ending September 30, 2025, and for other purposes. Be "
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t",
+      "new": "For necessary expenses of U.S. Immigration and Customs Enforcement for operations and support, including the purchase and lease of up to 3,790 (2,350 for replacement only) police-t"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 shall be available only as",
+      "new": "SEC. 211. (a) Of the total amount made available under \"U.S. Customs and Border Protection - Procurement, Construction, and Improvements\", $1,390,338,000 (reduced by $5,000,000) (i"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us",
+      "new": "SEC. 212. None of the funds appropriated or otherwise made available by this Act may be obligated, expended, or transferred to another Federal agency, board, or commission to be us"
+     },
+     {
+      "kind": "modified",
+      "old": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000: Provided, That not to exceed $2,250 shall be for official reception an",
+      "new": "For necessary expenses of the Federal Emergency Management Agency for operations and support, $1,551,093,000 (reduced by $1,000,000) (increased by $1,000,000) (reduced by $8,000,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810, which shal",
+      "new": "For activities of the Federal Emergency Management Agency for Federal assistance through grants, contracts, cooperative agreements, and other activities, $3,758,992,810 (increased "
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu",
+      "new": "SEC. 406. Notwithstanding the numerical limitation set forth in section 214(g)(1)(B) of the Immigration and Nationality Act (8 U.S.C. 1184(g)(1)(B)), the Secretary of Homeland Secu"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 413. In fiscal year 2025, nonimmigrants shall be admitted to the United States under section 101(a)(15)(H)(ii)(a) of the Immigration and Nationality Act (8 U.S.C. 1101(a)(15)(",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 37,
+     "n_changes_xml": 39,
+     "n_amount_entries_pdf": 17,
+     "n_amount_entries_xml": 3
+    },
+    "timings": {
+     "v1_extract_s": 0.746,
+     "v2_extract_s": 0.692,
+     "diff_s": 0.026
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 37,
+      "n_reference": 37,
+      "n_candidate": 37
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 17,
+      "n_reference": 17,
+      "n_candidate": 17
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   }
+  },
+  "118-hr-8774/1->2": {
+   "pdfium-native/strict": {
+    "T1_change_signatures": {
+     "precision": 0.01587,
+     "recall": 0.03226,
+     "f1": 0.02128,
+     "matched": 1,
+     "n_reference": 31,
+     "n_candidate": 63
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.2831,
+     "recall": 0.97659,
+     "f1": 0.43896,
+     "matched": 2587,
+     "n_reference": 2649,
+     "n_candidate": 9138
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.37103,
+     "recall": 0.98009,
+     "f1": 0.53828,
+     "matched": 3839,
+     "n_reference": 3917,
+     "n_candidate": 10347
+    },
+    "T2_amount_entries": {
+     "precision": 0.125,
+     "recall": 1.0,
+     "f1": 0.22222,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 32
+    },
+    "T3_material_disagreements": 92,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For pay, allowances, individual clothing, subsistence, interest on deposits, gratuities, permanent change of sta tion travel (including all expenses thereof for organiza tional mov",
+      "new": "For pay, allowances, individual clothing, subsistence, interest on deposits, gratuities, permanent change of sta tion travel (including all expenses thereof for organiza tional mov"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as author ized by law, $59,178,129,000: Provided, That not to ex ceed $7,000,000 ",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as author ized by law, $59,178,129,000 (increased by $2,000,000) (reduced by $2,0"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Navy and the Marine Corps, as authorized by law, $74,754,688,000: Provided, That not to",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Navy and the Marine Corps, as authorized by law, $74,754,688,000 (in creased by $10,000"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Air Force, as authorized by law, $64,560,558,000: Provided, That not to exceed $7,000,0",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Air Force, as authorized by law, $64,560,558,000 (increased by $5,000,000) (reduced by "
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of activities and agen cies of the Department of Defense (other than the military departments)",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of activities and agen cies of the Department of Defense (other than the military departments)"
+     },
+     {
+      "kind": "modified",
+      "old": "For the \"Counter-Islamic State of Iraq and Syria Train and Equip Fund\", $528,699,000, to remain avail able until September 30, 2026: Provided, That such funds shall be available to",
+      "new": "For the \"Counter-Islamic State of Iraq and Syria Train and Equip Fund\", $528,699,000, to remain available until September 30, 2026: Provided, That such funds shall be available to "
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses of training, organizing, and admin istering the Army National Guard, including medical and hospital treatment and related expenses in non-Federal hospitals; maintenanc",
+      "new": "For expenses of training, organizing, and admin istering the Army National Guard, including medical and hospital treatment and related expenses in non-Federal hospitals; maintenanc"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 63,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 32,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 1.188,
+     "v2_extract_s": 1.081,
+     "diff_s": 0.052
+    },
+    "T4_vs_incumbent": null
+   },
+   "pdfminer/strict": {
+    "T1_change_signatures": {
+     "precision": 0.65625,
+     "recall": 0.67742,
+     "f1": 0.66667,
+     "matched": 21,
+     "n_reference": 31,
+     "n_candidate": 32
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.92987,
+     "recall": 0.98112,
+     "f1": 0.95481,
+     "matched": 2599,
+     "n_reference": 2649,
+     "n_candidate": 2795
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.96214,
+     "recall": 0.98621,
+     "f1": 0.97403,
+     "matched": 3863,
+     "n_reference": 3917,
+     "n_candidate": 4015
+    },
+    "T2_amount_entries": {
+     "precision": 0.22222,
+     "recall": 1.0,
+     "f1": 0.36364,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 18
+    },
+    "T3_material_disagreements": 21,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach",
+      "new": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8170. $0."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8171. None of the funds made available by this Act may be used for classified teleworking or remote working for any employee of the Department of Defense."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8172. None of the funds appropriated or otherwise made available by this Act may be made available to remove a Chinese military company from the list required by section 1260H"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 32,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 18,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 2.781,
+     "v2_extract_s": 2.528,
+     "diff_s": 0.034
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.125,
+      "recall": 0.06349,
+      "f1": 0.08421,
+      "matched": 4,
+      "n_reference": 63,
+      "n_candidate": 32
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.5625,
+      "f1": 0.72,
+      "matched": 18,
+      "n_reference": 32,
+      "n_candidate": 18
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pymupdf/strict": {
+    "T1_change_signatures": {
+     "precision": 0.65625,
+     "recall": 0.67742,
+     "f1": 0.66667,
+     "matched": 21,
+     "n_reference": 31,
+     "n_candidate": 32
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.92987,
+     "recall": 0.98112,
+     "f1": 0.95481,
+     "matched": 2599,
+     "n_reference": 2649,
+     "n_candidate": 2795
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.96214,
+     "recall": 0.98621,
+     "f1": 0.97403,
+     "matched": 3863,
+     "n_reference": 3917,
+     "n_candidate": 4015
+    },
+    "T2_amount_entries": {
+     "precision": 0.22222,
+     "recall": 1.0,
+     "f1": 0.36364,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 18
+    },
+    "T3_material_disagreements": 21,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach",
+      "new": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8170. $0."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8171. None of the funds made available by this Act may be used for classified teleworking or remote working for any employee of the Department of Defense."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8172. None of the funds appropriated or otherwise made available by this Act may be made available to remove a Chinese military company from the list required by section 1260H"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 32,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 18,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 1.319,
+     "v2_extract_s": 1.189,
+     "diff_s": 0.041
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.125,
+      "recall": 0.06349,
+      "f1": 0.08421,
+      "matched": 4,
+      "n_reference": 63,
+      "n_candidate": 32
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.5625,
+      "f1": 0.72,
+      "matched": 18,
+      "n_reference": 32,
+      "n_candidate": 18
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pypdf/strict": {
+    "T1_change_signatures": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 31,
+     "n_candidate": 15
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.3762,
+     "recall": 0.963,
+     "f1": 0.54104,
+     "matched": 2551,
+     "n_reference": 2649,
+     "n_candidate": 6781
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.47738,
+     "recall": 0.97524,
+     "f1": 0.64099,
+     "matched": 3820,
+     "n_reference": 3917,
+     "n_candidate": 8002
+    },
+    "T2_amount_entries": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 4,
+     "n_candidate": 19
+    },
+    "T3_material_disagreements": 46,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,00P0r:o vided,T hat not to exceed $7,000,000 ma",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,000 (increased by $2,000,000) (reduced by $2,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there",
+      "new": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq",
+      "new": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000; of which $38,521,736,000 shall be",
+      "new": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000 (increased by $1,000,000) (reduced"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8074. None of the funds appropriated or otherwise made available by this Act may be obligated or expended for the purpose of decommissioning any Littoral Combat Ship or the U.",
+      "new": "SEC. 8074. None of the funds appropriated or otherwise made available by this Act may be obligated or expended for the purpose of decommissioning any Littoral Combat Ship or the U."
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 15,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 19,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 0.764,
+     "v2_extract_s": 0.743,
+     "diff_s": 0.186
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.2,
+      "recall": 0.04762,
+      "f1": 0.07692,
+      "matched": 3,
+      "n_reference": 63,
+      "n_candidate": 15
+     },
+     "amount_entries": {
+      "precision": 0.78947,
+      "recall": 0.46875,
+      "f1": 0.58824,
+      "matched": 15,
+      "n_reference": 32,
+      "n_candidate": 19
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pdfium-wasm/strict": {
+    "T1_change_signatures": {
+     "precision": 0.01587,
+     "recall": 0.03226,
+     "f1": 0.02128,
+     "matched": 1,
+     "n_reference": 31,
+     "n_candidate": 63
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.2831,
+     "recall": 0.97659,
+     "f1": 0.43896,
+     "matched": 2587,
+     "n_reference": 2649,
+     "n_candidate": 9138
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.37103,
+     "recall": 0.98009,
+     "f1": 0.53828,
+     "matched": 3839,
+     "n_reference": 3917,
+     "n_candidate": 10347
+    },
+    "T2_amount_entries": {
+     "precision": 0.125,
+     "recall": 1.0,
+     "f1": 0.22222,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 32
+    },
+    "T3_material_disagreements": 92,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For pay, allowances, individual clothing, subsistence, interest on deposits, gratuities, permanent change of sta tion travel (including all expenses thereof for organiza tional mov",
+      "new": "For pay, allowances, individual clothing, subsistence, interest on deposits, gratuities, permanent change of sta tion travel (including all expenses thereof for organiza tional mov"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as author ized by law, $59,178,129,000: Provided, That not to ex ceed $7,000,000 ",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as author ized by law, $59,178,129,000 (increased by $2,000,000) (reduced by $2,0"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Navy and the Marine Corps, as authorized by law, $74,754,688,000: Provided, That not to",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Navy and the Marine Corps, as authorized by law, $74,754,688,000 (in creased by $10,000"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Air Force, as authorized by law, $64,560,558,000: Provided, That not to exceed $7,000,0",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Air Force, as authorized by law, $64,560,558,000 (increased by $5,000,000) (reduced by "
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of activities and agen cies of the Department of Defense (other than the military departments)",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of activities and agen cies of the Department of Defense (other than the military departments)"
+     },
+     {
+      "kind": "modified",
+      "old": "For the \"Counter-Islamic State of Iraq and Syria Train and Equip Fund\", $528,699,000, to remain avail able until September 30, 2026: Provided, That such funds shall be available to",
+      "new": "For the \"Counter-Islamic State of Iraq and Syria Train and Equip Fund\", $528,699,000, to remain available until September 30, 2026: Provided, That such funds shall be available to "
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses of training, organizing, and admin istering the Army National Guard, including medical and hospital treatment and related expenses in non-Federal hospitals; maintenanc",
+      "new": "For expenses of training, organizing, and admin istering the Army National Guard, including medical and hospital treatment and related expenses in non-Federal hospitals; maintenanc"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 63,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 32,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 1.216,
+     "v2_extract_s": 1.021,
+     "diff_s": 0.053
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 63,
+      "n_reference": 63,
+      "n_candidate": 63
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 32,
+      "n_reference": 32,
+      "n_candidate": 32
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pdfjs/strict": {
+    "T1_change_signatures": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 31,
+     "n_candidate": 14
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.3875,
+     "recall": 0.98754,
+     "f1": 0.5566,
+     "matched": 2616,
+     "n_reference": 2649,
+     "n_candidate": 6751
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.48702,
+     "recall": 0.99106,
+     "f1": 0.6531,
+     "matched": 3882,
+     "n_reference": 3917,
+     "n_candidate": 7971
+    },
+    "T2_amount_entries": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 4,
+     "n_candidate": 14
+    },
+    "T3_material_disagreements": 45,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,000: Provided, That not to exceed $7,000,000 ma",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,000 (increased by $2,000,000) (reduced by $2,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there",
+      "new": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq",
+      "new": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000; of which $38,521,736,000 shall be",
+      "new": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000 (increased by $1,000,000) (reduced"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 14,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 14,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 0.936,
+     "v2_extract_s": 0.877,
+     "diff_s": 0.082
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.21429,
+      "recall": 0.04762,
+      "f1": 0.07792,
+      "matched": 3,
+      "n_reference": 63,
+      "n_candidate": 14
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.4375,
+      "f1": 0.6087,
+      "matched": 14,
+      "n_reference": 32,
+      "n_candidate": 14
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pdfium-native/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.65625,
+     "recall": 0.67742,
+     "f1": 0.66667,
+     "matched": 21,
+     "n_reference": 31,
+     "n_candidate": 32
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.92987,
+     "recall": 0.98112,
+     "f1": 0.95481,
+     "matched": 2599,
+     "n_reference": 2649,
+     "n_candidate": 2795
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.96214,
+     "recall": 0.98621,
+     "f1": 0.97403,
+     "matched": 3863,
+     "n_reference": 3917,
+     "n_candidate": 4015
+    },
+    "T2_amount_entries": {
+     "precision": 0.22222,
+     "recall": 1.0,
+     "f1": 0.36364,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 18
+    },
+    "T3_material_disagreements": 21,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach",
+      "new": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8170. $0."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8171. None of the funds made available by this Act may be used for classified teleworking or remote working for any employee of the Department of Defense."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8172. None of the funds appropriated or otherwise made available by this Act may be made available to remove a Chinese military company from the list required by section 1260H"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 32,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 18,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 1.087,
+     "v2_extract_s": 1.017,
+     "diff_s": 0.052
+    },
+    "T4_vs_incumbent": null
+   },
+   "pdfminer/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.65625,
+     "recall": 0.67742,
+     "f1": 0.66667,
+     "matched": 21,
+     "n_reference": 31,
+     "n_candidate": 32
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.92987,
+     "recall": 0.98112,
+     "f1": 0.95481,
+     "matched": 2599,
+     "n_reference": 2649,
+     "n_candidate": 2795
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.96214,
+     "recall": 0.98621,
+     "f1": 0.97403,
+     "matched": 3863,
+     "n_reference": 3917,
+     "n_candidate": 4015
+    },
+    "T2_amount_entries": {
+     "precision": 0.22222,
+     "recall": 1.0,
+     "f1": 0.36364,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 18
+    },
+    "T3_material_disagreements": 21,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach",
+      "new": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8170. $0."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8171. None of the funds made available by this Act may be used for classified teleworking or remote working for any employee of the Department of Defense."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8172. None of the funds appropriated or otherwise made available by this Act may be made available to remove a Chinese military company from the list required by section 1260H"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 32,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 18,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 2.805,
+     "v2_extract_s": 2.56,
+     "diff_s": 0.032
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 32,
+      "n_reference": 32,
+      "n_candidate": 32
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 18,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pymupdf/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.65625,
+     "recall": 0.67742,
+     "f1": 0.66667,
+     "matched": 21,
+     "n_reference": 31,
+     "n_candidate": 32
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.92987,
+     "recall": 0.98112,
+     "f1": 0.95481,
+     "matched": 2599,
+     "n_reference": 2649,
+     "n_candidate": 2795
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.96214,
+     "recall": 0.98621,
+     "f1": 0.97403,
+     "matched": 3863,
+     "n_reference": 3917,
+     "n_candidate": 4015
+    },
+    "T2_amount_entries": {
+     "precision": 0.22222,
+     "recall": 1.0,
+     "f1": 0.36364,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 18
+    },
+    "T3_material_disagreements": 21,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach",
+      "new": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8170. $0."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8171. None of the funds made available by this Act may be used for classified teleworking or remote working for any employee of the Department of Defense."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8172. None of the funds appropriated or otherwise made available by this Act may be made available to remove a Chinese military company from the list required by section 1260H"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 32,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 18,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 1.275,
+     "v2_extract_s": 1.245,
+     "diff_s": 0.035
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 32,
+      "n_reference": 32,
+      "n_candidate": 32
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 18,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pypdf/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 31,
+     "n_candidate": 15
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.3762,
+     "recall": 0.963,
+     "f1": 0.54104,
+     "matched": 2551,
+     "n_reference": 2649,
+     "n_candidate": 6781
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.47738,
+     "recall": 0.97524,
+     "f1": 0.64099,
+     "matched": 3820,
+     "n_reference": 3917,
+     "n_candidate": 8002
+    },
+    "T2_amount_entries": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 4,
+     "n_candidate": 19
+    },
+    "T3_material_disagreements": 46,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,00P0r:o vided,T hat not to exceed $7,000,000 ma",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,000 (increased by $2,000,000) (reduced by $2,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there",
+      "new": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq",
+      "new": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000; of which $38,521,736,000 shall be",
+      "new": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000 (increased by $1,000,000) (reduced"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8074. None of the funds appropriated or otherwise made available by this Act may be obligated or expended for the purpose of decommissioning any Littoral Combat Ship or the U.",
+      "new": "SEC. 8074. None of the funds appropriated or otherwise made available by this Act may be obligated or expended for the purpose of decommissioning any Littoral Combat Ship or the U."
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 15,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 19,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 0.794,
+     "v2_extract_s": 0.741,
+     "diff_s": 0.086
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.53333,
+      "recall": 0.25,
+      "f1": 0.34043,
+      "matched": 8,
+      "n_reference": 32,
+      "n_candidate": 15
+     },
+     "amount_entries": {
+      "precision": 0.68421,
+      "recall": 0.72222,
+      "f1": 0.7027,
+      "matched": 13,
+      "n_reference": 18,
+      "n_candidate": 19
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   },
+   "pdfium-wasm/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.65625,
+     "recall": 0.67742,
+     "f1": 0.66667,
+     "matched": 21,
+     "n_reference": 31,
+     "n_candidate": 32
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.92987,
+     "recall": 0.98112,
+     "f1": 0.95481,
+     "matched": 2599,
+     "n_reference": 2649,
+     "n_candidate": 2795
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.96214,
+     "recall": 0.98621,
+     "f1": 0.97403,
+     "matched": 3863,
+     "n_reference": 3917,
+     "n_candidate": 4015
+    },
+    "T2_amount_entries": {
+     "precision": 0.22222,
+     "recall": 1.0,
+     "f1": 0.36364,
+     "matched": 4,
+     "n_reference": 4,
+     "n_candidate": 18
+    },
+    "T3_material_disagreements": 21,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach",
+      "new": "For expenses necessary for the construction, acquisition, or conversion of vessels as authorized by law, including armor and armament thereof, plant equipment, appliances, and mach"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8170. $0."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8171. None of the funds made available by this Act may be used for classified teleworking or remote working for any employee of the Department of Defense."
+     },
+     {
+      "kind": "added",
+      "old": "",
+      "new": "SEC. 8172. None of the funds appropriated or otherwise made available by this Act may be made available to remove a Chinese military company from the list required by section 1260H"
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 32,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 18,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 1.128,
+     "v2_extract_s": 1.033,
+     "diff_s": 0.035
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 32,
+      "n_reference": 32,
+      "n_candidate": 32
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 18,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "identical_changes": true,
+     "identical_amounts": true
+    }
+   },
+   "pdfjs/repaired": {
+    "T1_change_signatures": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 31,
+     "n_candidate": 14
+    },
+    "T1b_changed_tokens_old": {
+     "precision": 0.3875,
+     "recall": 0.98754,
+     "f1": 0.5566,
+     "matched": 2616,
+     "n_reference": 2649,
+     "n_candidate": 6751
+    },
+    "T1b_changed_tokens_new": {
+     "precision": 0.48702,
+     "recall": 0.99106,
+     "f1": 0.6531,
+     "matched": 3882,
+     "n_reference": 3917,
+     "n_candidate": 7971
+    },
+    "T2_amount_entries": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "matched": 0,
+     "n_reference": 4,
+     "n_candidate": 14
+    },
+    "T3_material_disagreements": 45,
+    "T3_sample": [
+     {
+      "kind": "modified",
+      "old": "IB Union Calendar No. 460 118TH CONGRESS 2D SESSION H. R. 8774 [Report No. 118 - 557] Making appropriations for the Department of Defense for the fiscal year ending September 30, 2",
+      "new": "118TH CONGRESS 2D SESSION H. R. 8774 AN ACT Making appropriations for the Department of Defense for the fiscal year ending September 30, 2025, and for other purposes. Be it enacted"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,000: Provided, That not to exceed $7,000,000 ma",
+      "new": "For expenses, not otherwise provided for, necessary for the operation and maintenance of the Army, as authorized by law, $59,178,129,000 (increased by $2,000,000) (reduced by $2,00"
+     },
+     {
+      "kind": "modified",
+      "old": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there",
+      "new": "For construction, procurement, production, modification, and modernization of aircraft, equipment, including ordnance, ground handling equipment, spare parts, and accessories there"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq",
+      "new": "For expenses necessary for basic and applied scientific research, development, test and evaluation, including maintenance, rehabilitation, lease, and operation of facilities and eq"
+     },
+     {
+      "kind": "modified",
+      "old": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000; of which $38,521,736,000 shall be",
+      "new": "For expenses, not otherwise provided for, for medical and health care programs of the Department of Defense as authorized by law, $41,159,039,000 (increased by $1,000,000) (reduced"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie",
+      "new": "SEC. 8044. Of the funds appropriated in Department of Defense Appropriations Acts, the following funds are hereby rescinded from the following accounts and programs in the specifie"
+     },
+     {
+      "kind": "modified",
+      "old": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000, to rem",
+      "new": "SEC. 8106. Of the amounts appropriated in this Act under the heading \"Operation and Maintenance, Defense- Wide\", for the Defense Security Cooperation Agency, $1,423,630,000 (reduce"
+     },
+     {
+      "kind": "removed",
+      "old": "SEC. 8170. $0. This Act may be cited as the \"Department of Defense Appropriations Act, 2025\".",
+      "new": ""
+     }
+    ],
+    "context": {
+     "n_changes_pdf": 14,
+     "n_changes_xml": 31,
+     "n_amount_entries_pdf": 14,
+     "n_amount_entries_xml": 4
+    },
+    "timings": {
+     "v1_extract_s": 0.953,
+     "v2_extract_s": 0.885,
+     "diff_s": 0.084
+    },
+    "T4_vs_incumbent": {
+     "change_signatures": {
+      "precision": 0.71429,
+      "recall": 0.3125,
+      "f1": 0.43478,
+      "matched": 10,
+      "n_reference": 32,
+      "n_candidate": 14
+     },
+     "amount_entries": {
+      "precision": 1.0,
+      "recall": 0.77778,
+      "f1": 0.875,
+      "matched": 14,
+      "n_reference": 18,
+      "n_candidate": 14
+     },
+     "identical_changes": false,
+     "identical_amounts": false
+    }
+   }
   }
  },
  "n_pairs": 15,

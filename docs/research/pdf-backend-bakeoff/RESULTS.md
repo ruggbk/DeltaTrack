@@ -21,10 +21,10 @@ diffs entirely inside a browser: PDFium-WASM.** It is the same engine the projec
 depends on, compiled to WebAssembly, and it is already published as an MIT-licensed
 package wrapping BSD-3 PDFium.
 
-1. **PDFium-WASM reproduces the incumbent exactly.** Across all 15 terminal pairs it
-   produced canonical diffs whose change sets and `amount_entries` are **identical** to
-   native pypdfium2's. Not "close" — identical. Swapping the backend changes nothing a
-   staffer reads.
+1. **PDFium-WASM reproduces the incumbent exactly.** Across all **13** terminal pairs the
+   product accepts, it produced canonical diffs whose change sets and `amount_entries` are
+   **identical** to native pypdfium2's. Not "close" — identical, on both fields, on every
+   pair. Swapping the backend changes nothing a staffer reads.
 
 2. **The spec's hardest expected question dissolved.** It anticipated needing to price a
    PDFium-WASM engineering effort against PyMuPDF's ceiling. A credible build already
@@ -32,11 +32,12 @@ package wrapping BSD-3 PDFium.
    glyph sidecar needs, and works. **The gap PyMuPDF exists to price is essentially
    zero**, so there is nothing to fund and no reason to revisit the AGPL question.
 
-3. **pdfminer.six is a genuine runner-up and the ADR 0002 re-examination was justified.**
-   Asked the question ADR 0002 never asked — not "is it a good text extractor" but "is it
-   a good glyph-geometry source" — it matches the incumbent on every `amount_entries`
-   comparison and leads on raw text recovery. It is pure Python, MIT, installs under
-   Pyodide. Its cost is speed: 37.9 s on a 1118-page bill against PDFium-WASM's 4.6 s.
+3. **pdfminer.six is a genuine runner-up, and the ADR 0002 re-examination was justified.**
+   Asked the question ADR 0002 never asked — not "is it a good text extractor" (answered:
+   no) but "is it a good glyph-geometry source" — it matches the incumbent on
+   `amount_entries` for all 13 pairs and edges it on raw text recovery. It is pure Python,
+   MIT, and installs under Pyodide. Its cost is speed: **37.9 s** on a 1118-page bill
+   against PDFium-WASM's **4.6 s**.
 
 4. **PDF.js loses on a signal a text-only bake-off would never have seen.** Its text
    recovery matches the incumbent, but `getTextContent()` **cannot represent GPO's
@@ -59,9 +60,11 @@ package wrapping BSD-3 PDFium.
 ### The sentences the spec asked to complete
 
 1. *"The best browser-viable PDF backend is …"* — **PDFium-WASM**, scoring **identical**
-   change sets and `amount_entries` to the incumbent on all 15 pairs. No adjudication was
-   needed, because holding the pipeline fixed and varying only the glyph source leaves no
-   other cause for a difference.
+   change sets and `amount_entries` to the incumbent on all 13 accepted pairs
+   (amount F1 1.0000, change F1 1.0000). No adjudication was needed: holding the whole
+   downstream pipeline fixed and varying only the glyph source leaves no other cause for a
+   difference. **Runner-up: pdfminer.six**, identical on `amount_entries` for all 13 pairs
+   and 0.9669 on change signatures.
 2. *"It runs in the browser at … startup and … per comparison on the largest bill"* —
    Pyodide boot **1.4 s**, extraction **4.6 s** for a 1118-page bill.
 3. *"A full comparison makes zero network requests, and our harness is proven to detect a
@@ -122,22 +125,46 @@ introduces no drift.
 Hard gates. A backend passes or fails; ranking applies only among survivors. Gates 2–3 are
 **no-regression** (measured against PDFium); gates 4–5 are **correctness**.
 
+**Scored over the population production accepts.** `compare/pdf.py` declines an unnumbered
+(enrolled) layout, so gates 2 and 3 are evaluated over the **42 of 52** documents that are
+not enrolled prints, and gates 4 and 5 over the **13 of 15** pairs that survive the same
+guard. Scoring a backend on a document the product refuses to answer for measures nothing
+about the backend. This is not a softening: it changed one verdict in each direction, and
+both are noted below.
+
 | Gate | pdfium-wasm | pdfminer | pdfjs | pypdf | *pymupdf* |
 |---|---|---|---|---|---|
 | 1 Opens the corpus (52/52) | ✅ | ✅ | ✅ | ✅ | *✅* |
-| 2 Line-number integrity | ✅ 1.000 | ✅ 1.000 | ✅ 1.000 | ❌ 0.988 | *✅ 1.000* |
-| 3 Structural conservation | ✅ | ✅ | ✅ | ❌ | *✅* |
-| 4 Material diff correctness | ✅ | ✅ | ⚠️ | ❌ | *✅* |
-| 5 `amount_entries` | ✅ 15/15 | ✅ 15/15 | ❌ 12/15 | ❌ 6/15 | *✅ 15/15* |
+| 2 Line-number integrity | ✅ 1.0000 | ✅ 1.0000 | ✅ 1.0000 | ✅ 1.0000 | *✅ 1.0000* |
+| 3 Structural conservation — no regressions | ✅ 0 | ✅ 0 | ✅ 0 | ✅ 0 | *✅ 0* |
+| 3b …but breadcrumb recovery | ✅ **1.0000** | ✅ 0.9808 | ❌ **0.4664** | ❌ **0.4137** | *✅ 0.9808* |
+| 4 Material diff correctness | ✅ | ✅ | ❌ | ❌ | *✅* |
+| 5 `amount_entries` identical to incumbent | ✅ **13/13** | ✅ **13/13** | ❌ 10/13 | ❌ 6/13 | *✅ 13/13* |
 | 6 Browser execution | ✅ | ✅ | ✅ | ✅ | *✅* |
 | 7 Fully offline | ✅ | ✅ | ✅ | ✅ | *✅* |
 | 8 Licensing | ✅ MIT/BSD-3 | ✅ MIT | ✅ Apache-2.0 | ✅ BSD-3 | *❌ AGPL* |
-| 9 Performance | ✅ 4.6 s | ✅ 37.9 s | ✅ 3.9 s | ✅ | *✅* |
+| 9 Performance (1118-page bill) | ✅ 4.6 s | ✅ 37.9 s | ✅ 3.9 s | ✅ | *✅* |
 
 *PyMuPDF is shown in italics throughout: it is a **ceiling reference**, not a candidate.
 Its passing marks are not a recommendation.*
 
 **Survivors: PDFium-WASM and pdfminer.six.**
+
+**Two verdicts the accepted-population scoring changed, in opposite directions.**
+
+- **pypdf passes gates 2 and 3 after all.** Over the full 52 it looked like a failure
+  (line-number recall 0.988, one conservation regression). All nine of its line-number
+  shortfalls and its single conservation regression fall on **enrolled bills**, which
+  production declines. Over the accepted 42 it is perfect on both. Its real failure is
+  gate 5, and it is not close: 6 of 13.
+- **Row 3b is an addition, and it is doing the work gate 3 was meant to do.** The
+  pre-registered gate 3 reads "no unexplained structural loss". Conservation alone does
+  not detect the loss found here: PDF.js and pypdf recover **less than half** the
+  incumbent's breadcrumbs while passing every conservation check, because losing a heading
+  reparents its amounts without dropping them. Breadcrumb agreement is the pre-registered
+  M4 metric; it is promoted here because it is the measurement that actually reveals
+  unexplained structural loss, and reporting only conservation would have passed two
+  backends that lose more than half the heading tree.
 
 ---
 
@@ -225,6 +252,19 @@ change what a staffer sees?*
 
 <!-- T4_TABLE -->
 
+Scored on **13 of 15** pairs. 2 declined by the production unnumbered-layout guard (115-hr-5895/4->5, 118-hr-4366/5->6).
+
+| Backend | amounts identical | changes identical | amount F1 | change F1 |
+|---|---|---|---|---|
+| pdfium-native *(incumbent)* | (reference) | (reference) | — | — |
+| **pdfminer** | **13/13** | 6/13 | 1.0000 | 0.9669 |
+| pymupdf *(ceiling)* | **13/13** | 7/13 | 1.0000 | 0.9294 |
+| pypdf | 6/13 | 2/13 | 0.9304 | 0.6004 |
+| **pdfium-wasm** | **13/13** | 13/13 | 1.0000 | 1.0000 |
+| pdfjs | 10/13 | 5/13 | 0.9896 | 0.8296 |
+
+<!-- /T4_TABLE -->
+
 ### T2 — PDF-derived vs XML-derived, and why it is weaker than the spec assumed
 
 Reported **stratified**, because an unstratified mean mixes three populations and is
@@ -237,6 +277,52 @@ side under-reports content. A PDF-vs-XML disagreement there is presumptively the
 the error the spec warned about.
 
 <!-- T2_TABLE -->
+
+**`substantive_clean`** (n=2) — real amounts, XML reference **sound** — the informative population
+
+| Backend | mean F1 | min F1 | perfect |
+|---|---|---|---|
+| pdfium-native *(incumbent)* | 0.3318 | 0.3000 | 0/2 |
+| **pdfminer** | 0.3318 | 0.3000 | 0/2 |
+| pymupdf *(ceiling)* | 0.3318 | 0.3000 | 0/2 |
+| pypdf | 0.1500 | 0.0000 | 0/2 |
+| **pdfium-wasm** | 0.3318 | 0.3000 | 0/2 |
+| pdfjs | 0.1500 | 0.0000 | 0/2 |
+
+**`substantive_qb`** (n=6) — real amounts, XML reference carries `<quoted-block>` (known parser drop)
+
+| Backend | mean F1 | min F1 | perfect |
+|---|---|---|---|
+| pdfium-native *(incumbent)* | 0.9921 | 0.9708 | 2/6 |
+| **pdfminer** | 0.9921 | 0.9708 | 2/6 |
+| pymupdf *(ceiling)* | 0.9921 | 0.9708 | 2/6 |
+| pypdf | 0.9011 | 0.5000 | 1/6 |
+| **pdfium-wasm** | 0.9921 | 0.9708 | 2/6 |
+| pdfjs | 0.9905 | 0.9708 | 2/6 |
+
+**`xml_found_none`** (n=1) — XML found no amounts; F1 is an empty-denominator artifact
+
+| Backend | mean F1 | min F1 | perfect |
+|---|---|---|---|
+| pdfium-native *(incumbent)* | 0.0000 | 0.0000 | 0/1 |
+| **pdfminer** | 0.0000 | 0.0000 | 0/1 |
+| pymupdf *(ceiling)* | 0.0000 | 0.0000 | 0/1 |
+| pypdf | 0.0000 | 0.0000 | 0/1 |
+| **pdfium-wasm** | 0.0000 | 0.0000 | 0/1 |
+| pdfjs | 0.0000 | 0.0000 | 0/1 |
+
+**`empty_both`** (n=4) — neither side found amounts; F1 trivially 1.0, no information
+
+| Backend | mean F1 | min F1 | perfect |
+|---|---|---|---|
+| pdfium-native *(incumbent)* | 1.0000 | 1.0000 | 4/4 |
+| **pdfminer** | 1.0000 | 1.0000 | 4/4 |
+| pymupdf *(ceiling)* | 1.0000 | 1.0000 | 4/4 |
+| pypdf | 1.0000 | 1.0000 | 4/4 |
+| **pdfium-wasm** | 1.0000 | 1.0000 | 4/4 |
+| pdfjs | 1.0000 | 1.0000 | 4/4 |
+
+<!-- /T2_TABLE -->
 
 **The direction matters more than the magnitude.** Where the XML reference is sound, the
 PDF path's **recall of XML-detected money changes is perfect or near-perfect**, and the
@@ -387,6 +473,10 @@ extrapolated.**
 ## Tier B: not closed
 
 <!-- TIERB -->
+
+_(pending)_
+
+<!-- /TIERB -->
 
 **The repository contains no pre-publication fixtures**, which is the material ADR 0010
 says the PDF pipeline exists for. Per the spec's own table, Tier A passing with Tier B
