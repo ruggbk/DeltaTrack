@@ -1,8 +1,9 @@
 """Guardrails on the triggers of the workflows that own a required status check.
 
-Two properties are pinned here: that the test suite runs when a commit lands on the
-integration branch (#412), and that both required checks answer the merge_group event so
-a merge queue can complete a merge (#416).
+Three properties are pinned here: that the test suite runs when a commit lands on the
+integration branch (#412), that both required checks answer the merge_group event so
+a merge queue can complete a merge (#416), and that every module carrying a @slow test
+is named by some workflow, since the marker alone makes a gate runnable but never run.
 
 
 Nothing ran the test suite when a commit landed on ``develop``, so a broken integration
@@ -22,6 +23,7 @@ nothing about the rest of the workflow, so adding a job or a step does not touch
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -153,73 +155,305 @@ def test_ci_does_not_cancel_in_progress_runs() -> None:
     )
 
 
-# Slow modules CI deliberately does not run, each with the reason it is exempt.
-# An entry here is a claim that the module is covered somewhere else or is not an
-# offline gate -- not a place to park a module nobody wired up.
-SLOW_MODULES_NOT_IN_CI_YML = {
-    "tests/test_govinfo_corpus_parity.py": (
-        "fetches BILLSTATUS live, so it is not an offline gate; it runs in corpus-parity.yml"
-    ),
-}
+# --- Every @slow module is named by a workflow ---------------------------------
+# Every slow step in ci.yml selects modules by PATH, not by marker: the fast step
+# deselects `-m slow`, and each slow step lists the files it runs. So a new @slow module
+# is collected by no step at all and reports nothing, while the author sees it pass
+# locally and CI go green. The failure is silent in the worst direction -- a gate that
+# has never run looks identical to a gate that runs and passes.
+#
+# ci.yml already argues this in prose at three separate steps ("the marker makes a gate
+# runnable, naming its module is what makes it RUN"), which is precisely the situation
+# this repository treats as under-gated: a convention carried only in comments. It has
+# been rediscovered twice, by the packaging gate (#398) and by the XML-withheld recall
+# gate (#507 review).
+#
+# Scanning EVERY workflow, not just ci.yml, is deliberate: test_govinfo_corpus_parity.py
+# is excluded from ci.yml on purpose because it fetches live, and runs from
+# corpus-parity.yml instead. Being run by any workflow satisfies this.
+#
+# The coverage test is STRUCTURAL -- the module name must appear in an executable
+# `jobs.*.steps[*].run` command -- and not a search of the raw file text, which would
+# fail open. ci.yml *mentions* test_govinfo_corpus_parity.py in a comment, precisely to
+# explain that it is excluded there. Under a text search, deleting the real invocation
+# from corpus-parity.yml would leave this gate green on the strength of that comment,
+# retiring a live-fetch gate silently. Parsing the YAML drops comments, so only a step
+# that actually runs the module counts. test_a_module_named_only_in_a_comment_is_not_
+# covered pins that, because the difference between the two implementations is invisible
+# while every module happens to be correctly registered.
 
 
-# A real marker: the decorator on its own line, or a module-level `pytestmark`.
-# Matched structurally rather than as a substring, so a module that merely mentions
-# the marker in prose (this one does, at length) is not counted as carrying it.
-_SLOW_MARKER = re.compile(r"^\s*@pytest\.mark\.slow\b|^pytestmark\s*=.*\bpytest\.mark\.slow\b", re.MULTILINE)
+def _slow_test_modules() -> list[Path]:
+    """Test modules that define at least one @slow test, found by AST, not by grep.
 
-
-def _slow_test_modules() -> set[str]:
-    """Every tests/*.py module that marks at least one case @pytest.mark.slow."""
-    root = Path(__file__).parent
-    return {
-        f"tests/{path.name}"
-        for path in sorted(root.glob("test_*.py"))
-        if _SLOW_MARKER.search(path.read_text(encoding="utf-8"))
-    }
-
-
-def _modules_named_in_ci() -> set[str]:
-    """Every tests/*.py path named by any step's `run:` block in ci.yml."""
-    text = WORKFLOW.read_text(encoding="utf-8")
-    return {token.strip() for token in text.split() if token.strip().startswith("tests/") and token.endswith(".py")}
-
-
-def test_every_slow_module_is_named_by_a_ci_step() -> None:
-    """A @slow module named by no step is collected by nothing and passes by absence.
-
-    Every slow step in ci.yml selects modules BY PATH, and the fast step excludes the
-    slow marker, so adding a @slow file wires it into no job at all. The suite goes
-    green because the file's assertions never ran -- indistinguishable, from the outside,
-    from a file whose assertions all passed.
-
-    ci.yml argues this in prose in three separate step comments, and it had still
-    happened at least twice (the packaging gate, then the committee-report fixture gate
-    in #295). Prose that no test enforces reads as settled while being ungated, which is
-    the same reasoning that put the trigger assertions above in this file.
+    A text search for "pytest.mark.slow" also matches the many modules that only
+    discuss the marker in a docstring or comment (test_corpus_manifest.py explains at
+    length why it is deliberately NOT slow). Those are not gaps, and a false positive
+    here would be an unfixable failure, so the marker is read from the syntax tree.
     """
-    slow_modules = _slow_test_modules()
-    named = _modules_named_in_ci()
+    modules = []
+    for path in sorted(Path(__file__).parent.glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(_is_slow_marker(node) for node in ast.walk(tree)):
+            modules.append(path)
+    return modules
 
-    # Neither half may be empty, or the comparison below passes having compared nothing.
-    assert slow_modules, "found no @slow test modules; the scan is broken, not the workflow"
-    assert named, "found no tests/*.py paths in ci.yml; the parse is broken, not the workflow"
 
-    unwired = slow_modules - named - set(SLOW_MODULES_NOT_IN_CI_YML)
-    assert not unwired, (
-        "these @slow test modules are named by no ci.yml step, so CI collects none of "
-        "their cases and they pass green-by-absence:\n"
-        + "\n".join(f"  {m}" for m in sorted(unwired))
-        + "\n\nAdd each to a slow step's `run:` list, or declare it in "
-        "SLOW_MODULES_NOT_IN_CI_YML with the reason it is covered elsewhere."
+def _is_slow_marker(node: ast.AST) -> bool:
+    """True for the `pytest.mark.slow` attribute chain, wherever it appears.
+
+    This covers all three spellings the suite uses -- a `@pytest.mark.slow` decorator, a
+    module-level `pytestmark = pytest.mark.slow`, and a list of marks -- because every
+    one of them contains this attribute access. Walking for the access rather than
+    matching each shape means a fourth spelling is caught too.
+    """
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "slow"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "mark"
     )
 
 
-def test_slow_module_exemptions_still_exist() -> None:
-    """An exemption naming a deleted or de-marked module is stale, and hides the next one."""
+#: A test module passed as an ARGUMENT: preceded by whitespace or the start of the
+#: command, optionally directory-qualified, and ending at whitespace. Matching the bare
+#: name anywhere would also match one quoted inside an English sentence -- which
+#: corpus-parity.yml really does contain, in the body of the issue its failure step
+#: files. That step runs, so restricting to `run:` blocks alone does not exclude it.
+_TEST_MODULE_ARGUMENT = re.compile(r"(?:^|\s)(?:[\w./-]*/)?(test_[A-Za-z0-9_]+\.py)(?=\s|$)", re.MULTILINE)
+
+#: A command counts only if it invokes pytest. The issue-filing step above is the reason:
+#: it is executable and names a module, but it runs `gh issue create`, so the module it
+#: mentions is documentation, not coverage.
+_INVOKES_PYTEST = re.compile(r"\bpytest\b")
+
+#: Shell operators that end one logical command and begin the next. A pipe is included so
+#: `pytest ... | tail` splits, leaving the modules with the pytest side.
+_COMMAND_SEPARATOR = re.compile(r"&&|\|\||;|\|")
+
+
+def _workflow_files(directory: Path) -> list[Path]:
+    """Every workflow in a directory. Both suffixes: GitHub accepts .yml and .yaml."""
+    return sorted([*directory.glob("*.yml"), *directory.glob("*.yaml")])
+
+
+def _strip_shell_comment(line: str) -> str:
+    """Drop a trailing shell comment, ignoring a `#` inside quotes.
+
+    YAML parsing removes YAML comments; it does NOT touch a `#` inside a block scalar,
+    which is ordinary shell text. So `# uv run pytest tests/test_x.py` survives parsing
+    intact and reads exactly like a live invocation -- the way a gate gets retired
+    without the guard noticing.
+    """
+    quote = None
+    for index, char in enumerate(line):
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#" and (index == 0 or line[index - 1].isspace()):
+            return line[:index]
+    return line
+
+
+def _logical_commands(block: str) -> list[str]:
+    """Split a `run:` block into the individual commands a shell would execute.
+
+    Splitting is what ties a module argument to the command that actually runs it.
+    Searching the block as one string cannot: it only knows that `pytest` and some
+    module name both occur somewhere inside, which is equally true of a block whose
+    pytest line is commented out and whose live line runs something else.
+
+    A backslash continuation is joined first, so an invocation wrapped over several
+    lines stays one command. A YAML folded scalar (`run: >`, which every slow step in
+    ci.yml uses) has already been joined into one line by the parser.
+    """
+    joined = block.replace("\\\n", " ")
+    commands: list[str] = []
+    for raw_line in joined.splitlines():
+        line = _strip_shell_comment(raw_line)
+        if line.strip():
+            commands.extend(_COMMAND_SEPARATOR.split(line))
+    return commands
+
+
+def _modules_run_by_workflows(directory: Path) -> set[str]:
+    """Test module filenames that some workflow step actually EXECUTES.
+
+    Four filters, each removing a way a name can appear without being run:
+
+    1. Only ``jobs.<id>.steps[*].run`` is read, so a YAML comment, a step ``name:``, a
+       job id or the workflow's own ``name:`` do not count. Parsing rather than grepping
+       is what draws this line -- PyYAML discards YAML comments before this sees them.
+    2. The block is split into logical commands, so a module is credited only to the
+       command it is an argument of, not to anything else in the same block.
+    3. Shell comments are stripped from each line. YAML parsing leaves them untouched
+       inside a block scalar, so a commented-out invocation otherwise reads as live.
+    4. Within a command, it must invoke pytest and the module must sit in it as an
+       argument rather than inside prose.
+
+    None of these are hypothetical. corpus-parity.yml has an executable step that files a
+    tracker issue whose body names a test module in a sentence, which motivated 1 and 4;
+    2 and 3 came from review of #507, and both are the shape of a gate being disabled
+    temporarily and never re-enabled.
+    """
+    executed: set[str] = set()
+    for path in _workflow_files(directory):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for job in (workflow.get("jobs") or {}).values():
+            for step in (job or {}).get("steps") or []:
+                block = (step or {}).get("run")
+                if not isinstance(block, str):
+                    continue
+                for command in _logical_commands(block):
+                    if _INVOKES_PYTEST.search(command):
+                        executed.update(_TEST_MODULE_ARGUMENT.findall(command))
+    return executed
+
+
+def test_every_slow_module_is_run_by_a_workflow() -> None:
+    """A @slow module no workflow step runs reports green by absence, having run nowhere."""
     slow_modules = _slow_test_modules()
-    stale = {m for m in SLOW_MODULES_NOT_IN_CI_YML if m not in slow_modules}
-    assert not stale, (
-        f"SLOW_MODULES_NOT_IN_CI_YML names module(s) that no longer exist or no longer "
-        f"mark any case @slow: {sorted(stale)}. Remove the entry."
+    # Fails closed: an AST change or a moved directory that found nothing would
+    # otherwise satisfy the assertion below while checking no module at all.
+    assert slow_modules, "found no @slow test modules, so this gate asserted nothing"
+
+    executed = _modules_run_by_workflows(WORKFLOWS)
+    # The same fail-closed reasoning from the other side: a YAML-shape change that parsed
+    # to no run steps would report every module missing, which is loud, but an empty set
+    # here is worth naming as the likely cause rather than sending someone to their diff.
+    assert executed, "parsed no test modules out of any workflow `run:` step"
+
+    unrun = [path.name for path in slow_modules if path.name not in executed]
+    assert not unrun, (
+        f"{len(unrun)} module(s) define @slow tests but are run by no workflow step in "
+        f".github/workflows, so those tests run nowhere in CI: {unrun}. Add each to a "
+        "slow step in ci.yml -- the marker makes the gate runnable, naming the module in "
+        "a `run:` command is what makes it run."
+    )
+
+
+def test_a_module_named_only_in_a_comment_is_not_covered(tmp_path: Path) -> None:
+    """The guard reads run steps, not file text, so a mention cannot stand in for a run.
+
+    Both directions are asserted. A guard that reported nothing covered would pass the
+    negative case while being useless, so the same module is checked to register when it
+    IS in a `run:` command. The live instance this protects is
+    test_govinfo_corpus_parity.py, which ci.yml names in a comment explaining that it is
+    excluded there: a text search would let its real invocation be deleted from
+    corpus-parity.yml without going red.
+    """
+    mentioned_only = tmp_path / "mentioned.yml"
+    mentioned_only.write_text(
+        "name: run tests/test_example_gate.py\n"
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      # tests/test_example_gate.py is deliberately excluded here\n"
+        "      - name: Skip tests/test_example_gate.py for now\n"
+        "        run: echo no tests here\n"
+        "      - name: File an issue when the corpus drifts\n"
+        "        run: |\n"
+        "          gh issue create --body 'add the stem to `tests/test_example_gate.py`'\n"
+        "      - name: A pytest step that runs something else entirely\n"
+        "        run: uv run pytest -m slow tests/test_other_gate.py\n",
+        encoding="utf-8",
+    )
+    covered = _modules_run_by_workflows(tmp_path)
+    assert "test_example_gate.py" not in covered, (
+        "a module named only in a comment, a step name, the workflow name and the prose "
+        f"of an executable non-pytest step counted as covered: {sorted(covered)}. The "
+        "guard is textual and fails open."
+    )
+    # The neighbouring real invocation must still register, or the negative above would
+    # also pass on a guard that simply parsed nothing out of this file.
+    assert "test_other_gate.py" in covered, (
+        f"the one genuine pytest invocation in the file was not detected: {sorted(covered)}"
+    )
+
+    (tmp_path / "runs.yaml").write_text(
+        "on: [push]\njobs:\n  build:\n    steps:\n      - run: uv run pytest -v -m slow tests/test_example_gate.py\n",
+        encoding="utf-8",
+    )
+    assert "test_example_gate.py" in _modules_run_by_workflows(tmp_path), (
+        "a module invoked by a real `run:` step was not detected, so the guard rejects "
+        "everything and proves nothing (the .yaml suffix is covered here too)"
+    )
+
+
+def test_a_commented_out_invocation_is_not_covered(tmp_path: Path) -> None:
+    """Commenting a gate out must retire it visibly, not silently.
+
+    This is the disable-and-forget path, and it is the one a text search cannot see at
+    all: YAML parsing strips YAML comments but leaves a `#` inside a block scalar alone,
+    because there it is ordinary shell text. The commented line still contains the word
+    pytest and the module name, so a guard that searches the block as one string reads
+    it as a live invocation.
+    """
+    (tmp_path / "disabled.yml").write_text(
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          # uv run pytest -m slow tests/test_example_gate.py\n"
+        '          echo "temporarily disabled"\n',
+        encoding="utf-8",
+    )
+    covered = _modules_run_by_workflows(tmp_path)
+    assert "test_example_gate.py" not in covered, (
+        "a commented-out pytest invocation counted as coverage, so a slow gate can be "
+        f"retired while this guard stays green: {sorted(covered)}"
+    )
+
+    # Uncommenting the same line must register, or the assertion above would also hold
+    # on a guard that never counts anything inside a `run: |` block.
+    (tmp_path / "disabled.yml").write_text(
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          uv run pytest -m slow tests/test_example_gate.py\n"
+        '          echo "back on"\n',
+        encoding="utf-8",
+    )
+    assert "test_example_gate.py" in _modules_run_by_workflows(tmp_path), (
+        "the same invocation, uncommented, was not detected -- the guard is not reading "
+        "block scalars at all rather than reading their comments correctly"
+    )
+
+
+def test_a_module_named_beside_a_real_invocation_is_not_covered(tmp_path: Path) -> None:
+    """A module credited to a neighbour's pytest command is coverage that does not exist.
+
+    The block runs pytest and mentions two modules, but only one is an argument to that
+    command; the other sits in an `echo` saying it is disabled. Matching the block as a
+    whole cannot tell them apart, so the disabled module inherits its neighbour's
+    invocation. Splitting into logical commands is what separates them.
+
+    The echo is deliberately UNQUOTED. Quoting the path puts a `"` immediately before it,
+    which the argument pattern already rejects on its own -- so a quoted version of this
+    fixture passes under both the whole-block and the per-command implementation, and
+    would assert nothing about the change it exists to pin.
+    """
+    (tmp_path / "mixed.yml").write_text(
+        "on: [push]\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          echo tests/test_example_gate.py is disabled\n"
+        "          uv run pytest -m slow tests/test_other_gate.py\n",
+        encoding="utf-8",
+    )
+    covered = _modules_run_by_workflows(tmp_path)
+    assert "test_example_gate.py" not in covered, (
+        "a module named in an echo inherited the coverage of a real pytest command in "
+        f"the same block: {sorted(covered)}"
+    )
+    assert "test_other_gate.py" in covered, (
+        f"the genuinely invoked module in that block was not detected: {sorted(covered)}"
     )
