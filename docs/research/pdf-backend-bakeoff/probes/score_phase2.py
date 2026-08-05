@@ -49,6 +49,7 @@ from contract import ALL_BACKENDS, run_backend  # noqa: E402
 from reconstruct import reconstruct  # noqa: E402
 
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
+from deltatrack.compare.pdf import UnsupportedLayoutError, _is_unnumbered_layout  # noqa: E402
 from deltatrack.diff_bill import bill_diff_to_dict, diff_bills  # noqa: E402
 from deltatrack.diff_pdf import diff_pdfs  # noqa: E402
 from deltatrack.formatters.canonical import (  # noqa: E402
@@ -171,6 +172,23 @@ def pdf_canonical(backend: str, v1_pdf: Path, v2_pdf: Path, bill: str, mode: str
         raw, _summary = run_backend(backend, path)
         timings[f"{side}_extract_s"] = round(time.perf_counter() - t0, 3)
         pages[side], _diag = reconstruct(raw, repaired=(mode == "repaired"))
+
+    # Apply the SAME guard production applies. `compare/pdf.py` declines an unnumbered
+    # (enrolled) layout with UnsupportedLayoutError before diffing, because every anchor
+    # path gates on a printed line number, so an enrolled bill collapses into one
+    # anchorless block and the diff returns a confident wrong answer rather than failing.
+    #
+    # Calling `diff_pdfs` directly bypasses that guard, and this harness originally did.
+    # The result was exactly the failure the guard exists to prevent: on 118-hr-4366/5->6
+    # the PDF side reported 3468 amount entries against the XML's 0, and on
+    # 115-hr-5895/4->5 it matched only 47 of 164. Both pairs end in an enrolled bill.
+    # Scoring a backend on a document the product declines measures nothing about the
+    # backend, so those pairs are marked declined rather than silently scored.
+    declined = [side for side in ("v1", "v2") if _is_unnumbered_layout(pages[side])]
+    if declined:
+        raise UnsupportedLayoutError(
+            f"unnumbered (enrolled) layout on {'+'.join(declined)}; production declines this pair"
+        )
 
     t0 = time.perf_counter()
     diff = diff_pdfs(pages["v1"], pages["v2"])
