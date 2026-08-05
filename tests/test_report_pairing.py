@@ -376,8 +376,6 @@ def test_blind_offline_mode_fails_closed_for_new_version(monkeypatch):
     "bill has no committee reports", which is false. This test ensures we fail
     with a clear error instead.
     """
-    # Simulate the manifest having no recoverable sources for this bill
-    # (all pairings were dropped by the lineage rule)
     import scripts.update_manifest_with_reports as updater
 
     # This is what sources_from_manifest returns when all pairings are "none" with reasons
@@ -432,11 +430,6 @@ def test_blind_offline_mode_fails_closed_for_new_version(monkeypatch):
     # sources_from_manifest should return empty because all recorded pairings are "none"
     assert report_sources == [], f"Expected empty sources, got {report_sources}"
 
-    # Now try to run the offline update logic for the new version
-    # This should fail because we're in blind mode and the version has no entry
-    blind = not False and not report_sources  # not args.refresh and not report_sources
-    assert blind
-
     # Find the version with no entry
     new_version = None
     for ver in bill_entry["versions"]:
@@ -447,11 +440,10 @@ def test_blind_offline_mode_fails_closed_for_new_version(monkeypatch):
     assert new_version is not None
     assert "committee_report" not in new_version
 
-    # The fail-closed logic: when blind and no committee_report entry, we should error
-    # This is tested by checking that the updater would exit
+    # Now call the production updater logic directly -- this is what exercises
+    # the actual fail-closed branch in update_bill_version_pairing()
     import sys
 
-    # Capture sys.exit
     old_exit = sys.exit
     exit_msg = None
 
@@ -460,16 +452,14 @@ def test_blind_offline_mode_fails_closed_for_new_version(monkeypatch):
         exit_msg = msg
 
     sys.exit = mock_exit
-
     try:
-        # This mimics the loop in main()
-        stage = new_version["stage"]
-        if blind and not new_version.get("committee_report"):
-            # This is the fail-closed branch
-            sys.exit(
-                f"118-hr-2882: cannot determine committee report for new version "
-                f"{stage} offline; run scripts/update_manifest_with_reports.py --refresh"
-            )
+        updater.update_bill_version_pairing(
+            ver=new_version,
+            report_sources=report_sources,
+            bill_id="118-hr-2882",
+            bill_type="hr",
+            blind=True,  # offline mode with no recoverable sources
+        )
     finally:
         sys.exit = old_exit
 
@@ -477,3 +467,61 @@ def test_blind_offline_mode_fails_closed_for_new_version(monkeypatch):
     assert "cannot determine committee report for new version" in exit_msg
     assert "7_enrolled-bill" in exit_msg
     assert "--refresh" in exit_msg
+
+    # Verify existing valid entries remain untouched
+    for ver in bill_entry["versions"]:
+        if "committee_report" in ver:
+            assert ver["committee_report"] is not None
+
+
+def test_updater_offline_format_independence():
+    """Format independence: pairing depends on legislative version/stage, not on XML presence.
+
+    The updater used to skip versions without XML, leaving PDF-only versions with
+    no committee_report entry at all. This test exercises the production updater
+    logic directly with a synthetic version that has formats = ["pdf"] plus a
+    known report source, asserting it receives the correct committee_report.
+
+    This test does not depend on the live corpus containing a PDF-only version.
+    The real corpus no longer has one (114-hr-2029/4_reported-in-senate gained
+    XML when #434 landed), so the invariant is protected at the rule level.
+    """
+    import scripts.update_manifest_with_reports as updater
+    from scripts.report_pairing import ReportSource
+
+    # A synthetic PDF-only version (the format that used to be skipped)
+    synthetic_version = {
+        "stage": "4_reported-in-senate",
+        "formats": ["pdf"],  # no XML
+    }
+
+    # A known report source for this bill/chamber -- with pkg as it would be
+    # after --refresh resolves it. The offline updater just copies what it's given.
+    report_sources = [
+        ReportSource(
+            citation="S. Rept. 114-57",
+            chamber="senate",
+            number=57,
+            pkg="CRPT-114srpt57",
+        )
+    ]
+
+    # Call the production updater logic directly
+    updater.update_bill_version_pairing(
+        ver=synthetic_version,
+        report_sources=report_sources,
+        bill_id="114-hr-2029",
+        bill_type="hr",
+        blind=False,  # we have report sources, so not blind
+    )
+
+    # The version should now have a committee_report entry
+    assert "committee_report" in synthetic_version
+    report_entry = synthetic_version["committee_report"]
+
+    # It should be an array with the Senate report
+    assert isinstance(report_entry, list)
+    assert len(report_entry) == 1
+    assert report_entry[0]["citation"] == "S. Rept. 114-57"
+    assert report_entry[0]["chamber"] == "senate"
+    assert report_entry[0]["pkg"] == "CRPT-114srpt57"
