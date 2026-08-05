@@ -26,10 +26,21 @@ build of the renderer than the one the code produces.
 Do these in order. The steps are separable and the ordering is what makes a failure
 attributable.
 
-1. **Confirm the test suite is green on `develop`.** Continuous integration runs on pull
-   requests and on pushes to `main`; it does **not** run on pushes to `develop`. Each
-   feature branch was checked before its merge, but the integrated state is not checked
-   by anything automatic. A local full run is the gate here.
+1. **Confirm continuous integration is green on the exact commit being promoted.**
+   CI runs on pull requests, on pushes to **both** `main` and `develop`, and on
+   `merge_group` events, and the `develop` push run is the same full matrix a pull
+   request gets. So the integrated state *is* checked automatically. Two separate
+   mechanisms cover it: the merge queue tests each merge commit before it lands
+   (prevention), and the push run re-tests it afterwards, attributed to the merge that
+   caused any breakage (detection). See the header comment in `.github/workflows/ci.yml`
+   for why both are kept. The trigger itself is pinned by
+   `tests/test_ci_workflow.py::test_ci_runs_on_pushes_to_develop`, so this statement
+   fails loudly rather than silently going stale if the trigger is ever removed.
+
+   Check the run attributed to the head commit being promoted, not merely the branch's
+   most recent green run: another pull request can land in between, and a green mark on
+   an earlier commit says nothing about the one going to `main`. A local full run is a
+   fallback if no run exists for that commit, not the gate.
 
 2. **Check the example-generation workflow can still run.** `update-examples.yml` fetches
    a bill and runs two comparisons. It executes only on `main`, so any change to fetching
@@ -54,7 +65,8 @@ attributable.
 
 ## What the workflow does not exercise
 
-Steps 1 and 2 can be run locally. The Pages publishing steps in `update-examples.yml`
+Step 1 reads a continuous-integration run and step 2 can be run locally. The Pages
+publishing steps in `update-examples.yml`
 (`configure-pages`, `upload-pages-artifact`, `deploy-pages`) cannot: they need the Pages
 environment and only run on `main`. They are unchanged from previous successful runs, so
 they are low risk, but a promotion has no local evidence about them. If Pages publishing
