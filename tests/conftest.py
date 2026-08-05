@@ -456,6 +456,7 @@ CI_SLOW_MODULES = (
     "tests/test_financial_diff.py",
     "tests/test_pipeline_parity.py",
     "tests/test_pdf_xml_amount_recall.py",
+    "tests/test_pdf_xml_prose_recall.py",
     "tests/test_front_matter_parity.py",
     "tests/test_xml_compare.py",
     "tests/test_toc_tree.py",
@@ -565,10 +566,12 @@ _SKIP_WATCH_GROUPS = (
 _WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES + FAST_GATE_MODULES
 
 # --- Cases CI can never collect ------------------------------------------------
-# Every watched module parametrizes over the committed manifest EXCEPT these two, which
-# glob bills/ directly (tests/pdf_corpus.py: dual_format_versions, adjacent_pdf_pairs).
-# Their case list therefore grows with whatever a machine has fetched: 6 and 30 cases in
-# CI, 90 and 432 on a full working checkout.
+# Every watched module parametrizes over the committed manifest EXCEPT the ones below,
+# which build their case list from the bill trees directly (tests/pdf_corpus.py:
+# dual_format_versions, adjacent_pdf_pairs). Their case list therefore grows with
+# whatever a machine has fetched: for the two original modules, 6 and 30 cases in CI
+# against 90 and 432 on a full working checkout. The prose gate added in #7 shares the
+# amount gate's dual_format_versions denominator exactly, so it expands the same way.
 #
 # That breaks the assumption the allowlist rests on. An allowlist calibrated against the
 # committed corpus cannot name cases that only exist on one developer's disk, so those
@@ -576,7 +579,7 @@ _WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES + FAST_GATE_MODULE
 # branch where nothing is wrong. A ceiling that cries wolf on every maintainer's machine
 # gets muted, which costs more than the channel it guards.
 #
-# So for these two modules a case is watched only if the manifest declares every FILE the
+# So for these modules a case is watched only if the manifest declares every FILE the
 # case reads. A case CI cannot collect cannot regress in CI, and there is nothing
 # meaningful to declare about it. Cases that ARE manifested stay watched exactly as
 # before, so the channel is narrowed to what CI runs, not switched off. This is the same
@@ -594,6 +597,8 @@ _CORPUS_EXPANDING_MODULES = {
     "tests/test_pdf_corpus_smoke.py": ("pdf",),
     # dual_format_versions(): a stage present in BOTH formats.
     "tests/test_pdf_xml_amount_recall.py": ("xml", "pdf"),
+    # dual_format_versions() as well: the same stage-in-both-formats denominator.
+    "tests/test_pdf_xml_prose_recall.py": ("xml", "pdf"),
 }
 
 # The two id shapes these modules generate: "<bill>/<stem>" and, for a pair case,

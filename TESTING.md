@@ -19,7 +19,7 @@ comparison needs no key and no internet connection.
 
 ## How accuracy is checked
 
-Accuracy is checked in five ways. Each one answers a different question, and
+Accuracy is checked in six ways. Each one answers a different question, and
 each has limits worth being honest about. There is no single accuracy
 percentage that would be truthful across all of appropriations, so we describe
 what each layer does and does not establish.
@@ -103,7 +103,9 @@ including where each change appears (page and line) and what kind of change it
 is. The tool's PDF comparison is then checked against that list.
 
 **Limit:** this is the newest and thinnest area, and the hand-built list so far
-covers a single draft bill.
+covers a single draft bill. It is also the only place the wording of a bill is
+checked against a human reading of it: for published bills, check 6 uses the
+official text instead, which no draft has.
 
 ### 5. Cross-checking the PDF reading against the official text
 
@@ -126,6 +128,49 @@ cross-check earlier surfaced a quirk in the official-text reader, where it
 merged a dollar figure with an adjacent percentage in non-spending statutory
 tables; that has since been fixed.) The soundness pass covers every bill,
 including the largest omnibus in the collection.
+
+### 6. Cross-checking the PDF reading against the official *wording*
+
+Check 5 asks whether the dollar figures survive when the tool reads a PDF. This
+one asks the same question of the words. The official machine-readable version of
+a bill is an independent transcription of the same document, so for every bill we
+have in both forms we take passages of its body text and confirm each one turns
+up in what the tool read out of the PDF. Punctuation, capitalisation, accents, and
+hyphens are ignored: the two formats set them differently, and the question here
+is whether the wording survived at all, not whether it was reproduced character
+for character.
+
+Not every word in the file is compared, and the gaps are deliberate. The passages
+are cut at sentence punctuation and only those of eight words or more are used, so
+a fragment too short to match distinctively is left out. Repeated passages are
+counted once, since bills repeat boilerplate provisos verbatim and counting them
+each time would weight the score toward whichever bill repeats itself most. Two
+kinds of text are excluded outright: the table of contents, which is set in a
+dot-leadered layout that reads as a different string entirely, and quoted blocks
+(the passages an amendment inserts into another law), which are set as indented
+block quotations with their own numbering. What remains is the body prose, which
+is the part a reader of the change report is actually reading.
+
+Most versions score 100%. Two kinds of print fall short, and in both cases we
+know why. Congress prints a bill differently at different stages, and two of
+those print styles defeat the tool's handling of the page furniture: the enrolled
+print (the final enacted text) and the Senate engrossed amendment both splice a
+running page header or footer into the middle of a sentence, and the enrolled
+print additionally loses a number that begins a line. So the allowance is written
+against the print style rather than against a named bill, along with the defect
+that causes it. A new bill is then covered the moment it is added if it is printed
+the same way, and held to the full standard if it is not. If the underlying defect
+is ever fixed, the check fails and tells us to remove the allowance, so it cannot
+quietly outlive its reason.
+
+**Limit:** because the same clean-up is applied to both sides before comparing,
+this check is blind to changes in that clean-up — it confirms the words are
+there, not that they are rendered exactly as printed. Exact rendering is held in
+place separately, by frozen copies of what the tool reads out of specific pages
+(`tests/test_pdf_extraction_golden.py`). Matching is by containment rather than
+position, so it confirms a passage is present somewhere in the version, not that
+it appears in the right place. It also cannot cover draft bills at all, which have
+no official version to compare against; that is check 4's job.
 
 ## Known soft spots
 
