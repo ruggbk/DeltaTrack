@@ -46,12 +46,12 @@ too strict. The defects belong to the LAYOUT, which is why the floors key on it:
 
   - Enrolled prints (worst 94.0%) carry no margin line numbers, so `extract_clean_pages`
     treats a line-initial integer as one and drops it: "not more than 25 percent" reads
-    as "not more than percent". The same layout's running header is not recognised as
-    page furniture, so "H. R. 4366-4" splices into the middle of a sentence.
+    as "not more than percent" (#534). The same layout's running header is not recognised
+    as page furniture, so "H. R. 4366-4" splices into the middle of a sentence (#535).
   - Senate engrossed amendments (worst 88.0%) DO carry line numbers, and show the chrome
     half of that defect on its own: the running footer splices in mid-word, so "inland
-    waterways projects" extracts as "inland water(dagger) HR 5895 EAS ways projects".
-    Same shape as the running footer fixed in #140 for the "PCS" variant.
+    waterways projects" extracts as "inland water(dagger) HR 5895 EAS ways projects"
+    (#535 again). Same shape as the running footer fixed in #140 for the "PCS" variant.
 
 Within the healthy layouts, two residues are worth naming because they are real and
 deliberately not normalized away:
@@ -59,7 +59,7 @@ deliberately not normalized away:
   - On a line carrying a vulgar fraction, the extractor emits the margin line number
     mid-line rather than at the start, where line-number stripping would catch it, so a
     stray integer welds itself into a number: "18 3/4 percent" reads as "183 15 /4
-    percent". That is the whole of 119-hr-1's 99.5%.
+    percent" (#536). That is the whole of 119-hr-1's 99.5%.
   - A space is lost where a line wraps between two parentheticals: "$5,000,000)
     (reduced by" extracts as "$5,000,000)(reduced by". A missing space is text the tool
     got wrong, and folding it away here would canonicalize a defect rather than a
@@ -113,16 +113,17 @@ RECALL_FLOOR = 0.99
 _LAYOUT_FLOORS: dict[str, float] = {
     # Enrolled prints, measured 94.0-94.8%. Two defects, both from this layout carrying
     # no margin line numbers: a line-initial integer is stripped as though it were one
-    # ("not more than 25 percent" -> "not more than percent"), and the running header is
-    # not recognised as page furniture, so "H. R. 4366-4" splices into a sentence.
+    # ("not more than 25 percent" -> "not more than percent", #534), and the running
+    # header is not recognised as page furniture, so "H. R. 4366-4" splices into a
+    # sentence (#535). Both must be fixed before this entry can go.
     "enrolled-bill": 0.90,
     # Senate engrossed amendments, measured 88.0-88.1%. A different marker for the same
     # running-furniture defect: the footer "(dagger) HR 5895 EAS" splices into the middle
     # of a sentence and frequently into the middle of a WORD, so "inland waterways
     # projects" extracts as "inland water(dagger) HR 5895 EAS ways projects". These
     # prints DO carry line numbers, so this is the chrome half of the enrolled defect
-    # arriving on its own. It is the same shape as the running footer fixed in #140 for
-    # the "HR 5895 PCS" variant, on a variant that fix did not reach.
+    # arriving on its own (#535). It is the same shape as the running footer fixed in
+    # #140 for the "HR 5895 PCS" variant, on a variant that fix did not reach.
     "engrossed-amendment-senate": 0.85,
 }
 

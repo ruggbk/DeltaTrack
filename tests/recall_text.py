@@ -41,7 +41,9 @@ def normalize_for_recall(text: str) -> str:
 #    side needs the spacing diacritics dropped and dotless i/j restored. The extracted
 #    text keeping that broken spelling is a real defect in its own right -- it is what
 #    a reader sees and searches -- but it is a rendering-fidelity bug tracked
-#    separately, not a recall failure, so it is folded away here.
+#    separately as #537, not a recall failure, so it is folded away here. Note that
+#    folding it here means nothing in the suite will surface it again; #537 is the
+#    only place it lives.
 #  - Quotes: XML wraps quoted terms in `<quote>` elements that itertext() renders as
 #    bare quote characters, in positions the PDF sets differently.
 #  - Hyphens: three unrelated artifacts collapse into one rule -- a soft wrap in the
