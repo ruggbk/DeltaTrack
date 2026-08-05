@@ -13621,6 +13621,4606 @@
      "n_pages": 16
     }
    }
+  },
+  "117-hr-2471/6": {
+   "pdfium-native": {
+    "backend": "pdfium-native",
+    "extract_s": 14.876,
+    "backend_summary": {
+     "backend": "pdfium-native",
+     "pages": 1068,
+     "glyphs": 3137145,
+     "empty_font_names": 2903,
+     "undecodable_glyphs": 6135,
+     "extract_ms": 14874
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.0,
+     "n_numbered_lines_scored": 373,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 3125528
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 6135,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 86,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.87586,
+      "recall": 0.93904,
+      "f1": 0.90635,
+      "matched": 427710
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.87574,
+      "recall": 0.93914,
+      "f1": 0.90633,
+      "matched": 427755
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 6135,
+      "repaired_line_ends": 6135
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 86,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.89652,
+      "recall": 0.94945,
+      "f1": 0.92223,
+      "matched": 432454
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89639,
+      "recall": 0.94955,
+      "f1": 0.92221,
+      "matched": 432500
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    }
+   },
+   "pdfminer": {
+    "backend": "pdfminer",
+    "extract_s": 25.77,
+    "backend_summary": {
+     "backend": "pdfminer",
+     "pages": 1068,
+     "glyphs": 3127706,
+     "empty_font_names": 0,
+     "undecodable_glyphs": 0,
+     "extract_ms": 25769
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.0,
+     "n_numbered_lines_scored": 373,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 3127706
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 84,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.9005,
+      "recall": 0.94944,
+      "f1": 0.92433,
+      "matched": 432450
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.90038,
+      "recall": 0.94955,
+      "f1": 0.92431,
+      "matched": 432496
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 84,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.9005,
+      "recall": 0.94944,
+      "f1": 0.92433,
+      "matched": 432450
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.90038,
+      "recall": 0.94955,
+      "f1": 0.92431,
+      "matched": 432496
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    }
+   },
+   "pymupdf": {
+    "backend": "pymupdf",
+    "extract_s": 17.527,
+    "backend_summary": {
+     "backend": "pymupdf",
+     "pages": 1068,
+     "glyphs": 3138561,
+     "empty_font_names": 0,
+     "extract_ms": 17526,
+     "license_role": "ceiling-reference-only (AGPL-3.0)"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.0,
+     "n_numbered_lines_scored": 373,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 3138561
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 86,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.89651,
+      "recall": 0.94946,
+      "f1": 0.92223,
+      "matched": 432456
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89638,
+      "recall": 0.94956,
+      "f1": 0.92221,
+      "matched": 432502
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 86,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.89651,
+      "recall": 0.94946,
+      "f1": 0.92223,
+      "matched": 432456
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89638,
+      "recall": 0.94956,
+      "f1": 0.92221,
+      "matched": 432502
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    }
+   },
+   "pypdf": {
+    "backend": "pypdf",
+    "extract_s": 8.123,
+    "backend_summary": {
+     "backend": "pypdf",
+     "pages": 1068,
+     "glyphs": 3142739,
+     "empty_font_names": 0,
+     "extract_ms": 8116,
+     "geometry_note": "per-run origin only; character advances synthesized"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.0,
+     "n_numbered_lines_scored": 389,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 3142739
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 56598,
+      "chrome_lines": 0,
+      "numbered_lines": 141,
+      "ambiguous_numbers": 2,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 84,
+      "trimmed_tail": 0
+     },
+     "text_vs_xml": {
+      "precision": 0.79539,
+      "recall": 0.83829,
+      "f1": 0.81628,
+      "matched": 381824
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.79537,
+      "recall": 0.83842,
+      "f1": 0.81633,
+      "matched": 381883
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 0.92667,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 139
+     },
+     "tree": {
+      "n_anchors": 1,
+      "n_nodes": 2,
+      "levels": {
+       "division": 1,
+       "account": 1
+      },
+      "conservation_overcount": 18,
+      "conservation_dropped": 3232,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 56598,
+      "chrome_lines": 0,
+      "numbered_lines": 141,
+      "ambiguous_numbers": 2,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 84,
+      "trimmed_tail": 0
+     },
+     "text_vs_xml": {
+      "precision": 0.79539,
+      "recall": 0.83829,
+      "f1": 0.81628,
+      "matched": 381824
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.79537,
+      "recall": 0.83842,
+      "f1": 0.81633,
+      "matched": 381883
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 0.92667,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 139
+     },
+     "tree": {
+      "n_anchors": 1,
+      "n_nodes": 2,
+      "levels": {
+       "division": 1,
+       "account": 1
+      },
+      "conservation_overcount": 18,
+      "conservation_dropped": 3232,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    }
+   },
+   "pdfium-wasm": {
+    "backend": "pdfium-wasm",
+    "extract_s": 14.746,
+    "backend_summary": {
+     "backend": "pdfium-wasm",
+     "pages": 1068,
+     "pages_total": 1068,
+     "glyphs": 3087823,
+     "empty_font_names": 2903,
+     "undecodable_glyphs": 6135,
+     "extract_ms": 8549
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.0,
+     "n_numbered_lines_scored": 373,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 3076206
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 6135,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 86,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.87586,
+      "recall": 0.93904,
+      "f1": 0.90635,
+      "matched": 427710
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.87574,
+      "recall": 0.93914,
+      "f1": 0.90633,
+      "matched": 427755
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 6135,
+      "repaired_line_ends": 6135
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 86,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.89652,
+      "recall": 0.94945,
+      "f1": 0.92223,
+      "matched": 432454
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89639,
+      "recall": 0.94955,
+      "f1": 0.92221,
+      "matched": 432500
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    }
+   },
+   "pdfjs": {
+    "backend": "pdfjs",
+    "extract_s": 6.732,
+    "backend_summary": {
+     "backend": "pdfjs",
+     "pages": 1068,
+     "pages_total": 1068,
+     "glyphs": 3087619,
+     "empty_font_names": 0,
+     "extract_ms": 5057,
+     "get_text_content_ms": 2201,
+     "get_operator_list_ms": 1227,
+     "geometry_note": "per-item geometry; character boxes synthesized by width division"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.0,
+     "n_numbered_lines_scored": 373,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 3087619
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 99,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.89649,
+      "recall": 0.94946,
+      "f1": 0.92221,
+      "matched": 432456
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89634,
+      "recall": 0.94956,
+      "f1": 0.92218,
+      "matched": 432503
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 57871,
+      "chrome_lines": 3,
+      "numbered_lines": 153,
+      "ambiguous_numbers": 3,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 99,
+      "trimmed_tail": 34
+     },
+     "text_vs_xml": {
+      "precision": 0.89649,
+      "recall": 0.94946,
+      "f1": 0.92221,
+      "matched": 432456
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89634,
+      "recall": 0.94956,
+      "f1": 0.92218,
+      "matched": 432503
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 150,
+      "n_candidate": 150
+     },
+     "tree": {
+      "n_anchors": 0,
+      "n_nodes": 0,
+      "levels": {},
+      "conservation_overcount": 0,
+      "conservation_dropped": 3468,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": null,
+      "n_reference": 0
+     },
+     "n_pages": 1068
+    }
+   }
+  },
+  "117-hr-4432/1": {
+   "pdfium-native": {
+    "backend": "pdfium-native",
+    "extract_s": 1.038,
+    "backend_summary": {
+     "backend": "pdfium-native",
+     "pages": 148,
+     "glyphs": 218882,
+     "empty_font_names": 3728,
+     "undecodable_glyphs": 978,
+     "extract_ms": 1037
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99972,
+     "n_numbered_lines_scored": 3510,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 208233
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 977,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 118,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.88933,
+      "recall": 0.94018,
+      "f1": 0.91405,
+      "matched": 25602
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.88653,
+      "recall": 0.9411,
+      "f1": 0.913,
+      "matched": 25627
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 977,
+      "repaired_line_ends": 977
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    }
+   },
+   "pdfminer": {
+    "backend": "pdfminer",
+    "extract_s": 2.554,
+    "backend_summary": {
+     "backend": "pdfminer",
+     "pages": 148,
+     "glyphs": 214149,
+     "empty_font_names": 0,
+     "undecodable_glyphs": 0,
+     "extract_ms": 2554
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99972,
+     "n_numbered_lines_scored": 3510,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 208353
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    }
+   },
+   "pymupdf": {
+    "backend": "pymupdf",
+    "extract_s": 1.173,
+    "backend_summary": {
+     "backend": "pymupdf",
+     "pages": 148,
+     "glyphs": 214374,
+     "empty_font_names": 0,
+     "extract_ms": 1172,
+     "license_role": "ceiling-reference-only (AGPL-3.0)"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99972,
+     "n_numbered_lines_scored": 3510,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 208575
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    }
+   },
+   "pypdf": {
+    "backend": "pypdf",
+    "extract_s": 0.734,
+    "backend_summary": {
+     "backend": "pypdf",
+     "pages": 148,
+     "glyphs": 215501,
+     "empty_font_names": 0,
+     "extract_ms": 731,
+     "geometry_note": "per-run origin only; character advances synthesized"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99972,
+     "n_numbered_lines_scored": 3510,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 215181
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 117,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.92508,
+      "recall": 0.94719,
+      "f1": 0.936,
+      "matched": 25793
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.92211,
+      "recall": 0.94815,
+      "f1": 0.93495,
+      "matched": 25819
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 184,
+      "n_nodes": 185,
+      "levels": {
+       "title": 8,
+       "major": 16,
+       "section": 160,
+       "heading": 1
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.7098,
+      "n_reference": 255,
+      "n_candidate": 184
+     },
+     "n_pages": 148
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 117,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.92508,
+      "recall": 0.94719,
+      "f1": 0.936,
+      "matched": 25793
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.92211,
+      "recall": 0.94815,
+      "f1": 0.93495,
+      "matched": 25819
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 184,
+      "n_nodes": 185,
+      "levels": {
+       "title": 8,
+       "major": 16,
+       "section": 160,
+       "heading": 1
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.7098,
+      "n_reference": 255,
+      "n_candidate": 184
+     },
+     "n_pages": 148
+    }
+   },
+   "pdfium-wasm": {
+    "backend": "pdfium-wasm",
+    "extract_s": 1.021,
+    "backend_summary": {
+     "backend": "pdfium-wasm",
+     "pages": 148,
+     "pages_total": 148,
+     "glyphs": 216192,
+     "empty_font_names": 3726,
+     "undecodable_glyphs": 978,
+     "extract_ms": 629
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99972,
+     "n_numbered_lines_scored": 3510,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 205553
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 977,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 118,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.88933,
+      "recall": 0.94018,
+      "f1": 0.91405,
+      "matched": 25602
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.88653,
+      "recall": 0.9411,
+      "f1": 0.913,
+      "matched": 25627
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 977,
+      "repaired_line_ends": 977
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 255,
+      "n_nodes": 255,
+      "levels": {
+       "title": 8,
+       "major": 8,
+       "section": 160,
+       "account": 65,
+       "agency": 14
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 255,
+      "n_candidate": 255
+     },
+     "n_pages": 148
+    }
+   },
+   "pdfjs": {
+    "backend": "pdfjs",
+    "extract_s": 1.11,
+    "backend_summary": {
+     "backend": "pdfjs",
+     "pages": 148,
+     "pages_total": 148,
+     "glyphs": 212600,
+     "empty_font_names": 0,
+     "extract_ms": 806,
+     "get_text_content_ms": 406,
+     "get_operator_list_ms": 243,
+     "geometry_note": "per-item geometry; character boxes synthesized by width division"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99972,
+     "n_numbered_lines_scored": 3510,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 206811
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 181,
+      "n_nodes": 181,
+      "levels": {
+       "title": 8,
+       "major": 13,
+       "section": 160
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.69412,
+      "n_reference": 255,
+      "n_candidate": 181
+     },
+     "n_pages": 148
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 4046,
+      "chrome_lines": 438,
+      "numbered_lines": 3591,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 116,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.95014,
+      "recall": 0.97202,
+      "f1": 0.96095,
+      "matched": 26469
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94681,
+      "recall": 0.97268,
+      "f1": 0.95957,
+      "matched": 26487
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 3591,
+      "n_candidate": 3591
+     },
+     "tree": {
+      "n_anchors": 181,
+      "n_nodes": 181,
+      "levels": {
+       "title": 8,
+       "major": 13,
+       "section": 160
+      },
+      "conservation_overcount": 217,
+      "conservation_dropped": 217,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.69412,
+      "n_reference": 255,
+      "n_candidate": 181
+     },
+     "n_pages": 148
+    }
+   }
+  },
+  "117-hr-4502/1": {
+   "pdfium-native": {
+    "backend": "pdfium-native",
+    "extract_s": 1.581,
+    "backend_summary": {
+     "backend": "pdfium-native",
+     "pages": 196,
+     "glyphs": 288168,
+     "empty_font_names": 4920,
+     "undecodable_glyphs": 1060,
+     "extract_ms": 1579
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99978,
+     "n_numbered_lines_scored": 4577,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 273694
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 1058,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 136,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.89635,
+      "recall": 0.93583,
+      "f1": 0.91567,
+      "matched": 34653
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.8944,
+      "recall": 0.9371,
+      "f1": 0.91525,
+      "matched": 34700
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 340,
+      "n_nodes": 340,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 148,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 340,
+      "n_candidate": 340
+     },
+     "n_pages": 196
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 1058,
+      "repaired_line_ends": 1058
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94454,
+      "recall": 0.9603,
+      "f1": 0.95235,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94227,
+      "recall": 0.96144,
+      "f1": 0.95176,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 340,
+      "n_nodes": 340,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 148,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 340,
+      "n_candidate": 340
+     },
+     "n_pages": 196
+    }
+   },
+   "pdfminer": {
+    "backend": "pdfminer",
+    "extract_s": 3.415,
+    "backend_summary": {
+     "backend": "pdfminer",
+     "pages": 196,
+     "glyphs": 281592,
+     "empty_font_names": 0,
+     "undecodable_glyphs": 0,
+     "extract_ms": 3415
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99978,
+     "n_numbered_lines_scored": 4577,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 273956
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94451,
+      "recall": 0.9603,
+      "f1": 0.95234,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94225,
+      "recall": 0.96144,
+      "f1": 0.95175,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 341,
+      "n_nodes": 341,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 149,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.99706,
+      "n_reference": 340,
+      "n_candidate": 341
+     },
+     "n_pages": 196
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94451,
+      "recall": 0.9603,
+      "f1": 0.95234,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94225,
+      "recall": 0.96144,
+      "f1": 0.95175,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 341,
+      "n_nodes": 341,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 149,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.99706,
+      "n_reference": 340,
+      "n_candidate": 341
+     },
+     "n_pages": 196
+    }
+   },
+   "pymupdf": {
+    "backend": "pymupdf",
+    "extract_s": 1.56,
+    "backend_summary": {
+     "backend": "pymupdf",
+     "pages": 196,
+     "glyphs": 282302,
+     "empty_font_names": 0,
+     "extract_ms": 1559,
+     "license_role": "ceiling-reference-only (AGPL-3.0)"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99978,
+     "n_numbered_lines_scored": 4577,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 274663
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94451,
+      "recall": 0.9603,
+      "f1": 0.95234,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94225,
+      "recall": 0.96144,
+      "f1": 0.95175,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 340,
+      "n_nodes": 340,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 148,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.99706,
+      "n_reference": 340,
+      "n_candidate": 340
+     },
+     "n_pages": 196
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94451,
+      "recall": 0.9603,
+      "f1": 0.95234,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94225,
+      "recall": 0.96144,
+      "f1": 0.95175,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 340,
+      "n_nodes": 340,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 148,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.99706,
+      "n_reference": 340,
+      "n_candidate": 340
+     },
+     "n_pages": 196
+    }
+   },
+   "pypdf": {
+    "backend": "pypdf",
+    "extract_s": 0.951,
+    "backend_summary": {
+     "backend": "pypdf",
+     "pages": 196,
+     "glyphs": 283995,
+     "empty_font_names": 0,
+     "extract_ms": 947,
+     "geometry_note": "per-run origin only; character advances synthesized"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99978,
+     "n_numbered_lines_scored": 4577,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 283611
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 135,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.90943,
+      "recall": 0.92576,
+      "f1": 0.91752,
+      "matched": 34280
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.90772,
+      "recall": 0.92735,
+      "f1": 0.91743,
+      "matched": 34339
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 288,
+      "n_nodes": 294,
+      "levels": {
+       "title": 5,
+       "major": 11,
+       "section": 116,
+       "heading": 6,
+       "agency": 18,
+       "account": 129,
+       "grouping": 1,
+       "subsection": 8
+      },
+      "conservation_overcount": 433,
+      "conservation_dropped": 433,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.11176,
+      "n_reference": 340,
+      "n_candidate": 288
+     },
+     "n_pages": 196
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 135,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.90943,
+      "recall": 0.92576,
+      "f1": 0.91752,
+      "matched": 34280
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.90772,
+      "recall": 0.92735,
+      "f1": 0.91743,
+      "matched": 34339
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 288,
+      "n_nodes": 294,
+      "levels": {
+       "title": 5,
+       "major": 11,
+       "section": 116,
+       "heading": 6,
+       "agency": 18,
+       "account": 129,
+       "grouping": 1,
+       "subsection": 8
+      },
+      "conservation_overcount": 433,
+      "conservation_dropped": 433,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.11176,
+      "n_reference": 340,
+      "n_candidate": 288
+     },
+     "n_pages": 196
+    }
+   },
+   "pdfium-wasm": {
+    "backend": "pdfium-wasm",
+    "extract_s": 1.302,
+    "backend_summary": {
+     "backend": "pdfium-wasm",
+     "pages": 196,
+     "pages_total": 196,
+     "glyphs": 284500,
+     "empty_font_names": 4918,
+     "undecodable_glyphs": 1060,
+     "extract_ms": 799
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99978,
+     "n_numbered_lines_scored": 4577,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 270038
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 1058,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 136,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.89635,
+      "recall": 0.93583,
+      "f1": 0.91567,
+      "matched": 34653
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.8944,
+      "recall": 0.9371,
+      "f1": 0.91525,
+      "matched": 34700
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 340,
+      "n_nodes": 340,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 148,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 340,
+      "n_candidate": 340
+     },
+     "n_pages": 196
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 1058,
+      "repaired_line_ends": 1058
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94454,
+      "recall": 0.9603,
+      "f1": 0.95235,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94227,
+      "recall": 0.96144,
+      "f1": 0.95176,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 340,
+      "n_nodes": 340,
+      "levels": {
+       "title": 5,
+       "major": 5,
+       "section": 116,
+       "agency": 54,
+       "account": 148,
+       "grouping": 4,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 340,
+      "n_candidate": 340
+     },
+     "n_pages": 196
+    }
+   },
+   "pdfjs": {
+    "backend": "pdfjs",
+    "extract_s": 0.97,
+    "backend_summary": {
+     "backend": "pdfjs",
+     "pages": 196,
+     "pages_total": 196,
+     "glyphs": 279745,
+     "empty_font_names": 0,
+     "extract_ms": 724,
+     "get_text_content_ms": 344,
+     "get_operator_list_ms": 211,
+     "geometry_note": "per-item geometry; character boxes synthesized by width division"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99978,
+     "n_numbered_lines_scored": 4577,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 272117
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94451,
+      "recall": 0.9603,
+      "f1": 0.95234,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94225,
+      "recall": 0.96144,
+      "f1": 0.95175,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 287,
+      "n_nodes": 291,
+      "levels": {
+       "title": 5,
+       "major": 9,
+       "section": 116,
+       "heading": 4,
+       "agency": 18,
+       "account": 130,
+       "grouping": 1,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.12059,
+      "n_reference": 340,
+      "n_candidate": 287
+     },
+     "n_pages": 196
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 5357,
+      "chrome_lines": 583,
+      "numbered_lines": 4755,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 134,
+      "trimmed_tail": 1
+     },
+     "text_vs_xml": {
+      "precision": 0.94451,
+      "recall": 0.9603,
+      "f1": 0.95234,
+      "matched": 35559
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94225,
+      "recall": 0.96144,
+      "f1": 0.95175,
+      "matched": 35601
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 4755,
+      "n_candidate": 4755
+     },
+     "tree": {
+      "n_anchors": 287,
+      "n_nodes": 291,
+      "levels": {
+       "title": 5,
+       "major": 9,
+       "section": 116,
+       "heading": 4,
+       "agency": 18,
+       "account": 130,
+       "grouping": 1,
+       "subsection": 8
+      },
+      "conservation_overcount": 444,
+      "conservation_dropped": 444,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.12059,
+      "n_reference": 340,
+      "n_candidate": 287
+     },
+     "n_pages": 196
+    }
+   }
+  },
+  "117-hr-4502/2": {
+   "pdfium-native": {
+    "backend": "pdfium-native",
+    "extract_s": 6.956,
+    "backend_summary": {
+     "backend": "pdfium-native",
+     "pages": 1040,
+     "glyphs": 1382295,
+     "empty_font_names": 26471,
+     "undecodable_glyphs": 5907,
+     "extract_ms": 6954
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99996,
+     "n_numbered_lines_scored": 24765,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1352931
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 5906,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 62,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.89414,
+      "recall": 0.93868,
+      "f1": 0.91587,
+      "matched": 182762
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89402,
+      "recall": 0.93889,
+      "f1": 0.91591,
+      "matched": 182803
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1798,
+      "n_nodes": 1809,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 657,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2117,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 1798,
+      "n_candidate": 1798
+     },
+     "n_pages": 1040
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 5906,
+      "repaired_line_ends": 5906
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94747,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188101
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.9663,
+      "f1": 0.95672,
+      "matched": 188139
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1798,
+      "n_nodes": 1809,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 657,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 1798,
+      "n_candidate": 1798
+     },
+     "n_pages": 1040
+    }
+   },
+   "pdfminer": {
+    "backend": "pdfminer",
+    "extract_s": 16.809,
+    "backend_summary": {
+     "backend": "pdfminer",
+     "pages": 1040,
+     "glyphs": 1354512,
+     "empty_font_names": 0,
+     "undecodable_glyphs": 0,
+     "extract_ms": 16809
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99996,
+     "n_numbered_lines_scored": 24765,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1354281
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94746,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188100
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.96629,
+      "f1": 0.95671,
+      "matched": 188138
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1800,
+      "n_nodes": 1811,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 659,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.29255,
+      "n_reference": 1798,
+      "n_candidate": 1800
+     },
+     "n_pages": 1040
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94746,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188100
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.96629,
+      "f1": 0.95671,
+      "matched": 188138
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1800,
+      "n_nodes": 1811,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 659,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.99944,
+      "n_reference": 1798,
+      "n_candidate": 1800
+     },
+     "n_pages": 1040
+    }
+   },
+   "pymupdf": {
+    "backend": "pymupdf",
+    "extract_s": 7.77,
+    "backend_summary": {
+     "backend": "pymupdf",
+     "pages": 1040,
+     "glyphs": 1358050,
+     "empty_font_names": 0,
+     "extract_ms": 7768,
+     "license_role": "ceiling-reference-only (AGPL-3.0)"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99996,
+     "n_numbered_lines_scored": 24765,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1357817
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94746,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188101
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.9663,
+      "f1": 0.95671,
+      "matched": 188139
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1798,
+      "n_nodes": 1809,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 657,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.29255,
+      "n_reference": 1798,
+      "n_candidate": 1798
+     },
+     "n_pages": 1040
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94746,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188101
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.9663,
+      "f1": 0.95671,
+      "matched": 188139
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1798,
+      "n_nodes": 1809,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 657,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.99944,
+      "n_reference": 1798,
+      "n_candidate": 1798
+     },
+     "n_pages": 1040
+    }
+   },
+   "pypdf": {
+    "backend": "pypdf",
+    "extract_s": 4.746,
+    "backend_summary": {
+     "backend": "pypdf",
+     "pages": 1040,
+     "glyphs": 1359744,
+     "empty_font_names": 0,
+     "extract_ms": 4740,
+     "geometry_note": "per-run origin only; character advances synthesized"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99996,
+     "n_numbered_lines_scored": 24765,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1359513
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.91712,
+      "recall": 0.93626,
+      "f1": 0.92659,
+      "matched": 182291
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.917,
+      "recall": 0.93647,
+      "f1": 0.92663,
+      "matched": 182332
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1497,
+      "n_nodes": 1545,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 78,
+       "section": 653,
+       "heading": 40,
+       "agency": 70,
+       "account": 530,
+       "subsection": 48,
+       "grouping": 80,
+       "preamble": 1
+      },
+      "conservation_overcount": 2082,
+      "conservation_dropped": 2311,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.04004,
+      "n_reference": 1798,
+      "n_candidate": 1497
+     },
+     "n_pages": 1040
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.91712,
+      "recall": 0.93626,
+      "f1": 0.92659,
+      "matched": 182291
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.917,
+      "recall": 0.93647,
+      "f1": 0.92663,
+      "matched": 182332
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1497,
+      "n_nodes": 1545,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 78,
+       "section": 653,
+       "heading": 40,
+       "agency": 70,
+       "account": 530,
+       "subsection": 48,
+       "grouping": 80,
+       "preamble": 1
+      },
+      "conservation_overcount": 2082,
+      "conservation_dropped": 2311,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.20022,
+      "n_reference": 1798,
+      "n_candidate": 1497
+     },
+     "n_pages": 1040
+    }
+   },
+   "pdfium-wasm": {
+    "backend": "pdfium-wasm",
+    "extract_s": 7.512,
+    "backend_summary": {
+     "backend": "pdfium-wasm",
+     "pages": 1040,
+     "pages_total": 1040,
+     "glyphs": 1363083,
+     "empty_font_names": 26469,
+     "undecodable_glyphs": 5907,
+     "extract_ms": 4097
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99996,
+     "n_numbered_lines_scored": 24765,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1333726
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 5906,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 62,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.89414,
+      "recall": 0.93868,
+      "f1": 0.91587,
+      "matched": 182762
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.89402,
+      "recall": 0.93889,
+      "f1": 0.91591,
+      "matched": 182803
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1798,
+      "n_nodes": 1809,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 657,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2117,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 1798,
+      "n_candidate": 1798
+     },
+     "n_pages": 1040
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 5906,
+      "repaired_line_ends": 5906
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94747,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188101
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.9663,
+      "f1": 0.95672,
+      "matched": 188139
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1798,
+      "n_nodes": 1809,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 40,
+       "section": 653,
+       "agency": 271,
+       "account": 657,
+       "grouping": 91,
+       "subsection": 48,
+       "heading": 3,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 1798,
+      "n_candidate": 1798
+     },
+     "n_pages": 1040
+    }
+   },
+   "pdfjs": {
+    "backend": "pdfjs",
+    "extract_s": 3.955,
+    "backend_summary": {
+     "backend": "pdfjs",
+     "pages": 1040,
+     "pages_total": 1040,
+     "glyphs": 1337508,
+     "empty_font_names": 0,
+     "extract_ms": 3696,
+     "get_text_content_ms": 1686,
+     "get_operator_list_ms": 1078,
+     "geometry_note": "per-item geometry; character boxes synthesized by width division"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.99996,
+     "n_numbered_lines_scored": 24765,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1337281
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94746,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188101
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.9663,
+      "f1": 0.95671,
+      "matched": 188139
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1487,
+      "n_nodes": 1522,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 65,
+       "section": 653,
+       "heading": 27,
+       "agency": 70,
+       "account": 533,
+       "subsection": 48,
+       "grouping": 80,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.04338,
+      "n_reference": 1798,
+      "n_candidate": 1487
+     },
+     "n_pages": 1040
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 27664,
+      "chrome_lines": 2076,
+      "numbered_lines": 25575,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 11
+     },
+     "text_vs_xml": {
+      "precision": 0.94746,
+      "recall": 0.9661,
+      "f1": 0.95669,
+      "matched": 188101
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.94732,
+      "recall": 0.9663,
+      "f1": 0.95671,
+      "matched": 188139
+     },
+     "text_vs_xml_lcs": null,
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 25575,
+      "n_candidate": 25575
+     },
+     "tree": {
+      "n_anchors": 1487,
+      "n_nodes": 1522,
+      "levels": {
+       "division": 7,
+       "title": 38,
+       "major": 65,
+       "section": 653,
+       "heading": 27,
+       "agency": 70,
+       "account": 533,
+       "subsection": 48,
+       "grouping": 80,
+       "preamble": 1
+      },
+      "conservation_overcount": 2087,
+      "conservation_dropped": 2327,
+      "conservation_holds": false
+     },
+     "breadcrumbs": {
+      "agreement": 0.21468,
+      "n_reference": 1798,
+      "n_candidate": 1487
+     },
+     "n_pages": 1040
+    }
+   }
+  },
+  "118-hr-2882/1": {
+   "pdfium-native": {
+    "backend": "pdfium-native",
+    "extract_s": 0.017,
+    "backend_summary": {
+     "backend": "pdfium-native",
+     "pages": 2,
+     "glyphs": 1738,
+     "empty_font_names": 23,
+     "undecodable_glyphs": 6,
+     "extract_ms": 14
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.94737,
+     "n_numbered_lines_scored": 19,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1629
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 136,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.64948,
+      "recall": 0.7,
+      "f1": 0.6738,
+      "matched": 63
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.29787,
+      "recall": 0.77778,
+      "f1": 0.43077,
+      "matched": 70
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.64948,
+      "recall": 0.7,
+      "f1": 0.6738,
+      "matched": 63
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 6
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    }
+   },
+   "pdfminer": {
+    "backend": "pdfminer",
+    "extract_s": 0.025,
+    "backend_summary": {
+     "backend": "pdfminer",
+     "pages": 2,
+     "glyphs": 1702,
+     "empty_font_names": 0,
+     "undecodable_glyphs": 0,
+     "extract_ms": 24
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.94737,
+     "n_numbered_lines_scored": 19,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1630
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    }
+   },
+   "pymupdf": {
+    "backend": "pymupdf",
+    "extract_s": 0.016,
+    "backend_summary": {
+     "backend": "pymupdf",
+     "pages": 2,
+     "glyphs": 1706,
+     "empty_font_names": 0,
+     "extract_ms": 15,
+     "license_role": "ceiling-reference-only (AGPL-3.0)"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.94737,
+     "n_numbered_lines_scored": 19,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1634
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    }
+   },
+   "pypdf": {
+    "backend": "pypdf",
+    "extract_s": 0.011,
+    "backend_summary": {
+     "backend": "pypdf",
+     "pages": 2,
+     "glyphs": 1722,
+     "empty_font_names": 0,
+     "extract_ms": 10,
+     "geometry_note": "per-run origin only; character advances synthesized"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.94737,
+     "n_numbered_lines_scored": 19,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1722
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 110,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.53719,
+      "recall": 0.72222,
+      "f1": 0.61611,
+      "matched": 65
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.30043,
+      "recall": 0.77778,
+      "f1": 0.43344,
+      "matched": 70
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.52893,
+      "recall": 0.71111,
+      "f1": 0.60664,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 110,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.53719,
+      "recall": 0.72222,
+      "f1": 0.61611,
+      "matched": 65
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.30043,
+      "recall": 0.77778,
+      "f1": 0.43344,
+      "matched": 70
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.52893,
+      "recall": 0.71111,
+      "f1": 0.60664,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    }
+   },
+   "pdfium-wasm": {
+    "backend": "pdfium-wasm",
+    "extract_s": 0.137,
+    "backend_summary": {
+     "backend": "pdfium-wasm",
+     "pages": 2,
+     "pages_total": 2,
+     "glyphs": 1708,
+     "empty_font_names": 22,
+     "undecodable_glyphs": 6,
+     "extract_ms": 41
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.94737,
+     "n_numbered_lines_scored": 19,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1600
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 136,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.64948,
+      "recall": 0.7,
+      "f1": 0.6738,
+      "matched": 63
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.29787,
+      "recall": 0.77778,
+      "f1": 0.43077,
+      "matched": 70
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.64948,
+      "recall": 0.7,
+      "f1": 0.6738,
+      "matched": 63
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 6
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    }
+   },
+   "pdfjs": {
+    "backend": "pdfjs",
+    "extract_s": 0.387,
+    "backend_summary": {
+     "backend": "pdfjs",
+     "pages": 2,
+     "pages_total": 2,
+     "glyphs": 1690,
+     "empty_font_names": 0,
+     "extract_ms": 94,
+     "get_text_content_ms": 59,
+     "get_operator_list_ms": 33,
+     "geometry_note": "per-item geometry; character boxes synthesized by width division"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 0.94737,
+     "n_numbered_lines_scored": 19,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1618
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 40,
+      "chrome_lines": 4,
+      "numbered_lines": 18,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 131,
+      "trimmed_tail": 2
+     },
+     "text_vs_xml": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.31441,
+      "recall": 0.8,
+      "f1": 0.45141,
+      "matched": 72
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.66667,
+      "recall": 0.71111,
+      "f1": 0.68817,
+      "matched": 64
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 18,
+      "n_candidate": 18
+     },
+     "tree": {
+      "n_anchors": 2,
+      "n_nodes": 2,
+      "levels": {
+       "section": 2
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 2,
+      "n_candidate": 2
+     },
+     "n_pages": 2
+    }
+   }
+  },
+  "118-hr-2882/4": {
+   "pdfium-native": {
+    "backend": "pdfium-native",
+    "extract_s": 0.017,
+    "backend_summary": {
+     "backend": "pdfium-native",
+     "pages": 4,
+     "glyphs": 1794,
+     "empty_font_names": 34,
+     "undecodable_glyphs": 6,
+     "extract_ms": 15
+    },
+    "font_role": {
+     "margin_vs_body_separation": 1.0,
+     "n_numbered_lines_scored": 30,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1717
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 61,
+      "trimmed_tail": 5
+     },
+     "text_vs_xml": {
+      "precision": 0.75234,
+      "recall": 0.805,
+      "f1": 0.77778,
+      "matched": 161
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.60357,
+      "recall": 0.845,
+      "f1": 0.70417,
+      "matched": 169
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.75234,
+      "recall": 0.805,
+      "f1": 0.77778,
+      "matched": 161
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 6
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 5
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63504,
+      "recall": 0.87,
+      "f1": 0.73418,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    }
+   },
+   "pdfminer": {
+    "backend": "pdfminer",
+    "extract_s": 0.027,
+    "backend_summary": {
+     "backend": "pdfminer",
+     "pages": 4,
+     "glyphs": 1761,
+     "empty_font_names": 0,
+     "undecodable_glyphs": 0,
+     "extract_ms": 27
+    },
+    "font_role": {
+     "margin_vs_body_separation": 1.0,
+     "n_numbered_lines_scored": 30,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1717
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 5
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63504,
+      "recall": 0.87,
+      "f1": 0.73418,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 5
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63504,
+      "recall": 0.87,
+      "f1": 0.73418,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    }
+   },
+   "pymupdf": {
+    "backend": "pymupdf",
+    "extract_s": 0.014,
+    "backend_summary": {
+     "backend": "pymupdf",
+     "pages": 4,
+     "glyphs": 1764,
+     "empty_font_names": 0,
+     "extract_ms": 13,
+     "license_role": "ceiling-reference-only (AGPL-3.0)"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 1.0,
+     "n_numbered_lines_scored": 30,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1718
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 6
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63273,
+      "recall": 0.87,
+      "f1": 0.73263,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 6
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63273,
+      "recall": 0.87,
+      "f1": 0.73263,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    }
+   },
+   "pypdf": {
+    "backend": "pypdf",
+    "extract_s": 0.01,
+    "backend_summary": {
+     "backend": "pypdf",
+     "pages": 4,
+     "glyphs": 1762,
+     "empty_font_names": 0,
+     "extract_ms": 9,
+     "geometry_note": "per-run origin only; character advances synthesized"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 1.0,
+     "n_numbered_lines_scored": 30,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1718
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 43,
+      "trimmed_tail": 6
+     },
+     "text_vs_xml": {
+      "precision": 0.75221,
+      "recall": 0.85,
+      "f1": 0.79812,
+      "matched": 170
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63273,
+      "recall": 0.87,
+      "f1": 0.73263,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.73451,
+      "recall": 0.83,
+      "f1": 0.77934,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 43,
+      "trimmed_tail": 6
+     },
+     "text_vs_xml": {
+      "precision": 0.75221,
+      "recall": 0.85,
+      "f1": 0.79812,
+      "matched": 170
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63273,
+      "recall": 0.87,
+      "f1": 0.73263,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.73451,
+      "recall": 0.83,
+      "f1": 0.77934,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    }
+   },
+   "pdfium-wasm": {
+    "backend": "pdfium-wasm",
+    "extract_s": 0.12,
+    "backend_summary": {
+     "backend": "pdfium-wasm",
+     "pages": 4,
+     "pages_total": 4,
+     "glyphs": 1754,
+     "empty_font_names": 33,
+     "undecodable_glyphs": 6,
+     "extract_ms": 37
+    },
+    "font_role": {
+     "margin_vs_body_separation": 1.0,
+     "n_numbered_lines_scored": 30,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1680
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 61,
+      "trimmed_tail": 5
+     },
+     "text_vs_xml": {
+      "precision": 0.75234,
+      "recall": 0.805,
+      "f1": 0.77778,
+      "matched": 161
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.60357,
+      "recall": 0.845,
+      "f1": 0.70417,
+      "matched": 169
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.75234,
+      "recall": 0.805,
+      "f1": 0.77778,
+      "matched": 161
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 6,
+      "repaired_line_ends": 6
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 5
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63504,
+      "recall": 0.87,
+      "f1": 0.73418,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    }
+   },
+   "pdfjs": {
+    "backend": "pdfjs",
+    "extract_s": 0.332,
+    "backend_summary": {
+     "backend": "pdfjs",
+     "pages": 4,
+     "pages_total": 4,
+     "glyphs": 1724,
+     "empty_font_names": 0,
+     "extract_ms": 81,
+     "get_text_content_ms": 39,
+     "get_operator_list_ms": 37,
+     "geometry_note": "per-item geometry; character boxes synthesized by width division"
+    },
+    "font_role": {
+     "margin_vs_body_separation": 1.0,
+     "n_numbered_lines_scored": 30,
+     "empty_font_name_rate": 0.0,
+     "n_glyphs": 1681
+    },
+    "strict": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 6
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63273,
+      "recall": 0.87,
+      "f1": 0.73263,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    },
+    "repaired": {
+     "reconstruction": {
+      "visual_lines": 43,
+      "chrome_lines": 1,
+      "numbered_lines": 30,
+      "ambiguous_numbers": 0,
+      "unnamed_glyphs": 0,
+      "repaired_line_ends": 0
+     },
+     "alignment": {
+      "aligned": true,
+      "trimmed_head": 60,
+      "trimmed_tail": 6
+     },
+     "text_vs_xml": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "text_vs_xml_unaligned": {
+      "precision": 0.63273,
+      "recall": 0.87,
+      "f1": 0.73263,
+      "matched": 174
+     },
+     "text_vs_xml_lcs": {
+      "precision": 0.79426,
+      "recall": 0.83,
+      "f1": 0.81174,
+      "matched": 166
+     },
+     "line_numbers": {
+      "recall": 1.0,
+      "spurious_rate": 0.0,
+      "n_reference": 30,
+      "n_candidate": 30
+     },
+     "tree": {
+      "n_anchors": 4,
+      "n_nodes": 4,
+      "levels": {
+       "section": 4
+      },
+      "conservation_overcount": 0,
+      "conservation_dropped": 0,
+      "conservation_holds": true
+     },
+     "breadcrumbs": {
+      "agreement": 1.0,
+      "n_reference": 4,
+      "n_candidate": 4
+     },
+     "n_pages": 4
+    }
+   }
   }
  },
  "n_documents": 52,

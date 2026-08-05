@@ -44,9 +44,15 @@ import statistics
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
-if str(REPO / "src") not in sys.path:
-    sys.path.insert(0, str(REPO / "src"))
+# Locate the engine relative to this file when running from the checkout. Under Pyodide
+# the probes live in a flat VFS with no repo above them and `deltatrack` is already on
+# sys.path, so the derivation is guarded rather than assumed -- an unguarded parents[3]
+# raises IndexError there and takes every browser backend down with it.
+_here = Path(__file__).resolve()
+if len(_here.parents) > 3:
+    _src = _here.parents[3] / "src"
+    if _src.is_dir() and str(_src) not in sys.path:
+        sys.path.insert(0, str(_src))
 
 from contract import BASELINE, CP, SIZE, UPRIGHT, X0, X1, PdfPage  # noqa: E402
 

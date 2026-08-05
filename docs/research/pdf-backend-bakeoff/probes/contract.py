@@ -111,7 +111,10 @@ def read_stream(lines: Iterator[str]) -> tuple[list[PdfPage], dict]:
 
 
 PROBES = Path(__file__).resolve().parent
-REPO = PROBES.parents[3]
+# Guarded, not assumed: under Pyodide the probes sit in a flat VFS with no repo above
+# them, and a bare parents[3] raises IndexError at import time, taking every browser
+# backend down before it runs.
+REPO = PROBES.parents[3] if len(PROBES.parents) > 3 else PROBES
 
 # Every backend is invoked the same way -- as a subprocess emitting the JSONL contract --
 # so a Node backend and a Python backend are indistinguishable to the scorer. Native
