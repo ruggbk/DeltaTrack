@@ -180,6 +180,12 @@ EXPECTED: dict[str, Expected] = {
     ),
     "114-hr-2029/1_reported-in-house.pdf": Expected(subsections=14, catchlines=2),
     "114-hr-2029/3_referred-in-senate.pdf": Expected(subsections=14, catchlines=2),
+    # Became a committed PDF/XML pair when #434 landed and this version's XML was no
+    # longer withheld. Measured, not estimated: all 3 catchlines are found and there are
+    # no false positives. The counts are higher than v1/v3 because the XML holds the
+    # reported text AND the committee substitute as two <legis-body> elements, so the
+    # oracle sees both texts' subsections — which is the point of #434.
+    "114-hr-2029/4_reported-in-senate.pdf": Expected(subsections=30, catchlines=3),
     "115-hr-5895/1_reported-in-house.pdf": Expected(subsections=39, catchlines=5),
     "115-hr-5895/2_engrossed-in-house.pdf": Expected(subsections=93, catchlines=29),
     "115-hr-5895/5_enrolled-bill.pdf": Expected(
