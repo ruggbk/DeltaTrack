@@ -574,8 +574,14 @@ def test_every_manifested_version_has_a_committee_report_entry():
     # A floor, so an empty or mis-parsed manifest cannot satisfy the check above by
     # having nothing to check.
     assert len(_ALL_VERSIONS) >= 50, f"expected the full corpus, saw {len(_ALL_VERSIONS)} versions"
-    assert any("xml" not in formats for _b, _s, formats, _r in _ALL_VERSIONS), (
-        "no PDF-only version in the corpus, so this gate would not prove the format-independence it exists for"
+    # The format-independence invariant (report metadata generated regardless of
+    # committed formats) is tested by test_updater_offline_format_independence in
+    # test_report_pairing.py, which uses a synthetic version with formats = ["pdf"]
+    # and does not depend on the live corpus containing a PDF-only version. The
+    # corpus no longer has a PDF-only version since #434 committed XML for
+    # 114-hr-2029 / 4_reported-in-senate.
+    assert any("xml" not in formats or "pdf" not in formats for _b, _s, formats, _r in _ALL_VERSIONS), (
+        "corpus has no single-format versions; format independence not exercised in live data"
     )
 
 
@@ -605,11 +611,12 @@ def test_every_version_entry_is_either_sources_or_a_stated_reason():
 
 @pytest.mark.slow
 def test_114_hr_2029_reported_in_senate_pairs_with_the_senate_report():
-    """The PDF-only version #295 uses to establish version/chamber pairing.
+    """Version/chamber pairing: the reported-in-Senate print takes the Senate report.
 
-    Its formats are ["pdf"], and it was skipped entirely by the XML-only filter. It
-    is a Senate-reported print, so the Senate committee report explains it -- the
-    same report the Senate amendment that follows already carried.
+    114-hr-2029 v4 is a Senate-reported print, so the Senate committee report
+    (S. Rept. 114-57) explains it -- the same report the Senate amendment that
+    follows already carried. This is the version/chamber example #295 exists to
+    establish, and the pairing must not depend on which formats are committed.
     """
     key = ("114-hr-2029", "4_reported-in-senate")
     assert key in _REPORT_PKGS, f"{key} has no committee report pairing"
@@ -617,9 +624,13 @@ def test_114_hr_2029_reported_in_senate_pairs_with_the_senate_report():
     citations = {s["citation"] for s in _REPORT_PKGS[key]}
     assert citations == {"S. Rept. 114-57"}, f"expected S. Rept. 114-57, got {sorted(citations)}"
 
-    # The point of the fix: this version has no XML, and that must not matter.
+    # The point of the fix: this version had no XML when the test was written, but
+    # #434 has since landed and the XML is now committed. The pairing works
+    # regardless of which formats we hold for the version. The format-independence
+    # invariant is tested separately by test_updater_offline_format_independence
+    # (a synthetic unit test that does not depend on live corpus shape).
     formats = next(f for b, s, f, _r in _ALL_VERSIONS if (b, s) == key)
-    assert "xml" not in formats, (
-        "this regression is about a PDF-only version; if it gained XML, pick another "
-        "non-XML version so the gate keeps testing format independence"
+    assert "xml" in formats and "pdf" in formats, (
+        "this version now has both formats; the format-independence invariant is "
+        "protected by test_updater_offline_format_independence in test_report_pairing.py"
     )
