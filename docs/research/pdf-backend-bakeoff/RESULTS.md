@@ -474,9 +474,40 @@ extrapolated.**
 
 <!-- TIERB -->
 
-_(pending)_
+Measured on **12** non-corpus documents with no XML reference: the watermarked committee report `CRPT-118srpt198`, the watermarked Senate bill `BILLS-118s4795rs`, and nine House-reported subcommittee prints. The spec asks for the first two by name; the nine are additional **Tier A** print-class variety, as the spec itself classifies them.
+
+| Backend | opened | text identical to incumbent | line numbers identical | mean breadcrumb agreement |
+|---|---|---|---|---|
+| **pdfminer** | 12/12 | 5/12 | 12/12 | 1.0000 |
+| pymupdf *(ceiling)* | 12/12 | 6/12 | 12/12 | 1.0000 |
+| pypdf | 12/12 | 0/12 | 11/12 | 0.3284 |
+| **pdfium-wasm** | 12/12 | 12/12 | 12/12 | 1.0000 |
+| pdfjs | 12/12 | 6/12 | 12/12 | 0.3665 |
 
 <!-- /TIERB -->
+
+**The PDF.js heading collapse is not specific to one bill.** Breadcrumb recovery holds at
+0.37 across a different document class (a watermarked committee report) and nine
+independently typeset subcommittee prints, closely tracking the 0.47 measured on the
+52-document corpus. pypdf behaves the same way, at 0.33. So the small-caps size-merge is a
+property of the `getTextContent()` API, not of any one document's typesetting.
+
+**PDFium-WASM is identical to the incumbent on all three measures across all twelve**, and
+it is the only backend whose text matches on the 231-page committee report.
+
+One caveat on that table, because the number is vacuous where it looks strongest: **the
+committee report yields zero anchors for every backend, the incumbent included**, so its
+breadcrumb agreement is 0/0 and contributes nothing. DeltaTrack extracts bill anchors, and
+a committee report is not a bill — it has its own parser (`parsers/committee_report.py`).
+The breadcrumb discrimination in the table therefore comes entirely from the Senate bill
+and the nine subcommittee prints. Text identity and line-number identity on the committee
+report are real measurements over 231 pages; its breadcrumb column is not.
+
+The text-identity column is the weakest of the three and should not be over-read: pdfminer
+and PyMuPDF match the incumbent's text on only 5–6 of 12 while recovering **every**
+breadcrumb and line number. The residual differences are sub-line typographic detail, not
+structural loss, which is exactly why breadcrumb agreement rather than text identity is
+the gate.
 
 **The repository contains no pre-publication fixtures**, which is the material ADR 0010
 says the PDF pipeline exists for. Per the spec's own table, Tier A passing with Tier B

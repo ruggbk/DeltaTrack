@@ -1,7 +1,18 @@
 # Spike specification: browser PDF backend bake-off + zero-egress proof
 
-- Status: **specification only. Not yet run.** Written 2026-08-05 as the handoff for a
-  fresh session.
+- Status: **run 2026-08-05. This file is the specification; the findings are in
+  [`RESULTS.md`](RESULTS.md).** Metrics were fixed in advance in
+  [`PRE-REGISTRATION.md`](PRE-REGISTRATION.md); licensing is recorded separately in
+  [`LICENSING.md`](LICENSING.md).
+- **This document was not rewritten to match the results**, deliberately: the value of a
+  pre-registered spec is that it can be read against the outcome, including where the
+  outcome contradicted it. Three places it did:
+  - The Phase 0 gate expected PDFium-WASM might have no credible build exposing the FFI.
+    One exists, works, and won the bake-off.
+  - The measured note that "a strict CSP blocked all ten" vectors was taken with an
+    HTTP-only listener. With a UDP listener, WebRTC egress survives CSP.
+  - Gate 3's conservation check does not detect the structural loss the spike actually
+    found; breadcrumb recovery does.
 - Predecessor: [`../staffer-delivery/README.md`](../staffer-delivery/README.md), which
   established that the XML pipeline runs byte-identically under Pyodide and left the
   PDF path as the open question.
