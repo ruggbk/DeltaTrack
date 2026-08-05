@@ -313,9 +313,12 @@ def assert_manifest_committed(collected: Sequence, kind: str) -> None:
 # cover it.
 #
 # Why not watch the other corpus modules: test_node_join_corpus,
-# test_xml_subsection_nodes and test_pdf_subsection_recall hard-assert denominators
-# instead of skipping, so they have no content-skip channel. Left out deliberately;
-# add one here if it ever grows a content-skip.
+# test_xml_subsection_nodes, test_pdf_subsection_recall and
+# test_pdf_xml_withheld_recall hard-assert denominators instead of skipping, so
+# they have no content-skip channel. The last of those reads one fixture named in the
+# manifest and carries no skipif at all: a deleted fixture raises rather than skips,
+# so there is nothing here to allow. Left out deliberately; add one here if any of
+# them ever grows a content-skip.
 CORPUS_GATE_MODULES = (
     "tests/test_corpus_properties.py",
     "tests/test_corpus_tree_properties.py",
@@ -362,8 +365,8 @@ ALLOWED_CORPUS_SKIPS = {
     "tests/test_corpus_properties.py::test_every_dollar_amount_appears_in_a_node"
     "[118-hr-2882/4_engrossed-amendment-senate.xml]": "No dollar amounts in bill body",
     # --- Introduced/early stages committed for per-version format parity -----------
-    # These six versions gained an XML so every committed version carries both formats,
-    # which is what lets the PDF-vs-XML gates run per version instead of only where a
+    # These six versions gained an XML, taking format parity to 52 of 57 versions, which
+    # is what lets the PDF-vs-XML gates run per version instead of only where a
     # counterpart happened to exist. Each is an INTRODUCED or early-stage print, and an
     # appropriations bill at that stage is a shell: the money is added later in markup, so
     # they genuinely carry no <appropriations-*> elements and (mostly) no dollar amounts.
@@ -512,6 +515,14 @@ ALLOWED_CI_SLOW_SKIPS = {
     "[118-hr-2882/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
     "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
     "[118-hr-8282/1_introduced-in-house]": "No amounts in XML (shell / procedural version)",
+    # Same shape, seen from the other direction: #126 committed this version's PDF beside
+    # its existing XML, so the pair gate collects it for the first time. 118-hr-2882 v4 is
+    # the 4 KB procedural Senate amendment already declared in ALLOWED_CORPUS_SKIPS above
+    # for carrying no dollar amounts, so there is nothing for the recall case to assert
+    # either. A property of the document, not a fixture absence — committing more cannot
+    # retire it. Its PDF is carried for the v4->v5 anchor pair, not for amounts.
+    "tests/test_pdf_xml_amount_recall.py::test_xml_amounts_appear_in_pdf"
+    "[118-hr-2882/4_engrossed-amendment-senate]": "No amounts in XML (shell / procedural version)",
 }
 
 # --- Fast-tier PDF gates -------------------------------------------------------
@@ -576,10 +587,11 @@ _WATCHED_SKIP_MODULES = CORPUS_GATE_MODULES + CI_SLOW_MODULES + FAST_GATE_MODULE
 # construction.
 #
 # Format matters, and collapsing it is the trap here. The manifest declares (bill, stage,
-# FORMAT), and a stage is often committed in one format only -- 113-hr-3547 v1 is
-# pdf-only. The amount-recall gate reads the xml AND the pdf of a stage, so a pdf-only
-# stage yields no case in CI even though the manifest names it. Each module therefore
-# declares which formats its cases actually need.
+# FORMAT), and five of the 57 manifested versions are deliberately committed in one format
+# only -- the five #519 engrossed amendments are xml-only. The amount-recall
+# gate reads the xml AND the pdf of a stage, so a single-format stage yields no case in CI
+# even though the manifest names it. Each module therefore declares which formats its
+# cases actually need.
 _CORPUS_EXPANDING_MODULES = {
     # adjacent_pdf_pairs(): consecutive PDFs within a bill.
     "tests/test_pdf_corpus_smoke.py": ("pdf",),
@@ -953,6 +965,7 @@ def make_bill_node(
     header_text="",
     tag="appropriations-intermediate",
     division_label="",
+    body_index=0,
 ):
     """Build a BillNode with defaults for testing."""
     return BillNode(
@@ -964,6 +977,7 @@ def make_bill_node(
         body_text=body_text,
         section_number="",
         division_label=division_label,
+        body_index=body_index,
     )
 
 

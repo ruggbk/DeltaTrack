@@ -161,6 +161,7 @@ jobs:
           tests/test_node_join_corpus.py
           tests/test_xml_subsection_nodes.py
           tests/test_pdf_subsection_recall.py
+          tests/test_manifest_report_fixtures.py
           tests/test_financial_callout_whole_item.py
 
       - name: Run the packaging gate (build, install, diff from outside the checkout)
@@ -228,6 +229,7 @@ jobs:
           tests/test_reconcile.py
           tests/test_pdf_watermark_recall.py
           tests/test_formatters_text_serializer.py
+          tests/test_pdf_xml_withheld_recall.py
 
   # The required status check on `develop` and `main` is a context named exactly
   # `test`. The matrix above reports per-leg contexts (`test-suite (3.12)`, ...),

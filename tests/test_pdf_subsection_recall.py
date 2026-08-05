@@ -178,10 +178,57 @@ EXPECTED: dict[str, Expected] = {
         "catchline-bearing subsection exists to find. Pinned at 0 rather than excluded: "
         "the recall and leak gates are vacuous here by fact, and the precision gate is not.",
     ),
+    "113-hr-3547/6_enrolled-bill.pdf": Expected(
+        subsections=680,
+        catchlines=267,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
+    "113-hr-83/7_enrolled-bill.pdf": Expected(
+        subsections=684,
+        catchlines=301,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
     "114-hr-2029/1_reported-in-house.pdf": Expected(subsections=14, catchlines=2),
     "114-hr-2029/3_referred-in-senate.pdf": Expected(subsections=14, catchlines=2),
+    "114-hr-2029/4_reported-in-senate.pdf": Expected(subsections=30, catchlines=3),
+    "114-hr-2029/7_enrolled-bill.pdf": Expected(
+        subsections=1082,
+        catchlines=787,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
+    "115-hr-1625/6_enrolled-bill.pdf": Expected(
+        subsections=898,
+        catchlines=527,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
+    "115-hr-244/6_enrolled-bill.pdf": Expected(
+        subsections=822,
+        catchlines=451,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
     "115-hr-5895/1_reported-in-house.pdf": Expected(subsections=39, catchlines=5),
     "115-hr-5895/2_engrossed-in-house.pdf": Expected(subsections=93, catchlines=29),
+    "115-hr-5895/4_engrossed-amendment-senate.pdf": Expected(subsections=133, catchlines=35),
     "115-hr-5895/5_enrolled-bill.pdf": Expected(
         subsections=112,
         catchlines=36,
@@ -191,20 +238,103 @@ EXPECTED: dict[str, Expected] = {
         "subsections are real and unreachable, which is why this is asserted as a decline "
         "instead of counted as 36 misses.",
     ),
+    "116-hr-1865/6_enrolled-bill.pdf": Expected(
+        subsections=812,
+        catchlines=642,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
     "117-hr-2471/1_introduced-in-house.pdf": Expected(subsections=7, catchlines=7),
+    "117-hr-2471/6_enrolled-bill.pdf": Expected(
+        subsections=1176,
+        catchlines=769,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
     "117-hr-4432/1_reported-in-house.pdf": Expected(subsections=74, catchlines=0),
     "117-hr-4502/1_reported-in-house.pdf": Expected(subsections=55, catchlines=8),
     "117-hr-4502/2_engrossed-in-house.pdf": Expected(subsections=336, catchlines=48),
     "118-hr-2882/1_introduced-in-house.pdf": Expected(subsections=0, catchlines=0),
+    "118-hr-2882/4_engrossed-amendment-senate.pdf": Expected(
+        subsections=0,
+        catchlines=0,
+        note="committed by #126 for format parity. Its XML carries no catchline-bearing subsection, so the "
+        "recall and leak gates are vacuous here by fact while the precision gate is not — pinned at 0 "
+        "rather than excluded, the same treatment as 113-hr-3547's engrossed Senate amendment above.",
+    ),
+    "118-hr-2882/5_engrossed-amendment-house.pdf": Expected(subsections=636, catchlines=301),
     "118-hr-4366/1_reported-in-house.pdf": Expected(subsections=37, catchlines=4),
     "118-hr-4366/2_engrossed-in-house.pdf": Expected(subsections=37, catchlines=4),
     "118-hr-4366/3_placed-on-calendar-senate.pdf": Expected(subsections=37, catchlines=4),
+    "118-hr-4366/4_engrossed-amendment-senate.pdf": Expected(subsections=139, catchlines=24),
+    "118-hr-4366/5_engrossed-amendment-house.pdf": Expected(subsections=313, catchlines=85),
+    "118-hr-4366/6_enrolled-bill.pdf": Expected(
+        subsections=313,
+        catchlines=85,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
     "118-hr-4820/1_reported-in-house.pdf": Expected(subsections=49, catchlines=11),
     "118-hr-8282/1_introduced-in-house.pdf": Expected(subsections=5, catchlines=5),
     "118-hr-8752/1_reported-in-house.pdf": Expected(subsections=131, catchlines=3),
     "118-hr-8752/2_engrossed-in-house.pdf": Expected(subsections=133, catchlines=3),
     "118-hr-8774/1_reported-in-house.pdf": Expected(subsections=90, catchlines=3),
     "118-hr-8774/2_engrossed-in-house.pdf": Expected(subsections=90, catchlines=3),
+    "118-hr-9468/1_introduced-in-house.pdf": Expected(subsections=7, catchlines=2),
+    "118-hr-9468/4_enrolled-bill.pdf": Expected(
+        subsections=7,
+        catchlines=2,
+        anchors=False,
+        note="enrolled print — no GPO margin line numbers, so the anchor pipeline declines the whole "
+        "document rather than guessing (#141). Committed by #126 for the dollar-amount cross-check, "
+        "which reads PDF text and needs no anchors; its catchline-bearing subsections are real and "
+        "unreachable, asserted as a decline rather than counted as misses.",
+    ),
+    "118-s-2321/1_reported-in-senate.pdf": Expected(
+        subsections=45,
+        catchlines=0,
+        note="committed by #126 for format parity. Its XML carries no catchline-bearing subsection, so the "
+        "recall and leak gates are vacuous here by fact while the precision gate is not — pinned at 0 "
+        "rather than excluded, the same treatment as 113-hr-3547's engrossed Senate amendment above.",
+    ),
+    "118-s-2625/1_reported-in-senate.pdf": Expected(
+        subsections=102,
+        catchlines=0,
+        note="committed by #126 for format parity. Its XML carries no catchline-bearing subsection, so the "
+        "recall and leak gates are vacuous here by fact while the precision gate is not — pinned at 0 "
+        "rather than excluded, the same treatment as 113-hr-3547's engrossed Senate amendment above.",
+    ),
+    "118-s-4677/1_reported-in-senate.pdf": Expected(subsections=33, catchlines=3),
+    "118-s-4690/1_reported-in-senate.pdf": Expected(subsections=31, catchlines=2),
+    "118-s-4795/1_reported-in-senate.pdf": Expected(
+        subsections=43,
+        catchlines=0,
+        note="committed by #126 for format parity. Its XML carries no catchline-bearing subsection, so the "
+        "recall and leak gates are vacuous here by fact while the precision gate is not — pinned at 0 "
+        "rather than excluded, the same treatment as 113-hr-3547's engrossed Senate amendment above.",
+    ),
+    "118-s-4796/1_reported-in-senate.pdf": Expected(subsections=71, catchlines=10),
+    "118-s-4797/1_reported-in-senate.pdf": Expected(subsections=296, catchlines=271),
+    "118-s-4802/1_reported-in-senate.pdf": Expected(subsections=50, catchlines=9),
+    "118-s-4921/1_reported-in-senate.pdf": Expected(
+        subsections=75,
+        catchlines=0,
+        note="committed by #126 for format parity. Its XML carries no catchline-bearing subsection, so the "
+        "recall and leak gates are vacuous here by fact while the precision gate is not — pinned at 0 "
+        "rather than excluded, the same treatment as 113-hr-3547's engrossed Senate amendment above.",
+    ),
+    "118-s-4927/1_reported-in-senate.pdf": Expected(subsections=37, catchlines=10),
+    "118-s-4928/1_reported-in-senate.pdf": Expected(subsections=90, catchlines=6),
+    "118-s-4942/1_reported-in-senate.pdf": Expected(subsections=50, catchlines=4),
     "119-hr-1/1_reported-in-house.pdf": Expected(
         subsections=952,
         catchlines=934,
