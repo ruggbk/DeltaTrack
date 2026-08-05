@@ -20,47 +20,60 @@ what the tool read, which is either:
     misordered, a wrap that lost a word), or
   - an XML-side artifact -- text GPO's XML renders in a form the PDF never had.
 
-Both are worth seeing. Unlike amounts, prose does not reach 100%: the residue is real
-and per-bill, so the gate is a FLOOR on recall plus a floor on the number of sentences
-actually compared. The second floor matters as much as the first -- a fragment
-extractor that silently yields nothing would otherwise pass this test at 100%.
+Both are worth seeing. Unlike amounts, prose does not reach 100%, so the gate is a
+FLOOR on recall per print layout, backed by a corpus-level floor on how much prose is
+being compared at all (`test_corpus_yields_prose_to_compare`). The second matters as
+much as the first: a fragment extractor that silently yielded nothing would otherwise
+pass every per-version assertion here at 100%.
 
-Floors are calibrated on the whole fixture corpus (scripts/calibrate_prose_recall.py),
-set below the measured worst case with deliberate headroom, and are not snapshots of
-the current numbers: they lock the claim "essentially all prose survives extraction",
-which should stay true, rather than pinning a count that legitimately moves whenever a
-fixture or the extractor changes. Investigate a drop; do not re-baseline the floor to
-whatever the run produced.
+Nothing in this module is keyed to an individual bill. The corpus is curated and still
+growing, so a per-bill baseline would turn every fixture addition into a recalibration
+chore and, worse, invite clearing the red by pasting in whatever the run produced. The
+floors key on the print LAYOUT because that is what the defects are properties of, and
+the found-nothing guard is a corpus aggregate rather than per-bill counts. A new bill is
+therefore either covered the moment it lands, or held to the full floor.
 
-What the residue currently is, as of the calibration run that set these floors: of the
-19 measured versions (the other 5 are shells, see `_SHELL_VERSIONS`), 16 recall 100% of
-their prose, 119-hr-1 recalls 99.5% and 118-hr-8752 v2 recalls 99.8%, and the enrolled
-115-hr-5895 recalls 94.1%. What holds the last three short of 100% is extraction
-defects this cross-check found, not a comparison that is too strict:
+Floors are calibrated on the whole fixture corpus (scripts/calibrate_prose_recall.py)
+and set below the measured worst case of their layout with deliberate headroom. They
+lock the claim "essentially all prose survives extraction, except where a named defect
+says otherwise", which should stay true. Investigate a drop; do not re-baseline the
+floor to whatever the run produced.
 
-  - The enrolled-bill layout carries no margin line numbers, so `extract_clean_pages`
-    treats a line-initial integer as one and drops it: "not more than 25 percent"
-    reads as "not more than percent". The same layout's running header ("H. R.
-    5895-4") is not recognized as chrome and splices into the middle of sentences.
-    Together these are the whole of 115-hr-5895's enrolled-bill residue.
+What the residue currently is, as of the calibration run that set these floors. Seven
+of the nine print layouts in the corpus recall 99.5-100%, and the two that do not are
+held there by extraction defects this cross-check found, not by a comparison that is
+too strict. The defects belong to the LAYOUT, which is why the floors key on it:
+
+  - Enrolled prints (worst 94.0%) carry no margin line numbers, so `extract_clean_pages`
+    treats a line-initial integer as one and drops it: "not more than 25 percent" reads
+    as "not more than percent". The same layout's running header is not recognised as
+    page furniture, so "H. R. 4366-4" splices into the middle of a sentence.
+  - Senate engrossed amendments (worst 88.0%) DO carry line numbers, and show the chrome
+    half of that defect on its own: the running footer splices in mid-word, so "inland
+    waterways projects" extracts as "inland water(dagger) HR 5895 EAS ways projects".
+    Same shape as the running footer fixed in #140 for the "PCS" variant.
+
+Within the healthy layouts, two residues are worth naming because they are real and
+deliberately not normalized away:
+
   - On a line carrying a vulgar fraction, the extractor emits the margin line number
-    mid-line rather than at the start, where line-number stripping would catch it, so
-    a stray integer welds itself into a number: "18 3/4 percent" reads as
-    "183 15 /4 percent". That is the whole of 119-hr-1's residue.
-  - 118-hr-8752 v2's single miss is a lost space where a line wraps between two
-    parentheticals: "$5,000,000) (reduced by" extracts as "$5,000,000)(reduced by".
-    Left unnormalized deliberately -- a missing space is text the tool got wrong, and
-    folding it away here would be canonicalizing a defect rather than a convention.
+    mid-line rather than at the start, where line-number stripping would catch it, so a
+    stray integer welds itself into a number: "18 3/4 percent" reads as "183 15 /4
+    percent". That is the whole of 119-hr-1's 99.5%.
+  - A space is lost where a line wraps between two parentheticals: "$5,000,000)
+    (reduced by" extracts as "$5,000,000)(reduced by". A missing space is text the tool
+    got wrong, and folding it away here would canonicalize a defect rather than a
+    convention.
 
-None of these is visible to the amount cross-check: the two figures the first two
-corrupt are not dollar amounts, and the third leaves its amounts intact.
+None of these is visible to the amount cross-check: the corrupted figures are
+percentages and page numbers rather than dollar amounts.
 
 What this CANNOT see, established by injecting each fault and watching the result:
-making `normalize_glyphs` a no-op leaves all 24 cases green, because the comparison
-runs the same normalization over both sides, so a change there cancels out. Glyph
-handling is gated by the golden prints (test_pdf_extraction_golden.py), not here.
-Dropping extracted lines, extracting no fragments at all, a stale `_KNOWN_DEGRADED`
-entry, and a `_SHELL_VERSIONS` entry that no longer describes a shell all do fail.
+making `normalize_glyphs` a no-op leaves every case green, because the comparison runs
+the same normalization over both sides, so a change there cancels out. Glyph handling is
+gated by the golden prints (test_pdf_extraction_golden.py), not here. Dropping extracted
+lines, extracting no fragments at all, and a layout floor that is no longer earned all
+do fail.
 
 Marked @slow: parses bill XML and extracts every PDF page.
 """
@@ -76,56 +89,50 @@ from recall_text import normalize_for_cross_format
 
 pytestmark = pytest.mark.slow
 
-#: Minimum share of XML sentences recoverable from the PDF, per version. The healthy
-#: population sits at 99.5-100%, so this leaves room for one unlucky sentence without
-#: leaving room for a systemic failure. A version that needs a lower floor is not
-#: healthy: give it an entry in `_KNOWN_DEGRADED` naming the defect, so the exception
-#: is legible instead of being absorbed by a slack global floor.
+#: Minimum share of XML sentences recoverable from the PDF, for a version printed in a
+#: layout with no known extraction defect. That population sits at 99.5-100%, so this
+#: leaves room for one unlucky sentence without leaving room for a systemic failure.
 RECALL_FLOOR = 0.99
 
-#: Versions held below the floor by a known, documented extraction defect (see the
-#: module docstring for both). The value is that version's own floor, still asserted:
-#: a degraded version should stay where it is until the defect is fixed, and slipping
-#: further is its own regression. Delete the entry when the defect is fixed rather than
-#: loosening it -- and an entry going slack (the version now recalls far above its
-#: floor) means the defect moved, which is worth knowing either way.
-_KNOWN_DEGRADED: dict[str, float] = {
-    # Line-initial integers dropped and the running header spliced into sentences,
-    # both from the enrolled layout having no margin line numbers. Measured 94.1%.
-    "115-hr-5895/5_enrolled-bill": 0.90,
+#: Floors for the print layouts a known extraction defect degrades, keyed by the GPO
+#: version code the fixture stem ends in.
+#:
+#: Keyed by LAYOUT rather than by bill, because that is what the defects are properties
+#: of. An earlier revision listed individual versions, which passed on the corpus it was
+#: calibrated against and then failed the moment the fixture set grew: eight enrolled
+#: prints and two Senate engrossed amendments arrived at once, each reproducing a defect
+#: already documented here, and each would have needed its own hand-measured entry. A
+#: per-bill list makes every corpus addition a recalibration chore and, worse, invites
+#: clearing the red by pasting in whatever number the run produced. Keyed by layout, a
+#: new bill is covered the moment it lands if it shares the layout, and is held to the
+#: full floor if it does not.
+#:
+#: Both floors sit below the measured worst case of their layout with headroom, and both
+#: are still ASSERTED: a degraded layout should stay where it is until the defect is
+#: fixed, and slipping further is its own regression.
+_LAYOUT_FLOORS: dict[str, float] = {
+    # Enrolled prints, measured 94.0-94.8%. Two defects, both from this layout carrying
+    # no margin line numbers: a line-initial integer is stripped as though it were one
+    # ("not more than 25 percent" -> "not more than percent"), and the running header is
+    # not recognised as page furniture, so "H. R. 4366-4" splices into a sentence.
+    "enrolled-bill": 0.90,
+    # Senate engrossed amendments, measured 88.0-88.1%. A different marker for the same
+    # running-furniture defect: the footer "(dagger) HR 5895 EAS" splices into the middle
+    # of a sentence and frequently into the middle of a WORD, so "inland waterways
+    # projects" extracts as "inland water(dagger) HR 5895 EAS ways projects". These
+    # prints DO carry line numbers, so this is the chrome half of the enrolled defect
+    # arriving on its own. It is the same shape as the running footer fixed in #140 for
+    # the "HR 5895 PCS" variant, on a variant that fix did not reach.
+    "engrossed-amendment-senate": 0.85,
 }
 
-#: Minimum distinct sentences a version must contribute before its recall is believed.
-#: Below this the ratio is too coarse to mean anything: one miss out of two fragments
-#: is a 50% recall that says nothing about the extractor.
+#: Minimum distinct fragments a version must contribute before its recall RATIO is
+#: believed. Below this the ratio is too coarse to mean anything: one miss out of two
+#: fragments is a 50% recall that says nothing about the extractor. Such versions are
+#: not skipped -- see `test_xml_prose_appears_in_pdf`, which demands full recall of
+#: them instead, and `test_corpus_yields_prose_to_compare`, which closes the
+#: found-nothing channel across the corpus rather than by pinning per-bill counts.
 MIN_FRAGMENTS = 20
-
-#: Versions that genuinely carry less prose than `MIN_FRAGMENTS`, with the EXACT
-#: fragment count measured at calibration. 113-hr-3547 is a two-section shell bill: a
-#: short title and one amendment to title 51, and nothing else.
-#:
-#: Named rather than skipped, deliberately. A content-skip here would be the exact
-#: fail-open the corpus content-skip ceiling in conftest.py exists to close: if a
-#: regression dropped every version's fragments to zero, a skipping test would go
-#: quiet and green while asserting nothing. So these versions are asserted on from
-#: both sides instead -- an exact count, and full recall of what little prose they
-#: have, which is a stricter demand than the floor makes of anyone else.
-#:
-#: The count is asserted as EQUAL, not as an upper bound. An upper bound reopens the
-#: very channel this exists to close, because zero fragments satisfies it: a fragment
-#: extractor that found nothing would leave both assertions true (0 <= 2, and nothing
-#: missing out of nothing) and these five cases would go green while asserting nothing
-#: at all. Equality is safe here in a way it would not be for a recall budget: the
-#: fixtures are committed and immutable, so the count is a fact about a specific file,
-#: not a baseline that drifts. If one of these bills legitimately changes, the entry
-#: is wrong and should be recalibrated deliberately.
-_SHELL_VERSIONS = {
-    "113-hr-3547/1_introduced-in-house": 2,
-    "113-hr-3547/2_engrossed-in-house": 2,
-    "113-hr-3547/3_received-in-senate": 2,
-    "113-hr-3547/4_engrossed-amendment-senate": 4,
-    "118-hr-2882/1_introduced-in-house": 4,
-}
 
 #: Words per sentence fragment. Long enough that a match cannot be coincidental, short
 #: enough that most of a bill's prose qualifies.
@@ -204,6 +211,29 @@ def prose_recall(xml_path: Path, pdf_path: Path) -> tuple[list[str], list[str]]:
     return fragments, [f for f in fragments if f not in haystack]
 
 
+def version_layout(xml_path: Path) -> str:
+    """The GPO version code a fixture stem ends in: `6_enrolled-bill` -> `enrolled-bill`.
+
+    The corpus names every version file `<stage>_<version-code>`, and the version code
+    is what determines how GPO typesets the document, which is what the extraction
+    defects attach to.
+    """
+    return xml_path.stem.split("_", 1)[-1]
+
+
+def layout_floor(xml_path: Path) -> float:
+    """The recall floor this version's print layout is held to."""
+    return _LAYOUT_FLOORS.get(version_layout(xml_path), RECALL_FLOOR)
+
+
+def _is_unnumbered(pages) -> bool:
+    """True when the print carries no margin line numbers, the enrolled-layout property
+    the dropped-integer defect follows from."""
+    lines = [line for page in pages for line in page.lines]
+    numbered = sum(1 for line in lines if line.line_number is not None)
+    return bool(lines) and numbered / len(lines) < 0.10
+
+
 _VERSIONS = dual_format_versions()
 
 
@@ -215,44 +245,92 @@ _VERSIONS = dual_format_versions()
 def test_xml_prose_appears_in_pdf(bill: str, xml_path: Path, pdf_path: Path) -> None:
     fragments, missing = prose_recall(xml_path, pdf_path)
     test_id = f"{bill}/{xml_path.stem}"
-
-    if test_id in _SHELL_VERSIONS:
-        expected = _SHELL_VERSIONS[test_id]
-        assert len(fragments) == expected, (
-            f"{test_id} yields {len(fragments)} prose fragments, not the {expected} "
-            f"measured when it was recorded as a shell version. More means it is no "
-            f"longer a shell and should be gated like any other version (remove its "
-            f"_SHELL_VERSIONS entry); fewer means fragment extraction has regressed."
-        )
-        assert not missing, (
-            f"{test_id} is a shell version, so all {len(fragments)} of its prose "
-            f"fragments must survive extraction. Missing: {missing}"
-        )
-        return
-
-    assert len(fragments) >= MIN_FRAGMENTS, (
-        f"{test_id} yields only {len(fragments)} prose fragments, too few to measure "
-        f"recall against. Either the XML is a shell (add it to _SHELL_VERSIONS with "
-        f"its count) or fragment extraction has regressed and is finding nothing."
-    )
-
-    floor = _KNOWN_DEGRADED.get(test_id, RECALL_FLOOR)
-    recall = (len(fragments) - len(missing)) / len(fragments)
+    floor = layout_floor(xml_path)
     sample = "\n    ".join(m[:160] for m in missing[:5])
+
+    # An exemption handed out on a filename is an exemption a typo can claim. The
+    # enrolled floor exists for a layout with no margin line numbers, so confirm this
+    # print really is that layout before letting it off the full floor.
+    if version_layout(xml_path) == "enrolled-bill":
+        assert _is_unnumbered(cached_pages(pdf_path)), (
+            f"{test_id} is named an enrolled print, which is why it is held to a "
+            f"{floor:.0%} floor rather than {RECALL_FLOOR:.0%}, but its pages carry "
+            f"margin line numbers. The exemption does not apply to this document."
+        )
+
+    if len(fragments) < MIN_FRAGMENTS:
+        # Too few fragments for a ratio to mean anything, so demand all of them. Not
+        # skipped: a skip asserts nothing, and a fragment extractor that quietly found
+        # nothing would land every version here. On a degraded layout the same defect
+        # applies to these short documents, so they keep their layout's floor.
+        if floor == RECALL_FLOOR:
+            assert not missing, (
+                f"{test_id} carries only {len(fragments)} prose fragments, too few to "
+                f"measure a ratio, so all of them must survive extraction. "
+                f"{len(missing)} did not:\n    {sample}"
+            )
+            return
+        assert fragments, f"{test_id} yielded no prose fragments at all."
+
+    recall = (len(fragments) - len(missing)) / len(fragments)
     assert recall >= floor, (
-        f"{test_id}: prose recall {recall:.1%} is below the "
-        f"{floor:.0%} floor -- {len(missing)} of {len(fragments)} XML sentences "
-        f"are absent from the extracted PDF text. This is a PDF extraction failure or "
-        f"an XML-side artifact; find out which before touching the floor.\n"
+        f"{test_id}: prose recall {recall:.1%} is below the {floor:.0%} floor for the "
+        f"{version_layout(xml_path)} layout -- {len(missing)} of {len(fragments)} XML "
+        f"fragments are absent from the extracted PDF text. This is a PDF extraction "
+        f"failure or an XML-side artifact; find out which before touching the floor.\n"
         f"    {sample}"
     )
 
-    # A degraded entry that no longer describes reality is an exemption nothing will
-    # ever revisit: the version silently keeps a floor 9 points below every other one,
-    # and a real regression into that gap reads as a pass. Fail when the exemption is
-    # no longer earned, the same way a strict xfail does.
-    assert test_id not in _KNOWN_DEGRADED or recall < RECALL_FLOOR, (
-        f"{test_id} recalls {recall:.1%}, at or above the {RECALL_FLOOR:.0%} floor "
-        f"every other version is held to. The defect its _KNOWN_DEGRADED entry names "
-        f"appears to be fixed -- remove the entry so this version is gated normally."
+
+@pytest.mark.parametrize("layout", sorted(_LAYOUT_FLOORS))
+def test_degraded_layout_still_earns_its_floor(layout: str) -> None:
+    """A layout floor that every version has climbed past is an exemption nothing will
+    revisit: the layout keeps a floor points below everyone else's, and a real
+    regression into that gap reads as a pass. Fail once the defect looks fixed."""
+    versions = [(b, x, p) for b, x, p in _VERSIONS if version_layout(x) == layout]
+    if not versions:
+        pytest.skip(f"No {layout} versions in the collected corpus")
+
+    recalls = {}
+    for bill, xml_path, pdf_path in versions:
+        fragments, missing = prose_recall(xml_path, pdf_path)
+        if len(fragments) >= MIN_FRAGMENTS:
+            recalls[f"{bill}/{xml_path.stem}"] = (len(fragments) - len(missing)) / len(fragments)
+
+    if not recalls:
+        pytest.skip(f"No {layout} version carries enough prose to measure")
+
+    assert min(recalls.values()) < RECALL_FLOOR, (
+        f"Every {layout} version now recalls at or above the {RECALL_FLOOR:.0%} floor "
+        f"the healthy layouts are held to ({recalls}). The defect its _LAYOUT_FLOORS "
+        f"entry names appears to be fixed -- remove the entry so this layout is gated "
+        f"normally."
+    )
+
+
+def test_corpus_yields_prose_to_compare() -> None:
+    """The found-nothing channel, closed once for the whole corpus.
+
+    Every per-version assertion above is satisfied by a fragment extractor that returns
+    nothing for a SHORT document, so the guard against it belongs at corpus level rather
+    than in per-bill counts that need recalibrating every time a fixture lands. The
+    floors are deliberately far below the measured totals: this is a smoke alarm for the
+    extractor having stopped working, not a budget on the corpus size.
+    """
+    measurable = 0
+    total_fragments = 0
+    for _bill, xml_path, _pdf in _VERSIONS:
+        count = len(xml_prose_fragments(xml_path))
+        total_fragments += count
+        measurable += count >= MIN_FRAGMENTS
+
+    assert measurable >= 0.5 * len(_VERSIONS), (
+        f"Only {measurable} of {len(_VERSIONS)} collected versions yield "
+        f"{MIN_FRAGMENTS}+ prose fragments. Bills that short are the exception, so this "
+        f"points at fragment extraction rather than at the corpus."
+    )
+    assert total_fragments >= 1000, (
+        f"The whole collected corpus yields only {total_fragments} prose fragments. "
+        f"Fragment extraction has regressed: the comparison is running on nearly "
+        f"nothing while still reporting a recall ratio."
     )

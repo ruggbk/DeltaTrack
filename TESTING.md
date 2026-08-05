@@ -19,7 +19,7 @@ comparison needs no key and no internet connection.
 
 ## How accuracy is checked
 
-Accuracy is checked in five ways. Each one answers a different question, and
+Accuracy is checked in six ways. Each one answers a different question, and
 each has limits worth being honest about. There is no single accuracy
 percentage that would be truthful across all of appropriations, so we describe
 what each layer does and does not establish.
@@ -151,9 +151,17 @@ dot-leadered layout that reads as a different string entirely, and quoted blocks
 block quotations with their own numbering. What remains is the body prose, which
 is the part a reader of the change report is actually reading.
 
-Most versions score 100%. Where a version falls short, the shortfall is written
-down in the check itself, along with the specific reading defect that causes it,
-so the number is never a mystery to be explained away later.
+Most versions score 100%. Two kinds of print fall short, and in both cases we
+know why. Congress prints a bill differently at different stages, and two of
+those print styles defeat the tool's handling of the page furniture: the enrolled
+print (the final enacted text) and the Senate engrossed amendment both splice a
+running page header or footer into the middle of a sentence, and the enrolled
+print additionally loses a number that begins a line. So the allowance is written
+against the print style rather than against a named bill, along with the defect
+that causes it. A new bill is then covered the moment it is added if it is printed
+the same way, and held to the full standard if it is not. If the underlying defect
+is ever fixed, the check fails and tells us to remove the allowance, so it cannot
+quietly outlive its reason.
 
 **Limit:** because the same clean-up is applied to both sides before comparing,
 this check is blind to changes in that clean-up — it confirms the words are
