@@ -24,6 +24,7 @@ sys.path.insert(0, str(_ROOT / "tests"))
 from pdf_corpus import dual_format_versions  # noqa: E402
 from test_pdf_xml_prose_recall import (  # noqa: E402
     _KNOWN_DEGRADED,
+    _SHELL_VERSIONS,
     MIN_FRAGMENTS,
     RECALL_FLOOR,
     prose_recall,
@@ -48,9 +49,34 @@ def main() -> int:
     for bill, xml_path, pdf_path in versions:
         fragments, missing = prose_recall(xml_path, pdf_path)
         label = f"{bill}/{xml_path.stem}"
-        if len(fragments) < MIN_FRAGMENTS:
-            print(f"{label}: SHELL ({len(fragments)} fragments, {len(missing)} missing)")
+
+        if label in _SHELL_VERSIONS:
+            expected = _SHELL_VERSIONS[label]
+            if len(fragments) != expected:
+                breaches.append(label)
+                print(
+                    f"{label}: SHELL DRIFT -- {len(fragments)} fragments, expected {expected} "
+                    f"({len(missing)} missing)"
+                )
+                continue
+            if missing:
+                breaches.append(label)
+                print(
+                    f"{label}: SHELL MISSING -- {len(fragments)} fragments, "
+                    f"{len(missing)} missing (shell versions must have full recall)"
+                )
+                continue
+            print(f"{label}: SHELL OK ({len(fragments)} fragments, 0 missing)")
             continue
+
+        if len(fragments) < MIN_FRAGMENTS:
+            breaches.append(label)
+            print(
+                f"{label}: REGRESSION -- only {len(fragments)} fragments (minimum {MIN_FRAGMENTS}), "
+                f"{len(missing)} missing. Not a known shell; fragment extraction has regressed."
+            )
+            continue
+
         recall = (len(fragments) - len(missing)) / len(fragments)
         floor = _KNOWN_DEGRADED.get(label)
         if floor is None:
