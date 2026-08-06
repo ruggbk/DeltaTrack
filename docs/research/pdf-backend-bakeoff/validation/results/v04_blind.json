@@ -1,0 +1,366 @@
+{
+ "question": "For each id: looking ONLY at the printed page crop, does the printed text contain a WORD BOUNDARY at the red caret? Answer BOUNDARY, NO_BOUNDARY, or UNREADABLE.",
+ "sheets_dir": "v04_sheets/",
+ "items": [
+  {
+   "id": "B01",
+   "sheet": 1,
+   "slot": 0
+  },
+  {
+   "id": "B02",
+   "sheet": 1,
+   "slot": 1
+  },
+  {
+   "id": "B03",
+   "sheet": 1,
+   "slot": 2
+  },
+  {
+   "id": "B04",
+   "sheet": 1,
+   "slot": 3
+  },
+  {
+   "id": "B05",
+   "sheet": 1,
+   "slot": 4
+  },
+  {
+   "id": "B06",
+   "sheet": 1,
+   "slot": 5
+  },
+  {
+   "id": "B07",
+   "sheet": 2,
+   "slot": 0
+  },
+  {
+   "id": "B08",
+   "sheet": 2,
+   "slot": 1
+  },
+  {
+   "id": "B09",
+   "sheet": 2,
+   "slot": 2
+  },
+  {
+   "id": "B10",
+   "sheet": 2,
+   "slot": 3
+  },
+  {
+   "id": "B11",
+   "sheet": 2,
+   "slot": 4
+  },
+  {
+   "id": "B12",
+   "sheet": 2,
+   "slot": 5
+  },
+  {
+   "id": "B13",
+   "sheet": 3,
+   "slot": 0
+  },
+  {
+   "id": "B14",
+   "sheet": 3,
+   "slot": 1
+  },
+  {
+   "id": "B15",
+   "sheet": 3,
+   "slot": 2
+  },
+  {
+   "id": "B16",
+   "sheet": 3,
+   "slot": 3
+  },
+  {
+   "id": "B17",
+   "sheet": 3,
+   "slot": 4
+  },
+  {
+   "id": "B18",
+   "sheet": 3,
+   "slot": 5
+  },
+  {
+   "id": "B19",
+   "sheet": 4,
+   "slot": 0
+  },
+  {
+   "id": "B20",
+   "sheet": 4,
+   "slot": 1
+  },
+  {
+   "id": "B21",
+   "sheet": 4,
+   "slot": 2
+  },
+  {
+   "id": "B22",
+   "sheet": 4,
+   "slot": 3
+  },
+  {
+   "id": "B23",
+   "sheet": 4,
+   "slot": 4
+  },
+  {
+   "id": "B24",
+   "sheet": 4,
+   "slot": 5
+  },
+  {
+   "id": "B25",
+   "sheet": 5,
+   "slot": 0
+  },
+  {
+   "id": "B26",
+   "sheet": 5,
+   "slot": 1
+  },
+  {
+   "id": "B27",
+   "sheet": 5,
+   "slot": 2
+  },
+  {
+   "id": "B28",
+   "sheet": 5,
+   "slot": 3
+  },
+  {
+   "id": "B29",
+   "sheet": 5,
+   "slot": 4
+  },
+  {
+   "id": "B30",
+   "sheet": 5,
+   "slot": 5
+  },
+  {
+   "id": "B31",
+   "sheet": 6,
+   "slot": 0
+  },
+  {
+   "id": "B32",
+   "sheet": 6,
+   "slot": 1
+  },
+  {
+   "id": "B33",
+   "sheet": 6,
+   "slot": 2
+  },
+  {
+   "id": "B34",
+   "sheet": 6,
+   "slot": 3
+  },
+  {
+   "id": "B35",
+   "sheet": 6,
+   "slot": 4
+  },
+  {
+   "id": "B36",
+   "sheet": 6,
+   "slot": 5
+  },
+  {
+   "id": "B37",
+   "sheet": 7,
+   "slot": 0
+  },
+  {
+   "id": "B38",
+   "sheet": 7,
+   "slot": 1
+  },
+  {
+   "id": "B39",
+   "sheet": 7,
+   "slot": 2
+  },
+  {
+   "id": "B40",
+   "sheet": 7,
+   "slot": 3
+  },
+  {
+   "id": "B41",
+   "sheet": 7,
+   "slot": 4
+  },
+  {
+   "id": "B42",
+   "sheet": 7,
+   "slot": 5
+  },
+  {
+   "id": "B43",
+   "sheet": 8,
+   "slot": 0
+  },
+  {
+   "id": "B44",
+   "sheet": 8,
+   "slot": 1
+  },
+  {
+   "id": "B45",
+   "sheet": 8,
+   "slot": 2
+  },
+  {
+   "id": "B46",
+   "sheet": 8,
+   "slot": 3
+  },
+  {
+   "id": "B47",
+   "sheet": 8,
+   "slot": 4
+  },
+  {
+   "id": "B48",
+   "sheet": 8,
+   "slot": 5
+  },
+  {
+   "id": "B49",
+   "sheet": 9,
+   "slot": 0
+  },
+  {
+   "id": "B50",
+   "sheet": 9,
+   "slot": 1
+  },
+  {
+   "id": "B51",
+   "sheet": 9,
+   "slot": 2
+  },
+  {
+   "id": "B52",
+   "sheet": 9,
+   "slot": 3
+  },
+  {
+   "id": "B53",
+   "sheet": 9,
+   "slot": 4
+  },
+  {
+   "id": "B54",
+   "sheet": 9,
+   "slot": 5
+  },
+  {
+   "id": "B55",
+   "sheet": 10,
+   "slot": 0
+  },
+  {
+   "id": "B56",
+   "sheet": 10,
+   "slot": 1
+  },
+  {
+   "id": "B57",
+   "sheet": 10,
+   "slot": 2
+  },
+  {
+   "id": "B58",
+   "sheet": 10,
+   "slot": 3
+  },
+  {
+   "id": "B59",
+   "sheet": 10,
+   "slot": 4
+  },
+  {
+   "id": "B60",
+   "sheet": 10,
+   "slot": 5
+  },
+  {
+   "id": "B61",
+   "sheet": 11,
+   "slot": 0
+  },
+  {
+   "id": "B62",
+   "sheet": 11,
+   "slot": 1
+  },
+  {
+   "id": "B63",
+   "sheet": 11,
+   "slot": 2
+  },
+  {
+   "id": "B64",
+   "sheet": 11,
+   "slot": 3
+  },
+  {
+   "id": "B65",
+   "sheet": 11,
+   "slot": 4
+  },
+  {
+   "id": "B66",
+   "sheet": 11,
+   "slot": 5
+  },
+  {
+   "id": "B67",
+   "sheet": 12,
+   "slot": 0
+  },
+  {
+   "id": "B68",
+   "sheet": 12,
+   "slot": 1
+  },
+  {
+   "id": "B69",
+   "sheet": 12,
+   "slot": 2
+  },
+  {
+   "id": "B70",
+   "sheet": 12,
+   "slot": 3
+  },
+  {
+   "id": "B71",
+   "sheet": 12,
+   "slot": 4
+  },
+  {
+   "id": "B72",
+   "sheet": 12,
+   "slot": 5
+  }
+ ]
+}
