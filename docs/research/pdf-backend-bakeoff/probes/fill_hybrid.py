@@ -159,30 +159,59 @@ def corpus_table(data: dict) -> str:
 
 
 def accuracy_table(data: dict) -> str:
-    """The same paths against XML, so parity is not mistaken for correctness."""
-    docs = [
-        d for d in data["documents"] if "vs_xml" in d and not d.get("production_declined") and not d.get("quoted_block")
-    ]
-    out = [
-        f"Reference is **XML**, over the {len(docs)} production-accepted documents WITHOUT a "
-        "`<quoted-block>` (the DeltaTrack#11 parser defect drops those, and they would penalise every "
-        "path equally for a reference gap). `production` is included as a fourth column here because "
-        "against XML it is a candidate like any other, not the reference.",
-        "",
-        "| metric | production | " + " | ".join(f"**{p}**" if p == "hybrid" else p for p in PATHS) + " |",
-        "|---|---|" + "---|" * len(PATHS),
-    ]
+    """The same paths against XML, so parity is not mistaken for correctness.
+
+    Reported in TWO STRATA, and the split is not cosmetic. `RESULTS-CONFIRMATORY.md`
+    recorded that every corpus document where the paths' heading recovery differs carries a
+    `<quoted-block>`, which the DeltaTrack#11 parser defect drops from the XML reference.
+    Excluding those documents therefore removes exactly the documents that can
+    discriminate, and one pooled figure over the remainder reads as "all paths are
+    equivalent" when what it says is "these documents cannot tell them apart."
+
+    Each stratum carries a generated `can this stratum discriminate?` row, derived from
+    whether any path differs from production on labels inside it. A stratum answering NO is
+    published and is not evidence.
+    """
     cols = ("production",) + PATHS
-    for label, metric, field in (
-        ("B2 heading-label F1", "B2", "f1"),
-        ("B5 amount→heading F1", "B5", "f1"),
-        ("B6 parent/child accuracy", "B6", "accuracy"),
-    ):
-        cells = []
-        for path in cols:
-            vals = [d["vs_xml"][path][metric].get(field) for d in docs if path in d.get("vs_xml", {})]
-            cells.append(str(_mean(vals)))
-        out.append(f"| {label} | " + " | ".join(cells) + " |")
+    accepted = [d for d in data["documents"] if "vs_xml" in d and not d.get("production_declined")]
+    strata = (
+        ("primary — no `<quoted-block>`", [d for d in accepted if not d.get("quoted_block")]),
+        ("quoted-block stratum", [d for d in accepted if d.get("quoted_block")]),
+    )
+    out = [
+        "Reference is **XML**. `production` is a fourth column rather than the reference, because "
+        "against XML it is a candidate like any other.",
+    ]
+    for name, docs in strata:
+        differs = sum(
+            1
+            for d in docs
+            if any(
+                r["H2_absent_from_reference"] or r["H2_missed_from_reference"]
+                for r in (d.get("vs_production") or {}).values()
+            )
+        )
+        verdict = (
+            f"**YES** — {differs} of {len(docs)} documents separate the paths"
+            if differs
+            else f"**NO** — no path differs from production anywhere in these {len(docs)}"
+        )
+        out += [
+            "",
+            f"**{name}** — {len(docs)} documents. _Can this stratum discriminate?_ {verdict}",
+            "",
+            "| metric | " + " | ".join(f"**{p}**" if p == "hybrid" else p for p in cols) + " |",
+            "|---|" + "---|" * len(cols),
+        ]
+        for label, metric, field in (
+            ("B2 heading-label F1", "B2", "f1"),
+            ("B5 amount→heading F1", "B5", "f1"),
+            ("B6 parent/child accuracy", "B6", "accuracy"),
+        ):
+            cells = [
+                str(_mean([d["vs_xml"][p][metric].get(field) for d in docs if p in d.get("vs_xml", {})])) for p in cols
+            ]
+            out.append(f"| {label} | " + " | ".join(cells) + " |")
     return "\n".join(out)
 
 
@@ -229,14 +258,15 @@ def signals_table(data: dict) -> str:
 
 def portability_table(data: dict) -> str:
     out = [
-        "| document | raw stream identical | stream diff ops | all diffs are line-trailing spaces | "
-        "**page text digest identical** | line numbers identical | heading labels identical |",
-        "|---|---|---|---|---|---|---|",
+        "| document | raw stream identical | trailing-space divergences | line-break-vs-space | "
+        "**unclassified** | **page text digest identical** | line numbers identical | heading labels identical |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for path, e in data.items():
+        k = e["stream_diff_kinds"]
         out.append(
-            f"| `{Path(path).name}` | {e['stream_identical']} | {e['stream_diff_ops']} | "
-            f"{e['stream_diffs_are_all_line_trailing_spaces']} | **{e['pages_text_identical']}** | "
+            f"| `{Path(path).name}` | {e['stream_identical']} | {k['line_trailing_space']} | "
+            f"{k['line_break_vs_space']} | **{k['unclassified']}** | **{e['pages_text_identical']}** | "
             f"{e['pages_line_numbers_identical']} ({e['n_line_numbers']}) | "
             f"{e['pages_labels_identical']} ({e['n_labels']}) |"
         )

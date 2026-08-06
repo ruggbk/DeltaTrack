@@ -89,6 +89,42 @@ def stream(pages: list[HybridPage]) -> str:
     return "\n".join("".join(chr(c[CP]) for c in p.chars) for p in pages)
 
 
+def classify_stream(nat: list[HybridPage], wasm: list[HybridPage]) -> dict:
+    """Every native-vs-WASM divergence, sorted into named kinds.
+
+    Compared PAGE BY PAGE, not document-wide: `difflib` is quadratic and a 129k-character
+    committee report does not finish in a useful time as one string.
+
+    "Harmless" has to be a claim about WHAT differs, not about how few differences there
+    are, so each op is classified and anything that does not fit a named kind is counted
+    as `unclassified` and sampled. An unclassified count above zero is the signal that
+    this probe's conclusion no longer covers the evidence.
+    """
+    kinds = {"line_trailing_space": 0, "line_break_vs_space": 0, "unclassified": 0}
+    samples: list[str] = []
+    for a, b in zip(nat, wasm):
+        ns = "".join(chr(c[CP]) for c in a.chars)
+        ws = "".join(chr(c[CP]) for c in b.chars)
+        if ns == ws:
+            continue
+        for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(a=ns, b=ws, autojunk=False).get_opcodes():
+            if tag == "equal":
+                continue
+            seg, other = ns[i1:i2], ws[j1:j2]
+            if tag == "delete" and set(seg) <= {" "} and ns[i2 : i2 + 1] in ("\r", "\n", ""):
+                kinds["line_trailing_space"] += 1
+            elif tag == "replace" and set(seg) <= {"\r", "\n"} and set(other) <= {" "}:
+                # The WASM build joins two printed lines the native build separates. It
+                # cannot reach the reconstruction, which assigns lines by baseline and
+                # discards the engine's break characters outright.
+                kinds["line_break_vs_space"] += 1
+            else:
+                kinds["unclassified"] += 1
+                if len(samples) < 5:
+                    samples.append(f"p{a.page_number} {tag}: native={seg[:40]!r} wasm={other[:40]!r}")
+    return {"kinds": kinds, "unclassified_samples": samples, "all_classified": kinds["unclassified"] == 0}
+
+
 def facts(pages: list[HybridPage]) -> dict:
     dt_pages, diag = RH.reconstruct(pages)
     text, _ = pdf_full_text(dt_pages)
@@ -116,21 +152,17 @@ def main() -> None:
         nat_pages, nat_sum = pdfium_hybrid.extract(pdf, args.limit)
         wasm_pages, wasm_sum = run_wasm(pdf, args.limit)
         ns, ws = stream(nat_pages), stream(wasm_pages)
-        sm = difflib.SequenceMatcher(a=ns, b=ws, autojunk=False)
-        ops = [o for o in sm.get_opcodes() if o[0] != "equal"]
-        # Every divergence classified, so "harmless" is a measured claim about what the
-        # differing characters ARE, not an assertion that the count is small.
-        only_trailing_space = all(
-            o[0] == "delete" and set(ns[o[1] : o[2]]) <= {" "} and ns[o[2] : o[2] + 1] in ("\r", "\n", "") for o in ops
-        )
+        cls = classify_stream(nat_pages, wasm_pages)
         nf, wf = facts(nat_pages), facts(wasm_pages)
         entry = {
             "native_summary": nat_sum,
             "wasm_summary": wasm_sum,
             "stream_identical": ns == ws,
-            "stream_similarity": round(sm.ratio(), 6),
-            "stream_diff_ops": len(ops),
-            "stream_diffs_are_all_line_trailing_spaces": only_trailing_space,
+            "stream_chars_native": len(ns),
+            "stream_chars_wasm": len(ws),
+            "stream_diff_kinds": cls["kinds"],
+            "stream_all_divergences_classified": cls["all_classified"],
+            "stream_unclassified_samples": cls["unclassified_samples"],
             "pages_text_identical": nf["text_sha256"] == wf["text_sha256"],
             "pages_line_numbers_identical": nf["line_numbers"] == wf["line_numbers"],
             "pages_labels_identical": nf["labels"] == wf["labels"],
@@ -144,10 +176,10 @@ def main() -> None:
         out[path] = entry
         print(f"\n## {path}  (pages limit={args.limit})")
         print(f"  raw char stream identical            : {entry['stream_identical']}")
-        print(
-            f"  stream differences                   : {entry['stream_diff_ops']} ops, sim {entry['stream_similarity']}"
-        )
-        print(f"  all differences line-trailing spaces  : {entry['stream_diffs_are_all_line_trailing_spaces']}")
+        print(f"  divergences by kind                  : {entry['stream_diff_kinds']}")
+        print(f"  every divergence classified          : {entry['stream_all_divergences_classified']}")
+        for s in entry["stream_unclassified_samples"]:
+            print(f"     UNCLASSIFIED {s}")
         print("  --- after the hybrid layer ---")
         print(f"  pdf_full_text digest identical       : {entry['pages_text_identical']}")
         print(f"  line-number set identical ({entry['n_line_numbers']})     : {entry['pages_line_numbers_identical']}")
