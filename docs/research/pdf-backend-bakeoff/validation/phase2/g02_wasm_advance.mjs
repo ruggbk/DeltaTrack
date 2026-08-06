@@ -19,7 +19,10 @@
 //   {ok, exported:{...}, chars, withTextObject, withFont, withAdvance,
 //    zeroAdvance, sample:[{cp, ox, size, emAdv}...]}
 //
-// Run: node g02_wasm_advance.mjs <pdf> [--page N]
+// Run from this directory, resolving the spike's node_modules WITHOUT copying anything
+// into probes/ -- the phase-1 tree is preserved byte-for-byte:
+//
+//   NODE_PATH=../../probes/js/node_modules node g02_wasm_advance.mjs <pdf> [--page N]
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
