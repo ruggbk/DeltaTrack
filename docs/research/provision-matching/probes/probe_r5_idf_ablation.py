@@ -27,6 +27,17 @@ Reported per variant: the 12-pair separation margin (min same - max different; >
 threshold separates perfectly, and NO threshold is fitted anywhere in this probe), the stub cases,
 the boilerplate cases, and the degenerate short-text case R3 surfaced.
 
+SCOPE, and why section 2b exists. Every score below is computed on the fixture's FROZEN strings,
+not on text re-derived from the current parser. R2 shows three of the twelve no longer correspond
+to anything the parser emits, so a result stated over all twelve is a result about historical
+observations. Section 2b therefore repeats the whole separation analysis over only the pairs whose
+stored text still resolves in the current parse -- the population that is simultaneously historical
+and current -- so the claim can be scoped to what was actually tested rather than caveated in prose.
+
+The five variants are FROZEN as of 2026-08-06 and must not be re-tuned after the quarantined
+records are re-adjudicated. Re-running the same five is a replication; changing them first and
+re-running is fitting to the answer.
+
 Run (from a normal checkout, repo venv):
     .venv/bin/python docs/research/provision-matching/probes/probe_r5_idf_ablation.py
 """
@@ -44,7 +55,7 @@ REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from corpus_roots import bill_versions  # noqa: E402
+from corpus_roots import banner, bill_versions  # noqa: E402
 
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
 from deltatrack.diff_bill import _normalize_text  # noqa: E402
@@ -133,7 +144,40 @@ def make_scorer(df: Counter, n_docs: int, drop_num: bool, drop_cite: bool):
     return contain
 
 
+_body_cache: dict[tuple[str, str], set[str]] = {}
+
+
+def resolves(bill: str, version: str, text: str) -> bool:
+    """Does the current parser emit a node whose body IS this stored text? (R2's test, reused.)
+
+    A pair for which both sides resolve is not merely a historical observation: the frozen string
+    is byte-identical to a body the parser emits today, so re-deriving it would return the same
+    string and therefore the same score. That equivalence is what lets section 2b state a CURRENT
+    result without re-deriving anything.
+    """
+    key = (bill, version)
+    if key not in _body_cache:
+        path = bill_versions().get(bill, {}).get(version)
+        if path is None:
+            _body_cache[key] = set()
+        else:
+            try:
+                _body_cache[key] = {_normalize_text(n.body_text) for n in normalize_bill(path).nodes}
+            except Exception:
+                _body_cache[key] = set()
+    return _normalize_text(text) in _body_cache[key]
+
+
+def separation(rows: list[tuple[str, float]]) -> tuple[float, float, float, bool]:
+    same = [c for lb, c in rows if lb == "same"]
+    diff = [c for lb, c in rows if lb == "different"]
+    if not same or not diff:
+        return (0.0, 0.0, 0.0, False)
+    return (max(diff), min(same), min(same) - max(diff), max(diff) < KEEP <= min(same))
+
+
 def main() -> None:
+    print(banner())
     print("building document-frequency tables (one corpus pass)...", flush=True)
     tables, n_bills = build_dfs()
     pairs = json.loads(FIXTURE.read_text())["pairs"]
@@ -175,11 +219,53 @@ def main() -> None:
     print(f"  {'variant':<28} {'max different':>14} {'min same':>10} {'margin':>9} {'0.70 bar works':>16}")
     print("  " + "-" * 82)
     for k, label, _, _ in specs:
-        same = [c for lb, c in vals[k] if lb == "same"]
-        diff = [c for lb, c in vals[k] if lb == "different"]
-        margin = min(same) - max(diff)
-        ok = "yes" if (max(diff) < KEEP <= min(same)) else "NO"
-        print(f"  {k} {label:<24} {max(diff):>14.3f} {min(same):>10.3f} {margin:>+9.3f} {ok:>16}")
+        md, ms, margin, ok = separation(vals[k])
+        print(f"  {k} {label:<24} {md:>14.3f} {ms:>10.3f} {margin:>+9.3f} {('yes' if ok else 'NO'):>16}")
+
+    print()
+    print("=" * 104)
+    print("2b. THE SAME ANALYSIS, RESTRICTED TO PAIRS THAT STILL RESOLVE UNDER THE CURRENT PARSER")
+    print("=" * 104)
+    print("  Section 2 scores frozen strings, so it is a statement about HISTORICAL observations.")
+    print("  This restricts to pairs whose stored text is byte-identical to a body the parser emits")
+    print("  today, on both sides -- so for these, stored score == re-derived score by construction,")
+    print("  and the result is current as well as historical.")
+    print()
+    live = [
+        p
+        for p in pairs
+        if resolves(p["bill"], p["version_old"], p["text_old"]) and resolves(p["bill"], p["version_new"], p["text_new"])
+    ]
+    quarantined = [p["id"] for p in pairs if p not in live]
+    print(f"  resolving pairs : {len(live)}/{len(pairs)}")
+    print(f"  quarantined     : {quarantined}")
+    print(
+        f"  labels remaining: same={sum(1 for p in live if p['label'] == 'same')}, "
+        f"different={sum(1 for p in live if p['label'] == 'different')}"
+    )
+    print()
+    live_ids = {p["id"] for p in live}
+    idx = {p["id"]: i for i, p in enumerate(pairs)}
+    print(f"  {'variant':<28} {'max different':>14} {'min same':>10} {'margin':>9} {'0.70 bar works':>16}")
+    print("  " + "-" * 82)
+    changed = []
+    for k, label, _, _ in specs:
+        rows = [vals[k][idx[pid]] for pid in live_ids]
+        md, ms, margin, ok = separation(rows)
+        _fmd, _fms, full_margin, _fok = separation(vals[k])
+        if abs(margin - full_margin) > 1e-9:
+            changed.append(k)
+        print(f"  {k} {label:<24} {md:>14.3f} {ms:>10.3f} {margin:>+9.3f} {('yes' if ok else 'NO'):>16}")
+    print()
+    if changed:
+        print(f"  variants whose margin MOVES when the quarantined pairs are dropped: {changed}")
+        print("  => the ablation result partly rests on records that no longer reproduce. Scope the")
+        print("     claim to the historical observations until those are re-adjudicated.")
+    else:
+        print("  No variant's margin moves. The quarantined pairs are not load-bearing for this")
+        print("  result: the separation and the 0.70 bar are carried entirely by pairs that still")
+        print("  resolve, so the robustness claim holds for the CURRENT parser on this population,")
+        print("  not only for the frozen strings.")
 
     print()
     print("=" * 104)

@@ -28,7 +28,7 @@ REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from corpus_roots import merged_root  # noqa: E402
+from corpus_roots import banner, bill_versions, merged_root  # noqa: E402
 from mine_common import containment, vec  # noqa: E402
 
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
@@ -70,8 +70,36 @@ def resolves(bill: str, ver: str, text: str) -> bool:
     return any(_normalize_text(x.body_text) == tgt for x in tree(bill, ver).nodes)
 
 
+def where_it_exists(bill: str, text: str) -> list[str]:
+    """Every version of `bill` whose parse contains this exact normalized body, today.
+
+    Section 1 asks whether a label's text still resolves in the ONE version the label names. That
+    is the right question for the label, and it is not enough to support the prose claim that the
+    Alien SNAP stub "exists in no version of 119-hr-1 under the current parser, verified across
+    all five" -- a claim about five versions needs a check over five versions. This is that check,
+    run for every label rather than for the one the review happens to quote, so the reproducer and
+    the sentence cannot drift apart again.
+
+    It also separates two failure modes the single-version check conflates: a body that has moved
+    to a DIFFERENT version (the label's locator is stale) from one that is gone entirely (the
+    parser no longer emits that representation anywhere).
+    """
+    tgt = _normalize_text(text)
+    found = []
+    for stem in sorted(bill_versions().get(bill, {})):
+        try:
+            t = tree(bill, stem)
+        except Exception:
+            continue
+        if any(_normalize_text(x.body_text) == tgt for x in t.nodes):
+            found.append(stem)
+    return found
+
+
 def main() -> None:
     pairs = json.loads(FIXTURE.read_text())["pairs"]
+    print(banner())
+    print()
 
     print("=" * 108)
     print("1. DOES THE STORED LABEL TEXT STILL EXIST IN THE CORPUS?")
@@ -150,6 +178,29 @@ def main() -> None:
         at = [c for c in d.changes if tuple(c.match_path) == mp]
         kinds = ", ".join(sorted({c.change_type for c in at})) or "(no change record at this path)"
         print(f"  {p['id']:<26} {p['label']:<10} {p['change_type']:<12} {f'{len(at)} record(s): {kinds}':<40}")
+
+    print()
+    print("=" * 108)
+    print("4. ALL-VERSION PROVENANCE: in WHICH versions of the bill does each stored text exist?")
+    print("=" * 108)
+    print("  Section 1 checks the one version the label names. This checks every version of the")
+    print("  bill in the corpus, which is what distinguishes a stale LOCATOR (the body moved to")
+    print("  another version) from a vanished REPRESENTATION (the parser emits it nowhere).")
+    print()
+    for p in pairs:
+        bill = p["bill"]
+        all_versions = sorted(bill_versions().get(bill, {}))
+        old_in = where_it_exists(bill, p["text_old"])
+        new_in = where_it_exists(bill, p["text_new"])
+        ok_old = "ok" if p["version_old"] in old_in else ("MOVED" if old_in else "ABSENT")
+        ok_new = "ok" if p["version_new"] in new_in else ("MOVED" if new_in else "ABSENT")
+        print(f"  {p['id']:<26} {p['label']:<10} ({len(all_versions)} versions of {bill} in corpus)")
+        print(f"      text_old  labelled {p['version_old']:<32} -> {ok_old:<7} found in: {old_in or '(none)'}")
+        print(f"      text_new  labelled {p['version_new']:<32} -> {ok_new:<7} found in: {new_in or '(none)'}")
+    print()
+    print("  READ THIS AS: 'ABSENT' with an empty found-in list is the strong claim -- that exact")
+    print("  representation is emitted by NO version of that bill under today's parser. That is the")
+    print("  reproducer for the review's Alien SNAP sentence, and it is now printed for all twelve.")
 
 
 if __name__ == "__main__":

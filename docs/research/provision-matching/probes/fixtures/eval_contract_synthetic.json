@@ -1,0 +1,667 @@
+{
+  "_about": "Hand-authored synthetic dataset for the Pass 2 evaluation contract. It contains NO real legislation and NO human judgments -- every 'adjudicator' is 'synthetic'. Its only job is to prove, before any human labels anything, that the frozen schema can produce all five promised metrics and that the anti-circularity exclusion actually excludes. One record per shape the design must handle: clean one-to-one, no counterpart, one-to-many with a retrieval gap, a candidate miss found only by browsing, a ranking miss, an assignment collision with one winner and one loser, a suggestion-list-only truth that must be excluded from candidate recall, an uncertain, and a challenge-stratum failure.",
+  "schema_version": "pass2-anchor-v1",
+  "records": [
+    {
+      "anchor_id": "a1-one-to-one",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title I",
+          "sec. 101"
+        ],
+        "text_sha256": "f55ff16f66f43360266b95db6f8fec01d76031054306ae4a4b380598f6cfd114",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "one-to-one",
+        "oracle": "region-exhaustive",
+        "region_id": "title I",
+        "adjudicator": "synthetic",
+        "change_type": "modified",
+        "counterparts": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 101"
+            ],
+            "text_sha256": "73ec527d77ea00f5ee4337bbabeec4e672dc08b3e3b0ace792a0f05c1dd471ab",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "suggested"
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 101"
+          ],
+          "text_sha256": "73ec527d77ea00f5ee4337bbabeec4e672dc08b3e3b0ace792a0f05c1dd471ab",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "structural-path",
+            "word-overlap"
+          ]
+        },
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 102"
+          ],
+          "text_sha256": "e40f2eb4ebb22e9f9ad7c510c9173a927fa1d7feb07bc959a2f6e093ab166fba",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 2,
+          "retrievers": [
+            "containment"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "modified",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 101"
+            ],
+            "text_sha256": "73ec527d77ea00f5ee4337bbabeec4e672dc08b3e3b0ace792a0f05c1dd471ab",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "anchor_id": "a2-none",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title I",
+          "sec. 110"
+        ],
+        "text_sha256": "2c3a4249d77070058649dbd822dcaf7957586fce428cfb2ca88b94741eda8b07",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "none",
+        "oracle": "region-exhaustive",
+        "region_id": "title I",
+        "adjudicator": "synthetic",
+        "change_type": "removed",
+        "counterparts": []
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 111"
+          ],
+          "text_sha256": "765807749dceafc2cb4aacd1cd081eab5e4bf789180f21a282d182240bfcfcd8",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "removed",
+        "assigned": []
+      }
+    },
+    {
+      "anchor_id": "a3-one-to-many",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title I",
+          "sec. 120"
+        ],
+        "text_sha256": "f46dd28a5499d8efef0b8fb8ee1ec1c5a5e407c9381741d576ba8deb4f59ec3f",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "one-to-many",
+        "oracle": "region-exhaustive",
+        "region_id": "title I",
+        "adjudicator": "synthetic",
+        "change_type": "modified",
+        "counterparts": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 120"
+            ],
+            "text_sha256": "28627c64c301151bee28c5dc1b1f51116fee9662adb542c10d9016ab53339647",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "suggested"
+          },
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 121"
+            ],
+            "text_sha256": "48506cee2c5ef1d361d16ba2c21094d3894ed8aabebf9b5afe6ad966107e3492",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "region-sweep"
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 120"
+          ],
+          "text_sha256": "28627c64c301151bee28c5dc1b1f51116fee9662adb542c10d9016ab53339647",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "word-overlap"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "removed",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 120"
+            ],
+            "text_sha256": "28627c64c301151bee28c5dc1b1f51116fee9662adb542c10d9016ab53339647",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "anchor_id": "a4-candidate-miss",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title I",
+          "sec. 130"
+        ],
+        "text_sha256": "4539e4b4889079c2a00afeae0bfc1439840ef2379a1fb81c8ba27361ad476d6b",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "one-to-one",
+        "oracle": "document-search",
+        "adjudicator": "synthetic",
+        "change_type": "moved",
+        "counterparts": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title III",
+              "sec. 730"
+            ],
+            "text_sha256": "270dcef86fb58fc9adbbc1c10502f909aa93fa7c1fe6e2a33c21c83fdca709e2",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "browse"
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 131"
+          ],
+          "text_sha256": "9d42943ed281f54c5ae47101b1d19526df4cb705af8284914b35747d8f93809a",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "removed",
+        "assigned": []
+      }
+    },
+    {
+      "anchor_id": "a5-ranking-miss",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title II",
+          "sec. 200"
+        ],
+        "text_sha256": "66220e71591b2d933c0e935c138ebfd60710b91fe2fb7599eced4430b3dbb3c9",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "one-to-one",
+        "oracle": "region-exhaustive",
+        "region_id": "title II",
+        "adjudicator": "synthetic",
+        "change_type": "modified",
+        "counterparts": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title II",
+              "sec. 200"
+            ],
+            "text_sha256": "31bacdacdca956170206b243515074991b4ce18a94c609d060a5b4b86b507300",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "suggested"
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title II",
+            "sec. 201"
+          ],
+          "text_sha256": "1cfb35e80310097fad3281785a24c2aef7df05555823e5edad2106058124fc6b",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment"
+          ]
+        },
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title II",
+            "sec. 202"
+          ],
+          "text_sha256": "5f2ce9e33029456b9d33fb338cf2376c0ef2fe9d6274f53d9d86399fb8d73f72",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 2,
+          "retrievers": [
+            "containment"
+          ]
+        },
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title II",
+            "sec. 200"
+          ],
+          "text_sha256": "31bacdacdca956170206b243515074991b4ce18a94c609d060a5b4b86b507300",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 3,
+          "retrievers": [
+            "word-overlap"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "modified",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title II",
+              "sec. 200"
+            ],
+            "text_sha256": "31bacdacdca956170206b243515074991b4ce18a94c609d060a5b4b86b507300",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "anchor_id": "a6-collision-winner",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title II",
+          "sec. 210"
+        ],
+        "text_sha256": "730bea4ff16f200fb931b06cae08a5da8e279813775d7ed81e680b4a77946fe1",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "one-to-one",
+        "oracle": "region-exhaustive",
+        "region_id": "title II",
+        "adjudicator": "synthetic",
+        "change_type": "moved",
+        "counterparts": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 900"
+            ],
+            "text_sha256": "bc556e49fda2fa4f92c973d921e1ea35b9bf080709bf2b0781bca76ee65795ed",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "suggested"
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 900"
+          ],
+          "text_sha256": "bc556e49fda2fa4f92c973d921e1ea35b9bf080709bf2b0781bca76ee65795ed",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment",
+            "word-overlap"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "moved",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 900"
+            ],
+            "text_sha256": "bc556e49fda2fa4f92c973d921e1ea35b9bf080709bf2b0781bca76ee65795ed",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "anchor_id": "a7-collision-loser",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title II",
+          "sec. 211"
+        ],
+        "text_sha256": "20377cec9f51f6bf5ba1fa64649f3b1614e4eee833fd0fc5893f24f6e0accbaf",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "none",
+        "oracle": "region-exhaustive",
+        "region_id": "title II",
+        "adjudicator": "synthetic",
+        "change_type": "removed",
+        "counterparts": []
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title I",
+            "sec. 900"
+          ],
+          "text_sha256": "bc556e49fda2fa4f92c973d921e1ea35b9bf080709bf2b0781bca76ee65795ed",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "modified",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title I",
+              "sec. 900"
+            ],
+            "text_sha256": "bc556e49fda2fa4f92c973d921e1ea35b9bf080709bf2b0781bca76ee65795ed",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "anchor_id": "a8-suggested-only",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title II",
+          "sec. 220"
+        ],
+        "text_sha256": "ce609b5bf3b974a84907e237aca3011286182be9b1b87cad7b4e9cf5d0be355f",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "one-to-one",
+        "oracle": "suggested-list",
+        "adjudicator": "synthetic",
+        "change_type": "modified",
+        "counterparts": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title II",
+              "sec. 220"
+            ],
+            "text_sha256": "58e0dc385cff25c9c791473b2bfafc47787ecdc98366f2aa13dede357dce251c",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000",
+            "found_via": "suggested"
+          }
+        ]
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title II",
+            "sec. 220"
+          ],
+          "text_sha256": "58e0dc385cff25c9c791473b2bfafc47787ecdc98366f2aa13dede357dce251c",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "word-overlap"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "modified",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title II",
+              "sec. 220"
+            ],
+            "text_sha256": "58e0dc385cff25c9c791473b2bfafc47787ecdc98366f2aa13dede357dce251c",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "anchor_id": "a9-uncertain",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title II",
+          "sec. 230"
+        ],
+        "text_sha256": "2b12242f306cde1c5f3670f1ea20dd4d6390316bd23102f2cb9d640f48b174d7",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "uncertain",
+        "oracle": "region-exhaustive",
+        "region_id": "title II",
+        "adjudicator": "synthetic",
+        "change_type": "modified",
+        "counterparts": []
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title II",
+            "sec. 231"
+          ],
+          "text_sha256": "7616550f9fc176b209e2cb22dd9c9bc4483cf4a8dcf4e5eda36c249801d7aae0",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "modified",
+        "assigned": []
+      }
+    },
+    {
+      "anchor_id": "a10-challenge-false-keep",
+      "schema_version": "pass2-anchor-v1",
+      "anchor": {
+        "bill": "000-synthetic-1",
+        "version": "1_old",
+        "match_path": [
+          "title III",
+          "sec. 300"
+        ],
+        "text_sha256": "e80fb65ac70384bd8bab0358d60b7cbe96de5b2de7c095e0d8695852e9c673af",
+        "source_sha256": "c69dc9fa8b69341d2a67e72629faf631d296b2a5bc214b4be6c7d87e18bfdc24",
+        "parser_commit": "0000000000000000000000000000000000000000"
+      },
+      "truth": {
+        "relation": "none",
+        "oracle": "region-exhaustive",
+        "region_id": "title III",
+        "adjudicator": "synthetic",
+        "change_type": "removed",
+        "counterparts": []
+      },
+      "candidates": [
+        {
+          "bill": "000-synthetic-1",
+          "version": "2_new",
+          "match_path": [
+            "title III",
+            "sec. 301"
+          ],
+          "text_sha256": "864f7bf04c21e6ddaca059762cbc3864945515d059b2cbd1b3997b42e60335e1",
+          "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+          "parser_commit": "0000000000000000000000000000000000000000",
+          "rank": 1,
+          "retrievers": [
+            "containment"
+          ]
+        }
+      ],
+      "system": {
+        "change_type": "modified",
+        "assigned": [
+          {
+            "bill": "000-synthetic-1",
+            "version": "2_new",
+            "match_path": [
+              "title III",
+              "sec. 301"
+            ],
+            "text_sha256": "864f7bf04c21e6ddaca059762cbc3864945515d059b2cbd1b3997b42e60335e1",
+            "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
+            "parser_commit": "0000000000000000000000000000000000000000"
+          }
+        ]
+      },
+      "stratum": "high-containment-different",
+      "is_challenge": true
+    }
+  ]
+}

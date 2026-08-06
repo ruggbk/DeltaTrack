@@ -14,6 +14,14 @@ Two things this measures, both on the union corpus (see corpus_roots):
      is used here only as an INDEPENDENT second opinion for triage; it is not ground truth, and
      nothing below is a labeled "same".
 
+     WHAT THE DENOMINATOR IS, said plainly because the first review's summary of it was read as
+     something stronger. It is: removed financial provisions occurring in a version pair that
+     also contains at least one added financial provision. It is NOT a set of known
+     correspondences. Some of these provisions were simply deleted and correspond to nothing. So
+     the share below the floor is the share of the DISCOVERY population the miner cannot reach --
+     a statement about the sampling frame, not about missed matches. How many are genuine missed
+     correspondences is unknown until they are labeled, and this probe cannot narrow it.
+
   2. TEXT SOURCE. Production extracts amounts from `amount_source_old/new`; the miner extracts
      from `old_text/new_text`. NodeDiff documents the two as a no-op on the current corpus and
      pins it with a regression test. This re-derives that agreement independently rather than
@@ -33,7 +41,7 @@ REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from corpus_roots import adjacent_pairs  # noqa: E402
+from corpus_roots import adjacent_pairs, banner  # noqa: E402
 from mine_common import containment, vec  # noqa: E402
 
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
@@ -45,6 +53,8 @@ CONTAIN_STRONG = 0.70  # the paper's keep bar, used here as an independent secon
 
 
 def main() -> None:
+    print(banner())
+    print()
     below, above, no_partner = [], [], 0
     src_checked = src_disagree = 0
     disagreements = []
@@ -106,6 +116,8 @@ def main() -> None:
     print(f"1. DISCOVERY GATE  (union corpus: {n_pairs} adjacent version pairs)")
     print("=" * 100)
     tot = len(above) + len(below)
+    print("  DENOMINATOR: removed financial provisions in a version pair that also has >= 1 added")
+    print("  financial provision. NOT known correspondences -- some correspond to nothing at all.")
     print(f"  removed financial nodes with >=1 added financial partner available : {tot}")
     pa, pb = len(above) / max(tot, 1), len(below) / max(tot, 1)
     print(f"    best word-overlap >= {SPLIT_SIM} -> miner CAN see them    : {len(above)} ({pa:.1%})")
@@ -113,8 +125,23 @@ def main() -> None:
     print()
     hidden_strong = [r for r in below if r[2] >= CONTAIN_STRONG]
     print(f"  Of the invisible ones, how many have a STRONG containment partner (>= {CONTAIN_STRONG})?")
-    print(f"    {len(hidden_strong)} of {len(below)}  -- these are the severe-false-split shape the")
-    print("    miner is meant to sample, and the word floor removes them from discovery.")
+    print(f"    {len(hidden_strong)} of {len(below)}  -- these have the severe-false-split SHAPE the")
+    print("    miner is meant to sample, and the word floor removes them from discovery. How many")
+    print("    are genuine missed correspondences is unknown until a human rules them.")
+    print()
+    print("  SUPPORT BY BILL (which bills the discovery population and the exclusion come from):")
+    bills_tot: dict[str, int] = {}
+    bills_below: dict[str, int] = {}
+    bills_strong: dict[str, int] = {}
+    for r in above + below:
+        bills_tot[r[0]] = bills_tot.get(r[0], 0) + 1
+    for r in below:
+        bills_below[r[0]] = bills_below.get(r[0], 0) + 1
+        if r[2] >= CONTAIN_STRONG:
+            bills_strong[r[0]] = bills_strong.get(r[0], 0) + 1
+    print(f"    {'bill':<18}{'in population':>15}{'below floor':>14}{'+ strong contain':>19}")
+    for b in sorted(bills_tot, key=lambda k: -bills_tot[k]):
+        print(f"    {b:<18}{bills_tot[b]:>15}{bills_below.get(b, 0):>14}{bills_strong.get(b, 0):>19}")
     print()
     print("  Where Tanker (word-overlap 0.255) would sit: below the floor, i.e. undiscoverable.")
     print()
