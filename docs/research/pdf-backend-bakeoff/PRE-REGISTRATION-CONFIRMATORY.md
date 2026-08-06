@@ -1,7 +1,11 @@
 # Pre-registration: narrow confirmatory run
 
 - Status: **frozen protocol. Nothing has been run against it.** Revised 2026-08-05 after
-  methodological review of the first proposal.
+  methodological review of the first proposal, then **amended 2026-08-05 before execution**
+  on four points: per-metric sabotage controls (B0), an unfillable holdout stratum (P2 #8),
+  gold-sample blinding, and an inside-the-sandbox known-bad control. All four were amended
+  **with no results visible**, which is why they are amendments and not deviations —
+  the [DEVIATIONS](#deviations) table opens when the first score is produced.
 - Supersedes the 2026-08-05 *proposal* of the same name. It supersedes nothing else.
   [`PRE-REGISTRATION.md`](PRE-REGISTRATION.md) remains the record of what the exploratory
   spike committed to; [`RESULTS.md`](RESULTS.md) remains the authoritative record of the
@@ -83,7 +87,20 @@ Executed **before** either candidate runs, output committed to
    | 5 | Bill whose longest version is **< 20 printed pages** | 2 | document length |
    | 6 | Bill whose longest version is **> 400 printed pages** | 1 | document length |
    | 7 | Bill with a watermarked Senate print (`rs` / `pcs`) | 1 | watermark / layout |
-   | 8 | Conference report or a real committee print (`CPRT-*`) | 1 | GPO production class |
+   | 8 | Bill with a chamber-crossing amendment print (`eah` / `eas`) | 1 | typeface class — DeVinne-Italic, only 5 documents in P1 |
+
+   **Stratum 8 changed, because the original was unfillable by P2's own rule.** It asked for
+   a conference report or a committee print. Neither is a bill: they carry no bill XML and
+   have no adjacent-version pairs, so neither can satisfy "≥ 2 versions each with PDF and
+   XML", and a stratum that can never fill would have silently spent the adequacy budget.
+   **Conference reports and committee prints move to P3a**, where they can be tested for
+   robustness and safe failure without an XML reference.
+
+   **Honest limit on the typeface axis:** the BILLS collection offers effectively three
+   typesetting classes — DeVinne, DeVinne-Italic and NewCenturySchlbk-Roman (enrolled) —
+   and **P1 already contains all three**. P2 can add new *bills* within those classes and
+   can thin out P1's concentration; it cannot add a fourth class. Any GPO production class
+   beyond those three is reachable only through P3, without XML.
 
 4. **Within a stratum**: candidates sorted by bill id, permuted with seed **20260805**, and
    the first that satisfies the two-dual-format-versions rule is taken. Ties are broken by
@@ -116,14 +133,15 @@ test and never was.
 
 | Sub-population | Fixtures | What it can support |
 |---|---|---|
-| P3a real, non-corpus GPO | the existing 12, plus any conference report / `CPRT-*` fetched for stratum 8 | robustness across GPO print classes |
+| P3a real, non-corpus GPO | the existing 12, **plus one real conference report (`CRPT-*`) and one real committee print (`CPRT-*`)**, both required | robustness and safe failure across GPO print classes. **No accuracy metric** — these have no XML reference and are not bills |
 | P3b synthetic degradations | a rasterized (image-only) corpus PDF; a non-GPO producer PDF generated locally | **safe-failure only, never accuracy** |
 
 **Source classes that remain unvalidated after this run**, listed in the results as a
 standing section rather than a caveat: chair's marks; discussion drafts; genuinely
 pre-publication committee documents; Word-generated legislative drafts; real (not
-synthesized) image-only or scanned PDFs; conference-report layouts if stratum 8 fails to
-fill; other non-GPO PDFs. Obtaining real pre-publication material needs a congressional
+synthesized) image-only or scanned PDFs; conference-report and committee-print layouts as
+*accuracy* claims, since P3a can only test robustness and safe failure on them; other
+non-GPO PDFs. Obtaining real pre-publication material needs a congressional
 contact and is outside what any protocol here can arrange.
 
 ### Safe failure is a first-class gate
@@ -259,17 +277,51 @@ means over the **six** documents in `redteam_ablation.py`, not over 52. Confirma
 not be numerically comparable to them, and the results must say so rather than appear to
 replicate a number it never measured.
 
-### B0 — harness sensitivity control (a gate on the metrics, not on the backends)
+### B0 — harness sensitivity controls (a gate on the metrics, not on the backends)
 
 A metric that cannot distinguish good extraction from bad cannot rank anything, and an
 all-green sweep looks identical either way.
 
-A synthetic **`sabotage`** backend is scored alongside the candidates: `pdfium-wasm` output
-with 5 % of glyphs deleted (seed 20260805). **Every B metric must score `sabotage`
-measurably worse than both candidates.** A metric that does not is **void for this run** and
-is reported as void — not as a tie.
+**One uniform sabotage is not enough.** A 5 % random glyph dropout garbles text but barely
+touches heading attachment, so a metric that survives it may be blind rather than robust —
+and declaring it void on that evidence is itself a false negative. **Each metric therefore
+gets its own sabotage, injecting the specific fault that metric claims to catch**, applied
+to `pdfium-wasm` glyph output with seed 20260805. Glyph field indices are
+`contract.GLYPH_FIELDS`.
 
-The same control runs against Concern A: `sabotage` must **fail** A1, A2 and A4.
+| ID | Targets | Injected fault | Must happen |
+|---|---|---|---|
+| **S1** | B1 | delete 5 % of glyphs, uniformly at random | B1 falls |
+| **S2** | B2 | on every line whose max `font_size` exceeds the page's dominant body size, set all its glyphs to the line median — collapsing the small-caps size band | B2 falls |
+| **S3** | B3a | delete the leading margin-number glyph run on 5 % of numbered lines | B3a falls |
+| **S4** | B5 | shift heading lines' `baseline`/`y0`/`y1` down one body line-height: headings keep their text, but attach to the wrong block | B5 falls **while B2 moves less than 0.020** |
+| **S5** | B6 | delete agency-level heading lines only, keeping accounts, so their children reparent | B6 falls **by more than B2 does** |
+| **S6** | B7 | relabel a sampled amount's side (old ↔ new) | the corroboration check flags it |
+| **S7** | B8 | the ten corrupted gold items (wrong amount, wrong heading, wrong line number) | the scorer flags all ten |
+| **SA1** | A1 | perturb one digit of one amount | A1 **fails** |
+| **SA2** | A2 | delete one change block's glyphs | A2 **fails** |
+| **SA3** | A4 | delete a single glyph | A4 **fails** |
+
+**The discriminating requirements on S4 and S5 are the point, not decoration.** S4 leaves
+every heading label intact and only moves where it sits; if B2 falls as far as B5 does, then
+B2 and B5 are measuring the same thing and the association metric adds nothing. Same for S5
+against B6.
+
+Pre-committed verdicts:
+
+- **B1, B2, B3a, B5, B6** — a metric whose own sabotage does not move it **beyond that
+  metric's practical threshold** is **void for this run**, reported as void, and its Δ is
+  not published as evidence.
+- **B7 and B8** have no Δ and no threshold; their controls (S6, S7) are pass/fail. A missed
+  flag voids that metric outright.
+- **A1, A2, A4** — a gate its own sabotage does not fail is void, and a candidate's pass on
+  a void gate is not evidence of parity.
+- Where a discriminating requirement fails, the two metrics involved are reported as
+  **not separable** — a different finding from either being blind, and it must not be
+  written as one.
+
+**Sabotage variants are scored as their own pseudo-backends. They are never pooled with the
+candidates, never enter Δ, and never appear in a ranking table.**
 
 ### Statistics: paired cluster bootstrap by bill
 
@@ -409,11 +461,34 @@ hand; **until he signs it off, every gold-derived number is published as provisi
 4. **Recorded per item**: document; page; printed line number(s) where the page has them;
    exact source text of the line; the heading / account / agency context as printed; the
    amount as printed; and for change items the expected relationship.
-5. **Ordering.** The gold file is committed **before** any candidate is scored against it.
-6. **Proof the gold set can fire.** Ten deliberately corrupted items (wrong amount, wrong
+5. **Blinding.** The frame is built from backend output, so the sampler knows every
+   candidate's answer. **The adjudicator must not.** The sampler writes two files:
+
+   | File | Contents | Read by the adjudicator? |
+   |---|---|---|
+   | `gold_key.json` | item id → document, page, **which backends contributed and what each said**, XML value, stratum | **no** — committed, then not opened until scoring |
+   | `gold_blind.json` | item id → document, page, rendered image path, **a geometric locator (bounding box in PDF points)**, and the question | **yes — this is all it sees** |
+
+   A blind record carries **no backend name, no candidate text, no XML value, and no stratum
+   label**. Localisation is by bounding box, because a box says *where to look* without
+   saying *what is there*. Items are presented in a seeded shuffle (20260805) across all
+   strata, so neighbouring items do not reveal which cell — and therefore which expected
+   difficulty — an item came from.
+
+6. **Ordering, enforced by hash rather than by intent.** The adjudicated answers are written
+   to `gold_adjudicated.json` and **committed, with their SHA-256 recorded, before
+   `gold_key.json` is joined to them**. The join is a separate committed script. The commit
+   order is the evidence that adjudication preceded exposure; "I adjudicated first" is not.
+7. **Proof the gold set can fire.** Ten deliberately corrupted items (wrong amount, wrong
    heading, wrong line number) go into a separate control file. **The scorer must flag all
    ten.** A scorer that passes the control silently cannot distinguish a correct backend
    from a broken comparison, and the run is void for B8.
+8. **Blinding residue that cannot be removed, stated rather than papered over.** The
+   adjudicator is the same agent that has read `RESULTS.md` and therefore carries the
+   exploratory prior that pdfminer led the independent metrics. No file-level blinding
+   removes that. It is a standing limitation on B8, it is one of the reasons the 20-item
+   human check exists, and **B8 alone may never decide a ranking** — it corroborates or
+   contradicts B1–B6, which are computed without an adjudicator.
 
 ---
 
@@ -517,10 +592,29 @@ page, and require it to **succeed**:
 - **Stronger (attempted): a Linux container with `--network none`.** The Docker daemon is
   **not running** on this machine at freeze time; if it is unavailable at execution time this
   is recorded as **NOT RUN**, never inferred from the macOS result.
-- **Proof the isolation check can fire**, per the rule that a guard's probe must be inert if
-  the guard fails open: the same command outside the sandbox must reach the local
-  observation server. A payload that only ever touches `127.0.0.1:8973` is harmless if
-  isolation fails open, which is why it is the payload.
+**Proof the isolation check can fire.** An unsandboxed run reaching the observation server
+proves only that the *server* works; it says nothing about whether the sandboxed run's
+silence came from the sandbox or from a dead listener, and it is evidence gathered in a
+different environment from the one under test. **Both halves must run, and both inside the
+same invocation window:**
+
+| Control | Where it runs | Required outcome | What it establishes |
+|---|---|---|---|
+| **known-bad, inside the sandbox** | in the sandboxed process, alongside the comparison | **no request received** | the silence is attributable to the sandbox, not to the app happening not to call out |
+| **observer liveness, outside the sandbox** | the harness process, same run, same listener, overlapping window | **request received** | the listener was alive and observing throughout — so "nothing received" means blocked, not unwatched |
+
+Neither alone is sufficient: the first cannot distinguish a working sandbox from a dead
+listener, and the second cannot attribute anything to the sandbox. **A run missing either
+control is void, not a pass.**
+
+Per the rule that a guard's probe must be inert if the guard fails open, both beacons target
+`127.0.0.1:8973` — our own listener — carrying a canary. If isolation fails open, the worst
+outcome is a loopback request we wanted to see anyway.
+
+A third check separates loopback from the network generally: **a sandboxed request to an
+external host must fail to resolve**, so a pass cannot come from loopback being blocked by
+something other than the policy. Verified during protocol design; re-run and recorded each
+time.
 
 ---
 
@@ -669,11 +763,11 @@ The minimum another reviewer needs. Every command runs from the repo root with
 
 | Goal | Artifact / command |
 |---|---|
-| **1. Verify protocol compliance** | This file at its freeze commit; `results/DEVIATIONS.md`; `results/holdout_membership.json` (timestamped before any score file); `results/gold_sample.json` (timestamped before any B8 score) |
+| **1. Verify protocol compliance** | This file at its freeze commit; `results/DEVIATIONS.md`; `results/holdout_membership.json`, committed before any score file. **Check `git log` order, not file timestamps**: `gold_adjudicated.json` must be committed before `gold_key.json` is joined to it, and that ordering is the only evidence the adjudication was blind |
 | **2. Regenerate tables from raw output** | `probes/fill_results.py` — every table in the results document is generated, none transcribed |
-| **3. Reproduce migration parity** | `probes/score_phase2.py` (13 accepted) and `probes/redteam_unguarded.py` (the 2 declined, guard bypassed); `sabotage` must fail both |
-| **4. Reproduce independent-accuracy statistics** | `probes/score_phase1.py` → `probes/report_confirmatory.py`, which emits Δ, the paired cluster-bootstrap CI, the practical-threshold verdict and the B0 sabotage row together. **A Δ table without its B0 row is not reviewable** |
-| **5. Reproduce the security table** | `probes/redteam_egress2.py` and `probes/redteam_csp_mitigation.py` for the per-vector control/policy matrix; `probes/phase4_egress.py` for the environment-isolation run |
+| **3. Reproduce migration parity** | `probes/score_phase2.py` (13 accepted) and `probes/redteam_unguarded.py` (the 2 declined, guard bypassed). **SA1 / SA2 / SA3 must fail A1 / A2 / A4 respectively**; a gate its own sabotage does not fail is void |
+| **4. Reproduce independent-accuracy statistics** | `probes/score_phase1.py` → `probes/report_confirmatory.py`, which emits Δ, the paired cluster-bootstrap CI, the practical-threshold verdict and **every B0 row (S1–S5, with the S4/S5 separability checks)** together. **A Δ table without its own metric's B0 row is not reviewable** |
+| **5. Reproduce the security table** | `probes/redteam_egress2.py` and `probes/redteam_csp_mitigation.py` for the per-vector control/policy matrix; `probes/phase4_egress.py` for the environment-isolation run, which must carry **both** the inside-sandbox known-bad and the same-run observer-liveness control |
 
 **Independence.** The execution agent does not self-certify these conclusions. The
 deliverables are: this frozen preregistration, immutable raw outputs, scripts that regenerate
@@ -689,7 +783,7 @@ frozen above; each is listed here so it is challenged rather than discovered.
 
 | # | Choice | Made | Alternative, and why it was not taken |
 |---|---|---|---|
-| 1 | Gold-sample adjudicator | **Agent reading CoreGraphics-rendered page images**, with a 20-item human check pending | True human adjudication of 100 items. Nobody is at the keyboard; blocking the run on it delivers nothing. The claim is downgraded and labelled instead |
+| 1 | Gold-sample adjudicator | **Agent reading CoreGraphics-rendered page images**, blinded to backend output by a two-file split and a commit-order proof, with a 20-item human check pending | True human adjudication of 100 items. Nobody is at the keyboard; blocking the run on it delivers nothing. The claim is downgraded and labelled, and B8 may not decide a ranking on its own |
 | 2 | B3 line-number oracle | **Split**: B3a self-consistency (no reference) + B3b exactness on gold pages | The old "vs the page's own margin numbers" has no implementation — the exploratory metric scored against the **incumbent**. There is no corpus-scale margin-number oracle that is not a backend |
 | 3 | PDF.js in A / B | **Excluded**; measured in E only | Building the operator-list adapter. It is a large piece of work with no concrete trigger, and it would delay every other answer |
 | 4 | B metric weighting | **Bill-weighted** (per-bill mean, then mean over bills) | Document-weighted, which lets one 6-document bill dominate. Reported as a secondary sensitivity |
