@@ -355,7 +355,34 @@ unsandboxed liveness beacon is what distinguishes a working sandbox from a dead 
 # Concern D — performance
 
 <!-- D_PERF -->
+
+> **THIS RUN IS VOID.** load average at start >= 1.0: load average 5.27 against a ceiling of 1.0. The numbers are published as void rather than withheld, and no gate verdict below counts. The exploratory gate-9 figure that failed to reproduce was measured under exactly this condition, undeclared.
+
+Document: `tests/corpus/119-hr-1/1_reported-in-house.pdf`. Estimator: minimum of trials of 5.
+
+| backend | min | median | max | spread | cpu/wall at min | D1 | D2 |
+|---|---|---|---|---|---|---|---|
+| pdfium-native | 6.32 s | 6.33 s | 6.45 s | 0.14 s | 1.0 | VOID -- pass | VOID -- pass |
+| pdfium-wasm | 5.40 s | 5.41 s | 5.44 s | 0.04 s | 1.03 | VOID -- pass | VOID -- pass |
+| pdfminer | 17.31 s | 19.85 s | 20.62 s | 3.31 s | 0.99 | VOID -- pass | VOID -- pass |
+
 <!-- /D_PERF -->
+
+**Void twice over, and the second reason matters more than the first.** The load-average
+condition failed (5.27 against a ceiling of 1.0), which the harness detected and declared
+itself. Separately, gate D-1 was frozen as *in-browser* and this probe times native
+extraction instead — an oversight logged in [`DEVIATIONS.md`](results/DEVIATIONS.md).
+
+So these numbers **cannot resolve the exploratory gate-9 UNRESOLVED verdict in either
+direction**. Native pdfminer at 17.3 s says nothing about Pyodide pdfminer, which is
+interpreted Python compiled to WASM and is where the exploratory 37.9 s / 69.2 s figures
+came from. The one thing worth carrying is the relative ordering, which is stable across
+both runs and does not depend on the ceiling: **PDFium-WASM ≈ PDFium-native, pdfminer ~3×
+slower natively and 8–10× slower in-browser.**
+
+`cpu/wall ≈ 1.00` for all three, so none was CPU-starved; the machine was busy but each
+process held a core. That is the diagnosis the exploratory run could not make.
+
 
 ---
 
