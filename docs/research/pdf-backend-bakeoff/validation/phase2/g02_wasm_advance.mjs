@@ -63,6 +63,7 @@ let withAdvance = 0;
 let zeroAdvance = 0;
 const zeroCps = {};
 const sample = [];
+const seq = [];
 // Cache keyed on the font pointer, exactly as the native probe does, so the two are
 // measuring the same call pattern and the cost comparison stays honest.
 const widthCache = new Map();
@@ -98,6 +99,11 @@ for (let i = 0; i < n; i++) {
   if (sample.length < 12 && cp > 32) {
     sample.push({ cp, ch: String.fromCharCode(cp), ox: +ox.toFixed(3), size, emAdv });
   }
+  // Full per-character [codepoint, advance] sequence, for the index-aligned comparison
+  // against native in the findings. Keyed by codepoint alone it would collapse two fonts
+  // on one page onto one value, which is what made the first native-vs-WASM comparison
+  // report a false mismatch on '9'.
+  seq.push([cp, emAdv]);
 }
 
 pdfium.FPDFText_ClosePage(tp);
@@ -116,5 +122,6 @@ console.log(
     zeroAdvance,
     zeroAdvanceCodepoints: zeroCps,
     sample,
+    seq,
   }),
 );
