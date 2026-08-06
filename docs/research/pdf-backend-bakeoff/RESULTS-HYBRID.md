@@ -105,7 +105,7 @@ Counters from the hybrid adapter itself, aggregated over all 52 corpus documents
 | **pages where CountChars != len(text)** | 0 |
 | **ink the engine could not name** | 0 |
 | **unicode map errors** | 0 |
-| **characters with an empty font name** | 0 |
+| **non-generated characters with an empty font name** | 0 |
 | generated-character rate | 4.17% |
 
 <!-- /H_ADAPTER -->
@@ -290,17 +290,37 @@ Reference is **production** (`extract_clean_pages`) on the 42 corpus documents p
 
 ## The canonical diff
 
+This is the product's actual output, and it separates two things the earlier tables do not.
+
 <!-- H_PAIRS -->
 
-Reference is **production**'s canonical diff over 12 consecutive version pairs. `amounts` is the `Counter[(old, new, kind)]` of `amount_entries` — the money, and the highest-consequence field. `changes` is the `Counter[(change_type, norm(old), norm(new))]` signature set, which embeds the line text and therefore cannot be byte-identical for any path that assembles lines geometrically; its **overlap** is the informative figure and the identity column is reported only so the distinction is visible.
+Reference is **production**'s canonical diff over 15 consecutive version pairs. `amounts` is the `Counter[(old, new, kind)]` of `amount_entries` — the money, and the highest-consequence field. `changes` is the `Counter[(change_type, norm(old), norm(new))]` signature set, which embeds the line text and therefore cannot be byte-identical for any path that assembles lines geometrically; its **overlap** is the informative figure and the identity column is reported only so the distinction is visible.
 
 | path | amount signatures identical | amount recall | change signatures identical | change recall |
 |---|---|---|---|---|
-| glyph | 12/12 | 1.0 (6726/6726) | 0/12 | 0.86106 (5429/6305) |
-| **hybrid** | 12/12 | 1.0 (6726/6726) | 0/12 | 0.99699 (6286/6305) |
-| pdfminer | 12/12 | 1.0 (6726/6726) | 0/12 | 0.89421 (5638/6305) |
+| glyph | 15/15 | 1.0 (10229/10229) | 0/15 | 0.87642 (6929/7906) |
+| **hybrid** | 15/15 | 1.0 (10229/10229) | 0/15 | 0.99671 (7880/7906) |
+| pdfminer | 15/15 | 1.0 (10229/10229) | 0/15 | 0.91437 (7229/7906) |
 
 <!-- /H_PAIRS -->
+
+**All three paths reproduce production's `amount_entries` exactly** — the same 10,229
+amount signatures, on 15 of 15 pairs. No path loses or invents money, so the glyph seam's
+heading defect is **not** an amount-extraction defect.
+
+**It is an attachment defect, and the two tables have to be read together.**
+`amount_entries` carries `(old, new, kind)`; it does not carry which account the amount sits
+under. That is H5, where the glyph path scores 0.99081 against the hybrid's 1.0. The failure
+mode is therefore precise: the right money, filed under a corrupted account name. That is
+worse than a missing amount rather than better, because it is invisible to every check that
+counts or sums — including, as `RESULTS-CONFIRMATORY.md` recorded, the ADR 0014 conservation
+check, which compared totals and passed.
+
+On change signatures the separation is large: the hybrid recovers 99.7 % of production's
+changes against the glyph path's 87.6 %. The identity column is 0/15 for every path,
+including pdfminer, because these signatures embed the line text and no geometrically
+assembled line matches `normalize_raw`'s output byte for byte. Recall is the figure that
+carries information here, which is why both are shown.
 
 ## The hybrid's entire heading-label error, named
 
@@ -528,7 +548,38 @@ falsify it is the one section 5 excludes: production declines unnumbered layouts
 enrolled bills it declines are precisely where the mid-line soft-hyphen branch fires.
 
 <!-- H_NORMALIZE_RAW -->
+
+Measured on the **production-declined** stratum — the unnumbered layouts, mostly enrolled bills, which section 5's parity table excludes and which are exactly where `normalize_raw`'s mid-line soft-hyphen branch exists to act (its docstring names them). A branch is counted as having fired by matching its own pattern against PDFium's raw page text.
+
+| document | mid-line hyphen branch fired | soft hyphens total | trailing spaces | **hyphen artifacts in hybrid** | **fused tokens in hybrid** |
+|---|---|---|---|---|---|
+| `113-hr-3547/6` | 3,466 | 3,514 | 29,321 | **0** | **1** |
+| `113-hr-83/7` | 3,731 | 3,787 | 32,583 | **0** | **4** |
+| **total** | | | | **0** | **5** |
+
+Every artifact instance, so the counts above can be read rather than trusted:
+
+- `fused: hybrid='General’’,' = production 'General' + '’’,'`
+- `fused: hybrid='provided' = production 'pro' + 'vided'`
+- `fused: hybrid='programs,' = production 'pro' + 'grams,'`
+- `fused: hybrid='Programs’’,' = production 'Pro' + 'grams’’,'`
+- `fused: hybrid='WAYS.—If' = production 'WAYS.—' + 'If'`
+
 <!-- /H_NORMALIZE_RAW -->
+
+**Reading this table.** The `mid-line branch fired` column exists so the zeros to its right
+mean something: it fires thousands of times per document, so a hybrid path that needed the
+branch would show the damage in the thousands, not the units.
+
+**A correction worth recording, because it is the kind that publishes cleanly.** The first
+version of this probe paired tokens against the other rendering's whole-document bag,
+asking "does some split of this token into two tokens present somewhere in the document
+exist?". At ~100k tokens that is trivially satisfiable, and it duly reported that the hybrid
+had fused `pro` + `vided`. Production's `pro` was from `a pro rata share`, on a different
+page, and had nothing to do with the word `provided`. A test satisfiable by coincidence
+cannot distinguish a defect from its absence, so it was replaced with a set difference over
+the tokens that actually carry a hyphen — the population the branches act on, where a
+coincidental match is not available.
 
 **Explicitly NOT retired, and this is the point of the split:** `strip_page_chrome`'s
 patterns, the chrome size ratio, the margin-number regex, `_merge_print_lines`,

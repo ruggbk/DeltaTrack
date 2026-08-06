@@ -79,41 +79,41 @@ def raw_page_texts(pdf: Path) -> list[str]:
 
 
 def classify(prod_text: str, hy_text: str) -> dict:
-    """Token-level differences between the two renderings, sorted into named kinds."""
-    p, h = Counter(prod_text.split()), Counter(hy_text.split())
-    only_p, only_h = p - h, h - p
-    hyphen = space = 0
-    samples: list[str] = []
+    """Direct measures of the damage `normalize_raw`'s hyphen branches prevent.
 
-    # A hyphen artifact: the same token appears on the other side with hyphens stripped.
-    h_nohyph = {t.replace("-", ""): t for t in only_h}
-    p_nohyph = {t.replace("-", ""): t for t in only_p}
-    for t in list(only_p):
-        k = t.replace("-", "")
-        if k in h_nohyph and h_nohyph[k] != t:
-            hyphen += only_p[t]
-            if len(samples) < 5:
-                samples.append(f"hyphen: production={t!r} hybrid={h_nohyph[k]!r}")
+    WHAT THIS DELIBERATELY DOES NOT DO, because the first version of it did and was wrong:
+    it does not pair tokens by searching the other side's whole-document bag. At ~100k
+    tokens, "does SOME split of this token into two tokens present somewhere in the
+    document exist" is trivially satisfiable, and it reported production's legitimate
+    `a pro rata share` as evidence that the hybrid had fused `pro` + `vided` — two
+    unrelated words from different pages. A test that can be satisfied by coincidence
+    cannot distinguish a defect from its absence.
 
-    # A space artifact: a token on one side is the concatenation of two on the other.
-    for t in list(only_h):
-        if t in p_nohyph.values():
-            continue
-        for i in range(2, len(t) - 1):
-            if t[:i] in p and t[i:] in p:
-                space += only_h[t]
-                if len(samples) < 10:
-                    samples.append(f"fused: hybrid={t!r} = production {t[:i]!r} + {t[i:]!r}")
-                break
-
+    What replaces it is a set difference over the tokens that CARRY a hyphen, which is
+    exactly the population the branches act on. If the hybrid failed to rejoin `pro-vided`,
+    that token appears in its hyphenated set and not in production's. A stray soft-hyphen
+    character surviving into the rendered text is counted directly, as is a token left
+    ending in a hyphen — an unrejoined syllable break, the specific failure the mid-line
+    branch exists to prevent.
+    """
+    p_tok, h_tok = prod_text.split(), hy_text.split()
+    p_hy = {t for t in p_tok if "-" in t}
+    h_hy = {t for t in h_tok if "-" in t}
+    only_h = sorted(h_hy - p_hy)
+    only_p = sorted(p_hy - h_hy)
     return {
-        "tokens_production": sum(p.values()),
-        "tokens_hybrid": sum(h.values()),
-        "only_production": sum(only_p.values()),
-        "only_hybrid": sum(only_h.values()),
-        "hyphen_artifact": hyphen,
-        "space_artifact": space,
-        "samples": samples,
+        "tokens_production": len(p_tok),
+        "tokens_hybrid": len(h_tok),
+        "trailing_hyphen_production": sum(1 for t in p_tok if t.endswith("-")),
+        "trailing_hyphen_hybrid": sum(1 for t in h_tok if t.endswith("-")),
+        "soft_hyphen_chars_production": prod_text.count("￾") + prod_text.count("\xad"),
+        "soft_hyphen_chars_hybrid": hy_text.count("￾") + hy_text.count("\xad"),
+        "hyphenated_tokens_production": len(p_hy),
+        "hyphenated_tokens_hybrid": len(h_hy),
+        "hyphenated_only_in_hybrid": len(only_h),
+        "hyphenated_only_in_production": len(only_p),
+        "samples_only_in_hybrid": only_h[:8],
+        "samples_only_in_production": only_p[:8],
     }
 
 
@@ -148,13 +148,16 @@ def main() -> None:
         rows.append(entry)
         d = entry["diff"]
         print(
-            f"  [{len(rows)}] {key:<22} declined={str(declined):<5} "
-            f"midline_hyphen_fired={fired['midline_hyphen_lowercase']:<4} "
-            f"hyphen_artifacts={d['hyphen_artifact']:<4} fused={d['space_artifact']}",
+            f"  [{len(rows)}] {key:<22} midline_branch_fired={fired['midline_hyphen_lowercase']:<5} "
+            f"trailing-hyphen prod/hyb={d['trailing_hyphen_production']}/{d['trailing_hyphen_hybrid']}  "
+            f"soft-hyphen chars prod/hyb={d['soft_hyphen_chars_production']}/{d['soft_hyphen_chars_hybrid']}  "
+            f"hyphenated-only-in-hybrid={d['hyphenated_only_in_hybrid']}",
             file=sys.stderr,
         )
-        for s in d["samples"][:3]:
-            print(f"        {s}", file=sys.stderr)
+        for s in d["samples_only_in_hybrid"][:4]:
+            print(f"        only in hybrid: {s!r}", file=sys.stderr)
+        for s in d["samples_only_in_production"][:4]:
+            print(f"        only in production: {s!r}", file=sys.stderr)
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps({"documents": rows}, indent=1))
@@ -167,8 +170,16 @@ def main() -> None:
     print("\nbranch firings over the documents scored:")
     for k, v in tot_fired.items():
         print(f"  {k:28} {v:,}")
-    print(f"\n  total hyphen artifacts: {sum(r['diff']['hyphen_artifact'] for r in rows)}")
-    print(f"  total fused tokens    : {sum(r['diff']['space_artifact'] for r in rows)}")
+    print(
+        f"\n  trailing-hyphen tokens   production={sum(r['diff']['trailing_hyphen_production'] for r in rows)}"
+        f"  hybrid={sum(r['diff']['trailing_hyphen_hybrid'] for r in rows)}"
+    )
+    print(
+        f"  soft-hyphen chars in text production={sum(r['diff']['soft_hyphen_chars_production'] for r in rows)}"
+        f"  hybrid={sum(r['diff']['soft_hyphen_chars_hybrid'] for r in rows)}"
+    )
+    print(f"  hyphenated tokens only in hybrid: {sum(r['diff']['hyphenated_only_in_hybrid'] for r in rows)}")
+    print(f"  hyphenated tokens only in production: {sum(r['diff']['hyphenated_only_in_production'] for r in rows)}")
     if args.out:
         print(f"\nwrote {args.out}")
 

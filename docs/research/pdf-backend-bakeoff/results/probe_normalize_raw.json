@@ -1,0 +1,48 @@
+{
+ "documents": [
+  {
+   "doc": "113-hr-3547/6",
+   "production_declined": true,
+   "branch_fired": {
+    "crlf": 29321,
+    "hyphen_plus_margin_number": 0,
+    "glued_chrome": 0,
+    "midline_hyphen_lowercase": 3466,
+    "other_soft_hyphen": 3514,
+    "trailing_space": 29321
+   },
+   "diff": {
+    "tokens_production": 290434,
+    "tokens_hybrid": 290466,
+    "trailing_hyphen_production": 28,
+    "trailing_hyphen_hybrid": 59,
+    "soft_hyphen_chars_production": 0,
+    "soft_hyphen_chars_hybrid": 0,
+    "hyphenated_tokens_production": 591,
+    "hyphenated_tokens_hybrid": 589,
+    "hyphenated_only_in_hybrid": 36,
+    "hyphenated_only_in_production": 38,
+    "samples_only_in_hybrid": [
+     "APPRO-",
+     "APPROPRIA-",
+     "AUTHOR-",
+     "Bankhead-",
+     "Bay-",
+     "Counter-",
+     "Defense-",
+     "ENVI-"
+    ],
+    "samples_only_in_production": [
+     "APPRO-PRIATIONS",
+     "APPROPRIA-TIONS",
+     "AUTHOR-IZED.\u2014",
+     "Administra-",
+     "Bankhead-Jones",
+     "Bay-Delta",
+     "Counter-Drug",
+     "ENVI-RONMENT,"
+    ]
+   }
+  }
+ ]
+}

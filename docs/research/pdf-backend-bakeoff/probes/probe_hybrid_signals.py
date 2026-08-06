@@ -150,6 +150,67 @@ def s3_font_roles(pages) -> dict:
     }
 
 
+def s4_geometry_agreement(pdf: Path, limit: int | None) -> dict:
+    """Do the sidecar VALUES agree with production's, not merely exist?
+
+    S2 asks whether a `glyph_size` and a `LineGeom` could be computed. That is coverage,
+    and coverage is compatible with computing the wrong number everywhere. The heading
+    detector consumes these values directly -- `glyph_size` drives ADR 0012's size bands
+    and `first_word_right` drives the major detector's stacked-vs-wrapped split -- so the
+    stronger question is whether they match what production derives for the same line.
+
+    Compared per (page, margin line number), which is the key production itself uses, over
+    the lines both paths recovered. Tolerance is 0.05 pt: these are floats derived through
+    different call paths, and an exact-equality test would report float noise as
+    disagreement.
+    """
+    import reconstruct_hybrid as R
+
+    from deltatrack.parsers.pdf_text import extract_clean_pages
+
+    prod = extract_clean_pages(pdf)
+    hy, _ = R.reconstruct(pdfium_hybrid.extract(pdf, limit)[0])
+    if limit:
+        prod = prod[:limit]
+
+    def index(pages):
+        out = {}
+        for pg in pages:
+            for ln in pg.lines:
+                if ln.line_number is not None and ln.geom is not None:
+                    out[(pg.page_number, ln.line_number)] = (ln.glyph_size, ln.geom)
+        return out
+
+    p, h = index(prod), index(hy)
+    shared = p.keys() & h.keys()
+    tol = 0.05
+    size_ok = left_ok = right_ok = fwr_ok = 0
+    samples = []
+    for k in shared:
+        (ps, pg_), (hs, hg) = p[k], h[k]
+        if ps is not None and hs is not None and abs(ps - hs) <= tol:
+            size_ok += 1
+        if abs(pg_.content_left - hg.content_left) <= tol:
+            left_ok += 1
+        if abs(pg_.content_right - hg.content_right) <= tol:
+            right_ok += 1
+        if abs(pg_.first_word_right - hg.first_word_right) <= tol:
+            fwr_ok += 1
+        elif len(samples) < 4:
+            samples.append(f"p{k[0]} L{k[1]}: production={pg_.first_word_right:.2f} hybrid={hg.first_word_right:.2f}")
+    n = len(shared) or 1
+    return {
+        "lines_production": len(p),
+        "lines_hybrid": len(h),
+        "lines_shared": len(shared),
+        "glyph_size_agree": round(size_ok / n, 5),
+        "content_left_agree": round(left_ok / n, 5),
+        "content_right_agree": round(right_ok / n, 5),
+        "first_word_right_agree": round(fwr_ok / n, 5),
+        "first_word_right_disagreements": samples,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("pdfs", nargs="+")
@@ -160,7 +221,13 @@ def main() -> None:
     out = {}
     for path in args.pdfs:
         pages, summary = pdfium_hybrid.extract(Path(path), args.limit)
-        entry = {"summary": summary, "S1": s1_generated(pages), "S2": s2_signals(pages), "S3": s3_font_roles(pages)}
+        entry = {
+            "summary": summary,
+            "S1": s1_generated(pages),
+            "S2": s2_signals(pages),
+            "S3": s3_font_roles(pages),
+            "S4": s4_geometry_agreement(Path(path), args.limit),
+        }
         out[path] = entry
         print(f"\n## {path}")
         s1, s2, s3 = entry["S1"], entry["S2"], entry["S3"]
@@ -174,6 +241,14 @@ def main() -> None:
         print(f"  S3 margin/body font separation {s3['separation_rate']} over {s3['numbered_lines_with_both']} lines")
         print(f"     margin={s3['margin_fonts']}  body={s3['body_fonts']}")
         print(f"     empty font-name rate on real chars: {s3['empty_font_name_rate']}")
+        s4 = entry["S4"]
+        print(f"  S4 sidecar VALUES vs production over {s4['lines_shared']} shared numbered lines:")
+        print(
+            f"     glyph_size={s4['glyph_size_agree']}  content_left={s4['content_left_agree']}  "
+            f"content_right={s4['content_right_agree']}  first_word_right={s4['first_word_right_agree']}"
+        )
+        for s in s4["first_word_right_disagreements"]:
+            print(f"     disagreement {s}")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

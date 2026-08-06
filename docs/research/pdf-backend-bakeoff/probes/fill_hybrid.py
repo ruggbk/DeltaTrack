@@ -385,23 +385,37 @@ def normalize_raw_table(data: dict) -> str:
         "Measured on the **production-declined** stratum — the unnumbered layouts, mostly "
         "enrolled bills, which section 5's parity table excludes and which are exactly where "
         "`normalize_raw`'s mid-line soft-hyphen branch exists to act (its docstring names them). "
-        "A branch is counted as having fired by matching its own pattern against PDFium's raw "
-        "page text.",
+        "A branch counts as having fired by matching its own pattern against PDFium's raw page "
+        "text, so the zeros to its right are only meaningful because the number to its left is "
+        "large.",
         "",
-        "| document | mid-line hyphen branch fired | soft hyphens total | trailing spaces | "
-        "**hyphen artifacts in hybrid** | **fused tokens in hybrid** |",
-        "|---|---|---|---|---|---|",
+        "| document | mid-line branch fired | trailing-hyphen tokens (prod / hybrid) | "
+        "soft-hyphen chars in text (prod / hybrid) | hyphenated tokens only in hybrid |",
+        "|---|---|---|---|---|",
     ]
-    tot_h = tot_f = 0
+    tot = {k: 0 for k in ("fired", "th_p", "th_h", "sh_p", "sh_h", "only_h")}
     for r in rows:
         b, d = r["branch_fired"], r["diff"]
-        tot_h += d["hyphen_artifact"]
-        tot_f += d["space_artifact"]
+        tot["fired"] += b["midline_hyphen_lowercase"]
+        tot["th_p"] += d["trailing_hyphen_production"]
+        tot["th_h"] += d["trailing_hyphen_hybrid"]
+        tot["sh_p"] += d["soft_hyphen_chars_production"]
+        tot["sh_h"] += d["soft_hyphen_chars_hybrid"]
+        tot["only_h"] += d["hyphenated_only_in_hybrid"]
         out.append(
-            f"| `{r['doc']}` | {b['midline_hyphen_lowercase']:,} | {b['other_soft_hyphen']:,} | "
-            f"{b['trailing_space']:,} | **{d['hyphen_artifact']}** | **{d['space_artifact']}** |"
+            f"| `{r['doc']}` | {b['midline_hyphen_lowercase']:,} | "
+            f"{d['trailing_hyphen_production']} / {d['trailing_hyphen_hybrid']} | "
+            f"{d['soft_hyphen_chars_production']} / {d['soft_hyphen_chars_hybrid']} | "
+            f"**{d['hyphenated_only_in_hybrid']}** |"
         )
-    out.append(f"| **total** | | | | **{tot_h}** | **{tot_f}** |")
+    out.append(
+        f"| **total** | **{tot['fired']:,}** | {tot['th_p']} / {tot['th_h']} | "
+        f"{tot['sh_p']} / {tot['sh_h']} | **{tot['only_h']}** |"
+    )
+    samples = [s for r in rows for s in r["diff"]["samples_only_in_hybrid"]]
+    if samples:
+        out += ["", "Hyphenated tokens the hybrid produces and production does not:", ""]
+        out += [f"- `{s}`" for s in samples[:20]]
     return "\n".join(out)
 
 

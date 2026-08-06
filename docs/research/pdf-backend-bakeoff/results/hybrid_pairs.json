@@ -451,6 +451,125 @@
      "H6_changes_candidate": 1283
     }
    }
+  },
+  {
+   "pair": "118-hr-4366/5->6",
+   "declined": {
+    "production": [
+     "v2"
+    ],
+    "glyph": [
+     "v2"
+    ],
+    "hybrid": [
+     "v2"
+    ],
+    "pdfminer": [
+     "v2"
+    ]
+   },
+   "n_amount_entries_production": 3468,
+   "n_changes_production": 1531,
+   "vs_production": {
+    "glyph": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 3468,
+     "H6_amounts_candidate": 3468,
+     "H6_change_overlap": 1435,
+     "H6_changes_candidate": 1531
+    },
+    "hybrid": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 3468,
+     "H6_amounts_candidate": 3468,
+     "H6_change_overlap": 1529,
+     "H6_changes_candidate": 1531
+    },
+    "pdfminer": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 3468,
+     "H6_amounts_candidate": 3468,
+     "H6_change_overlap": 1526,
+     "H6_changes_candidate": 1531
+    }
+   }
+  },
+  {
+   "pair": "118-hr-8752/1->2",
+   "declined": {
+    "production": [],
+    "glyph": [],
+    "hybrid": [],
+    "pdfminer": []
+   },
+   "n_amount_entries_production": 17,
+   "n_changes_production": 37,
+   "vs_production": {
+    "glyph": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 17,
+     "H6_amounts_candidate": 17,
+     "H6_change_overlap": 35,
+     "H6_changes_candidate": 37
+    },
+    "hybrid": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 17,
+     "H6_amounts_candidate": 17,
+     "H6_change_overlap": 35,
+     "H6_changes_candidate": 37
+    },
+    "pdfminer": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 17,
+     "H6_amounts_candidate": 17,
+     "H6_change_overlap": 35,
+     "H6_changes_candidate": 37
+    }
+   }
+  },
+  {
+   "pair": "118-hr-8774/1->2",
+   "declined": {
+    "production": [],
+    "glyph": [],
+    "hybrid": [],
+    "pdfminer": []
+   },
+   "n_amount_entries_production": 18,
+   "n_changes_production": 33,
+   "vs_production": {
+    "glyph": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 18,
+     "H6_amounts_candidate": 18,
+     "H6_change_overlap": 30,
+     "H6_changes_candidate": 32
+    },
+    "hybrid": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 18,
+     "H6_amounts_candidate": 18,
+     "H6_change_overlap": 30,
+     "H6_changes_candidate": 32
+    },
+    "pdfminer": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 18,
+     "H6_amounts_candidate": 18,
+     "H6_change_overlap": 30,
+     "H6_changes_candidate": 32
+    }
+   }
   }
  ]
 }
