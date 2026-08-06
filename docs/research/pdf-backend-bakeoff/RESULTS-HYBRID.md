@@ -23,7 +23,7 @@ Two kinds of interpretation are involved, and the whole answer turns on keeping 
 
 | | what it needs to know | best-placed owner |
 |---|---|---|
-| **Generic PDF text layout** — which marks form a word, where a word break falls, what a syllable-break hyphen is | font metrics, text-object structure, the encoding | the **PDF engine**, which is the only layer that has them |
+| **Generic PDF text layout** — which marks form a word, where a word break falls, what a syllable-break hyphen is | the encoding, the text-object structure, and the font's own metrics | the **PDF engine**, which is the only layer that has them |
 | **GPO / legislative interpretation** — margin line numbers, running heads, watermarks, heading levels, account structure, amounts | how GPO sets a bill | **DeltaTrack**, which is the only layer that has that |
 
 The glyph seam assigns *both* to DeltaTrack. The hybrid seam assigns the first to the
@@ -40,7 +40,7 @@ Two of them answer the question directly, and neither was used by the bake-off:
 
 - **`FPDFText_IsGenerated(page, i)`** — was character *i* synthesised by PDFium rather
   than read from the content stream? This is how the engine reports the word spaces it
-  derived from font metrics.
+  inferred rather than found.
 - **`FPDFText_IsHyphen(page, i)`** — is character *i* a syllable-break hyphen?
 
 <!-- H_WASM -->
@@ -77,13 +77,37 @@ Two of them answer the question directly, and neither was used by the bake-off:
 `FPDFText_CountChars` counts one char list per page, and **every** geometry and font call
 addresses that same list by the same index. Measured on this corpus:
 
-- `FPDFText_CountChars(page) == len(get_text_range(page))` on every page tried, and
-  `pdfium_hybrid.extract` counts any page where it does not (`index_skew_pages`, zero
-  throughout this run).
+- `FPDFText_CountChars(page) == len(get_text_range(page))`. The adapter counts every page
+  where it does not, so this is a falsifiable counter rather than a spot check.
 - `FPDFText_GetTextIndexFromCharIndex` is the identity map.
 - `get_text_range()[i]` and `FPDFText_GetUnicode(i)` agree everywhere **except** at GPO's
   soft hyphen, where the text API says U+FFFE and the glyph API says 0x02 — and those are
   exactly the indices `FPDFText_IsHyphen` flags.
+
+<!-- H_ADAPTER -->
+
+Counters from the hybrid adapter itself, aggregated over all 52 corpus documents.
+
+| | total |
+|---|---|
+| pages | 14,856 |
+| characters | 30,400,854 |
+| engine-generated characters | 1,266,899 |
+| `FPDFText_IsHyphen` characters | 83,775 |
+| **pages where CountChars != len(text)** | 0 |
+| **ink the engine could not name** | 0 |
+| **unicode map errors** | 0 |
+| **characters with an empty font name** | 0 |
+| generated-character rate | 4.17% |
+
+<!-- /H_ADAPTER -->
+
+The four bolded rows are the ones that would invalidate the contract if they were non-zero,
+and they are reported over the whole corpus rather than the page the mechanism was diagnosed
+on. The empty-font-name row is worth noting separately: `docs/source-signal-inventory.md`
+warns that a small fraction of glyphs return no font name and that font must therefore
+supplement rather than replace the position gates. Through this adapter, on this corpus,
+that fraction is zero.
 
 So the answer to "is the character index used for PDFium's reconstructed text stream also
 usable to retrieve geometry for that same logical character, including generated ones?" is
@@ -164,7 +188,9 @@ rather than universal, and that the hybrid is not simply scoring on an easier po
 
 ## Mechanism, at the character level
 
-At `114-hr-2029/4` page 99, `NATIONAL CEMETERY ADMINISTRATION`:
+The clearest instance is not one of the four but a fifth label from the same document,
+chosen because its gap is the narrowest and so the arithmetic is unambiguous. At
+`114-hr-2029/4` page 99, `NATIONAL CEMETERY ADMINISTRATION`:
 
 ```
  idx ch  cp  gen        x0        x1   origin_y   mat.f    size  font
@@ -175,8 +201,14 @@ At `114-hr-2029/4` page 99, `NATIONAL CEMETERY ADMINISTRATION`:
 
 The gap from `Y` to `A` is **2.40 pt** against a threshold of `0.25 × 14.00 = 3.50`, so the
 neutral layer inserts nothing and the label becomes `CEMETERYADMINISTRATION`. The word
-space is **not missing from the document** — it is character 608, and PDFium generated it
-from the font's own metrics. The glyph seam discards it and then fails to re-derive it.
+space is **not missing from the document** — it is character 608, flagged generated.
+
+Note what the three rows show together: the engine placed a space at a gap *narrower* than
+the threshold, and §4 shows no threshold would have worked. So the engine is not applying a
+better-tuned version of the same rule; it is deciding with information the glyph stream does
+not carry. That is the argument for moving the decision, and it does not depend on any
+claim about PDFium's internals — only on the measurement that geometry alone is insufficient
+and that the engine nonetheless gets it right.
 
 ---
 
@@ -247,13 +279,13 @@ Reference is **production** (`extract_clean_pages`) on the 42 corpus documents p
 
 <!-- H_PAIRS -->
 
-Reference is **production**'s canonical diff over 7 consecutive version pairs. `amounts` is the `Counter[(old, new, kind)]` of `amount_entries`; `changes` is the `Counter[(change_type, norm(old), norm(new))]` signature set.
+Reference is **production**'s canonical diff over 12 consecutive version pairs. `amounts` is the `Counter[(old, new, kind)]` of `amount_entries` — the money, and the highest-consequence field. `changes` is the `Counter[(change_type, norm(old), norm(new))]` signature set, which embeds the line text and therefore cannot be byte-identical for any path that assembles lines geometrically; its **overlap** is the informative figure and the identity column is reported only so the distinction is visible.
 
-| path | amount signatures identical | change signatures identical |
-|---|---|---|
-| glyph | 7/7 | 0/7 |
-| **hybrid** | 7/7 | 0/7 |
-| pdfminer | 7/7 | 0/7 |
+| path | amount signatures identical | amount recall | change signatures identical | change recall |
+|---|---|---|---|---|
+| glyph | 12/12 | 1.0 (6726/6726) | 0/12 | 0.86106 (5429/6305) |
+| **hybrid** | 12/12 | 1.0 (6726/6726) | 0/12 | 0.99699 (6286/6305) |
+| pdfminer | 12/12 | 1.0 (6726/6726) | 0/12 | 0.89421 (5638/6305) |
 
 <!-- /H_PAIRS -->
 
@@ -465,15 +497,21 @@ Asked of both existing layers, since they carry different repair code.
 | `_SPACE_FACTOR` and the x-gap word-space rule in `_line_text` | the engine supplies the spaces |
 | the x-gap fallback inside `_first_word_right` | it exists only to cover boundaries the engine already marks |
 | `_repair_line_end` / the `repaired` vs `strict` mode split | the "unnamed ink, line-final" position heuristic is replaced by `FPDFText_IsHyphen` |
-| the U+FFFD unnamed-ink carrier for PDFium | `unnamed_ink` is 0 through the hybrid adapter on this corpus |
+| the `repaired`-mode machinery the U+FFFD unnamed-ink carrier fed | the carrier itself stays as a safety net, but it never fires: `unnamed_ink` is **0** over all 14,856 corpus pages (§1) |
 
 **Additionally retired from `parsers/pdf_text.py` (production's text path):** the whole of
 `normalize_raw` — the `_HYPHEN_BREAK` rewrite of `U+FFFE` plus a glued margin number, the
-`_GLUED_CHROME` rewrite, the mid-line hyphen join, and the trailing-space strip. Every one
-of those repairs damage that exists only in a page-wide text blob, and none of it exists
-once characters are addressed by index with geometry attached. Production's own
+`_GLUED_CHROME` rewrite, the mid-line hyphen join, and the trailing-space strip. Each
+repairs damage that exists only in a page-wide text blob. Production's own
 `_cluster_baselines` and its `_line_text` gap rule also go, replaced by the exact
 text-matrix/origin baseline.
+
+**That claim is checked rather than read off the code**, because the stratum that would
+falsify it is the one section 5 excludes: production declines unnumbered layouts, and the
+enrolled bills it declines are precisely where the mid-line soft-hyphen branch fires.
+
+<!-- H_NORMALIZE_RAW -->
+<!-- /H_NORMALIZE_RAW -->
 
 **Explicitly NOT retired, and this is the point of the split:** `strip_page_chrome`'s
 patterns, the chrome size ratio, the margin-number regex, `_merge_print_lines`,

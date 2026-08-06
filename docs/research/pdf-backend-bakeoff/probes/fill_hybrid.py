@@ -219,20 +219,30 @@ def pairs_table(data: dict) -> str:
     pairs = [p for p in data["pairs"] if "vs_production" in p]
     out = [
         f"Reference is **production**'s canonical diff over {len(pairs)} consecutive version pairs. "
-        "`amounts` is the `Counter[(old, new, kind)]` of `amount_entries`; `changes` is the "
-        "`Counter[(change_type, norm(old), norm(new))]` signature set.",
+        "`amounts` is the `Counter[(old, new, kind)]` of `amount_entries` — the money, and the "
+        "highest-consequence field. `changes` is the `Counter[(change_type, norm(old), norm(new))]` "
+        "signature set, which embeds the line text and therefore cannot be byte-identical for any "
+        "path that assembles lines geometrically; its **overlap** is the informative figure and the "
+        "identity column is reported only so the distinction is visible.",
         "",
-        "| path | amount signatures identical | change signatures identical |",
-        "|---|---|---|",
+        "| path | amount signatures identical | amount recall | change signatures identical | change recall |",
+        "|---|---|---|---|---|",
     ]
+    ref_amt = sum(p.get("n_amount_entries_production", 0) for p in pairs)
+    ref_chg = sum(p.get("n_changes_production", 0) for p in pairs)
     for path in PATHS:
         e = [p["vs_production"][path] for p in pairs if path in p["vs_production"]]
         if not e:
             continue
         a = sum(1 for r in e if r["H6_amounts_identical"])
         c = sum(1 for r in e if r["H6_changes_identical"])
+        ao = sum(r["H6_amount_overlap"] for r in e)
+        co = sum(r["H6_change_overlap"] for r in e)
         name = f"**{path}**" if path == "hybrid" else path
-        out.append(f"| {name} | {a}/{len(e)} | {c}/{len(e)} |")
+        out.append(
+            f"| {name} | {a}/{len(e)} | {round(ao / ref_amt, 5) if ref_amt else '—'} ({ao}/{ref_amt}) | "
+            f"{c}/{len(e)} | {round(co / ref_chg, 5) if ref_chg else '—'} ({co}/{ref_chg}) |"
+        )
     return "\n".join(out)
 
 
@@ -321,9 +331,85 @@ def backend_spacing_table(data: dict) -> str:
     return "\n".join(out)
 
 
+def adapter_table(data: dict) -> str:
+    """Corpus-scale totals from the adapter's own counters.
+
+    These are the claims the contract rests on, each stated as a count that can be
+    non-zero: an index skew would mean the char index does not address both the character
+    and its geometry; unnamed ink would mean the stream lost a glyph; a unicode map error
+    would mean a character PDFium could not name at all.
+    """
+    keys = (
+        ("pages", "pages"),
+        ("chars", "characters"),
+        ("generated_chars", "engine-generated characters"),
+        ("hyphen_chars", "`FPDFText_IsHyphen` characters"),
+        ("index_skew_pages", "**pages where CountChars != len(text)**"),
+        ("unnamed_ink", "**ink the engine could not name**"),
+        ("unicode_map_errors", "**unicode map errors**"),
+        # Counted in the non-generated branch only. A generated character has no font name
+        # by construction, and folding those in would make the row unreadable.
+        ("empty_font_names", "**non-generated characters with an empty font name**"),
+    )
+    tot = dict.fromkeys((k for k, _ in keys), 0)
+    n = 0
+    for d in data["documents"]:
+        s = (d.get("extract") or {}).get("hybrid")
+        if not s:
+            continue
+        n += 1
+        for k in tot:
+            tot[k] += s.get(k, 0)
+    out = [
+        f"Counters from the hybrid adapter itself, aggregated over all {n} corpus documents.",
+        "",
+        "| | total |",
+        "|---|---|",
+    ]
+    for k, label in keys:
+        out.append(f"| {label} | {tot[k]:,} |")
+    if tot["chars"]:
+        out.append(f"| generated-character rate | {tot['generated_chars'] / tot['chars']:.2%} |")
+    return "\n".join(out)
+
+
+def normalize_raw_table(data: dict) -> str:
+    """Whether `normalize_raw`'s branches repair damage the hybrid path still has.
+
+    Each row is a document where the branches fire, with the token-level artifacts the
+    branches exist to prevent. Non-zero `hyphen artifacts` on a document where the
+    mid-line branch fires would falsify section 8's claim.
+    """
+    rows = data["documents"]
+    out = [
+        "Measured on the **production-declined** stratum — the unnumbered layouts, mostly "
+        "enrolled bills, which section 5's parity table excludes and which are exactly where "
+        "`normalize_raw`'s mid-line soft-hyphen branch exists to act (its docstring names them). "
+        "A branch is counted as having fired by matching its own pattern against PDFium's raw "
+        "page text.",
+        "",
+        "| document | mid-line hyphen branch fired | soft hyphens total | trailing spaces | "
+        "**hyphen artifacts in hybrid** | **fused tokens in hybrid** |",
+        "|---|---|---|---|---|---|",
+    ]
+    tot_h = tot_f = 0
+    for r in rows:
+        b, d = r["branch_fired"], r["diff"]
+        tot_h += d["hyphen_artifact"]
+        tot_f += d["space_artifact"]
+        out.append(
+            f"| `{r['doc']}` | {b['midline_hyphen_lowercase']:,} | {b['other_soft_hyphen']:,} | "
+            f"{b['trailing_space']:,} | **{d['hyphen_artifact']}** | **{d['space_artifact']}** |"
+        )
+    out.append(f"| **total** | | | | **{tot_h}** | **{tot_f}** |")
+    return "\n".join(out)
+
+
 def main() -> None:
     text = DOC.read_text()
     jobs = [
+        ("H_ADAPTER", "hybrid_docs.json", adapter_table),
+        ("H_NORMALIZE_RAW", "probe_normalize_raw.json", normalize_raw_table),
         ("H_BACKEND_SPACING", "probe_backend_spacing.json", backend_spacing_table),
         ("H_HEADINGS", "probe_failure_headings.json", headings_table),
         ("H_SEPARABILITY", "probe_separability.json", separability_table),

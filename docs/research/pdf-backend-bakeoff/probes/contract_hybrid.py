@@ -4,7 +4,7 @@
 principle that ordering and spacing are generic PDF-layout decisions the consuming
 project should make for itself. This contract tests the opposite principle: that
 ordering and word spacing are decisions the PDF ENGINE is better positioned to make,
-because it can see font metrics and text-object structure that positions alone do not
+because it can see the encoding and text-object structure that positions alone do not
 carry, and that DeltaTrack's job begins at GPO/legislative interpretation.
 
 The two differences from `contract.Glyph` are the whole experiment:

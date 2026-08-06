@@ -10,7 +10,7 @@ PDFium's `CPDF_TextPage` builds one char list per page. `FPDFText_CountChars` co
 `FPDFText_GetUnicode(i)` names entry i, and `GetCharBox(i)` / `GetCharOrigin(i)` /
 `GetMatrix(i)` / `GetFontSize(i)` / `GetFontInfo(i)` all address the SAME entry i. The
 list already contains the characters PDFium synthesised rather than read -- word spaces
-it derived from font metrics, and line breaks -- flagged by `FPDFText_IsGenerated(i)`.
+it inferred rather than found, and line breaks -- flagged by `FPDFText_IsGenerated(i)`.
 Measured on this corpus: `FPDFText_CountChars(page) == len(get_text_range(page))` on
 every page tried, and `FPDFText_GetTextIndexFromCharIndex` is the identity, so there is
 no index skew to correct.

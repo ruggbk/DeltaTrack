@@ -340,6 +340,117 @@
      "H6_changes_candidate": 26
     }
    }
+  },
+  {
+   "pair": "118-hr-4366/2->3",
+   "declined": {
+    "production": [],
+    "glyph": [],
+    "hybrid": [],
+    "pdfminer": []
+   },
+   "n_amount_entries_production": 0,
+   "n_changes_production": 2,
+   "vs_production": {
+    "glyph": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 0,
+     "H6_amounts_candidate": 0,
+     "H6_change_overlap": 1,
+     "H6_changes_candidate": 2
+    },
+    "hybrid": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 0,
+     "H6_amounts_candidate": 0,
+     "H6_change_overlap": 1,
+     "H6_changes_candidate": 2
+    },
+    "pdfminer": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 0,
+     "H6_amounts_candidate": 0,
+     "H6_change_overlap": 1,
+     "H6_changes_candidate": 2
+    }
+   }
+  },
+  {
+   "pair": "118-hr-4366/3->4",
+   "declined": {
+    "production": [],
+    "glyph": [],
+    "hybrid": [],
+    "pdfminer": []
+   },
+   "n_amount_entries_production": 790,
+   "n_changes_production": 720,
+   "vs_production": {
+    "glyph": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 790,
+     "H6_amounts_candidate": 790,
+     "H6_change_overlap": 443,
+     "H6_changes_candidate": 730
+    },
+    "hybrid": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 790,
+     "H6_amounts_candidate": 790,
+     "H6_change_overlap": 719,
+     "H6_changes_candidate": 720
+    },
+    "pdfminer": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 790,
+     "H6_amounts_candidate": 790,
+     "H6_change_overlap": 469,
+     "H6_changes_candidate": 720
+    }
+   }
+  },
+  {
+   "pair": "118-hr-4366/4->5",
+   "declined": {
+    "production": [],
+    "glyph": [],
+    "hybrid": [],
+    "pdfminer": []
+   },
+   "n_amount_entries_production": 1356,
+   "n_changes_production": 1283,
+   "vs_production": {
+    "glyph": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 1356,
+     "H6_amounts_candidate": 1356,
+     "H6_change_overlap": 967,
+     "H6_changes_candidate": 1283
+    },
+    "hybrid": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 1356,
+     "H6_amounts_candidate": 1356,
+     "H6_change_overlap": 1282,
+     "H6_changes_candidate": 1283
+    },
+    "pdfminer": {
+     "H6_amounts_identical": true,
+     "H6_changes_identical": false,
+     "H6_amount_overlap": 1356,
+     "H6_amounts_candidate": 1356,
+     "H6_change_overlap": 1032,
+     "H6_changes_candidate": 1283
+    }
+   }
   }
  ]
 }

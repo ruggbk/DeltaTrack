@@ -11,7 +11,7 @@ THE ONE THING THAT CHANGED, and the whole hypothesis:
                     x-gaps, using one global constant (`_SPACE_FACTOR`).
     this module     takes the line's characters in the engine's own order and uses the
                     word spaces the engine already decided, including the ones it
-                    SYNTHESISED from font metrics.
+                    SYNTHESISED rather than read from the page.
 
 Line assignment stays geometric (cluster on baseline), not stream-order, and that split
 is the point of the design rather than a compromise. The two failure modes are different
