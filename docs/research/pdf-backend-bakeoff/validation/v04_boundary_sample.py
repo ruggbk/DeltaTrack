@@ -79,7 +79,7 @@ SEED = 20260806
 BASELINE_TOL = 0.6
 SHIPPED_FACTOR = 0.25
 PER_STRATUM = 8
-SLOTS_PER_SHEET = 6
+SLOTS_PER_SHEET = 3
 
 # Print classes chosen before any pair was scored: two chambers, four stages, an enrolled
 # bill (no margin numbers), a Senate report-stage bill, and a committee report, which is
@@ -333,9 +333,13 @@ def render_sheets(items: list[dict]) -> None:
     from PIL import Image, ImageDraw
 
     SHEETS.mkdir(parents=True, exist_ok=True)
-    zoom = 4.0
-    half_w = 105.0  # pt of context either side of the gap
-    above, below = 13.0, 7.0
+    # Tightened after the first render: at 105 pt of context the caret sat mid-line and
+    # its position was ambiguous to read. The SAMPLE is unchanged -- same seed, same 72
+    # items, same key digest -- only the magnification is. Re-rendering a frozen sample is
+    # a presentation change; re-drawing it would not be.
+    zoom = 8.0
+    half_w = 42.0  # pt of context either side of the gap
+    above, below = 11.0, 9.0
 
     by_sheet: dict[int, list[dict]] = defaultdict(list)
     for it in items:
@@ -367,17 +371,43 @@ def render_sheets(items: list[dict]) -> None:
             draw = ImageDraw.Draw(sheet)
             y = pad
             for it, img in tiles:
+                # Translucent band over the gap under test, blended into the tile BEFORE
+                # it is pasted, so it tints rather than covers and no ink is lost.
+                #
+                # This shows the adjudicator WHERE to look, and it necessarily also shows
+                # how wide the gap is. That is not leakage of the thing under test: gap
+                # width is part of what any reader of the printed page uses, and the
+                # judgment being asked -- is this whitespace a word break or the letter
+                # spacing of a display line -- is exactly the one width alone cannot
+                # settle. What is withheld is every backend's DECISION.
+                gw = max(int((it["_next_x0"] - it["_prev_x1"]) * zoom), 2)
+                gx0 = img.width // 2 - gw // 2
+                band = Image.new("RGB", (gw, img.height), (255, 230, 90))
+                region = img.crop((gx0, 0, gx0 + gw, img.height))
+                img.paste(Image.blend(region, band, 0.38), (gx0, 0))
                 sheet.paste(img, (label_w, y))
                 draw.text((6, y + img.height // 2 - 6), it["id"], fill="black")
-                # The caret marks the gap under test. It sits BELOW the baseline so it
-                # cannot occlude the ink the adjudicator has to read.
+                # The gap under test is marked as a SPAN directly under the target line's
+                # baseline: a rule from the previous glyph's right edge to the next
+                # glyph's left edge, with end caps, plus a caret at its midpoint.
+                #
+                # Two earlier presentations were rejected. A caret alone was ambiguous on
+                # tight-set justified lines. Ticks at the top of the tile misaligned
+                # whenever the crop caught a neighbouring line, which happens on any
+                # small-leading layout such as a table of contents. Nothing is drawn
+                # across the ink: a hairline through the gap would hand the adjudicator
+                # the geometric answer, which is the thing under test.
                 cx = label_w + img.width // 2
-                cy = y + int((above + 1.0) * zoom)
+                base_y = y + int(above * zoom) + 3
+                half_gap = max(int(((it["_next_x0"] - it["_prev_x1"]) / 2.0) * zoom), 1)
+                lx, rx = cx - half_gap, cx + half_gap
+                draw.line([(lx, base_y + 6), (rx, base_y + 6)], fill=(220, 0, 0), width=2)
+                for tx in (lx, rx):
+                    draw.line([(tx, base_y + 1), (tx, base_y + 11)], fill=(220, 0, 0), width=2)
                 draw.polygon(
-                    [(cx, cy), (cx - 6, cy + 11), (cx + 6, cy + 11)],
+                    [(cx, base_y + 12), (cx - 5, base_y + 21), (cx + 5, base_y + 21)],
                     fill=(220, 0, 0),
                 )
-                draw.line([(cx, cy + 11), (cx, cy + 20)], fill=(220, 0, 0), width=2)
                 draw.rectangle([label_w - 1, y - 1, label_w + img.width, y + img.height], outline=(200, 200, 200))
                 y += img.height + pad
             draw.text((6, h - 16), f"sheet {sheet_no} - mark: is there a word boundary at the red caret?", fill="black")
@@ -503,8 +533,33 @@ def build() -> None:
     )
     digest = hashlib.sha256((RESULTS / "v04_key.json").read_bytes()).hexdigest()
     (RESULTS / "v04_key.sha256").write_text(digest + "\n")
+    # The file digest moves whenever presentation metadata does (sheet, slot). The SAMPLE
+    # digest covers only what identifies a pair and what each path said about it, so it is
+    # the one that has to hold constant across a re-render. Both are reported; only the
+    # second is evidence that the frame was not redrawn after seeing a score.
+    content = hashlib.sha256(
+        json.dumps(
+            sorted(
+                (
+                    it["doc"],
+                    it["page"],
+                    round(it["prev_x1"], 3),
+                    round(it["next_x0"], 3),
+                    it["stratum"],
+                    it["pdfium_space"],
+                    it["pdfium_generated"],
+                    it["glyph_threshold_space"],
+                    it["pdfminer_space"],
+                )
+                for it in key
+            ),
+            default=str,
+        ).encode()
+    ).hexdigest()
+    (RESULTS / "v04_sample.sha256").write_text(content + "\n")
     print(f"\nfroze {len(key)} items across {max(b['sheet'] for b in blind)} sheets")
-    print(f"key sha256 {digest}")
+    print(f"key file sha256 {digest}")
+    print(f"SAMPLE     sha256 {content}   <- must not change across re-renders")
 
 
 def main() -> int:
