@@ -100,12 +100,20 @@ def cluster_bootstrap(by_bill: dict[str, list[float]]) -> dict:
     hi = draws[int(0.975 * RESAMPLES) - 1]
 
     flat = [d for v in by_bill.values() for d in v]
+    n_differing = sum(1 for d in flat if abs(d) > 1e-9)
     return {
         "point": round(point, 5),
         "ci": [round(lo, 5), round(hi, 5)],
         "excludes_zero": bool(lo > 0 or hi < 0),
         "n_bills": n,
         "n_documents": len(flat),
+        "n_documents_differing": n_differing,
+        # A [0, 0] interval means NO DOCUMENT DIFFERED, which is a different statement from
+        # "the differences cancelled out" and must not be read as the latter. Where it also
+        # holds that every document capable of differing was excluded by a stratum rule, the
+        # metric had no chance to discriminate and "indistinguishable" is not evidence of
+        # similarity -- see the B2 note in RESULTS-CONFIRMATORY.md.
+        "degenerate_all_zero": n_differing == 0,
         "doc_weighted_point": round(statistics.mean(flat), 5),
     }
 
@@ -125,6 +133,8 @@ def verdict(stat: dict, metric: str, void: bool) -> str:
         return "statistically distinguishable, practically indistinguishable"
     if not sig and prac:
         return "practically large but CI includes zero -- not established"
+    if stat.get("degenerate_all_zero"):
+        return "identical on every document (not merely indistinguishable)"
     return "indistinguishable"
 
 
@@ -298,7 +308,8 @@ def main() -> None:
         pm = means["pdfminer"][m]
         a = "     n/a" if pw is None else f"{pw:8.4f}"
         b = "     n/a" if pm is None else f"{pm:8.4f}"
-        print(f"  {m:6} {a} {b} {s['point']:+9.4f} {ci:>20} {s['threshold']:>7}  {s['verdict']}")
+        n = f"{s['n_documents_differing']}/{s['n_documents']}"
+        print(f"  {m:6} {a} {b} {s['point']:+9.4f} {ci:>20} {s['threshold']:>7}  {n:>7} differ  {s['verdict']}")
 
     print(f"\nrepair delta on B1 (repaired - strict): {report['repair_delta_B1']}")
 
