@@ -1,0 +1,163 @@
+{
+ "tests/corpus/114-hr-2029/4_reported-in-senate.pdf": {
+  "summary": {
+   "backend": "pdfium-hybrid",
+   "pages": 40,
+   "chars": 54942,
+   "generated_chars": 9111,
+   "hyphen_chars": 246,
+   "unicode_map_errors": 0,
+   "unnamed_ink": 0,
+   "empty_font_names": 0,
+   "index_skew_pages": 0,
+   "extract_ms": 514
+  },
+  "S1": {
+   "chars_total": 54942,
+   "chars_generated": 9111,
+   "generated_rate": 0.16583,
+   "generated_missing_origin": 0,
+   "generated_with_real_box": 0,
+   "generated_with_size": 0,
+   "generated_with_font_name": 0,
+   "claim_generated_carry_only_origin": true
+  },
+  "S2": {
+   "numbered_lines": 963,
+   "with_glyph_size": 963,
+   "with_line_geom": 963,
+   "size_coverage": 1.0,
+   "geom_coverage": 1.0
+  },
+  "S3": {
+   "numbered_lines_with_both": 963,
+   "margin_font_differs_from_body": 963,
+   "separation_rate": 1.0,
+   "margin_fonts": [
+    [
+     "Times-Roman",
+     963
+    ]
+   ],
+   "body_fonts": [
+    [
+     "DeVinne",
+     961
+    ],
+    [
+     "DeVinne-Italic",
+     52
+    ]
+   ],
+   "non_generated_chars": 44786,
+   "non_generated_empty_font_name": 0,
+   "empty_font_name_rate": 0.0
+  }
+ },
+ "tests/corpus/118-hr-4366/5_engrossed-amendment-house.pdf": {
+  "summary": {
+   "backend": "pdfium-hybrid",
+   "pages": 40,
+   "chars": 55942,
+   "generated_chars": 2691,
+   "hyphen_chars": 235,
+   "unicode_map_errors": 0,
+   "unnamed_ink": 0,
+   "empty_font_names": 0,
+   "index_skew_pages": 0,
+   "extract_ms": 447
+  },
+  "S1": {
+   "chars_total": 55942,
+   "chars_generated": 2691,
+   "generated_rate": 0.0481,
+   "generated_missing_origin": 0,
+   "generated_with_real_box": 0,
+   "generated_with_size": 0,
+   "generated_with_font_name": 0,
+   "claim_generated_carry_only_origin": true
+  },
+  "S2": {
+   "numbered_lines": 936,
+   "with_glyph_size": 936,
+   "with_line_geom": 936,
+   "size_coverage": 1.0,
+   "geom_coverage": 1.0
+  },
+  "S3": {
+   "numbered_lines_with_both": 936,
+   "margin_font_differs_from_body": 936,
+   "separation_rate": 1.0,
+   "margin_fonts": [
+    [
+     "Times-Roman",
+     936
+    ]
+   ],
+   "body_fonts": [
+    [
+     "DeVinne-Italic",
+     927
+    ],
+    [
+     "NewCenturySchlbk-BoldItalic",
+     9
+    ]
+   ],
+   "non_generated_chars": 50233,
+   "non_generated_empty_font_name": 0,
+   "empty_font_name_rate": 0.0
+  }
+ },
+ "tests/data/CRPT-118srpt198.pdf": {
+  "summary": {
+   "backend": "pdfium-hybrid",
+   "pages": 40,
+   "chars": 129184,
+   "generated_chars": 3337,
+   "hyphen_chars": 497,
+   "unicode_map_errors": 0,
+   "unnamed_ink": 0,
+   "empty_font_names": 0,
+   "index_skew_pages": 0,
+   "extract_ms": 1055
+  },
+  "S1": {
+   "chars_total": 129184,
+   "chars_generated": 3337,
+   "generated_rate": 0.02583,
+   "generated_missing_origin": 0,
+   "generated_with_real_box": 0,
+   "generated_with_size": 0,
+   "generated_with_font_name": 0,
+   "claim_generated_carry_only_origin": true
+  },
+  "S2": {
+   "numbered_lines": 2,
+   "with_glyph_size": 2,
+   "with_line_geom": 2,
+   "size_coverage": 1.0,
+   "geom_coverage": 1.0
+  },
+  "S3": {
+   "numbered_lines_with_both": 2,
+   "margin_font_differs_from_body": 0,
+   "separation_rate": 0.0,
+   "margin_fonts": [
+    [
+     "NewCenturySchlbk-Roman",
+     2
+    ]
+   ],
+   "body_fonts": [
+    [
+     "NewCenturySchlbk-Roman",
+     2
+    ]
+   ],
+   "non_generated_chars": 129,
+   "non_generated_empty_font_name": 0,
+   "empty_font_name_rate": 0.0
+  }
+ }
+}
