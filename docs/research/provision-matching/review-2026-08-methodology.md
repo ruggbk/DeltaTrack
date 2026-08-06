@@ -1,6 +1,6 @@
 # Methodology review — adversarial challenge to Study 1 and the Study 2 protocol
 
-**Status:** Round 6 complete; **human labeling stays gated.** This document is the deliverable that
+**Status:** Round 6 complete (+ follow-up closure); **human labeling stays gated.** This document is the deliverable that
 `pass2-protocol.md` §10.1 gates on, extended to cover an independent adversarial review of Study 1.
 **Date:** 2026-08-06, rounds 1–6. **Current machinery:** schema `pass2-anchor-v5`; oracles
 `suggested-list` / `region-exhaustive` / `document-exhaustive`; observation identity
@@ -3350,3 +3350,147 @@ separate questions, and conflating them is what would let a merge read as permis
 | `study2_frame.py` | §R6-1, §R6-2 | `derive_eligible_ordinals`, `verify_coverage_against_corpus`, `expected_quota` |
 | `pass2_schema.py` *(v5)* | §R6-1, §R6-3, §R6-4 | `universe_verified`, `DOCUMENT_COMPLETENESS_RULES`, full target identity |
 | `eval_pass2.py` *(changed)* | §R6-1 | `evaluate(records, verifier)`; completeness refused without a corpus |
+
+
+---
+
+# §R6-FU — Round 6 follow-up and closure
+
+Not a seventh round. Two substantive gaps found by re-reading the pushed code at `036f6f1`, plus
+consistency work. Both gaps are the same shape as everything this programme has found: **a field
+that records an intention rather than a fact.**
+
+## 1. Parser commit — **CONFIRMED**
+
+**Falsification attempted, executed against the pushed code:**
+
+```
+change ONLY target_parser_commit to 'b'*40 (well-formed, different)
+-> universe_verified = True
+-> record NOT refused by any completeness metric
+-> the only verification failure reported was the unrelated a21
+```
+
+`verify_coverage_against_corpus` resolved the XML, checked its SHA, and re-derived the universe with
+whatever `normalize_bill` happened to be checked out. It never looked at `parser_commit`. So the
+field was decorative — in a programme whose round-2 finding was that a parser change silently
+invalidated three observations.
+
+**Fix — the frozen-revision contract, made executable.**
+
+`study2_frame.parser_revision()` returns a SHA-256 over the source of `deltatrack.bill_tree` and
+every `deltatrack.*` module it transitively imports, resolved by AST. Not a git commit: that moves
+when documentation changes and does *not* move for an uncommitted edit to the parser. Not a
+declared constant: it is derived from the code under evaluation.
+
+`verify_coverage_against_corpus` now rejects any coverage block whose `*_parser_commit` is not that
+revision. The contract is the weak, sufficient one Will proposed — Study 2 observations are produced
+and verified only against one frozen parser revision — rather than historical-parser execution
+machinery.
+
+Deliberately over-broad: the transitive set may include a module that cannot affect node emission,
+so an unrelated edit forces re-verification. That direction costs work; the other silently certifies
+a universe derived by different code.
+
+**Tests.** `test_a_wrong_parser_commit_cannot_establish_completeness` (same XML, same ordinals,
+wrong commit → refused by all three completeness metrics) and
+`test_the_parser_revision_is_derived_from_the_code_not_declared` (edits `bill_tree.py`, asserts the
+revision moves, restores it, asserts it returns).
+
+## 2. Reverse-sweep target identity — **CONFIRMED, and the machinery is now DEFERRED**
+
+Two defects, both real:
+
+* `collision_resolution` keyed proven groups on `(anchor.source_sha256, anchor.parser_commit,
+  target_ordinal)` — the OLD side plus a bare ordinal. Reverse truth for target A:73 was reachable
+  for B:73.
+* the corpus verifier checked only the **source** universe of a `competition_coverage` block. The
+  contested target's identity was never verified at all — in either the real verifier or the
+  synthetic one.
+
+**Fix.** The key is now `(target_source_sha256, target_parser_commit, target_ordinal)`. Both
+verifiers check the reverse sweep's target identity as well as its source universe, and the real one
+additionally checks that `target_ordinal` is in range for the named target parse.
+
+**Scope — deferred, per Will's decision.** Tiers A/B/C collect no reverse sweeps.
+`collision_resolution` now reports `study2_scope: "deferred"` and
+`validation_status: "not fully validated…"`, and is **removed from `contract_check`** so it cannot
+gate the start of the other tiers. The machinery is retained because it is the correct shape for the
+question, not because it is ready.
+
+Stated plainly rather than implied by silence: what is proven is the direction argument, the
+target-identity key, and that a group without source-side truth is refused. What is **not** proven
+is the reverse-sweep path on real corpus data, and `claiming_ordinals` have no independent check
+beyond being a subset of the swept universe.
+
+**Test.** `test_reverse_truth_for_one_target_cannot_certify_another` moves the sweep's target
+document while holding the ordinal fixed, and asserts the record is rejected and the group
+disappears.
+
+## 3. Current-state prose
+
+| location | stale | corrected |
+|---|---|---|
+| `eval_pass2` docstring | "3 assignment … for every anchor in the collision group" (the pre-v4 unsplit estimand) | 3a per-anchor + 3b collision, with 3b marked deferred |
+| fixture `_about` | "schema v4", round-5 shape list | v5, round-6 shapes, and the published universes/revision |
+| `probe_r9` §5 conclusion | "`all-nodes-with-body` MAY establish global completeness" | overruled; counts stand, inference does not |
+| review header | schema v4, "four layers" | v5 → v6 machinery line, six layers |
+
+Historical attributions ("Round 5 pointed out…") were left intact. Only text purporting to describe
+the **current** machinery was changed.
+
+## 4. Real-verifier integration — implemented, not deferred
+
+`eval_pass2.evaluate_study2_dataset(path)` is the one canonical path for a real dataset. It wires
+`corpus_roots` → `verify_coverage_against_corpus` → `evaluate`, and **raises `ProvenanceError`**
+when the corpus is absent or the dataset's declared parser revision is not the checked-out one.
+
+It raises rather than returning a degraded result because "the metrics came out empty" and "the
+metrics could not be computed" look identical in a report and mean very different things. This
+closes the gap Will named: real Tier B evaluation no longer depends on a caller remembering the
+right callback. Independent of sample size, so it is implemented now.
+
+**Test.** `test_the_canonical_real_dataset_path_fails_closed`.
+
+## 5. Blocker table
+
+**Merge blockers** — none. Both follow-up gaps are closed; prose is consistent.
+
+**Agent implementation before labeling**
+
+| item | state |
+|---|---|
+| Parser provenance verified (§1) | **done** |
+| Reverse-sweep target identity + deferral (§2) | **done** |
+| Canonical fail-closed evaluation path (§4) | **done** |
+| Re-mine the financial stratum without signal-conditioned discovery | **OPEN — agent work, not started** |
+
+**Decisions requiring Will**
+
+| item |
+|---|
+| Tier A/B/C scale: regions, anchors per region, how many document-complete anchors |
+| Whether to accept the ~8.5% extra review `all-nodes` costs, or shrink tier B instead |
+| Whether to add provenance fields to `tests/data/similarity_labels.json` (rewrites a committed fixture) |
+| Whether to apply §E's wording corrections to `paper.md` / `pass2-protocol.md` |
+| Freeze the corpus manifest digest and seed, then run the draw |
+
+**Human legislative judgment**
+
+| item |
+|---|
+| The three drifted Study 1 observations (blind packet ready, unadjudicated) |
+| The Study 2 labels themselves |
+
+## 6. Closing note on the audit
+
+The standing gates stay: universe verification fails closed without a corpus, the parser revision is
+derived from the code, the sampling frame cannot import the matcher, and every guard is pinned by a
+test that removes it and watches the number move. Those exist so the methodology remains falsifiable
+by whoever comes next.
+
+The audit itself stops here. Six rounds found six instances of one pattern — a dependency renamed
+rather than removed — and the last two found it only in fields that had just been added to fix the
+previous instance. That is the expected tail of a converging process, not evidence of a seventh
+layer waiting. The remaining work is labeling-budget decisions and one mining task, none of which
+turn on another review pass.

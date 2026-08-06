@@ -633,3 +633,112 @@ def test_the_draw_records_both_probabilities_and_names_them(frame):
     for a in drawn["selected_anchors"]:
         assert a["p_inclusion_given_quota"] == pytest.approx(a["p_region_given_quota"] * a["p_within_region"])
         assert a["p_inclusion_unconditional"] == pytest.approx(a["p_region_unconditional"] * a["p_within_region"])
+
+
+# --------------------------------------------------------------------------------------------
+# round 6 follow-up: parser provenance, and the reverse-sweep target key
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_wrong_parser_commit_cannot_establish_completeness(evaluator, records, verifier):
+    """The follow-up's central case.
+
+    Same XML, same eligible/reviewed ordinals, only `target_parser_commit` changed to another
+    well-formed value. Before the fix this still yielded `universe_verified=True` and the record was
+    admitted -- `parser_commit` was a required field whose value nothing compared against anything,
+    in a programme whose round-2 finding was that a parser change silently invalidated three
+    observations.
+    """
+    bad = copy.deepcopy(records)
+    cov = _find(bad, "a1-one-to-one")["truth"]["coverage"]
+    cov["target_parser_commit"] = "b" * 40
+    r = evaluator.evaluate(bad, verifier)
+
+    assert "a1-one-to-one" in r["universe_verification"]["failed"]
+    assert "parser_commit" in r["universe_verification"]["failed"]["a1-one-to-one"]
+    for metric in ("candidate_recall", "assignment_per_anchor", "diff_correctness"):
+        refused = {a["anchor_id"] for a in r[metric]["refused"]["anchors"]}
+        assert "a1-one-to-one" in refused, metric
+
+
+def test_the_parser_revision_is_derived_from_the_code_not_declared(frame):
+    """It must be a function of the parser source, so it cannot be a decorative constant.
+
+    Hashing the transitive `deltatrack.*` imports of `bill_tree` is deliberately over-broad: a
+    module that cannot affect node emission may still move the revision. That direction costs a
+    re-verification; the other direction silently certifies a universe derived by different code.
+    """
+    rev = frame.parser_revision()
+    assert len(rev) == 64 and rev == frame.parser_revision(), "must be a stable content hash"
+
+    src = (PROJECT_ROOT / "src" / "deltatrack" / "bill_tree.py").read_bytes()
+    try:
+        (PROJECT_ROOT / "src" / "deltatrack" / "bill_tree.py").write_bytes(src + b"\n# provenance probe\n")
+        assert frame.parser_revision() != rev, "editing the parser must change the revision"
+    finally:
+        (PROJECT_ROOT / "src" / "deltatrack" / "bill_tree.py").write_bytes(src)
+    assert frame.parser_revision() == rev, "restoring the parser must restore the revision"
+
+
+def test_reverse_truth_for_one_target_cannot_certify_another(evaluator, records, verifier):
+    """The aliasing case: document A ordinal 73 and document B ordinal 73 are different nodes.
+
+    The round-6 evaluator keyed proven groups on the ANCHOR's source hash plus a bare target
+    ordinal, so reverse truth collected for A:73 was looked up for B:73. The key is now the
+    target's own observation identity.
+    """
+    a15 = _find(records, "a15-duplicate-text-right-node")
+    comp = a15["truth"]["competition_coverage"]
+
+    before = evaluator.evaluate(records, verifier)["collision_resolution"]
+    assert before["groups_with_source_side_truth"] == 1
+
+    # Point the reverse sweep at a DIFFERENT target document, same ordinal.
+    moved = copy.deepcopy(records)
+    other = _find(moved, "a15-duplicate-text-right-node")["truth"]["competition_coverage"]
+    other["target_source_sha256"] = "c" * 64
+    after = evaluator.evaluate(moved, verifier)
+
+    assert "a15-duplicate-text-right-node" in after["universe_verification"]["failed"], (
+        "a reverse sweep naming a target document that does not verify must be rejected outright"
+    )
+    assert after["collision_resolution"]["groups_with_source_side_truth"] == 0, (
+        "truth collected for one target must not remain usable once the target identity changes"
+    )
+    assert comp["target_ordinal"] == other["target_ordinal"], "the ordinal is unchanged; only the document moved"
+
+
+def test_collision_resolution_is_marked_deferred_and_unvalidated(evaluator, records, verifier):
+    """It is out of Study 2 scope, and the output says so rather than implying validation."""
+    cr = evaluator.evaluate(records, verifier)["collision_resolution"]
+    assert cr["study2_scope"] == "deferred"
+    assert "not fully validated" in cr["validation_status"]
+
+
+def test_collision_resolution_does_not_gate_the_other_tiers(evaluator, records, verifier):
+    """Tiers A/B/C collect no reverse sweeps, so gating the study on 3b would block work for a
+    question nobody is asking yet."""
+    ok = evaluator.contract_check(evaluator.evaluate(records, verifier))
+    assert "3b collision resolution" not in ok
+    assert set(ok) == {
+        "1 candidate recall",
+        "2 ranking / MRR",
+        "3a per-anchor assignment",
+        "4 final diff correctness",
+        "5 failure-mode rates",
+    }
+
+
+def test_the_canonical_real_dataset_path_fails_closed(evaluator, tmp_path, doc):
+    """Real labels must not be consumable by a caller who forgets the verifier.
+
+    `evaluate_study2_dataset` wires corpus resolver -> verification -> evaluate and RAISES when
+    provenance cannot be established, because "the metrics came out empty" and "the metrics could
+    not be computed" look identical in a report and mean very different things.
+    """
+    path = tmp_path / "labels.json"
+    path.write_text(json.dumps(doc))
+    with pytest.raises(evaluator.ProvenanceError) as exc:
+        evaluator.evaluate_study2_dataset(path)
+    # the synthetic fixture's parser revision is not the checked-out parser's
+    assert "parser" in str(exc.value).lower() or "corpus" in str(exc.value).lower()

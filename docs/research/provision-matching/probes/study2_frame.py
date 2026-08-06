@@ -42,6 +42,7 @@ Run (from a normal checkout, repo venv):
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import itertools
 import json
@@ -98,6 +99,52 @@ def enumerate_study2_anchors(bill: str, old_xml: Path) -> list[dict]:
     return out
 
 
+def parser_revision() -> str:
+    """A content hash of the parser implementation that produces node ordinals.
+
+    Round 6 follow-up: `parser_commit` was a required string that nothing proved. Changing it to
+    another well-formed value left `universe_verified` True, so the field recorded an intention
+    rather than a fact -- in a research programme whose second-round finding was that a parser
+    change silently invalidated three observations.
+
+    Study 2 does not need historical-parser execution. It needs the weaker, executable contract:
+    **observations are produced and verified only against ONE frozen parser revision**, and a
+    coverage block whose `parser_commit` is not that revision cannot establish completeness.
+
+    The revision is derived from the code under evaluation, not declared: it is a SHA-256 over the
+    source of `deltatrack.bill_tree` and every `deltatrack.*` module it transitively imports. A git
+    commit would be worse on both sides -- it moves when documentation changes, and it does not
+    move for an uncommitted edit to the parser.
+
+    Deliberately over-broad rather than under-broad: the transitive set may include a module whose
+    change cannot alter node emission. That direction costs a re-verification; the other direction
+    silently certifies a universe derived by different code.
+    """
+    seen: set[str] = set()
+    queue = ["deltatrack.bill_tree"]
+    files: list[tuple[str, bytes]] = []
+    while queue:
+        mod_name = queue.pop()
+        if mod_name in seen:
+            continue
+        seen.add(mod_name)
+        path = REPO / "src" / (mod_name.replace(".", "/") + ".py")
+        if not path.exists():
+            continue
+        src = path.read_bytes()
+        files.append((mod_name, src))
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("deltatrack"):
+                queue.append(node.module)
+            elif isinstance(node, ast.Import):
+                queue.extend(a.name for a in node.names if a.name.startswith("deltatrack"))
+    h = hashlib.sha256()
+    for mod_name, src in sorted(files):
+        h.update(mod_name.encode())
+        h.update(hashlib.sha256(src).digest())
+    return h.hexdigest()
+
+
 def derive_eligible_ordinals(target_xml: Path, rule: str) -> list[int]:
     """THE authoritative eligible universe for a coverage claim. Generated, never authored.
 
@@ -124,35 +171,66 @@ def verify_coverage_against_corpus(records: list[dict], resolve) -> dict[str, st
     `resolve(bill, version) -> Path | None` supplies the XML. Anything this returns is a record
     whose completeness claim is fabricated or stale; the evaluator refuses those records rather
     than trusting the fields to agree with each other.
+
+    THREE things are checked per coverage block, and the middle one was missing until the round 6
+    follow-up:
+
+      * the XML resolves and its SHA-256 matches the recorded `*_source_sha256`;
+      * the recorded `*_parser_commit` equals `parser_revision()` -- the study's frozen parser. A
+        universe derived by different code is a different universe, which is round 2's finding;
+      * the stored `eligible_ordinals` equals the set re-derived from that parse under that rule.
+
+    A reverse sweep (`competition_coverage`) carries TWO identities -- the source document it swept
+    and the target node it swept against -- and both are checked, because a bare target ordinal
+    aliases across documents.
     """
     bad: dict[str, str] = {}
+    revision = parser_revision()
+
+    def check(rec, field, side, block, *, universe: bool) -> str | None:
+        bill = rec["anchor"]["bill"]
+        version = block.get(f"{side}_version")
+        path = resolve(bill, version) if version else None
+        if path is None:
+            return f"{field}: cannot resolve {bill}/{version} ({side} side) to verify against"
+        if hashlib.sha256(path.read_bytes()).hexdigest() != block.get(f"{side}_source_sha256"):
+            return f"{field}: {side}_source_sha256 does not match {bill}/{version}"
+        if block.get(f"{side}_parser_commit") != revision:
+            return (
+                f"{field}: {side}_parser_commit is not this study's frozen parser revision "
+                f"({revision[:12]}...) -- the universe was derived by different code"
+            )
+        if not universe:
+            return None
+        try:
+            actual = set(derive_eligible_ordinals(path, block["rule"]))
+        except Exception as exc:  # pragma: no cover - a parse failure is its own defect
+            return f"{field}: could not derive the universe ({exc})"
+        stored = set(block.get("eligible_ordinals", []))
+        if stored != actual:
+            return (
+                f"{field}: stored eligible universe has {len(stored)} node(s), the parse under "
+                f"rule {block['rule']!r} has {len(actual)}"
+            )
+        if field == "competition_coverage":
+            target_ord = block.get("target_ordinal")
+            n_target = len(derive_eligible_ordinals(resolve(bill, block["target_version"]), block["rule"]))
+            if not isinstance(target_ord, int) or not (0 <= target_ord < n_target):
+                return f"{field}: target_ordinal {target_ord} is not a node of the named target parse"
+        return None
+
     for rec in records:
         truth = rec.get("truth", {})
         for field, side in (("coverage", "target"), ("competition_coverage", "source")):
             block = truth.get(field)
             if not isinstance(block, dict):
                 continue
-            bill = rec["anchor"]["bill"]
-            version = block.get(f"{side}_version")
-            path = resolve(bill, version) if version else None
-            if path is None:
-                bad[rec["anchor_id"]] = f"{field}: cannot resolve {bill}/{version} to verify against"
-                continue
-            actual_sha = hashlib.sha256(path.read_bytes()).hexdigest()
-            if actual_sha != block.get(f"{side}_source_sha256"):
-                bad[rec["anchor_id"]] = f"{field}: {side}_source_sha256 does not match {bill}/{version}"
-                continue
-            try:
-                actual = set(derive_eligible_ordinals(path, block["rule"]))
-            except Exception as exc:  # pragma: no cover - a parse failure is its own defect
-                bad[rec["anchor_id"]] = f"{field}: could not derive the universe ({exc})"
-                continue
-            stored = set(block.get("eligible_ordinals", []))
-            if stored != actual:
-                bad[rec["anchor_id"]] = (
-                    f"{field}: stored eligible universe has {len(stored)} node(s), the parse under "
-                    f"rule {block['rule']!r} has {len(actual)}"
-                )
+            reason = check(rec, field, side, block, universe=True)
+            if reason is None and field == "competition_coverage":
+                # the reverse sweep's TARGET identity, which the round-6 verifier never checked
+                reason = check(rec, field, "target", block, universe=False)
+            if reason:
+                bad[rec["anchor_id"]] = reason
     return bad
 
 

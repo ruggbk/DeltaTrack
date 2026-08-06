@@ -262,19 +262,28 @@ def main() -> None:
     for e in cross_examples:
         print(f"      {e}")
     print()
+    print("  ROUND 6 OVERRULED THE CONCLUSION THIS SECTION ORIGINALLY DREW. The counts below stand;")
+    print("  the inference from them does not. Half the evidence was 'production never pairs across")
+    print("  the boundary', and the production matcher is the OBJECT UNDER EVALUATION -- what it")
+    print("  currently pairs cannot license an assumption about what a human would legitimately")
+    print("  judge, least of all in a programme whose round-2 finding was segmentation drift.")
+    print("  `DOCUMENT_COMPLETENESS_RULES` is now ('all-nodes',): only the unfiltered universe may")
+    print("  establish global completeness. `all-nodes-with-body` remains valid for region-scoped")
+    print("  work, where no global claim is made. Cost of the change: ~8.5% more review.")
+    print()
     if empty_leaf == 0 and cross_pairs == 0:
-        print("  INVARIANT HOLDS ON THIS CORPUS: every body-less target node is a structural")
+        print("  THE STRUCTURAL FACT (still true, now used only to describe the corpus, not to")
+        print("  license a coverage rule): every body-less target node is a structural")
         print("  container whose content is carried by a descendant the rule admits, and production")
         print("  never pairs across the boundary. A Study-2-eligible anchor must itself have body")
         print("  text, and a container carries none to correspond with.")
         print()
-        print("  => `all-nodes-with-body` MAY establish global completeness. This is an empirical")
-        print("     regularity, not a theorem, so tests/test_research_probes.py asserts it and will")
-        print("     fail if a body-less LEAF ever appears. `all-nodes` remains available for a study")
-        print("     that wants the guarantee without the assumption -- at ~9% more review.")
+        print("  => The structural regularity holds, and `tests/test_research_probes.py` asserts it")
+        print("     so a future body-less LEAF fails loudly. It is NOT the reason a coverage rule is")
+        print("     or is not allowed to establish global completeness -- see the note above.")
     else:
-        print("  INVARIANT DOES NOT HOLD. `all-nodes-with-body` must not grant global completeness;")
-        print("  use `all-nodes`, or state the estimand as complete-modulo-the-rule.")
+        print("  Even the structural regularity has broken: a body-less LEAF exists, so the corpus")
+        print("  no longer supports even the descriptive claim. `all-nodes` was already required.")
 
 
 if __name__ == "__main__":

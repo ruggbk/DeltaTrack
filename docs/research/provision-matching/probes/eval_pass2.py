@@ -16,7 +16,7 @@ Deliberately absent: confidence intervals, per-stratum breakdowns, inter-rater a
 execution, weighting, and report formatting. Those are reporting concerns and can follow the labels.
 The contract cannot.
 
-THE FIVE TARGETS and the truth each one needs. The requirement is DATA, in
+THE TARGETS and the truth each one needs. The requirement is DATA, in
 `pass2_schema.METRIC_TRUTH_REQUIREMENTS`, not prose here -- so that enforcement is testable and a
 future metric cannot be added without declaring what it assumes.
 
@@ -28,8 +28,14 @@ future metric cannot be added without declaring what it assumes.
   2 ranking            needs `affirmed-positive` only. Where the true counterpart ranked does not
                        depend on whether a second one exists elsewhere. This is the one target the
                        cheap oracle genuinely supports.
-  3 assignment         needs `complete-in-document`, for every anchor in the collision group. An
-                       unfound competitor makes a wrong assignment look right.
+  3a per-anchor        needs `complete-in-document`. Did the system assign exactly THIS anchor's
+     assignment       true counterpart set? A per-anchor question, answerable from a target-side
+                       sweep alone, making no claim about other anchors.
+  3b collision         needs `complete-source-side` -- a REVERSE sweep, the opposite direction.
+     resolution        ** DEFERRED FROM STUDY 2 ** and excluded from `contract_check`: tiers A/B/C
+                       collect no reverse sweeps, so it reports NOT MEASURABLE on a real dataset
+                       and is not a condition for starting them. The machinery is retained and is
+                       explicitly NOT fully validated; see `collision_resolution`.
   4 diff correctness   needs `complete-in-document`. `removed` vs `moved` IS the question of whether
                        a counterpart exists elsewhere in the document.
   5 failure modes      per stratum: an existence claim needs a positive, an absence claim needs
@@ -197,6 +203,17 @@ def assignment_per_anchor(records: list[dict]) -> dict:
 def collision_resolution(records: list[dict]) -> dict:
     """Target 3b. Did the global assignment resolve a contested target node correctly?
 
+    ** DEFERRED FROM STUDY 2. ** Tiers A/B/C do not collect reverse sweeps, so on a real Study 2
+    dataset this reports NOT MEASURABLE, and it is deliberately NOT a condition for starting the
+    other tiers (`contract_check` excludes it). The machinery is retained because it is the only
+    correct shape for the question and throwing it away would mean re-deriving it later.
+
+    ** NOT FULLY VALIDATED. ** Stated plainly rather than implied by silence. What is proven: the
+    direction argument, the target-identity key, and that a group without source-side truth is
+    refused. What is NOT: the reverse-sweep path has never been exercised on real corpus data, and
+    its `claiming_ordinals` have no independent check beyond being a subset of the swept universe.
+    Do not read a number from this metric as validated.
+
     THE DIRECTION MATTERS, and v3 got it wrong. A `document-exhaustive` sweep runs per OLD anchor
     over the NEW document: it enumerates that anchor's counterparts. It says nothing about which
     OTHER old provisions claim the same new node. v3 derived collision groups from "whichever
@@ -204,17 +221,17 @@ def collision_resolution(records: list[dict]) -> dict:
     competitor that was never sampled made a wrong resolution look right.
 
     Establishing the group needs the reverse sweep -- for one target node, review every old
-    provision -- recorded as `truth.competition_coverage` and granting `complete-source-side`. A
-    group is scorable only when some record carries that for its contested node.
-
-    When no record does, this metric reports NOT MEASURABLE rather than a number. That is the
-    honest output, and it is what v3 could not say.
+    provision -- recorded as `truth.competition_coverage` and granting `complete-source-side`.
     """
     proven: dict[tuple, dict] = {}
     for r in records:
         comp = r["truth"].get("competition_coverage")
         if comp and _admits(r, "collision_resolution"):
-            proven[(r["anchor"]["source_sha256"], r["anchor"]["parser_commit"], comp["target_ordinal"])] = {
+            # Key on the TARGET's observation identity. The round-6 code keyed on the ANCHOR's
+            # source hash plus a bare target ordinal, which scopes the wrong document: ordinal 73
+            # exists in every version of every bill, so reverse truth collected for target A:73
+            # could be looked up for B:73.
+            proven[(comp["target_source_sha256"], comp["target_parser_commit"], comp["target_ordinal"])] = {
                 "record": r,
                 "claiming": set(comp["claiming_ordinals"]),
             }
@@ -242,6 +259,11 @@ def collision_resolution(records: list[dict]) -> dict:
         else:
             correct += 1
     return {
+        "study2_scope": "deferred",
+        "validation_status": (
+            "not fully validated -- never exercised on real corpus data, and `claiming_ordinals` "
+            "have no independent check beyond subset-of-the-swept-universe"
+        ),
         "measurable": scored > 0,
         "groups_with_source_side_truth": scored,
         "groups_observed_in_dataset_without_source_side_truth": len(observed) - scored,
@@ -368,14 +390,72 @@ def contract_check(result: dict) -> dict:
     admitted population reports NO -- which is the honest answer, and the one v1 could not give,
     because v1 computed four of the five over every record regardless of oracle.
     """
+    # 3b (collision resolution) is DEFERRED from Study 2 and is deliberately absent: tiers A/B/C do
+    # not collect reverse sweeps, so gating the study's start on a metric it does not intend to
+    # produce would block work for a question nobody is asking yet.
     return {
         "1 candidate recall": result["candidate_recall"]["counterparts_total"] > 0,
         "2 ranking / MRR": result["ranking"]["n"] > 0,
         "3a per-anchor assignment": result["assignment_per_anchor"]["n"] > 0,
-        "3b collision resolution": result["collision_resolution"]["measurable"],
         "4 final diff correctness": result["diff_correctness"]["n"] > 0,
         "5 failure-mode rates": bool(result["failure_modes"]["strata"]),
     }
+
+
+class ProvenanceError(RuntimeError):
+    """The corpus or parser provenance could not be established, so nothing may be evaluated."""
+
+
+def evaluate_study2_dataset(path: Path) -> dict:
+    """THE canonical path for a real Study 2 dataset. Fails closed.
+
+    `evaluate(records, verifier=...)` is right for the synthetic contract, but it puts the burden on
+    a caller to remember the right callback -- and a caller who forgets gets a silently weaker
+    result rather than an error. Real labels must not be consumable that way.
+
+    This wires the one correct chain and refuses to proceed if any link cannot be established:
+
+        dataset -> corpus resolver (corpus_roots) -> verify_coverage_against_corpus -> evaluate
+
+    It raises rather than returning a degraded result when the corpus is absent or the parser
+    revision does not match the study's frozen one, because "the metrics came out empty" and "the
+    metrics could not be computed" look identical in a report and mean very different things.
+    """
+    sys.path.insert(0, str(Path(__file__).parent))
+    from corpus_roots import bill_versions  # noqa: PLC0415
+    from study2_frame import parser_revision, verify_coverage_against_corpus  # noqa: PLC0415
+
+    doc = json.loads(path.read_text())
+    records = doc["records"]
+
+    versions = bill_versions()
+    if not versions:
+        raise ProvenanceError(
+            "no corpus is present, so no coverage universe can be re-derived. Completeness metrics "
+            "would be silently empty; refusing to evaluate."
+        )
+
+    revision = parser_revision()
+    declared = {
+        b.get(f"{s}_parser_commit")
+        for r in records
+        for s, b in (
+            ("target", r["truth"].get("coverage")),
+            ("source", r["truth"].get("competition_coverage")),
+        )
+        if isinstance(b, dict)
+    }
+    if declared and declared != {revision}:
+        raise ProvenanceError(
+            f"dataset declares parser revision(s) {sorted(x[:12] for x in declared if x)} but the "
+            f"checked-out parser is {revision[:12]}. Study 2 observations are valid only against "
+            "the frozen revision they were produced under; re-derive them or check out that parser."
+        )
+
+    def resolve(bill: str, version: str):
+        return versions.get(bill, {}).get(version)
+
+    return evaluate(records, verifier=lambda recs: verify_coverage_against_corpus(recs, resolve))
 
 
 def _synthetic_verifier(doc: dict):
@@ -387,6 +467,28 @@ def _synthetic_verifier(doc: dict):
     up, which is the property under test.
     """
     truth_universes = doc.get("_synthetic_universes", {})
+    revision = doc.get("_synthetic_parser_revision")
+
+    def check_side(field, side, block, *, universe: bool) -> str | None:
+        known = truth_universes.get(block.get(f"{side}_version"))
+        if not known:
+            return f"{field}: unknown {side} version"
+        if known["source_sha256"] != block.get(f"{side}_source_sha256"):
+            return f"{field}: {side}_source_sha256 mismatch"
+        if block.get(f"{side}_parser_commit") != revision:
+            # The check the round-6 verifier omitted entirely: `parser_commit` was a required field
+            # whose value nothing compared against anything.
+            return f"{field}: {side}_parser_commit is not the frozen revision"
+        if not universe:
+            return None
+        if block.get("rule") not in known:
+            return f"{field}: no universe published for rule {block.get('rule')!r}"
+        if set(block.get("eligible_ordinals", [])) != set(known[block["rule"]]):
+            return (
+                f"{field}: stored universe has {len(set(block['eligible_ordinals']))} node(s), "
+                f"the parse has {len(known[block['rule']])}"
+            )
+        return None
 
     def verify(records):
         bad = {}
@@ -395,18 +497,14 @@ def _synthetic_verifier(doc: dict):
                 block = rec.get("truth", {}).get(field)
                 if not isinstance(block, dict):
                     continue
-                known = truth_universes.get(block.get(f"{side}_version"))
-                if not known:
-                    bad[rec["anchor_id"]] = f"{field}: unknown {side} version"
-                elif known["source_sha256"] != block.get(f"{side}_source_sha256"):
-                    bad[rec["anchor_id"]] = f"{field}: {side}_source_sha256 mismatch"
-                elif block.get("rule") not in known:
-                    bad[rec["anchor_id"]] = f"{field}: no universe published for rule {block.get('rule')!r}"
-                elif set(block.get("eligible_ordinals", [])) != set(known[block["rule"]]):
-                    bad[rec["anchor_id"]] = (
-                        f"{field}: stored universe has {len(set(block['eligible_ordinals']))} "
-                        f"node(s), the parse has {len(known[block['rule']])}"
-                    )
+                reason = check_side(field, side, block, universe=True)
+                if reason is None and field == "competition_coverage":
+                    # A reverse sweep carries TWO identities. The round-6 verifier checked only the
+                    # source universe, leaving the contested target unverified -- which is what let
+                    # a bare ordinal alias across documents.
+                    reason = check_side(field, "target", block, universe=False)
+                if reason:
+                    bad[rec["anchor_id"]] = reason
         return bad
 
     return verify

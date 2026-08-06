@@ -1,4 +1,5 @@
 {
+  "_synthetic_parser_revision": "0000000000000000000000000000000000000000",
   "_synthetic_universes": {
     "2_new": {
       "source_sha256": "e77134697520a89bdaa8dbe2f0ce0292767c6aeec1a6851ab7a1aa5b839ca587",
@@ -49,7 +50,7 @@
       ]
     }
   },
-  "_about": "Hand-authored synthetic dataset for the Pass 2 evaluation contract (schema v4). No real legislation, no human judgments -- every 'adjudicator' is 'synthetic'. It proves, before any human labels anything, that the frozen schema can produce each promised metric over a population whose truth is ADEQUATE for that metric, and that every guard excludes. Rounds 1-4 shapes cover clean/absent/multiple correspondences, retrieval and ranking misses, collisions, suggestion-list truth, duplicate body text, an incomplete document sweep and a pairwise false keep. Round 5 adds: a coverage set whose CARDINALITY matches while its MEMBERSHIP does not; an anchor that is target-complete but whose contested node has no source-side competition truth; and one record carrying a reverse sweep, which is the only thing that makes a collision group scorable.",
+  "_about": "Hand-authored synthetic dataset for the Pass 2 evaluation contract (schema v5). No real legislation, no human judgments -- every 'adjudicator' is 'synthetic'. It proves, before any human labels anything, that the frozen schema can produce each promised metric over a population whose truth is ADEQUATE for that metric, and that every guard excludes. Rounds 1-4 shapes cover clean/absent/multiple correspondences, retrieval and ranking misses, collisions, suggestion-list truth, duplicate body text, an incomplete document sweep and a pairwise false keep. Round 5 adds a coverage set whose CARDINALITY matches while its MEMBERSHIP does not, an anchor that is target-complete but whose contested node has no source-side competition truth, and one record carrying a reverse sweep. Round 6 adds a fabricated eligible universe that is internally perfect and describes a document that does not exist. Coverage universes and the frozen parser revision are published under `_synthetic_universes` / `_synthetic_parser_revision` so the contract tests can verify records against something external to them, as the real pipeline does against the corpus.",
   "schema_version": "pass2-anchor-v5",
   "records": [
     {
