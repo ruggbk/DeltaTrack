@@ -63,13 +63,14 @@ def migration_table(data: dict) -> str:
             cells.append(f"**{ok}/{n}**" if ok == n and n else f"{ok}/{n}")
         return cells
 
+    na, nd = len(accepted), len(declined)
     for label, field, rows in (
-        ("A1 amounts identical (13 accepted)", "A1_amounts_identical", accepted),
-        ("A2 changes identical (13 accepted)", "A2_changes_identical", accepted),
-        ("A4 full text identical (13 accepted)", "A4_text_identical", accepted),
-        ("A5 line numbers identical (13 accepted)", "A5_line_numbers_identical", accepted),
-        ("A1 amounts identical (2 declined, diagnostic)", "A1_amounts_identical", declined),
-        ("A2 changes identical (2 declined, diagnostic)", "A2_changes_identical", declined),
+        (f"A1 amounts identical ({na} accepted)", "A1_amounts_identical", accepted),
+        (f"A2 changes identical ({na} accepted)", "A2_changes_identical", accepted),
+        (f"A4 full text identical ({na} accepted)", "A4_text_identical", accepted),
+        (f"A5 line numbers identical ({na} accepted)", "A5_line_numbers_identical", accepted),
+        (f"A1 amounts identical ({nd} declined, diagnostic)", "A1_amounts_identical", declined),
+        (f"A2 changes identical ({nd} declined, diagnostic)", "A2_changes_identical", declined),
     ):
         out.append(f"| {label} | " + " | ".join(tally(rows, field)) + " |")
 
