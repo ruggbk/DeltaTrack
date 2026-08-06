@@ -34,7 +34,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve()
 EV = HERE.parents[1]
-REPO = EV.parents[3]
+REPO = EV.parents[4]
 CORPUS = REPO / "tests" / "corpus"
 OUT = EV / "results" / "x02_oracle_reference_defects.json"
 
@@ -93,6 +93,20 @@ def main() -> int:
                     "headers_inside_quoted_block": headers_in_qb,
                 }
             )
+
+    # COMPLETENESS FLOOR. The verdict below is an assertion of ABSENCE, and an absence is
+    # satisfied vacuously by a scan that read nothing. The first version of this probe
+    # pointed REPO one directory too high, globbed an empty tree, and printed the "no
+    # instances" verdict over totals of {} -- certifying a corpus it never opened. The
+    # floor is deliberately a hard failure, not a warning.
+    if totals["documents"] < 40 or totals["appropriations_elements"] < 10_000:
+        print(
+            f"FATAL: scan is too thin to support an absence claim -- "
+            f"{totals['documents']} documents, {totals['appropriations_elements']} appropriations elements. "
+            f"Expected the full development corpus at {CORPUS}.",
+            file=sys.stderr,
+        )
+        return 2
 
     verdict = (
         "The mechanism has NO instances on this corpus: no appropriations heading element "

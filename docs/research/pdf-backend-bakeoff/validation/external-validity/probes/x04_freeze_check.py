@@ -27,7 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve()
 EV = HERE.parents[1]
-REPO = EV.parents[3]
+REPO = EV.parents[4]
 
 MEMBERSHIP = EV / "results" / "holdout_membership.json"
 CONTAM = EV / "results" / "contamination.json"

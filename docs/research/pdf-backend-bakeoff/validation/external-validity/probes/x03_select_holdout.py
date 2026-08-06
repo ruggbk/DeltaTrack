@@ -40,7 +40,7 @@ import httpx
 
 HERE = Path(__file__).resolve()
 EV = HERE.parents[1]
-REPO = EV.parents[3]
+REPO = EV.parents[4]
 sys.path.insert(0, str(REPO / "tools"))
 from fetch_govinfo import order_versions  # noqa: E402
 
@@ -325,8 +325,16 @@ STRATA = [
         "n": 2,
         "frame": "F1",
         "pred": lambda r: r["appropriations"],
+        # The LAST version, not the first: a bill grows across stages, so the introduced
+        # print is the smallest and would fail the page gate on bills that would pass it.
+        "prefer": "last",
         "pick": None,
         "min_pages": 400,
+        # A page gate can only be evaluated by downloading, so an unbounded walk over a
+        # permuted appropriations pool downloads arbitrarily many large PDFs. The cap is
+        # recorded next to `examined`, so a stratum that ran out of budget is
+        # distinguishable from one that ran out of candidates.
+        "max_examine": 30,
     },
 ]
 
@@ -369,8 +377,9 @@ def main() -> int:
         rng.shuffle(order)
 
         filled, examined = [], 0
+        budget = st.get("max_examine")
         for idx in order:
-            if len(filled) >= st["n"]:
+            if len(filled) >= st["n"] or (budget is not None and examined >= budget):
                 break
             rec = cands[idx]
             examined += 1
@@ -407,7 +416,7 @@ def main() -> int:
                 pick = [v for v in rec["versions"] if st["pick"] is None or v["code"] in st["pick"]]
                 if not pick:
                     continue
-                v = pick[0]
+                v = pick[-1] if st.get("prefer") == "last" else pick[0]
                 pdf_url = pkg_urls(v["pkg"])[1]
                 if not head_ok(client, pdf_url):
                     continue
@@ -461,6 +470,10 @@ def main() -> int:
                 "filled": [r["id"] for r in filled],
                 "candidates": len(cands),
                 "examined": examined,
+                "examine_budget": budget,
+                # A stratum that stopped on its budget is NOT the same as one that ran out
+                # of candidates, and reporting them the same way would hide a thin result.
+                "stopped_on_budget": bool(budget is not None and examined >= budget and len(filled) < st["n"]),
             }
         )
         print(f"stratum {st['id']} ({st['name']}): {len(filled)}/{st['n']}", file=sys.stderr)
