@@ -29,6 +29,14 @@ Two kinds of interpretation are involved, and the whole answer turns on keeping 
 The glyph seam assigns *both* to DeltaTrack. The hybrid seam assigns the first to the
 engine and keeps the second.
 
+**Lower-level is not the same as more correct, and this corpus is a clean demonstration.**
+Glyph positions are strictly more primitive than a character stream, and they are strictly
+*less* informative about where a word ends: §4 shows the gap between two letters does not
+determine whether a space belongs there, in any print class measured. Going lower-level
+discarded a decision the engine had already made with information the positions do not
+carry. The primitive layer is the right seam when the consumer knows something the producer
+does not — which is true of GPO conventions and false of word breaks.
+
 ---
 
 # 1. The APIs exist, natively and in the browser build
@@ -221,6 +229,11 @@ PDFium's own stream supplies the label for each adjacent ink pair (did the engin
 space there?) and the geometry supplies the feature (gap ÷ size). This is not circular: the
 question is not whether PDFium is right, it is whether the geometry the neutral layer sees
 is *sufficient* to recover the same decision with one constant.
+
+The labels are also corroborated rather than taken on trust. Where the two disagree, the
+engine's answer is the one that matches **two independent references** — GPO's own printing
+(§3, `FAMILY HOUSING` is set with a space) and the XML tree (§6, on the stratum that can
+discriminate).
 
 <!-- H_SEPARABILITY -->
 
@@ -474,11 +487,15 @@ halves, and backends satisfy them differently:
 - **PyMuPDF** would need the adapter to treat all spaces alike. That is safe here (its
   synthesised boxes are real, not placeholders) but it forfeits the "fail loudly" property.
 - **PDF.js** is the one genuine narrowing, and it was already the weakest fit for the glyph
-  contract for the same reason: no per-character box. Its spacing is fine — 0 of 23
-  font-boundary adjacencies on the probe page lost a space, and an earlier note in
-  [`README.md`](README.md) recording a `Providedfurther,That` artifact did **not**
-  reproduce under pdfjs-dist 6.2.108 on this document (0 losses over 1657 font-boundary
-  adjacencies across 60 pages). Its limitation is geometry granularity, not text assembly.
+  contract for the same reason: no per-character box. Its *spacing* is fine — 0 of 23
+  font-boundary adjacencies on the probe page lost a space, and 0 over 1657 such
+  adjacencies across 60 pages of `114-hr-2029/4`. Its limitation is geometry granularity,
+  not text assembly.
+  [`README.md`](README.md) records a `Providedfurther,That` artifact from naive item
+  joining; that did not reproduce here under pdfjs-dist 6.2.108. The note does not name the
+  document it was measured on, so this is one document failing to reproduce it rather than
+  a refutation, and the check was first shown able to fire (1657 adjacencies examined)
+  before its zero was believed.
 
 So the honest statement is narrower and firmer than the draft's: the hybrid contract costs
 nothing against pdfminer, costs a safety property against PyMuPDF, and does not change
@@ -539,6 +556,29 @@ The evidence, in the order it should be checked:
    coverage (§2).
 5. It survives the WASM build, including a real stream-level difference between the two
    PDFium builds that the layer absorbs (§7).
+
+## Was the hybrid layer fitted to the failure cases?
+
+It was written after reading them, so the question is fair and is worth answering directly
+rather than leaving to the reader.
+
+- **No constant was tuned.** `reconstruct_hybrid.py` carries `_BASELINE_TOL`, `_SIZE_FLOOR`,
+  `_CHROME_SIZE_RATIO`, the chrome patterns and the margin-number regex at exactly the
+  values `reconstruct.py` uses. The only change is where word spaces come from, and it
+  removes a parameter rather than adding one.
+- **The discriminating documents were not chosen.** §3 includes a document where the glyph
+  path does not fail, and §5 scores all 52 corpus documents, of which the four heading
+  failures I inspected are a small part. The hybrid's error total over the full corpus is
+  the same 2/2 it shows on the documents I read.
+- **One bug was found by a diagnostic rather than by the score, and it is recorded** in
+  `probes/README.md`: the first version sorted each line by baseline and rendered `MILITARY`
+  as `M6 ILITARY`, because a heading's full-size initial reports an origin 0.003 pt above
+  its small caps. It was caught by an out-of-order counter, not by a metric, which is a
+  reason to keep such counters rather than a reason to trust the metrics more.
+- **What was NOT re-examined:** `_BASELINE_TOL = 0.6` is inherited unchanged and is exactly
+  what the `COUPS D'ÉTAT` case above trips over. This spike deliberately did not tune it. It
+  is the obvious first candidate for the follow-up, and it should be decided on its own
+  evidence, not folded into the contract decision.
 
 ## What this does not establish
 
