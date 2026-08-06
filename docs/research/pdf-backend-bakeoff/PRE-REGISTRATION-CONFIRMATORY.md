@@ -219,6 +219,41 @@ appear. So is any unqualified "zero egress".
 
 ---
 
+---
+
+# Concern D — performance, and why it needs its own protocol
+
+The exploratory run's gate-9 verdict for pdfminer **did not reproduce**: 37.9 s first,
+69.2 s on re-run, against a 60 s ceiling. Bare repeat trials of pdfium-wasm show CPU time
+≈ wall time, so the difference is machine state, not starvation. Absolute timings in this
+spike are not reproducible to better than ~1.5×.
+
+### Frozen protocol
+
+- **Idle machine.** Load average < 1.0 at start, verified and recorded with the results. No
+  other probe, no browser, no games. A run that starts above that threshold is void.
+- **Minimum of 5 trials**, not mean — the minimum is the robust estimator for "how fast can
+  this go" under residual noise. Report min, median and spread.
+- **Record CPU time alongside wall time.** Where they diverge materially the run is
+  contended and void.
+- **One backend at a time**, never concurrently.
+
+### Frozen gates
+
+| Gate | Threshold |
+|---|---|
+| D-1 | Largest corpus document (`119-hr-1/1`, 1118 pp) extracts in **< 60 s**, min-of-5, in-browser |
+| D-2 | Within **3×** the incumbent's native full-document time, min-of-5 |
+
+**Pre-committed:** a candidate whose min-of-5 straddles the ceiling is reported as
+`UNRESOLVED`, never rounded to a pass or a fail. That is the state pdfminer is in today,
+and pretending otherwise is what this rule prevents.
+
+**Relative claims survive contention and may be made from the exploratory data**
+(pdfium-wasm ≈ pdfjs, pdfminer 8–10× slower). **Absolute threshold claims may not.**
+
+---
+
 # Cross-cutting rules
 
 1. **No composite score.** Not across A/B/C, not within B. The exploratory spike avoided

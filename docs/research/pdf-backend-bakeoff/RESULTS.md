@@ -47,7 +47,7 @@ Method and per-test detail: [`RED-TEAM.md`](RED-TEAM.md). Probes:
 | 6 | "Permits no subresource or background network egress" | **WITHDRAWN** | Speculation Rules and `window.open` both reach the network under the published policy |
 | 7 | WebRTC survives CSP; no page-level mitigation closes it | **UPHELD** | Three mitigations tested, distinct source ports confirm independent attempts |
 | 8 | Top-level navigation exfiltration "is user-visible" | **WITHDRAWN** | False for `window.open`, which leaves the page in place |
-| 9 | Gate 9: pdfminer passes at 37.9 s | **UPHELD** | Measured at full document length, not extrapolated |
+| 9 | Gate 9: pdfminer passes at 37.9 s | **WITHDRAWN — now UNRESOLVED** | Did not reproduce: re-run gives 69.2 s, over the 60 s ceiling. See § 7 |
 | 10 | Calibration gate passed; layer introduces no drift | **UPHELD** | Production and neutral layer give identical anchor/node/conservation counts |
 | 11 | Money conservation and font-role do not discriminate | **UPHELD** | Identical across backends; font-role figure mixes two populations |
 | 12 | "Browser PDF architecture is viable on published GPO material" | **NARROWED** | The accepted corpus is effectively **one** typesetting class, not 52 documents of diversity |
@@ -207,6 +207,40 @@ Not blockers for the research conclusion; **blockers for shipping it.** Detail i
 | Vendored third-party licences | Not enumerated. `zlib` confirmed present in the shipped `.wasm` by string inspection. **Open item** |
 | Maintainership | Single maintainer; 16 stars on the runtime fork |
 | If it disappeared | DeltaTrack **could** rebuild (PDFium is BSD-3), but it is a depot_tools/`gn`/Emscripten build plus fork review. Interim mitigation: **vendor the verified `.wasm` and its checksum** rather than resolve from npm at build time |
+
+## 7. Gate 9 did not reproduce, and is now unresolved
+
+Found while restoring a deleted probe, not by re-examining the argument — the strongest
+kind of finding and the reason deleted probes are a defect rather than untidiness.
+
+The published full-document timings were produced by a scratch script that was then
+deleted. Rewriting it as [`phase5_fulldoc.mjs`](probes/js/phase5_fulldoc.mjs) and re-running
+gives different numbers:
+
+| Backend | published first run | same-day re-run | bare, 3 trials |
+|---|---|---|---|
+| pdfminer | **37.9 s** | **69.2 s** | — |
+| pdfjs | 3.9 s | 8.4 s | — |
+| pdfium-wasm | 4.6 s | 7.2 s | 6.55 / 6.72 / 6.75 s |
+
+**pdfminer crosses the pre-registered 60 s ceiling in the re-run.** Its gate-9 verdict is
+therefore **UNRESOLVED**, not passed.
+
+Diagnosis, rather than assumption: the re-run machine carried load average 4.68 with a
+game at 29 % CPU and WindowServer at 44 %. But in the bare trials **CPU time ≈ wall time**
+(6.87 / 6.64 / 6.87 against 6.72 / 6.55 / 6.75), so this is not CPU starvation — it is a
+genuinely slower machine state, and the 4.6 s figure is the outlier. It should not be
+quoted without this caveat.
+
+**What survives:** the *relative* ordering is stable across both runs — pdfium-wasm ≈
+pdfjs, with pdfminer 8–10× slower — so every comparative performance claim in this document
+holds. **What does not:** any absolute threshold test. pdfium-wasm and pdfjs pass gate 9
+under both runs (worst case 8.4 s); pdfminer's pass depends on which run you believe.
+
+This also means the earlier "the projection was wrong by 3.5×" correction was itself
+measured under unknown load. The honest statement is that **this spike cannot resolve
+pdfminer's performance gate**, and the confirmatory protocol requires an idle machine and a
+minimum-of-N-trials estimator to settle it.
 
 ## What an independent reviewer should reproduce first
 
