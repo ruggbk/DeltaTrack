@@ -13,6 +13,15 @@ stopped discriminating, and the decision is now purely architectural. On the arc
 recommend the hybrid — but for a different reason than `RESULTS-HYBRID.md` gives, and with
 a stated condition that would flip it.**
 
+> **Phase 3 has since tested two claims this document made without measuring them, and
+> found two defects in this phase's own work.** Read
+> [`../phase3/FINDINGS-CROSS-BACKEND.md`](../phase3/FINDINGS-CROSS-BACKEND.md) after this
+> one. Nothing below is rewritten; the rows phase 3 replaced are marked in place, and every
+> phase-2 result file is untouched. In short: the portability claim is **supported**, one
+> backend reason in §G3 was wrong, and `pdfium_extended.py` was consuming PDFium's
+> generated spaces despite its docstring saying it does not. That last one contaminated
+> `g05` and `g06`; the corrected contract scores identically.
+
 ---
 
 ## The feasibility gate
@@ -85,6 +94,21 @@ embedded DeVinne faces and covered only 36 of 987 characters.
 That is the **same portability profile as the hybrid**: three backends in, PDF.js out, for
 the same per-character-granularity reason ADR 0003 already records.
 
+> **Phase 3 correction to this table's reasons, not to its verdicts** (`../phase3/`, §1–2).
+> The table's three verdicts stand. Two of its reasons do not.
+>
+> - **pdfminer.** `LTChar.adv` is the advance in *text space* (`textwidth × fontsize ×
+>   scaling`), not em units. It reads as em only because GPO writes `Tf 1` and carries the
+>   size in the text matrix. `.width` is that value transformed into page space, which is
+>   the space the rule works in, so the field choice above is right and the reason is not.
+> - **PyMuPDF.** The `Font` route is open after all: `extract_font(xref)` yields the
+>   embedded program and `Font(fontbuffer=…)` instantiates it, agreeing with
+>   `get_texttrace()` at rate 1.0 over 987–1,633 characters per page. Two independent
+>   routes, not one.
+> - **PDF.js.** Granularity is the limitation of `getTextContent()` only. `getOperatorList()`
+>   exposes a genuine per-character advance at coverage 1.0. The blocker is that **no PDF.js
+>   API exposes a per-character pen origin**. Verdict unchanged, reason corrected.
+
 ### G4 — Experimental API burden
 
 | design | Experimental APIs | which |
@@ -108,6 +132,22 @@ they pass object handles whose lifetime semantics are subtler than a per-index p
 position, not the ink left edge) and `advance` (the font metric). `pdfium_extended.py` is a
 byte-for-byte copy of the glyph backend's rules plus those two fields, and reads no
 `get_text_range`, no `IsGenerated`, no engine-decided space.
+
+> **Phase 3 falsifies the last clause of that sentence** (`../phase3/`, §5 D2). The adapter
+> never *asks* whether a character was generated, which is what its docstring says, but it
+> copies every character on PDFium's text page and PDFium's text page contains generated
+> spaces. `reconstruct_extended._line_text` then emits `chr(32)` for each one before the
+> geometric rule runs. On `114-hr-2029/4` that is 4,445 engine-invented spaces against 555
+> from the content stream, so the reconstruction path was taking eight of every nine word
+> boundaries from the engine. **`g04` below is unaffected** (it walks ink pairs and never
+> reads a space glyph, confirmed independently by phase 3's N1 control); **`g05` and `g06`
+> ran on the contaminated path.** Re-run with every U+0020 dropped from every backend, the
+> heading failure cases score 53 ok / 0 bad exactly as below and the reconstructed text is
+> identical, so the defect is in the design's stated property rather than in its numbers.
+>
+> A note on the fix, because it is the cheap one: dropping U+0020 from the contract is also
+> how the design excludes engine-invented spaces *without* `FPDFText_IsGenerated`, the
+> Experimental predicate it exists to avoid.
 
 `reconstruct_extended.py` changes exactly one thing against `reconstruct.py`: the word-space
 rule. **It is labelled in its own docstring as a port of PDFium's heuristic, not as a law of
@@ -217,12 +257,38 @@ reintroduces a different unexplained constant, on a narrow and well-understood p
 | **word quality if the backend changes** | **fixed — the rule is ours** | **the backend's: pdfminer scores 0.807 against PDFium's 0.968 on truth** |
 | **PDFium's `R E P O R T` split** | **fixable in-repo** | not fixable |
 
+> **The last-but-one row was an assertion when this table was written. Phase 3 measured it,
+> and it holds** (`../phase3/`, §3–4). The same `wants_space` fed each engine's own facts
+> scores **0.9683 from PDFium, pdfminer and PyMuPDF alike**, with 0 pairwise disagreements
+> on the 72 adjudicated pairs and 1 in 195,291 at page scale. Under hybrid the swing is now
+> measured on two alternative engines rather than one: pdfminer 0.8065 and PyMuPDF 0.8413
+> against PDFium's 0.9683, i.e. **16.2 and 12.7 points**.
+>
+> The *mechanism* is narrower than "the rule is ours" implies, and worth stating precisely:
+> over 390,582 glyph endpoints the three engines return **advances identical to 0.0 pt**,
+> because each reads the same widths from the same embedded font programs. The extended
+> contract is not normalising a difference between engines; it is asking for a quantity on
+> which these engines do not differ.
+>
+> Phase 3 also adds a row to the **cost** side that this table does not carry:
+> `contract_extended.font_size` has **no defined axis**, and the ported rule buckets on it.
+> PDFium and PyMuPDF report the horizontal type scale, pdfminer the vertical; GPO's
+> condensed display type (text matrix `12 0 0 13`) separates them on 2.9 % of pairs, and
+> that is the cause of the single page-scale disagreement.
+
 ---
 
 ## Recommendation
 
-**Adopt the hybrid contract.** Accuracy is tied on every measure taken, portability is
-tied, and cost is close enough not to decide it. What separates them is that hybrid takes
+> **Corrected in strength, 2026-08-06.** This section originally opened "Adopt the hybrid
+> contract." That is stronger than this document's own "Evidence still blocking an ADR"
+> section supports, since a valid heading oracle and a fresh structure-rich holdout are both
+> listed there as blocking and neither is closed. The recommendation now reads as a standing
+> preference, not an adoption. Nothing else in the reasoning changed.
+
+**Hybrid remains the preferred candidate on the evidence measured so far.** Accuracy is
+tied on every measure taken, portability is tied, and cost is close enough not to decide
+it. What separates them is that hybrid takes
 on no new code and no new constant, while extended glyph asks DeltaTrack to own and
 maintain a heuristic Chromium wrote for a different purpose, plus a fallback constant for a
 character PDFium's own public API cannot measure.
@@ -232,9 +298,10 @@ ability to fix PDFium's display-caps split — are **option value the project ha
 to exercise**. ADR 0002 pins pypdfium2 as the single engine, and PDF.js can satisfy neither
 contract, so the backend the hybrid binds to is the backend that is already bound.
 
-**Adopt it for the corrected reason, though.** Not "geometry alone is insufficient", which
+**Prefer it for the corrected reason, though.** Not "geometry alone is insufficient", which
 phase 1 falsified and phase 2 has now falsified a second way, by building the geometric
-path and tying. The defensible ADR rationale is:
+path and tying. The rationale an ADR could rest on, once the two blocking items below are
+closed, is:
 
 > The engine's word-boundary decision is at least as good as anything DeltaTrack would
 > write — measured, by writing it and finding zero disagreements — and writing our own buys
@@ -250,6 +317,9 @@ path and tying. The defensible ADR rationale is:
    the financial data contract.
 2. **ADR 0002 is reopened** and a second engine becomes real. Under hybrid, the measured
    quality swing is 16 points; under extended glyph it is zero.
+   *(Phase 3 has now measured both halves of that sentence rather than asserting them: the
+   swing is 16.2 points to pdfminer and 12.7 to PyMuPDF, and extended glyph's is zero on
+   both, with 0 disagreements on the adjudicated sample and 1 in 195,291 at page scale.)*
 3. **The Experimental handle-chain proves more stable than the flags**, reversing the API
    argument. Nothing here tests that; it is an upstream-history question neither phase
    answered.
@@ -277,6 +347,15 @@ Phase 2 adds two of its own, both cheap:
 
 Items 1 and 2 remain blocking. 3–5 can be follow-ups if the ADR states them as open.
 
+Phase 3 adds two more, both design-level rather than evidence-level:
+
+6. **`contract_extended.font_size` needs its axis specified.** PDFium and PyMuPDF report the
+   horizontal type scale, pdfminer the vertical, and the ported rule buckets on it, so the
+   omission is load-bearing under anisotropic type. One line of definition.
+7. **The extended contract must exclude U+0020, and the exclusion needs a test.** D2 below
+   shows an adapter can satisfy the docstring's letter while passing the engine's decision
+   through.
+
 ---
 
 ## Corrections this phase makes to its own earlier claims
@@ -290,3 +369,22 @@ Items 1 and 2 remain blocking. 3–5 can be follow-ups if the ADR states them as
 - **Two backend APIs were wrong on first reading** (pdfminer's `adv` units, PyMuPDF's font
   path). Both would have produced a false "this backend cannot supply the field", which is
   the failure direction that would have wrongly killed the extended design.
+
+### Corrections phase 3 makes to this phase
+
+Detail and evidence in [`../phase3/FINDINGS-CROSS-BACKEND.md`](../phase3/FINDINGS-CROSS-BACKEND.md) §7.
+
+- **`g03`'s pdfminer reason.** `.adv` is the text-space advance, not em units. The field
+  chosen (`.width`) was right; the reason a reader would carry elsewhere was not.
+- **`g03`'s PyMuPDF font path.** `Font(fontname=…)` is closed, as recorded, but
+  `extract_font(xref)` + `Font(fontbuffer=…)` is open and corroborates `get_texttrace()`.
+- **`g03`'s PDF.js reason.** Item granularity limits `getTextContent()` only;
+  `getOperatorList()` gives a per-character advance at coverage 1.0. The blocker is the pen
+  origin. Verdict unchanged.
+- **`pdfium_extended.py`'s "never consumes a space the engine decided to insert".**
+  Falsified. `g05` and `g06` ran on that path; `g04` did not. The corrected contract scores
+  identically, so no number above moves.
+- **`contract_extended.py`'s "no backend is asked to reproduce another's conventions".**
+  True of `origin_x` and `advance`; not true of `font_size`.
+- **The portability row in the architectural table**, and flip condition 2, were assertions
+  when written. Phase 3 measured both and both hold.
