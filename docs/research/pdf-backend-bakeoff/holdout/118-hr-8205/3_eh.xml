@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="billres.xsl"?>
+<!DOCTYPE bill PUBLIC "-//US Congress//DTDs/bill.dtd//EN" "bill.dtd">
+<bill bill-stage="Engrossed-in-House" dms-id="H4C991CEA95154560BE59B434BDB57402" public-private="public" key="H" bill-type="olc" stage-count="1"> 
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dublinCore>
+<dc:title>118 HR 8205 EH: Keeping Violent Offenders Off Our Streets Act</dc:title>
+<dc:publisher>U.S. House of Representatives</dc:publisher>
+<dc:date></dc:date>
+<dc:format>text/xml</dc:format>
+<dc:language>EN</dc:language>
+<dc:rights>Pursuant to Title 17 Section 105 of the United States Code, this file is not subject to copyright protection and is in the public domain.</dc:rights>
+</dublinCore>
+</metadata>
+<form>
+<distribution-code display="no">I</distribution-code> 
+<congress>118th CONGRESS</congress> <session>2d Session</session> 
+<legis-num>H. R. 8205</legis-num> 
+<current-chamber display="no">IN THE HOUSE OF REPRESENTATIVES</current-chamber> 
+<legis-type>AN ACT</legis-type> 
+<official-title display="yes">To amend title 18, United States Code, to prohibit fraud in connection with posting bail.</official-title> 
+</form> 
+<legis-body id="H01DC332D55FB4B9E8F074B62F7B81CB7" style="OLC"> 
+<section id="H189993A07F9E49BAB1624FBD9E4B522F" section-type="section-one"><enum>1.</enum><header>Short title</header><text display-inline="no-display-inline">This Act may be cited as the <quote><short-title>Keeping Violent Offenders Off Our Streets Act</short-title></quote>.</text></section> <section id="H4484F494D08C481996AED2A60BADFD9D" section-type="subsequent-section"><enum>2.</enum><header>Fraud in connection with posting bail</header><text display-inline="no-display-inline">Section 1033(f)(1)(A) of title 18, United States Code, is amended by inserting before the comma the following: <quote>(including the posting of monetary bail, criminal bail bonds, and Federal immigration bail bonds)</quote>. </text></section> 
+</legis-body> <attestation><attestation-group><attestation-date date="20240925" chamber="House">Passed the House of Representatives September 25, 2024.</attestation-date><attestor display="no">Kevin F. McCumber,</attestor><role>Clerk.</role></attestation-group></attestation>
+<endorsement display="yes"></endorsement>
+</bill> 
+
+
