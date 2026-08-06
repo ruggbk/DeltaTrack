@@ -6,6 +6,12 @@
   [`LICENSING.md`](LICENSING.md).
 - The conclusion was then **adversarially audited** in [`RED-TEAM.md`](RED-TEAM.md), which
   rejected the first draft's headline. Read that before acting on `RESULTS.md`.
+- The spike's successors, in order: [`RESULTS-CONFIRMATORY.md`](RESULTS-CONFIRMATORY.md)
+  (pre-registered re-run), [`RESULTS-HYBRID.md`](RESULTS-HYBRID.md) (where the engine/
+  DeltaTrack seam should sit), and then [`validation/README.md`](validation/README.md), a
+  three-phase falsification pass over that last one. **The seam question is not settled by
+  anything in this directory**; `validation/` carries the current state of it, including
+  where these documents are wrong.
 - **This document was not rewritten to match the results**, deliberately: the value of a
   pre-registered spec is that it can be read against the outcome, including where the
   outcome contradicted it. Places it did:

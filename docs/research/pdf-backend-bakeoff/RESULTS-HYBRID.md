@@ -10,6 +10,17 @@
   bake-off's neutral **glyph** layer, produce 302 heading labels production does not.
   This document asks whether that was a defect of PDFium, of the constant, or **of the
   abstraction boundary**.
+- **Successor, and read it before acting on this document:**
+  [`validation/README.md`](validation/README.md). An independent falsification pass run on
+  the assumption that this document's conclusion is wrong. Its verdict is *supported but
+  not confirmed*: the conclusion holds, and **the reason given for it below is falsified**.
+  PDFium's word-space rule is published geometry over pen origins and font advance widths,
+  so "the engine is the only layer that has the font's own metrics" is not true as stated;
+  a contract can carry them. Three further claims here are wrong as written. That opened a
+  third seam this document never scored, which phases 2 and 3 then built and measured.
+  **Nothing below is edited to agree with it**, for the same reason `RESULTS.md` keeps its
+  withdrawn headline: a research record that quietly rewrites its own conclusions cannot be
+  audited.
 
 ## The question, restated
 

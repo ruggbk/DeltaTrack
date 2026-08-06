@@ -10,6 +10,12 @@
 - Reproduction: [`probes/`](probes/). Raw output: [`results/`](results/). Full audit method:
   [`RED-TEAM.md`](RED-TEAM.md). Proposed confirmatory run:
   [`PRE-REGISTRATION-CONFIRMATORY.md`](PRE-REGISTRATION-CONFIRMATORY.md).
+- **Later work supersedes parts of this document.** The confirmatory run
+  ([`RESULTS-CONFIRMATORY.md`](RESULTS-CONFIRMATORY.md)) found that both PDFium builds
+  produce 302 heading labels production does not; [`RESULTS-HYBRID.md`](RESULTS-HYBRID.md)
+  asked where the seam belongs; and [`validation/README.md`](validation/README.md)
+  falsified that document's stated reasoning and then built and scored the seam it never
+  considered. Read `validation/` for the current state of the seam question.
 
 > **This document has two layers, and neither is edited to agree with the other.**
 > The audit section comes first because it is what a reader should act on. The original

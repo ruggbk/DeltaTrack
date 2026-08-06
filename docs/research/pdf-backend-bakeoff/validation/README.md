@@ -96,14 +96,39 @@ does not propose it.
 ## Preservation
 
 The pre-validation spike is tagged **`pdf-bakeoff-prevalidation`** and hashed file-by-file
-in [`PRESERVED-MANIFEST.txt`](PRESERVED-MANIFEST.txt). Nothing outside this directory was
-modified or added:
+in [`PRESERVED-MANIFEST.txt`](PRESERVED-MANIFEST.txt), which remains the authority: every
+spike artefact can still be verified byte-for-byte against it.
+
+**The trade this section used to describe as unmade has now been made, deliberately.**
+Until 2026-08-06 nothing outside this directory was touched, so
+`git diff pdf-bakeoff-prevalidation HEAD -- <spike> ':!validation'` was empty, and that
+one command proved the audit had not edited the thing it was auditing. The cost was that a
+reader arriving at the spike's own front door had no path to the work that partly overturns
+it. Three pointers were added, and the check becomes: **exactly three files differ, and
+each diff is an added pointer block and nothing else.**
 
 ```
 git diff --stat pdf-bakeoff-prevalidation HEAD -- \
     docs/research/pdf-backend-bakeoff ':!docs/research/pdf-backend-bakeoff/validation'
 ```
 
-is empty. That is why the spike's own entry points do not link here — adding a link would
-end the property. If you would rather have the cross-link than the guarantee, that is a
-deliberate trade and it has not been made.
+must list only `README.md`, `RESULTS.md` and `RESULTS-HYBRID.md`. Drop `--stat` to confirm
+the content: **additions only, no deletions, no changed line** (23 insertions, 0 deletions
+as of this writing). Every other spike file, and the prior content of those three, still
+verifies against the manifest and the tag.
+
+The manifest check is the stronger of the two, because it fails loudly rather than
+silently. From `docs/research/pdf-backend-bakeoff/`:
+
+```
+grep '^[0-9a-f]' validation/PRESERVED-MANIFEST.txt | shasum -a 256 -c
+```
+
+112 entries, of which exactly three report `FAILED` and every other reports `OK`. Those
+three are the pointer blocks. **A run where nothing fails would mean the check is not
+reading the files at all**, which is worth knowing: this command is one of the few here
+that has a known-bad case built into it.
+
+**No spike conclusion was edited to agree with this directory.** `RESULTS-HYBRID.md` keeps
+its falsified rationale in place and says so at the top, on the same principle that keeps
+`RESULTS.md`'s withdrawn headline verbatim below its own audit.

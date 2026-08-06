@@ -1,8 +1,13 @@
 # Adversarial validation of the hybrid text+geometry conclusion
 
 - Run 2026-08-06 against `RESULTS-HYBRID.md` at commit `3a67b03`, tagged
-  `pdf-bakeoff-prevalidation`. **No spike file and no production file was modified.** Every
-  spike artefact is hashed in [`PRESERVED-MANIFEST.txt`](PRESERVED-MANIFEST.txt).
+  `pdf-bakeoff-prevalidation`. **No spike finding, table or probe was modified, and no
+  production file was.** Every spike artefact is hashed in
+  [`PRESERVED-MANIFEST.txt`](PRESERVED-MANIFEST.txt).
+  Three spike documents were later given a pointer to this directory so a reader arriving
+  at the spike's front door can find it; that is an addition of navigation, not an edit of
+  a result, and [`README.md § Preservation`](README.md#preservation) states exactly what to
+  check.
 - Probes are `v01`–`v09` in this directory; raw output is in [`results/`](results/).
 - The question asked was whether the conclusion *"hybrid text+geometry should replace raw
   glyph reconstruction as DeltaTrack's PDF adapter contract"* may be **wrong**.
