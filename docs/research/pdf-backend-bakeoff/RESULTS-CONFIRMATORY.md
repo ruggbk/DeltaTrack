@@ -520,6 +520,72 @@ tests it and finds the failure mode is silent rather than loud.
 it belongs to the pipeline rather than to the bake-off. It is nonetheless the most actionable
 product finding in this run.
 
+
+---
+
+# Applying the frozen decision rules
+
+**Rule 1 — does either candidate have a clear, practically meaningful, independently
+validated accuracy advantage on replication *and* holdout?**
+
+**No, because the conjunction fails.** pdfminer has a demonstrated structural advantage on
+the **replication** corpus: it leads B2 on the only stratum where B2 can move (+0.0320, CI
+excluding zero), it leads every metric at every setting of every parameter, and it
+reproduces production's heading extraction almost exactly through the glyph layer where
+PDFium does not (5 spurious labels against 302). But the **holdout cannot corroborate any of
+it** — B2 is void there because 37 of 44 holdout documents carry no headings at all.
+
+So the honest statement is narrower than a lead and wider than a tie: **pdfminer has a
+structural advantage that is well evidenced on the replication corpus and untested on unseen
+data.** On text recovery the two are indistinguishable in the shipping mode on **both**
+populations.
+
+**Rule 2 — where accuracy is indistinguishable, tie-breakers apply.** On text, they do, and
+they favour PDFium-WASM decisively: a **3.03–4.13× smaller** artifact over the wire and
+roughly **3× faster** native extraction (8–10× in-browser, from the exploratory data).
+
+**Rule 3 — PDFium-WASM's exact parity is migration safety, not correctness.** Held to, and
+sharpened: its parity is with the *harness incumbent*, and the same output regresses against
+*production* on heading labels.
+
+**Rule 4 — pdfminer's exploratory metrics were evidence worth testing, not proof.** Tested.
+The text half dissolved into the soft-hyphen repair delta. The structural half survived, and
+strengthened once measured against production rather than against the XML.
+
+**Rule 5 — security conclusions name their policy and environment.** Done in Concern C.
+
+## The tradeoff, stated rather than resolved
+
+| | PDFium-WASM | pdfminer.six |
+|---|---|---|
+| Reproduces the harness incumbent | **exact** — 43/43 accepted, 4/4 declined | amounts yes; change segmentation diverges on 22/43 |
+| Heading labels vs **production** | 302 spurious / 280 missed over 33 docs | **5 spurious / 2 missed** |
+| Text recovery (shipping mode) | **indistinguishable** | **indistinguishable** |
+| Artifact over the wire | **2.19 MB** incremental | 6.66–9.05 MB incremental |
+| Speed | **~3× faster** natively | 8–10× slower in-browser (exploratory) |
+| Supply chain | single-maintainer fork, no tarball→commit mapping | PyPI, long established |
+
+**Neither dominates, and the deciding axis is now a different one than the audit expected.**
+The exploratory audit thought bundle size might rescue pdfminer; it does the opposite. This
+run's own finding is that PDFium's glyph path misfiles ~15 % of the heading tree on large
+appropriations bills relative to production — and the heading tree is the financial data
+contract.
+
+## The step this run has earned
+
+**Fix the adapter's word-space rule and re-run, before choosing.** The defect is one rule:
+a space is inserted when the x-gap exceeds `_SPACE_FACTOR × size`, evaluated against the
+*following* glyph's size, and at a small-caps boundary that lands ~0.8 pt from the threshold.
+Keying it on the larger of the neighbouring sizes, or on PDFium's own space glyphs, is a
+small change to `reconstruct.py`.
+
+If it removes PDFium's 302 spurious labels, the two candidates become indistinguishable on
+every independent metric and the decision falls cleanly to the tie-breakers, where
+PDFium-WASM wins on size, speed and exact migration parity. **That is a cheap experiment with
+a decisive outcome, and this run did not perform it** — writing the fix after seeing which
+backend it helps is exactly the degree of freedom the preregistration exists to prevent, so
+it belongs to a separately pre-registered run.
+
 ---
 
 # What this run did not settle
