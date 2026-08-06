@@ -266,6 +266,25 @@ def main() -> None:
         results[metric] = stat
     report["delta"] = results
 
+    # The quoted-block stratum for B2/B5/B6, reported because the primary stratum is
+    # known to be non-discriminating on this corpus: every P1 document where the two
+    # backends' heading recovery differs carries <quoted-block>, and the exclusion that
+    # protects B2 from the DeltaTrack#11 reference defect removes all of them. Publishing
+    # only "identical on every document" would read as evidence of similarity when the
+    # metric in fact had no opportunity to fire.
+    secondary = {}
+    for metric in ("B2", "B5", "B6"):
+        keys = strata["primary, quoted-block (B2/B5/B6)"]
+        stat = cluster_bootstrap(paired_deltas(docs, args.mode, metric, keys))
+        stat["threshold"] = THRESHOLDS[metric]
+        stat["stratum"] = "quoted-block (XML reference carries a known parser drop)"
+        stat["caveat"] = (
+            "The XML reference under-reports here (DeltaTrack#11), so this is not a clean "
+            "accuracy comparison. It is reported because the clean stratum cannot discriminate."
+        )
+        secondary[metric] = stat
+    report["delta_quoted_block_stratum"] = secondary
+
     # Absolute per-backend means, for context. Never a ranking on their own.
     means = {}
     for backend in CANDIDATES + ("pdfium-native",):
@@ -310,6 +329,16 @@ def main() -> None:
         b = "     n/a" if pm is None else f"{pm:8.4f}"
         n = f"{s['n_documents_differing']}/{s['n_documents']}"
         print(f"  {m:6} {a} {b} {s['point']:+9.4f} {ci:>20} {s['threshold']:>7}  {n:>7} differ  {s['verdict']}")
+
+    print("\nB2/B5/B6 on the QUOTED-BLOCK stratum (reference is known-defective there,")
+    print("reported because the clean stratum above cannot discriminate at all):")
+    for m, s2 in report["delta_quoted_block_stratum"].items():
+        if s2["point"] is None:
+            print(f"  {m:6} insufficient data")
+            continue
+        ci = f"[{s2['ci'][0]:+.4f}, {s2['ci'][1]:+.4f}]"
+        n = f"{s2['n_documents_differing']}/{s2['n_documents']}"
+        print(f"  {m:6} delta={s2['point']:+.4f} {ci:>20} {n:>7} differ")
 
     print(f"\nrepair delta on B1 (repaired - strict): {report['repair_delta_B1']}")
 
