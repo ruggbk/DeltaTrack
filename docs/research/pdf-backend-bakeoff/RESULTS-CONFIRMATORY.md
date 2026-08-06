@@ -244,6 +244,62 @@ cannot move a heading without changing whether it is detected. That is a real co
 `extract_anchors`, not a defect in B5. On P2 both read "separable" **only because B2 cannot
 move there at all**, so the P2 separability verdict is not evidence and the P1 one stands.
 
+
+---
+
+# The finding that reframes Concern A
+
+**Production does not use the glyph path.** `parsers/pdf_text.py` reads PDFium's *text* API;
+the neutral glyph layer is something this bake-off built to compare backends fairly, and it
+is also what a browser architecture would have to use. Those are not the same pipeline, and
+Concern A's reference is the harness incumbent — native pypdfium2 **through the glyph
+layer** — not production's current output.
+
+Measured over the 33 production-accepted corpus documents that carry any headings, against
+`extract_clean_pages` as the production reference:
+
+| path | exact heading-set match | labels production does **not** produce | production labels **missed** |
+|---|---|---|---|
+| PDFium-native via the glyph layer | 26/33 | **302** | **280** |
+| PDFium-WASM via the glyph layer | 26/33 | **302** | **280** |
+| **pdfminer via the glyph layer** | **29/33** | **5** | **2** |
+
+The two PDFium builds are identical to each other to the label — which is exactly what
+Concern A reports, and it is a real result: **the WASM build faithfully reproduces native
+PDFium, including this defect.**
+
+On the largest bills the defect is not marginal. `118-hr-4366/5`: production recovers 652
+headings; PDFium's glyph path invents 99 and loses 98, about **15 % of the heading tree**.
+pdfminer invents 0 and loses 0.
+
+**Mechanism, diagnosed and robust.** PDFium loses the word space at GPO small-caps
+boundaries, producing `FAMILYHOUSING`, `NAVYAND`, `ARMYNATIONAL`, `AMERICANBATTLE`. The
+layer inserts a space when the x-gap exceeds `_SPACE_FACTOR × size`; at those boundaries the
+gap is ~4.3 pt against a threshold of exactly 3.50, and the backends resolve the small-cap
+size differently (PDFium 11.2 pt, pdfminer 10.5 pt). The sensitivity sweep shows this is
+**not** an artifact of that constant: pdfminer leads at every setting of every parameter,
+and its own B2 is flat at 0.5826 across 0.15/0.20/0.30 while PDFium's moves.
+
+**Why nothing caught this earlier.** The exploratory calibration gate compared production's
+and the layer's **anchor counts, node counts and conservation numbers** — 165/165, 339/339,
+197/197 — and passed. Counts are not what differ; labels are. A gate that compares totals
+cannot see a renamed heading.
+
+**Product consequence.** The heading tree is the financial data contract: it is what puts an
+amount under the right department, agency and account. A malformed account label does not
+merely look wrong, it misfiles the money beneath it.
+
+**What this does and does not change.**
+
+- It does **not** touch Concern A's result. PDFium-WASM does reproduce the harness incumbent
+  exactly, on 43 accepted pairs and 4 declined.
+- It **does** change what that result licenses. "Safe to swap the backend" is not "safe to
+  move to the glyph architecture": a browser build carrying PDFium would regress against
+  current production on heading labels, and Concern A was never pointed at that comparison.
+- It is **fixable in principle** — the adapter's word-space rule could key on the larger of
+  the neighbouring glyph sizes, or use PDFium's own space glyphs — but **nobody has written
+  or tested that fix**, so it is not evidence available to a decision today.
+
 ---
 
 # Concern C — security / egress
