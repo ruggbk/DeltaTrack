@@ -79,6 +79,32 @@ accuracy conclusion.
 
 <!-- /A_P2 -->
 
+
+## A.3 How to read Concern A
+
+**PDFium-WASM reproduces the incumbent exactly on 43 accepted pairs and 4 declined ones**,
+across both populations, including bill classes no probe had seen: non-appropriations House
+and Senate bills, a joint resolution, a watermarked Senate print, a chamber-crossing
+amendment print. On the same pairs pdfminer matches amounts and line numbers but diverges on
+change segmentation (22 of 43) and full text (15 of 43).
+
+**This is evidence about migration risk and about nothing else.** Reproducing today's output
+exactly says a swap changes nothing a staffer reads; it says nothing about whether either
+backend reads the document correctly. That substitution is what produced the withdrawn
+headline in the exploratory run.
+
+**The amount-identity result is thinner than its 43/43 suggests, and the controls are what
+exposed that.** A pair whose amount multiset is empty on both sides passes A1 vacuously.
+Only **9 of 13** P1 pairs and **3 of 30** holdout pairs carry any amount entries at all — the
+holdout's non-appropriations bills barely contain dollar figures. SA1 breaks A1 on **every one
+of those 12**, so the gate is demonstrably live, but amount parity rests on **12 substantive
+pairs**, not 43. The exploratory run's own "13/13 identical `amount_entries`" carried the same
+three empty pairs and did not say so.
+
+SA2 and SA3 are each unproven on some pairs and are marked rather than counted: on very small
+change sets, deleting one printed line does not always alter the change-signature multiset,
+and deleting one glyph from a cover page changes no text that survives chrome stripping.
+
 ---
 
 # Concern B — independent document accuracy
@@ -159,6 +185,64 @@ Replication and holdout are reported separately and never pooled.
 | B6 | | | | | 0.02 | insufficient data |
 
 <!-- /B_P2_DELTA -->
+
+
+## B.5 How to read Concern B
+
+**The mode decides the answer, and only one mode is shippable.**
+
+| | strict | repaired (the mode a production adapter would ship) |
+|---|---|---|
+| P1 text (B1) | pdfminer leads +0.0422 | **indistinguishable**, 0.9098 vs 0.9099 |
+| P2 holdout text (B1) | pdfminer leads +0.0638 | **indistinguishable**, +0.0001 |
+| P1 structure (B2/B3a/B5/B6) | identical on every document | identical on every document |
+
+pdfminer's entire strict-mode text lead is PDFium's soft-hyphen repair delta: **+0.0422
+against +0.03875** on P1, **+0.0638 against +0.0741** on the holdout. pdfminer's repair
+delta is exactly 0.0000 in both, because the rule only ever fires for PDFium. Production
+already performs the equivalent repair for the text API in `normalize_raw`, so a glyph-path
+adapter would carry it too.
+
+**Where B2 is silent, it is silent for two different reasons, and neither is similarity.**
+
+- **P1 primary stratum: no opportunity to fire.** Every P1 document where the two backends'
+  heading recovery differs carries `<quoted-block>`, and the exclusion that protects B2 from
+  the DeltaTrack#11 reference defect removes all of them. The stratum reports "identical on
+  every document" over 26 documents that could not have differed.
+- **P2 holdout: nothing to measure.** 7 of 44 holdout documents carry any account or agency
+  heading; 37 carry none. Its B2 control moves the metric by +0.0059 against a 0.020
+  threshold, so **B2 is VOID on the holdout** — by the population's construction, not the
+  metric's fault. Ten of twelve holdout bills are non-appropriations, and the appropriations
+  heading tree is what B2/B5/B6 measure.
+
+**A design tension worth carrying forward:** one 12-bill holdout cannot both test
+generalization *beyond* appropriations and exercise metrics that only exist *within* it.
+These strata bought the first and spent the second.
+
+**On the quoted-block stratum, where B2 can move, pdfminer leads — and the mechanism is
+diagnosed rather than inferred.** PDFium loses the word space inside heading labels at GPO
+small-caps boundaries: `FAMILYHOUSING`, `NAVYAND`, `ARMYNATIONAL`, `AMERICANBATTLE`. On
+`114-hr-2029/4` that is 17 malformed labels, **none of which match anything in the XML**,
+against 2 for pdfminer. The neutral layer inserts a space when the x-gap exceeds
+`_SPACE_FACTOR × size`; at those boundaries the gap is ~4.3 pt against a threshold of
+exactly 0.25 × 14.0 = **3.50**, and the two backends resolve the small-cap size differently
+(PDFium 11.2 pt, pdfminer 10.5 pt). They land on opposite sides of one knife-edge.
+
+Two things follow, and they point in opposite directions:
+
+1. The malformed labels are **wrong regardless of the reference's completeness** — GPO
+   prints "FAMILY HOUSING" with a space — so this is a real defect of the
+   PDFium-plus-this-layer combination, not an artifact of the XML drop.
+2. Whether it is PDFium's defect or the **constant's** is what the sensitivity sweep decides,
+   and `_SPACE_FACTOR = 0.25` is the value the exploratory audit already flagged as
+   inherited from PDFium-tuned production. A lead that exists only at the default is
+   reported as *"leads at the default parameterization only"*.
+
+**Separability, and a trap in reading it.** On P1, S5 is separable and **S4 is not**: moving
+a heading into another heading's slot costs B5 0.61 but also costs B2 0.17, so this pipeline
+cannot move a heading without changing whether it is detected. That is a real coupling in
+`extract_anchors`, not a defect in B5. On P2 both read "separable" **only because B2 cannot
+move there at all**, so the P2 separability verdict is not evidence and the P1 one stands.
 
 ---
 
