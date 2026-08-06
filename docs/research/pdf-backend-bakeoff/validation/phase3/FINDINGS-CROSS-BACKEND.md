@@ -1,7 +1,17 @@
 # Phase 3 — does the extended-glyph rule survive a change of engine?
 
-- Run 2026-08-06. **Phase 1 (`../FINDINGS.md`) and phase 2 (`../phase2/FINDINGS-EXTENDED-GLYPH.md`)
-  are unchanged; their result files are untouched.** This is a new subphase.
+- Run 2026-08-06. This is a new subphase. **Preservation, stated literally** (the first
+  version of this line said phase 1 and phase 2 "are unchanged", which their findings
+  documents no longer are):
+  - **Phase 1 and phase 2 RESULT ARTIFACTS are unchanged.** No commit after each file's
+    creating commit touches `../results/` or `../phase2/results/`; `git log -- <those
+    paths>` lists only phase-1 and phase-2 spike commits.
+  - **Their FINDINGS DOCUMENTS have been annotated**, by phase 3, with forward pointers and
+    corrections: 109 lines added and 6 removed across both. Five of the six removed lines
+    are the two sentences whose *strength* was corrected ("Adopt the hybrid contract" and
+    "Adopt it for the corrected reason"), each replaced in place with an annotation saying
+    what changed and why. The sixth is the superseded preservation claim itself. **No
+    result, table or number was edited**, and the original claims stay visible.
 - Probes are `h01`–`h05` here; raw output in [`results/`](results/).
 - The question phase 2 left open. Phase 2 measured field *availability* on three backends
   and *accuracy* on one, then wrote into its comparison table:
@@ -14,17 +24,28 @@
 
   Neither sentence had been measured. Both are tested here.
 
-**Answer: confirmed, and the mechanism is not the one the phrasing implies.** The same
-`wants_space` fed each engine's own facts gives the same answer on 195,290 of 195,291
-adjacent pairs, and produces byte-identical reconstructed text from all three engines on
-four of five documents. But the extended contract is not *normalising* a difference between
-engines. Over 390,582 glyph endpoints the three engines return **advances that are
-identical to 0.0 pt**, because all three read the same widths from the same embedded font
-programs. The rule ports because the facts do not differ, which is a stronger property than
-"our rule smooths the engines out", and a narrower one.
+**Answer: confirmed on the tested population, and the mechanism is not the one the phrasing
+implies.** The same `wants_space` fed each engine's own facts gives the same answer on
+195,290 of the 195,291 adjacent pairs all three engines could align, and produces
+byte-identical reconstructed text from all three on four of five documents. On the frozen
+adjudicated sample all three score **0.9275**, the primary result, with zero disagreements
+between them.
+
+The extended contract is not *normalising* a difference between engines. It is asking for a
+quantity on which they barely differ: over 390,582 glyph endpoints the raw advances agree
+to within **3.05e-5 pt**, which is below the contract's own 1e-4 rounding and about three
+orders of magnitude below the smallest perturbation the spacing rule can feel.
+
+> **Corrected 2026-08-06.** The first version of this document said the engines return
+> "advances identical to 0.0 pt". That measured the values **after** the adapters round
+> them to four decimal places. Re-read raw, they are **equivalent at the contract's
+> precision, not identical** (`h06`). The architectural conclusion is unchanged, because it
+> needs semantic equivalence and not bit-identity, but the stronger claim was not evidenced
+> and has been withdrawn.
 
 Phase 3 also found **two defects in phase 2's own work**, one of which falsifies a sentence
-in `pdfium_extended.py`'s docstring. Both are in [§5](#5-h5--the-two-divergences-diagnosed).
+in `pdfium_extended.py`'s docstring ([§5](#5-h5--the-two-divergences-diagnosed)), and **four
+in its own first pass**, listed in [§7](#7-corrections-this-phase-makes-to-earlier-claims).
 
 ---
 
@@ -127,17 +148,48 @@ PDFium; **0 unmapped in any backend**. The join is by pen origin (codepoint, `|�
 `|Δbaseline| ≤ 0.6` pt, unique match required), which is safe because H1 measured the
 engines' origins as agreeing to under 2e-4 pt.
 
-| backend | backend's own text decision | extended-rule decision | independently adjudicated accuracy | coverage |
-|---|---|---|---|---|
-| PDFium | 0.9275 / **0.9683** | 0.9275 / **0.9683** | tied with its own decision, 0 disagreements | 69/69 |
-| pdfminer.six | 0.8065 / **0.8065** | **0.9275 / 0.9683** | **+16.2 pts over its own decision** | 69/69 ext, 62/69 own |
-| PyMuPDF | 0.8116 / **0.8413** | **0.9275 / 0.9683** | **+12.7 pts over its own decision** | 69/69 |
-| PDF.js | n/a | unsupported (no pen origin) | n/a | 0 |
+**On the primary adjudication, unchanged and not reopened**, all three extended paths score
+**0.9275**, with zero pairwise disagreements between them.
 
-Two numbers per cell: as adjudicated, then with phase 1's inconsistent class dropped, which
-remains labelled **post-hoc**. Three of the 72 are UNREADABLE and excluded, as in phase 1.
-pdfminer's *own* column keeps phase 1's frozen coverage of 62/69; the 7 it could not locate
-were not scored then and are not scored now.
+| backend | backend's own text decision | extended-rule decision | coverage |
+|---|---|---|---|
+| PDFium | **0.9275** | **0.9275** | 69/69 |
+| pdfminer.six | **0.8065** (on the 62 it can decide) | **0.9275** | 69/69 ext, 62/69 own |
+| PyMuPDF | **0.8116** | **0.9275** | 69/69 |
+| PDF.js | n/a | unsupported (no pen origin) | 0 |
+
+Three of the 72 are UNREADABLE and excluded, as in phase 1. pdfminer's *own* column keeps
+phase 1's frozen coverage of 62/69; the 7 it could not locate were not scored then and are
+not scored now.
+
+> **The post-hoc sensitivity analysis, kept visibly secondary.** Phase 1 found six identical
+> stimuli answered 3–3 by its adjudicator and reported that as a defect in its own work.
+> Removing that inconsistent class raises **all three extended paths to 0.9683**, PDFium's
+> own decision to 0.9683, pdfminer's own to 0.8065 and PyMuPDF's own to 0.8413. It is a
+> sensitivity check on a known adjudication weakness, it moves the numbers in the direction
+> that favours the paths under test, and phase 1 labelled it post-hoc for exactly that
+> reason. **The primary adjudication above is the result; 0.9683 is the sensitivity.**
+
+### The cost of a backend change, computed PAIRED
+
+Phase 3's first pass subtracted 0.9683 from 0.8065 and called the gap 16.2 points. Those
+accuracies were computed on different denominators (69 pairs against 62), so the subtraction
+was not licensed. Scored on **exactly the pairs where both the engine's own decision and the
+extended rule have an answer** (`h07`):
+
+| backend | paired n | own | extended | paired delta | extended fixed | extended broke |
+|---|---|---|---|---|---|---|
+| pdfminer.six | 62 | 0.8065 (12 errors) | **0.9677** (2 errors) | **+16.12 pts** | **10** | **0** |
+| PyMuPDF | 69 | 0.8116 (13 errors) | **0.9275** (5 errors) | **+11.59 pts** | **8** | **0** |
+
+Post-hoc, inconsistent class dropped: pdfminer **+16.12** (n unchanged at 62, because all six
+inconsistent items are already outside pdfminer's paired set), PyMuPDF **+12.70** (n = 63).
+
+The discordant counts are the part a bare delta hides, and they are one-directional: the
+extended rule corrects **10** of pdfminer's boundaries and **8** of PyMuPDF's, and regresses
+**none**. PyMuPDF's coverage was already equal, so its paired number moving only from
+"12.7 post-hoc" to "11.59 primary" is the control that the pairing machinery is not itself
+introducing the effect.
 
 ### Pairwise disagreement
 
@@ -152,10 +204,10 @@ were not scored then and are not scored now.
 
 The three extended paths are unanimous. The rule agrees with PDFium's own text assembly on
 all 72, which is expected, since it is a port of PDFium's heuristic. It disagrees with
-pdfminer's on 12 of 65 and with PyMuPDF's on 8 of 72, and on both of those the extended
-answer is the more accurate one (0.9683 against 0.8065 and 0.8413).
+pdfminer's on 12 of 65 and with PyMuPDF's on 8 of 72, and on the paired subsets above the
+extended answer is the more accurate one in every discordant case.
 
-### By stratum
+### By stratum, on the primary adjudication
 
 | stratum | n | PDFium-ext | pdfminer-ext | PyMuPDF-ext | pdfminer own |
 |---|---|---|---|---|---|
@@ -176,12 +228,39 @@ wrong in the same places, which is what a shared rule on shared facts should loo
 
 | control | result | reads as |
 |---|---|---|
-| **N1** adapter vs phase 2's `g04`, item by item | **0 mismatches** | the new adapter reproduces phase 2's column, computed by different code |
+| **N1** adapter vs phase 2's `g04`, full 72-decision vector | **0 mismatches** | see the correction below: N1 as first written did less than it claimed, and now does what it claimed |
 | **N2** advances ×1.25 | 0.9275 → **0.8986** (all three backends) | the rule is reading the advance |
 | **N2** advances ×0.75 | 0.9275 → **0.7971** (all three) | as above, larger effect |
 | **N3** pdfminer fed `.adv` instead of `.width` | 0.9275 → **0.6087**, 27 spurious splits | the harness can see the field choice; a wrong field collapses |
 | **N4** coverage | 72/72 relocated, 0 unmapped per backend | no silent partial match |
-| **N5** the facts themselves | max &#124;Δorigin_x&#124; **1.9e-4 pt**, max &#124;Δadvance&#124; **0.0 pt** over 144 endpoints | the mechanism |
+| **N5** the facts themselves | max &#124;Δorigin_x&#124; **1.9e-4 pt**, max &#124;Δadvance&#124; **0.0 pt** over 144 endpoints | at the contract's 1e-4 rounding. See §4 and `h06`: the raw values are **not** identical |
+
+### N1, corrected: what it did and what it now does
+
+As first written, N1 was described as reproducing phase 2's extended result "item by item".
+It did not. `g04_boundary_scores.json` persists only the extended-vs-PDFium
+**disagreements**, and there were none, so there is no phase-2 extended vector on disk to
+compare against. What phase 3 actually did was reconstruct the expected value as "equal to
+`pdfium_own`" and compare with that, which tests agreement with PDFium's engine-space
+decision and not agreement with phase 2's computation.
+
+`h07` replaces it with the comparison originally claimed. Phase 2's `g04` code path is
+re-run, its complete **72-decision** extended vector is materialised, and each decision is
+compared with phase 3's adapter-derived vector. The two extractions are genuinely different
+implementations: `g04._page_pairs` reads the text page inline, `pdfium_extended.extract` is
+the adapter.
+
+| | |
+|---|---|
+| vector length | **72** (41 space, 31 no-space) |
+| extended decisions differing between the two implementations | **0** |
+| engine decisions differing | **0** |
+| `g04.main()` re-run to a scratch path, published blocks vs the frozen artifact | **all four identical** |
+| `g04_boundary_scores.json` modified | **no** |
+
+The last two rows matter: without them, a drift between the imported functions and the
+committed entry point would make "a different implementation" untrue and the replication
+worthless.
 
 ---
 
@@ -192,6 +271,10 @@ Zero disagreements on 72 pairs is consistent with a divergence rate up to about 
 trades truth for power: every adjacent same-baseline pair on 24 pages of each of the five
 documents, no oracle, agreement only.
 
+**Of 195,291 adjacent pairs that all three engines could align and compare, one
+word-boundary decision differed.** The population this claim covers, and the population it
+does not, in full:
+
 | | |
 |---|---|
 | pairs PDFium saw | 200,684 |
@@ -199,6 +282,13 @@ documents, no oracle, agreement only.
 | shared key but a different following glyph, excluded | 814 |
 | **pairs compared** | **195,291** |
 | **word-boundary disagreements** | **1** |
+| **never joined, and therefore never tested** | **4,579 (2.28 %)**, characterised in §4.1 |
+
+This is a statement about 120 pages of five GPO documents through three engines. It is not a
+statement about the PDF population at large, and the sentence "the engines have nothing to
+disagree about" that appeared in the first draft of this document overreached in exactly
+that way. What is measured is that on this corpus, through these three engines, at these
+pages, the same rule on each engine's own facts returns the same answer.
 
 Reconstructed text, all three engines through the same reconstructor:
 
@@ -225,18 +315,83 @@ Reconstructed text, all three engines through the same reconstructor:
 between two engines would move 7 pairs in 100,000, which this comparison would report as
 "essentially identical". So "1 disagreement in 195,291" would, on its own, be weak evidence.
 
-**N12 removes that limit by measuring the inputs instead of the outputs.** Over **390,582
-glyph endpoints**, with the advance available on both sides of every single one:
+**N12 removes that limit by measuring the inputs instead of the outputs** — but N12 as first
+written compared the values *after* the adapters rounded them to four decimal places, so it
+established equality at the contract's precision and was reported as equality full stop.
+`h06` re-reads the same glyphs raw, straight from each API before packing, on the identical
+joined population. Over **390,582 glyph endpoints**, advance available on both sides of
+every one:
 
-| comparison | max &#124;Δ origin_x&#124; | max &#124;Δ advance&#124; |
+| raw advance vs PDFium | max | median | p99 | exactly equal | non-zero but under 1e-4 | **at or above 1e-4** |
+|---|---|---|---|---|---|---|
+| pdfminer.six | **4.40e-7 pt** | 9.8e-15 | 1.2e-7 | 43,077 | 347,505 | **0** |
+| PyMuPDF | **3.05e-5 pt** | 4.9e-6 | 1.5e-5 | 41,681 | 348,901 | **0** |
+
+| raw origin_x vs PDFium | max | median | p99 | exactly equal | **at or above 1e-4** |
+|---|---|---|---|---|---|
+| pdfminer.six | 2.12e-4 pt | 1.1e-5 | 8.0e-5 | 5,205 | **22,745** |
+| PyMuPDF | 1.22e-3 pt | 3.1e-5 | 2.1e-4 | 138,100 | **107,141** |
+
+**So: not identical.** The advances are *equivalent at the contract's precision* — no
+endpoint differs by as much as the contract's own rounding step. The **origins are not even
+that**: 22,745 and 107,141 endpoints differ by more than 1e-4 pt.
+
+**Two controls say why that does not matter here, and both were run because the answer was
+not assumed.**
+
+- **Where PyMuPDF's floor comes from.** Every one of PyMuPDF's advances is **exactly
+  representable in float32** (share 1.000 on all five documents), while only 2.6–16.3 % of
+  PDFium's and pdfminer's are. MuPDF carries the advance box in single precision, and that
+  quantisation is the entire residue. This is a measured mechanism, not an inference from
+  the size of the number.
+- **How much room there is.** On the same pages, the largest relative advance perturbation
+  that changed **no** decision is 1e-2 (1e-1 on `118-hr-4366/5`); the smallest that changed
+  **any** is 1e-1. Against a maximum observed cross-engine relative difference of 3.97e-8
+  (pdfminer) and 1.08e-5 (PyMuPDF), that is **5.4 to 11.7** and **3.0 to 4.4** orders of
+  magnitude of headroom, quoted from the conservative end of the bracket. The origin
+  residue is likewise ~3 orders below the 1.7–2.2 pt thresholds the rule actually compares
+  against.
+
+The honest formulation is therefore: **the engines agree on these facts far more closely
+than the rule can distinguish**, which is what the architecture needs. They do not return
+bit-identical values, and this document no longer says they do.
+
+### 4.1 The 4,579 pairs that never joined
+
+2.28 % of PDFium's pairs never entered the comparison. If that population were concentrated
+on the display type that carries account names, the portability claim would miss the place
+DeltaTrack most depends on, because the heading tree is the financial data contract.
+
+| | |
+|---|---|
+| unjoined | **4,579** of 200,684 (2.28 %) |
+| concentrated in | `CRPT-118srpt198` (2,999) and `116-hr-1865/6` (1,484); the other three total 96 |
+| **recoverable by a tolerance rematch** | **4,558 (99.5 %)** |
+| of those, decisions that then **disagree** | **0** |
+| genuinely absent from another engine | **21** |
+
+**The gap is overwhelmingly an artefact of the join key, not of the engines.** The key
+buckets the pen origin at 0.05 pt and the baseline at 0.6 pt; a glyph whose coordinate sits
+near a bucket edge can land on either side, and the engines' sub-1e-3 pt coordinate
+differences are enough to separate them. Rematching by tolerance instead of by bucket
+recovers 4,558 of the 4,579, and every one of those agrees. That rematch is reported as a
+diagnostic and is **not** folded into H4's 195,291, which stays as measured.
+
+**The 21 that are genuinely absent are all the same known case:** every one is a pair whose
+second glyph is **U+FFFD**, PDFium's carrier for GPO's soft hyphen, which the other two
+engines do not emit. That is the glyph-inventory difference N8 and §5's D2 already document,
+not a new one.
+
+**And it is not display type.** Type size, joined against unjoined:
+
+| | modal size | share **above** the modal size |
 |---|---|---|
-| PDFium vs pdfminer.six | 2.1e-4 pt | **0.0 pt** |
-| PDFium vs PyMuPDF | 1.2e-3 pt | **0.0 pt** |
+| joined (195,291) | 10.0 pt | **39.0 %** |
+| unjoined (4,579) | 10.0 pt | **2.1 %** |
 
-The engines do not return *similar* advances, they return the *same* advances. This is the
-finding, and it reframes the claim: the extended contract asks for a quantity on which
-these engines have nothing to disagree about, because each is reading the same width array
-out of the same embedded font program.
+The unjoined population is *under*-represented in larger type by a factor of nearly twenty.
+It is body prose, and headings are if anything better covered by the comparison than the
+corpus average.
 
 **N8** guards against crediting an engine that simply emitted less: glyph inventories are
 diffed per document. The only codepoint not reported by all three is U+FFFD (120 to 294 per
@@ -350,9 +505,9 @@ simply not to carry U+0020 at all, and that costs nothing.
 | backends that can emit the contract | 3 of 4 | **3 of 4, confirmed by construction rather than by field probe**; PyMuPDF on two independent routes |
 | PDF.js failure reason | item granularity | **no per-character pen origin**; the advance *is* available at 1.0 coverage |
 | pdfminer's advance field | `.adv` is em units | `.adv` is text-space points; `.width` is its page-space transform. Field choice unchanged |
-| "word quality if the backend changes: fixed" | asserted | **supported**: 0.9683 from all three engines, 0 pairwise disagreements on 72 adjudicated pairs and 1 in 195,291 at page scale |
-| "under hybrid the swing is 16 points" | asserted from pdfminer alone | **measured on two engines**: pdfminer 0.8065, PyMuPDF 0.8413, against PDFium's 0.9683. Swing of 16.2 and 12.7 points |
-| the reason it ports | the contract normalises engines | **the engines already agree**: max &#124;Δadvance&#124; 0.0 pt over 390,582 endpoints |
+| "word quality if the backend changes: fixed" | asserted | **supported**: **0.9275** from all three engines on the primary adjudication (0.9683 post-hoc), 0 pairwise disagreements on the 72 adjudicated pairs, 1 in 195,291 at page scale |
+| "under hybrid the swing is 16 points" | asserted from pdfminer alone | **measured on two engines, paired**: **+16.12 pts** against pdfminer's own decision and **+11.59** against PyMuPDF's, correcting 10 and 8 boundaries respectively and regressing none |
+| the reason it ports | the contract normalises engines | **the engines already agree, to far below what the rule can distinguish**: raw advances within 3.05e-5 pt, three or more orders of magnitude under the smallest perturbation that changes any decision |
 | `pdfium_extended` consumes no engine space | stated in its docstring | **false as built**; corrected contract scores identically |
 
 **This is the review's Outcome A.** Extended segmentation stays at PDFium accuracy across
@@ -361,10 +516,12 @@ a measured row where it had an asserted one, and the row favours extended glyph.
 
 It does not settle the decision, for the reason phase 2 already gave: engine independence is
 option value that ADR 0002 has declined. What phase 3 changes is that the option value is
-now **priced**, not assumed. The hybrid's cost of a future engine change is 12.7 to 16.2
-points of word-boundary accuracy on adjudicated truth. The extended contract's is zero, plus
-one ported heuristic, one fallback constant, and one contract field (`font_size`) that needs
-its axis specified.
+now **priced**, not assumed. On the primary adjudication, paired, the hybrid's cost of a
+future engine change is **11.6 to 16.1 points** of word-boundary accuracy, and it is
+one-directional: the extended rule corrected 10 of pdfminer's boundaries and 8 of PyMuPDF's
+and broke none. The extended contract's cost is zero of those points, plus one ported
+heuristic, one fallback constant, and one contract field (`font_size`) that needs its axis
+specified.
 
 ---
 
@@ -396,6 +553,27 @@ To phase 3's own first pass:
    document. That is not evidence the comparison can see a divergence. It is now a curve,
    and the curve says the decision test is insensitive below about ×1.25, which is why N12
    (comparing the facts) carries the portability claim instead.
+8. **"Advances identical to 0.0 pt" was measured on ROUNDED values.** Every adapter rounds
+   `advance` to 4 dp, so N12 as first written established equality at the contract's
+   precision and reported it as equality. Raw, the advances differ by up to 4.40e-7 pt
+   (pdfminer) and 3.05e-5 pt (PyMuPDF), and the **origins** differ by more than the
+   contract's rounding on 22,745 and 107,141 endpoints. The claim is now "equivalent at the
+   contract's precision", with the headroom quantified. `h06`.
+9. **The 16.2-point engine-change cost was an UNPAIRED subtraction** across 69 and 62 pairs.
+   Paired, it is +16.12 (pdfminer) and +11.59 (PyMuPDF) on the primary adjudication. The
+   number barely moved; the licence to state it did not exist before.
+10. **N1 claimed an item-by-item replication of phase 2 that it was not performing.**
+    `g04_boundary_scores.json` stores only disagreements, so phase 3 had reconstructed the
+    expected value from `pdfium_own`. `h07` now re-runs g04's code path and compares the
+    full 72-decision vector.
+11. **0.9683 was the headline number throughout the first draft.** It is the *post-hoc*
+    figure, obtained by dropping the inconsistent class phase 1 identified in its own
+    adjudication. The primary adjudication gives **0.9275**, and that is now the headline
+    everywhere, with 0.9683 kept and labelled as the sensitivity analysis it is.
+12. **A 20-minute O(n²) in this phase's own harness.** `h06`'s type-size profile evaluated
+    `Counter(joined_sizes).most_common(1)` inside a generator condition, rebuilding a
+    195,291-element counter once per element. Found by sampling the process rather than by
+    guessing; the modal size is now computed once.
 
 ---
 
@@ -425,12 +603,16 @@ Items 1 and 2 remain blocking.
 
 ## 9. Recommendation
 
-**Hybrid remains the preferred candidate on the evidence measured so far**, and phase 3
-narrows the gap rather than closing it. Accuracy is tied within PDFium (phase 2) and now
-tied across engines (phase 3), so accuracy still does not decide it. What phase 3 changes:
+> **Hybrid remains the preferred candidate on the evidence measured so far, but phase 3
+> materially strengthens the extended-glyph alternative by demonstrating cross-engine
+> portability rather than merely asserting it.**
+
+Accuracy is tied within PDFium (phase 2) and now tied across engines (phase 3), so accuracy
+still does not decide it. What phase 3 changes:
 
 - extended glyph's engine independence is **demonstrated**, not asserted, and priced at the
-  12.7 to 16.2 points hybrid would give up if ADR 0002 were reopened;
+  11.6 to 16.1 paired points hybrid would give up if ADR 0002 were reopened, one-directional
+  (18 boundaries corrected across the two engines, none regressed);
 - extended glyph carries **one more unspecified contract field** than phase 2 recorded
   (`font_size`'s axis), which is a real cost on its side of the ledger;
 - the "one ironic magic constant" cost is unchanged, and D2 removes a different one: the
@@ -445,6 +627,42 @@ row substituted for its assertion:
 > independence that ADR 0002 has already declined, and phase 3 has now measured what that
 > independence is worth rather than assuming it.
 
+### Do this phase's corrections overturn the cross-engine result?
+
+**No, and the reason is that every correction moved a claim's precision or its licence, not
+its direction.**
+
+| correction | effect on the cross-engine result |
+|---|---|
+| advances equivalent-at-precision, not identical | **none.** The architecture needs the engines to agree more closely than the rule can distinguish. They agree 3 to 11 orders of magnitude more closely than that |
+| origins differ above contract precision | **none.** The residue is ~1e-3 pt against thresholds of 1.7–2.2 pt |
+| paired instead of unpaired deltas | **strengthens.** 16.2 → 16.12 and 12.7 → 11.59, now licensed, and the discordant counts show the gain is one-directional |
+| 0.9275 headline instead of 0.9683 | **none for portability.** All three engines move together; the *tie* is unaffected by which adjudication is quoted |
+| N1 narrowed then genuinely widened | **strengthens.** The replication now compares 72 decisions against phase 2's own code path, not 0 |
+| 2.28 % unjoined characterised | **strengthens.** 99.5 % is a bucket artefact that agrees on rematch; the 21 real absences are the known U+FFFD case; the gap is body prose, not display type |
+
+### Is the word-spacing question closed?
+
+**Yes.** Three phases have now asked whether the seam between a PDF engine and DeltaTrack
+should carry word spaces, and the word-spacing-specific evidence has converged: the rule is
+recoverable above the seam (phase 1), it ties the engine on adjudicated truth (phase 2), and
+it ports across every engine that can supply the facts (phase 3). No remaining
+word-spacing-specific measurement would change the architectural choice, because accuracy
+stopped discriminating two phases ago and portability has now been measured rather than
+assumed.
+
+**Continuing to probe the same 72-pair development sample would be optimisation against a
+fixed sample, not evidence.** The two items that have blocked an ADR since phase 1 are not
+about word spacing at all, and they are where the next work belongs:
+
+1. a valid heading-level correctness oracle, with blinded heading adjudication;
+2. a genuinely fresh, structure-rich holdout, membership and hashes frozen **before** either
+   contract is scored.
+
+Both should score **hybrid and corrected extended glyph side by side**, because phase 3 has
+made extended a credible architectural alternative rather than a discarded option. "Corrected"
+means with `font_size`'s axis specified and U+0020 excluded from the contract.
+
 ---
 
 ## Reproduction
@@ -458,7 +676,13 @@ NODE_PATH=../../probes/js/node_modules node h02_pdfjs_percharacter.mjs <pdf> <pa
 .venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h03_score_cross_backend.py
 .venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h04_page_scale_agreement.py
 .venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h05_diagnose_divergence.py
+.venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h06_raw_precision.py
+.venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h07_paired_and_replication.py
 ```
+
+`h06` takes a few minutes: the perturbation bracket walks a decade-spaced ladder over every
+compared pair. `h07` re-runs phase 2's `g04` as a subprocess to a scratch path and does not
+touch `g04_boundary_scores.json`.
 
 Versions: pypdfium2 5.12.1 (PDFium 152.0.7947.0), pdfminer.six 20260107, PyMuPDF 1.28.0
 (MuPDF 1.29.0), pdfjs-dist 6.2.108, Python 3.12.12, macOS / arm64. Every number in this

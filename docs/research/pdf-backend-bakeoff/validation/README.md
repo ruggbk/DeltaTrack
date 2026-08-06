@@ -25,7 +25,7 @@ all still in the tree.
 | 3. the hybrid hypothesis | `RESULTS-HYBRID.md`: put the engine's characters and word spaces below the seam, keep GPO interpretation above it. |
 | 4. adversarial validation | phase 1 here. The hybrid **beats** the shipped glyph rule on adjudicated truth, and the **stated reason** for it is falsified: PDFium's word-space rule is public geometry and is reimplementable above the seam. |
 | 5. extended glyph, phase 2 | build that third option and score it. It **ties** the hybrid inside PDFium: 0 disagreements on 72 adjudicated pairs, 53 ok / 0 bad on the heading failure cases. Accuracy stops discriminating. |
-| 6. cross-backend test, phase 3 | phase 2 then asserted that the tie *generalises* across engines. It does, measured: 0.9683 from three engines, 1 disagreement in 195,291 pairs, byte-identical text on four of five documents. Phase 3 also found two defects in phase 2's own work. |
+| 6. cross-backend test, phase 3 | phase 2 then asserted that the tie *generalises* across engines. It does, measured: **0.9275** from three engines on the primary adjudication, 1 disagreement in 195,291 pairs, byte-identical text on four of five documents. Phase 3 also found two defects in phase 2's own work, and five in its own first pass. |
 
 ## The three verdicts, in one paragraph each
 
@@ -46,17 +46,29 @@ sample, 53 ok / 0 bad on the heading failure cases. The recommendation therefore
 cost and ownership, not on a score, and it lands on the hybrid **for a corrected reason**,
 with three stated conditions that would flip it.
 
-**Phase 3 — the portability claim is CONFIRMED, and two phase-2 defects are not.** Phase 2's
-comparison table asserted "word quality if the backend changes: fixed, the rule is ours".
-Built for real, with pdfminer.six and PyMuPDF each answering from their own API and no value
-borrowed from PDFium, the same rule scores **0.9683 from all three engines**, disagrees with
-none of them on the 72 adjudicated pairs, and disagrees once in 195,291 pairs at page scale.
-The mechanism is narrower than the phrasing: over 390,582 endpoints the engines return
-**advances identical to 0.0 pt**, so the contract is not normalising a difference, it is
-asking for one that does not exist. Phase 3 also found that `pdfium_extended.py` was
-consuming PDFium's generated spaces despite its docstring, and that
-`contract_extended.font_size` has no defined axis. Neither moves a phase-2 number; both are
-recorded rather than repaired.
+**Phase 3 — the portability claim is CONFIRMED on the tested population, and two phase-2
+defects are not.** Phase 2's comparison table asserted "word quality if the backend changes:
+fixed, the rule is ours". Built for real, with pdfminer.six and PyMuPDF each answering from
+their own API and no value borrowed from PDFium, the same rule scores **0.9275 from all
+three engines on the primary adjudication** (0.9683 in phase 1's post-hoc sensitivity
+analysis), disagrees with none of them on the 72 adjudicated pairs, and disagrees once in
+the 195,291 pairs all three engines could align at page scale. The mechanism is narrower
+than the phrasing: over 390,582 endpoints the raw advances agree to within **3.05e-5 pt**,
+below the contract's own rounding and three or more orders of magnitude below the smallest
+perturbation the rule can feel, so the contract is not normalising a difference, it is
+asking for one they barely have. Phase 3 also found that `pdfium_extended.py` was consuming
+PDFium's generated spaces despite its docstring, and that `contract_extended.font_size` has
+no defined axis. Neither moves a phase-2 number; both are recorded rather than repaired.
+
+A methodological cleanup pass then corrected five of phase 3's own claims, none of which
+changed the direction of the result: the advance equality was measured after rounding and is
+equivalence-at-precision rather than identity; the engine-change cost was an unpaired
+subtraction and is now paired (+16.12 and +11.59 points, correcting 18 boundaries between
+them and regressing none); N1 claimed a replication it was not performing and now performs
+it; the post-hoc 0.9683 had been used as the headline in place of the primary 0.9275; and
+the 2.28 % of page-scale pairs that never joined are characterised (99.5 % a bucket artefact
+that agrees on rematch, the rest the known U+FFFD case, and under-represented rather than
+concentrated in display type).
 
 ## What a reviewer should check first
 
@@ -82,7 +94,7 @@ recorded rather than repaired.
 
 ## Reproduction
 
-Probes are `v01`–`v09` here, `g01`–`g07` in [`phase2/`](phase2/) and `h01`–`h05` in
+Probes are `v01`–`v09` here, `g01`–`g07` in [`phase2/`](phase2/) and `h01`–`h07` in
 [`phase3/`](phase3/); raw output is in the `results/` directories. Every number in all three
 documents comes from those files; none is transcribed by hand. Run from the repo root with
 `.venv/bin/python`, except `phase2/g02_wasm_advance.mjs` and `phase3/h02_pdfjs_percharacter.mjs`,

@@ -259,16 +259,21 @@ reintroduces a different unexplained constant, on a narrow and well-understood p
 
 > **The last-but-one row was an assertion when this table was written. Phase 3 measured it,
 > and it holds** (`../phase3/`, §3–4). The same `wants_space` fed each engine's own facts
-> scores **0.9683 from PDFium, pdfminer and PyMuPDF alike**, with 0 pairwise disagreements
-> on the 72 adjudicated pairs and 1 in 195,291 at page scale. Under hybrid the swing is now
-> measured on two alternative engines rather than one: pdfminer 0.8065 and PyMuPDF 0.8413
-> against PDFium's 0.9683, i.e. **16.2 and 12.7 points**.
+> scores **0.9275 from PDFium, pdfminer and PyMuPDF alike on the primary adjudication**
+> (0.9683 in phase 1's post-hoc sensitivity analysis), with 0 pairwise disagreements on the
+> 72 adjudicated pairs and 1 in 195,291 at page scale. Under hybrid the swing is now
+> measured on two alternative engines rather than one, and **paired**, on exactly the pairs
+> where both the engine's own decision and the rule have an answer: **+16.12 points** over
+> pdfminer's own decision and **+11.59** over PyMuPDF's, correcting 10 and 8 boundaries
+> respectively and regressing none.
 >
 > The *mechanism* is narrower than "the rule is ours" implies, and worth stating precisely:
-> over 390,582 glyph endpoints the three engines return **advances identical to 0.0 pt**,
-> because each reads the same widths from the same embedded font programs. The extended
-> contract is not normalising a difference between engines; it is asking for a quantity on
-> which these engines do not differ.
+> over 390,582 glyph endpoints the three engines return advances that agree to within
+> **3.05e-5 pt**, which is below the contract's own 1e-4 rounding and three or more orders
+> of magnitude below the smallest perturbation the rule can feel. The extended contract is
+> not normalising a difference between engines; it is asking for a quantity on which they
+> barely differ. (Phase 3's first pass said "identical to 0.0 pt"; that was measured after
+> the adapters round, and has been corrected to equivalence at the contract's precision.)
 >
 > Phase 3 also adds a row to the **cost** side that this table does not carry:
 > `contract_extended.font_size` has **no defined axis**, and the ported rule buckets on it.
@@ -317,9 +322,10 @@ closed, is:
    the financial data contract.
 2. **ADR 0002 is reopened** and a second engine becomes real. Under hybrid, the measured
    quality swing is 16 points; under extended glyph it is zero.
-   *(Phase 3 has now measured both halves of that sentence rather than asserting them: the
-   swing is 16.2 points to pdfminer and 12.7 to PyMuPDF, and extended glyph's is zero on
-   both, with 0 disagreements on the adjudicated sample and 1 in 195,291 at page scale.)*
+   *(Phase 3 has now measured both halves of that sentence rather than asserting them, and
+   paired: the swing is **+16.12** points to pdfminer and **+11.59** to PyMuPDF on the
+   primary adjudication, and extended glyph's is zero on both, with 0 disagreements on the
+   adjudicated sample and 1 in 195,291 at page scale.)*
 3. **The Experimental handle-chain proves more stable than the flags**, reversing the API
    argument. Nothing here tests that; it is an upstream-history question neither phase
    answered.
@@ -388,3 +394,7 @@ Detail and evidence in [`../phase3/FINDINGS-CROSS-BACKEND.md`](../phase3/FINDING
   True of `origin_x` and `advance`; not true of `font_size`.
 - **The portability row in the architectural table**, and flip condition 2, were assertions
   when written. Phase 3 measured both and both hold.
+- **The `0.9683` column below is the POST-HOC figure**, obtained by dropping the inconsistent
+  class phase 1 found in its own adjudication. The primary adjudication is `0.9275`, and
+  both are shown in the scoring table for exactly that reason. Phase 3's first draft used
+  0.9683 as its headline throughout and has been corrected to lead with the primary result.
