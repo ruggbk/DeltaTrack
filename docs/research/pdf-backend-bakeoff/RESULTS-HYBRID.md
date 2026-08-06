@@ -198,8 +198,12 @@ edge of `r` (253.70) instead of `y` (260.19).
 This is not a new finding so much as a measured one: `probes/reconstruct.py`'s docstring
 already predicted it ("on a 14pt body line the descender drop is ~8.4pt against a 7pt
 tolerance"). What is new is that it is **live in production**, in the signal that decides
-whether two heading lines are stacked or wrapped, and that the hybrid contract removes it
-for free by carrying the text-matrix origin instead of the box bottom.
+whether two heading lines are stacked or wrapped.
+
+**Credit where it is due: this is not a hybrid advantage over the glyph contract.** Both
+carry the text-matrix origin as their baseline, so both avoid it; production is alone in
+clustering on the box bottom. It is an argument for moving the seam, not for choosing
+between the two candidate seams.
 `glyph_size` and `LineGeom` coverage are `1.0` on every numbered line, so nothing the
 engine consumes — ADR 0012's heading sizes, the major detector's line-fullness split — is
 lost. Font-role separation is `1.0` on the bills. The committee report's `0.0` is a
@@ -731,10 +735,12 @@ The evidence, in the order it should be checked:
    coverage (§2).
 5. It survives the WASM build, including a real stream-level difference between the two
    PDFium builds that the layer absorbs (§7).
-6. It **fixes a live production defect** it was not built to fix (§2): production's
-   geometry sidecar clusters on the character box bottom, so a descender falls outside the
-   tolerance and `first_word_right` comes back one glyph short on ~7 % of lines — in the
-   signal that decides whether two heading lines are stacked or wrapped.
+6. Moving the seam at all **fixes a live production defect** neither contract was built to
+   fix (§2): production's geometry sidecar clusters on the character box bottom, so a
+   descender falls outside the tolerance and `first_word_right` comes back one glyph short
+   on ~7 % of lines — in the signal that decides whether two heading lines are stacked or
+   wrapped. This one is not a hybrid advantage over the glyph contract; **both** carry the
+   text-matrix origin, and it is production that is alone in clustering on the box bottom.
 
 **The two limitations, both found by probes built to find them:**
 
@@ -760,9 +766,10 @@ rather than leaving to the reader.
   values `reconstruct.py` uses. The only change is where word spaces come from, and it
   removes a parameter rather than adding one.
 - **The discriminating documents were not chosen.** §3 includes a document where the glyph
-  path does not fail, and §5 scores all 52 corpus documents, of which the four heading
-  failures I inspected are a small part. The hybrid's error total over the full corpus is
-  the same 2/2 it shows on the documents I read.
+  path does not fail, and §5 scores all 52 corpus documents. The hybrid's entire
+  corpus-wide heading error is two labels, and **neither is on a document inspected while
+  building the layer** — both are the `COUPS D'ÉTAT` diacritic, on `118-hr-2882/5` and
+  `118-s-4797/1`, which the corpus run surfaced rather than the development loop.
 - **One bug was found by a diagnostic rather than by the score, and it is recorded** in
   `probes/README.md`: the first version sorted each line by baseline and rendered `MILITARY`
   as `M6 ILITARY`, because a heading's full-size initial reports an origin 0.003 pt above
