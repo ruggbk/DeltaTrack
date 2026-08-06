@@ -81,9 +81,38 @@ forward.
 in general. It does establish that the single exemplar the text-only reading leans on hardest no
 longer supports it, and that Study 2 must re-derive its labels before calibrating anything.
 
+**Independently confirmed by the repo's own regeneration path.** `scripts/build_similarity_labels.py`
+re-derives every label's text from `tests/corpus/`, so it is the authority on whether the key still
+rebuilds. It does not. Two defects, in order:
+
+1. It is broken by the same #492 rename as the probes (`_MOVE_THRESHOLD`, `_SIMILARITY_THRESHOLD`,
+   `_text_similarity`), so it exits on `ImportError` before doing anything. Unlike the probes it
+   lives in `scripts/`, which *is* linted, and it still went unnoticed. **Fixed in this branch.**
+2. Once it runs, it fails on the first drifted pair:
+
+```
+LookupError: modified ('corps of engineers—civil',
+                       'general provisions—corps of engineers—civil', 'sec. 110') not found
+```
+
+That is `contested-2-corps-110`, one of the exact three pairs `probe_r2` independently flagged. The
+cause is visible in `probe_r2` section 3: the engine no longer emits a `modified` record at that
+path, it emits `added` + `removed`. So the drift is behavioural as well as textual.
+
+**Three independent observations agree** — the stored text does not resolve to a node; the engine's
+change type at that path has changed; and the fixture builder cannot rebuild the key. So the answer
+key is currently **unregenerable**, and has been since at least the #492 refactor.
+
+**Why nothing caught it.** `tests/test_similarity_labels.py` passes, and passing is consistent with
+the key being decayed. Its own docstring says so: *"Self-contained: no `bills/` dependency."* It
+scores `pair["text_old"]` — the frozen string — so it re-verifies that the stored text still gets the
+stored score, which is true by construction and stays true forever. It is a threshold-regression
+test, correctly, and it is not a drift guard. Nothing else was.
+
 `pass2-protocol.md` §4 already has the right policy for this — a `text_sha256` mismatch quarantines a
-pair for re-review rather than auto-refreezing. The gap is that the policy was written for *future*
-candidates and was never run against the *existing 12*.
+pair for re-review rather than auto-refreezing. Two gaps: the policy was written for *future*
+candidates and was never run against the *existing 12*, and the current fixture carries no
+`text_sha256` field at all, so there is nothing for it to check.
 
 ---
 
@@ -515,6 +544,12 @@ structural-only rule also scores 12/12 on it.*
 
 So `paper.md`'s *"Every number in Part 2 can be reproduced from the scripts named in Appendix A"* was
 **false at review time** — none of them executed.
+
+**Evidence — the breakage reaches outside the probes directory.**
+`scripts/build_similarity_labels.py`, the answer key's regeneration path, is broken by the same
+rename. That file is **not** ruff-excluded and is referenced by `tests/test_similarity_labels.py`'s
+docstring as the way to re-freeze the fixture, and it still went unnoticed, because nothing runs it.
+Fixed here; it now reaches its real failure (see the drift section above).
 
 **Evidence — promised artifact missing.** `probes/eval_pass2.py`, promised by `pass2-protocol.md` §2.4
 and load-bearing for §7, **does not exist**.
