@@ -1,8 +1,16 @@
 # Pre-registration: external validity of the PDF extraction seam
 
-- **Status: protocol drafted, NOT YET FROZEN.** Nothing has been scored. No holdout has
-  been selected. See [§ Execution gate](#execution-gate) for what must happen before the
-  first confirmatory number exists.
+- **Status: protocol frozen, population frozen, NOTHING SCORED.** The holdout is selected
+  and hashed in [`results/holdout_membership.json`](results/holdout_membership.json); no
+  extractor has been run on any member. See [§ Execution gate](#execution-gate) for the
+  remaining conditions, which `probes/x04_freeze_check.py` enforces.
+- **The frozen population, as selected:** 19 documents, 5,744 pages, **7 of 8 strata
+  filled** → adequacy *generalization*, pending §4.5's ≥ 800 heading-occurrence check at
+  extraction time. **P-head 14 documents / 4,950 pages** (numbered-layout appropriations
+  acts, 106–1,547 pp, both chambers, Congresses 113–119); **P-robust 5 documents /
+  794 pages** (2 enrolled bills, 3 appropriations committee reports).
+  **Stratum 5 filled 1 of 2** — its whole candidate pool is 8 bills and all 8 were
+  examined, so this is scarcity, not a budget artifact, and §4.5 names it in the headline.
 - This is a new study in the bake-off lineage, not a fourth phase of the old one. Phases
   1–3 repeatedly interrogated **development** evidence; this study tests **external
   validity** with a new oracle and a new population. The directory name says so on purpose.
@@ -242,6 +250,33 @@ count, which reads no text.
 
 **Target: 20 documents from ≥ 16 distinct bills or packages.**
 
+### 4.4.1 Two populations, because two strata cannot carry a heading metric
+
+**MEASURED**, by reading the production code and by `x00`: strata 4 and 6 produce **zero**
+account / agency / grouping anchors, and would have contributed a zero denominator to
+every heading metric.
+
+| | why |
+|---|---|
+| **enrolled bills** (stratum 4) | production **declines** them — `compare/pdf.py::_is_unnumbered_layout` raises `UnsupportedLayoutError` — and `extract_anchors` emits no account anchors when `_coverage(pages) < 0.85`, which an unnumbered layout cannot reach. `x00` measures 0 heading occurrences on `116-hr-1865/6` |
+| **committee reports** (stratum 6) | `parsers/committee_report.py` reads GPO's **HTML `<pre>` dump, not the PDF**, deliberately — "fixed-width column slicing instead of PDF coordinate reconstruction". A report PDF has no production heading consumer at all. `x00` measures 0 heading occurrences on `CRPT-118srpt198` |
+
+The holdout is therefore split, **in advance**, and the split is reported in every table:
+
+| population | members | metrics it carries |
+|---|---|---|
+| **P-head** | strata 1, 2, 3, 5, 7, 8 | **M0, M9 and M1–M7** — the heading, hierarchy and attribution chain |
+| **P-robust** | strata 4, 6 | **M0 and M9 only**, plus safe-failure observation. **No heading metric is claimed on it** |
+
+**They are never pooled**, and §4.5's heading-occurrence adequacy count is computed on
+**P-head only**. This is the failure that voided the prior holdout's heading metric — 37 of
+44 documents carrying no heading at all — caught here by reading the production code before
+selecting rather than by discovering a VOID afterwards.
+
+P-robust is retained rather than dropped because report and enrolled typography is dense,
+table-heavy and differently set, which is where M0 is most likely to find a seam
+divergence, and because the brief asks the holdout to cover reports.
+
 **Within a stratum**: candidates sorted by id, permuted with seed **20260807**, and the
 first satisfying the predicate is taken. Ties break by the permutation, never by
 inspection. The number of candidates examined is recorded, so a thin stratum is
@@ -445,6 +480,28 @@ content-bearing denominator is zero is reported as VACUOUS, never as agreement.*
 | **M5** | role agreement, on a coarsened leaf-vs-container map | adjudicator | matched headings, **gated on R1 role ≥ 0.80** | R1 | corroboration only — **may never decide** |
 | **M6** | **amount → heading attribution** — for each dollar amount in a C-region, emitted nearest heading-ish ancestor vs adjudicated | adjudicator | C-regions containing ≥ 1 amount | shift heading baselines one line-height; M6 must fall further than M1 | "the money lands under the right account" |
 | **M7** | display-split incidence — emitted headings matching the letter-spaced signature (≥ 3 single-character tokens), per architecture | none (a self-signature) | 100 % of the holdout | inject a known `R E P O R T` page and require detection | phase 2's flip condition 1, on fresh data |
+| **M9** | **structural viability** — per document per architecture: does `derive_size_bands` return a band; is `_coverage` ≥ 0.85; how many margin-numbered lines are recovered | **none needed** | **100 % of the holdout, P-head and P-robust** | S1 | whether either architecture **loses the heading tree entirely** on a document the other keeps |
+
+**M9 exists because reading the production code found an all-or-nothing failure mode
+unique to X, and no other metric would see it.**
+
+- `extract_anchors` emits **no** account-level anchor at all unless `derive_size_bands`
+  returns a band **and** `_coverage(pages) ≥ 0.85`.
+- `_coverage` counts lines whose `line_number is not None`, and a line number is parsed by
+  `^(\d{1,2}) (.*)$` — **which requires a space after the margin number.**
+- Under hybrid that space is PDFium's. **Under corrected extended glyph it is re-derived by
+  the ported rule**, because X-2 removes every U+0020 from the contract.
+
+So a systematic failure to re-insert the margin space would drop coverage below 0.85 and
+**silently delete the entire heading tree for that document** — a catastrophic outcome that
+M1–M6 would report as an empty denominator rather than as a failure. `derive_size_bands`
+also reads line *text* (`_has_lowercase`, `_is_uppercase_heading`), so a word-boundary
+change can move the bands themselves.
+
+**MEASURED**: on the five development documents `x00` finds identical line counts and
+identical heading counts for both architectures, so the rule re-derives the margin space
+correctly there. That is five documents, and it is exactly the kind of property that
+generalises badly, which is why it is a pre-registered metric rather than an assumption.
 
 **M3 is the primary comparative metric.** It is the failure the seam choice actually
 governs, and it is the one whose *direction* has a product consequence.
@@ -494,6 +551,13 @@ achieved bound is reported alongside it** so a reader may apply their own margin
 
 Applied in order.
 
+0. **M9 supersedes everything below.** If either architecture loses `derive_size_bands`,
+   falls below the 0.85 coverage floor, or loses margin-numbered lines on a document the
+   other keeps, **that architecture is rejected outright**, regardless of every other
+   metric. Losing the heading tree for a whole document is a heading failure of the largest
+   available magnitude, and it is the one failure that would otherwise be reported as an
+   empty denominator rather than as an error. If both lose the same document, it is a
+   property of the document and is excluded from P-head with a stated reason.
 1. **Choose corrected extended glyph** if, on the D-frame census, X beats H on **M3** by
    more than δ, **and** the discordant counts are one-directional — X corrects **≥ 5**
    heading occurrences H gets wrong and regresses **≤ 1** — **and** M1 / M2 / M4 / M6 do
@@ -579,6 +643,9 @@ an explicitly narrowed claim.
 | 13 | **The most likely outcome is a vacuous pass** | Pre-committed wording: *EQUIVALENT AT RESOLUTION r*, with denominators, never "the architectures agree". §7.2 rule 3 voids the run outright if the denominator cannot support a bound under δ |
 | 14 | **The design pilot could be wrong in the same direction** | It **was**, first time: 98 differences that were a soft-hyphen mode artifact, now 2. A comparator that falls from 98 to 0 on a flag is exactly the kind that might be comparing nothing. **S1 is what establishes it is live** (458 differences), it runs on the holdout too, and **M0 without its S1 row is not reportable** |
 | 15 | **The oracle's own frame could miss body-size headings** | The C-frame predicate cannot select a page whose headings are set at body size. **Narrowed claim** rather than a control: M1's recall is over *heading-band* headings, and the protocol says so wherever M1 appears |
+| 16 | **A stratum that structurally cannot carry the metric** | Found at design time, not after: enrolled bills are declined by `_is_unnumbered_layout` and report PDFs have no production heading consumer, so both would have contributed a zero denominator. **Control:** §4.4.1 splits P-head from P-robust in advance and the adequacy count runs on P-head only |
+| 17 | **"Appropriations" selected by committee referral is not "carries an account tree"** | Found by running the selection: the first pass chose three sub-6-page bills referred to Appropriations that carry no heading at all — the prior holdout's disease exactly. **Control:** GPO's title convention plus a 25-page floor, both BILLSTATUS/container facts. The superseded run is recorded in the membership artifact and nothing from it was scored |
+| 18 | **A silent zero in the sampling frame reads as an empty collection** | Hit **twice**. The CRPT sitemap pattern required a trailing slash the URLs do not have and returned 0 packages; then the MODS classifier fetched from `/content/pkg` instead of `/metadata/pkg`, took 404 on all 60 candidates it examined, and reported "0 appropriations reports" — which is what a genuinely rare class also looks like. **Controls:** `stopped_on_budget` separates a budget-limited stratum from an exhausted one, and `mods_liveness` records whether the classifier could resolve *anything*, so a broken query can no longer present as scarcity |
 
 ---
 

@@ -1,0 +1,552 @@
+{
+ "protocol": "validation/external-validity/PRE-REGISTRATION.md section 4",
+ "seed": 20260807,
+ "scored": false,
+ "note": "Selection only. No extractor was imported; the sole PDF operation is a page count.",
+ "generation_note": "Generated twice, and NOTHING WAS SCORED from the first output, which was never committed. The first run keyed 'appropriations' on committee referral alone and selected 'Pay Our Troops Act of 2026' (3 pp), 'Federal Firefighter Paycheck Protection Act' (3 pp) and 'Chips and Science Act' -- all referred to Appropriations, none carrying an account heading. That is the same defect that voided the prior holdout's heading metric, so referral was replaced by GPO's title convention plus a 25-page floor, both BILLSTATUS/container facts. The first run also matched 0 CRPT packages, because the sitemap pattern required a trailing slash that the URLs do not have -- indistinguishable from an empty collection. Bills seen in the superseded run remain ELIGIBLE: only their titles and page counts were ever observed, no PDF was extracted, and excluding them would bias the frame against exactly the well-formed appropriations acts the study needs.",
+ "exclusions_from": "results/contamination.json",
+ "exclusions": {
+  "bills": 93,
+  "reports": 33
+ },
+ "frames": {
+  "F1": {
+   "source": "govinfo BILLSTATUS",
+   "congresses": [
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119
+   ],
+   "bill_types": [
+    "hr",
+    "s",
+    "hjres",
+    "sjres"
+   ],
+   "bills_parsed": 92564,
+   "pool_after_exclusions": 92345,
+   "appropriations_pool": 1124
+  },
+  "F2": {
+   "source": "govinfo CRPT year sitemaps",
+   "packages_parsed": 8246,
+   "pool_after_exclusions": 8220
+  }
+ },
+ "mods_liveness": {
+  "attempted": 93,
+  "ok": 93
+ },
+ "strata": [
+  {
+   "stratum": 1,
+   "name": "House appropriations bill, introduced or reported (ih/rh)",
+   "frame": "F1",
+   "target": 3,
+   "population": "P-head",
+   "filled": [
+    "115-hr-5952",
+    "113-hr-4745",
+    "118-hr-5894"
+   ],
+   "candidates": 188,
+   "examined": 3,
+   "examine_budget": 60,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 2,
+   "name": "Senate appropriations bill, reported or placed on calendar (rs/pcs)",
+   "frame": "F1",
+   "target": 3,
+   "population": "P-head",
+   "filled": [
+    "118-s-2587",
+    "114-s-1725",
+    "115-s-3108"
+   ],
+   "candidates": 83,
+   "examined": 3,
+   "examine_budget": 60,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 3,
+   "name": "chamber-crossing appropriations amendment print (eah/eas)",
+   "frame": "F1",
+   "target": 2,
+   "population": "P-head",
+   "filled": [
+    "114-hr-5325",
+    "116-hr-3055"
+   ],
+   "candidates": 14,
+   "examined": 2,
+   "examine_budget": 60,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 4,
+   "name": "enrolled appropriations bill (enr)",
+   "frame": "F1",
+   "target": 2,
+   "population": "P-robust",
+   "filled": [
+    "114-hr-240",
+    "119-hr-7147"
+   ],
+   "candidates": 20,
+   "examined": 4,
+   "examine_budget": 60,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 5,
+   "name": "full-year continuing / joint-resolution appropriations",
+   "frame": "F1",
+   "target": 2,
+   "population": "P-head",
+   "filled": [
+    "115-hjres-128"
+   ],
+   "candidates": 8,
+   "examined": 8,
+   "examine_budget": 60,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 6,
+   "name": "appropriations committee report (CRPT)",
+   "frame": "F2",
+   "target": 3,
+   "population": "P-robust",
+   "filled": [
+    "CRPT-119HRPT212",
+    "CRPT-113SRPT181",
+    "CRPT-116SRPT102"
+   ],
+   "candidates": 8220,
+   "examined": 93,
+   "examine_budget": 250,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 7,
+   "name": "Congress under-represented in development (113/116/117/119)",
+   "frame": "F1",
+   "target": 3,
+   "population": "P-head",
+   "filled": [
+    "116-hr-3163",
+    "113-s-2499",
+    "116-hr-265"
+   ],
+   "candidates": 184,
+   "examined": 3,
+   "examine_budget": 60,
+   "stopped_on_budget": false
+  },
+  {
+   "stratum": 8,
+   "name": "omnibus / consolidated appropriations (>= 400 printed pages)",
+   "frame": "F1",
+   "target": 2,
+   "population": "P-head",
+   "filled": [
+    "116-hr-2740",
+    "118-hr-10445"
+   ],
+   "candidates": 300,
+   "examined": 10,
+   "examine_budget": 100,
+   "stopped_on_budget": false
+  }
+ ],
+ "strata_fully_filled": 7,
+ "adequacy": "generalization (pending the >=800 heading-occurrence check at extraction time)",
+ "members": [
+  {
+   "id": "115-hr-5952",
+   "kind": "bill",
+   "stratum": 1,
+   "population": "P-head",
+   "title": "Commerce, Justice, Science, and Related Agencies Appropriations Act, 2019",
+   "congress": 115,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-115hr5952rh",
+     "code": "rh",
+     "date": "2018-05-24T04:00:00Z",
+     "path": "115-hr-5952/rh.pdf",
+     "sha256": "8fbe7485786a274169d0e653e43ac806141b32ff769b994221439bf40d79314c",
+     "bytes": 253661,
+     "pages": 106
+    }
+   ]
+  },
+  {
+   "id": "113-hr-4745",
+   "kind": "bill",
+   "stratum": 1,
+   "population": "P-head",
+   "title": "Transportation, Housing and Urban Development, and Related Agencies Appropriations Act, 2015",
+   "congress": 113,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-113hr4745rh",
+     "code": "rh",
+     "date": "2014-05-27T04:00:00Z",
+     "path": "113-hr-4745/rh.pdf",
+     "sha256": "e5d1e59ec7f53b55e70e17f254dcd6ff3fed23a640b3d5ba41b65cdf7a6970ec",
+     "bytes": 468712,
+     "pages": 158
+    }
+   ]
+  },
+  {
+   "id": "118-hr-5894",
+   "kind": "bill",
+   "stratum": 1,
+   "population": "P-head",
+   "title": "Making appropriations for the Departments of Labor, Health and Human Services, and Education, and related agencies for the fiscal year ending September 30, 2024, and for other purposes.",
+   "congress": 118,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-118hr5894ih",
+     "code": "ih",
+     "date": "2023-10-25T04:00:00Z",
+     "path": "118-hr-5894/ih.pdf",
+     "sha256": "67108f5ba780b2e43443bb6bd6d40406c8b668cfc9e7b83d237f5419254c28f1",
+     "bytes": 549444,
+     "pages": 195
+    }
+   ]
+  },
+  {
+   "id": "118-s-2587",
+   "kind": "bill",
+   "stratum": 2,
+   "population": "P-head",
+   "title": "Department of Defense Appropriations Act, 2024",
+   "congress": 118,
+   "type": "s",
+   "files": [
+    {
+     "pkg": "BILLS-118s2587rs",
+     "code": "rs",
+     "date": "2023-07-27T04:00:00Z",
+     "path": "118-s-2587/rs.pdf",
+     "sha256": "9aa7696afe2fc8252b6ee1961b2ca3c582259c05275683f100bc41c680781598",
+     "bytes": 309775,
+     "pages": 142
+    }
+   ]
+  },
+  {
+   "id": "114-s-1725",
+   "kind": "bill",
+   "stratum": 2,
+   "population": "P-head",
+   "title": "Department of State, Foreign Operations, and Related Programs Appropriations Act, 2016",
+   "congress": 114,
+   "type": "s",
+   "files": [
+    {
+     "pkg": "BILLS-114s1725pcs",
+     "code": "pcs",
+     "date": "2015-07-09T04:00:00Z",
+     "path": "114-s-1725/pcs.pdf",
+     "sha256": "a2619b3aa98b7c67f63e242ba53a20a962c72aac313e2908362732b079f177c6",
+     "bytes": 513121,
+     "pages": 326
+    }
+   ]
+  },
+  {
+   "id": "115-s-3108",
+   "kind": "bill",
+   "stratum": 2,
+   "population": "P-head",
+   "title": "Department of State, Foreign Operations, and Related Programs Appropriations Act, 2019",
+   "congress": 115,
+   "type": "s",
+   "files": [
+    {
+     "pkg": "BILLS-115s3108pcs",
+     "code": "pcs",
+     "date": "2018-06-21T04:00:00Z",
+     "path": "115-s-3108/pcs.pdf",
+     "sha256": "16834e568eed41b5df2a9bdb3e8297594cfc5d35ca225b1c9af892264b166f5f",
+     "bytes": 600399,
+     "pages": 328
+    }
+   ]
+  },
+  {
+   "id": "114-hr-5325",
+   "kind": "bill",
+   "stratum": 3,
+   "population": "P-head",
+   "title": "Continuing Appropriations and Military Construction, Veterans Affairs, and Related Agencies Appropriations Act, 2017, and Zika Response and Preparedness Act",
+   "congress": 114,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-114hr5325eas",
+     "code": "eas",
+     "date": "2016-09-28T04:00:00Z",
+     "path": "114-hr-5325/eas.pdf",
+     "sha256": "a3e8c47eb3acfe6e993dfedd7b70c0c987e4d406dee8ea4d221adc03ec99bc95",
+     "bytes": 723383,
+     "pages": 154
+    }
+   ]
+  },
+  {
+   "id": "116-hr-3055",
+   "kind": "bill",
+   "stratum": 3,
+   "population": "P-head",
+   "title": "Further Continuing Appropriations Act, 2020, and Further Health Extenders Act of 2019",
+   "congress": 116,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-116hr3055eas",
+     "code": "eas",
+     "date": "2019-10-31T04:00:00Z",
+     "path": "116-hr-3055/eas.pdf",
+     "sha256": "28333c2f07db0936248205fc04d943831e8a62db3292b327104461b85b4c4d46",
+     "bytes": 786051,
+     "pages": 562
+    }
+   ]
+  },
+  {
+   "id": "114-hr-240",
+   "kind": "bill",
+   "stratum": 4,
+   "population": "P-robust",
+   "title": "Department of Homeland Security Appropriations Act, 2015",
+   "congress": 114,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-114hr240enr",
+     "code": "enr",
+     "date": "",
+     "path": "114-hr-240/enr.pdf",
+     "sha256": "11bfa9bc8642443e89ffa0d3cc27fb1c52906be559500884d3603da4b1ff8d4c",
+     "bytes": 179581,
+     "pages": 39
+    }
+   ]
+  },
+  {
+   "id": "119-hr-7147",
+   "kind": "bill",
+   "stratum": 4,
+   "population": "P-robust",
+   "title": "Homeland Security and Further Additional Continuing Appropriations Act, 2026.",
+   "congress": 119,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-119hr7147enr",
+     "code": "enr",
+     "date": "",
+     "path": "119-hr-7147/enr.pdf",
+     "sha256": "781d4061de999c84db8c8f47c2ac72d7f0a0cad64a827c1a6414028057b84c87",
+     "bytes": 204314,
+     "pages": 38
+    }
+   ]
+  },
+  {
+   "id": "115-hjres-128",
+   "kind": "bill",
+   "stratum": 5,
+   "population": "P-head",
+   "title": "Department of Defense Appropriations Act, 2018",
+   "congress": 115,
+   "type": "hjres",
+   "files": [
+    {
+     "pkg": "BILLS-115hjres128ih",
+     "code": "ih",
+     "date": "2018-02-05T05:00:00Z",
+     "path": "115-hjres-128/ih.pdf",
+     "sha256": "5da3d09407830cb12a691566f03aaac29d2be3e119d985b0175513d5602d44b4",
+     "bytes": 344449,
+     "pages": 171
+    }
+   ]
+  },
+  {
+   "id": "CRPT-119HRPT212",
+   "kind": "report",
+   "stratum": 6,
+   "population": "P-robust",
+   "title": "DEPARTMENTS OF TRANSPORTATION, AND HOUSING AND URBAN DEVELOPMENT, AND RELATED AGENCIES APPROPRIATIONS BILL, 2026",
+   "congress": null,
+   "type": null,
+   "files": [
+    {
+     "pkg": "CRPT-119HRPT212",
+     "code": "rpt",
+     "path": "CRPT-119HRPT212/CRPT-119HRPT212.pdf",
+     "sha256": "0ba67c8a629fe23eaab5440aa897b37d66c31a1014618ce763c033d58b4b4cdb",
+     "bytes": 3024489,
+     "pages": 385
+    }
+   ]
+  },
+  {
+   "id": "CRPT-113SRPT181",
+   "kind": "report",
+   "stratum": 6,
+   "population": "P-robust",
+   "title": "DEPARTMENTS OF COMMERCE AND JUSTICE, AND SCIENCE, AND RELATED AGENCIES APPROPRIATIONS BILL, 2015",
+   "congress": null,
+   "type": null,
+   "files": [
+    {
+     "pkg": "CRPT-113SRPT181",
+     "code": "rpt",
+     "path": "CRPT-113SRPT181/CRPT-113SRPT181.pdf",
+     "sha256": "c46ef1b3e6c918c6fe15752161be634a88fe35863fd2462b2e91b8a2f56a786e",
+     "bytes": 801787,
+     "pages": 152
+    }
+   ]
+  },
+  {
+   "id": "CRPT-116SRPT102",
+   "kind": "report",
+   "stratum": 6,
+   "population": "P-robust",
+   "title": "ENERGY AND WATER DEVELOPMENT APPROPRIATIONS BILL, 2020",
+   "congress": null,
+   "type": null,
+   "files": [
+    {
+     "pkg": "CRPT-116SRPT102",
+     "code": "rpt",
+     "path": "CRPT-116SRPT102/CRPT-116SRPT102.pdf",
+     "sha256": "9176a2de225bd0815264f050742e6dbf47ed5f17576974d9ef6a1d54ef6ea7b0",
+     "bytes": 554489,
+     "pages": 180
+    }
+   ]
+  },
+  {
+   "id": "116-hr-3163",
+   "kind": "bill",
+   "stratum": 7,
+   "population": "P-head",
+   "title": "Making appropriations for the Departments of Transportation, and Housing and Urban Development, and related agencies for the fiscal year ending September 30, 2020, and for other purposes.",
+   "congress": 116,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-116hr3163rh",
+     "code": "rh",
+     "date": "2019-06-06T04:00:00Z",
+     "path": "116-hr-3163/rh.pdf",
+     "sha256": "bc083e79c0966ab57c4875e6719ec292e55dfb6310a0c9227caa80886b423d9b",
+     "bytes": 561410,
+     "pages": 216
+    }
+   ]
+  },
+  {
+   "id": "113-s-2499",
+   "kind": "bill",
+   "stratum": 7,
+   "population": "P-head",
+   "title": "Department of State, Foreign Operations, and Related Programs Appropriations Act, 2015",
+   "congress": 113,
+   "type": "s",
+   "files": [
+    {
+     "pkg": "BILLS-113s2499pcs",
+     "code": "pcs",
+     "date": "2014-06-19T04:00:00Z",
+     "path": "113-s-2499/pcs.pdf",
+     "sha256": "59a530a9f966ec31ea58de68d926ef83cdd6275516a5f6e213d5e07139dd1b67",
+     "bytes": 537728,
+     "pages": 286
+    }
+   ]
+  },
+  {
+   "id": "116-hr-265",
+   "kind": "bill",
+   "stratum": 7,
+   "population": "P-head",
+   "title": "Agriculture, Rural Development, Food and Drug Administration, and Related Agencies Appropriations Act, 2019",
+   "congress": 116,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-116hr265rfs",
+     "code": "rfs",
+     "date": "2019-01-11T05:00:00Z",
+     "path": "116-hr-265/rfs.pdf",
+     "sha256": "70667790d144f5f165b7549fd2808a794078024f620e64662b7cd193d798bb34",
+     "bytes": 368686,
+     "pages": 109
+    }
+   ]
+  },
+  {
+   "id": "116-hr-2740",
+   "kind": "bill",
+   "stratum": 8,
+   "population": "P-head",
+   "title": "Labor, Health and Human Services, Education, Defense, State, Foreign Operations, and Energy and Water Development Appropriations Act, 2020",
+   "congress": 116,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-116hr2740pcs",
+     "code": "pcs",
+     "date": "2019-07-10T04:00:00Z",
+     "path": "116-hr-2740/pcs.pdf",
+     "sha256": "105d78cdfe0cd05e85094062435b4678ca21a886c93e87480ff79a26cd63fc01",
+     "bytes": 1020453,
+     "pages": 650
+    }
+   ]
+  },
+  {
+   "id": "118-hr-10445",
+   "kind": "bill",
+   "stratum": 8,
+   "population": "P-head",
+   "title": "Further Continuing Appropriations and Disaster Relief Supplemental Appropriations Act, 2025",
+   "congress": 118,
+   "type": "hr",
+   "files": [
+    {
+     "pkg": "BILLS-118hr10445ih",
+     "code": "ih",
+     "date": "2024-12-17T05:00:00Z",
+     "path": "118-hr-10445/ih.pdf",
+     "sha256": "e173b5ee04c5272e163a73561fbee010290d800e0988c64e091a5f077c1b63a3",
+     "bytes": 2621697,
+     "pages": 1547
+    }
+   ]
+  }
+ ],
+ "n_members": 19,
+ "n_documents": 19
+}

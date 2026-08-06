@@ -60,10 +60,28 @@ BS_DIR = Path(os.environ.get("EV_BILLSTATUS", Path(os.environ.get("CLAUDE_JOB_DI
 
 _PKG_RE = re.compile(r"/(BILLS-\d+[a-z]+\d+[a-z0-9]+)\.(?:xml|htm|pdf)\b", re.I)
 _CODE_RE = re.compile(r"^BILLS-\d+[a-z]+\d+([a-z][a-z0-9]*)$", re.I)
-_CRPT_RE = re.compile(r"/(CRPT-\d+[hs]rpt[0-9-]+)/", re.I)
-# GPO's own title convention for an appropriations report; matched on the mods title, not
-# on our own vocabulary.
-_APPROPS_TITLE = re.compile(r"\bappropriation", re.I)
+# Sitemap entries are ".../app/details/CRPT-118hrpt338" with NO trailing slash. The first
+# version of this pattern required one, matched nothing, and reported a frame of 0
+# packages -- which reads identically to "the collection is empty".
+_CRPT_RE = re.compile(r"\b(CRPT-\d+[hs]rpt[0-9-]+)\b", re.I)
+# GPO's own title convention for an appropriations COMMITTEE report: "<SUBJECT>
+# APPROPRIATIONS BILL, <year>". Matching bare "appropriation" also catches Rules Committee
+# reports ABOUT an appropriations measure ("PROVIDING FOR CONSIDERATION OF THE JOINT
+# RESOLUTION ... MAKING CONTINUING APPROPRIATIONS"), which carry none of the account
+# tabulation this stratum exists to sample.
+_APPROPS_TITLE = re.compile(r"appropriations bill,\s*\d{4}", re.I)
+
+# GPO's title convention for a bill that actually CARRIES an appropriations account tree.
+#
+# Committee referral alone is a poor proxy and the first selection run proved it: it chose
+# "Pay Our Troops Act of 2026" (3 pp), "Federal Firefighter Paycheck Protection Act" (3 pp)
+# and "Chips and Science Act" -- all referred to Appropriations, none carrying an account
+# heading. That is precisely the disease that voided the prior holdout's heading metric.
+# The title is BILLSTATUS metadata and the page count is a container fact, so neither
+# conditions selection on either architecture's output.
+_APPROPS_BILL_TITLE = re.compile(r"appropriations act|making appropriations", re.I)
+# A document with an appropriations heading tree is not three pages long.
+_MIN_STRUCTURE_PAGES = 25
 
 # Version-code classes the strata name.
 EARLY_HOUSE = {"ih", "rh"}
@@ -243,20 +261,39 @@ def load_report_frame(client: httpx.Client) -> list[dict]:
             if pkg in seen:
                 continue
             seen.add(pkg)
-            out.append({"kind": "report", "id": pkg, "year": y})
+            # `id` is upper-cased to match the contamination inventory, but govinfo
+            # package paths are CASE-SENSITIVE, so every URL must use the id as printed.
+            # Requesting CRPT-118HRPT338 404s where CRPT-118hrpt338 resolves, and that is
+            # what made mods_liveness read 250 attempted / 0 ok on the previous run.
+            out.append({"kind": "report", "id": pkg, "pkg_id": m.group(1), "year": y})
             n += 1
         print(f"  CRPT {y}: {n} packages", file=sys.stderr)
     return out
 
 
+# MODS lives under /metadata/pkg, NOT /content/pkg. The first version of this used
+# /content/pkg and got 404 on every package, so report_is_appropriations returned False
+# 60 times and the stratum reported 0 filled -- a broken query that reads exactly like a
+# rare class. `mods_ok` below is what distinguishes the two.
+MODS = "https://www.govinfo.gov/metadata/pkg"
+_mods_stats = {"attempted": 0, "ok": 0}
+
+
 def report_is_appropriations(client: httpx.Client, pkg: str) -> tuple[bool, str]:
+    """Is this CRPT package an appropriations report? Decided on GPO's own MODS title.
+
+    The package's own title is the FIRST title element; the rest are cited documents
+    (the bill it reports, the U.S. Code, ...), which would match far too broadly.
+    """
+    _mods_stats["attempted"] += 1
     try:
-        r = client.get(f"{CONTENT}/{pkg}/mods.xml", follow_redirects=True, timeout=120)
+        r = client.get(f"{MODS}/{pkg}/mods.xml", follow_redirects=True, timeout=120)
         if r.status_code != 200:
             return False, ""
         root = ET.fromstring(r.content)
     except (httpx.HTTPError, ET.ParseError):
         return False, ""
+    _mods_stats["ok"] += 1
     titles = [(e.text or "").strip() for e in root.iter() if e.tag.endswith("}title") or e.tag == "title"]
     title = next((t for t in titles if t), "")
     return bool(_APPROPS_TITLE.search(title)), title
@@ -269,62 +306,108 @@ def has_code(rec: dict, codes: set[str]) -> bool:
     return any(v["code"] in codes for v in rec["versions"])
 
 
+def structural(rec: dict) -> bool:
+    """Does this bill plausibly CARRY an appropriations account tree?
+
+    Committee referral says only which committee it went to. GPO's title convention says
+    what the document is. Both are BILLSTATUS metadata; neither reads the PDF.
+    """
+    return rec["appropriations"] and bool(_APPROPS_BILL_TITLE.search(rec.get("title", "")))
+
+
 STRATA = [
     {
         "id": 1,
         "name": "House appropriations bill, introduced or reported (ih/rh)",
         "n": 3,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"] and r["type"] == "hr" and has_code(r, EARLY_HOUSE),
+        "population": "P-head",
+        "pred": lambda r: structural(r) and r["type"] == "hr" and has_code(r, EARLY_HOUSE),
         "pick": EARLY_HOUSE,
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 60,
     },
     {
         "id": 2,
         "name": "Senate appropriations bill, reported or placed on calendar (rs/pcs)",
         "n": 3,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"] and r["type"] == "s" and has_code(r, SENATE_PRINT),
+        "population": "P-head",
+        "pred": lambda r: structural(r) and r["type"] == "s" and has_code(r, SENATE_PRINT),
         "pick": SENATE_PRINT,
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 60,
     },
     {
         "id": 3,
         "name": "chamber-crossing appropriations amendment print (eah/eas)",
         "n": 2,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"] and has_code(r, AMENDMENT_PRINT),
+        "population": "P-head",
+        "pred": lambda r: structural(r) and has_code(r, AMENDMENT_PRINT),
         "pick": AMENDMENT_PRINT,
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 60,
     },
     {
         "id": 4,
         "name": "enrolled appropriations bill (enr)",
         "n": 2,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"] and has_code(r, ENROLLED),
+        # P-robust: production DECLINES an unnumbered layout, and extract_anchors emits no
+        # account anchors below 0.85 glyph-size coverage. M0/M9 only.
+        "population": "P-robust",
+        "pred": lambda r: structural(r) and has_code(r, ENROLLED),
         "pick": ENROLLED,
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 60,
     },
     {
         "id": 5,
-        "name": "appropriations joint resolution / continuing resolution",
+        "name": "full-year continuing / joint-resolution appropriations",
         "n": 2,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"] and r["type"] in ("hjres", "sjres"),
+        "population": "P-head",
+        # A short-term CR is two pages of cross-references and carries no account tree; the
+        # page floor is what separates a full-year CR from one.
+        "pred": lambda r: structural(r) and r["type"] in ("hjres", "sjres"),
         "pick": None,
+        "prefer": "last",
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 60,
     },
-    {"id": 6, "name": "appropriations committee report (CRPT)", "n": 3, "frame": "F2", "pred": None, "pick": None},
+    {
+        "id": 6,
+        "name": "appropriations committee report (CRPT)",
+        "n": 3,
+        "frame": "F2",
+        # P-robust: committee_report.py reads GPO's HTML <pre> dump, not the PDF, so a
+        # report PDF has no production heading consumer. M0/M9 only.
+        "population": "P-robust",
+        "pred": None,
+        "pick": None,
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 250,
+    },
     {
         "id": 7,
         "name": "Congress under-represented in development (113/116/117/119)",
         "n": 3,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"] and r["congress"] in (113, 116, 117, 119),
+        "population": "P-head",
+        "pred": lambda r: structural(r) and r["congress"] in (113, 116, 117, 119),
         "pick": None,
+        "prefer": "last",
+        "min_pages": _MIN_STRUCTURE_PAGES,
+        "max_examine": 60,
     },
     {
         "id": 8,
         "name": "omnibus / consolidated appropriations (>= 400 printed pages)",
         "n": 2,
         "frame": "F1",
-        "pred": lambda r: r["appropriations"],
+        "population": "P-head",
+        "pred": structural,
         # The LAST version, not the first: a bill grows across stages, so the introduced
         # print is the smallest and would fail the page gate on bills that would pass it.
         "prefer": "last",
@@ -334,7 +417,7 @@ STRATA = [
         # permuted appropriations pool downloads arbitrarily many large PDFs. The cap is
         # recorded next to `examined`, so a stratum that ran out of budget is
         # distinguishable from one that ran out of candidates.
-        "max_examine": 30,
+        "max_examine": 100,
     },
 ]
 
@@ -385,10 +468,11 @@ def main() -> int:
             examined += 1
 
             if st["frame"] == "F2":
-                ok, title = report_is_appropriations(client, rec["id"])
+                pkg_id = rec.get("pkg_id", rec["id"])  # case-sensitive on govinfo
+                ok, title = report_is_appropriations(client, pkg_id)
                 if not ok:
                     continue
-                pdf_url = f"{CONTENT}/{rec['id']}/pdf/{rec['id']}.pdf"
+                pdf_url = f"{CONTENT}/{pkg_id}/pdf/{pkg_id}.pdf"
                 if not head_ok(client, pdf_url):
                     continue
                 dest = DOCS_DIR / rec["id"] / f"{rec['id']}.pdf"
@@ -397,6 +481,9 @@ def main() -> int:
                     pages = page_count(dest)
                 except Exception as exc:
                     print(f"    fetch fail {rec['id']}: {exc}", file=sys.stderr)
+                    continue
+                if pages < st.get("min_pages", 0):
+                    dest.unlink(missing_ok=True)
                     continue
                 rec = {
                     **rec,
@@ -414,6 +501,14 @@ def main() -> int:
                 }
             else:
                 pick = [v for v in rec["versions"] if st["pick"] is None or v["code"] in st["pick"]]
+                # A P-head stratum must never pick an ENROLLED print. Production declines
+                # the unnumbered enrolled layout and extract_anchors emits no account
+                # anchors below the coverage floor, so an enrolled document in P-head is a
+                # guaranteed zero denominator -- the very defect 4.4.1 splits the
+                # populations to avoid. `prefer: last` walked straight into it by choosing
+                # 116-hjres-31's enrolled print for stratum 5.
+                if st["population"] == "P-head":
+                    pick = [v for v in pick if v["code"] not in ENROLLED]
                 if not pick:
                     continue
                 v = pick[-1] if st.get("prefer") == "last" else pick[0]
@@ -455,6 +550,7 @@ def main() -> int:
                     "id": rec["id"],
                     "kind": rec["kind"],
                     "stratum": st["id"],
+                    "population": st["population"],
                     "title": rec.get("title", ""),
                     "congress": rec.get("congress"),
                     "type": rec.get("type"),
@@ -467,6 +563,7 @@ def main() -> int:
                 "name": st["name"],
                 "frame": st["frame"],
                 "target": st["n"],
+                "population": st["population"],
                 "filled": [r["id"] for r in filled],
                 "candidates": len(cands),
                 "examined": examined,
@@ -493,6 +590,21 @@ def main() -> int:
         "seed": SEED,
         "scored": False,
         "note": "Selection only. No extractor was imported; the sole PDF operation is a page count.",
+        "generation_note": (
+            "Generated twice, and NOTHING WAS SCORED from the first output, which was "
+            "never committed. The first run keyed 'appropriations' on committee referral "
+            "alone and selected 'Pay Our Troops Act of 2026' (3 pp), 'Federal Firefighter "
+            "Paycheck Protection Act' (3 pp) and 'Chips and Science Act' -- all referred "
+            "to Appropriations, none carrying an account heading. That is the same defect "
+            "that voided the prior holdout's heading metric, so referral was replaced by "
+            "GPO's title convention plus a 25-page floor, both BILLSTATUS/container facts. "
+            "The first run also matched 0 CRPT packages, because the sitemap pattern "
+            "required a trailing slash that the URLs do not have -- indistinguishable from "
+            "an empty collection. Bills seen in the superseded run remain ELIGIBLE: only "
+            "their titles and page counts were ever observed, no PDF was extracted, and "
+            "excluding them would bias the frame against exactly the well-formed "
+            "appropriations acts the study needs."
+        ),
         "exclusions_from": "results/contamination.json",
         "exclusions": {"bills": len(excluded_bills), "reports": len(excluded_reports)},
         "frames": {
@@ -510,6 +622,11 @@ def main() -> int:
                 "pool_after_exclusions": len(report_pool),
             },
         },
+        # A stratum that filled 0 is only evidence of scarcity if its QUERY worked. The
+        # first run fetched MODS from the wrong path, got 404 sixty times, and reported
+        # "0 appropriations reports" -- which is what a genuinely rare class also looks
+        # like. This records whether the classifier could see anything at all.
+        "mods_liveness": dict(_mods_stats),
         "strata": strata_report,
         "strata_fully_filled": filled_n,
         "adequacy": adequacy,
