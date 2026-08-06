@@ -50,7 +50,19 @@ def _clone(pages: list[PdfPage]) -> list[PdfPage]:
 
 
 def _rows(page: PdfPage) -> list[list]:
-    return R.cluster_lines(page)
+    """Baseline-clustered rows, memoized ON the page object.
+
+    Cached as an attribute rather than in a module dict keyed by id(): a freed page's id
+    can be reused by a later one, which would silently serve another document's rows. The
+    attribute lives and dies with the object it describes. Every sabotage clusters the
+    same pages, and clustering is O(n log n) over ~3M glyphs on the largest bill.
+    """
+    cached = getattr(page, "_rows_cache", None)
+    if cached is not None and cached[0] == len(page.glyphs):
+        return cached[1]
+    rows = R.cluster_lines(page)
+    page._rows_cache = (len(page.glyphs), rows)
+    return rows
 
 
 _SMALLCAPS_LO, _SMALLCAPS_HI = 0.70, 0.90
@@ -115,15 +127,14 @@ def s2_collapse_size_band(pages: list[PdfPage]) -> list[PdfPage]:
     """
     out = _clone(pages)
     for page in out:
-        targets = {id(g) for row in _heading_rows(page) for g in row}
-        if not targets:
-            continue
         med = {}
         for row in _heading_rows(page):
             m = statistics.median([g[SIZE] for g in row])
             for g in row:
                 med[id(g)] = m
-        page.glyphs = [(g[:SIZE] + (med[id(g)],) + g[SIZE + 1 :]) if id(g) in targets else g for g in page.glyphs]
+        if not med:
+            continue
+        page.glyphs = [(g[:SIZE] + (med[id(g)],) + g[SIZE + 1 :]) if id(g) in med else g for g in page.glyphs]
     return out
 
 
@@ -188,8 +199,7 @@ def s4_rotate_heading_slots(pages: list[PdfPage]) -> list[PdfPage]:
         page.glyphs = [g for g in page.glyphs if id(g) not in victims]
     for tpi, delta, row in moves:
         out[tpi].glyphs.extend(
-            g[:Y0] + (g[Y0] + delta, g[Y0 + 1], g[Y1] + delta, g[BASELINE] + delta) + g[BASELINE + 1 :]
-            for g in row
+            g[:Y0] + (g[Y0] + delta, g[Y0 + 1], g[Y1] + delta, g[BASELINE] + delta) + g[BASELINE + 1 :] for g in row
         )
     return out
 
