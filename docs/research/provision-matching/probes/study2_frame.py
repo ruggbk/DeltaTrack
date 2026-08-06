@@ -43,6 +43,7 @@ Run (from a normal checkout, repo venv):
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import random
 import sys
@@ -95,6 +96,64 @@ def enumerate_study2_anchors(bill: str, old_xml: Path) -> list[dict]:
             }
         )
     return out
+
+
+def derive_eligible_ordinals(target_xml: Path, rule: str) -> list[int]:
+    """THE authoritative eligible universe for a coverage claim. Generated, never authored.
+
+    Round 6's first criticism: v4 stored `eligible_ordinals` in the record and checked only that
+    `reviewed` equalled it. A record claiming `eligible = [5], reviewed = [5]` therefore passed and
+    was granted `complete-in-document` over a 161-node document. Set equality fixed duplicate-count
+    masking and moved the trust one field along -- from the count to the universe.
+
+    This is the function that closes it: the universe comes from the frozen parse, and
+    `verify_coverage_against_corpus` re-derives it and compares. A reviewer controls which nodes
+    they have adjudicated. They do not control what there was to adjudicate.
+    """
+    if rule not in ("all-nodes", "all-nodes-with-body"):
+        raise ValueError(f"unknown coverage rule {rule!r}")
+    tree = normalize_bill(target_xml)
+    if rule == "all-nodes":
+        return list(range(len(tree.nodes)))
+    return [i for i, n in enumerate(tree.nodes) if n.body_text.strip()]
+
+
+def verify_coverage_against_corpus(records: list[dict], resolve) -> dict[str, str]:
+    """{anchor_id: reason} for every coverage block that does NOT match the real parse.
+
+    `resolve(bill, version) -> Path | None` supplies the XML. Anything this returns is a record
+    whose completeness claim is fabricated or stale; the evaluator refuses those records rather
+    than trusting the fields to agree with each other.
+    """
+    bad: dict[str, str] = {}
+    for rec in records:
+        truth = rec.get("truth", {})
+        for field, side in (("coverage", "target"), ("competition_coverage", "source")):
+            block = truth.get(field)
+            if not isinstance(block, dict):
+                continue
+            bill = rec["anchor"]["bill"]
+            version = block.get(f"{side}_version")
+            path = resolve(bill, version) if version else None
+            if path is None:
+                bad[rec["anchor_id"]] = f"{field}: cannot resolve {bill}/{version} to verify against"
+                continue
+            actual_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            if actual_sha != block.get(f"{side}_source_sha256"):
+                bad[rec["anchor_id"]] = f"{field}: {side}_source_sha256 does not match {bill}/{version}"
+                continue
+            try:
+                actual = set(derive_eligible_ordinals(path, block["rule"]))
+            except Exception as exc:  # pragma: no cover - a parse failure is its own defect
+                bad[rec["anchor_id"]] = f"{field}: could not derive the universe ({exc})"
+                continue
+            stored = set(block.get("eligible_ordinals", []))
+            if stored != actual:
+                bad[rec["anchor_id"]] = (
+                    f"{field}: stored eligible universe has {len(stored)} node(s), the parse under "
+                    f"rule {block['rule']!r} has {len(actual)}"
+                )
+    return bad
 
 
 def enumerate_study2_regions(min_anchors: int = MIN_REGION_ANCHORS) -> dict[str, dict]:
@@ -160,6 +219,71 @@ def _allocate_quota(supply: dict[str, int], n_regions: int, rng: random.Random) 
     return quota
 
 
+def expected_quota(supply: dict[str, int], n_regions: int) -> tuple[dict[str, float], str]:
+    """E[k_b] over the randomness in `_allocate_quota`, plus how it was obtained.
+
+    Round 6's second criticism, and it is correct: `k_b / n_b` is the probability CONDITIONAL on the
+    realised quota, and quota allocation is itself random. Enumerated on a frame of three bills with
+    two regions each, requesting one region:
+
+        true unconditional P(region) = 1/6 = 0.167   (empirical over 60,000 seeds: 0.166-0.169)
+        what v4 recorded              = 1/2 = 0.500   for whichever bill won the quota, 0 for others
+
+    So the unconditional probability needs E[k_b], not the realised k_b. Two exact routes and an
+    honest refusal:
+
+      closed-form   when no bill can be capped (every supply >= base+1), the remainder is a simple
+                    random sample of R bills from B, so E[k_b] = base + R/B for every bill.
+      enumeration   when capping is possible and B is small enough to enumerate every permutation
+                    of the remainder shuffle, average the realised quotas over all B! of them.
+      None          otherwise -- reported as unavailable rather than approximated, because a
+                    Monte-Carlo "probability" in a design document is the kind of number that gets
+                    quoted later as if it were exact.
+    """
+    bills = sorted(supply)
+    B = len(bills)
+    total = sum(supply.values())
+    target = min(n_regions, total)
+    if B == 0 or target == 0:
+        return (dict.fromkeys(bills, 0.0), "trivial")
+
+    base = target // B
+    remainder = target - base * B
+    if all(supply[b] >= base + 1 for b in bills):
+        share = base + remainder / B
+        return ({b: share for b in bills}, "closed-form")
+
+    if B <= 8:
+        totals = dict.fromkeys(bills, 0)
+        perms = list(itertools.permutations(bills))
+        for order in perms:
+            for b, k in _allocate_quota_for_order(supply, target, list(order)).items():
+                totals[b] += k
+        return ({b: totals[b] / len(perms) for b in bills}, "exact-enumeration")
+
+    return (dict.fromkeys(bills, None), "unavailable: capping possible and too many bills to enumerate")
+
+
+def _allocate_quota_for_order(supply: dict[str, int], target: int, order: list[str]) -> dict[str, int]:
+    """`_allocate_quota`'s body with the shuffle already fixed, so it can be enumerated."""
+    bills = sorted(supply)
+    quota = dict.fromkeys(bills, 0)
+    base = target // len(bills)
+    for b in bills:
+        quota[b] = min(base, supply[b])
+    while sum(quota.values()) < target:
+        progressed = False
+        for b in order:
+            if sum(quota.values()) >= target:
+                break
+            if quota[b] < supply[b]:
+                quota[b] += 1
+                progressed = True
+        if not progressed:  # pragma: no cover - unreachable while target <= total supply
+            break
+    return quota
+
+
 def draw_study2_sample(
     n_regions: int,
     seed: int,
@@ -208,14 +332,19 @@ def draw_study2_sample(
         by_bill.setdefault(r["bill"], []).append(r)
     bills = sorted(by_bill)
 
-    quota = _allocate_quota({b: len(by_bill[b]) for b in bills}, n_regions, rng)
+    supply = {b: len(by_bill[b]) for b in bills}
+    quota = _allocate_quota(supply, n_regions, rng)
+    e_quota, e_method = expected_quota(supply, n_regions)
 
     selected: list[dict] = []
-    p_region_by_bill: dict[str, float] = {}
+    p_given_quota: dict[str, float] = {}
+    p_uncond: dict[str, float | None] = {}
     for b in bills:
         k = quota.get(b, 0)
-        n_b = len(by_bill[b])
-        p_region_by_bill[b] = (k / n_b) if n_b else 0.0
+        n_b = supply[b]
+        p_given_quota[b] = (k / n_b) if n_b else 0.0
+        ek = e_quota.get(b)
+        p_uncond[b] = (ek / n_b) if (ek is not None and n_b) else None
         if k:
             selected.extend(rng.sample(by_bill[b], k))
 
@@ -227,15 +356,21 @@ def draw_study2_sample(
         else:
             chosen = rng.sample(pool, anchors_per_region)
             p_within = anchors_per_region / len(pool)
-        p_r = p_region_by_bill[r["bill"]]
+        p_cond = p_given_quota[r["bill"]]
+        p_unc = p_uncond[r["bill"]]
         for a in chosen:
             picked.append(
                 {
                     **a,
                     "region_key": r["key"],
-                    "p_region": p_r,
+                    # NAMED for what they are. `p_region_given_quota` is conditional on the realised
+                    # allocation; `p_region_unconditional` accounts for the allocation randomness too
+                    # and is the only one that is an inclusion probability for the whole design.
+                    "p_region_given_quota": p_cond,
+                    "p_region_unconditional": p_unc,
                     "p_within_region": p_within,
-                    "p_inclusion": p_r * p_within,
+                    "p_inclusion_given_quota": p_cond * p_within,
+                    "p_inclusion_unconditional": (p_unc * p_within) if p_unc is not None else None,
                 }
             )
 
@@ -252,11 +387,16 @@ def draw_study2_sample(
             "anchors_total": sum(r["n_anchors"] for r in regions.values()),
             "anchors_in_drawable_regions": sum(r["n_anchors"] for r in drawable),
         },
-        # Per-bill quota and supply, so the recorded probabilities can be re-derived by hand rather
-        # than trusted: P(region) = quota[b] / supply[b].
+        # Per-bill quota, supply and expected quota, so every recorded probability can be
+        # re-derived by hand rather than trusted:
+        #   P(region | realised quota) = quota[b] / supply[b]
+        #   P(region, unconditional)   = expected_quota[b] / supply[b]
         "quota_by_bill": quota,
-        "drawable_by_bill": {b: len(by_bill[b]) for b in bills},
-        "p_region_by_bill": p_region_by_bill,
+        "drawable_by_bill": supply,
+        "expected_quota_by_bill": e_quota,
+        "expected_quota_method": e_method,
+        "p_region_given_quota_by_bill": p_given_quota,
+        "p_region_unconditional_by_bill": p_uncond,
         "selected_regions": [r["key"] for r in selected],
         "selected_anchors": [
             {
@@ -266,9 +406,11 @@ def draw_study2_sample(
                 "node_ordinal": a["node_ordinal"],
                 "element_id": a["element_id"],
                 "region_key": a["region_key"],
-                "p_region": a["p_region"],
+                "p_region_given_quota": a["p_region_given_quota"],
+                "p_region_unconditional": a["p_region_unconditional"],
                 "p_within_region": a["p_within_region"],
-                "p_inclusion": a["p_inclusion"],
+                "p_inclusion_given_quota": a["p_inclusion_given_quota"],
+                "p_inclusion_unconditional": a["p_inclusion_unconditional"],
             }
             for a in picked
         ],
@@ -302,8 +444,13 @@ def main() -> None:
     )
     print(f"    anchors selected : {len(demo['selected_anchors'])}")
     if demo["selected_anchors"]:
-        p = demo["selected_anchors"][0]["p_inclusion"]
-        print(f"    example inclusion probability : {p:.4f}")
+        a = demo["selected_anchors"][0]
+        print(f"    E[quota] method  : {demo['expected_quota_method']}")
+        print(f"    example anchor   : p(given realised quota) = {a['p_inclusion_given_quota']:.5f}")
+        print(f"                       p(unconditional)        = {a['p_inclusion_unconditional']:.5f}")
+        print("      The second is the inclusion probability for the WHOLE randomized design; the")
+        print("      first conditions on the quota allocation, which is itself random. Reporting")
+        print("      the first as an inclusion probability overstates it (R6-2).")
     print()
     print("  The ALGORITHM is frozen in this PR. The study's actual draw is not performed here.")
     if "--json" in sys.argv:

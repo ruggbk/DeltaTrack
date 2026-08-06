@@ -1,4 +1,4 @@
-"""The frozen Pass 2 annotation schema (v3). ONE authoritative description of the semantics.
+"""The frozen Pass 2 annotation schema (v5). ONE authoritative description of the semantics.
 
 WHY A SCHEMA BEFORE ANY LABELS EXIST. The protocol promises five outputs from one dataset:
 candidate recall, ranking accuracy, assignment accuracy, final diff correctness, and challenge-set
@@ -12,34 +12,41 @@ THE INVARIANT:
     A method under evaluation may help a human FIND a counterpart. It may never define whether one
     EXISTS, directly or indirectly.
 
-"Indirectly" is where three review rounds have found the failures, each one layer further out:
-first the matcher chose the pairs; then the retrievers chose the candidate list; then a bounded
-region chose the search area; then -- round 4 -- "the reviewer searched and found nothing" was
-being read as "nothing is there". Each fix renamed the dependency rather than removing it. v3
-removes it by making completeness a COUNT rather than a promise (see `document-exhaustive`).
+"Indirectly" is where five review rounds have found the failures, each one layer further out: the
+matcher chose the pairs; then the retrievers chose the candidate list; then a bounded region chose
+the search area; then "the reviewer searched and found nothing" was read as "nothing is there";
+then a COUNT of what had been reviewed stood in for the reviewed set; then the record's own
+statement of the eligible universe stood in for the universe. Every fix moved the dependency one
+field along. v5 ends the chain by deriving the universe from the frozen parse: see
+`mark_verified_universes`, and note that the evaluator refuses completeness for any record that
+has not been through it.
 
-NOTE ON THIS DOCSTRING. v2 shipped with prose that still described v1 semantics -- it said
-`suggested-list` was "sufficient for ranking, assignment and diff correctness" while the executable
-rules refused it for two of those, and described document search as discretionary while the rules
-made escalation systematic. Stale explanatory prose preserving a superseded methodology is one of
-this programme's own named findings, so: this docstring describes v3 and nothing else. Where an
-earlier version differed, the history is in `review-2026-08-methodology.md`, not here.
+NOTE ON THIS DOCSTRING. Twice now this file has shipped prose describing a superseded version while
+the executable rules said otherwise -- v2 claimed `suggested-list` sufficed for assignment and diff
+correctness, and v4 still showed a count-based coverage block. Stale explanatory prose preserving a
+superseded methodology is one of this programme's own named findings, and agents read docstrings as
+current truth. So: **this docstring describes v5 and nothing else.** History belongs in
+`review-2026-08-methodology.md`.
 
 --------------------------------------------------------------------------------------------------
-THE FOUR PROPOSITIONS
+THE FIVE PROPOSITIONS
 --------------------------------------------------------------------------------------------------
-Truth records support propositions, not "confidence levels". Four matter, and they are not nested
+Truth records support propositions, not "confidence levels". Five matter, and they are not nested
 by cost -- which is why the requirement is per metric rather than one global strictness flag.
 
   affirmed-positive       "this specific node IS a counterpart of the anchor"
   affirmed-negative       "this specific node is NOT the same provision as the anchor"
-                          Pairwise, like the positive. Added in v3: a high-containment false keep
-                          can be ruled DIFFERENT without anyone establishing where the anchor's
-                          true counterpart is, and that is legitimate, sufficient evidence for a
-                          false-keep challenge. v2 forced such strata to pay for exhaustive
-                          document review they did not need.
+                          Pairwise, like the positive: a high-containment false keep can be ruled
+                          DIFFERENT without anyone establishing where the anchor's true counterpart
+                          is, which is sufficient evidence for a false-keep challenge and much
+                          cheaper than the document sweep an earlier schema charged it for.
   complete-within-region  "no counterpart exists in region R" -- and nothing about outside R.
   complete-in-document    "the counterpart set is exactly this, across the whole target version."
+  complete-source-side    "for THIS contested target node, these are all the old provisions that
+                          claim it." The opposite direction, and the only thing that makes a
+                          collision group scorable. A target-side sweep cannot establish it at any
+                          level of thoroughness -- it is the wrong axis, not too little of the
+                          right one.
 
 Both pairwise propositions additionally require a PER-CANDIDATE BINARY question. A forced choice
 among a candidate list yields "the best of what I was shown", which the candidate set manufactured.
@@ -61,30 +68,36 @@ label cannot express it.
                         error.
 
   document-exhaustive   The reviewer adjudicated every provision of the target version that the
-                        declared coverage rule admits. Not "searched" -- COVERED, and the record
-                        proves it by carrying the SET:
+                        declared coverage rule admits. Not "searched" -- COVERED, and not asserted
+                        -- verified:
 
                             truth.coverage = {
-                                "rule": "all-nodes-with-body",
-                                "target_source_sha256": ..., "target_parser_commit": ...,
-                                "eligible_ordinals": [...],   # generated from the frozen parse
+                                "rule": "all-nodes",
+                                "target_version": ..., "target_source_sha256": ...,
+                                "target_parser_commit": ...,
+                                "eligible_ordinals": [...],   # RE-DERIVED from the frozen parse
                                 "reviewed_ordinals": [...],   # what was actually adjudicated
                             }
 
-                        `complete-in-document` is granted only when the two are equal AS SETS.
-                        Retrieval, search and structural navigation may order the queue; they may
-                        not end it. A reviewer who stops early does not produce a defective record
-                        -- they produce one that honestly claims less, and the evaluator refuses it
-                        for the metrics that need more.
+                        `complete-in-document` requires all three of:
+                          1. `rule` in `DOCUMENT_COMPLETENESS_RULES` (i.e. `all-nodes`);
+                          2. `set(reviewed) == set(eligible)`;
+                          3. `universe_verified`, stamped only by `mark_verified_universes` after
+                             re-deriving the eligible set from the parse named by
+                             `target_version` + `target_source_sha256` + `target_parser_commit`.
 
-                        `rule` MUST come from `COVERAGE_RULES`, all measure-independent: a rule that
-                        consulted word overlap or containment would let a method under evaluation
-                        set its own denominator, one layer out. `all-nodes-with-body` excludes ~8.5%
-                        of target nodes, and R9 §5 measures that every one of them is a structural
-                        CONTAINER whose text lives in a descendant the rule does admit, with the
-                        production matcher never pairing across that boundary. That is an empirical
-                        regularity over this corpus, so a test asserts it; `all-nodes` is available
-                        for a study that prefers the guarantee to the assumption.
+                        (2) alone compares two lists inside one record, which cannot tell a real
+                        universe from a fabricated one -- `eligible=[5], reviewed=[5]` satisfies it.
+                        (3) is what makes the universe come from the corpus. Retrieval, search and
+                        structural navigation may order the queue; they may not end it, and the
+                        record may not define what the queue contained.
+
+                        Only `all-nodes` may establish global completeness. `all-nodes-with-body`
+                        excludes ~8.5% of target nodes; every one of those is a structural container
+                        in this corpus, but the evidence that it never matters leaned on what the
+                        production matcher pairs -- and the matcher is the object under evaluation.
+                        `all-nodes-with-body` therefore remains available for region-scoped work,
+                        where no global claim is made.
 
 --------------------------------------------------------------------------------------------------
 WHAT IS DELIBERATELY NOT HERE
@@ -99,7 +112,7 @@ from __future__ import annotations
 
 from typing import Any
 
-SCHEMA_VERSION = "pass2-anchor-v4"
+SCHEMA_VERSION = "pass2-anchor-v5"
 
 RELATIONS = ("one-to-one", "one-to-many", "many-to-one", "none", "uncertain")
 ORACLES = ("suggested-list", "region-exhaustive", "document-exhaustive")
@@ -144,6 +157,7 @@ ORACLE_CAPABILITIES: dict[str, frozenset[str]] = {
 # different one -- the same class of defect as a stale corpus, one field further in.
 COVERAGE_FIELDS = (
     "rule",
+    "target_version",  # v5: needed to RESOLVE the parse for independent verification
     "target_source_sha256",
     "target_parser_commit",
     "eligible_ordinals",
@@ -156,14 +170,37 @@ COVERAGE_FIELDS = (
 #: without that. Establishing it needs the sweep in the opposite direction -- for one target node,
 #: review every old provision -- which is a separate cost and therefore a separate record.
 COMPETITION_FIELDS = (
+    # v5: the contested target needs a FULL observation identity. v4 carried a bare
+    # `target_ordinal`, which is only meaningful inside one parse -- ordinal 73 exists in every
+    # version of every bill, so a reverse sweep for one target could certify collision truth for
+    # another. Round 4 established the identity invariant and round 5's own new field broke it.
+    "target_version",
+    "target_source_sha256",
+    "target_parser_commit",
     "target_ordinal",
     "rule",
+    "source_version",
     "source_source_sha256",
     "source_parser_commit",
     "eligible_ordinals",
     "reviewed_ordinals",
     "claiming_ordinals",
 )
+
+#: Coverage rules that may establish `complete-in-document`.
+#:
+#: v4 allowed `all-nodes-with-body`, on the evidence that every body-less node in this corpus is a
+#: container with a text-bearing descendant and that production never pairs across the boundary.
+#: Round 6 pointed out the second half is inadmissible: **the matcher is the object under
+#: evaluation**, so what it currently pairs cannot license an assumption about what a human would
+#: legitimately judge. And the shape is exactly the one this research keeps finding -- a section
+#: whose text moves into subsections leaves a body-less container whose correspondence a reviewer
+#: might reasonably record as one-to-many.
+#:
+#: Global completeness therefore requires the universe with nothing excluded. `all-nodes-with-body`
+#: remains available for region-scoped work, where no global claim is made. Measured cost of the
+#: change: ~8.5% more nodes in a target sweep.
+DOCUMENT_COMPLETENESS_RULES = ("all-nodes",)
 
 #: What each metric's arithmetic ASSUMES about the truth record it consumes. Data, not prose, so
 #: `eval_pass2` can enforce it and a test can prove the enforcement fires.
@@ -239,7 +276,7 @@ METRIC_TRUTH_REQUIREMENTS: dict[str, dict[str, str]] = {
 CHALLENGE_REQUIREMENTS = ("affirmed-positive", "affirmed-negative", "complete-in-document")
 
 
-def _set_covers(block: dict[str, Any] | None) -> bool:
+def _set_covers(block: dict[str, Any] | None, *, for_document: bool = False) -> bool:
     """Does `reviewed_ordinals` cover `eligible_ordinals` as a SET?
 
     v3 asked `reviewed >= eligible_total`, which a workflow that adjudicated node 42 twice and never
@@ -250,7 +287,16 @@ def _set_covers(block: dict[str, Any] | None) -> bool:
     """
     if not isinstance(block, dict):
         return False
-    if block.get("rule") not in COVERAGE_RULES:
+    allowed = DOCUMENT_COMPLETENESS_RULES if for_document else COVERAGE_RULES
+    if block.get("rule") not in allowed:
+        return False
+    if not block.get("universe_verified"):
+        # v5. The set equality above is a statement about two lists in the SAME record. It cannot
+        # tell a real universe from a fabricated one: `eligible=[5], reviewed=[5]` satisfies it and
+        # was granted completeness over a 161-node document. `universe_verified` is set only by
+        # `mark_verified_universes`, from a re-derivation of the eligible set out of the frozen
+        # parse, so completeness now rests on the corpus rather than on the artifact agreeing with
+        # itself. A record that has never been verified claims less, and the evaluator says so.
         return False
     eligible, reviewed = block.get("eligible_ordinals"), block.get("reviewed_ordinals")
     if not isinstance(eligible, list) or not isinstance(reviewed, list) or not eligible:
@@ -260,7 +306,7 @@ def _set_covers(block: dict[str, Any] | None) -> bool:
 
 def coverage_is_complete(truth: dict[str, Any]) -> bool:
     """Was every eligible node of the TARGET document actually adjudicated for this anchor?"""
-    return _set_covers(truth.get("coverage"))
+    return _set_covers(truth.get("coverage"), for_document=True)
 
 
 def competition_is_complete(truth: dict[str, Any]) -> bool:
@@ -269,7 +315,30 @@ def competition_is_complete(truth: dict[str, Any]) -> bool:
     The reverse sweep. Establishes `complete-source-side`: for one contested target node, which old
     provisions legitimately claim it. Nothing in a target-side sweep can substitute for this.
     """
-    return _set_covers(truth.get("competition_coverage"))
+    return _set_covers(truth.get("competition_coverage"), for_document=True)
+
+
+def mark_verified_universes(records: list[dict[str, Any]], verifier) -> dict[str, str]:
+    """Re-derive every coverage universe from the corpus and stamp the ones that check out.
+
+    `verifier(records) -> {anchor_id: reason}` returns the records whose stored universe does NOT
+    match the frozen parse (see `study2_frame.verify_coverage_against_corpus`). Everything it does
+    not name gets `universe_verified = True`; everything it does name is left unstamped and will be
+    refused by the completeness metrics.
+
+    This is deliberately a separate, explicit step rather than part of `validate_dataset`: it needs
+    the corpus, and a validator that silently passes when the corpus is absent would be the
+    fail-open shape this programme keeps finding. `eval_pass2` refuses completeness for any record
+    that has not been through it.
+    """
+    bad = verifier(records)
+    for rec in records:
+        ok = rec["anchor_id"] not in bad
+        for field in ("coverage", "competition_coverage"):
+            block = rec.get("truth", {}).get(field)
+            if isinstance(block, dict):
+                block["universe_verified"] = ok
+    return bad
 
 
 def establishes(truth: dict[str, Any], proposition: str) -> bool:
@@ -370,6 +439,12 @@ def _validate_coverage_block(block: Any, aid: str, name: str, fields: tuple[str,
             f"{aid}: {name}.{f} must be a list of non-negative node ordinals",
         )
     _require(bool(block["eligible_ordinals"]), f"{aid}: {name}.eligible_ordinals is empty")
+    _require(
+        "universe_verified" not in block,
+        f"{aid}: {name}.universe_verified must not be present in an authored record -- it is "
+        "stamped by mark_verified_universes() from a re-derivation of the eligible set out of the "
+        "frozen parse. A hand-set flag would restore exactly the self-certification it replaces",
+    )
     stray = sorted(set(block["reviewed_ordinals"]) - set(block["eligible_ordinals"]))
     _require(
         not stray,
@@ -440,6 +515,13 @@ def validate_record(rec: dict[str, Any]) -> None:
             and set(comp["claiming_ordinals"]) <= set(comp["eligible_ordinals"]),
             f"{aid}: competition_coverage.claiming_ordinals must be a subset of the eligible "
             "source universe -- a claimant outside it was never in scope for the sweep",
+        )
+        _require(
+            comp["target_source_sha256"] != comp["source_source_sha256"]
+            or comp["target_version"] != comp["source_version"],
+            f"{aid}: competition_coverage names the same document as both source and target -- a "
+            "reverse sweep compares OLD provisions against a NEW node, so the two identities "
+            "cannot be the same parse",
         )
         _require(
             isinstance(rec.get("system", {}).get("competition_claimants"), list),

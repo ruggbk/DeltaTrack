@@ -63,8 +63,24 @@ def frame():
 
 
 @pytest.fixture
-def records():
-    return copy.deepcopy(json.loads(FIXTURE.read_text())["records"])
+def doc():
+    return copy.deepcopy(json.loads(FIXTURE.read_text()))
+
+
+@pytest.fixture
+def records(doc):
+    return doc["records"]
+
+
+@pytest.fixture
+def verifier(evaluator, doc):
+    """The universe verifier the contract fixture stands in for a corpus with.
+
+    Round 6: `set(reviewed) == set(eligible)` compares two lists inside one record and cannot tell a
+    real universe from a fabricated one. Completeness now requires the universe to be re-derived
+    from the frozen parse, so every evaluation that expects completeness must supply one of these.
+    """
+    return evaluator._synthetic_verifier(doc)
 
 
 def _find(records, anchor_id):
@@ -108,8 +124,8 @@ def test_fixture_covers_every_shape_the_design_must_handle(records):
         assert shape in ids, f"the contract fixture no longer covers {shape}"
 
 
-def test_all_metrics_are_computable_and_non_degenerate(evaluator, records):
-    r = evaluator.evaluate(records)
+def test_all_metrics_are_computable_and_non_degenerate(evaluator, records, verifier):
+    r = evaluator.evaluate(records, verifier)
 
     cr = r["candidate_recall"]
     assert (cr["counterparts_found"], cr["counterparts_total"]) == (6, 10)
@@ -134,7 +150,7 @@ def test_all_metrics_are_computable_and_non_degenerate(evaluator, records):
 # --------------------------------------------------------------------------------------------
 
 
-def test_equal_counts_do_not_grant_completeness(evaluator, schema, records):
+def test_equal_counts_do_not_grant_completeness(evaluator, schema, records, verifier):
     """R5's central case. a18 reviews as many nodes as the universe holds, but reviews one twice
     and never reaches another. Under v3's `reviewed >= eligible_total` it was certified complete."""
     a18 = _find(records, "a18-count-matches-set-does-not")
@@ -145,7 +161,7 @@ def test_equal_counts_do_not_grant_completeness(evaluator, schema, records):
     assert set(cov["reviewed_ordinals"]) != set(cov["eligible_ordinals"])
     assert not schema.establishes(a18["truth"], "complete-in-document")
 
-    r = evaluator.evaluate(records)
+    r = evaluator.evaluate(records, verifier)
     for metric in ("candidate_recall", "assignment_per_anchor", "diff_correctness"):
         refused = {a["anchor_id"] for a in r[metric]["refused"]["anchors"]}
         assert "a18-count-matches-set-does-not" in refused, metric
@@ -161,13 +177,13 @@ def test_the_superseded_count_rule_would_have_admitted_it(records):
     )
 
 
-def test_duplicates_cannot_inflate_coverage(evaluator, schema, records):
+def test_duplicates_cannot_inflate_coverage(evaluator, schema, records, verifier):
     """`reviewed` longer than `eligible` through repetition must not grant completeness either."""
     bad = copy.deepcopy(records)
     cov = _find(bad, "a1-one-to-one")["truth"]["coverage"]
     cov["reviewed_ordinals"] = [cov["eligible_ordinals"][0]] * (len(cov["eligible_ordinals"]) + 5)
     assert not schema.establishes(_find(bad, "a1-one-to-one")["truth"], "complete-in-document")
-    r = evaluator.evaluate(bad)
+    r = evaluator.evaluate(bad, verifier)
     assert "a1-one-to-one" in {a["anchor_id"] for a in r["diff_correctness"]["refused"]["anchors"]}
 
 
@@ -189,12 +205,18 @@ def test_coverage_must_name_the_parse_it_was_derived_from(schema, records):
     assert "target_source_sha256" in str(exc.value)
 
 
-def test_exact_set_coverage_grants_completeness(schema, records):
-    """The mirror: the guard is about membership, not about disliking records."""
+def test_exact_set_coverage_grants_completeness(evaluator, records, verifier):
+    """The mirror: the guards are about membership and provenance, not about disliking records.
+
+    Asserted through `evaluate` rather than `establishes` directly, because completeness now needs
+    the universe stamped by verification -- which is the point of round 6.
+    """
     a1 = _find(records, "a1-one-to-one")
     cov = a1["truth"]["coverage"]
     assert set(cov["reviewed_ordinals"]) == set(cov["eligible_ordinals"])
-    assert schema.establishes(a1["truth"], "complete-in-document")
+    r = evaluator.evaluate(records, verifier)
+    refused = {a["anchor_id"] for a in r["diff_correctness"]["refused"]["anchors"]}
+    assert "a1-one-to-one" not in refused
 
 
 # --------------------------------------------------------------------------------------------
@@ -202,24 +224,24 @@ def test_exact_set_coverage_grants_completeness(schema, records):
 # --------------------------------------------------------------------------------------------
 
 
-def test_collision_resolution_needs_source_side_truth(evaluator, records):
+def test_collision_resolution_needs_source_side_truth(evaluator, records, verifier):
     """a19 is document-complete on the TARGET side and its counterpart is a contested node. That
     does not establish which other OLD provisions claim it, so its group is not scorable."""
-    r = evaluator.evaluate(records)
+    r = evaluator.evaluate(records, verifier)
     cr = r["collision_resolution"]
     assert cr["groups_with_source_side_truth"] == 1
     assert cr["groups_observed_in_dataset_without_source_side_truth"] >= 1
     assert cr["wrong"] == ["a15-duplicate-text-right-node"]
 
 
-def test_removing_the_reverse_sweep_makes_collision_resolution_unmeasurable(evaluator, records):
+def test_removing_the_reverse_sweep_makes_collision_resolution_unmeasurable(evaluator, records, verifier):
     """Prove the requirement bites: without any `competition_coverage` the metric must report NOT
     MEASURABLE rather than scoring the groups it can see in the dataset."""
     stripped = copy.deepcopy(records)
     for rec in stripped:
         rec["truth"].pop("competition_coverage", None)
         rec["system"].pop("competition_claimants", None)
-    after = evaluator.evaluate(stripped)["collision_resolution"]
+    after = evaluator.evaluate(stripped, verifier)["collision_resolution"]
     assert after["measurable"] is False
     assert after["accuracy"] is None
     assert "competition_coverage" in after["why_not_measurable"]
@@ -229,15 +251,15 @@ def test_removing_the_reverse_sweep_makes_collision_resolution_unmeasurable(eval
     )
 
 
-def test_per_anchor_assignment_is_separate_and_still_measurable(evaluator, records):
+def test_per_anchor_assignment_is_separate_and_still_measurable(evaluator, records, verifier):
     """The per-anchor question needs only target-side truth, so stripping the reverse sweep must
     leave it untouched. If the two moved together they would not be separate estimands."""
-    before = evaluator.evaluate(records)["assignment_per_anchor"]
+    before = evaluator.evaluate(records, verifier)["assignment_per_anchor"]
     stripped = copy.deepcopy(records)
     for rec in stripped:
         rec["truth"].pop("competition_coverage", None)
         rec["system"].pop("competition_claimants", None)
-    after = evaluator.evaluate(stripped)["assignment_per_anchor"]
+    after = evaluator.evaluate(stripped, verifier)["assignment_per_anchor"]
     assert before["n"] == after["n"] and before["accuracy"] == after["accuracy"]
 
 
@@ -271,15 +293,15 @@ def test_a_reverse_sweep_must_record_the_systems_claimants(schema, records):
         ("ranking", lambda r: r["ranking"]["top1"]),
     ],
 )
-def test_a_content_hash_join_would_corrupt_this_metric(evaluator, schema, records, metric, extract):
+def test_a_content_hash_join_would_corrupt_this_metric(evaluator, schema, records, metric, extract, verifier):
     """Restore the pre-R3 join: the two boilerplate-identical target nodes collapse and the metrics
     move in the OPTIMISTIC direction."""
-    real = extract(evaluator.evaluate(records))
+    real = extract(evaluator.evaluate(records, verifier))
     original = schema.observation_id
     try:
         schema.observation_id = lambda ref: (ref["bill"], ref["version"], ref["text_sha256"])
         evaluator.observation_id = schema.observation_id
-        collapsed = extract(evaluator.evaluate(records))
+        collapsed = extract(evaluator.evaluate(records, verifier))
     finally:
         schema.observation_id = original
         evaluator.observation_id = original
@@ -329,18 +351,18 @@ def test_recorded_inclusion_probability_matches_the_realised_quota(frame):
     draw persists -- the R4 code recorded one corpus-wide figure that was wrong in both directions."""
     drawn = frame.draw_study2_sample(n_regions=6, seed=3, anchors_per_region=4)
     quota, supply = drawn["quota_by_bill"], drawn["drawable_by_bill"]
-    for bill, p in drawn["p_region_by_bill"].items():
+    for bill, p in drawn["p_region_given_quota_by_bill"].items():
         assert p == pytest.approx(quota.get(bill, 0) / supply[bill])
     for a in drawn["selected_anchors"]:
-        assert a["p_inclusion"] == pytest.approx(a["p_region"] * a["p_within_region"])
-        assert 0 < a["p_inclusion"] <= 1
+        assert a["p_inclusion_given_quota"] == pytest.approx(a["p_region_given_quota"] * a["p_within_region"])
+        assert 0 < a["p_inclusion_given_quota"] <= 1
 
 
 def test_the_old_single_corpus_wide_probability_would_have_been_wrong(frame):
     """The superseded formula, run against the corrected one on the real frame."""
     drawn = frame.draw_study2_sample(n_regions=6, seed=3, anchors_per_region=4)
     old_p = len(drawn["selected_regions"]) / drawn["frame"]["regions_drawable"]
-    per_bill = {b: p for b, p in drawn["p_region_by_bill"].items() if p > 0}
+    per_bill = {b: p for b, p in drawn["p_region_given_quota_by_bill"].items() if p > 0}
     assert any(abs(p - old_p) > 1e-9 for p in per_bill.values()), (
         "if every stratum's probability equalled the corpus-wide figure, the fix would be untested"
     )
@@ -371,35 +393,35 @@ def test_the_sampling_frame_never_imports_the_matcher():
 # --------------------------------------------------------------------------------------------
 
 
-def test_bounded_search_negatives_are_refused_by_the_completeness_metrics(evaluator, records):
-    r = evaluator.evaluate(records)
+def test_bounded_search_negatives_are_refused_by_the_completeness_metrics(evaluator, records, verifier):
+    r = evaluator.evaluate(records, verifier)
     for metric in ("candidate_recall", "assignment_per_anchor", "diff_correctness"):
         refused = {a["anchor_id"] for a in r[metric]["refused"]["anchors"]}
         assert {"a11-region-only-none", "a13-suggestion-list-none"} <= refused, metric
 
 
-def test_ranking_still_admits_bounded_oracles(evaluator, records):
-    r = evaluator.evaluate(records)
+def test_ranking_still_admits_bounded_oracles(evaluator, records, verifier):
+    r = evaluator.evaluate(records, verifier)
     assert r["ranking"]["refused"]["count"] == 0
     assert r["ranking"]["refused"]["requires"] == "affirmed-positive"
 
 
-def test_a_pairwise_false_keep_needs_no_document_completeness(evaluator, schema, records):
+def test_a_pairwise_false_keep_needs_no_document_completeness(evaluator, schema, records, verifier):
     a17 = _find(records, "a17-pairwise-false-keep")
     assert schema.establishes(a17["truth"], "affirmed-negative")
     assert not schema.establishes(a17["truth"], "complete-in-document")
-    stratum = evaluator.evaluate(records)["failure_modes"]["strata"]["high-containment-pairwise"]
+    stratum = evaluator.evaluate(records, verifier)["failure_modes"]["strata"]["high-containment-pairwise"]
     assert (stratum["mode_occurred"], stratum["n"]) == (1, 1)
 
 
-def test_forced_choice_cannot_establish_anything(schema, evaluator, records):
+def test_forced_choice_cannot_establish_anything(schema, evaluator, records, verifier):
     assert not schema.establishes(
         {"oracles": ["document-exhaustive"], "judgment_mode": "forced-choice"}, "affirmed-positive"
     )
     forced = copy.deepcopy(records)
     for rec in forced:
         rec["truth"]["judgment_mode"] = "forced-choice"
-    after = evaluator.evaluate(forced)
+    after = evaluator.evaluate(forced, verifier)
     assert after["ranking"]["n"] == 0
     assert after["candidate_recall"]["counterparts_total"] == 0
     assert after["failure_modes"]["strata"] == {}
@@ -450,3 +472,164 @@ def test_provenance_fields_are_present_on_every_node_reference(schema, records):
         for ref in refs:
             for field in schema.PROVENANCE_FIELDS:
                 assert field in ref, f"{rec['anchor_id']}: node ref missing {field}"
+
+
+# --------------------------------------------------------------------------------------------
+# round 6: the universe must come from the corpus, not from the record
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_fabricated_universe_is_refused(evaluator, records, verifier):
+    """R6's central case. a21 declares a one-node universe and reviews that one node, so
+    `set(reviewed) == set(eligible)` holds perfectly -- with itself. The real document has 21."""
+    a21 = _find(records, "a21-fabricated-universe")
+    cov = a21["truth"]["coverage"]
+    assert set(cov["reviewed_ordinals"]) == set(cov["eligible_ordinals"]), (
+        "the adversarial case only tests anything if the record is internally consistent"
+    )
+    r = evaluator.evaluate(records, verifier)
+    assert "a21-fabricated-universe" in r["universe_verification"]["failed"]
+    for metric in ("candidate_recall", "assignment_per_anchor", "diff_correctness"):
+        refused = {a["anchor_id"] for a in r[metric]["refused"]["anchors"]}
+        assert "a21-fabricated-universe" in refused, metric
+
+
+def test_set_equality_alone_would_have_admitted_the_fabrication(schema, records):
+    """Prove the verification changes the answer, by running the rule it strengthens."""
+    cov = _find(records, "a21-fabricated-universe")["truth"]["coverage"]
+    assert set(cov["reviewed_ordinals"]) == set(cov["eligible_ordinals"]), (
+        "v4's set-equality rule admits this record; if it stops doing so the guard is untested"
+    )
+    assert cov["rule"] in schema.DOCUMENT_COMPLETENESS_RULES
+
+
+def test_without_a_verifier_no_record_can_claim_completeness(evaluator, records):
+    """The strongest form of the contract: completeness needs the corpus, full stop.
+
+    An evaluation run with no verifier cannot re-derive any universe, so it refuses every
+    completeness metric and says why -- rather than trusting each record to describe its own
+    universe honestly. Ranking is unaffected, because it needs only an affirmed positive.
+    """
+    r = evaluator.evaluate(records)
+    assert r["universe_verification"]["ran"] is False
+    assert "never re-derived" in r["universe_verification"]["note"]
+    assert r["candidate_recall"]["counterparts_total"] == 0
+    assert r["diff_correctness"]["n"] == 0
+    assert r["assignment_per_anchor"]["n"] == 0
+    assert r["collision_resolution"]["measurable"] is False
+    assert r["ranking"]["n"] == 6, "ranking needs no completeness and must be unaffected"
+
+
+@pytest.mark.parametrize(
+    "corrupt",
+    [
+        lambda c: c.update(eligible_ordinals=c["eligible_ordinals"][:1], reviewed_ordinals=c["eligible_ordinals"][:1]),
+        lambda c: c.update(target_source_sha256="a" * 64),
+        lambda c: c.update(target_version="9_nonexistent"),
+        lambda c: c.update(rule="all-nodes-with-body"),
+    ],
+    ids=["truncated-universe", "wrong-source-hash", "unknown-version", "wrong-rule-output"],
+)
+def test_coverage_corruptions_are_rejected(evaluator, records, verifier, corrupt):
+    """R6's required corruption matrix. Each mutation leaves the record internally consistent and
+    is caught only by re-deriving the universe from the parse."""
+    bad = copy.deepcopy(records)
+    corrupt(_find(bad, "a1-one-to-one")["truth"]["coverage"])
+    r = evaluator.evaluate(bad, verifier)
+    refused = {a["anchor_id"] for a in r["diff_correctness"]["refused"]["anchors"]}
+    assert "a1-one-to-one" in refused
+
+
+def test_a_hand_set_verification_flag_is_rejected(schema, records):
+    """The flag is the verifier's output, not an input -- allowing it restores self-certification."""
+    bad = copy.deepcopy(records)
+    _find(bad, "a1-one-to-one")["truth"]["coverage"]["universe_verified"] = True
+    with pytest.raises(schema.SchemaError) as exc:
+        schema.validate_dataset(bad)
+    assert "universe_verified" in str(exc.value)
+
+
+def test_only_all_nodes_may_establish_global_completeness(schema):
+    """R6-3: `all-nodes-with-body` excludes ~8.5% of the document, and the evidence that the
+    exclusion is harmless leaned on what the matcher pairs -- the object under evaluation."""
+    assert schema.DOCUMENT_COMPLETENESS_RULES == ("all-nodes",)
+    assert "all-nodes-with-body" in schema.COVERAGE_RULES, "still valid for region-scoped work"
+
+
+def test_evaluation_does_not_mutate_the_caller_records(evaluator, schema, records, verifier):
+    """Verification stamps a copy. Otherwise a dataset that validates would fail validation after
+    being evaluated once, because an authored record may not carry `universe_verified`."""
+    evaluator.evaluate(records, verifier)
+    schema.validate_dataset(records)
+
+
+# --------------------------------------------------------------------------------------------
+# round 6: collision target identity
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_reverse_sweep_carries_a_full_target_identity(records):
+    """R6-4: a bare `target_ordinal` aliases across documents -- ordinal 602 exists in every
+    version of every bill."""
+    comp = _find(records, "a15-duplicate-text-right-node")["truth"]["competition_coverage"]
+    for field in ("target_version", "target_source_sha256", "target_parser_commit", "target_ordinal"):
+        assert field in comp, f"competition_coverage must scope its target: missing {field}"
+    assert comp["target_source_sha256"] != comp["source_source_sha256"]
+
+
+def test_a_reverse_sweep_may_not_name_one_document_as_both_sides(schema, records):
+    bad = copy.deepcopy(records)
+    comp = _find(bad, "a15-duplicate-text-right-node")["truth"]["competition_coverage"]
+    comp["target_source_sha256"] = comp["source_source_sha256"]
+    comp["target_version"] = comp["source_version"]
+    with pytest.raises(schema.SchemaError) as exc:
+        schema.validate_dataset(bad)
+    assert "same document as both source and target" in str(exc.value)
+
+
+# --------------------------------------------------------------------------------------------
+# round 6: unconditional inclusion probability
+# --------------------------------------------------------------------------------------------
+
+
+def test_unconditional_probability_matches_exhaustive_enumeration(frame):
+    """R6-2. `k_b / n_b` is conditional on the realised quota, and quota allocation is random.
+
+    Enumerated on three bills of two regions each requesting one region: the true unconditional
+    probability is 1/6, while the conditional figure is 1/2 for whichever bill won the quota.
+    """
+    sizes = {"A": 2, "B": 2, "C": 2}
+    hits = {f"{b}{i}": 0 for b in sizes for i in range(2)}
+    trials = 6000
+    for seed in range(trials):
+        rng = random.Random(seed)
+        quota = frame._allocate_quota(sizes, 1, rng)
+        for b, k in quota.items():
+            if k:
+                for r in rng.sample([f"{b}{i}" for i in range(sizes[b])], k):
+                    hits[r] += 1
+    for r, c in hits.items():
+        assert abs(c / trials - 1 / 6) < 0.02, f"{r}: empirical {c / trials:.4f} is not ~1/6"
+
+    e_quota, method = frame.expected_quota(sizes, 1)
+    assert method == "closed-form"
+    for b in sizes:
+        assert e_quota[b] / sizes[b] == pytest.approx(1 / 6)
+
+
+def test_capping_uses_exact_enumeration_not_the_closed_form(frame):
+    """When a bill can be capped the closed form does not apply, so the expectation is enumerated
+    over every permutation of the remainder shuffle rather than approximated."""
+    e_quota, method = frame.expected_quota({"A": 2, "B": 50, "C": 50}, 9)
+    assert method == "exact-enumeration"
+    assert e_quota["A"] == pytest.approx(2.0), "a bill capped at its supply has expectation = supply"
+    assert e_quota["B"] == pytest.approx(3.5)
+
+
+def test_the_draw_records_both_probabilities_and_names_them(frame):
+    """Semantic honesty: a conditional probability must not be labelled an inclusion probability."""
+    drawn = frame.draw_study2_sample(n_regions=6, seed=3, anchors_per_region=4)
+    assert drawn["expected_quota_method"] in ("closed-form", "exact-enumeration")
+    for a in drawn["selected_anchors"]:
+        assert a["p_inclusion_given_quota"] == pytest.approx(a["p_region_given_quota"] * a["p_within_region"])
+        assert a["p_inclusion_unconditional"] == pytest.approx(a["p_region_unconditional"] * a["p_within_region"])

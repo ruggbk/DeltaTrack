@@ -42,6 +42,7 @@ Run (no corpus needed; defaults to the synthetic contract fixture):
 
 from __future__ import annotations
 
+import copy
 import json
 import sys
 from collections import Counter
@@ -52,6 +53,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from pass2_schema import (  # noqa: E402
     METRIC_TRUTH_REQUIREMENTS,
     establishes,
+    mark_verified_universes,
     observation_id,
     validate_dataset,
 )
@@ -66,7 +68,9 @@ POSITIVE = ("one-to-one", "one-to-many", "many-to-one")
 def _key(ref: dict) -> tuple:
     """Node identity for joining truth against candidates and against the system's output.
 
-    `(source_sha256, parser_commit, element_id)` -- an OBSERVATION identity, not a content hash.
+    `(source_sha256, parser_commit, node_ordinal)` -- an OBSERVATION identity, not a content hash.
+    (`element_id` is recorded for traceability and is deliberately NOT part of the key: its
+    uniqueness is a regularity of GPO markup, while an ordinal is unique by construction.)
 
     v1 joined on `(bill, version, text_sha256)`. Rejecting `match_path` was right (it is the
     unstable key this program exists because of), but the replacement assumed body text identifies
@@ -310,14 +314,38 @@ def _rate(k: int, n: int) -> float | None:
     return (k / n) if n else None
 
 
-def evaluate(records: list[dict]) -> dict:
+def evaluate(records: list[dict], verifier=None) -> dict:
+    """Compute every target. `verifier` re-derives each coverage universe from the corpus.
+
+    Round 6: without a verifier, NO record can establish `complete-in-document` or
+    `complete-source-side`, because set equality between two lists in the same record cannot tell a
+    real universe from a fabricated one. The refusal is the enforcement -- an evaluation run with no
+    corpus reports the completeness metrics as empty and names the reason, rather than trusting the
+    artifact to describe its own universe honestly.
+    """
     validate_dataset(records)
+    # Stamp a COPY. `mark_verified_universes` writes `universe_verified` into the coverage blocks,
+    # and an authored record may not carry that flag -- so mutating the caller's data would make a
+    # dataset that validates today fail validation after being evaluated once. Found by a contract
+    # test that validated a mutated copy after an evaluation run.
+    records = copy.deepcopy(records)
+    unverified = mark_verified_universes(records, verifier) if verifier else {}
     uncertain = [r["anchor_id"] for r in records if r["truth"]["relation"] == "uncertain"]
     scored = [r for r in records if r["truth"]["relation"] != "uncertain"]
     return {
         "n_records": len(records),
         "n_uncertain_excluded": len(uncertain),
         "uncertain": uncertain,
+        "universe_verification": {
+            "ran": verifier is not None,
+            "failed": unverified,
+            "note": (
+                None
+                if verifier
+                else "no verifier supplied: the eligible universes were never re-derived from the "
+                "corpus, so NO record can establish complete-in-document or complete-source-side"
+            ),
+        },
         "candidate_recall": candidate_recall(scored),
         "ranking": ranking(scored),
         "assignment_per_anchor": assignment_per_anchor(scored),
@@ -350,11 +378,46 @@ def contract_check(result: dict) -> dict:
     }
 
 
+def _synthetic_verifier(doc: dict):
+    """A universe verifier for the contract fixture, which has no XML behind it.
+
+    Real datasets use `study2_frame.verify_coverage_against_corpus`, which re-derives the eligible
+    set from the frozen parse. The fixture publishes its true universes under `_synthetic_universes`
+    and this checks records against THOSE -- so the fixture still cannot certify a universe it made
+    up, which is the property under test.
+    """
+    truth_universes = doc.get("_synthetic_universes", {})
+
+    def verify(records):
+        bad = {}
+        for rec in records:
+            for field, side in (("coverage", "target"), ("competition_coverage", "source")):
+                block = rec.get("truth", {}).get(field)
+                if not isinstance(block, dict):
+                    continue
+                known = truth_universes.get(block.get(f"{side}_version"))
+                if not known:
+                    bad[rec["anchor_id"]] = f"{field}: unknown {side} version"
+                elif known["source_sha256"] != block.get(f"{side}_source_sha256"):
+                    bad[rec["anchor_id"]] = f"{field}: {side}_source_sha256 mismatch"
+                elif block.get("rule") not in known:
+                    bad[rec["anchor_id"]] = f"{field}: no universe published for rule {block.get('rule')!r}"
+                elif set(block.get("eligible_ordinals", [])) != set(known[block["rule"]]):
+                    bad[rec["anchor_id"]] = (
+                        f"{field}: stored universe has {len(set(block['eligible_ordinals']))} "
+                        f"node(s), the parse has {len(known[block['rule']])}"
+                    )
+        return bad
+
+    return verify
+
+
 def main() -> None:
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else FIXTURE
-    records = json.loads(path.read_text())["records"]
+    doc = json.loads(path.read_text())
+    records = doc["records"]
     print(f"dataset: {path}")
-    result = evaluate(records)
+    result = evaluate(records, verifier=_synthetic_verifier(doc))
     print(json.dumps(result, indent=2))
 
     print()
