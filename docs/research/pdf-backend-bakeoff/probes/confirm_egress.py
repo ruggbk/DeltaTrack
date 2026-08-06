@@ -148,7 +148,12 @@ def observed_vectors(hits: list[str], tag: str, paths: list[str]) -> dict[str, b
     seen = {}
     for p in paths:
         if p == "webrtc":
-            seen[p] = "[udp]" in joined
+            # serve.py labels a datagram [stun] when it carries the 0x2112A442 magic
+            # cookie and [udp] otherwise. Matching only "[udp]" scored WebRTC as BLOCKED
+            # under the policy while six STUN binding requests were sitting in the log --
+            # a false negative in the dangerous direction, and one that contradicted a
+            # correct exploratory finding. Both labels are WebRTC evidence.
+            seen[p] = "[udp]" in joined or "[stun]" in joined
             continue
         canary = f"DELTATRACK_SECRET_{p}_{DOC_HASH}"
         seen[p] = (f"/{tag}-{p}?" in joined and canary in joined) or f"/{tag}-{p}" in joined
