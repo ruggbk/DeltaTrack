@@ -196,3 +196,28 @@ Run from the repo root. **Order does not matter**; only `fill_hybrid.py` must ru
   It writes JSON after every document, so a killed run is not wasted.
 - **Nothing in this run is a timing measurement.** Several probes were executed
   concurrently with each other; no wall-clock figure here is comparable to Phase 5's.
+
+### Added after the first HYBRID pass
+
+Both of these exist because a claim in `RESULTS-HYBRID.md` was read off the code rather
+than measured, and measuring it changed the answer.
+
+| Command | Produces |
+|---|---|
+| `… probes/probe_normalize_raw.py --only-declined --out …/results/probe_normalize_raw.json` | **the result that falsified "normalize_raw retires in full"**: uppercase syllable breaks are left dangling on unnumbered layouts |
+| `… probes/probe_normalize_raw.py --limit-docs 14 --out …/results/probe_normalize_raw_all.json` | the scope table showing the gap is confined to production-declined documents |
+
+`probe_hybrid_signals.py` also gained **S4**, which compares the sidecar's VALUES against
+production's rather than checking they exist. That is what found production's descender
+defect: `_cluster_baselines` clusters on the character box bottom with a tolerance of
+0.5 × median size, and on a 14 pt line carrying both open quotes and a descender the spread
+is 8.81 pt against 7.0, so the descender lands on a line of its own and `first_word_right`
+comes back one glyph short.
+
+**A metric of this run's own was withdrawn.** `probe_normalize_raw`'s first fused-token
+test paired tokens against the other rendering's whole-document bag. At ~100k tokens
+"does some split of this token into two tokens present somewhere exist" is satisfiable by
+coincidence, and it reported `pro` + `vided` as a fusion — production's `pro` was from
+`a pro rata share` on another page. If you re-run this probe, do not reintroduce a
+bag-membership test; the hyphen-carrying set difference it was replaced with cannot be
+satisfied by chance.

@@ -10,7 +10,7 @@
    "unnamed_ink": 0,
    "empty_font_names": 0,
    "index_skew_pages": 0,
-   "extract_ms": 514
+   "extract_ms": 394
   },
   "S1": {
    "chars_total": 54942,
@@ -52,6 +52,21 @@
    "non_generated_chars": 44786,
    "non_generated_empty_font_name": 0,
    "empty_font_name_rate": 0.0
+  },
+  "S4": {
+   "lines_production": 718,
+   "lines_hybrid": 718,
+   "lines_shared": 718,
+   "glyph_size_agree": 1.0,
+   "content_left_agree": 0.99861,
+   "content_right_agree": 0.99304,
+   "first_word_right_agree": 0.97075,
+   "first_word_right_disagreements": [
+    "p14 L10: production=190.98 hybrid=160.91",
+    "p21 L12: production=196.68 hybrid=203.62",
+    "p39 L24: production=163.94 hybrid=170.93",
+    "p16 L21: production=199.95 hybrid=237.77"
+   ]
   }
  },
  "tests/corpus/118-hr-4366/5_engrossed-amendment-house.pdf": {
@@ -65,7 +80,7 @@
    "unnamed_ink": 0,
    "empty_font_names": 0,
    "index_skew_pages": 0,
-   "extract_ms": 447
+   "extract_ms": 379
   },
   "S1": {
    "chars_total": 55942,
@@ -107,6 +122,21 @@
    "non_generated_chars": 50233,
    "non_generated_empty_font_name": 0,
    "empty_font_name_rate": 0.0
+  },
+  "S4": {
+   "lines_production": 705,
+   "lines_hybrid": 705,
+   "lines_shared": 705,
+   "glyph_size_agree": 1.0,
+   "content_left_agree": 0.99858,
+   "content_right_agree": 0.97305,
+   "first_word_right_agree": 0.92624,
+   "first_word_right_disagreements": [
+    "p27 L13: production=253.70 hybrid=260.19",
+    "p26 L16: production=253.70 hybrid=260.19",
+    "p26 L25: production=221.40 hybrid=223.61",
+    "p26 L2: production=253.70 hybrid=260.19"
+   ]
   }
  },
  "tests/data/CRPT-118srpt198.pdf": {
@@ -120,7 +150,7 @@
    "unnamed_ink": 0,
    "empty_font_names": 0,
    "index_skew_pages": 0,
-   "extract_ms": 1055
+   "extract_ms": 893
   },
   "S1": {
    "chars_total": 129184,
@@ -158,6 +188,16 @@
    "non_generated_chars": 129,
    "non_generated_empty_font_name": 0,
    "empty_font_name_rate": 0.0
+  },
+  "S4": {
+   "lines_production": 2,
+   "lines_hybrid": 2,
+   "lines_shared": 2,
+   "glyph_size_agree": 1.0,
+   "content_left_agree": 1.0,
+   "content_right_agree": 1.0,
+   "first_word_right_agree": 1.0,
+   "first_word_right_disagreements": []
   }
  }
 }

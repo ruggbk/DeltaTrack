@@ -156,6 +156,50 @@ char's geometry fails loudly instead of consuming a placeholder.
 **Reading this table.** The three bolded columns are the claim "generated characters carry
 their origin and nothing else", stated as a falsifiable count rather than a description: a
 single generated char with a real box would mean the contract is discarding information.
+
+## The sidecar values, not just their existence
+
+Coverage of `1.0` above means a value *could be computed*, which is compatible with
+computing the wrong one everywhere. The heading detector consumes these numbers directly —
+`glyph_size` drives ADR 0012's size bands, `first_word_right` drives the major detector's
+stacked-vs-wrapped split — so the stronger question is whether they agree with production's.
+
+<!-- H_GEOM_AGREE -->
+
+Agreement is over the numbered lines both paths recovered, to a 0.05 pt tolerance (these are floats derived through different call paths, so exact equality would report noise as disagreement).
+
+| document | shared numbered lines | `glyph_size` | `content_left` | `content_right` | `first_word_right` |
+|---|---|---|---|---|---|
+| `4_reported-in-senate.pdf` | 718 | 1.0 | 0.99861 | 0.99304 | **0.97075** |
+| `5_engrossed-amendment-house.pdf` | 705 | 1.0 | 0.99858 | 0.97305 | **0.92624** |
+| `CRPT-118srpt198.pdf` | 2 | 1.0 | 1.0 | 1.0 | **1.0** |
+
+<!-- /H_GEOM_AGREE -->
+
+**`first_word_right` disagrees on about 7 % of lines, and production is the side that is
+wrong.** Diagnosed at `118-hr-4366/5` page 26 line 2, `‘‘Military Construction, Navy and
+Marine`:
+
+```
+char   box_bottom   box_top   origin_y
+ ‘       686.895    690.591    681.001
+ M       681.001    690.269    681.001
+ r       681.001    687.021    681.001
+ y       678.089    687.049    681.001      <- descender
+ SP      681.001    681.015    681.001
+```
+
+Every character shares an origin of `681.001` **exactly**. The box bottoms span `678.089`
+to `686.895` — a spread of **8.81 pt** against the `0.5 × 14.0 = 7.0` tolerance
+`_cluster_baselines` uses. So production's geometry sidecar puts the `y` on a different line
+from the word it belongs to, and `first_word_right` for `‘‘Military` comes back as the right
+edge of `r` (253.70) instead of `y` (260.19).
+
+This is not a new finding so much as a measured one: `probes/reconstruct.py`'s docstring
+already predicted it ("on a 14pt body line the descender drop is ~8.4pt against a 7pt
+tolerance"). What is new is that it is **live in production**, in the signal that decides
+whether two heading lines are stacked or wrapped, and that the hybrid contract removes it
+for free by carrying the text-matrix origin instead of the box bottom.
 `glyph_size` and `LineGeom` coverage are `1.0` on every numbered line, so nothing the
 engine consumes — ADR 0012's heading sizes, the major detector's line-fullness split — is
 lost. Font-role separation is `1.0` on the bills. The committee report's `0.0` is a
@@ -536,40 +580,120 @@ Asked of both existing layers, since they carry different repair code.
 | `_repair_line_end` / the `repaired` vs `strict` mode split | the "unnamed ink, line-final" position heuristic is replaced by `FPDFText_IsHyphen` |
 | the `repaired`-mode machinery the U+FFFD unnamed-ink carrier fed | the carrier itself stays as a safety net, but it never fires: `unnamed_ink` is **0** over all 14,856 corpus pages (§1) |
 
-**Additionally retired from `parsers/pdf_text.py` (production's text path):** the whole of
-`normalize_raw` — the `_HYPHEN_BREAK` rewrite of `U+FFFE` plus a glued margin number, the
-`_GLUED_CHROME` rewrite, the mid-line hyphen join, and the trailing-space strip. Each
-repairs damage that exists only in a page-wide text blob. Production's own
-`_cluster_baselines` and its `_line_text` gap rule also go, replaced by the exact
-text-matrix/origin baseline.
+**Additionally retired from `parsers/pdf_text.py` (production's text path):** the
+`_HYPHEN_BREAK` rewrite of `U+FFFE` plus a glued margin number, the `_GLUED_CHROME`
+rewrite, and the trailing-space strip. Production's own `_cluster_baselines` and its
+`_line_text` gap rule also go, replaced by the exact text-matrix/origin baseline — and
+§5's `first_word_right` result shows that is a fix, not a wash.
 
-**That claim is checked rather than read off the code**, because the stratum that would
-falsify it is the one section 5 excludes: production declines unnumbered layouts, and the
-enrolled bills it declines are precisely where the mid-line soft-hyphen branch fires.
+**An earlier draft said "the whole of `normalize_raw`", and the probe below falsified it.**
+That claim was read off the code, and the stratum that could disprove it is the one §5
+excludes: production declines unnumbered layouts, and the enrolled bills it declines are
+precisely where the mid-line soft-hyphen branch fires.
 
 <!-- H_NORMALIZE_RAW -->
 
-Measured on the **production-declined** stratum — the unnumbered layouts, mostly enrolled bills, which section 5's parity table excludes and which are exactly where `normalize_raw`'s mid-line soft-hyphen branch exists to act (its docstring names them). A branch is counted as having fired by matching its own pattern against PDFium's raw page text.
+Measured on the **production-declined** stratum — the unnumbered layouts, mostly enrolled bills, which section 5's parity table excludes and which are exactly where `normalize_raw`'s mid-line soft-hyphen branch exists to act (its docstring names them). A branch counts as having fired by matching its own pattern against PDFium's raw page text, so the zeros to its right are only meaningful because the number to its left is large.
 
-| document | mid-line hyphen branch fired | soft hyphens total | trailing spaces | **hyphen artifacts in hybrid** | **fused tokens in hybrid** |
-|---|---|---|---|---|---|
-| `113-hr-3547/6` | 3,466 | 3,514 | 29,321 | **0** | **1** |
-| `113-hr-83/7` | 3,731 | 3,787 | 32,583 | **0** | **4** |
-| **total** | | | | **0** | **5** |
+| document | mid-line branch fired | trailing-hyphen tokens (prod / hybrid) | soft-hyphen chars in text (prod / hybrid) | hyphenated tokens only in hybrid |
+|---|---|---|---|---|
+| `113-hr-3547/6` | 3,466 | 28 / 59 | 0 / 0 | **36** |
+| `113-hr-83/7` | 3,731 | 37 / 80 | 0 / 0 | **37** |
+| `114-hr-2029/7` | 4,716 | 39 / 226 | 0 / 0 | **138** |
+| `115-hr-1625/6` | 4,754 | 31 / 144 | 0 / 0 | **90** |
+| `115-hr-244/6` | 3,897 | 33 / 91 | 0 / 0 | **54** |
+| `115-hr-5895/5` | 431 | 3 / 11 | 0 / 0 | **9** |
+| `116-hr-1865/6` | 3,871 | 45 / 169 | 0 / 0 | **88** |
+| `117-hr-2471/6` | 5,960 | 40 / 201 | 0 / 0 | **122** |
+| `118-hr-4366/6` | 2,338 | 30 / 69 | 0 / 0 | **36** |
+| `118-hr-9468/4` | 13 | 0 / 0 | 0 / 0 | **0** |
+| **total** | **33,177** | 286 / 1050 | 0 / 0 | **610** |
 
-Every artifact instance, so the counts above can be read rather than trusted:
+Hyphenated tokens the hybrid produces and production does not:
 
-- `fused: hybrid='General’’,' = production 'General' + '’’,'`
-- `fused: hybrid='provided' = production 'pro' + 'vided'`
-- `fused: hybrid='programs,' = production 'pro' + 'grams,'`
-- `fused: hybrid='Programs’’,' = production 'Pro' + 'grams’’,'`
-- `fused: hybrid='WAYS.—If' = production 'WAYS.—' + 'If'`
+- `APPRO-`
+- `APPROPRIA-`
+- `AUTHOR-`
+- `Bankhead-`
+- `Bay-`
+- `Counter-`
+- `Defense-`
+- `ENVI-`
+- `ACTIVI-`
+- `APPRO-`
+- `APPROPRIA-`
+- `Al-`
+- `Bankhead-`
+- `Bay-`
+- `CRIT-`
+- `Counter-`
+- `AGREE-`
+- `AGRI-`
+- `ALTER-`
+- `AMER-`
 
 <!-- /H_NORMALIZE_RAW -->
 
-**Reading this table.** The `mid-line branch fired` column exists so the zeros to its right
-mean something: it fires thousands of times per document, so a hybrid path that needed the
-branch would show the damage in the thousands, not the units.
+**What it found, and it is a real limitation.** No soft-hyphen character survives into
+either rendering, so that half of the claim holds. But the hybrid leaves **1050** tokens
+ending in a dangling hyphen against production's **286**, and the samples name the pattern
+exactly:
+
+```
+only in hybrid:      'APPRO-'            'AUTHOR-'          'ACTIVI-'
+only in production:  'APPRO-PRIATIONS'   'AUTHOR-IZED.—'    'ACTIVI-TIES'
+```
+
+These are **uppercase** syllable breaks. PDFium's text API does not emit a line break at
+them, so production receives `APPRO￾PRIATIONS` inline and `normalize_raw`'s
+`text.replace("￾", "-")` yields one token. The hybrid assigns lines geometrically — correctly,
+since GPO did print them on two lines — and then `_merge_print_lines` declines to rejoin,
+because its guard requires a **lowercase** continuation. That guard exists to protect real
+compounds like `Child-Rescue`, and it is production's rule, reused unchanged.
+
+So `normalize_raw` is **not** retired in full: one of its branches is doing work that the
+hybrid's geometric line assignment plus production's lowercase-guarded rejoin does not
+reproduce.
+
+**It is fixable with information only this contract has, and that fix is not written.**
+`FPDFText_IsHyphen` distinguishes a syllable break from a compound hyphen directly, so a
+rejoin keyed on the flag rather than on the continuation's case would be both more correct
+than the lowercase guard and available to no other layer. Per this document's own standard,
+a fix that is described and not written is not evidence, so this stands as a limitation.
+
+**Scope, which matters here, and is measured rather than asserted.**
+
+<!-- H_NORMALIZE_RAW_SCOPE -->
+
+The same probe over a **mixed** stratum, to locate the limitation rather than just measure it. `declined` is production's own unnumbered-layout guard.
+
+| document | production declines it | mid-line branch fired | trailing-hyphen tokens (prod / hybrid) | hyphenated tokens only in hybrid |
+|---|---|---|---|---|
+| `113-hr-3547/1` | no | 0 | 0 / 0 — **identical** | 0 |
+| `113-hr-3547/2` | no | 0 | 0 / 0 — **identical** | 0 |
+| `113-hr-3547/3` | no | 0 | 0 / 0 — **identical** | 0 |
+| `113-hr-3547/4` | no | 2 | 0 / 0 — **identical** | 0 |
+| `113-hr-3547/6` | **yes** | 3,466 | 28 / 59 | 36 |
+| `113-hr-83/7` | **yes** | 3,731 | 37 / 80 | 37 |
+| `114-hr-2029/1` | no | 7 | 7 / 7 — **identical** | 0 |
+| `114-hr-2029/3` | no | 13 | 13 / 13 — **identical** | 0 |
+| `114-hr-2029/4` | no | 1 | 36 / 36 — **identical** | 0 |
+| `114-hr-2029/7` | **yes** | 4,716 | 39 / 226 | 138 |
+| `115-hr-1625/6` | **yes** | 4,754 | 31 / 144 | 90 |
+| `115-hr-244/6` | **yes** | 3,897 | 33 / 91 | 54 |
+| `115-hr-5895/1` | no | 1 | 19 / 18 | 0 |
+| `115-hr-5895/2` | no | 1 | 54 / 53 | 0 |
+
+<!-- /H_NORMALIZE_RAW_SCOPE -->
+
+The dichotomy is sharp. On numbered layouts the mid-line branch fires a handful of times
+and the hybrid produces **no** hyphenated token production does not — its trailing-hyphen
+count is equal to production's or, on two documents, one lower. On unnumbered layouts the
+branch fires in the thousands and the counts diverge by 3–6×.
+
+The limitation therefore lives entirely inside the stratum production already refuses. That
+is why §5's parity table does not see it — and equally why that table could not have ruled
+it out, which is the reason this probe exists.
 
 **A correction worth recording, because it is the kind that publishes cleanly.** The first
 version of this probe paired tokens against the other rendering's whole-document bag,
@@ -607,6 +731,24 @@ The evidence, in the order it should be checked:
    coverage (§2).
 5. It survives the WASM build, including a real stream-level difference between the two
    PDFium builds that the layer absorbs (§7).
+6. It **fixes a live production defect** it was not built to fix (§2): production's
+   geometry sidecar clusters on the character box bottom, so a descender falls outside the
+   tolerance and `first_word_right` comes back one glyph short on ~7 % of lines — in the
+   signal that decides whether two heading lines are stacked or wrapped.
+
+**The two limitations, both found by probes built to find them:**
+
+- **A diacritic set above its line** is assigned to a line of its own, costing one heading
+  label on two documents (§5). Shared with the glyph layer, and a property of the 0.6 pt
+  clustering tolerance rather than of the contract.
+- **Uppercase syllable breaks are left dangling** on unnumbered layouts (§8): 1050 tokens
+  against production's 286. Confined to the stratum production already declines, and
+  fixable with `FPDFText_IsHyphen`, which no other layer has — but that fix is not written,
+  so it stands.
+
+Neither is an argument for keeping raw glyph reconstruction, because the glyph layer has
+the first defect too and is worse on everything else. They are arguments for what the
+follow-up has to cover.
 
 ## Was the hybrid layer fitted to the failure cases?
 
@@ -650,10 +792,20 @@ rather than leaving to the reader.
 
 ## Recommended follow-up, as separate decisions
 
-1. Adopt the hybrid contract as the PDF adapter seam, replacing `contract.PdfPage` for
-   PDFium-family backends (this is the decision this document supports).
-2. Re-run Concern A's migration gate against the hybrid path before any production change,
-   since Concern A's reference was the harness incumbent through the glyph layer.
-3. Record the backend-portability narrowing in an ADR amendment to
-   [`0002`](../../decisions/0002-pdfium-single-engine.md), because it changes what a future
-   engine swap costs.
+1. **Adopt the hybrid contract as the PDF adapter seam**, replacing `contract.PdfPage`.
+   This is the decision this document supports and the only one it supports.
+2. **Re-run Concern A's migration gate against the hybrid path** before any production
+   change. Concern A's reference was the harness incumbent through the glyph layer, so it
+   says nothing about this path.
+3. **Rejoin syllable breaks on `FPDFText_IsHyphen` rather than on the continuation's case**
+   (§8). This is the fix for the one limitation the contract introduces, and it is
+   strictly better than the lowercase guard it replaces, because the flag distinguishes a
+   syllable break from `Child-Rescue` directly instead of inferring it.
+4. **Re-examine `_BASELINE_TOL` on its own evidence**, not as part of this decision. It is
+   inherited unchanged here and it is what the `COUPS D'ÉTAT` case trips over.
+5. **Fix production's descender clustering, or let the seam change fix it** (§2). Either
+   way the ~7 % `first_word_right` error is a live defect in heading detection today and
+   should be tracked whether or not the contract changes.
+6. **Record the backend-portability narrowing** in an ADR amendment to
+   [`0002`](../../decisions/0002-pdfium-single-engine.md), with the measured version from
+   §7 rather than the API-shape version this document first drafted.

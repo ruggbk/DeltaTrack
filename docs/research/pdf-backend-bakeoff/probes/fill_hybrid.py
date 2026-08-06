@@ -266,6 +266,54 @@ def signals_table(data: dict) -> str:
     return "\n".join(out)
 
 
+def normalize_raw_scope_table(data: dict) -> str:
+    """Where the dangling-hyphen gap lives, over a mixed stratum.
+
+    The point of this table is the dichotomy, not the totals: the mid-line branch either
+    barely fires (numbered layouts, where the two paths agree exactly) or fires in the
+    thousands (unnumbered layouts, where they diverge). A pooled figure would average the
+    two into a middling rate that describes neither.
+    """
+    out = [
+        "The same probe over a **mixed** stratum, to locate the limitation rather than "
+        "just measure it. `declined` is production's own unnumbered-layout guard.",
+        "",
+        "| document | production declines it | mid-line branch fired | trailing-hyphen tokens (prod / hybrid) | "
+        "hyphenated tokens only in hybrid |",
+        "|---|---|---|---|---|",
+    ]
+    for r in data["documents"]:
+        b, d, dec = r["branch_fired"], r["diff"], r["production_declined"]
+        agree = d["trailing_hyphen_production"] == d["trailing_hyphen_hybrid"] and not d["hyphenated_only_in_hybrid"]
+        out.append(
+            f"| `{r['doc']}` | {'**yes**' if dec else 'no'} | {b['midline_hyphen_lowercase']:,} | "
+            f"{d['trailing_hyphen_production']} / {d['trailing_hyphen_hybrid']}"
+            f"{' — **identical**' if agree else ''} | {d['hyphenated_only_in_hybrid']} |"
+        )
+    return "\n".join(out)
+
+
+def geometry_agreement_table(data: dict) -> str:
+    """Do the sidecar VALUES match production's, not merely exist?"""
+    out = [
+        "Agreement is over the numbered lines both paths recovered, to a 0.05 pt tolerance "
+        "(these are floats derived through different call paths, so exact equality would "
+        "report noise as disagreement).",
+        "",
+        "| document | shared numbered lines | `glyph_size` | `content_left` | `content_right` | `first_word_right` |",
+        "|---|---|---|---|---|---|",
+    ]
+    for path, e in data.items():
+        s = e.get("S4")
+        if not s:
+            continue
+        out.append(
+            f"| `{Path(path).name}` | {s['lines_shared']} | {s['glyph_size_agree']} | "
+            f"{s['content_left_agree']} | {s['content_right_agree']} | **{s['first_word_right_agree']}** |"
+        )
+    return "\n".join(out)
+
+
 def portability_table(data: dict) -> str:
     out = [
         "| document | raw stream identical | trailing-space divergences | line-break-vs-space | "
@@ -424,6 +472,7 @@ def main() -> None:
     jobs = [
         ("H_ADAPTER", "hybrid_docs.json", adapter_table),
         ("H_NORMALIZE_RAW", "probe_normalize_raw.json", normalize_raw_table),
+        ("H_NORMALIZE_RAW_SCOPE", "probe_normalize_raw_all.json", normalize_raw_scope_table),
         ("H_BACKEND_SPACING", "probe_backend_spacing.json", backend_spacing_table),
         ("H_HEADINGS", "probe_failure_headings.json", headings_table),
         ("H_SEPARABILITY", "probe_separability.json", separability_table),
@@ -431,6 +480,7 @@ def main() -> None:
         ("H_ACCURACY", "hybrid_docs.json", accuracy_table),
         ("H_PAIRS", "hybrid_pairs.json", pairs_table),
         ("H_SIGNALS", "probe_hybrid_signals.json", signals_table),
+        ("H_GEOM_AGREE", "probe_hybrid_signals.json", geometry_agreement_table),
         ("H_PORTABILITY", "hybrid_portability.json", portability_table),
         ("H_WASM", "hybrid_wasm_entrypoints.json", wasm_table),
     ]
