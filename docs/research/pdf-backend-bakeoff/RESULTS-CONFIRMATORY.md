@@ -22,8 +22,14 @@
 # Concern A — production migration parity
 
 **Question.** If we replace pypdfium2, does any output production currently returns to
-users change? **Reference: today's native pypdfium2.** This section cannot support an
-accuracy conclusion.
+users change? **Reference: today's native pypdfium2 through the neutral glyph layer.** This
+section cannot support an accuracy conclusion.
+
+> **Do not read this section alone.** Its reference is the *harness incumbent*, and
+> [§ The finding that reframes Concern A](#the-finding-that-reframes-concern-a) shows that
+> the harness incumbent itself differs from **production** on heading labels — 302 spurious
+> and 280 missed across 33 documents, which PDFium-WASM reproduces exactly. "Safe to swap
+> the backend" is not "safe to move to the glyph architecture".
 
 ## A.1 Replication corpus (P1, 15 pairs)
 
