@@ -86,6 +86,7 @@ def collect():
     """Anchors (short, cited, removed) with their own-bill long-added neighbourhood, plus the
     corpus-wide pool of long added provisions used to build the matched control."""
     anchors = []  # (bill, short_vec, short_text, [own-bill long vecs])
+    version_pair_of = []  # parallel to `anchors`: the version pair each one came from
     pool_by_bill: dict[str, list[dict]] = {}
     for bill, xa, xb in adjacent_pairs():
         try:
@@ -108,7 +109,8 @@ def collect():
             continue
         for st in shorts:
             anchors.append((bill, vec(st), st, long_vecs))
-    return anchors, pool_by_bill
+            version_pair_of.append(f"{bill}:{xa.stem}->{xb.stem}")
+    return anchors, pool_by_bill, version_pair_of
 
 
 def own_bill_draw(_bill, _k, own):
@@ -151,7 +153,7 @@ def main() -> None:
     random.seed(SEED)
     print(banner())
     print()
-    anchors, pool_by_bill = collect()
+    anchors, pool_by_bill, version_pair_of = collect()
     if not anchors:
         print("no anchors found -- corpus missing?")
         return
@@ -172,31 +174,67 @@ def main() -> None:
     print(f"  control draws per anchor    : {REPLICATES} (matched k, sampled from OTHER bills only)")
     print()
 
-    # --- production arm ------------------------------------------------------------------------
-    print("=" * 104)
-    print("1. THE COMPARISON, WITH THE DENOMINATORS MADE IDENTICAL")
-    print("=" * 104)
-    p_hits, p_comps, p_anch, _n, p_by_bill = arm(anchors, own_bill_draw)
-    report("PRODUCTION  (own-bill added provisions)", p_hits, p_comps, p_anch, len(anchors), p_by_bill)
-
-    # --- matched control arm -------------------------------------------------------------------
+    # --- one pass, per anchor, feeding every section below ---------------------------------------
+    # Both arms are computed ONCE, per anchor, and every aggregate and every bootstrap below is
+    # derived from the same rows. An earlier revision recomputed the control draws for the cluster
+    # bootstrap, and the two control estimates disagreed by 27% -- the control arm's hits are
+    # concentrated in a few anchors, so its across-draw variance is far above Poisson. Two numbers
+    # in one run that disagree is a reproducibility defect regardless of which is "right", and the
+    # spread is itself the finding: it is why section 4 exists.
     flat_by_other: dict[str, list[dict]] = {
         b: [v for ob, vs in pool_by_bill.items() if ob != b for v in vs] for b in bills
     }
-
-    def other_bill_draw(bill, k, _own):
+    per_anchor = []
+    for i, (bill, sv, _st, own) in enumerate(anchors):
+        ph = sum(1 for lv in own if containment(sv, lv) >= KEEP)
         pool = flat_by_other[bill]
-        return random.sample(pool, min(k, len(pool)))
+        k = min(len(own), len(pool))
+        ch = cc = 0
+        c_anchor_hits = 0  # replicate-draws in which this anchor saw at least one hit
+        for _r in range(REPLICATES):
+            hit_here = 0
+            for lv in random.sample(pool, k):
+                cc += 1
+                if containment(sv, lv) >= KEEP:
+                    ch += 1
+                    hit_here += 1
+            c_anchor_hits += hit_here > 0
+        per_anchor.append(
+            {
+                "bill": bill,
+                "vp": version_pair_of[i],
+                "anchor": i,
+                "ph": ph,
+                "pc": len(own),
+                "p_any": int(ph > 0),
+                "ch": ch,
+                "cc": cc,
+                "c_any": c_anchor_hits,
+            }
+        )
 
-    c_hits = c_comps = c_anch = 0
+    def totals(rows):
+        return (
+            sum(r["ph"] for r in rows),
+            sum(r["pc"] for r in rows),
+            sum(r["p_any"] for r in rows),
+            sum(r["ch"] for r in rows),
+            sum(r["cc"] for r in rows),
+            sum(r["c_any"] for r in rows),
+        )
+
+    print("=" * 104)
+    print("1. THE COMPARISON, WITH THE DENOMINATORS MADE IDENTICAL")
+    print("=" * 104)
+    p_hits, p_comps, p_anch, c_hits, c_comps, c_anch = totals(per_anchor)
+    p_by_bill: dict[str, int] = {}
     c_by_bill: dict[str, int] = {}
-    for _r in range(REPLICATES):
-        h, cm, a, _n, bb = arm(anchors, other_bill_draw)
-        c_hits += h
-        c_comps += cm
-        c_anch += a
-        for k, v in bb.items():
-            c_by_bill[k] = c_by_bill.get(k, 0) + v
+    for r in per_anchor:
+        if r["p_any"]:
+            p_by_bill[r["bill"]] = p_by_bill.get(r["bill"], 0) + 1
+        if r["c_any"]:
+            c_by_bill[r["bill"]] = c_by_bill.get(r["bill"], 0) + r["c_any"]
+    report("PRODUCTION  (own-bill added provisions)", p_hits, p_comps, p_anch, len(anchors), p_by_bill)
     report(
         f"CONTROL     (other-bill added provisions, k matched, {REPLICATES} draws)",
         c_hits,
@@ -225,19 +263,16 @@ def main() -> None:
     print("2. WITHOUT 119-hr-1  (it dominates the hits AND is the known consolidation bill, so its")
     print("   hits are the ones most likely to be genuine 'absorbed into' relations, not errors)")
     print("=" * 104)
-    sub = [a for a in anchors if a[0] != "119-hr-1"]
+    sub = [r for r in per_anchor if r["bill"] != "119-hr-1"]
     if not sub:
         print("  no anchors outside 119-hr-1")
     else:
-        s_hits, s_comps, s_anch, _n, s_by_bill = arm(sub, own_bill_draw)
+        s_hits, s_comps, s_anch, t_hits, t_comps, t_anch = totals(sub)
+        s_by_bill: dict[str, int] = {}
+        for r in sub:
+            if r["p_any"]:
+                s_by_bill[r["bill"]] = s_by_bill.get(r["bill"], 0) + 1
         report("PRODUCTION minus 119-hr-1", s_hits, s_comps, s_anch, len(sub), s_by_bill)
-
-        t_hits = t_comps = t_anch = 0
-        for _r in range(REPLICATES):
-            h, cm, a, _n, _bb = arm(sub, other_bill_draw)
-            t_hits += h
-            t_comps += cm
-            t_anch += a
         report(
             f"CONTROL minus 119-hr-1 (k matched, {REPLICATES} draws)",
             t_hits,
@@ -269,6 +304,65 @@ def main() -> None:
     print("  Reporting it as 0.0% next to a 35.1% read as a 350x gap; the honest reading is that the")
     print("  cross-bill probe had no power to measure a rate this low, and its Wilson upper bound")
     print(f"  alone ({wilson(0, 976)[1]:.3%}) already overlapped the production per-comparison rate.")
+
+    # --- 4. cluster-aware inference --------------------------------------------------------------
+    print()
+    print("=" * 104)
+    print("4. THE SAME COMPARISON UNDER CLUSTER-AWARE INFERENCE")
+    print("=" * 104)
+    print("  The Wilson intervals above treat every short x long comparison as an independent")
+    print("  observation. They are not: comparisons share an anchor, anchors share a version pair,")
+    print("  version pairs share a bill. And the 20 control replicates reuse the SAME anchors, so")
+    print("  they cut Monte Carlo noise without adding evidence about the population -- yet they")
+    print("  enter the Wilson denominator as if they did, which is why the control interval above")
+    print("  is so tight. A cluster bootstrap resamples whole clusters and asks how much of the")
+    print("  effect survives.")
+    print()
+
+    def ratio(rows):
+        ph = sum(r["ph"] for r in rows)
+        pc = sum(r["pc"] for r in rows)
+        ch = sum(r["ch"] for r in rows)
+        cc = sum(r["cc"] for r in rows)
+        if not pc or not cc or not ch:
+            return None
+        return (ph / pc) / (ch / cc)
+
+    def cluster_bootstrap(rows, field, n_boot=2000):
+        by = {}
+        for r in rows:
+            by.setdefault(r[field], []).append(r)
+        keys = list(by)
+        if len(keys) < 2:
+            return None, len(keys), []
+        out = []
+        for _b in range(n_boot):
+            drawn = [x for kk in (random.choice(keys) for _ in keys) for x in by[kk]]
+            v = ratio(drawn)
+            if v is not None:
+                out.append(v)
+        out.sort()
+        return (out[int(0.025 * len(out))], out[int(0.975 * len(out))]) if out else None, len(keys), out
+
+    point = ratio(per_anchor)
+    print(f"  point estimate, production rate / control rate : {point:.1f}x")
+    print()
+    print(f"  {'resampling unit':<20}{'clusters':>10}{'95% percentile CI of the ratio':>36}{'>1?':>8}")
+    print("  " + "-" * 76)
+    for label, field in (("anchor", "anchor"), ("version pair", "vp"), ("bill", "bill")):
+        ci, k, draws = cluster_bootstrap(per_anchor, field)
+        if ci is None:
+            print(f"  {label:<20}{k:>10}{'(too few clusters to resample)':>36}")
+            continue
+        verdict = "yes" if ci[0] > 1.0 else "NO"
+        print(f"  {label:<20}{k:>10}{f'[{ci[0]:.2f}, {ci[1]:.2f}]':>36}{verdict:>8}")
+    print()
+    print("  READ THIS AS: the effect is a descriptive property of this corpus. Whether it")
+    print("  generalises depends on which unit you are willing to treat as exchangeable, and at the")
+    print("  bill level this corpus supplies too few units for the question to be answerable. Where")
+    print("  the interval covers 1, the honest statement is the descriptive one -- 'in this corpus,")
+    print("  a spurious high-containment partner was available N times more often inside a bill' --")
+    print("  with no significance claim attached.")
 
 
 if __name__ == "__main__":

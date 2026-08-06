@@ -10,7 +10,7 @@ Every claim below was tested against the code and the corpus rather than argued 
 Where a criticism could be decided empirically, a probe decides it, and the probe is committed.
 Failed falsification attempts are reported alongside successful ones.
 
-**How to read this document.** It has two layers and the evolution is deliberately visible.
+**How to read this document.** It has three layers and the evolution is deliberately visible.
 
 - **Round 1** (§"The eleven claims", §A–§E) is the original review. Its text is **unedited**.
   Where round 2 changed a conclusion, the round-1 section carries a **`↪ Round 2`** pointer and
@@ -20,6 +20,11 @@ Failed falsification attempts are reported alongside successful ones.
   succeeded. Two of the twelve overturn conclusions round 1 reported with more confidence than the
   evidence carried, and one of those — the cause of the label drift — inverts round 1's diagnosis.
 
+- **Round 3** (§R3) is a third adversarial review, targeting rounds 1 and 2 together. Nine
+  criticisms. It found that round 2's fixes were correct in direction and incomplete in three
+  places that all share one shape: **a guard was built for one metric and the same defect was left
+  running in the others.**
+
 Round 2's own summary of what changed, in one paragraph: the three drifted observations did **not**
 decay, and neither did the source; the parser's representation of byte-identical legislation
 changed, which is a different defect with a different remedy (§R2-6). The headline comparison
@@ -28,6 +33,15 @@ quantities and had to be re-run; the direction survives in aggregate but not onc
 dominating it is removed (§R2-2). And the round-1 design's suggestion list still could not
 establish whether a counterpart exists, which is now demonstrated on the corpus rather than argued
 (§R2-1).
+
+Round 3's, likewise: the anti-circularity guard protected candidate recall and left the other four
+metrics consuming the same contaminated truth (§R3-2); `region-exhaustive` was treated as an
+independent oracle when a bounded sweep cannot establish that no counterpart exists anywhere
+(§R3-1); the evaluator identified nodes by their body text, and 33% of real documents contain two
+provisions sharing one body (§R3-4); and the region-sampling design both broke its own sampling
+frame and bought about a dozen independent observations rather than eighty (§R3-3). **Study 2 as
+designed after round 2 could not have produced a valid end-to-end recall or diff-correctness
+number.** It can now, over a smaller and honestly-labeled population.
 
 ---
 
@@ -1328,6 +1342,15 @@ genuinely different question, rather than asking for the old verdict to be recon
 
 ## §R2-C. Revised Study 2 labeling design
 
+> **↪ Round 3 (§R3-1, §R3-3, §R3-C).** Two defects. The oracle: `region-exhaustive` cannot
+> establish that no counterpart exists, only that none exists *in that region* — a counterpart that
+> moved to another title reads as NONE, and 40.8% of anchors sit in an old top-level unit that does
+> not even exist in the new version. Negatives now require a document-wide escalation. The sampling
+> frame: defining regions on the **new** version made an anchor's inclusion probability depend on a
+> correspondence judgment. Regions are now defined on the **old** version, where an anchor's region
+> is read off the same parse that produced the anchor. And the four-region MVP buys ~12 effective
+> observations, not 80, so the population-estimate claim is withdrawn.
+
 Everything in round 1's §B stands except the ground-truth mechanism. The invariant:
 
 > **Candidate generators may help humans find counterparts. They may not define whether a
@@ -1367,6 +1390,10 @@ all. The bounded consolidation subtree (C8) is the same mechanism and merges int
 ---
 
 ## §R2-E. Revised blocking / non-blocking
+
+> **↪ Round 3 (§R3-G).** Superseded. Items 4 and 5 were marked done on schema v1, which round 3
+> found could not produce valid metrics; they revert to open against schema v2. The table is also
+> re-cut into four tiers, because "blocking" was doing two jobs at once.
 
 **Blocking — before any human labeling resumes**
 
@@ -1435,3 +1462,553 @@ quoted here — run them.
    failed: a lint exclusion silently became a "nothing checks this" exclusion for months.
 5. **The region-sampling parameters** — how many regions, at which bound, across which bills. The
    cost table prices the options; the coverage/effort trade is a judgment call.
+
+---
+---
+
+# §R3 — Third adversarial review (round 3)
+
+**Target: rounds 1 and 2 together, including round 2's fixes.** Nine criticisms. Five hold as
+stated, three hold in part, and one was falsified. The pattern across the three that hold hardest is
+worth naming, because it is the same mistake three times: **round 2 built a guard for one metric and
+left the identical defect running in the others.** The anti-circularity exclusion protected candidate
+recall while four metrics kept consuming suggestion-list truth; `text_sha256` was rejected as an
+identity for `match_path`'s instability and then adopted as one; `region-exhaustive` was introduced
+to make negatives independent of retrieval and then treated as if it made them independent of
+*location*.
+
+| # | criticism | verdict | what changed |
+|---|---|---|---|
+| 1 | region-local NONE becomes global NONE | **CONFIRMED** | oracles are a list; negatives need document escalation |
+| 2 | suggestion-list truth contaminates the other four metrics | **CONFIRMED** | per-metric truth requirements, enforced as data |
+| 3 | region sampling breaks the estimand and the frame | **CONFIRMED**, both halves | frame moves to the old side; population claim withdrawn |
+| 4 | `text_sha256` is not a node identity | **CONFIRMED**, at scale | observation identity = `(source, parser, element_id)` |
+| 5 | the 18.1% causal wording overreaches | **CONFIRMED** | narrowed in probe, review and PR |
+| 6 | rate-parity CIs ignore clustering | **CONFIRMED** | cluster bootstrap at three levels |
+| 7 | "all five computable" ≠ "all five valid" | **CONFIRMED** | contract check re-specified; 5 adversarial records |
+| 8 | preserve what survived | **ACCEPTED** | nothing reopened; one round-2 probe self-audited |
+| 9 | existing blockers still apply | **ACCEPTED** | §R3-G |
+
+---
+
+## §R3-1. Region-exhaustive truth converts "none in this region" into global NONE
+
+**Verdict: CONFIRMED. The falsification attempt failed on inspection, and the mechanism turned out
+to be different from — and nastier than — the one the criticism described.**
+
+**Falsification attempted.** The criticism asks whether the schema and evaluator already separate
+`none-in-region` from `none-in-document`. Reading v1: the *information* was present
+(`oracle=region-exhaustive` plus `region_id`), so a reader could in principle tell them apart. The
+*metrics* could not. `INDEPENDENT_ORACLES = ("region-exhaustive", "document-search")` put both in
+one bucket, and nothing downstream consulted `region_id`. So the distinction existed in the data and
+nowhere else, which is the same as not existing.
+
+**The mechanism, corrected.** The criticism says a false NONE would be consumed as truth by candidate
+recall. Tracing it, that is not what happens, and the real path is worse:
+
+- `candidate_recall` only ever iterated anchors whose relation was *positive*. A false NONE does not
+  enter as a wrong observation — **it vanishes from the denominator entirely.** And the anchors that
+  vanish are exactly the ones retrieval failed hardest on. **The bias is by selection, and selection
+  bias is invisible in the metric it corrupts**: candidate recall goes up, nothing looks wrong, and
+  no record is individually incorrect.
+- `diff_correctness` is where the criticism's description lands exactly. A region-local NONE yields
+  truth `change_type=removed`, and the matcher that also said `removed` is scored **correct** on the
+  strength of a search that never looked at most of the document.
+
+Measured on the contract fixture: admitting the two bounded-search negatives moves diff correctness
+from **6/11 (54.5%) to 8/13 (61.5%)**, and `test_admitting_bounded_negatives_would_inflate_diff_correctness`
+pins that both ways.
+
+**Evidence that the escape is not hypothetical.** `probe_r10_sampling_design.py` §1: of 2,137
+anchors, **872 (40.8%)** sit in an old top-level unit that does not exist in the new version at all.
+Those are precisely the anchors whose counterpart, if any, must be somewhere else.
+
+**Which metrics need global truth** — the criticism's central question, answered in §R3-B and
+encoded in `pass2_schema.METRIC_TRUTH_REQUIREMENTS`. The short version: **ranking needs only an
+affirmed positive; the other three need document-wide completeness.** Ranking asks where the true
+counterpart sat in an ordering, and a second counterpart elsewhere does not change that. So
+`region-exhaustive` is genuinely sufficient for one of the five, which is why the requirement is
+per-metric rather than one global flag.
+
+**Design adopted: Option A, systematic escalation** — with `truth.oracles` as a **list** of the steps
+actually performed, so a region sweep followed by a document search is recordable as what it is. A
+negative becomes global only when `document-search` is in the list. No reviewer judgment is
+involved: the criticism's "do not rely on 'I suspect a move'" is met by making escalation
+unconditional for negatives rather than discretionary.
+
+Option B (relabel the metrics as region-local) was rejected on the arithmetic: a region-local recall
+number answers no question anyone has, since a staffer's exposure to a missed counterpart does not
+stop at a title boundary.
+
+**Action — blocking.** `oracles` list, mandatory `region_id`, escalation for every negative, and an
+evaluator that refuses. Cost: only negatives escalate, so the region economy survives for positives.
+
+---
+
+## §R3-2. Suggestion-list truth contaminated the other four metrics
+
+**Verdict: CONFIRMED. No falsification available — the code says so plainly.**
+
+**Falsification attempted, and abandoned at the source.** v1's `candidate_recall` filtered on
+`INDEPENDENT_ORACLES`. `ranking`, `assignment`, `diff_correctness` and `failure_modes` each iterated
+`records` with no oracle filter at all. The schema docstring even *asserted* that `suggested-list`
+was "sufficient for ranking, assignment and diff correctness" — an assertion nobody had tested, and
+which is two-thirds wrong.
+
+The criticism's worked example is exact: system says `removed`, a suggestion-list reviewer sees no
+counterpart, truth becomes `removed`, evaluator scores the matcher correct. Round 2 built a guard
+against precisely this and then left the back door open.
+
+**Required work — the mapping, derived rather than assumed.** For each metric, the proposition its
+arithmetic silently relies on (full table in §R3-B, code in `METRIC_TRUTH_REQUIREMENTS`):
+
+| metric | what its arithmetic assumes | requires |
+|---|---|---|
+| candidate recall | the counterpart set is enumerable | `complete-in-document` |
+| ranking | *this node* is a counterpart | `affirmed-positive` |
+| assignment | every competitor for a node has been found | `complete-in-document` |
+| diff correctness | whether **any** counterpart exists | `complete-in-document` |
+| challenge rates | per stratum: existence vs absence | declared in `challenge_requires` |
+
+**A fourth requirement, found while encoding the third.** A contract test forced a distinction the
+criticism did not raise: an `affirmed-positive` is only affirmed if the human was asked a
+**per-candidate binary** question. A forced choice among eight candidates yields "the best of what I
+was shown", which is manufactured by the candidate set. The protocol's card UI is already
+per-candidate binary; `truth.judgment_mode` now records it, and `establishes()` returns False for
+every proposition under `forced-choice` — a forced-choice dataset supports nothing. The first cut
+gated only positives on it; `test_forced_choice_cannot_establish_a_positive` failed, correctly,
+because a counterpart *set* is only as sound as each member's affirmation.
+
+**Enforcement, and proof it fires.** Each metric now reports a `refused` block naming the anchors it
+would not consume and the proposition they lack. On the fixture, three anchors are refused by three
+metrics and zero by ranking — the asymmetry is the point, and
+`test_ranking_still_admits_bounded_oracles` pins it so a future "just require the strictest oracle
+everywhere" simplification cannot quietly discard valid evidence.
+
+---
+
+## §R3-3. Region sampling breaks both the frame and the estimand
+
+**Verdict: CONFIRMED, both halves, and the second is worse than the criticism suggested.**
+
+### The circularity — confirmed against round 2, and resolvable
+
+**Falsification attempted, and it succeeded for a design round 2 did not write.** The criticism
+asks: for every anchor, can inclusion probability be determined without knowing its true
+counterpart? `probe_r10` §1 answers it for both framings:
+
+| frame | anchors whose region is determined without correspondence |
+|---|---|
+| **old-side** (regions are units of the OLD version) | **2,137 / 2,137 = 100%** |
+| **new-side** (round 2 §R2-C's actual wording) | 1,265 / 2,137 = **59.2%** |
+
+An anchor *is* a node of the old version, so its old region is read off the same parse that produced
+the anchor — no diff, no matcher, no counterpart. Inclusion probability is `P(region drawn) × 1`,
+known before any labeling. Under round 2's new-side wording, **40.8% of anchors** sit in an old
+top-level unit with no counterpart unit in the new version, so the sampler would have to make a
+correspondence judgment before any human saw the anchor.
+
+Round 2 conflated two different regions: the one that defines the **sampling frame** (must be
+old-side, or the frame is circular) and the one that bounds the **oracle sweep** (must be new-side,
+because that is where you look for the counterpart). They are now separate, and the sweep region is
+demoted to a search heuristic whose failures are caught by the §R3-1 escalation — so it never
+defines truth.
+
+### The estimand — confirmed, and priced
+
+`probe_r10` §2 measures intra-cluster correlation on two label-free proxy outcomes (the matcher's
+`removed`-vs-`moved` call; whether any added provision reaches containment 0.70). Both are proxies
+for the *correlation structure*, which does not require them to be correct:
+
+| clustering | clusters | ICC (proxy A / B) | design effect | n_eff of 2,137 |
+|---|---:|---:|---:|---:|
+| old region | 147 | 0.271 / 0.291 | 4.7 / 4.9 | 458 / 432 |
+| version pair | 32 | 0.153 / 0.268 | 11.1 / 18.6 | 193 / 115 |
+| bill | 15 | 0.088 / 0.188 | 13.4 / 27.6 | 159 / 77 |
+
+Applied to the proposed MVP (§3–4 of the probe), with the worse measured ICC:
+
+| design | anchors | clusters | deff | n_eff | ±95% at p=0.5 |
+|---|---:|---:|---:|---:|---:|
+| **round 2 MVP: 4 regions × 20** | 80 | 4 | 6.5 | **12.2** | **±28%** |
+| 8 regions × 10 | 80 | 8 | 3.6 | 22.1 | ±21% |
+| 20 regions × 4 | 80 | 20 | 1.9 | 42.7 | ±15% |
+| 80 random anchors | 80 | 80 | 1.0 | 80.0 | ±11% |
+
+**The round-2 MVP buys about twelve independent observations and a ±28-point interval.** It cannot
+distinguish 60% recall from 90%. And §3 of the probe shows the ceiling is structural, not a matter
+of drawing more regions: only **36 regions hold ≥10 anchors, and they sit in 4 bills.**
+
+### Decision: (B) development and challenge dataset
+
+Study 2 is **not** a population-estimation study, and the claim that "targets 1–4 are population
+estimates" is withdrawn. Reasons, in order of weight:
+
+1. The arithmetic above. At ±28 points, an estimate is indistinguishable from no estimate, and
+   quoting one implies a precision the design cannot deliver.
+2. The population was never defined. The corpus is a convenience sample of 34 bills chosen for
+   fixture coverage; there is no frame from which it is a probability sample of *anything*, so
+   weighting would put a rigorous superstructure on an arbitrary base.
+3. Each round has found the estimand harder, not easier — matcher-conditioned (R1), then
+   retrieval-conditioned (R2), now cluster-limited (R3). Three consecutive corrections in the same
+   direction are a signal about the ambition, not about the execution.
+
+What is *kept* is everything that made the design worth building: the frame is frozen (§R3-C) and
+recorded per record, so a later study can scale it into a genuine estimate without re-labeling;
+selection is documented and reproducible; and the dataset answers "does this failure mode occur,
+where, and does a change fix it", which is what the engineering work actually needs.
+
+**Action — blocking.** Frame on the old side; freeze the algorithm (§R3-C); delete the
+population-estimate language from §R2-B and the protocol.
+
+---
+
+## §R3-4. `text_sha256` is not a node identity
+
+**Verdict: CONFIRMED, at a scale that makes it the most consequential defect in this round.**
+
+**Falsification attempted — the criticism invited a corpus search, and the corpus answered.**
+`probe_r9_node_identity.py`:
+
+```
+documents parsed                                  : 106
+documents containing at least one duplicated body : 35 (33%)
+distinct body texts that occur more than once     : 551
+node occurrences involved in a duplicate group    : 1544
+largest multiplicity (one text, one document)     : 12
+```
+
+It is not exotic and it is not marginal. Appropriations bills are assembled from repeated
+boilerplate — "No part of any appropriation contained in this Act shall remain available for
+obligation beyond the current fiscal year" appears six times in one version of 113-hr-3547, at six
+distinct paths. And it reaches **every version of all four answer-key bills**, up to multiplicity 12
+in 119-hr-1.
+
+The criticism asked to report even a null result and not assume future legislation is safe. The
+result is not null, so the stronger form applies: the schema now *requires* uniqueness and
+`validate_dataset` fails loudly if a future parser stops providing it.
+
+**The failure direction matters.** A content-hash join fails **optimistically**: a recall miss
+against provision X scores as a hit whenever any boilerplate twin is in the candidate set; a rank-2
+target scores as top-1; a wrong assignment scores as correct. Every collapse flatters the matcher.
+
+**Design adopted** — the three concepts the criticism asked to separate:
+
+| concept | field | may two distinct nodes share it? |
+|---|---|---|
+| observation identity | `(source_sha256, parser_commit, element_id)` | **no** — asserted, not assumed |
+| content integrity | `text_sha256` | **yes**, routinely — that is the finding |
+| cross-version identity | the human's SAME/DIFFERENT ruling | it is the study's OUTPUT, never an input key |
+
+`element_id` is parser-emitted and measured **unique and non-empty on all 106 documents**. It is
+preferred over a traversal ordinal because an ordinal shifts when anything earlier in the document
+changes, while an element id does not.
+
+**Adversarial test, both directions.** The fixture carries two distinct nodes sharing one body:
+`a14` (true counterpart is `dupA`, only `dupB` retrieved, matcher assigned `dupB`) and `a15` (true
+counterpart is `dupB`, sitting at rank 2 behind `dupA`).
+`test_a_content_hash_join_would_corrupt_this_metric` restores v1's join and asserts candidate
+recall, top-1 and assignment accuracy all score **strictly better** under it — the defect proven by
+running it.
+
+**Self-audit, because round 2 wrote the same bug twice.** `probe_r8_oracle_gap.py` keyed its
+header lookup on normalized body text. Re-keyed on `element_id` and re-run: **18.1% unchanged**. The
+defect was real and its effect on that number was nil, which is worth stating in both halves. The
+re-adjudication packet was also checked: all three drifted records' new-side texts are unique in
+their version, so the packet already shipped is unaffected. `element_id` is now recorded in the
+sealed provenance so this cannot depend on luck next time.
+
+---
+
+## §R3-5. The 18.1% wording overreached
+
+**Verdict: CONFIRMED.**
+
+The probe's own caveat was adequate; the PR description's gloss was not. *"A labeler seeing only the
+list would answer 'no counterpart'"* is a causal claim the evidence does not carry: header equality
+is not ground truth, and five of the eight printed examples are generic headers (`definitions`,
+`report`, `findings`, `rescission`). Nor is 18.1% a lower bound on true counterpart misses, since a
+true counterpart need not share a header.
+
+Adopted wording, in the probe, the review and the PR:
+
+> Among anchors that have a candidate matching on an independent fourth relevance signal, the
+> union@8 omits that candidate 18.1% of the time. This demonstrates the suggestion list is not
+> exhaustive. It does not estimate true candidate recall, and it does not estimate how often a
+> labeler would record a false NONE.
+
+**The logical falsification of the oracle is untouched**, and it never needed the rate: one
+retrievable-by-another-signal candidate that the union hides is sufficient to refute "the union can
+serve as the oracle".
+
+---
+
+## §R3-6. The rate-parity intervals ignored clustering
+
+**Verdict: CONFIRMED. The cluster-aware result is more informative than the nominal one, exactly as
+the criticism predicted.**
+
+The Wilson intervals treated every short×long comparison as independent. They are clustered within
+anchors, version pairs and bills — and the 20 control replicates reuse the same 77 anchors, so they
+cut Monte Carlo noise while entering the denominator as if they were fresh evidence. That is why the
+control interval was so tight.
+
+`probe_r6_rate_parity.py` §4 adds a cluster bootstrap (2,000 draws) on the **ratio** of the two
+per-comparison rates:
+
+| resampling unit | clusters | 95% percentile CI of the ratio | excludes 1? |
+|---|---:|---|:--:|
+| anchor | 77 | [4.62, 20.61] | yes |
+| version pair | 7 | [2.26, 40.00] | yes |
+| **bill** | **5** | **[0.00, 15.38]** | **NO** |
+
+Point estimate 8.0×. **Stable under anchor and version-pair clustering; unstable under bill
+clustering, because the support is five bills.** So the honest statement is the descriptive one, and
+significance language is dropped:
+
+> In this corpus, a spurious ≥0.70 partner was available about 8× more often inside a bill than
+> across bills, holding the anchor set, the rarity model and the candidate-set size constant. The
+> effect survives resampling anchors and version pairs. It does not survive resampling bills, of
+> which there are five, so it is a property of this corpus rather than an estimate of a population
+> rate.
+
+**A reproducibility defect found while doing this.** The first cut recomputed the control draws for
+the bootstrap and got a ratio of 9.7× against section 1's 7.6× — a 27% disagreement between two
+numbers in one run, because the control arm's hits are concentrated in a few anchors and its
+across-draw variance is far above Poisson. Both arms are now computed once, per anchor, and every
+aggregate and bootstrap derives from those rows. The spread is itself part of why §4 exists.
+
+---
+
+## §R3-7. "All five computable" was not "all five valid"
+
+**Verdict: CONFIRMED. The contract check was measuring the wrong thing.**
+
+v1 printed YES for all five while three of them consumed truth that could not support their
+arithmetic. The gate question is re-specified as the criticism proposes:
+
+> If we collect labels using the actual frozen sampling and oracle workflow, can every promised
+> metric be computed over a population whose ground truth is adequate for **that** metric?
+
+Five adversarial records added, one per failure the criticism named:
+
+| record | shape | what it would break without the fix |
+|---|---|---|
+| `a11-region-only-none` | region-local NONE | certifies the matcher's `removed` as correct |
+| `a12-cross-region-escape` | counterpart outside the swept region | anchor silently leaves the recall denominator |
+| `a13-suggestion-list-none` | suggestion-list NONE | same as a11, one step downstream of the guard |
+| `a14-duplicate-text-wrong-node` | duplicate body, wrong node | recall miss and wrong assignment both score as correct |
+| `a15-duplicate-text-right-node` | duplicate body, rank-2 target | rank-2 target scores as top-1 |
+
+Plus `a3-one-to-many-outside-region`: a region-local **positive** whose second counterpart is
+outside the region — the case the criticism flagged where finding one counterpart in-region does not
+prove no others exist elsewhere.
+
+Every fix is pinned by a test that **removes it and asserts the number moves**. Current output on
+the fixture, all five populations non-degenerate:
+
+```
+candidate recall  5/9 counterparts over 8 eligible anchors; 3 refused (needs complete-in-document)
+ranking           n=5, top-1 0.60, MRR 0.767; 0 refused (needs affirmed-positive only)
+assignment        3 contended targets, 4 scorable anchors, accuracy 0.50; 3 refused
+diff correctness  n=11, accuracy 6/11; 3 refused
+failure modes     high-containment-different 1/1, flagged NOT a precision
+```
+
+---
+
+## §R3-8. What round 3 did not reopen
+
+Checked and left standing, with no contradicting evidence found: the measure is a symmetric weighted
+overlap coefficient and symmetry did not cause the historical result (R1-C1); the IDF ablation
+survives on the nine resolving observations (§R2-5); matcher-conditioned pair sampling cannot
+estimate recall (R1-C2); the financial miner's signal-conditioned discovery makes it unfit for
+recall estimation (R1-C6, §R2-3); the consolidation miner supplies no recall denominator (R1-C8,
+§R2-4); observation drift is distinct from human-label validity (§R2-6); the manifest and the probe
+import/staleness guards (§R2-9, §R2-10); the original 35.1%-vs-0/976 comparison was invalid
+(§R2-2); and the same-bill opportunity effect is descriptive and driven by 119-hr-1 — now with the
+clustering caveat from §R3-6 attached.
+
+One round-2 artifact was audited rather than reopened: `probe_r8`'s text-keyed header join was the
+same defect as §R3-4, was fixed, and the number did not move.
+
+---
+
+## §R3-A. Oracle semantics
+
+| oracle | establishes | does NOT establish | metrics it may feed |
+|---|---|---|---|
+| `suggested-list` | `affirmed-positive` — this node is a counterpart | anything about counterparts not shown | ranking only |
+| `region-exhaustive` | `affirmed-positive`, `complete-within-region` — no counterpart in region R | that no counterpart exists outside R | ranking only |
+| `document-search` | all of the above plus `complete-in-document` | — | all five |
+
+Three notes that make the table operational. `oracles` is a **list**: a region sweep followed by a
+document escalation is `["region-exhaustive", "document-search"]`, and only the presence of the
+second admits the record to a completeness metric. `region_id` is **mandatory** whenever
+`region-exhaustive` appears, because "none" is uninterpretable without the bound it is none within.
+And `judgment_mode` gates **every** proposition: under `forced-choice` the table collapses to
+nothing, because "the best of these eight" is a claim about the candidate set, not the legislation.
+
+A counterpart later found outside a stated region is a recorded **region-escape**, not a labeling
+error — the record was true within its declared bound and says so.
+
+---
+
+## §R3-B. Metric truth requirements
+
+Encoded in `pass2_schema.METRIC_TRUTH_REQUIREMENTS`, consumed by `eval_pass2._admits`, and pinned by
+`tests/test_pass2_eval_contract.py`. Prose here is a reading of the data, not a second source.
+
+| metric | proposition its arithmetic assumes | required | allowed oracles | exclusion rule |
+|---|---|---|---|---|
+| candidate recall | the complete counterpart set is known | `complete-in-document` | must include `document-search` | refuse; bias is by selection, so a refused anchor must be *named*, not dropped |
+| ranking | this node is a counterpart | `affirmed-positive` | any, with `per-candidate-binary` | refuse only `forced-choice` |
+| assignment | every competitor for a node is known | `complete-in-document` | must include `document-search` | refuse — and one refused member **disqualifies its whole collision group** |
+| final diff correctness | whether any counterpart exists anywhere | `complete-in-document` | must include `document-search` | refuse |
+| challenge failure rates | per stratum: existence needs a positive, absence needs completeness | `challenge_requires` | per stratum | refuse; a stratum that does not declare its claim is a schema error |
+
+The group-level rule for assignment is the one that is easy to get wrong: scoring an anchor whose
+own truth is complete, inside a group containing an anchor whose truth is not, still lets an unfound
+competitor make a wrong assignment look right.
+
+---
+
+## §R3-C. Frozen sampling design
+
+**Estimand.** None. Study 2 is a **development and challenge dataset**, not a population-estimation
+study (§R3-3). Every metric it produces is a statement about the sampled units, reported with its
+selection rule, and never extrapolated to "the operational rate".
+
+**Sampling unit.** The **region**, defined as a top-level structural unit of the **OLD** version of
+one adjacent version pair — a division or title, as the old parse emits it.
+
+**Inclusion mechanism**, stated as an algorithm because "sample roughly four regions" is not one:
+
+1. Enumerate every `(bill, old_version, top_level_unit)` in the corpus with ≥ 10 anchors. Measured:
+   **36 regions across 4 bills.** This is the frame, and it is computable from old-side parses alone.
+2. Stratify by bill; draw regions **without replacement**, recording `P(selected)` per region.
+3. Take **every** anchor in a drawn region. Inclusion probability of an anchor is
+   `P(its region drawn) × 1` — computable with **no correspondence knowledge**, which is the
+   property §R3-3 tests and round 2's frame did not have.
+4. For each anchor: sweep the corresponding new-version region exhaustively; escalate **every**
+   negative, and every `one-to-many` positive, to a document-wide search. Record `oracles`,
+   `region_id` and per-counterpart `found_via`.
+5. Freeze the drawn region list, with the corpus manifest digest, before labeling starts.
+
+**Are these population estimates?** **No**, and the evaluator's output must not be reported as
+though they were.
+
+**Weighting and clustering.** No weighting, because there is no population to weight to. Any
+descriptive rate reported from this dataset must carry the number of **regions and bills** it came
+from, not only the anchor count — and where a comparison is made, a cluster bootstrap at the bill
+level, as §R3-6 now does for the rate-parity result.
+
+**Minimum clusters.** ≥ 8 regions across ≥ 3 bills for any cross-region statement. Below that, report
+per-region numbers and no aggregate.
+
+---
+
+## §R3-D. Node identity
+
+Three separate things, kept separate (full rationale in §R3-4):
+
+```
+observation identity   (source_sha256, parser_commit, element_id)   unique per parse, ASSERTED
+content integrity      text_sha256                                  may legitimately collide
+cross-version identity the human's SAME/DIFFERENT ruling            the study's output, never a key
+```
+
+`validate_dataset` rejects an empty `element_id` and rejects any observation id mapping to two
+different body texts. `test_a_content_hash_join_would_corrupt_this_metric` restores the old join and
+asserts three metrics improve, so the guard is proven to fire rather than assumed to work.
+
+---
+
+## §R3-E. Executable contract
+
+`probes/fixtures/eval_contract_synthetic.json` — 15 hand-authored records, no legislation, no human
+judgments. Rounds 1–2 shapes plus the five round-3 adversarial ones (§R3-7). The contract check now
+asks whether each metric has an **adequate** population, and every guard is tested by removal.
+
+---
+
+## §R3-F. Rate-parity inference
+
+Descriptive, with cluster bootstrap at three levels. Significance language removed. See §R3-6.
+
+---
+
+## §R3-G. Final blocking table
+
+Round 2's single "blocking" list was doing two jobs — gating annotation and gating the merge — and
+round 3's criticisms split cleanly along a third and fourth line. Four tiers:
+
+**Tier 1 — required to merge this methodology review**
+
+| item | state |
+|---|---|
+| Correct the 18.1% causal wording (§R3-5) | **done** — probe, review, PR |
+| Cluster-aware rate-parity inference, significance language dropped (§R3-6) | **done** — `probe_r6` §4 |
+| Restate the financial and consolidation percentages literally (§R2-3, §R2-4) | **done** |
+| Corpus manifest, probe import gate, `merged_root` staleness (§R2-9, §R2-10) | **done** |
+
+**Tier 2 — required before ANY human annotation**
+
+| item | state |
+|---|---|
+| Oracle semantics: `oracles` list, mandatory escalation for negatives (§R3-1) | **done** — schema v2 |
+| Per-metric truth requirements, enforced (§R3-2) | **done** — schema v2 + evaluator |
+| Observation identity separated from content hash (§R3-4) | **done** — schema v2 |
+| Executable contract over adversarial records (§R3-7) | **done** — 15-record fixture |
+| Frozen sampling design, old-side frame (§R3-3, §R3-C) | **done** — algorithm frozen; **the draw has not been run** |
+| Re-derive + quarantine the 12 observations; add `text_sha256`/`source_sha256` to the answer key | **OPEN — Will's call** (§R2-6) |
+| Re-mine the financial stratum without signal-conditioned discovery (R1-C6) | **OPEN — not started** |
+| Apply the Study 1 premise corrections to `paper.md` / `pass2-protocol.md` (§E) | **OPEN — proposed, not applied** |
+| Adjudicate the three drifted observations | **OPEN — packet ready, deliberately not adjudicated** |
+
+**Tier 3 — required before held-out evaluation**
+
+| item | state |
+|---|---|
+| Held-out split drawn at the **region** level, not the anchor level (else regions straddle the split) | not started |
+| Per-stratum `challenge_requires` declared for every existing challenge pool | not started |
+| Reporting layer: CIs, per-stratum breakdowns, kappa, cluster-aware intervals | not started |
+
+**Tier 4 — Study 4**
+
+Theory rewrite around the overlap coefficient; directional-variant benchmark on the
+reverse-direction population; whether to adopt structural confirmers; re-running the frozen IDF
+ablation after re-adjudication (variants frozen, **do not re-tune**).
+
+**Human labeling remains gated.** Tier 2 has four open items, and every one of them is a judgment
+call rather than an implementation task.
+
+---
+
+## §R3 — probes added and changed
+
+| probe | decides | headline output |
+|---|---|---|
+| `probe_r9_node_identity.py` | §R3-4 | 35/106 documents (33%) contain duplicate body text; 551 texts, 1,544 occurrences, max multiplicity 12; reaches all four answer-key bills |
+| `probe_r10_sampling_design.py` | §R3-3 | old-side frame 100% computable vs new-side 59.2%; ICC 0.27–0.29 by region; round-2 MVP n_eff 12.2, ±28% |
+| `probe_r6_rate_parity.py` *(changed)* | §R3-6 | cluster bootstrap: survives anchor and version-pair resampling, not bill (5 bills) |
+| `probe_r8_oracle_gap.py` *(changed)* | §R3-4, §R3-5 | header join re-keyed on `element_id` (18.1% unchanged); causal wording narrowed |
+| `pass2_schema.py` *(v2)* | §R3-1, §R3-2, §R3-4 | oracle capabilities, per-metric truth requirements, observation identity |
+| `eval_pass2.py` *(changed)* | §R3-1, §R3-2, §R3-7 | per-metric admission, refusal reporting, re-specified contract check |
+| `make_readjudication_packet.py` *(changed)* | §R3-4 | `element_id` recorded in the sealed provenance |
+
+---
+
+## §R3 — what still requires human judgment
+
+1. **The three drifted observations.** Unchanged from round 2: packet ready, not adjudicated.
+2. **Whether to add provenance hashes to `tests/data/similarity_labels.json`.** Round 3 adds a
+   second field to the same decision: `element_id`.
+3. **The region draw.** The algorithm is frozen; which regions, and how many, is a coverage/effort
+   call. §R3-3's table prices it: 8 regions × 10 anchors is the cheapest design that keeps the
+   interval under ±25 points, and the corpus caps the frame at 36 regions across 4 bills.
+4. **Whether a ±28-point dataset is worth collecting at all**, or whether Study 2 should be
+   re-scoped to the challenge strata only and the population question deferred to a corpus that can
+   support it. The analysis says the dataset is worth building as a dev/challenge set; whether it is
+   worth *this much labeling effort* is a product call.
+5. **Applying §E's documentation corrections**, still proposed and not applied.

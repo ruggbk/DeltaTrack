@@ -27,7 +27,7 @@
       },
       "current_observation": {
         "note": "What the pipeline produces today from the same source bytes. Awaiting a ruling; it carries no label and must not inherit the historical one.",
-        "parser_commit": "e3a98ae81bc14d79c0463fd34536c5e19b26a432",
+        "parser_commit": "95fc41258bf951c01a637cd647a70ae09af20ec1",
         "source_sha256_old": "1ffb81c413c007f999df117c9509d976c76cbe0c55f63d43dad920d7fe5bf772",
         "source_sha256_new": "4be06372badb910c815956bdf89f900e6de77279457c0d1559605a820125d358",
         "old_side_options": [
@@ -46,6 +46,7 @@
             ],
             "header_text": "",
             "length": 563,
+            "element_id": "idB9E2164FCD204CBEA5E9867D044BAEA1",
             "text_sha256": "010dce57c9af83a70f94bb2a3efd299fec840ff43a80d5aa3697838feb9fdebe"
           }
         ],
@@ -93,7 +94,7 @@
       },
       "current_observation": {
         "note": "What the pipeline produces today from the same source bytes. Awaiting a ruling; it carries no label and must not inherit the historical one.",
-        "parser_commit": "e3a98ae81bc14d79c0463fd34536c5e19b26a432",
+        "parser_commit": "95fc41258bf951c01a637cd647a70ae09af20ec1",
         "source_sha256_old": "1ffb81c413c007f999df117c9509d976c76cbe0c55f63d43dad920d7fe5bf772",
         "source_sha256_new": "4be06372badb910c815956bdf89f900e6de77279457c0d1559605a820125d358",
         "old_side_options": [
@@ -112,6 +113,7 @@
             ],
             "header_text": "",
             "length": 766,
+            "element_id": "id2561D9CF1BB84C72AE9EF14E9B3A23BB",
             "text_sha256": "84c53deaef53236db179fa6bef66d8439e780ba429018448a181ee580dbbe2a9"
           }
         ],
@@ -159,7 +161,7 @@
       },
       "current_observation": {
         "note": "What the pipeline produces today from the same source bytes. Awaiting a ruling; it carries no label and must not inherit the historical one.",
-        "parser_commit": "e3a98ae81bc14d79c0463fd34536c5e19b26a432",
+        "parser_commit": "95fc41258bf951c01a637cd647a70ae09af20ec1",
         "source_sha256_old": "c837c7f62418fda8c22d19a11a40c12f99261e144634509b5e0c042242630858",
         "source_sha256_new": "71822471fd717b67495ae467e82923db8d375e10f42f7299459baddde092431a",
         "old_side_options": [
@@ -177,6 +179,7 @@
             ],
             "header_text": "Alien SNAP eligibility",
             "length": 1443,
+            "element_id": "H960F5C40AA784D49A69DEBA67A3D1844",
             "text_sha256": "a5b55a0912dcde7bc46d88dc8e4f06db1ad7b91a4b5ddeb317ce0c2ee01653cc"
           },
           {
@@ -193,6 +196,7 @@
             ],
             "header_text": "Emergency food assistance",
             "length": 133,
+            "element_id": "H1C6FEE557E87454387DDDE5AB9737D24",
             "text_sha256": "af59676d897931004aeb67065913d33fc0f1a63ebb5c068e84f6131aff1b93b5"
           }
         ],

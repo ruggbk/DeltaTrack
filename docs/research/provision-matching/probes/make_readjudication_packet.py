@@ -248,6 +248,7 @@ def main() -> None:
                             "display_path": list(n.display_path),
                             "header_text": n.header_text,
                             "length": len(n.body_text),
+                            "element_id": n.element_id,
                             "text_sha256": sha(n.body_text),
                         }
                         for j, n in enumerate(old_nodes, 1)

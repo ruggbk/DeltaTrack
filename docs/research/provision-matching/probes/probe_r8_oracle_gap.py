@@ -105,18 +105,23 @@ def main() -> None:
         except Exception:
             continue
 
-        # NodeDiff carries no header, so headers come from the trees, keyed on normalized body.
-        # Keyed on text rather than match_path deliberately: match_path collides (that collision is
-        # itself one of the findings), and a collided lookup would attach the wrong header.
-        head_old = {_normalize_text(n.body_text): (n.header_text or "").strip().lower() for n in told.nodes}
-        head_new = {_normalize_text(n.body_text): (n.header_text or "").strip().lower() for n in tnew.nodes}
+        # NodeDiff carries no header, so headers come from the trees -- keyed on `element_id`.
+        #
+        # The first version of this probe keyed them on normalized body text, which R9 then showed
+        # to be a content hash rather than a node identity: 33% of documents in this corpus contain
+        # at least one body text shared by two or more provisions, up to 12 of them. A text-keyed
+        # dict silently keeps whichever node came last, so an anchor whose body is boilerplate could
+        # be attached to a different provision's header. `element_id` is unique and non-empty on all
+        # 106 documents (R9 §4), so it is the identity the join should have used from the start.
+        head_old = {n.element_id: (n.header_text or "").strip().lower() for n in told.nodes}
+        head_new = {n.element_id: (n.header_text or "").strip().lower() for n in tnew.nodes}
 
         added = []
         for c in d.changes:
             if c.change_type == "added" and c.new_text:
                 t = _normalize_text(c.new_text)
                 if t:
-                    added.append((t, vec(t), tuple(c.match_path), head_new.get(t, "")))
+                    added.append((t, vec(t), tuple(c.match_path), head_new.get(c.element_id_new, "")))
         if not added:
             continue
         added_per_pair.append(len(added))
@@ -131,7 +136,7 @@ def main() -> None:
             if not a_text:
                 continue
             a_path = tuple(c.match_path)
-            a_head = head_old.get(a_text, "")
+            a_head = head_old.get(c.element_id_old, "")
             anchors_total += 1
 
             for level, depth in (("parent", 1), ("grandparent", 2), ("top", None)):
@@ -161,11 +166,17 @@ def main() -> None:
     rate = twin_missed / with_header_twin if with_header_twin else 0.0
     print(f"  of those, the union@{SHOWN} does NOT show the header twin   : {twin_missed} ({rate:.1%})")
     print()
-    print("  These are anchors where a candidate matching on a signal the retrievers do not use")
-    print("  exists in the new version and would never reach the human. A labeler seeing only the")
-    print("  suggestion list would answer NONE for reasons that have nothing to do with the")
-    print("  legislation. LOWER BOUND: a header twin is not necessarily the true counterpart, and a")
-    print("  true counterpart need not share a header, so the real hole is not bounded by this.")
+    print("  WHAT THIS ESTABLISHES: the suggestion list is NOT exhaustive over plainly-relevant")
+    print("  candidates. A provision matching the anchor on a signal none of the three retrievers")
+    print("  uses exists in the new version, and the human never sees it. That is sufficient to")
+    print("  refute 'the union can serve as the oracle', which is the only claim it is used for.")
+    print()
+    print("  WHAT IT DOES NOT ESTABLISH, stated because the first write-up of this number overstepped")
+    print("  it: header equality is NOT ground truth. A header twin need not be the true counterpart")
+    print("  (5 of the examples below are generic headers like 'definitions' and 'report'), and a")
+    print("  true counterpart need not share a header. So 18.1% is NEITHER a lower bound on true")
+    print("  counterpart misses NOR an estimate of how often a labeler would record a false NONE.")
+    print("  It is the omission rate for one independent relevance signal, and nothing more.")
     print()
     for b, h, n_added, txt in missed_examples:
         print(f"    {b:<14} header={h!r} (neighbourhood {n_added} added)")
