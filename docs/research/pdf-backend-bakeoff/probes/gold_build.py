@@ -129,6 +129,15 @@ def assign_financial(view: dict) -> dict[tuple, dict]:
         for pg, ln in v["lines"]:
             max_line[pg] = max(max_line.get(pg, 0), ln)
 
+    # Distance-since-last-heading must be counted in DOCUMENT order, not within a page.
+    # Computed per page it can never exceed a page's ~25 printed lines, so the >40 test for
+    # "deep inside a long appropriations block" was structurally incapable of firing and the
+    # stratum drew a frame of 0 twice before this was noticed. A global ordinal over every
+    # printed line lets the distance cross page boundaries, which is where long blocks live.
+    all_lines = sorted(set().union(*[set(v["lines"]) for v in good.values()]))
+    seq = {k: i for i, k in enumerate(all_lines)}
+    anchor_seq = sorted(seq[k] for k in anchor_lines if k in seq)
+
     for key in sorted(all_keys):
         page, line = key
         texts = {b: v["lines"].get(key) for b, v in good.items()}
@@ -136,8 +145,11 @@ def assign_financial(view: dict) -> dict[tuple, dict]:
         contributors = [b for b, v in good.items() if key in v["amounts"]]
         disagree = len(set(amts.values())) > 1 or len({t for t in texts.values() if t}) > 1
 
-        prev_heads = [ln for (pg, ln) in anchor_lines if pg == page and ln <= line]
-        dist = line - max(prev_heads) if prev_heads else None
+        import bisect
+
+        here = seq.get(key)
+        j = bisect.bisect_right(anchor_seq, here) - 1 if here is not None else -1
+        dist = (here - anchor_seq[j]) if (here is not None and j >= 0) else None
         txt = ref["lines"].get(key) or next((t for t in texts.values() if t), "") or ""
 
         # Assignment is first-match, so the ORDER decides which strata can fill. An earlier
@@ -264,9 +276,31 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=REPO / "docs/research/pdf-backend-bakeoff/results")
     ap.add_argument("--render-dir", type=Path, default=None)
     ap.add_argument("--limit-docs", type=int, default=None)
+    ap.add_argument(
+        "--render-only",
+        action="store_true",
+        help="re-render page images from an existing gold_blind.json and exit. The frozen "
+        "sample is the JSON; the PNGs are ~29 MB of deterministic output and are gitignored, "
+        "so this recreates them without rebuilding (or perturbing) the sample.",
+    )
     args = ap.parse_args()
 
     render_dir = args.render_dir or (REPO / "docs/research/pdf-backend-bakeoff/results/gold_pages")
+
+    if args.render_only:
+        blind = json.loads((args.out_dir / "gold_blind.json").read_text())
+        key = json.loads((args.out_dir / "gold_key.json").read_text())
+        pdf_by_doc = {i["doc"]: REPO / i["pdf"] for i in key["items"]}
+        n = 0
+        for item in blind["items"]:
+            img = render_dir / f"{item['document'].replace('/', '_')}_p{item['page']}.png"
+            if img.exists():
+                continue
+            src = pdf_by_doc.get(item["document"])
+            if src and render_page(src, item["page"], img):
+                n += 1
+        print(f"re-rendered {n} page images into {render_dir}")
+        return
     docs = corpus_documents()
     if args.limit_docs:
         docs = docs[: args.limit_docs]

@@ -538,35 +538,44 @@ product finding in this run.
 
 # B8 — the gold sample: built and frozen, **not adjudicated**
 
-The image-adjudicated gold sample was constructed to protocol and **its adjudication was
-not performed in this run**. Reported as not done rather than partially done, because a
-prefix of the seeded shuffle would be a valid random subsample but a thin one, and B8 is
-corroboration that by protocol may never decide a ranking.
+The image-adjudicated gold sample was constructed to protocol and **its adjudication was not
+performed in this run**. Reported as not done rather than partially done: a prefix of the
+seeded shuffle would be a valid random subsample but a thin one, and B8 is corroboration
+that by protocol may never decide a ranking.
 
-What exists and is committed:
+**99 of 100 items across 98 distinct pages.** Only `financial/table_like` fell short, at 3
+of 4, and that cell is genuinely rare — its whole frame is 3 lines carrying three or more
+dollar amounts.
 
-| Artifact | Contents |
-|---|---|
-| `results/gold_key.json` | frame sizes, selection indices, contributing backends and what each said, per-stratum accounting. **Not to be opened until `gold_adjudicated.json` is committed** |
-| `results/gold_blind.json` | document, page, rendered image path, printed-line locator, and the question. No backend name, no candidate text, no XML value, no stratum label |
-| `results/gold_pages/` | one CoreGraphics render per sampled page, via pypdf page-split + `qlmanage` |
+| Artifact | Contents | Committed |
+|---|---|---|
+| `results/gold_key.json` | frame sizes, selection indices, contributing backends and what each said, per-stratum accounting. **Not to be opened until `gold_adjudicated.json` is committed** | yes |
+| `results/gold_blind.json` | document, page, image path, printed-line locator, question. No backend name, no candidate text, no XML value, no stratum label | yes |
+| `results/gold_pages/` | one CoreGraphics render per page (pypdf split + `qlmanage`) | **no** — 29 MB of deterministic output; regenerate with `gold_build.py --render-only`, which reads the frozen JSON and cannot perturb the sample |
 
-**Why it was not adjudicated:** the sample spans **~88 distinct pages for ~100 items**, so
-adjudication is roughly one page image per item rather than the clustering the design hoped
-for. That is a cost this run could not absorb after A, B, C, D, E, F, P3, the sensitivity
+**Why it was not adjudicated:** the sample spans **98 distinct pages for 99 items**, so
+adjudication is essentially one page image per item rather than the clustering the design
+assumed. That is a cost this run could not absorb after A, B, C, D, E, F, P3, the sensitivity
 sweep and the production-comparison probe.
 
-**A defect found while building it, and fixed.** Stratum assignment is first-match, and the
-first build ran common categories before rare ones. Nearly every GPO page carries the
-rotated gutter watermark and most lines end in a hyphen, so `watermark` and `soft_hyphen`
-absorbed almost everything: `long_block` drew a frame of **0** against a target of 8, and
-`table_like` a frame of **1** against 4. The committed sample is from the corrected build,
-which tests rare cells first and lets the broad ones mop up. The defective build was deleted
-rather than committed.
+**Two defects found while building it, both fixed, and the second is the instructive one.**
 
-**To adjudicate it later**, read `gold_blind.json` and the images only, write
-`gold_adjudicated.json`, **commit that**, and only then run the join against `gold_key.json`.
-The commit order is the only evidence the adjudication was blind.
+1. *Stratum starvation.* Assignment is first-match and the first build ordered common
+   categories before rare ones. Nearly every GPO page carries the rotated gutter watermark
+   and most lines end in a hyphen, so those absorbed almost everything. Reordered rare-first.
+2. *A predicate that could not fire.* `long_block` — "an amount deep inside a long
+   appropriations block" — tested `distance-since-last-heading > 40` where the distance was
+   computed **within a page**. GPO pages hold ~25 printed lines, so the test was
+   **structurally incapable of matching** and the cell drew a frame of **0** on two
+   successive builds. Counting the distance in document order across page boundaries gives
+   it a frame of **3,961**. This is the same failure mode this run kept finding elsewhere,
+   in the sampler this time.
+
+Neither defective build was committed.
+
+**To adjudicate it later:** run `gold_build.py --render-only`, read `gold_blind.json` and the
+images *only*, write `gold_adjudicated.json`, **commit that**, and only then join against
+`gold_key.json`. The commit order is the only evidence the adjudication was blind.
 
 ---
 
