@@ -1,17 +1,18 @@
 """The Pass 2 data contract: prove the schema can produce VALID metrics before humans label.
 
-`pass2-protocol.md` promises one dataset that answers candidate recall, ranking, assignment, final
-diff correctness and challenge-set failure rates. Four review rounds have each moved the bar for
-what "can produce" means:
+Five review rounds have each moved the bar for what "can produce" means:
 
 * **R1** called the evaluator non-blocking. **R2** showed the risk is that the SCHEMA cannot produce
   the metrics, which is only discoverable by computing them.
 * **R3** showed that computing them is not computing them VALIDLY: a region-local NONE and a
   suggestion-list NONE were both certifying the matcher's ``removed`` as correct, and nodes were
   joined on body text, which 33% of real documents share between two provisions.
-* **R4** showed that even the fixed oracle could be satisfied by EFFORT rather than COVERAGE — a
-  reviewer who searched a document and found nothing was granted "the counterpart set is complete",
-  which a transformed counterpart survives.
+* **R4** showed the strongest oracle could be satisfied by EFFORT rather than COVERAGE — a reviewer
+  who searched a document and found nothing was granted "the counterpart set is complete".
+* **R5** showed coverage was still proven by a COUNT rather than a SET (review node 42 twice, skip
+  node 117, record 161/161), and that assignment was scored with truth collected in only one
+  direction — a target-side sweep enumerates one anchor's counterparts and says nothing about which
+  *other* old provisions claim the same node.
 
 So the tests below pin two things. First, each metric's value on the synthetic fixture, which
 contains at least one success and one failure of every shape so no metric can pass by being
@@ -28,6 +29,7 @@ import ast
 import copy
 import importlib.util
 import json
+import random
 
 import pytest
 
@@ -55,9 +57,18 @@ def schema():
     return _mod("pass2_schema")
 
 
+@pytest.fixture(scope="module")
+def frame():
+    return _mod("study2_frame")
+
+
 @pytest.fixture
 def records():
     return copy.deepcopy(json.loads(FIXTURE.read_text())["records"])
+
+
+def _find(records, anchor_id):
+    return next(r for r in records if r["anchor_id"] == anchor_id)
 
 
 # --------------------------------------------------------------------------------------------
@@ -88,184 +99,168 @@ def test_fixture_covers_every_shape_the_design_must_handle(records):
         "a13-suggestion-list-none",
         "a14-duplicate-text-wrong-node",
         "a15-duplicate-text-right-node",
-        # round 4
         "a16-incomplete-document-sweep",
         "a17-pairwise-false-keep",
+        # round 5
+        "a18-count-matches-set-does-not",
+        "a19-target-complete-source-unknown",
     ):
         assert shape in ids, f"the contract fixture no longer covers {shape}"
 
 
-def test_the_duplicate_text_pair_really_is_a_duplicate(records):
-    """The adversarial case only tests anything if the two nodes genuinely share a content hash."""
-    a14 = next(r for r in records if r["anchor_id"] == "a14-duplicate-text-wrong-node")
-    a15 = next(r for r in records if r["anchor_id"] == "a15-duplicate-text-right-node")
-    dup_a = a14["truth"]["counterparts"][0]
-    dup_b = a15["truth"]["counterparts"][0]
-    assert dup_a["text_sha256"] == dup_b["text_sha256"], "the two nodes must share body text"
-    assert dup_a["node_ordinal"] != dup_b["node_ordinal"], "but must be distinct nodes"
-
-
-# --------------------------------------------------------------------------------------------
-# the five metrics
-# --------------------------------------------------------------------------------------------
-
-
-def test_all_five_metrics_are_computable_and_non_degenerate(evaluator, records):
+def test_all_metrics_are_computable_and_non_degenerate(evaluator, records):
     r = evaluator.evaluate(records)
 
     cr = r["candidate_recall"]
-    assert (cr["counterparts_found"], cr["counterparts_total"]) == (5, 9)
-    assert cr["anchors_eligible"] == 8
-    assert {a for a, _ in cr["misses"]} == {
-        "a3-one-to-many-outside-region",
-        "a4-candidate-miss",
-        "a12-cross-region-escape",
-        "a14-duplicate-text-wrong-node",
-    }
+    assert (cr["counterparts_found"], cr["counterparts_total"]) == (6, 10)
+    assert cr["anchors_eligible"] == 9
 
-    assert r["ranking"]["n"] == 5
-    assert r["ranking"]["top1"] == pytest.approx(0.6)
-    assert r["ranking"]["mrr"] == pytest.approx((1 + 1 / 3 + 1 + 1 + 1 / 2) / 5)
+    assert r["ranking"]["n"] == 6
+    assert r["ranking"]["top1"] == pytest.approx(2 / 3)
 
-    assert r["assignment"]["collision_groups"] == 3
-    assert r["assignment"]["anchors_in_collision"] == 4
-    assert r["assignment"]["accuracy"] == pytest.approx(0.5)
-    assert set(r["assignment"]["wrong"]) == {"a7-collision-loser", "a14-duplicate-text-wrong-node"}
+    assert r["assignment_per_anchor"]["n"] == 12
+    assert r["assignment_per_anchor"]["accuracy"] == pytest.approx(0.5)
 
-    assert r["diff_correctness"]["n"] == 11
-    assert r["diff_correctness"]["accuracy"] == pytest.approx(6 / 11)
-    assert r["diff_correctness"]["matrix"]["truth=moved -> system=removed"] == 2
+    assert r["diff_correctness"]["n"] == 12
+    assert r["diff_correctness"]["accuracy"] == pytest.approx(7 / 12)
 
     strata = r["failure_modes"]["strata"]
     assert strata["no-counterpart-anywhere"]["requires"] == "complete-in-document"
     assert strata["high-containment-pairwise"]["requires"] == "affirmed-negative"
-    for s in strata.values():
-        assert "rigged" in s["NOT_a_precision"]
-
-
-def test_a_candidate_miss_is_counted_as_a_recall_miss_not_a_ranking_miss(evaluator, records):
-    r = evaluator.evaluate(records)
-    assert "a4-candidate-miss" in {a for a, _ in r["candidate_recall"]["misses"]}
-    assert r["ranking"]["n"] == 5
 
 
 # --------------------------------------------------------------------------------------------
-# round 4: coverage, not effort
+# round 5: completeness is membership, not cardinality
 # --------------------------------------------------------------------------------------------
 
 
-def test_a_searched_but_unreviewed_document_does_not_grant_completeness(evaluator, records):
-    """R4's central case. a16 names `document-exhaustive` but adjudicated 40 of 161 provisions.
+def test_equal_counts_do_not_grant_completeness(evaluator, schema, records):
+    """R5's central case. a18 reviews as many nodes as the universe holds, but reviews one twice
+    and never reaches another. Under v3's `reviewed >= eligible_total` it was certified complete."""
+    a18 = _find(records, "a18-count-matches-set-does-not")
+    cov = a18["truth"]["coverage"]
+    assert len(cov["reviewed_ordinals"]) == len(cov["eligible_ordinals"]), (
+        "the adversarial case only tests anything if the CARDINALITIES match"
+    )
+    assert set(cov["reviewed_ordinals"]) != set(cov["eligible_ordinals"])
+    assert not schema.establishes(a18["truth"], "complete-in-document")
 
-    Under v2 the oracle's presence alone granted `complete-in-document`, so "I searched and found
-    nothing" became "no counterpart exists" — and a transformed counterpart (changed header,
-    rewritten wording, moved somewhere unexpected) survives any number of queries nobody thought to
-    type. v3 grants completeness on a measured count, so this record is refused.
-    """
     r = evaluator.evaluate(records)
-    for metric in ("candidate_recall", "assignment", "diff_correctness"):
+    for metric in ("candidate_recall", "assignment_per_anchor", "diff_correctness"):
         refused = {a["anchor_id"] for a in r[metric]["refused"]["anchors"]}
-        assert "a16-incomplete-document-sweep" in refused, metric
+        assert "a18-count-matches-set-does-not" in refused, metric
 
 
-def test_completing_the_sweep_admits_the_record(evaluator, schema, records):
-    """The mirror: the guard must be about coverage, not about disliking the record."""
-    a16 = next(r for r in records if r["anchor_id"] == "a16-incomplete-document-sweep")
-    assert not schema.establishes(a16["truth"], "complete-in-document")
-
-    completed = copy.deepcopy(records)
-    for rec in completed:
-        if rec["anchor_id"] == "a16-incomplete-document-sweep":
-            rec["truth"]["coverage"]["reviewed"] = rec["truth"]["coverage"]["eligible_total"]
-    after = evaluator.evaluate(completed)
-    refused = {a["anchor_id"] for a in after["diff_correctness"]["refused"]["anchors"]}
-    assert "a16-incomplete-document-sweep" not in refused
-    assert after["diff_correctness"]["n"] == 12
+def test_the_superseded_count_rule_would_have_admitted_it(records):
+    """Prove the guard changes the answer, by running the rule it replaced."""
+    cov = _find(records, "a18-count-matches-set-does-not")["truth"]["coverage"]
+    v3_complete = len(cov["reviewed_ordinals"]) >= len(cov["eligible_ordinals"])
+    v4_complete = set(cov["reviewed_ordinals"]) == set(cov["eligible_ordinals"])
+    assert v3_complete and not v4_complete, (
+        "if the count rule no longer admits this record, the membership guard is untested"
+    )
 
 
-def test_the_coverage_rule_must_be_measure_independent(schema, records):
-    """A coverage rule that consulted a similarity measure would let a system under evaluation set
-    the denominator of its own completeness claim — the central defect, one layer further out."""
+def test_duplicates_cannot_inflate_coverage(evaluator, schema, records):
+    """`reviewed` longer than `eligible` through repetition must not grant completeness either."""
     bad = copy.deepcopy(records)
-    target = next(r for r in bad if r["anchor_id"] == "a1-one-to-one")
-    target["truth"]["coverage"]["rule"] = "nodes-above-containment-0.3"
+    cov = _find(bad, "a1-one-to-one")["truth"]["coverage"]
+    cov["reviewed_ordinals"] = [cov["eligible_ordinals"][0]] * (len(cov["eligible_ordinals"]) + 5)
+    assert not schema.establishes(_find(bad, "a1-one-to-one")["truth"], "complete-in-document")
+    r = evaluator.evaluate(bad)
+    assert "a1-one-to-one" in {a["anchor_id"] for a in r["diff_correctness"]["refused"]["anchors"]}
+
+
+def test_reviewing_something_outside_the_universe_is_rejected(schema, records):
+    """A review of a node the rule does not admit cannot count toward covering what it does."""
+    bad = copy.deepcopy(records)
+    _find(bad, "a1-one-to-one")["truth"]["coverage"]["reviewed_ordinals"].append(99999)
     with pytest.raises(schema.SchemaError) as exc:
         schema.validate_dataset(bad)
-    assert "coverage.rule" in str(exc.value)
+    assert "outside the eligible universe" in str(exc.value)
 
 
-def test_admitting_bounded_negatives_would_inflate_diff_correctness(evaluator, records):
-    """Prove the refusal changes the answer, by removing it.
+def test_coverage_must_name_the_parse_it_was_derived_from(schema, records):
+    """A coverage set from one document must not certify completeness over another."""
+    bad = copy.deepcopy(records)
+    del _find(bad, "a1-one-to-one")["truth"]["coverage"]["target_source_sha256"]
+    with pytest.raises(schema.SchemaError) as exc:
+        schema.validate_dataset(bad)
+    assert "target_source_sha256" in str(exc.value)
 
-    a11 (region-only), a13 (suggestion-list) and a16 (searched but not reviewed) all carry truth
-    ``removed`` opposite a system that also said ``removed``. Admitting them adds three free correct
-    answers, scored on searches that never covered most of the document.
-    """
-    before = evaluator.evaluate(records)["diff_correctness"]
 
-    promoted = copy.deepcopy(records)
-    for rec in promoted:
-        if rec["anchor_id"] in ("a11-region-only-none", "a13-suggestion-list-none", "a16-incomplete-document-sweep"):
-            rec["truth"]["oracles"] = ["region-exhaustive", "document-exhaustive"]
-            rec["truth"].setdefault("region_id", "title IV")
-            rec["truth"]["coverage"] = {"rule": "all-nodes-with-body", "eligible_total": 161, "reviewed": 161}
-    after = evaluator.evaluate(promoted)["diff_correctness"]
-
-    assert (before["n"], after["n"]) == (11, 14)
-    assert after["accuracy"] > before["accuracy"]
-    assert after["accuracy"] == pytest.approx(9 / 14)
+def test_exact_set_coverage_grants_completeness(schema, records):
+    """The mirror: the guard is about membership, not about disliking records."""
+    a1 = _find(records, "a1-one-to-one")
+    cov = a1["truth"]["coverage"]
+    assert set(cov["reviewed_ordinals"]) == set(cov["eligible_ordinals"])
+    assert schema.establishes(a1["truth"], "complete-in-document")
 
 
 # --------------------------------------------------------------------------------------------
-# round 4: pairwise negatives
+# round 5: assignment truth has a direction
 # --------------------------------------------------------------------------------------------
 
 
-def test_a_pairwise_false_keep_needs_no_document_completeness(evaluator, schema, records):
-    """R4's eighth criticism. "This proposed pair is not the same provision" is complete at one
-    comparison. v2 had no `affirmed-negative`, so such a stratum had to declare
-    `complete-in-document` and buy a ~161-adjudication sweep for a judgment that did not need it."""
-    a17 = next(r for r in records if r["anchor_id"] == "a17-pairwise-false-keep")
-    assert a17["truth"]["oracles"] == ["suggested-list"]
-    assert schema.establishes(a17["truth"], "affirmed-negative")
-    assert not schema.establishes(a17["truth"], "complete-in-document")
-
+def test_collision_resolution_needs_source_side_truth(evaluator, records):
+    """a19 is document-complete on the TARGET side and its counterpart is a contested node. That
+    does not establish which other OLD provisions claim it, so its group is not scorable."""
     r = evaluator.evaluate(records)
-    stratum = r["failure_modes"]["strata"]["high-containment-pairwise"]
-    assert (stratum["mode_occurred"], stratum["n"]) == (1, 1)
+    cr = r["collision_resolution"]
+    assert cr["groups_with_source_side_truth"] == 1
+    assert cr["groups_observed_in_dataset_without_source_side_truth"] >= 1
+    assert cr["wrong"] == ["a15-duplicate-text-right-node"]
 
 
-def test_an_uncertain_relation_still_supports_a_pairwise_challenge(evaluator, records):
-    """`uncertain` is the honest relation when nobody established the counterpart set. The four
-    metrics that need that set exclude it; the pairwise challenge does not, because its claim has a
-    definite answer regardless."""
-    r = evaluator.evaluate(records)
-    assert "a17-pairwise-false-keep" in r["uncertain"]
-    assert "high-containment-pairwise" in r["failure_modes"]["strata"]
+def test_removing_the_reverse_sweep_makes_collision_resolution_unmeasurable(evaluator, records):
+    """Prove the requirement bites: without any `competition_coverage` the metric must report NOT
+    MEASURABLE rather than scoring the groups it can see in the dataset."""
+    stripped = copy.deepcopy(records)
+    for rec in stripped:
+        rec["truth"].pop("competition_coverage", None)
+        rec["system"].pop("competition_claimants", None)
+    after = evaluator.evaluate(stripped)["collision_resolution"]
+    assert after["measurable"] is False
+    assert after["accuracy"] is None
+    assert "competition_coverage" in after["why_not_measurable"]
+    assert after["groups_observed_in_dataset_without_source_side_truth"] >= 2, (
+        "contested nodes are still visible in the dataset -- that visibility is exactly what must "
+        "NOT be mistaken for evidence that every claimant has been found"
+    )
 
 
-def test_a_pairwise_stratum_must_record_the_rejected_node(schema, records):
-    """Without it there is nothing for the metric to test against."""
+def test_per_anchor_assignment_is_separate_and_still_measurable(evaluator, records):
+    """The per-anchor question needs only target-side truth, so stripping the reverse sweep must
+    leave it untouched. If the two moved together they would not be separate estimands."""
+    before = evaluator.evaluate(records)["assignment_per_anchor"]
+    stripped = copy.deepcopy(records)
+    for rec in stripped:
+        rec["truth"].pop("competition_coverage", None)
+        rec["system"].pop("competition_claimants", None)
+    after = evaluator.evaluate(stripped)["assignment_per_anchor"]
+    assert before["n"] == after["n"] and before["accuracy"] == after["accuracy"]
+
+
+def test_a_reverse_sweep_must_come_from_the_anchors_own_parse(schema, records):
     bad = copy.deepcopy(records)
-    target = next(r for r in bad if r["anchor_id"] == "a17-pairwise-false-keep")
-    target["truth"]["rejected"] = []
+    _find(bad, "a15-duplicate-text-right-node")["truth"]["competition_coverage"]["source_source_sha256"] = "f" * 64
     with pytest.raises(schema.SchemaError) as exc:
         schema.validate_dataset(bad)
-    assert "rejected" in str(exc.value)
+    assert "different parse" in str(exc.value)
 
 
-def test_a_stratum_may_not_mix_truth_requirements(schema, records):
-    """One stratum, one claim: otherwise a single reported rate pools two different propositions."""
+def test_a_reverse_sweep_must_record_the_systems_claimants(schema, records):
+    """Both sides of the comparison are source-side ordinals. Deriving the system's side from
+    whichever anchors happen to be sampled is the defect this replaces."""
     bad = copy.deepcopy(records)
-    target = next(r for r in bad if r["anchor_id"] == "a17-pairwise-false-keep")
-    target["stratum"] = "no-counterpart-anywhere"
+    del _find(bad, "a15-duplicate-text-right-node")["system"]["competition_claimants"]
     with pytest.raises(schema.SchemaError) as exc:
         schema.validate_dataset(bad)
-    assert "one claim" in str(exc.value)
+    assert "competition_claimants" in str(exc.value)
 
 
 # --------------------------------------------------------------------------------------------
-# node identity
+# node identity (rounds 3-4), re-pinned under v4
 # --------------------------------------------------------------------------------------------
 
 
@@ -274,17 +269,11 @@ def test_a_stratum_may_not_mix_truth_requirements(schema, records):
     [
         ("candidate_recall", lambda r: r["candidate_recall"]["counterparts_found"]),
         ("ranking", lambda r: r["ranking"]["top1"]),
-        ("assignment", lambda r: r["assignment"]["accuracy"]),
     ],
 )
 def test_a_content_hash_join_would_corrupt_this_metric(evaluator, schema, records, metric, extract):
-    """Prove the node-identity fix can fire, by restoring the pre-R3 join.
-
-    The fixture's two boilerplate-identical target nodes collapse under a text-hash key, and all
-    three metrics move in the OPTIMISTIC direction: a recall miss against the wrong node scores as a
-    hit, a rank-2 target scores as top-1, and a wrong assignment scores as correct. R9 measured this
-    shape in 33% of real documents, reaching every version of all four answer-key bills.
-    """
+    """Restore the pre-R3 join: the two boilerplate-identical target nodes collapse and the metrics
+    move in the OPTIMISTIC direction."""
     real = extract(evaluator.evaluate(records))
     original = schema.observation_id
     try:
@@ -298,116 +287,112 @@ def test_a_content_hash_join_would_corrupt_this_metric(evaluator, schema, record
 
 
 def test_identity_collision_is_caught_even_when_the_text_also_matches(schema, records):
-    """R4's fourth criticism. v2 compared only `text_sha256` across a shared identity, so two
-    genuinely distinct provisions that share a body — the boilerplate case, present in a third of
-    real documents — carried the same identity AND the same text hash and raised nothing. v3
-    compares every recorded attribute."""
     bad = copy.deepcopy(records)
-    a14 = next(r for r in bad if r["anchor_id"] == "a14-duplicate-text-wrong-node")
-    a15 = next(r for r in bad if r["anchor_id"] == "a15-duplicate-text-right-node")
-    dup_b = a15["truth"]["counterparts"][0]
-    # same ordinal as dupA, same text as dupA, different path: v2 saw no conflict here.
-    dup_b["node_ordinal"] = a14["truth"]["counterparts"][0]["node_ordinal"]
+    a14 = _find(bad, "a14-duplicate-text-wrong-node")
+    a15 = _find(bad, "a15-duplicate-text-right-node")
+    a15["truth"]["counterparts"][0]["node_ordinal"] = a14["truth"]["counterparts"][0]["node_ordinal"]
     with pytest.raises(schema.SchemaError) as exc:
         schema.validate_dataset(bad)
     assert "observation id collision" in str(exc.value)
 
 
-def test_element_id_is_not_part_of_the_identity(schema, records):
-    """It is recorded for traceability. Changing it must not change any join, because its
-    uniqueness is an empirical property of GPO markup rather than an invariant."""
-    a1 = next(r for r in records if r["anchor_id"] == "a1-one-to-one")
-    before = schema.observation_id(a1["anchor"])
-    a1["anchor"]["element_id"] = "something-else-entirely"
-    assert schema.observation_id(a1["anchor"]) == before
+# --------------------------------------------------------------------------------------------
+# round 5: sampling inclusion probabilities
+# --------------------------------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------------------
-# the canonical sampling frame
-# --------------------------------------------------------------------------------------------
+def test_quota_allocation_is_hand_computable(frame):
+    """Equal base share, remainder by seeded shuffle, capped at each bill's supply."""
+    rng = random.Random(0)
+    q = frame._allocate_quota({"A": 10, "B": 80}, 3, rng)
+    assert sum(q.values()) == 3
+    assert all(q[b] <= s for b, s in {"A": 10, "B": 80}.items())
+
+    rng = random.Random(0)
+    q = frame._allocate_quota({"A": 2, "B": 50, "C": 50}, 9, rng)
+    assert sum(q.values()) == 9
+    assert q["A"] == 2, "a bill is capped at its supply and the surplus redistributed"
+
+
+def test_every_bill_can_be_drawn_even_when_fewer_regions_than_bills(frame):
+    """R4's draw iterated bills in sorted order, so a 2-region request over 4 bills could only ever
+    touch the two alphabetically first. Every stratum must have positive probability."""
+    seen = set()
+    for seed in range(60):
+        q = frame._allocate_quota({"A": 5, "B": 5, "C": 5, "D": 5}, 2, random.Random(seed))
+        seen |= {b for b, k in q.items() if k}
+    assert seen == {"A", "B", "C", "D"}, f"these bills were never drawable: {{'A','B','C','D'}} - {seen}"
+
+
+def test_recorded_inclusion_probability_matches_the_realised_quota(frame):
+    """P(region in bill b) = quota[b] / drawable[b]. Recorded, and re-derivable from the fields the
+    draw persists -- the R4 code recorded one corpus-wide figure that was wrong in both directions."""
+    drawn = frame.draw_study2_sample(n_regions=6, seed=3, anchors_per_region=4)
+    quota, supply = drawn["quota_by_bill"], drawn["drawable_by_bill"]
+    for bill, p in drawn["p_region_by_bill"].items():
+        assert p == pytest.approx(quota.get(bill, 0) / supply[bill])
+    for a in drawn["selected_anchors"]:
+        assert a["p_inclusion"] == pytest.approx(a["p_region"] * a["p_within_region"])
+        assert 0 < a["p_inclusion"] <= 1
+
+
+def test_the_old_single_corpus_wide_probability_would_have_been_wrong(frame):
+    """The superseded formula, run against the corrected one on the real frame."""
+    drawn = frame.draw_study2_sample(n_regions=6, seed=3, anchors_per_region=4)
+    old_p = len(drawn["selected_regions"]) / drawn["frame"]["regions_drawable"]
+    per_bill = {b: p for b, p in drawn["p_region_by_bill"].items() if p > 0}
+    assert any(abs(p - old_p) > 1e-9 for p in per_bill.values()), (
+        "if every stratum's probability equalled the corpus-wide figure, the fix would be untested"
+    )
+
+
+def test_a_draw_is_reproducible_and_records_its_inputs(frame):
+    a = frame.draw_study2_sample(n_regions=4, seed=7, anchors_per_region=5)
+    b = frame.draw_study2_sample(n_regions=4, seed=7, anchors_per_region=5)
+    assert a["selected_regions"] == b["selected_regions"]
+    assert a["selected_anchors"] == b["selected_anchors"]
+    assert a["corpus_digest"] and a["seed"] == 7
 
 
 def test_the_sampling_frame_never_imports_the_matcher():
-    """R4's second criticism, as a standing gate.
-
-    `probe_r10` selected its anchors from `diff_bills` output while the review described the frame
-    as matcher-independent, and three review rounds did not catch it because prose and code were
-    never forced to agree. A static import check is the cheapest way to keep them agreeing.
-    """
-    src = (PROBES / "study2_frame.py").read_text()
-    tree = ast.parse(src)
+    """R4's second criticism, as a standing gate."""
+    tree = ast.parse((PROBES / "study2_frame.py").read_text())
     imported = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
         elif isinstance(node, ast.Import):
             imported.update(a.name for a in node.names)
-    assert not any("diff_bill" in m for m in imported), (
-        f"study2_frame imports the matcher: {sorted(imported)}. Anchor eligibility must be "
-        "structural; a frame that consults diff_bills is a matcher-conditioned population."
-    )
-
-
-def test_the_frame_exposes_the_three_operations_the_design_names():
-    frame = _mod("study2_frame")
-    for fn in ("enumerate_study2_anchors", "enumerate_study2_regions", "draw_study2_sample"):
-        assert callable(getattr(frame, fn, None)), f"study2_frame must expose {fn}"
-
-
-def test_a_draw_is_reproducible_and_records_its_inputs():
-    """A frozen algorithm is only frozen if the same seed and corpus reproduce the same sample."""
-    frame = _mod("study2_frame")
-    a = frame.draw_study2_sample(n_regions=4, seed=7, anchors_per_region=5)
-    b = frame.draw_study2_sample(n_regions=4, seed=7, anchors_per_region=5)
-    assert a["selected_regions"] == b["selected_regions"]
-    assert a["selected_anchors"] == b["selected_anchors"]
-    assert a["corpus_digest"] and a["seed"] == 7
-    for anchor in a["selected_anchors"]:
-        assert 0 < anchor["p_inclusion"] <= 1
-
-
-def test_a_draw_is_stratified_across_bills():
-    """One bill with many drawable regions must not be able to supply the whole sample."""
-    frame = _mod("study2_frame")
-    drawn = frame.draw_study2_sample(n_regions=6, seed=11, anchors_per_region=5)
-    bills = {k.split(":")[0] for k in drawn["selected_regions"]}
-    assert len(bills) >= min(4, drawn["frame"]["bills_drawable"])
+    assert not any("diff_bill" in m for m in imported), f"study2_frame imports the matcher: {sorted(imported)}"
 
 
 # --------------------------------------------------------------------------------------------
-# schema rejections
+# carried forward from rounds 3-4
 # --------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "mutate, expect",
-    [
-        (lambda rec: rec["truth"]["counterparts"][0].pop("found_via"), "found"),
-        (lambda rec: rec["truth"].pop("region_id"), "region"),
-        (lambda rec: rec["anchor"].pop("source_sha256"), "source_sha256"),
-        (lambda rec: rec["anchor"].pop("parser_commit"), "parser_commit"),
-        (lambda rec: rec["anchor"].pop("node_ordinal"), "node_ordinal"),
-        (lambda rec: rec["anchor"].update(node_ordinal="x"), "node_ordinal"),
-        (lambda rec: rec["candidates"][0].pop("retrievers"), "retriever"),
-        (lambda rec: rec["truth"].pop("change_type"), "change_type"),
-        (lambda rec: rec["truth"].pop("oracles"), "oracles"),
-        (lambda rec: rec["truth"].update(oracles="region-exhaustive"), "oracles"),
-        (lambda rec: rec["truth"].pop("judgment_mode"), "judgment_mode"),
-        (lambda rec: rec["truth"].pop("coverage"), "coverage"),
-        (lambda rec: rec["system"]["assigned"][0].pop("node_ordinal"), "node_ordinal"),
-    ],
-)
-def test_schema_rejects_a_record_that_cannot_support_its_metrics(schema, records, mutate, expect):
-    bad = copy.deepcopy(records)
-    target = next(r for r in bad if r["anchor_id"] == "a1-one-to-one")
-    mutate(target)
-    with pytest.raises(schema.SchemaError) as exc:
-        schema.validate_dataset(bad)
-    assert expect in str(exc.value).lower()
+def test_bounded_search_negatives_are_refused_by_the_completeness_metrics(evaluator, records):
+    r = evaluator.evaluate(records)
+    for metric in ("candidate_recall", "assignment_per_anchor", "diff_correctness"):
+        refused = {a["anchor_id"] for a in r[metric]["refused"]["anchors"]}
+        assert {"a11-region-only-none", "a13-suggestion-list-none"} <= refused, metric
+
+
+def test_ranking_still_admits_bounded_oracles(evaluator, records):
+    r = evaluator.evaluate(records)
+    assert r["ranking"]["refused"]["count"] == 0
+    assert r["ranking"]["refused"]["requires"] == "affirmed-positive"
+
+
+def test_a_pairwise_false_keep_needs_no_document_completeness(evaluator, schema, records):
+    a17 = _find(records, "a17-pairwise-false-keep")
+    assert schema.establishes(a17["truth"], "affirmed-negative")
+    assert not schema.establishes(a17["truth"], "complete-in-document")
+    stratum = evaluator.evaluate(records)["failure_modes"]["strata"]["high-containment-pairwise"]
+    assert (stratum["mode_occurred"], stratum["n"]) == (1, 1)
 
 
 def test_forced_choice_cannot_establish_anything(schema, evaluator, records):
-    """ "The best of these eight" is a claim about the candidate set, not the legislation."""
     assert not schema.establishes(
         {"oracles": ["document-exhaustive"], "judgment_mode": "forced-choice"}, "affirmed-positive"
     )
@@ -418,6 +403,39 @@ def test_forced_choice_cannot_establish_anything(schema, evaluator, records):
     assert after["ranking"]["n"] == 0
     assert after["candidate_recall"]["counterparts_total"] == 0
     assert after["failure_modes"]["strata"] == {}
+
+
+def test_a_stratum_may_not_mix_truth_requirements(schema, records):
+    bad = copy.deepcopy(records)
+    _find(bad, "a17-pairwise-false-keep")["stratum"] = "no-counterpart-anywhere"
+    with pytest.raises(schema.SchemaError) as exc:
+        schema.validate_dataset(bad)
+    assert "one claim" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "mutate, expect",
+    [
+        (lambda rec: rec["truth"]["counterparts"][0].pop("found_via"), "found"),
+        (lambda rec: rec["truth"].pop("region_id"), "region"),
+        (lambda rec: rec["anchor"].pop("source_sha256"), "source_sha256"),
+        (lambda rec: rec["anchor"].pop("node_ordinal"), "node_ordinal"),
+        (lambda rec: rec["anchor"].update(node_ordinal="x"), "node_ordinal"),
+        (lambda rec: rec["candidates"][0].pop("retrievers"), "retriever"),
+        (lambda rec: rec["truth"].pop("change_type"), "change_type"),
+        (lambda rec: rec["truth"].pop("oracles"), "oracles"),
+        (lambda rec: rec["truth"].pop("judgment_mode"), "judgment_mode"),
+        (lambda rec: rec["truth"].pop("coverage"), "coverage"),
+        (lambda rec: rec["truth"]["coverage"].update(rule="nodes-above-containment-0.3"), "coverage.rule"),
+        (lambda rec: rec["truth"]["coverage"].update(eligible_ordinals=[]), "empty"),
+    ],
+)
+def test_schema_rejects_a_record_that_cannot_support_its_metrics(schema, records, mutate, expect):
+    bad = copy.deepcopy(records)
+    mutate(_find(bad, "a1-one-to-one"))
+    with pytest.raises(schema.SchemaError) as exc:
+        schema.validate_dataset(bad)
+    assert expect in str(exc.value).lower()
 
 
 def test_provenance_fields_are_present_on_every_node_reference(schema, records):

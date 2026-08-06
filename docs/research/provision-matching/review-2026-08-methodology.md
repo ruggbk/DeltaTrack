@@ -1,9 +1,12 @@
 # Methodology review — adversarial challenge to Study 1 and the Study 2 protocol
 
-**Status:** Round 2 complete; **human labeling stays gated.** This document is the deliverable that
+**Status:** Round 5 complete; **human labeling stays gated.** This document is the deliverable that
 `pass2-protocol.md` §10.1 gates on, extended to cover an independent adversarial review of Study 1.
-**Date:** 2026-08-06 (round 1), 2026-08-06 (round 2). **Reviews:** `paper.md` (Study 1),
-`pass2-protocol.md` (Study 2), `probes/`, and — in round 2 — *this document itself*.
+**Date:** 2026-08-06, rounds 1–5. **Current machinery:** schema `pass2-anchor-v4`; oracles
+`suggested-list` / `region-exhaustive` / `document-exhaustive`; observation identity
+`(source_sha256, parser_commit, node_ordinal)`; sampling frame `probes/study2_frame.py`.
+**Reviews:** `paper.md` (Study 1), `pass2-protocol.md` (Study 2), `probes/`, and — from round 2
+onward — *this document and its own machinery*.
 **Supersedes nothing.** It records what survived challenge, what did not, and what neither side saw.
 
 Every claim below was tested against the code and the corpus rather than argued from the documents.
@@ -2386,6 +2389,12 @@ The existing annotation blockers stand unchanged and are re-listed in §R4-H.
 
 ## §R4-A. Oracle completeness contract
 
+> **↪ Round 5 (§R5-1, §R5-A).** Right idea, weaker execution than it read. The contract below is
+> satisfied by a **count** (`reviewed >= eligible_total`), and a count is still an assertion: review
+> node 42 twice, never reach node 117, record 161/161. v4 records the reviewed **set** and grants
+> completeness on set equality. Round 4's own contract test demonstrated the hole by *setting*
+> `reviewed = eligible_total` to promote a record.
+
 What a human must have done before a record may receive `complete-in-document`:
 
 1. The queue was **every provision in the target version** admitted by a declared `coverage.rule`
@@ -2408,6 +2417,12 @@ enforceable rather than aspirational.
 ---
 
 ## §R4-B. Canonical Study 2 sampling implementation
+
+> **↪ Round 5 (§R5-3, §R5-C).** The frame is matcher-independent and stands. The **draw** had two
+> defects: the recorded `p_inclusion` was one corpus-wide figure that was wrong in both directions
+> (6× understated for a small bill, 2.6× overstated for a large one), and deterministic bill
+> ordering gave whole strata **zero** selection probability whenever `n_regions < len(bills)` —
+> with 12 drawable bills and a 4-region request, eight bills were unsamplable.
 
 `probes/study2_frame.py` is authoritative for all four questions, and nothing else may answer them:
 
@@ -2435,6 +2450,12 @@ does not change any join.
 ---
 
 ## §R4-D. Capability model (v3, exhaustive)
+
+> **↪ Round 5 (§R5-2, §R5-D).** A fifth proposition, `complete-source-side`, is added, and
+> "assignment" splits into two estimands. A `document-exhaustive` sweep runs per OLD anchor over the
+> NEW document: it enumerates that anchor's counterparts and is silent about which *other* old
+> provisions claim the same node. Scoring a collision group with it is truth collected in one
+> direction only.
 
 | proposition | granted by | needs per-candidate binary |
 |---|---|---|
@@ -2474,6 +2495,12 @@ Run against the canonical frame, with the three categories kept apart:
 ---
 
 ## §R4-G. Revised Study 2 recommendation — Option 3, three tiers
+
+> **↪ Round 5 (§R5-5, §R5-6, §R5-E).** The three tiers stand; the cost note below does not.
+> "Amortised" conflated reading with deciding: judging that target node X is not anchor A's
+> counterpart says nothing about anchor B, so K anchors against one document remain K×M pairwise
+> decisions however many times the document is read. §R5-E separates the two, and drops the
+> single "cost" figure in favour of counts plus an explicit refusal to guess seconds-per-decision.
 
 The cost structure is no longer uniform across the metrics, so a single-tier design has to price
 every anchor at the most expensive oracle. Three tiers instead:
@@ -2565,3 +2592,407 @@ structural confirmers; re-running the frozen IDF ablation after re-adjudication 
 4. **Whether tier B is worth ~161 adjudications per anchor at all**, or whether candidate recall and
    diff correctness should wait for a cheaper oracle or a larger budget.
 5. **Applying §E's documentation corrections**, still proposed and not applied.
+
+---
+---
+
+# §R5 — Fifth adversarial review (round 5)
+
+**Target: the human truth machinery — does it prove what it claims to prove?** Seven criticisms.
+Five hold as stated, two in part, none is rejected. Round 5's sharper statement of the standard:
+
+> Do not prove completeness with a count when what you need is a set, and do not prove a global
+> assignment with truth collected in only one direction.
+
+Both halves landed. And both were the *same shape as the defect the round before had just fixed*:
+round 4 replaced "the reviewer searched" with a number, which is a weaker claim than it reads;
+round 3 built collision groups from whatever records the dataset happened to contain, which round 4
+tightened without noticing it was tightening the wrong axis.
+
+| # | criticism | verdict | what changed |
+|---|---|---|---|
+| 1 | coverage proven by a count, not a reviewed set | **CONFIRMED** | v4 records sets; completeness is set equality |
+| 2 | assignment truth collected in one direction | **CONFIRMED** | split into per-anchor and collision-resolution estimands |
+| 3 | recorded inclusion probabilities are wrong | **CONFIRMED**, plus a zero-probability bug | explicit per-bill quota; probabilities re-derivable |
+| 4 | `all-nodes-with-body` may not be a complete universe | **PARTLY CONFIRMED** | invariant measured, holds, now guarded by a test |
+| 5 | tier A may pay for truth it does not use | **PARTLY CONFIRMED** | what region sweeps buy, stated precisely |
+| 6 | "amortisation" conflates reading with deciding | **CONFIRMED** | costs separated; no seconds-per-decision guess |
+| 7 | stale current-state prose | **CONFIRMED** | audited and corrected |
+
+---
+
+## §R5-1. Completeness was proven by a count
+
+**Verdict: CONFIRMED.**
+
+**Falsification attempted.** The criticism offers an exit: if some existing mechanism already
+guaranteed `reviewed unique node identities == eligible node identities`, the integer was merely a
+summary. Nothing did. `coverage_is_complete` read `reviewed >= eligible_total` and no other code
+path examined membership. Worse, round 4's own contract test
+(`test_completing_the_sweep_admits_the_record`) promoted a record by *assigning*
+`reviewed = eligible_total` — the criticism's threat model, executed in the test suite as though it
+were a legitimate operation.
+
+**Evidence.** `a18-count-matches-set-does-not` reviews 21 nodes over a 21-node universe, repeating
+one and omitting another:
+
+```
+v3 rule (reviewed >= eligible_total) : COMPLETE
+v4 rule (set equality)               : NOT complete -> refused by all three completeness metrics
+```
+
+**Action — v4 records sets.** `coverage` carries `eligible_ordinals` (generated from the frozen
+target parse by a coverage rule, never typed by a reviewer or client) and `reviewed_ordinals`.
+Completeness is `set(reviewed) == set(eligible)`, so duplicates collapse and an omission has
+nothing to hide behind. The block also pins `target_source_sha256` / `target_parser_commit`, so a
+coverage set derived from one document cannot certify completeness over another.
+
+All five adversarial tests the criticism asked for are present and each is proven to change an
+outcome: duplicate-plus-omission at equal cardinality (refused), duplicates inflating the count
+(refused), an ordinal outside the eligible universe (rejected at validation, named explicitly),
+missing parse identity (rejected), and exact set coverage (granted).
+
+---
+
+## §R5-2. Assignment truth had only one direction
+
+**Verdict: CONFIRMED. The distinction the criticism proposed survives an attempt to collapse it.**
+
+**Falsification attempted.** Could target-side sweeps establish the group after all? No, and not for
+want of thoroughness — it is the wrong axis. A `document-exhaustive` sweep answers *"for old anchor
+A, which new nodes are its counterparts?"* Collision resolution asks *"for new node X, which old
+provisions legitimately claim it?"* No amount of the first produces the second. Round 3's evaluator
+derived groups from `claims` built over the records present in the dataset, which is a statement
+about sampling, not about legislation.
+
+**Evidence.** `a19-target-complete-source-unknown` is document-complete on the target side and its
+counterpart is a contested node. The evaluator reports it as a group **without** source-side truth
+and refuses to score it. Strip every `competition_coverage` from the fixture and the metric reports
+`measurable: false` rather than scoring the two contested nodes it can still see.
+
+**Action — two estimands, stated separately** (§R5-B):
+
+- **`assignment_per_anchor`** — *for this anchor, did the system assign exactly its true counterpart
+  set?* Needs target-side `complete-in-document` only. Measurable now: n=12, accuracy 0.50.
+- **`collision_resolution`** — *for a contested target node, did the global assignment resolve the
+  group correctly?* Needs `complete-source-side`: a reverse sweep recorded as
+  `truth.competition_coverage`, with the same set-membership proof as §R5-1. On the fixture: 1 group
+  scorable, 2 observed without source-side truth, accuracy 0.00.
+
+**A defect neither reviewer predicted, found while building this.** The first cut compared the
+system's assigned **target** ordinals against truth's **claiming** ordinals — two different
+documents, a comparison that could never be right. The fix is `system.competition_claimants`
+(matcher output: which old provisions it assigned to that target), so both sides are source-side
+ordinals and neither depends on which anchors happen to be sampled. The schema now requires it
+whenever `competition_coverage` is present.
+
+---
+
+## §R5-3. The recorded inclusion probabilities were wrong
+
+**Verdict: CONFIRMED, and simulation found a second, worse defect the criticism only hinted at.**
+
+**Falsification attempted by enumeration.** The round-4 draw recorded
+`p_region = len(selected) / len(drawable)` for every region. Simulated over 20,000 seeds on a frame
+with bill A holding 10 drawable regions and B holding 80, requesting 3:
+
+| | true P(region selected) | recorded |
+|---|---:|---:|
+| region in bill A | **0.202** | 0.033 |
+| region in bill B | **0.013** | 0.033 |
+
+Wrong by 6× one way and 2.6× the other, so no scale factor repairs it.
+
+**The second defect: zero-probability strata.** Round-robin iterated `sorted(by_bill)`, a
+deterministic order. When `n_regions < len(bills)` only the alphabetically-first bills could ever be
+drawn — with 12 drawable bills and a 4-region request, **eight bills had P = 0**. A stratification
+scheme that silently excluded most strata.
+
+**Action — explicit quota, verified against simulation.** Each bill gets a base quota
+`n_regions // n_bills`; the remainder is handed out over a **seeded shuffle** of the bills, so no
+stratum is structurally excluded; a bill whose quota exceeds its supply is capped and the surplus
+redistributed. Then `P(region r in bill b) = quota[b] / drawable[b]`, exactly, recorded per region
+alongside `quota_by_bill` and `drawable_by_bill` so a reader can re-derive it by hand.
+
+Simulation agreement on hand-computable frames:
+
+| frame | request | empirical P | predicted |
+|---|---:|---:|---:|
+| A=10, B=80 | 3 | A 0.1507 / B 0.0187 | 0.1499 / 0.0188 |
+| A=2, B=50, C=50 | 9 | A 1.000 (capped) | 1.000 |
+| A=B=C=D=5 | 2 | ~0.10 each, **including C and D** | 0.100 |
+
+The last row is the zero-probability bug, fixed and pinned by a test.
+
+---
+
+## §R5-4. Is `all-nodes-with-body` a complete universe?
+
+**Verdict: PARTLY CONFIRMED. The distinction is real and was untested; the invariant holds.**
+
+The criticism correctly separates two properties the schema had run together. Measure-independence
+stops a system under evaluation defining its own denominator. It says nothing about whether the rule
+can omit a true counterpart — which is a *truth-universe* question.
+
+**Measured** (R9 §5, all 71 adjacent pairs):
+
+```
+body-less target nodes that are CONTAINERS (text-bearing descendant exists) : 7054
+body-less target nodes that are LEAVES                                      :    0
+production records pairing OLD-with-text -> NEW-without-text                :    0
+```
+
+**So the invariant holds.** Every body-less node is a structural container whose text lives in a
+descendant the rule *does* admit, so correspondence is established at the level that carries text.
+A Study-2-eligible anchor must itself have body text, and a container carries none to correspond
+with.
+
+**Action.** `all-nodes-with-body` may establish global completeness, and the invariant is asserted
+by `test_body_less_target_nodes_are_always_containers` rather than assumed in prose — if a body-less
+leaf ever appears the test fails and the rule must stop granting completeness. `all-nodes` stays
+available for a study preferring the guarantee to the assumption, at ~8.5% more review.
+
+The same caution round 4 applied to `element_id` applies here — this is a regularity over 34 bills,
+not a theorem — but unlike that case the alternative has real cost and no benefit, so the guarded
+assumption is the better trade.
+
+---
+
+## §R5-5. What tier A's region sweeps buy
+
+**Verdict: PARTLY CONFIRMED. The logic is right; the conclusion is narrower than "tier A is
+overpaying".**
+
+The criticism is correct that ranking needs only `affirmed-positive`, so a region sweep is not
+logically required to answer *"given that X is the counterpart, where did the retriever rank it?"*
+A pairwise binary judgment on a single retrieved candidate suffices.
+
+**What the sweep actually buys**, stated precisely because the criticism asks for precision:
+
+1. **Positives the retrievers missed.** A pairwise pass over retrieved candidates can only ever
+   confirm what was retrieved. A region sweep finds counterparts no retriever proposed, which is
+   what makes a ranking dataset contain the interesting cases rather than only the easy ones.
+2. **Region-local candidate recall** — a genuine diagnostic, and explicitly *not* global recall.
+   §R5-A keeps that distinction; `complete-within-region` never becomes `complete-in-document`.
+3. **Regression coverage across structural neighbourhoods**, which is tier A's whole purpose.
+
+**What it does not buy**: global candidate recall. Round 4 did not claim otherwise, and the
+distinction is preserved.
+
+**Action.** No change to the tier structure. The recommendation now says explicitly that a
+cheaper ranking-only dataset is available if regression breadth is dropped, and that the sweep is
+paid for the first two items rather than for ranking itself. This affects the budget, not the
+validity, exactly as the criticism said.
+
+---
+
+## §R5-6. "Amortisation" conflated reading with deciding
+
+**Verdict: CONFIRMED.**
+
+Judging that target node X is not anchor A's counterpart says nothing about anchor B. Reading
+amortises across anchors; deciding does not. Round 4's phrasing invited the reader to divide the
+161-adjudication figure by the number of anchors sharing a document, which is wrong.
+
+**The model, with the two costs separated** (`probe_r10` §5, using the measured medians — 34
+provisions in a drawable region, 161 in a target version):
+
+| tier | anchors | documents | reads (reusable) | pairwise decisions (not reusable) |
+|---|---:|---:|---:|---:|
+| A regression | 200 | 20 regions | 680 | 6,800 |
+| B diagnostic | 20 | 4 | 644 | 3,220 |
+| C challenge | 40 | 0 | 0 | 40 |
+
+**Deliberately not modelled: seconds per decision.** Most tier-B decisions are obvious rejections;
+some are the hard cases the study exists for. Nobody has measured the distribution, and multiplying
+these counts by a guessed rate would manufacture a precision this analysis does not have.
+
+**The bipartite alternative, analysed rather than adopted.** Presenting the whole target document
+once and mapping all K anchors against it has the *same* decision count and the *same* reading cost.
+Its real advantage is different and was not the one round 4 imagined: sweeping one target node
+against every sampled anchor is the **source-side** direction, which is exactly how
+`competition_coverage` gets collected (§R5-2). Anchor-by-anchor review cannot produce it at any
+level of thoroughness. So the two criticisms interact: if collision resolution is wanted, the
+bipartite workflow is the one that produces it as a by-product.
+
+---
+
+## §R5-7. Prose/code consistency audit
+
+**Verdict: CONFIRMED.** Every named instance was stale current-state prose, not historical context:
+
+| location | stale | corrected to |
+|---|---|---|
+| document status header | "Round 2 complete" | "Round 5 complete", plus a current-machinery line |
+| `pass2_schema` docstring | `coverage = {rule, eligible_total, reviewed}` | the v4 set-based block |
+| PR body | "fifteen-record synthetic fixture" | the fixture's actual contents |
+| PR body | adding `element_id` to the answer key is "the right invariant" | `node_ordinal` (round 4 moved identity) |
+
+Historical passages that *describe* superseded rules — "v3 asked `reviewed >= eligible_total`" — are
+correct as history and were left alone; the audit's job was to separate the two, not to erase the
+record.
+
+The document header now carries a **current-machinery line** (schema version, oracle names,
+identity, frame module) so the single most drift-prone paragraph states the current state
+explicitly rather than leaving a reader to infer it from four rounds of narrative.
+
+---
+
+## §R5-A. Coverage-proof contract
+
+| oracle | eligible universe derived from | reviewed membership recorded how | establishes | fails when |
+|---|---|---|---|---|
+| `suggested-list` | — (no universe) | — | `affirmed-positive`, `affirmed-negative` | always, for any completeness claim |
+| `region-exhaustive` | the named `region_id` | not recorded per node | + `complete-within-region` | `region_id` absent |
+| `document-exhaustive` | `COVERAGE_RULES[rule]` applied to the frozen target parse, pinned by `target_source_sha256` + `target_parser_commit` | `coverage.reviewed_ordinals` | + `complete-in-document` **iff set equality** | reviewed set ≠ eligible set; stray ordinal; missing parse identity; non-allowlisted rule |
+| *(reverse sweep)* | `COVERAGE_RULES[rule]` applied to the frozen **source** parse | `competition_coverage.reviewed_ordinals` | `complete-source-side` | set inequality; parse mismatch with the anchor; missing `system.competition_claimants` |
+
+Mechanically: `establishes(truth, "complete-in-document")` returns true only when
+`"document-exhaustive" in truth.oracles` **and** `set(coverage.reviewed_ordinals) ==
+set(coverage.eligible_ordinals)`. `eligible_ordinals` is generated from the parse; no reviewer or
+client supplies it.
+
+---
+
+## §R5-B. Assignment estimand
+
+**Two metrics, never blurred.**
+
+| | `assignment_per_anchor` | `collision_resolution` |
+|---|---|---|
+| question | did the system assign exactly this anchor's true counterpart set? | did the global assignment resolve this contested node correctly? |
+| OLD-side truth needed | the sampled anchor only | **every** provision claiming the target node |
+| NEW-side truth needed | `complete-in-document` for this anchor | the target node's identity |
+| oracle | `document-exhaustive` (target sweep) | reverse sweep → `complete-source-side` |
+| measurable today | **yes** | **only for groups carrying `competition_coverage`** |
+| on the fixture | n=12, accuracy 0.50 | 1 group scorable, 2 refused, accuracy 0.00 |
+
+When no record carries a reverse sweep the metric reports **NOT MEASURABLE** with its reason,
+rather than scoring the contested nodes visible in the dataset. That visibility is a fact about
+sampling, not about legislation.
+
+---
+
+## §R5-C. Sampling probability derivation
+
+**Algorithm.** (1) Enumerate drawable regions (≥ `MIN_REGION_ANCHORS` anchors) from the canonical
+old-side frame. (2) Group by bill; `n_b` = that bill's drawable count. (3) Allocate quotas: base
+`n_regions // n_bills` each, remainder distributed over a **seeded shuffle** of bills, each capped at
+`n_b` with surplus redistributed. (4) Sample `k_b` regions uniformly without replacement within each
+bill. (5) Within each selected region, take every anchor or draw `M` uniformly without replacement.
+
+**Probabilities.** `P(region r ∈ bill b) = k_b / n_b`. `P(anchor a ∈ region r) = 1` if all anchors
+are taken, else `M / |r|`. `P(a) = (k_b / n_b) × P(a | r)`. All three are recorded per anchor, and
+`quota_by_bill` / `drawable_by_bill` are persisted so any of them can be re-derived by hand.
+
+**`n_regions < n_bills`:** every bill retains positive probability, because the remainder is
+allocated over a shuffled order rather than a sorted one. **Unequal regions-per-bill:** handled by
+the per-bill denominator `n_b`; a small bill is capped at its supply and the surplus redistributed
+so the requested sample size is still met. Both cases are tested against hand-computable frames.
+
+---
+
+## §R5-D. Capability model (v4, exhaustive)
+
+| proposition | granted by | additional condition |
+|---|---|---|
+| `affirmed-positive` | any oracle | per-candidate-binary judgment |
+| `affirmed-negative` | any oracle | per-candidate-binary judgment |
+| `complete-within-region` | `region-exhaustive`, `document-exhaustive` | `region_id` present |
+| `complete-in-document` | `document-exhaustive` | **target** coverage set equality |
+| `complete-source-side` | *(reverse sweep; no oracle name)* | **source** coverage set equality |
+
+---
+
+## §R5-E. Tier cost model
+
+See the table in §R5-6. Reads are reusable across anchors sharing a document; pairwise decisions are
+not. Seconds per decision is deliberately unmodelled.
+
+---
+
+## §R5-F. Contract fixture
+
+19 records. Rounds 1–4 shapes plus round 5's: `a18-count-matches-set-does-not` (equal cardinality,
+wrong membership), `a19-target-complete-source-unknown` (an unsampled competitor), and
+`a15`'s reverse sweep, which is the only thing that makes any collision group scorable. The
+duplicate-identity and stray-ordinal cases are constructed in tests, because they must fail
+validation.
+
+Every guard is proven by removal: the count rule admits `a18` where set equality refuses it;
+stripping `competition_coverage` makes collision resolution unmeasurable while leaving per-anchor
+assignment untouched (proving they are genuinely separate estimands); restoring the content-hash
+join improves two metrics; the old corpus-wide probability differs from the per-stratum one on the
+real frame.
+
+---
+
+## §R5-G. Blocker table
+
+**1 — required to merge this methodology review**
+
+| item | state |
+|---|---|
+| Prose/code consistency audit (§R5-7) | **done** |
+| Tier cost model separating reading from deciding (§R5-6) | **done** — `probe_r10` §5 |
+| Coverage-universe invariant measured and guarded (§R5-4) | **done** — R9 §5 + test |
+
+**2 — required before ANY human annotation**
+
+| item | state |
+|---|---|
+| Completeness proven by set membership (§R5-1) | **done** — schema v4 |
+| Assignment estimands separated; `complete-source-side` (§R5-2) | **done** — schema v4 + evaluator |
+| Identity, oracle coverage, `affirmed-negative` (rounds 3–4) | **done** |
+| Adjudicate the three drifted observations | **OPEN — packet ready, not adjudicated** |
+| Provenance on the answer key (`text_sha256`, `source_sha256`, `node_ordinal`) | **OPEN — Will's call** |
+| Re-mine the financial stratum without signal-conditioned discovery | **OPEN — not started** |
+| Apply the Study 1 premise corrections to `paper.md` / `pass2-protocol.md` | **OPEN — proposed, not applied** |
+| Decide whether collision resolution is in scope (it needs the reverse sweep) | **OPEN — Will's call** |
+
+**3 — required before the real sample draw**
+
+| item | state |
+|---|---|
+| Correct inclusion probabilities (§R5-3) | **done** — quota-based, simulation-verified |
+| Choose tier A/B/C scale, `n_regions`, `anchors_per_region`, seed | **OPEN — Will's call** |
+| Freeze the corpus manifest digest the draw is against | **OPEN** |
+
+**4 — required before held-out evaluation**
+
+Held-out split at the region level; `challenge_requires` declared for every existing challenge pool;
+reporting layer with cluster-aware intervals.
+
+**5 — deferred Study 4**
+
+Theory rewrite; directional-variant benchmark; structural confirmers; re-running the frozen IDF
+ablation after re-adjudication (variants frozen, **do not re-tune**).
+
+---
+
+## §R5 — Study 2 go / no-go
+
+| # | question | answer |
+|---|---|---|
+| 1 | Can tier A validly measure ranking? | **Yes.** Needs `affirmed-positive`, which every oracle grants under per-candidate-binary judgment. |
+| 2 | Can tier B validly measure candidate recall? | **Yes, for anchors with proven set coverage** — and only those; others are refused by name. |
+| 3 | Can tier B validly measure per-anchor diff correctness? | **Yes**, on the same population. |
+| 4 | Can the current dataset measure global assignment / collision resolution? | **No** — unless a reverse sweep is collected. The evaluator reports NOT MEASURABLE rather than a number. |
+| 5 | Can tier C validly measure its named challenge claims? | **Yes**, for pairwise claims via `affirmed-negative`; absence claims still need document completeness. |
+| 6 | Can any tier estimate operational prevalence? | **No.** Not a probability sample of any defined population, and the proxy ICC spread (0.058–0.700) means precision is a sensitivity range, not a measurement. |
+| 7 | Does `complete-in-document` derive from actual set coverage? | **Yes** — `set(reviewed_ordinals) == set(eligible_ordinals)`, with the eligible set generated from the frozen parse. |
+| 8 | Are the recorded inclusion probabilities mathematically correct? | **Yes**, now: `k_b / n_b` per stratum, verified against simulation on hand-computable frames. |
+| 9 | What still requires human judgment? | §R5-G tier 2 and 3: the three drifted observations, answer-key provenance, the financial re-mine, the Study 1 wording corrections, whether collision resolution is in scope, and the tier scale + seed. |
+| 10 | Should Study 2 labeling remain gated? | **Yes.** Eight open items, every one a judgment call rather than an implementation task. |
+
+---
+
+## §R5 — probes and modules changed
+
+| file | decides | headline |
+|---|---|---|
+| `pass2_schema.py` *(v4)* | §R5-1, §R5-2 | coverage as sets; `complete-source-side`; `system.competition_claimants` |
+| `eval_pass2.py` *(changed)* | §R5-2 | `assignment_per_anchor` + `collision_resolution`; NOT MEASURABLE reporting |
+| `study2_frame.py` *(changed)* | §R5-3 | quota allocation; per-stratum probabilities; no zero-probability strata |
+| `probe_r9_node_identity.py` *(§5 added)* | §R5-4 | 7,054 body-less containers, 0 leaves, 0 cross-boundary pairings |
+| `probe_r10_sampling_design.py` *(§5 added)* | §R5-6 | reads vs pairwise decisions, per tier |

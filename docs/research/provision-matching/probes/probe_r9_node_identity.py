@@ -50,10 +50,12 @@ REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from corpus_roots import banner, bill_versions  # noqa: E402
+from corpus_roots import adjacent_pairs, banner, bill_versions  # noqa: E402
 
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
-from deltatrack.diff_bill import _normalize_text  # noqa: E402
+
+# §5 only. The matcher is read as EVIDENCE about what it pairs, never as a selector.
+from deltatrack.diff_bill import _normalize_text, diff_bills  # noqa: E402
 
 FIXTURE = REPO / "tests" / "data" / "similarity_labels.json"
 
@@ -205,6 +207,74 @@ def main() -> None:
     print()
     print("  => identity is `(source_sha256, parser_commit, node_ordinal)`. `element_id` is kept as")
     print("     a recorded ATTRIBUTE for debugging and traceability, and is not part of the key.")
+
+    # ---- 5. is the coverage universe complete? -------------------------------------------------
+    print()
+    print("=" * 104)
+    print("5. COVERAGE UNIVERSE: can `all-nodes-with-body` omit a legitimate counterpart?")
+    print("=" * 104)
+    print("  Round 5 separated two things the schema had run together. `all-nodes-with-body` is")
+    print("  MEASURE-INDEPENDENT -- it consults no similarity signal -- and that is what stops a")
+    print("  system under evaluation defining its own denominator. It does NOT follow that the rule")
+    print("  is COMPLETE. If a body-less target node could be a real counterpart, a sweep could be")
+    print("  certified complete while never having looked at the answer.")
+    print()
+    empty_container = empty_leaf = 0
+    leaf_examples = []
+    cross_pairs = 0
+    cross_examples = []
+    pairs_checked = 0
+
+    for bill, xa, xb in adjacent_pairs():
+        try:
+            told, tnew = normalize_bill(xa), normalize_bill(xb)
+            d = diff_bills(told, tnew)
+        except Exception:
+            continue
+        pairs_checked += 1
+        with_body = [tuple(n.match_path) for n in tnew.nodes if n.body_text.strip()]
+        for n in tnew.nodes:
+            if n.body_text.strip():
+                continue
+            mp = tuple(n.match_path)
+            # a CONTAINER carries its text in descendants, which the rule does admit
+            if any(len(w) > len(mp) and w[: len(mp)] == mp for w in with_body):
+                empty_container += 1
+            else:
+                empty_leaf += 1
+                if len(leaf_examples) < 5:
+                    leaf_examples.append((bill, "/".join(n.match_path[-2:])))
+        # does the production matcher ever pair a with-text OLD node to a body-less NEW node?
+        for c in d.changes:
+            if c.change_type in ("modified", "moved") and (c.old_text or "").strip() and not (c.new_text or "").strip():
+                cross_pairs += 1
+                if len(cross_examples) < 5:
+                    cross_examples.append((bill, c.change_type, "/".join(c.match_path[-2:])))
+
+    print(f"  adjacent version pairs checked                          : {pairs_checked}")
+    print(f"  body-less target nodes that are CONTAINERS              : {empty_container}")
+    print("    (a text-bearing descendant exists, and the rule admits IT -- correspondence lives")
+    print("     at the level that carries text, so nothing is lost)")
+    print(f"  body-less target nodes that are LEAVES                  : {empty_leaf}")
+    for e in leaf_examples:
+        print(f"      {e}")
+    print(f"  production records pairing OLD-with-text -> NEW-without : {cross_pairs}")
+    for e in cross_examples:
+        print(f"      {e}")
+    print()
+    if empty_leaf == 0 and cross_pairs == 0:
+        print("  INVARIANT HOLDS ON THIS CORPUS: every body-less target node is a structural")
+        print("  container whose content is carried by a descendant the rule admits, and production")
+        print("  never pairs across the boundary. A Study-2-eligible anchor must itself have body")
+        print("  text, and a container carries none to correspond with.")
+        print()
+        print("  => `all-nodes-with-body` MAY establish global completeness. This is an empirical")
+        print("     regularity, not a theorem, so tests/test_research_probes.py asserts it and will")
+        print("     fail if a body-less LEAF ever appears. `all-nodes` remains available for a study")
+        print("     that wants the guarantee without the assumption -- at ~9% more review.")
+    else:
+        print("  INVARIANT DOES NOT HOLD. `all-nodes-with-body` must not grant global completeness;")
+        print("  use `all-nodes`, or state the estimand as complete-modulo-the-rule.")
 
 
 if __name__ == "__main__":

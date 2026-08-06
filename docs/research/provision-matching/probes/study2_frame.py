@@ -122,6 +122,44 @@ def enumerate_study2_regions(min_anchors: int = MIN_REGION_ANCHORS) -> dict[str,
     return regions
 
 
+def _allocate_quota(supply: dict[str, int], n_regions: int, rng: random.Random) -> dict[str, int]:
+    """How many regions each bill contributes. Equal base share, remainder by seeded shuffle.
+
+    Returns {bill: k_b} with `sum(k_b) == min(n_regions, sum(supply))` and `k_b <= supply[b]`.
+
+    The shuffle is what stops `n_regions < len(bills)` from excluding whole strata: under the
+    round-4 deterministic bill order, a 4-region request over 12 bills could only ever touch the
+    four alphabetically first. Capping and redistributing is what stops a small bill from silently
+    shrinking the sample below what was asked for.
+    """
+    bills = sorted(supply)
+    total_supply = sum(supply.values())
+    target = min(n_regions, total_supply)
+    quota = dict.fromkeys(bills, 0)
+    if not bills or target == 0:
+        return quota
+
+    base = target // len(bills)
+    for b in bills:
+        quota[b] = min(base, supply[b])
+
+    order = bills[:]
+    rng.shuffle(order)
+    # Hand out what is still owed, one at a time, to bills that still have supply. Looping rather
+    # than a single pass so that capping one bill genuinely redistributes to the others.
+    while sum(quota.values()) < target:
+        progressed = False
+        for b in order:
+            if sum(quota.values()) >= target:
+                break
+            if quota[b] < supply[b]:
+                quota[b] += 1
+                progressed = True
+        if not progressed:  # pragma: no cover - unreachable while target <= total_supply
+            break
+    return quota
+
+
 def draw_study2_sample(
     n_regions: int,
     seed: int,
@@ -133,12 +171,33 @@ def draw_study2_sample(
     Resolves an ambiguity round 3 left in prose: §R3-C said "take every anchor in a drawn region"
     while the cost table priced "8 regions x 10 anchors". Those are different designs with different
     inclusion probabilities. Here `anchors_per_region=None` means take them all; an integer means
-    draw uniformly without replacement within the region, and the per-anchor inclusion probability
-    is recorded either way.
+    draw uniformly without replacement within the region.
 
-    Regions are drawn WITHOUT replacement, stratified by bill: regions are shuffled within each
-    bill and taken round-robin across bills, so a single bill with many drawable regions cannot
-    supply the whole sample. With 4 bills carrying drawable regions in this corpus, that matters.
+    TWO DEFECTS ROUND 5 FOUND IN THE ROUND-4 DRAW, both fixed here.
+
+    1. THE RECORDED PROBABILITY WAS WRONG. The round-4 code recorded
+       `p_region = len(selected) / len(drawable)` for every region, a single corpus-wide figure.
+       Under round-robin allocation the real probability is stratum-specific. Simulated on a frame
+       with bill A holding 10 drawable regions and bill B holding 80, requesting 3 regions:
+
+           region in A : true P = 0.202   recorded 0.033   (6x understated)
+           region in B : true P = 0.013   recorded 0.033   (2.6x overstated)
+
+       The errors run in OPPOSITE directions, so no scale factor repairs them.
+
+    2. SOME BILLS HAD ZERO SELECTION PROBABILITY. Round-robin iterated `sorted(by_bill)`, a
+       deterministic order, so when `n_regions < len(bills)` only the alphabetically-first bills
+       could ever be drawn. With 12 drawable bills and a 4-region request, eight bills were
+       unsamplable -- a stratification scheme that silently excluded most strata.
+
+    THE FIX is an explicit quota: allocate k_b regions to each bill, then sample k_b uniformly
+    without replacement from that bill's n_b drawable regions, so
+
+        P(region r in bill b selected) = k_b / n_b        exactly, and recorded per region.
+
+    Base quota is `n_regions // n_bills` for every bill; the remainder goes to a SEEDED SHUFFLE of
+    the bills, so no bill is structurally excluded. A bill whose quota exceeds its supply is capped
+    and the surplus redistributed, so a small bill cannot silently shrink the sample.
     """
     regions = enumerate_study2_regions(min_anchors)
     drawable = sorted([r for r in regions.values() if r["drawable"]], key=lambda r: r["key"])
@@ -147,19 +206,19 @@ def draw_study2_sample(
     by_bill: dict[str, list[dict]] = {}
     for r in drawable:
         by_bill.setdefault(r["bill"], []).append(r)
-    for lst in by_bill.values():
-        rng.shuffle(lst)
+    bills = sorted(by_bill)
+
+    quota = _allocate_quota({b: len(by_bill[b]) for b in bills}, n_regions, rng)
 
     selected: list[dict] = []
-    bills = sorted(by_bill)
-    while len(selected) < n_regions and any(by_bill[b] for b in bills):
-        for b in bills:
-            if len(selected) >= n_regions:
-                break
-            if by_bill[b]:
-                selected.append(by_bill[b].pop())
+    p_region_by_bill: dict[str, float] = {}
+    for b in bills:
+        k = quota.get(b, 0)
+        n_b = len(by_bill[b])
+        p_region_by_bill[b] = (k / n_b) if n_b else 0.0
+        if k:
+            selected.extend(rng.sample(by_bill[b], k))
 
-    p_region = len(selected) / len(drawable) if drawable else 0.0
     picked = []
     for r in selected:
         pool = sorted(r["anchors"], key=lambda a: a["node_ordinal"])
@@ -168,8 +227,17 @@ def draw_study2_sample(
         else:
             chosen = rng.sample(pool, anchors_per_region)
             p_within = anchors_per_region / len(pool)
+        p_r = p_region_by_bill[r["bill"]]
         for a in chosen:
-            picked.append({**a, "region_key": r["key"], "p_inclusion": p_region * p_within})
+            picked.append(
+                {
+                    **a,
+                    "region_key": r["key"],
+                    "p_region": p_r,
+                    "p_within_region": p_within,
+                    "p_inclusion": p_r * p_within,
+                }
+            )
 
     return {
         "corpus_digest": manifest_digest(),
@@ -184,6 +252,11 @@ def draw_study2_sample(
             "anchors_total": sum(r["n_anchors"] for r in regions.values()),
             "anchors_in_drawable_regions": sum(r["n_anchors"] for r in drawable),
         },
+        # Per-bill quota and supply, so the recorded probabilities can be re-derived by hand rather
+        # than trusted: P(region) = quota[b] / supply[b].
+        "quota_by_bill": quota,
+        "drawable_by_bill": {b: len(by_bill[b]) for b in bills},
+        "p_region_by_bill": p_region_by_bill,
         "selected_regions": [r["key"] for r in selected],
         "selected_anchors": [
             {
@@ -193,6 +266,8 @@ def draw_study2_sample(
                 "node_ordinal": a["node_ordinal"],
                 "element_id": a["element_id"],
                 "region_key": a["region_key"],
+                "p_region": a["p_region"],
+                "p_within_region": a["p_within_region"],
                 "p_inclusion": a["p_inclusion"],
             }
             for a in picked

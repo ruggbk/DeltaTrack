@@ -166,45 +166,16 @@ def ranking(records: list[dict]) -> dict:
     }
 
 
-def assignment(records: list[dict]) -> dict:
-    """Target 3. Over anchors that COMPETE: two or more anchors contending for one new node.
+def assignment_per_anchor(records: list[dict]) -> dict:
+    """Target 3a. For THIS anchor, did the system assign exactly its true counterpart set?
 
-    Collision groups are derived, not annotated. A human ruling one anchor at a time cannot see
-    that two anchors claim the same target, so asking them to record it would be asking for
-    something they are not positioned to know.
-
-    A group is only scorable if EVERY anchor in it has document-complete truth -- an unfound
-    competitor makes a wrong assignment look right, so one refused member disqualifies the group
-    rather than just itself.
+    A per-anchor question, answerable from a target-side sweep alone. It makes no claim about other
+    anchors, so it does not need to know who else was competing -- which is precisely why it is
+    separated from `collision_resolution` below.
     """
-    admitted, refused = _partition(records, "assignment")
-    claims: dict[tuple, list[str]] = {}
-    for r in records:  # contention is derived over ALL records, including refused ones
-        for cp in r["truth"]["counterparts"]:
-            claims.setdefault(_key(cp), []).append(r["anchor_id"])
-        for c in r["candidates"]:
-            claims.setdefault(_key(c), []).append(r["anchor_id"])
-    contended = {k for k, v in claims.items() if len(set(v)) > 1}
-    refused_ids = {r["anchor_id"] for r in refused}
-
-    def in_group(r: dict) -> bool:
-        return any(_key(c) in contended for c in r["candidates"]) or any(
-            _key(cp) in contended for cp in r["truth"]["counterparts"]
-        )
-
-    groups: dict[tuple, set[str]] = {k: set(v) for k, v in claims.items() if k in contended}
-    tainted = {k for k, members in groups.items() if members & refused_ids}
-
-    scorable, disqualified = [], []
+    admitted, refused = _partition(records, "assignment_per_anchor")
+    correct, wrong = 0, []
     for r in admitted:
-        if not in_group(r):
-            continue
-        keys = {_key(c) for c in r["candidates"]} | {_key(cp) for cp in r["truth"]["counterparts"]}
-        (disqualified if keys & tainted else scorable).append(r)
-
-    correct = 0
-    wrong = []
-    for r in scorable:
         truth_set = {_key(cp) for cp in r["truth"]["counterparts"]}
         sys_set = {_key(a) for a in r["system"]["assigned"]}
         if truth_set == sys_set:
@@ -212,13 +183,73 @@ def assignment(records: list[dict]) -> dict:
         else:
             wrong.append(r["anchor_id"])
     return {
-        "collision_groups": len(contended),
-        "collision_groups_tainted": len(tainted),
-        "anchors_in_collision": len(scorable),
-        "anchors_disqualified_by_a_group_member": [r["anchor_id"] for r in disqualified],
-        "accuracy": _rate(correct, len(scorable)),
+        "n": len(admitted),
+        "accuracy": _rate(correct, len(admitted)),
         "wrong": wrong,
-        "refused": _refusal_report(refused, "assignment"),
+        "refused": _refusal_report(refused, "assignment_per_anchor"),
+    }
+
+
+def collision_resolution(records: list[dict]) -> dict:
+    """Target 3b. Did the global assignment resolve a contested target node correctly?
+
+    THE DIRECTION MATTERS, and v3 got it wrong. A `document-exhaustive` sweep runs per OLD anchor
+    over the NEW document: it enumerates that anchor's counterparts. It says nothing about which
+    OTHER old provisions claim the same new node. v3 derived collision groups from "whichever
+    records happen to be in the dataset" and scored them with target-side truth, so an old
+    competitor that was never sampled made a wrong resolution look right.
+
+    Establishing the group needs the reverse sweep -- for one target node, review every old
+    provision -- recorded as `truth.competition_coverage` and granting `complete-source-side`. A
+    group is scorable only when some record carries that for its contested node.
+
+    When no record does, this metric reports NOT MEASURABLE rather than a number. That is the
+    honest output, and it is what v3 could not say.
+    """
+    proven: dict[tuple, dict] = {}
+    for r in records:
+        comp = r["truth"].get("competition_coverage")
+        if comp and _admits(r, "collision_resolution"):
+            proven[(r["anchor"]["source_sha256"], r["anchor"]["parser_commit"], comp["target_ordinal"])] = {
+                "record": r,
+                "claiming": set(comp["claiming_ordinals"]),
+            }
+
+    # Contention observed in the dataset, for reporting only -- never as evidence of a group.
+    claims: dict[tuple, set[str]] = {}
+    for r in records:
+        for ref in [*r["truth"]["counterparts"], *r["candidates"]]:
+            claims.setdefault(_key(ref), set()).add(r["anchor_id"])
+    observed = {k for k, v in claims.items() if len(v) > 1}
+
+    scored, correct, wrong = 0, 0, []
+    for _key_tuple, info in proven.items():
+        r = info["record"]
+        scored += 1
+        # BOTH sides of this comparison are OLD-side ordinals. An earlier cut compared the system's
+        # assigned TARGET ordinals against the truth's CLAIMING ordinals -- two different documents,
+        # and a comparison that could never be right. `system.competition_claimants` is matcher
+        # output (which old provisions the system assigned to this target), so recording it costs
+        # nothing and it does not depend on which anchors happen to be sampled -- which was the
+        # original defect in deriving groups from the dataset.
+        sys_claimants = set(r["system"]["competition_claimants"])
+        if sys_claimants != info["claiming"]:
+            wrong.append(r["anchor_id"])
+        else:
+            correct += 1
+    return {
+        "measurable": scored > 0,
+        "groups_with_source_side_truth": scored,
+        "groups_observed_in_dataset_without_source_side_truth": len(observed) - scored,
+        "accuracy": _rate(correct, scored),
+        "wrong": wrong,
+        "why_not_measurable": (
+            None
+            if scored
+            else "no record carries `competition_coverage`; a contested node observed in the "
+            "dataset is not evidence that every old provision claiming it has been found, and "
+            "target-side sweeps cannot establish it at any level of thoroughness"
+        ),
     }
 
 
@@ -289,7 +320,8 @@ def evaluate(records: list[dict]) -> dict:
         "uncertain": uncertain,
         "candidate_recall": candidate_recall(scored),
         "ranking": ranking(scored),
-        "assignment": assignment(scored),
+        "assignment_per_anchor": assignment_per_anchor(scored),
+        "collision_resolution": collision_resolution(scored),
         "diff_correctness": diff_correctness(scored),
         # v3: challenge records see EVERY record, `uncertain` included. The blanket exclusion was
         # right for the four metrics that need to know the anchor's counterpart set and wrong here:
@@ -311,7 +343,8 @@ def contract_check(result: dict) -> dict:
     return {
         "1 candidate recall": result["candidate_recall"]["counterparts_total"] > 0,
         "2 ranking / MRR": result["ranking"]["n"] > 0,
-        "3 assignment accuracy": result["assignment"]["anchors_in_collision"] > 0,
+        "3a per-anchor assignment": result["assignment_per_anchor"]["n"] > 0,
+        "3b collision resolution": result["collision_resolution"]["measurable"],
         "4 final diff correctness": result["diff_correctness"]["n"] > 0,
         "5 failure-mode rates": bool(result["failure_modes"]["strata"]),
     }
@@ -334,11 +367,21 @@ def main() -> None:
 
     print()
     print("  Records refused per metric (truth cannot support what the metric assumes):")
-    for metric in ("candidate_recall", "ranking", "assignment", "diff_correctness", "failure_modes"):
-        node = result[metric]["refused"] if metric != "failure_modes" else result[metric]["refused"]
+    for metric in ("candidate_recall", "ranking", "assignment_per_anchor", "diff_correctness", "failure_modes"):
+        node = result[metric]["refused"]
         if node["count"]:
             ids = ", ".join(a["anchor_id"] for a in node["anchors"])
-            print(f"    {metric:<20} needs {node['requires']:<22} refused {node['count']}: {ids}")
+            print(f"    {metric:<22} needs {node['requires']:<22} refused {node['count']}: {ids}")
+    cr = result["collision_resolution"]
+    if not cr["measurable"]:
+        print()
+        print("  COLLISION RESOLUTION IS NOT MEASURABLE on this dataset.")
+        print(
+            f"    {cr['groups_observed_in_dataset_without_source_side_truth']} contested target "
+            "node(s) appear in the records, and none carries source-side competition truth."
+        )
+        print("    A contested node observed in the dataset is not evidence that every old")
+        print("    provision claiming it has been found -- that needs the reverse sweep.")
     print()
     print("  Answering the gate question -- if labels are collected using the frozen sampling and")
     print("  oracle workflow, can every promised metric be computed over a population whose ground")

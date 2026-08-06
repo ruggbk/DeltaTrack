@@ -60,29 +60,31 @@ label cannot express it.
                         found outside that region is a recorded `region-escape`, not a labeling
                         error.
 
-  document-exhaustive   Renamed in v3 from `document-search`, because the old name licensed the
-                        wrong thing. "The reviewer searched the document by their own means" is a
-                        statement about EFFORT. A transformed counterpart -- changed header,
-                        rewritten wording, moved somewhere unexpected -- survives any number of
-                        queries the reviewer did not think to type, and the record would still have
-                        claimed the counterpart set was complete.
+  document-exhaustive   The reviewer adjudicated every provision of the target version that the
+                        declared coverage rule admits. Not "searched" -- COVERED, and the record
+                        proves it by carrying the SET:
 
-                        v3 requires REVIEW COVERAGE, and measures it:
+                            truth.coverage = {
+                                "rule": "all-nodes-with-body",
+                                "target_source_sha256": ..., "target_parser_commit": ...,
+                                "eligible_ordinals": [...],   # generated from the frozen parse
+                                "reviewed_ordinals": [...],   # what was actually adjudicated
+                            }
 
-                            truth.coverage = {"rule": ..., "eligible_total": M, "reviewed": N}
+                        `complete-in-document` is granted only when the two are equal AS SETS.
+                        Retrieval, search and structural navigation may order the queue; they may
+                        not end it. A reviewer who stops early does not produce a defective record
+                        -- they produce one that honestly claims less, and the evaluator refuses it
+                        for the metrics that need more.
 
-                        `complete-in-document` is granted only when N >= M. Retrieval, search and
-                        structural navigation may order the queue; they may not end it. A reviewer
-                        who stops early does not produce a defective record -- they produce a record
-                        that honestly claims less, and the evaluator refuses it for the metrics that
-                        need more.
-
-                        `rule` defines M and MUST come from `COVERAGE_RULES`, all of which are
-                        measure-independent. A rule that consulted word overlap or containment
-                        would let a method under evaluation set its own denominator, one layer out.
-                        Note the residual honestly: "complete" means complete over the provisions
-                        the declared rule admits, and the rule is recorded so a reader can see what
-                        was excluded.
+                        `rule` MUST come from `COVERAGE_RULES`, all measure-independent: a rule that
+                        consulted word overlap or containment would let a method under evaluation
+                        set its own denominator, one layer out. `all-nodes-with-body` excludes ~8.5%
+                        of target nodes, and R9 §5 measures that every one of them is a structural
+                        CONTAINER whose text lives in a descendant the rule does admit, with the
+                        production matcher never pairing across that boundary. That is an empirical
+                        regularity over this corpus, so a test asserts it; `all-nodes` is available
+                        for a study that prefers the guarantee to the assumption.
 
 --------------------------------------------------------------------------------------------------
 WHAT IS DELIBERATELY NOT HERE
@@ -97,7 +99,7 @@ from __future__ import annotations
 
 from typing import Any
 
-SCHEMA_VERSION = "pass2-anchor-v3"
+SCHEMA_VERSION = "pass2-anchor-v4"
 
 RELATIONS = ("one-to-one", "one-to-many", "many-to-one", "none", "uncertain")
 ORACLES = ("suggested-list", "region-exhaustive", "document-exhaustive")
@@ -120,10 +122,48 @@ ORACLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "suggested-list": frozenset(PAIRWISE),
     "region-exhaustive": frozenset((*PAIRWISE, "complete-within-region")),
     # `complete-in-document` is NOT granted by the oracle's presence alone -- `establishes()`
-    # additionally requires the measured coverage to be complete. That conditionality is the
-    # substance of round 4's first criticism and cannot be expressed in this table.
+    # additionally requires the reviewed SET to equal the eligible SET. That conditionality is the
+    # substance of rounds 4 and 5 and cannot be expressed in this table.
     "document-exhaustive": frozenset((*PAIRWISE, "complete-within-region")),
 }
+
+# ---------------------------------------------------------------------------------------------
+# v4: completeness is membership, not cardinality
+# ---------------------------------------------------------------------------------------------
+# v3 replaced "the reviewer searched" with a count: `coverage.reviewed >= coverage.eligible_total`.
+# Round 5 pointed out that a count is still an assertion. A workflow that adjudicated node 42 twice
+# and never reached node 117 records 161/161 and is certified complete, and v3's own contract test
+# demonstrated the hole by *setting* `reviewed = eligible_total` to promote a record.
+#
+# v4 records SETS. `eligible_ordinals` is generated from the frozen target parse by a coverage rule
+# (never typed by a reviewer or a client); `reviewed_ordinals` is what was actually adjudicated.
+# Completeness is set equality, so duplicates collapse and an omission cannot be masked by one.
+#
+# `coverage.target_source_sha256` / `target_parser_commit` pin the parse the eligible set was
+# derived from. Without them a coverage set from one document could certify completeness over a
+# different one -- the same class of defect as a stale corpus, one field further in.
+COVERAGE_FIELDS = (
+    "rule",
+    "target_source_sha256",
+    "target_parser_commit",
+    "eligible_ordinals",
+    "reviewed_ordinals",
+)
+
+#: Source-side competition. Round 5's second criticism: a document-exhaustive sweep runs per OLD
+#: anchor over the NEW document, which enumerates that anchor's counterparts. It says nothing about
+#: which OTHER old provisions also claim the same new node, and a collision group cannot be scored
+#: without that. Establishing it needs the sweep in the opposite direction -- for one target node,
+#: review every old provision -- which is a separate cost and therefore a separate record.
+COMPETITION_FIELDS = (
+    "target_ordinal",
+    "rule",
+    "source_source_sha256",
+    "source_parser_commit",
+    "eligible_ordinals",
+    "reviewed_ordinals",
+    "claiming_ordinals",
+)
 
 #: What each metric's arithmetic ASSUMES about the truth record it consumes. Data, not prose, so
 #: `eval_pass2` can enforce it and a test can prove the enforcement fires.
@@ -147,11 +187,30 @@ METRIC_TRUTH_REQUIREMENTS: dict[str, dict[str, str]] = {
             "exists elsewhere. This is the one target the cheapest oracle genuinely supports."
         ),
     },
-    "assignment": {
-        "proposition": "the complete set of correspondences competing for a node is known",
+    # v4 splits what v3 called "assignment" into two questions that need truth in OPPOSITE
+    # directions. v3 required `complete-in-document`, which is a sweep of the NEW document per OLD
+    # anchor: it enumerates that anchor's counterparts and says nothing about which OTHER old
+    # provisions claim the same new node. Deriving collision groups from "the records that happen to
+    # be in the dataset" then scored a global question with one-directional truth.
+    "assignment_per_anchor": {
+        "proposition": "for THIS anchor, the system assigned exactly its true counterpart set",
         "requires": "complete-in-document",
         "why": (
-            "An unfound competitor makes a wrong assignment look right, and competitors are not confined to a region."
+            "A per-anchor question, answerable from a target-side sweep alone: the sweep enumerates "
+            "every counterpart this anchor has, which is exactly what the system's assignment for "
+            "this anchor is compared against. No claim is made about other anchors."
+        ),
+    },
+    "collision_resolution": {
+        "proposition": "for a contested target node, EVERY old provision that legitimately claims it is known",
+        "requires": "complete-source-side",
+        "why": (
+            "The opposite direction from every other metric here. Whether a global assignment "
+            "resolved a group correctly depends on who else was competing, and an unsampled "
+            "competitor makes a wrong resolution look right. A target-side sweep cannot establish "
+            "it at any level of thoroughness -- it is the wrong axis, not an insufficient amount of "
+            "the right one. Establishing it needs a reverse sweep: for one target node, review "
+            "every old provision."
         ),
     },
     "diff_correctness": {
@@ -180,22 +239,37 @@ METRIC_TRUTH_REQUIREMENTS: dict[str, dict[str, str]] = {
 CHALLENGE_REQUIREMENTS = ("affirmed-positive", "affirmed-negative", "complete-in-document")
 
 
-def coverage_is_complete(truth: dict[str, Any]) -> bool:
-    """Did the reviewer actually adjudicate everything the declared rule admits?
+def _set_covers(block: dict[str, Any] | None) -> bool:
+    """Does `reviewed_ordinals` cover `eligible_ordinals` as a SET?
 
-    This is the whole of the v3 change to `document-exhaustive`. `complete-in-document` is a claim
-    about coverage, so it is granted by a COUNT the record carries, never by the name of the step
-    the reviewer says they performed.
+    v3 asked `reviewed >= eligible_total`, which a workflow that adjudicated node 42 twice and never
+    reached node 117 satisfies exactly. Set equality cannot be satisfied that way: duplicates
+    collapse, and an omission has nothing to hide behind.
+
+    Completeness is a statement about membership, not cardinality.
     """
-    cov = truth.get("coverage")
-    if not isinstance(cov, dict):
+    if not isinstance(block, dict):
         return False
-    if cov.get("rule") not in COVERAGE_RULES:
+    if block.get("rule") not in COVERAGE_RULES:
         return False
-    total, reviewed = cov.get("eligible_total"), cov.get("reviewed")
-    if not isinstance(total, int) or not isinstance(reviewed, int) or total <= 0:
+    eligible, reviewed = block.get("eligible_ordinals"), block.get("reviewed_ordinals")
+    if not isinstance(eligible, list) or not isinstance(reviewed, list) or not eligible:
         return False
-    return reviewed >= total
+    return set(reviewed) == set(eligible)
+
+
+def coverage_is_complete(truth: dict[str, Any]) -> bool:
+    """Was every eligible node of the TARGET document actually adjudicated for this anchor?"""
+    return _set_covers(truth.get("coverage"))
+
+
+def competition_is_complete(truth: dict[str, Any]) -> bool:
+    """Was every eligible provision of the SOURCE document adjudicated against the target node?
+
+    The reverse sweep. Establishes `complete-source-side`: for one contested target node, which old
+    provisions legitimately claim it. Nothing in a target-side sweep can substitute for this.
+    """
+    return _set_covers(truth.get("competition_coverage"))
 
 
 def establishes(truth: dict[str, Any], proposition: str) -> bool:
@@ -209,6 +283,10 @@ def establishes(truth: dict[str, Any], proposition: str) -> bool:
     oracles = truth.get("oracles") or []
     if proposition == "complete-in-document":
         return "document-exhaustive" in oracles and coverage_is_complete(truth)
+    if proposition == "complete-source-side":
+        # Deliberately NOT gated on an oracle name: the reverse sweep is a different axis, and
+        # naming `document-exhaustive` says nothing about whether it was ever performed.
+        return competition_is_complete(truth)
     caps: set[str] = set()
     for o in oracles:
         caps |= ORACLE_CAPABILITIES.get(o, frozenset())
@@ -263,6 +341,44 @@ def _require(cond: bool, msg: str) -> None:
         raise SchemaError(msg)
 
 
+def _validate_coverage_block(block: Any, aid: str, name: str, fields: tuple[str, ...]) -> None:
+    """Structural validation for a coverage set. Membership, identity, and no smuggled nodes.
+
+    Three failure classes this catches that a count could not:
+      * an ordinal reviewed that is not in the eligible universe -- named explicitly rather than
+        silently changing the totals;
+      * duplicates masking omissions -- caught by `_set_covers`, not here, but the explicit lists
+        are what make that possible at all;
+      * a coverage set derived from a DIFFERENT parse than the nodes it certifies, which would let
+        one document's sweep certify completeness over another.
+    """
+    _require(
+        isinstance(block, dict),
+        f"{aid}: truth.{name} is required and must be a mapping -- completeness is granted on a "
+        "reviewed SET, never on a reviewer-supplied count",
+    )
+    for f in fields:
+        _require(f in block, f"{aid}: truth.{name} missing {f!r}")
+    _require(
+        block["rule"] in COVERAGE_RULES,
+        f"{aid}: {name}.rule must be one of {COVERAGE_RULES} -- all measure-independent, so a "
+        "system under evaluation cannot define the universe of its own completeness claim",
+    )
+    for f in ("eligible_ordinals", "reviewed_ordinals"):
+        _require(
+            isinstance(block[f], list) and all(isinstance(x, int) and x >= 0 for x in block[f]),
+            f"{aid}: {name}.{f} must be a list of non-negative node ordinals",
+        )
+    _require(bool(block["eligible_ordinals"]), f"{aid}: {name}.eligible_ordinals is empty")
+    stray = sorted(set(block["reviewed_ordinals"]) - set(block["eligible_ordinals"]))
+    _require(
+        not stray,
+        f"{aid}: {name}.reviewed_ordinals contains {len(stray)} ordinal(s) outside the eligible "
+        f"universe: {stray[:5]} -- a review of something the rule does not admit cannot count "
+        "toward covering what it does",
+    )
+
+
 def validate_node_ref(ref: dict[str, Any], where: str) -> None:
     for f in PROVENANCE_FIELDS:
         _require(f in ref, f"{where}: node ref missing provenance field {f!r}")
@@ -309,23 +425,28 @@ def validate_record(rec: dict[str, Any]) -> None:
         )
 
     if "document-exhaustive" in oracles:
-        cov = truth.get("coverage")
+        _validate_coverage_block(truth.get("coverage"), aid, "coverage", COVERAGE_FIELDS)
+    if "competition_coverage" in truth:
+        _validate_coverage_block(truth["competition_coverage"], aid, "competition_coverage", COMPETITION_FIELDS)
+        comp = truth["competition_coverage"]
         _require(
-            isinstance(cov, dict),
-            f"{aid}: document-exhaustive requires truth.coverage -- v3 grants complete-in-document "
-            "on measured REVIEW COVERAGE, never on the reviewer having searched. A transformed "
-            "counterpart survives any number of queries nobody thought to type",
+            comp["source_source_sha256"] == rec["anchor"]["source_sha256"]
+            and comp["source_parser_commit"] == rec["anchor"]["parser_commit"],
+            f"{aid}: competition_coverage was derived from a different parse than the anchor's -- "
+            "a reverse sweep over one source document cannot enumerate competitors in another",
         )
         _require(
-            cov.get("rule") in COVERAGE_RULES,
-            f"{aid}: coverage.rule must be one of {COVERAGE_RULES} -- all measure-independent, so "
-            "a system under evaluation cannot define the denominator of its own completeness claim",
+            isinstance(comp.get("claiming_ordinals"), list)
+            and set(comp["claiming_ordinals"]) <= set(comp["eligible_ordinals"]),
+            f"{aid}: competition_coverage.claiming_ordinals must be a subset of the eligible "
+            "source universe -- a claimant outside it was never in scope for the sweep",
         )
-        for f in ("eligible_total", "reviewed"):
-            _require(isinstance(cov.get(f), int), f"{aid}: coverage.{f} must be an integer")
         _require(
-            cov["reviewed"] <= cov["eligible_total"],
-            f"{aid}: coverage.reviewed exceeds coverage.eligible_total",
+            isinstance(rec.get("system", {}).get("competition_claimants"), list),
+            f"{aid}: a record carrying competition_coverage must also record "
+            "system.competition_claimants -- which OLD provisions the matcher assigned to that "
+            "target. Both sides of the comparison are source-side ordinals; deriving the system's "
+            "side from whichever anchors happen to be sampled is the defect this replaces",
         )
 
     counterparts = truth.get("counterparts", [])

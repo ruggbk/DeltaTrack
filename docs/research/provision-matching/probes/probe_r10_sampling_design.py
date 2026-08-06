@@ -224,6 +224,47 @@ def main() -> None:
         print("  CONSEQUENCE: document-complete truth is affordable for TENS of anchors, not")
         print("  hundreds. That, not the cluster count, is the real constraint on Study 2.")
 
+        # ---- 5. what "amortised" actually amortises ------------------------------------------
+        print()
+        print("=" * 104)
+        print("5. TIER COST MODEL -- separating what is reusable from what is not")
+        print("=" * 104)
+        print("  Round 4 said concentrating tier-B anchors in a few version pairs lets the document")
+        print("  sweep be 'amortised'. Round 5 objected that this conflates two different costs, and")
+        print("  it is right. Judging that target node X is not the counterpart of anchor A says")
+        print("  NOTHING about whether X is the counterpart of anchor B. Reading amortises; deciding")
+        print("  does not.")
+        print()
+        print(f"  {'tier':<10}{'anchors':>9}{'documents':>11}{'reads (reusable)':>19}{'pairwise decisions':>21}")
+        print("  " + "-" * 72)
+        region_m = dmed
+        doc_m = int(dm)
+        rows = [
+            ("A", 200, 20, 20 * region_m, 200 * region_m),
+            ("B", 20, 4, 4 * doc_m, 20 * doc_m),
+            ("C", 40, 0, 0, 40),
+        ]
+        for tier, anchors_n, docs_n, reads, decisions in rows:
+            print(f"  {tier:<10}{anchors_n:>9}{docs_n:>11}{reads:>19}{decisions:>21}")
+        print()
+        print("  Tier A reads a REGION per anchor-group, not a document. Tier B's 4 documents are")
+        print(f"  read once each ({4 * doc_m} reads) however many anchors they serve -- but its")
+        print(f"  {20 * doc_m} pairwise decisions are irreducible, because each is a different question.")
+        print("  Tier C is one decision per anchor: a pairwise ruling needs no sweep at all.")
+        print()
+        print("  WHAT IS NOT MODELLED, deliberately: seconds per decision. Most of tier B's")
+        print("  decisions are obvious rejections and cheap; some are the hard cases the study")
+        print("  exists for. Nobody has measured the distribution, so multiplying these counts by a")
+        print("  guessed rate would manufacture a precision this analysis does not have. The counts")
+        print("  are the honest output; the schedule is Will's judgment.")
+        print()
+        print("  A BIPARTITE ALTERNATIVE for tier B -- present the whole target document once and")
+        print("  map all K anchors against it in one pass -- has the same decision count and the")
+        print("  same reading cost. Its real advantage is different: sweeping one target node")
+        print("  against every sampled anchor is the SOURCE-SIDE direction, so it is the natural")
+        print("  way to collect the `competition_coverage` that collision resolution needs (R5-2).")
+        print("  Anchor-by-anchor review cannot produce that at any level of thoroughness.")
+
 
 if __name__ == "__main__":
     main()

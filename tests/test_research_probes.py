@@ -286,3 +286,46 @@ def test_adjacent_pairs_are_consecutive():
         a = int(older.stem.split("_", 1)[0])
         b = int(newer.stem.split("_", 1)[0])
         assert b == a + 1
+
+
+@pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    reason="the union corpus needs the gitignored bills/ tree, which CI does not have",
+)
+def test_body_less_target_nodes_are_always_containers():
+    """The invariant that lets ``all-nodes-with-body`` establish global completeness.
+
+    Round 5 separated measure-independence from completeness. ``all-nodes-with-body`` excludes
+    ~8.5% of target nodes, and the schema may only grant ``complete-in-document`` over it if an
+    excluded node can never be a legitimate counterpart. Measured (R9 §5): every body-less node is
+    a structural CONTAINER whose text lives in a descendant the rule does admit, so correspondence
+    is established at the level that carries text and nothing is lost.
+
+    That is an empirical regularity over 34 bills, not a theorem — which is exactly why it is
+    asserted here rather than assumed in a docstring. If a body-less LEAF ever appears, this fails
+    and ``all-nodes-with-body`` must stop granting global completeness.
+
+    Bounded to a slice of the corpus: the property is structural and per-document, so a sample
+    exercises it, and the full sweep lives in the probe.
+    """
+    cr = _load_corpus_roots()
+    from deltatrack.bill_tree import normalize_bill  # noqa: PLC0415
+
+    leaves = []
+    for _bill, _older, newer in cr.adjacent_pairs()[:12]:
+        try:
+            tree = normalize_bill(newer)
+        except Exception:  # pragma: no cover - a parse failure is a different test's business
+            continue
+        with_body = [tuple(n.match_path) for n in tree.nodes if n.body_text.strip()]
+        for n in tree.nodes:
+            if n.body_text.strip():
+                continue
+            mp = tuple(n.match_path)
+            if not any(len(w) > len(mp) and w[: len(mp)] == mp for w in with_body):
+                leaves.append(f"{newer.parent.name}/{newer.stem}:{'/'.join(n.match_path)}")
+    assert not leaves, (
+        f"{len(leaves)} body-less node(s) with no text-bearing descendant: {leaves[:3]}. "
+        "`all-nodes-with-body` can no longer be said to cover every possible counterpart, so it "
+        "must not grant complete-in-document — switch the coverage rule to `all-nodes`."
+    )
