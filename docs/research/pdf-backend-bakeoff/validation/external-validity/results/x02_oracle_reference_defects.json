@@ -1,0 +1,8 @@
+{
+ "population": "DEVELOPMENT corpus (tests/corpus) -- not a holdout",
+ "deltatrack_11": "CLOSED 2026-06-26 (COMPLETED); quoted-block TEXT now reaches the section body",
+ "what_the_tree_still_drops_by_design": "bill_tree._node_subsections: quoted-block subsections are amendment payload, not this bill's structure",
+ "totals": {},
+ "verdict": "The mechanism has NO instances on this corpus: no appropriations heading element sits inside a <quoted-block>. The reference is therefore NOT disqualified as a heading oracle by DeltaTrack#11, and any protocol citing that reason is citing an inherited claim. Non-appropriations <header> elements ARE dropped in quantity, so the mechanism is real for general legislation and irrelevant for appropriations.",
+ "documents": []
+}
