@@ -73,20 +73,40 @@ def migration_table(data: dict) -> str:
     ):
         out.append(f"| {label} | " + " | ".join(tally(rows, field)) + " |")
 
+    # A pair with zero amount entries on BOTH sides passes A1 vacuously: there is no
+    # multiset to break, so neither the candidate's pass nor the control's failure to break
+    # it carries information. Substantive pairs are counted separately, because "13/13
+    # identical" reads as thirteen pieces of evidence when three of them are empty.
+    def substantive(rows, key):
+        return [(k, e) for k, e in rows if (e.get("repaired", {}).get("pdfium-native", {}) or {}).get(key, 0) > 0]
+
+    sub_amt = substantive(accepted, "n_amount_entries")
+    sub_chg = substantive(accepted, "n_changes")
     out += [
         "",
-        "**B0 controls — each must FAIL its own gate.**",
+        f"**Evidential content.** {len(sub_amt)} of the {len(accepted)} accepted pairs carry any "
+        f"amount entries at all; the rest pass A1 vacuously (empty multiset on both sides) and are "
+        f"not evidence of amount parity in either direction. {len(sub_chg)} carry any changes.",
         "",
-        "| control | gate | failed as required |",
-        "|---|---|---|",
+        "**B0 controls — each must FAIL its own gate, and can only do so where the gate has content.**",
+        "",
+        "| control | gate | broke the gate | on content-bearing pairs | verdict |",
+        "|---|---|---|---|---|",
     ]
-    ctl = {"SA1": "A1_amounts_identical", "SA2": "A2_changes_identical", "SA3": "A4_text_identical"}
-    for sid, field in ctl.items():
-        failed = sum(1 for _k, e in accepted if e.get("repaired", {}).get(sid, {}).get(field) is False)
-        n = sum(1 for _k, e in accepted if sid in e.get("repaired", {}))
+    ctl = {
+        "SA1": ("A1_amounts_identical", sub_amt),
+        "SA2": ("A2_changes_identical", sub_chg),
+        "SA3": ("A4_text_identical", accepted),
+    }
+    for sid, (field, rows) in ctl.items():
+        failed_all = sum(1 for _k, e in accepted if e.get("repaired", {}).get(sid, {}).get(field) is False)
+        n_all = sum(1 for _k, e in accepted if sid in e.get("repaired", {}))
+        failed_sub = sum(1 for _k, e in rows if e.get("repaired", {}).get(sid, {}).get(field) is False)
+        n_sub = len(rows)
         gate = field.split("_")[0]
-        mark = "**yes**" if failed == n and n else f"**NO — gate void** ({failed}/{n})"
-        out.append(f"| {sid} | {gate} | {mark} ({failed}/{n}) |")
+        ok = failed_sub == n_sub and n_sub
+        verdict = "**live**" if ok else f"**UNPROVEN on {n_sub - failed_sub} content-bearing pair(s)**"
+        out.append(f"| {sid} | {gate} | {failed_all}/{n_all} | {failed_sub}/{n_sub} | {verdict} |")
     return "\n".join(out)
 
 

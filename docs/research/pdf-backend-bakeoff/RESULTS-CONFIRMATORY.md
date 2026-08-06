@@ -28,6 +28,28 @@ accuracy conclusion.
 ## A.1 Replication corpus (P1, 15 pairs)
 
 <!-- A_P1 -->
+
+**Primary mode `repaired`. 13 production-accepted pairs are the migration gate; 2 production-declined pairs are diagnostics and decide nothing.**
+
+| | pdfium-wasm | pdfminer |
+|---|---|---|
+| A1 amounts identical (13 accepted) | **13/13** | **13/13** |
+| A2 changes identical (13 accepted) | **13/13** | 6/13 |
+| A4 full text identical (13 accepted) | **13/13** | 4/13 |
+| A5 line numbers identical (13 accepted) | **13/13** | **13/13** |
+| A1 amounts identical (2 declined, diagnostic) | **2/2** | **2/2** |
+| A2 changes identical (2 declined, diagnostic) | **2/2** | 0/2 |
+
+**Evidential content.** 9 of the 13 accepted pairs carry any amount entries at all; the rest pass A1 vacuously (empty multiset on both sides) and are not evidence of amount parity in either direction. 13 carry any changes.
+
+**B0 controls — each must FAIL its own gate, and can only do so where the gate has content.**
+
+| control | gate | broke the gate | on content-bearing pairs | verdict |
+|---|---|---|---|---|
+| SA1 | A1 | 10/13 | 9/9 | **live** |
+| SA2 | A2 | 11/13 | 11/13 | **UNPROVEN on 2 content-bearing pair(s)** |
+| SA3 | A4 | 13/13 | 13/13 | **live** |
+
 <!-- /A_P1 -->
 
 ## A.2 Holdout (P2)
@@ -45,11 +67,38 @@ Replication and holdout are reported separately and never pooled.
 ## B.1 Replication corpus (P1) — controls
 
 <!-- B_P1_B0 -->
+
+**Every metric's own control, reported beside it. A Δ without its control row is not reviewable.**
+
+| metric | control | Δ from sabotage | practical δ | verdict |
+|---|---|---|---|---|
+| B1 | S1 | +0.2390 | 0.01 | fires |
+| B2 | S2b | +0.0535 | 0.02 | fires |
+| B3a | S3 | +0.0464 | 0.005 | fires |
+| B5 | S4 | +0.6106 | 0.01 | fires |
+| B6 | S5 | +0.3221 | 0.02 | fires |
+
+| separability | own metric | B2 | verdict |
+|---|---|---|---|
+| S4 | B5 +0.6106 | +0.1702 | **NOT SEPARABLE** |
+| S5 | B6 +0.3221 | +0.0729 | **SEPARABLE** |
+
 <!-- /B_P1_B0 -->
 
 ## B.2 Replication corpus (P1) — paired cluster bootstrap
 
 <!-- B_P1_DELTA -->
+
+Δ = score(pdfminer) − score(pdfium-wasm); positive favours pdfminer. 10,000 paired cluster resamples by bill, seed 20260805, `strict` mode.
+
+| metric | pdfium-wasm | pdfminer | Δ | 95% CI | practical δ | verdict |
+|---|---|---|---|---|---|---|
+| B1 | 0.8711 | 0.9099 | +0.0422 | [+0.0380, +0.0454] | 0.01 | pdfminer LEADS |
+| B2 | 0.5282 | 0.5282 | +0.0000 | [+0.0000, +0.0000] | 0.02 | identical on every document (not merely indistinguishable) |
+| B3a | 1.0000 | 1.0000 | +0.0000 | [+0.0000, +0.0000] | 0.005 | identical on every document (not merely indistinguishable) |
+| B5 | 0.7489 | 0.7513 | +0.0013 | [+0.0000, +0.0029] | 0.01 | indistinguishable |
+| B6 | 0.4668 | 0.4668 | +0.0000 | [+0.0000, +0.0000] | 0.02 | identical on every document (not merely indistinguishable) |
+
 <!-- /B_P1_DELTA -->
 
 ## B.3 Holdout (P2) — controls
