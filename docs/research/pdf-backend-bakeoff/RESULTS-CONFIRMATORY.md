@@ -92,7 +92,7 @@ section cannot support an accuracy conclusion.
 across both populations, including bill classes no probe had seen: non-appropriations House
 and Senate bills, a joint resolution, a watermarked Senate print, a chamber-crossing
 amendment print. On the same pairs pdfminer matches amounts and line numbers but diverges on
-change segmentation (22 of 43) and full text (15 of 43).
+change segmentation (agreeing on 22 of 43, diverging on 21) and full text (agreeing on 15 of 43, diverging on 28).
 
 **This is evidence about migration risk and about nothing else.** Reproducing today's output
 exactly says a swap changes nothing a staffer reads; it says nothing about whether either
@@ -527,6 +527,41 @@ it belongs to the pipeline rather than to the bake-off. It is nonetheless the mo
 product finding in this run.
 
 
+
+---
+
+# B8 — the gold sample: built and frozen, **not adjudicated**
+
+The image-adjudicated gold sample was constructed to protocol and **its adjudication was
+not performed in this run**. Reported as not done rather than partially done, because a
+prefix of the seeded shuffle would be a valid random subsample but a thin one, and B8 is
+corroboration that by protocol may never decide a ranking.
+
+What exists and is committed:
+
+| Artifact | Contents |
+|---|---|
+| `results/gold_key.json` | frame sizes, selection indices, contributing backends and what each said, per-stratum accounting. **Not to be opened until `gold_adjudicated.json` is committed** |
+| `results/gold_blind.json` | document, page, rendered image path, printed-line locator, and the question. No backend name, no candidate text, no XML value, no stratum label |
+| `results/gold_pages/` | one CoreGraphics render per sampled page, via pypdf page-split + `qlmanage` |
+
+**Why it was not adjudicated:** the sample spans **~88 distinct pages for ~100 items**, so
+adjudication is roughly one page image per item rather than the clustering the design hoped
+for. That is a cost this run could not absorb after A, B, C, D, E, F, P3, the sensitivity
+sweep and the production-comparison probe.
+
+**A defect found while building it, and fixed.** Stratum assignment is first-match, and the
+first build ran common categories before rare ones. Nearly every GPO page carries the
+rotated gutter watermark and most lines end in a hyphen, so `watermark` and `soft_hyphen`
+absorbed almost everything: `long_block` drew a frame of **0** against a target of 8, and
+`table_like` a frame of **1** against 4. The committed sample is from the corrected build,
+which tests rare cells first and lets the broad ones mop up. The defective build was deleted
+rather than committed.
+
+**To adjudicate it later**, read `gold_blind.json` and the images only, write
+`gold_adjudicated.json`, **commit that**, and only then run the join against `gold_key.json`.
+The commit order is the only evidence the adjudication was blind.
+
 ---
 
 # Applying the frozen decision rules
@@ -564,7 +599,7 @@ strengthened once measured against production rather than against the XML.
 
 | | PDFium-WASM | pdfminer.six |
 |---|---|---|
-| Reproduces the harness incumbent | **exact** — 43/43 accepted, 4/4 declined | amounts yes; change segmentation diverges on 22/43 |
+| Reproduces the harness incumbent | **exact** — 43/43 accepted, 4/4 declined | amounts yes; change segmentation agrees on only 22/43, full text on 15/43 |
 | Heading labels vs **production** | 302 spurious / 280 missed over 33 docs | **5 spurious / 2 missed** |
 | Text recovery (shipping mode) | **indistinguishable** | **indistinguishable** |
 | Artifact over the wire | **2.19 MB** incremental | 6.66–9.05 MB incremental |

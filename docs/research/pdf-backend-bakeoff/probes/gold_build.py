@@ -140,20 +140,26 @@ def assign_financial(view: dict) -> dict[tuple, dict]:
         dist = line - max(prev_heads) if prev_heads else None
         txt = ref["lines"].get(key) or next((t for t in texts.values() if t), "") or ""
 
+        # Assignment is first-match, so the ORDER decides which strata can fill. An earlier
+        # version ran common-first (watermark, soft_hyphen before table_like, long_block) and
+        # starved the rare cells outright: long_block drew a frame of 0 and table_like of 1
+        # against targets of 8 and 4, because nearly every GPO page carries the rotated
+        # watermark and most lines end in a hyphen. Rare and structurally interesting cells
+        # are tested first; the broad ones mop up.
         if disagree:
             stratum = "disagree"
+        elif dist is not None and dist > 40:
+            stratum = "long_block"
+        elif len(_AMOUNT.findall(txt)) >= 3:
+            stratum = "table_like"
         elif dist is not None and dist <= 3:
             stratum = "heading_transition"
         elif line <= 2 or (page in max_line and line >= max_line[page] - 1):
             stratum = "page_boundary"
-        elif page in wm:
-            stratum = "watermark"
         elif txt.rstrip().endswith("-"):
             stratum = "soft_hyphen"
-        elif len(_AMOUNT.findall(txt)) >= 3:
-            stratum = "table_like"
-        elif dist is not None and dist > 40:
-            stratum = "long_block"
+        elif page in wm:
+            stratum = "watermark"
         else:
             continue
         items[key] = {
