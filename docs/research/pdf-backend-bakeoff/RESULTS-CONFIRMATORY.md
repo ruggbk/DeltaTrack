@@ -203,9 +203,15 @@ Replication and holdout are reported separately and never pooled.
 | P2 holdout text (B1) | pdfminer leads +0.0638 | **indistinguishable**, +0.0001 |
 | P1 structure (B2/B3a/B5/B6) | identical on every document | identical on every document |
 
-pdfminer's entire strict-mode text lead is PDFium's soft-hyphen repair delta: **+0.0422
-against +0.03875** on P1, **+0.0638 against +0.0741** on the holdout. pdfminer's repair
-delta is exactly 0.0000 in both, because the rule only ever fires for PDFium. Production
+pdfminer's strict-mode text lead is almost entirely accounted for by PDFium's soft-hyphen
+repair delta: **+0.0422 against +0.0388** on P1, **+0.0638 against +0.0741** on the holdout.
+pdfminer's repair delta is exactly **0.0000** in both, because the rule only ever fires for
+PDFium.
+
+Those two figures are not computed the same way — the lead is bill-weighted, the repair
+delta is a per-document mean — so the near-cancellation is corroboration, not arithmetic.
+**The load-bearing evidence is the direct measurement:** in `repaired` mode the B1 delta is
++0.0000 on P1 and +0.0001 on the holdout, both well inside the 0.010 practical threshold. Production
 already performs the equivalent repair for the text API in `normalize_raw`, so a glyph-path
 adapter would carry it too.
 
