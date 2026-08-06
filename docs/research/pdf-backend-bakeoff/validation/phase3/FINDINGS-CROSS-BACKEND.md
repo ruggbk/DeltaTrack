@@ -12,7 +12,7 @@
     "Adopt it for the corrected reason"), each replaced in place with an annotation saying
     what changed and why. The sixth is the superseded preservation claim itself. **No
     result, table or number was edited**, and the original claims stay visible.
-- Probes are `h01`–`h05` here; raw output in [`results/`](results/).
+- Probes are `h01`–`h08` here; raw output in [`results/`](results/).
 - The question phase 2 left open. Phase 2 measured field *availability* on three backends
   and *accuracy* on one, then wrote into its comparison table:
 
@@ -32,20 +32,24 @@ adjudicated sample all three score **0.9275**, the primary result, with zero dis
 between them.
 
 The extended contract is not *normalising* a difference between engines. It is asking for a
-quantity on which they barely differ: over 390,582 glyph endpoints the raw advances agree
-to within **3.05e-5 pt**, which is below the contract's own 1e-4 rounding and about three
-orders of magnitude below the smallest perturbation the spacing rule can feel.
+quantity on which they barely differ: on every one of 390,582 glyph endpoints the raw
+advances agree to within **3.05e-5 pt**, below the 5e-5 pt maximum error that rounding to
+four decimals can itself introduce, and about three orders of magnitude below the smallest
+perturbation the spacing rule can feel.
 
-> **Corrected 2026-08-06.** The first version of this document said the engines return
-> "advances identical to 0.0 pt". That measured the values **after** the adapters round
-> them to four decimal places. Re-read raw, they are **equivalent at the contract's
-> precision, not identical** (`h06`). The architectural conclusion is unchanged, because it
-> needs semantic equivalence and not bit-identity, but the stronger claim was not evidenced
-> and has been withdrawn.
+> **Corrected 2026-08-06, twice.** The first version of this document said the engines
+> return "advances identical to 0.0 pt". That measured the values **after** the adapters
+> round them to four decimal places. Re-read raw (`h06`), they are **not identical**; they
+> are **equivalent under round-to-nearest at four decimals**, which is the sharper and more
+> relevant statement. A second pass then found that `h06`'s own bins were computed against
+> 5e-5 while being labelled as 1e-4, which overstated the *origin* divergence; §4 carries
+> both thresholds explicitly now. The architectural conclusion is unchanged through both,
+> because it needs semantic equivalence and not bit-identity.
 
 Phase 3 also found **two defects in phase 2's own work**, one of which falsifies a sentence
-in `pdfium_extended.py`'s docstring ([§5](#5-h5--the-two-divergences-diagnosed)), and **four
-in its own first pass**, listed in [§7](#7-corrections-this-phase-makes-to-earlier-claims).
+in `pdfium_extended.py`'s docstring ([§5](#5-h5--the-two-divergences-diagnosed)), and **eleven
+in its own successive passes**, listed in
+[§7](#7-corrections-this-phase-makes-to-earlier-claims).
 
 ---
 
@@ -322,28 +326,58 @@ established equality at the contract's precision and was reported as equality fu
 joined population. Over **390,582 glyph endpoints**, advance available on both sides of
 every one:
 
-| raw advance vs PDFium | max | median | p99 | exactly equal | non-zero but under 1e-4 | **at or above 1e-4** |
+**Two thresholds, and the first version of this section conflated them.** The contract's
+four-decimal quantisation **step** is 1e-4. The largest error `round(x, 4)` can itself
+introduce is half a step, **5e-5**. A difference below 5e-5 cannot survive rounding; a
+difference between 5e-5 and 1e-4 still can, because two values less than one step apart can
+straddle a rounding boundary. Both are now reported, and each bin is named for its literal
+threshold.
+
+| raw **advance** vs PDFium | max | median | exactly equal | 0 < d < 5e-5 | **≥ 5e-5** | **≥ 1e-4** |
 |---|---|---|---|---|---|---|
-| pdfminer.six | **4.40e-7 pt** | 9.8e-15 | 1.2e-7 | 43,077 | 347,505 | **0** |
-| PyMuPDF | **3.05e-5 pt** | 4.9e-6 | 1.5e-5 | 41,681 | 348,901 | **0** |
+| pdfminer.six | **4.40e-7 pt** | 9.8e-15 | 43,077 | 347,505 | **0** | **0** |
+| PyMuPDF | **3.05e-5 pt** | 4.9e-6 | 41,681 | 348,901 | **0** | **0** |
 
-| raw origin_x vs PDFium | max | median | p99 | exactly equal | **at or above 1e-4** |
-|---|---|---|---|---|---|
-| pdfminer.six | 2.12e-4 pt | 1.1e-5 | 8.0e-5 | 5,205 | **22,745** |
-| PyMuPDF | 1.22e-3 pt | 3.1e-5 | 2.1e-4 | 138,100 | **107,141** |
+| raw **origin_x** vs PDFium | max | median | exactly equal | 0 < d < 5e-5 | **≥ 5e-5** | **≥ 1e-4** |
+|---|---|---|---|---|---|---|
+| pdfminer.six | 2.12e-4 pt | 1.1e-5 | 5,205 | 362,632 | **22,745** | **901** |
+| PyMuPDF | 1.22e-3 pt | 3.1e-5 | 138,100 | 145,341 | **107,141** | **34,157** |
 
-**So: not identical.** The advances are *equivalent at the contract's precision* — no
-endpoint differs by as much as the contract's own rounding step. The **origins are not even
-that**: 22,745 and 107,141 endpoints differ by more than 1e-4 pt.
+**So: not identical, and the advance statement is stronger than previously written.** No
+advance endpoint differs by as much as **5e-5**, so on every one of the 390,582 endpoints
+the two engines' raw advances are **equivalent under round-to-nearest at four decimals**.
+That is a sharper claim than "below the contract's rounding" and it is the one the
+architecture rests on.
+
+The **origins are not equivalent at either threshold**: 22,745 and 107,141 endpoints differ
+by ≥ 5e-5, and **901 and 34,157** differ by ≥ 1e-4.
+
+> **Corrected 2026-08-06.** An earlier version of this table reported 22,745 and 107,141 as
+> the counts differing by more than **1e-4**. They are the counts at or above **5e-5**: the
+> probe binned against the round-to-nearest error bound and labelled the bin
+> `at_or_above_contract_precision`, which reads as the quantisation step. The true ≥1e-4
+> counts are **901 and 34,157**, so the previous sentence overstated the origin divergence
+> by 25× for pdfminer and 3× for PyMuPDF. **This was a reporting and binning defect, not a
+> change in the portability result**: no advance count moved, and the origin residue was
+> already three orders of magnitude below the thresholds the rule compares against.
 
 **Two controls say why that does not matter here, and both were run because the answer was
 not assumed.**
 
-- **Where PyMuPDF's floor comes from.** Every one of PyMuPDF's advances is **exactly
-  representable in float32** (share 1.000 on all five documents), while only 2.6–16.3 % of
-  PDFium's and pdfminer's are. MuPDF carries the advance box in single precision, and that
-  quantisation is the entire residue. This is a measured mechanism, not an inference from
-  the size of the number.
+- **Where PyMuPDF's floor comes from** (`h06` for the pattern, `h08` for the mechanism).
+  Every one of PyMuPDF's advances is **exactly representable in float32** (share 1.000 on
+  all five documents), while only 2.6–16.3 % of PDFium's and pdfminer's are. That is a
+  pattern; on its own it does not establish a cause, and the first version of this section
+  wrote that single-precision storage "is the entire residue", which claims one.
+  `h08` closes the two links needed. The code path: `jm_trace_text_span` returns
+  `char_orig` (an `fz_point`) and `char_bbox` (an `fz_rect`), so the advance `h06` reads is
+  `fz_rect.x1 − fz_point.x`. The storage width: a double pushed through `fz_make_point`,
+  `fz_make_rect` and `fz_make_matrix` **returns quantised to float32** (0.1 comes back as
+  0.10000000149011612), with a negative control on 0.5 confirming the test can tell a
+  quantising struct from a non-quantising one. So the origin and the advance box reach
+  Python already rounded to binary32, which accounts for a residue at the observed scale.
+  **It does not prove that no other rounding contributes anywhere else in the pipeline**,
+  and the mechanism is explanatory rather than architectural either way.
 - **How much room there is.** On the same pages, the largest relative advance perturbation
   that changed **no** decision is 1e-2 (1e-1 on `118-hr-4366/5`); the smallest that changed
   **any** is 1e-1. Against a maximum observed cross-engine relative difference of 3.97e-8
@@ -362,36 +396,53 @@ bit-identical values, and this document no longer says they do.
 on the display type that carries account names, the portability claim would miss the place
 DeltaTrack most depends on, because the heading tree is the financial data contract.
 
+**N16, strengthened.** The rematch originally required the two codepoints to match plus the
+**first** glyph's origin and baseline to fall within tolerance. That does not establish what
+the prose claimed, because nothing tied the candidate's **second** glyph to the second glyph
+of the PDFium pair: a candidate whose first glyph coincided but whose successor was a
+different instance of the same character would have been accepted. The rule now constrains
+both endpoints — both codepoints, both `origin_x` within 0.05 pt, both baselines within
+0.6 pt, exactly one candidate — with the tolerances unchanged.
+
 | | |
 |---|---|
 | unjoined | **4,579** of 200,684 (2.28 %) |
 | concentrated in | `CRPT-118srpt198` (2,999) and `116-hr-1865/6` (1,484); the other three total 96 |
-| **recoverable by a tolerance rematch** | **4,558 (99.5 %)** |
-| of those, decisions that then **disagree** | **0** |
-| genuinely absent from another engine | **21** |
+| **uniquely rematched under the two-endpoint rule** | **4,558 (99.5 %)** |
+| ambiguous candidate | **0** |
+| unmatched | **21** |
+| of the 4,558, decisions that then **disagree** | **0** |
+
+**The stronger rule preserves the result exactly**: same 4,558, no ambiguity, still zero
+disagreements. So the claim it was supposed to support now actually holds.
 
 **The gap is overwhelmingly an artefact of the join key, not of the engines.** The key
 buckets the pen origin at 0.05 pt and the baseline at 0.6 pt; a glyph whose coordinate sits
 near a bucket edge can land on either side, and the engines' sub-1e-3 pt coordinate
-differences are enough to separate them. Rematching by tolerance instead of by bucket
-recovers 4,558 of the 4,579, and every one of those agrees. That rematch is reported as a
-diagnostic and is **not** folded into H4's 195,291, which stays as measured.
+differences are enough to separate them. The rematch is reported as a diagnostic and is
+**not** folded into H4's 195,291, which stays as measured.
 
 **The 21 that are genuinely absent are all the same known case:** every one is a pair whose
 second glyph is **U+FFFD**, PDFium's carrier for GPO's soft hyphen, which the other two
 engines do not emit. That is the glyph-inventory difference N8 and §5's D2 already document,
 not a new one.
 
-**And it is not display type.** Type size, joined against unjoined:
+**Typography, and only typography.** Type size, joined against unjoined:
 
 | | modal size | share **above** the modal size |
 |---|---|---|
 | joined (195,291) | 10.0 pt | **39.0 %** |
 | unjoined (4,579) | 10.0 pt | **2.1 %** |
 
-The unjoined population is *under*-represented in larger type by a factor of nearly twenty.
-It is body prose, and headings are if anything better covered by the comparison than the
-corpus average.
+The unjoined population is strongly under-represented in above-modal-size text, which
+reduces the concern that the join gap is concentrated in display typography.
+
+> **This analysis does not semantically classify the pairs as headings versus body prose.**
+> Font size is a proxy for semantic role and nothing here validates it as one. An earlier
+> version of this section said the unjoined population "is body prose, and headings are if
+> anything better covered", which is an inference from type size alone. The project does
+> not yet have a trustworthy heading-level oracle — that is item 1 on the list blocking an
+> ADR — so a claim of that shape cannot be checked and is withdrawn.
 
 **N8** guards against crediting an engine that simply emitted less: glyph inventories are
 diffed per document. The only codepoint not reported by all three is U+FFFD (120 to 294 per
@@ -507,7 +558,7 @@ simply not to carry U+0020 at all, and that costs nothing.
 | pdfminer's advance field | `.adv` is em units | `.adv` is text-space points; `.width` is its page-space transform. Field choice unchanged |
 | "word quality if the backend changes: fixed" | asserted | **supported**: **0.9275** from all three engines on the primary adjudication (0.9683 post-hoc), 0 pairwise disagreements on the 72 adjudicated pairs, 1 in 195,291 at page scale |
 | "under hybrid the swing is 16 points" | asserted from pdfminer alone | **measured on two engines, paired**: **+16.12 pts** against pdfminer's own decision and **+11.59** against PyMuPDF's, correcting 10 and 8 boundaries respectively and regressing none |
-| the reason it ports | the contract normalises engines | **the engines already agree, to far below what the rule can distinguish**: raw advances within 3.05e-5 pt, three or more orders of magnitude under the smallest perturbation that changes any decision |
+| the reason it ports | the contract normalises engines | **the engines already agree, to far below what the rule can distinguish**: raw advances within 3.05e-5 pt everywhere, i.e. equivalent under round-to-nearest at 4 dp, and three or more orders of magnitude under the smallest perturbation that changes any decision |
 | `pdfium_extended` consumes no engine space | stated in its docstring | **false as built**; corrected contract scores identically |
 
 **This is the review's Outcome A.** Extended segmentation stays at PDFium accuracy across
@@ -556,9 +607,9 @@ To phase 3's own first pass:
 8. **"Advances identical to 0.0 pt" was measured on ROUNDED values.** Every adapter rounds
    `advance` to 4 dp, so N12 as first written established equality at the contract's
    precision and reported it as equality. Raw, the advances differ by up to 4.40e-7 pt
-   (pdfminer) and 3.05e-5 pt (PyMuPDF), and the **origins** differ by more than the
-   contract's rounding on 22,745 and 107,141 endpoints. The claim is now "equivalent at the
-   contract's precision", with the headroom quantified. `h06`.
+   (pdfminer) and 3.05e-5 pt (PyMuPDF), both below the 5e-5 round-to-nearest bound. The
+   claim is now "equivalent under round-to-nearest at 4 dp", with the headroom quantified.
+   `h06`.
 9. **The 16.2-point engine-change cost was an UNPAIRED subtraction** across 69 and 62 pairs.
    Paired, it is +16.12 (pdfminer) and +11.59 (PyMuPDF) on the primary adjudication. The
    number barely moved; the licence to state it did not exist before.
@@ -570,7 +621,27 @@ To phase 3's own first pass:
     figure, obtained by dropping the inconsistent class phase 1 identified in its own
     adjudication. The primary adjudication gives **0.9275**, and that is now the headline
     everywhere, with 0.9683 kept and labelled as the sensitivity analysis it is.
-12. **A 20-minute O(n²) in this phase's own harness.** `h06`'s type-size profile evaluated
+12. **`h06`'s bins were computed against 5e-5 and labelled as 1e-4.** The reported "origins
+    differ by more than 1e-4 on 22,745 and 107,141 endpoints" was wrong: those are the
+    ≥5e-5 counts. The true ≥1e-4 counts are **901 and 34,157**. A reporting and binning
+    defect, not a change in the portability result. It also let the *advance* claim be
+    stated more weakly than the data supports: no advance endpoint differs by as much as
+    5e-5, so the advances are equivalent under round-to-nearest, not merely under the
+    quantisation step.
+13. **N16's rematch validated only one endpoint.** It required both codepoints and the
+    **first** glyph's origin and baseline, then the prose claimed the recovered pairs were
+    the same pairs separated by a bucket edge. Both endpoints are now constrained; the
+    result is unchanged (4,558 rematched, 0 ambiguous, 0 disagreements), so the claim is
+    now established rather than assumed.
+14. **"It is body prose" was an inference from font size alone.** The measurement supports
+    only that the unjoined population is strongly under-represented in above-modal-size
+    text. Semantic heading-versus-body classification needs the heading oracle this project
+    does not have.
+15. **"Single-precision storage is the entire residue" claimed a cause from a pattern.**
+    `h08` now establishes the code path and demonstrates at runtime that MuPDF's geometry
+    structs quantise to float32, with a negative control. The wording is scoped to what
+    that shows, and still does not claim no other rounding contributes.
+16. **A 20-minute O(n²) in this phase's own harness.** `h06`'s type-size profile evaluated
     `Counter(joined_sizes).most_common(1)` inside a generator condition, rebuilding a
     195,291-element counter once per element. Found by sampling the process rather than by
     guessing; the modal size is now computed once.
@@ -639,7 +710,11 @@ its direction.**
 | paired instead of unpaired deltas | **strengthens.** 16.2 → 16.12 and 12.7 → 11.59, now licensed, and the discordant counts show the gain is one-directional |
 | 0.9275 headline instead of 0.9683 | **none for portability.** All three engines move together; the *tie* is unaffected by which adjudication is quoted |
 | N1 narrowed then genuinely widened | **strengthens.** The replication now compares 72 decisions against phase 2's own code path, not 0 |
-| 2.28 % unjoined characterised | **strengthens.** 99.5 % is a bucket artefact that agrees on rematch; the 21 real absences are the known U+FFFD case; the gap is body prose, not display type |
+| threshold bins mislabelled (5e-5 reported as 1e-4) | **none, and it sharpens the advance claim.** No advance count moved; the corrected origin counts are *lower* than stated |
+| N16 rematch validated one endpoint | **strengthens.** The two-endpoint rule returns the same 4,558 with 0 ambiguous and 0 disagreements, so the claim is now established |
+| heading/body wording narrowed | **none.** The measurement is unchanged; only the inference drawn from it is withdrawn |
+| float32 mechanism | **none.** Explanatory, not architectural. Now demonstrated (`h08`) rather than asserted |
+| 2.28 % unjoined characterised | **strengthens.** 99.5 % is a bucket artefact that agrees on rematch under a two-endpoint rule; the 21 real absences are the known U+FFFD case; the gap is strongly under-represented in above-modal-size type |
 
 ### Is the word-spacing question closed?
 
@@ -678,6 +753,7 @@ NODE_PATH=../../probes/js/node_modules node h02_pdfjs_percharacter.mjs <pdf> <pa
 .venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h05_diagnose_divergence.py
 .venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h06_raw_precision.py
 .venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h07_paired_and_replication.py
+.venv/bin/python docs/research/pdf-backend-bakeoff/validation/phase3/h08_mupdf_precision_path.py
 ```
 
 `h06` takes a few minutes: the perturbation bracket walks a decade-spaced ladder over every

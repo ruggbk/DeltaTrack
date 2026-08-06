@@ -269,8 +269,9 @@ reintroduces a different unexplained constant, on a narrow and well-understood p
 >
 > The *mechanism* is narrower than "the rule is ours" implies, and worth stating precisely:
 > over 390,582 glyph endpoints the three engines return advances that agree to within
-> **3.05e-5 pt**, which is below the contract's own 1e-4 rounding and three or more orders
-> of magnitude below the smallest perturbation the rule can feel. The extended contract is
+> **3.05e-5 pt**, which is below the 5e-5 pt error that rounding to four decimals can itself
+> introduce, and three or more orders of magnitude below the smallest perturbation the rule
+> can feel. The extended contract is
 > not normalising a difference between engines; it is asking for a quantity on which they
 > barely differ. (Phase 3's first pass said "identical to 0.0 pt"; that was measured after
 > the adapters round, and has been corrected to equivalence at the contract's precision.)

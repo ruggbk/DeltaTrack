@@ -25,7 +25,7 @@ all still in the tree.
 | 3. the hybrid hypothesis | `RESULTS-HYBRID.md`: put the engine's characters and word spaces below the seam, keep GPO interpretation above it. |
 | 4. adversarial validation | phase 1 here. The hybrid **beats** the shipped glyph rule on adjudicated truth, and the **stated reason** for it is falsified: PDFium's word-space rule is public geometry and is reimplementable above the seam. |
 | 5. extended glyph, phase 2 | build that third option and score it. It **ties** the hybrid inside PDFium: 0 disagreements on 72 adjudicated pairs, 53 ok / 0 bad on the heading failure cases. Accuracy stops discriminating. |
-| 6. cross-backend test, phase 3 | phase 2 then asserted that the tie *generalises* across engines. It does, measured: **0.9275** from three engines on the primary adjudication, 1 disagreement in 195,291 pairs, byte-identical text on four of five documents. Phase 3 also found two defects in phase 2's own work, and five in its own first pass. |
+| 6. cross-backend test, phase 3 | phase 2 then asserted that the tie *generalises* across engines. It does, measured: **0.9275** from three engines on the primary adjudication, 1 disagreement in 195,291 pairs, byte-identical text on four of five documents. Phase 3 also found two defects in phase 2's own work, and eleven in its own successive passes. |
 
 ## The three verdicts, in one paragraph each
 
@@ -54,21 +54,25 @@ three engines on the primary adjudication** (0.9683 in phase 1's post-hoc sensit
 analysis), disagrees with none of them on the 72 adjudicated pairs, and disagrees once in
 the 195,291 pairs all three engines could align at page scale. The mechanism is narrower
 than the phrasing: over 390,582 endpoints the raw advances agree to within **3.05e-5 pt**,
-below the contract's own rounding and three or more orders of magnitude below the smallest
-perturbation the rule can feel, so the contract is not normalising a difference, it is
-asking for one they barely have. Phase 3 also found that `pdfium_extended.py` was consuming
+below the 5e-5 pt error that rounding to four decimals can itself introduce, and three or
+more orders of magnitude below the smallest perturbation the rule can feel, so the contract
+is not normalising a difference, it is asking for one they barely have. Phase 3 also found that `pdfium_extended.py` was consuming
 PDFium's generated spaces despite its docstring, and that `contract_extended.font_size` has
 no defined axis. Neither moves a phase-2 number; both are recorded rather than repaired.
 
-A methodological cleanup pass then corrected five of phase 3's own claims, none of which
-changed the direction of the result: the advance equality was measured after rounding and is
-equivalence-at-precision rather than identity; the engine-change cost was an unpaired
-subtraction and is now paired (+16.12 and +11.59 points, correcting 18 boundaries between
-them and regressing none); N1 claimed a replication it was not performing and now performs
-it; the post-hoc 0.9683 had been used as the headline in place of the primary 0.9275; and
-the 2.28 % of page-scale pairs that never joined are characterised (99.5 % a bucket artefact
-that agrees on rematch, the rest the known U+FFFD case, and under-represented rather than
-concentrated in display type).
+Two methodological cleanup passes then corrected nine of phase 3's own claims, none of
+which changed the direction of the result. The advance equality was measured after rounding,
+and is equivalence under round-to-nearest rather than identity. The engine-change cost was an
+unpaired subtraction and is now paired (+16.12 and +11.59 points, correcting 18 boundaries
+between them and regressing none). N1 claimed a replication it was not performing and now
+performs it. The post-hoc 0.9683 had been used as the headline in place of the primary
+0.9275. The 2.28 % of page-scale pairs that never joined are characterised (99.5 % a bucket
+artefact that still agrees once the rematch validates **both** endpoints, the rest the known
+U+FFFD case). A binning defect had reported ≥5e-5 origin counts as ≥1e-4, overstating the
+origin divergence by 25× and 3×. And two claims were narrowed to their evidence: the
+unjoined population is under-represented in above-modal-size type, which is not a semantic
+heading-versus-body classification, and MuPDF's single-precision path is now demonstrated
+(`h08`) rather than asserted.
 
 ## What a reviewer should check first
 
@@ -83,8 +87,8 @@ concentrated in display type).
    two of its own controls as well as three of phase 2's claims.
 4. **The negative controls.** Every phase-3 table has one, because the expected result there
    was a tie and a tie is what a broken harness also produces. The load-bearing ones: the new
-   adapter reproduces phase 2's column item for item (N1); perturbing the advances moves the
-   answers (N2); feeding the rule the wrong pdfminer field collapses it to 0.6087 (N3); and
+   probe re-runs phase 2's `g04` code path and compares its complete 72-decision vector (N1);
+   perturbing the advances moves the answers (N2); feeding the rule the wrong pdfminer field collapses it to 0.6087 (N3); and
    the page-scale sabotage curve is reported in full, including the finding that the decision
    test is nearly blind below a 25 % advance error, which is why the portability claim rests
    on comparing the facts (N12) rather than the decisions.
@@ -94,7 +98,7 @@ concentrated in display type).
 
 ## Reproduction
 
-Probes are `v01`–`v09` here, `g01`–`g07` in [`phase2/`](phase2/) and `h01`–`h07` in
+Probes are `v01`–`v09` here, `g01`–`g07` in [`phase2/`](phase2/) and `h01`–`h08` in
 [`phase3/`](phase3/); raw output is in the `results/` directories. Every number in all three
 documents comes from those files; none is transcribed by hand. Run from the repo root with
 `.venv/bin/python`, except `phase2/g02_wasm_advance.mjs` and `phase3/h02_pdfjs_percharacter.mjs`,

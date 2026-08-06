@@ -1,6 +1,10 @@
 {
  "question": "are the engines' RAW advances equal, or only equal after the contract rounds them?",
- "contract_precision_pt": 0.0001,
+ "thresholds_pt": {
+  "quantisation_step_1e_4": 0.0001,
+  "round_to_nearest_max_error_5e_5": 5e-05,
+  "note": "a difference below 5e-5 cannot survive round(x, 4); a difference below 1e-4 still can, because two values under one step apart can straddle a rounding boundary"
+ },
  "documents": [
   {
    "pdf": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
@@ -13,8 +17,9 @@
      "p99": 1.329421968065958e-07,
      "p999": 1.5830992872167826e-07,
      "exactly_zero": 1427,
-     "nonzero_but_below_contract_precision": 49455,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 49455,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     },
     "pymupdf": {
      "n": 50882,
@@ -24,8 +29,9 @@
      "p99": 1.5136718749975131e-05,
      "p999": 1.5380859375468958e-05,
      "exactly_zero": 1390,
-     "nonzero_but_below_contract_precision": 49492,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 49492,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     }
    },
    "raw_origin_x_delta_vs_pdfium": {
@@ -37,8 +43,9 @@
      "p99": 2.8662109343713382e-05,
      "p999": 4.794921881057235e-05,
      "exactly_zero": 1256,
-     "nonzero_but_below_contract_precision": 49583,
-     "at_or_above_contract_precision": 43
+     "gt_zero_and_lt_5e_5": 49583,
+     "ge_5e_5": 43,
+     "ge_1e_4": 0
     },
     "pymupdf": {
      "n": 50882,
@@ -48,8 +55,9 @@
      "p99": 6.103515625e-05,
      "p999": 9.1552734375e-05,
      "exactly_zero": 36350,
-     "nonzero_but_below_contract_precision": 13423,
-     "at_or_above_contract_precision": 1109
+     "gt_zero_and_lt_5e_5": 13423,
+     "ge_5e_5": 1109,
+     "ge_1e_4": 50
     }
    },
    "headroom": {
@@ -96,8 +104,9 @@
      "p99": 1.2798308546280168e-07,
      "p999": 1.3771059670375507e-07,
      "exactly_zero": 3247,
-     "nonzero_but_below_contract_precision": 49801,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 49801,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     },
     "pymupdf": {
      "n": 53048,
@@ -107,8 +116,9 @@
      "p99": 1.391601562517053e-05,
      "p999": 1.52587890625e-05,
      "exactly_zero": 2102,
-     "nonzero_but_below_contract_precision": 50946,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 50946,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     }
    },
    "raw_origin_x_delta_vs_pdfium": {
@@ -120,8 +130,9 @@
      "p99": 8.198242181833848e-05,
      "p999": 0.00011728515619324753,
      "exactly_zero": 592,
-     "nonzero_but_below_contract_precision": 49566,
-     "at_or_above_contract_precision": 2890
+     "gt_zero_and_lt_5e_5": 49566,
+     "ge_5e_5": 2890,
+     "ge_1e_4": 180
     },
     "pymupdf": {
      "n": 53048,
@@ -131,8 +142,9 @@
      "p99": 0.000152587890625,
      "p999": 0.000213623046875,
      "exactly_zero": 16395,
-     "nonzero_but_below_contract_precision": 24026,
-     "at_or_above_contract_precision": 12627
+     "gt_zero_and_lt_5e_5": 24026,
+     "ge_5e_5": 12627,
+     "ge_1e_4": 2585
     }
    },
    "headroom": {
@@ -179,8 +191,9 @@
      "p99": 2.7533531010703882e-14,
      "p999": 5.240252676230739e-14,
      "exactly_zero": 18514,
-     "nonzero_but_below_contract_precision": 96298,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 96298,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     },
     "pymupdf": {
      "n": 114812,
@@ -190,8 +203,9 @@
      "p99": 1.4648437499875655e-05,
      "p999": 2.80761718753908e-05,
      "exactly_zero": 18449,
-     "nonzero_but_below_contract_precision": 96363,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 96363,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     }
    },
    "raw_origin_x_delta_vs_pdfium": {
@@ -203,8 +217,9 @@
      "p99": 7.446289066592726e-05,
      "p999": 0.00010722656253392415,
      "exactly_zero": 770,
-     "nonzero_but_below_contract_precision": 107687,
-     "at_or_above_contract_precision": 6355
+     "gt_zero_and_lt_5e_5": 107687,
+     "ge_5e_5": 6355,
+     "ge_1e_4": 181
     },
     "pymupdf": {
      "n": 114812,
@@ -214,8 +229,9 @@
      "p99": 0.000213623046875,
      "p999": 0.00030517578125,
      "exactly_zero": 31923,
-     "nonzero_but_below_contract_precision": 41204,
-     "at_or_above_contract_precision": 41685
+     "gt_zero_and_lt_5e_5": 41204,
+     "ge_5e_5": 41685,
+     "ge_1e_4": 14181
     }
    },
    "headroom": {
@@ -262,8 +278,9 @@
      "p99": 1.4171599360679465e-07,
      "p999": 1.5830992872167826e-07,
      "exactly_zero": 1481,
-     "nonzero_but_below_contract_precision": 51513,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 51513,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     },
     "pymupdf": {
      "n": 52994,
@@ -273,8 +290,9 @@
      "p99": 1.5136718749975131e-05,
      "p999": 1.5380859375468958e-05,
      "exactly_zero": 1378,
-     "nonzero_but_below_contract_precision": 51616,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 51616,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     }
    },
    "raw_origin_x_delta_vs_pdfium": {
@@ -286,8 +304,9 @@
      "p99": 8.549804687163487e-05,
      "p999": 0.00012934570321476713,
      "exactly_zero": 384,
-     "nonzero_but_below_contract_precision": 48851,
-     "at_or_above_contract_precision": 3759
+     "gt_zero_and_lt_5e_5": 48851,
+     "ge_5e_5": 3759,
+     "ge_1e_4": 248
     },
     "pymupdf": {
      "n": 52994,
@@ -297,8 +316,9 @@
      "p99": 0.000213623046875,
      "p999": 0.000274658203125,
      "exactly_zero": 10810,
-     "nonzero_but_below_contract_precision": 20508,
-     "at_or_above_contract_precision": 21676
+     "gt_zero_and_lt_5e_5": 20508,
+     "ge_5e_5": 21676,
+     "ge_1e_4": 8135
     }
    },
    "headroom": {
@@ -345,8 +365,9 @@
      "p99": 2.7533531010703882e-14,
      "p999": 2.842170943040401e-14,
      "exactly_zero": 18408,
-     "nonzero_but_below_contract_precision": 100438,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 100438,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     },
     "pymupdf": {
      "n": 118846,
@@ -356,8 +377,9 @@
      "p99": 1.4648437499875655e-05,
      "p999": 1.52587890625e-05,
      "exactly_zero": 18362,
-     "nonzero_but_below_contract_precision": 100484,
-     "at_or_above_contract_precision": 0
+     "gt_zero_and_lt_5e_5": 100484,
+     "ge_5e_5": 0,
+     "ge_1e_4": 0
     }
    },
    "raw_origin_x_delta_vs_pdfium": {
@@ -369,8 +391,9 @@
      "p99": 8.447265588529262e-05,
      "p999": 0.00010913085884567408,
      "exactly_zero": 2203,
-     "nonzero_but_below_contract_precision": 106945,
-     "at_or_above_contract_precision": 9698
+     "gt_zero_and_lt_5e_5": 106945,
+     "ge_5e_5": 9698,
+     "ge_1e_4": 292
     },
     "pymupdf": {
      "n": 118846,
@@ -380,8 +403,9 @@
      "p99": 0.00042724609375,
      "p999": 0.00103759765625,
      "exactly_zero": 42622,
-     "nonzero_but_below_contract_precision": 46180,
-     "at_or_above_contract_precision": 30044
+     "gt_zero_and_lt_5e_5": 46180,
+     "ge_5e_5": 30044,
+     "ge_1e_4": 9206
     }
    },
    "headroom": {
@@ -432,8 +456,9 @@
     "p99": 1.239776619144095e-07,
     "p999": 1.4305112472356996e-07,
     "exactly_zero": 43077,
-    "nonzero_but_below_contract_precision": 347505,
-    "at_or_above_contract_precision": 0
+    "gt_zero_and_lt_5e_5": 347505,
+    "ge_5e_5": 0,
+    "ge_1e_4": 0
    },
    "pymupdf": {
     "n": 390582,
@@ -443,8 +468,9 @@
     "p99": 1.4892578125369482e-05,
     "p999": 1.5869140625124345e-05,
     "exactly_zero": 41681,
-    "nonzero_but_below_contract_precision": 348901,
-    "at_or_above_contract_precision": 0
+    "gt_zero_and_lt_5e_5": 348901,
+    "ge_5e_5": 0,
+    "ge_1e_4": 0
    }
   },
   "raw_origin_x_delta_vs_pdfium": {
@@ -456,8 +482,9 @@
     "p99": 8.017578130647962e-05,
     "p999": 0.00011142578108547241,
     "exactly_zero": 5205,
-    "nonzero_but_below_contract_precision": 362632,
-    "at_or_above_contract_precision": 22745
+    "gt_zero_and_lt_5e_5": 362632,
+    "ge_5e_5": 22745,
+    "ge_1e_4": 901
    },
    "pymupdf": {
     "n": 390582,
@@ -467,8 +494,9 @@
     "p99": 0.000213623046875,
     "p999": 0.0008544921875,
     "exactly_zero": 138100,
-    "nonzero_but_below_contract_precision": 145341,
-    "at_or_above_contract_precision": 107141
+    "gt_zero_and_lt_5e_5": 145341,
+    "ge_5e_5": 107141,
+    "ge_1e_4": 34157
    }
   },
   "max_relative_advance_delta": {
@@ -479,7 +507,7 @@
    "pdfminer": 0,
    "pymupdf": 0
   },
-  "verdict": "EQUIVALENT AT THE CONTRACT'S PRECISION, NOT IDENTICAL: raw advances differ by up to 3.052e-05 pt, below the contract's 0.0001 pt rounding"
+  "verdict": "NOT IDENTICAL, but EQUIVALENT UNDER ROUND-TO-NEAREST at 4 dp: raw advances differ by up to 3.052e-05 pt, which is below the 5e-05 pt maximum error that round(x, 4) can itself introduce"
  },
  "unjoined_population": {
   "count": 4579,
@@ -533,17 +561,22 @@
   },
   "by_reason": {
    "absent_in_pdfminer_and_pymupdf": 1683,
-   "RECOVERABLE_by_tolerance_rematch": 4558,
+   "RECOVERABLE_by_two_endpoint_rematch": 4558,
    "absent_in_pymupdf": 2295,
    "absent_in_pdfminer": 601,
    "NOT_recoverable": 21
   },
-  "N16_tolerance_rematch": {
+  "N16_two_endpoint_rematch": {
    "note": "diagnostic only; these are NOT folded into H4's compared count",
-   "compared": 4558,
-   "disagree": 0
+   "rule": "both codepoints equal, and BOTH glyphs' origin_x within 0.05 pt and baseline within 0.6 pt of the PDFium pair, with exactly one candidate",
+   "unjoined_total": 4579,
+   "uniquely_rematched_in_both_engines": 4558,
+   "ambiguous_candidate": 0,
+   "unmatched": 21,
+   "boundary_decisions_compared": 4558,
+   "boundary_disagreements": 0
   },
-  "not_recoverable_examples": [
+  "unrecovered_examples": [
    {
     "pdf": "tests/corpus/116-hr-1865/6_enrolled-bill.pdf",
     "page": 5,

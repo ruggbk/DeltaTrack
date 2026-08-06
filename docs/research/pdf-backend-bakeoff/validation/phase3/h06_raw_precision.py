@@ -56,10 +56,18 @@ import raw_facts  # noqa: E402
 from contract_extended import ADVANCE, BASELINE, CP, ORIGIN_X, UPRIGHT  # noqa: E402
 from h04_page_scale_agreement import BACKENDS, DOCUMENTS, PAGES, _adjacent_pairs, _extract, _key  # noqa: E402
 
-# The contract rounds to 4 dp, so anything strictly under half a unit in the last place is
-# invisible to every number H3 and H4 published.
-CONTRACT_PRECISION = 1e-4
-BELOW_CONTRACT = CONTRACT_PRECISION / 2
+# TWO DIFFERENT QUANTITIES, and the first version of this probe conflated them.
+#
+#   QUANT_STEP        the contract's four-decimal quantisation step. Two values that differ
+#                     by less than this can still round to different 4 dp results.
+#   ROUND_MAX_ERROR   the largest error `round(x, 4)` can introduce, which is half a step.
+#                     A difference below this is invisible to round-to-nearest.
+#
+# The bug: bins were computed against ROUND_MAX_ERROR and then labelled
+# "at_or_above_contract_precision", so counts at or above 5e-5 were reported as counts at
+# or above 1e-4. Every bin below now names its literal threshold instead.
+QUANT_STEP = 1e-4
+ROUND_MAX_ERROR = QUANT_STEP / 2
 
 ORIGIN_TOL = 0.05
 BASELINE_TOL = 0.6
@@ -100,11 +108,17 @@ def _detectable_epsilon_bracket(pairs: list[tuple], rule) -> dict:
 
 
 def _type_size_profile(joined: list[float], unjoined: list[float]) -> dict:
-    """Is the unjoined population sitting on display type, or on body prose?
+    """Where does the unjoined population sit in the TYPE-SIZE distribution?
 
-    If the gap were concentrated above the modal body size it would be sitting on the type
-    that carries account names, which is where the heading tree and therefore the financial
-    data contract live.
+    The concern this addresses is that the join gap might be concentrated in display
+    typography, which is what carries account names, and therefore the heading tree and
+    the financial data contract.
+
+    WHAT THIS DOES NOT DO. It does not classify pairs as headings or as body prose. Font
+    size is a proxy for semantic role and nothing here validates it as one; this project
+    still lacks a trustworthy heading-level oracle, which is item 1 on the list blocking
+    an ADR. A low share of above-modal type reduces the concern. It does not license a
+    sentence about what the text *is*.
 
     The modal size is computed ONCE. The first version of this evaluated
     `Counter(joined).most_common(1)` inside a generator condition, which rebuilt a
@@ -140,9 +154,14 @@ def _pct(vals: list[float]) -> dict:
         "p90": q(0.90),
         "p99": q(0.99),
         "p999": q(0.999),
+        # Bins named for their literal thresholds. The previous version computed against
+        # 5e-5 and labelled the result "at_or_above_contract_precision", which a reader
+        # would take as 1e-4. Both are now reported, separately, and neither name implies
+        # a rounding interpretation the number does not carry.
         "exactly_zero": sum(1 for v in s if v == 0.0),
-        "nonzero_but_below_contract_precision": sum(1 for v in s if 0.0 < v < BELOW_CONTRACT),
-        "at_or_above_contract_precision": sum(1 for v in s if v >= BELOW_CONTRACT),
+        "gt_zero_and_lt_5e_5": sum(1 for v in s if 0.0 < v < ROUND_MAX_ERROR),
+        "ge_5e_5": sum(1 for v in s if v >= ROUND_MAX_ERROR),
+        "ge_1e_4": sum(1 for v in s if v >= QUANT_STEP),
     }
 
 
@@ -175,7 +194,14 @@ def main() -> int:
     pages = list(range(1, args.pages + 1))
     result: dict = {
         "question": "are the engines' RAW advances equal, or only equal after the contract rounds them?",
-        "contract_precision_pt": CONTRACT_PRECISION,
+        "thresholds_pt": {
+            "quantisation_step_1e_4": QUANT_STEP,
+            "round_to_nearest_max_error_5e_5": ROUND_MAX_ERROR,
+            "note": (
+                "a difference below 5e-5 cannot survive round(x, 4); a difference below 1e-4 still can, "
+                "because two values under one step apart can straddle a rounding boundary"
+            ),
+        },
         "documents": [],
     }
     d_adv: dict[str, list[float]] = {"pdfminer": [], "pymupdf": []}
@@ -267,7 +293,17 @@ def main() -> int:
                 absent = [bk for bk in ("pdfminer", "pymupdf") if k not in idx[bk]]
                 unjoined_reason["absent_in_" + "_and_".join(absent)] += 1
                 # N16: is the key merely in a neighbouring bucket? Diagnostic only.
+                #
+                # STRENGTHENED. The first version matched on the two codepoints plus the
+                # FIRST glyph's origin and baseline, and then the prose claimed the
+                # recovered pairs were "the same pairs separated only by a bucket edge".
+                # It had not established that: nothing tied the candidate's SECOND glyph
+                # to the second glyph of the PDFium pair, so a candidate whose first
+                # glyph coincided but whose successor was a different instance of the
+                # same character would have been accepted. Both endpoints are now
+                # constrained, and the tolerances are unchanged.
                 rematched = {}
+                ambiguous = False
                 for bk in ("pdfminer", "pymupdf"):
                     if k in idx[bk]:
                         rematched[bk] = idx[bk][k]
@@ -277,18 +313,22 @@ def main() -> int:
                         for v in by_cps[bk].get((a["cp"], b_["cp"]), ())
                         if abs(v[0]["origin_x"] - a["origin_x"]) <= ORIGIN_TOL
                         and abs(v[0]["baseline"] - a["baseline"]) <= BASELINE_TOL
+                        and abs(v[1]["origin_x"] - b_["origin_x"]) <= ORIGIN_TOL
+                        and abs(v[1]["baseline"] - b_["baseline"]) <= BASELINE_TOL
                     ]
                     if len(hit) == 1:
                         rematched[bk] = hit[0]
+                    elif len(hit) > 1:
+                        ambiguous = True
                 if len(rematched) == 2:
-                    unjoined_reason["RECOVERABLE_by_tolerance_rematch"] += 1
+                    unjoined_reason["RECOVERABLE_by_two_endpoint_rematch"] += 1
                     dec = {"pdfium": RE.wants_space(a["packed"], b_["packed"])}
                     for bk, (ra, rb) in rematched.items():
                         dec[bk] = RE.wants_space(ra["packed"], rb["packed"])
                     rematch_decisions["compared"] += 1
                     rematch_decisions["disagree"] += len(set(dec.values())) != 1
                 else:
-                    unjoined_reason["NOT_recoverable"] += 1
+                    unjoined_reason["AMBIGUOUS_candidate" if ambiguous else "NOT_recoverable"] += 1
                     # 21 in total, so all of them are kept rather than a sample.
                     unjoined_examples.append(
                         {
@@ -376,10 +416,14 @@ def main() -> int:
         "IDENTICAL: every raw advance matches bit for bit"
         if all_zero
         else (
-            f"EQUIVALENT AT THE CONTRACT'S PRECISION, NOT IDENTICAL: raw advances differ by up to "
-            f"{worst:.3e} pt, below the contract's {CONTRACT_PRECISION} pt rounding"
-            if worst < BELOW_CONTRACT
-            else f"DIFFERS AT OR ABOVE CONTRACT PRECISION: up to {worst:.3e} pt -- diagnose before relying on it"
+            f"NOT IDENTICAL, but EQUIVALENT UNDER ROUND-TO-NEAREST at 4 dp: raw advances differ by up to "
+            f"{worst:.3e} pt, which is below the {ROUND_MAX_ERROR} pt maximum error that round(x, 4) "
+            f"can itself introduce"
+            if worst < ROUND_MAX_ERROR
+            else (
+                f"NOT IDENTICAL: raw advances differ by up to {worst:.3e} pt, which is at or above the "
+                f"{ROUND_MAX_ERROR} pt round-to-nearest error bound -- state the threshold explicitly"
+            )
         )
     )
     result["unjoined_population"] = {
@@ -389,16 +433,26 @@ def main() -> int:
         ),
         "by_document": unjoined_by_doc,
         "by_first_codepoint": dict(unjoined_cp.most_common(15)),
-        # If the gap were concentrated above the modal body size it would be sitting on the
-        # display type that carries account names, which is where the heading tree and
-        # therefore the financial data contract live. This is the test of that.
+        # TYPOGRAPHY ONLY. This measures where the unjoined pairs sit in the type-size
+        # distribution. It does NOT classify them as headings or as body prose: font size
+        # is a proxy for semantic role, and this project does not yet have a trustworthy
+        # heading-level oracle to check such a classification against.
         "type_size_profile": _type_size_profile(joined_sizes, unjoined_sizes),
         "by_reason": dict(unjoined_reason),
-        "N16_tolerance_rematch": {
+        "N16_two_endpoint_rematch": {
             "note": "diagnostic only; these are NOT folded into H4's compared count",
-            **dict(rematch_decisions),
+            "rule": (
+                "both codepoints equal, and BOTH glyphs' origin_x within 0.05 pt and baseline within "
+                "0.6 pt of the PDFium pair, with exactly one candidate"
+            ),
+            "unjoined_total": sum(unjoined_by_doc.values()),
+            "uniquely_rematched_in_both_engines": unjoined_reason.get("RECOVERABLE_by_two_endpoint_rematch", 0),
+            "ambiguous_candidate": unjoined_reason.get("AMBIGUOUS_candidate", 0),
+            "unmatched": unjoined_reason.get("NOT_recoverable", 0),
+            "boundary_decisions_compared": rematch_decisions.get("compared", 0),
+            "boundary_disagreements": rematch_decisions.get("disagree", 0),
         },
-        "not_recoverable_examples": unjoined_examples,
+        "unrecovered_examples": unjoined_examples,
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
