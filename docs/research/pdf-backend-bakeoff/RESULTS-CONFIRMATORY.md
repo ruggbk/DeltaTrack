@@ -404,9 +404,58 @@ the reproduction branch is not.** npm publishes no `gitHead` for the version we 
 declared source path has moved, so there is no published mapping from tarball to source
 commit. Vendored third-party in the shipped `.wasm` is zlib, libpng, OpenJPEG and FreeType.
 
+
+---
+
+# P3 — non-corpus robustness and safe failure
+
+Renamed from the exploratory "Tier B", because eleven of its twelve fixtures are published
+GPO Tier A prints and it was never a pre-publication test.
+
+**Gate S-1 — no fixture may land in ANSWERS ANCHORLESS — FAILS.**
+
+| fixture class | outcome (identical on both backends) |
+|---|---|
+| Committee report `CRPT-118srpt198` | **DECLINES** — correct, it is not a bill |
+| Committee print / markup `CPRT-119HPRT63305` | **DECLINES** — correct |
+| 12 real GPO bill prints | **ANSWERS** — correct |
+| Synthetic image-only PDF | **ANSWERS ANCHORLESS** |
+| Synthetic non-GPO producer PDF | **ANSWERS ANCHORLESS** |
+
+Confirmed at the production entry point rather than at a probe's approximation of it: two
+**genuinely different** scanned pages — page 3 and page 21 of one bill, rasterized so no text
+layer survives — compare as **0 changes with an empty summary**. The same two pages with
+their text layers intact correctly yield 3.
+
+The guard catches the unnumbered-but-text-bearing enrolled layout it was written for. It
+does not catch a document with no text layer at all: the pipeline extracts 7 characters,
+finds no anchors, and answers anyway. **A staffer comparing two scanned drafts would be told
+nothing changed.** ADR 0003 flagged image-only draft PDFs as the untested hard case; this
+tests it and finds the failure mode is silent rather than loud.
+
+**It discriminates between no candidates** — pdfium-wasm and pdfminer behave identically — so
+it belongs to the pipeline rather than to the bake-off. It is nonetheless the most actionable
+product finding in this run.
+
 ---
 
 # What this run did not settle
 
 <!-- NOT_SETTLED -->
+
+Named so the next reader does not have to rediscover them.
+
+| Not settled | Why |
+|---|---|
+| **Genuine pre-publication material** — chair's marks, discussion drafts, real committee drafts | Unobtainable without a congressional contact. The closest proxy this run reached is `CPRT-119HPRT63305`, a full-committee markup print, and the pipeline **declines** it |
+| **Conference-report layouts** | No `CRPT` package from 2015 onward carries "conference report" in its title across 800 records; the class is close to extinct. Logged in [`DEVIATIONS.md`](results/DEVIATIONS.md) |
+| **Windows** | Everything here is macOS 15 / arm64 |
+| **PDF.js's true capability** | The operator-list adapter was not built, so its exploratory score belongs to `getTextContent()`, not to the library. It is measured in Concern E only |
+| **Structural accuracy on unseen data** | B2 is void on the holdout: 7 of 44 holdout documents carry any heading at all. The holdout confirms text recovery and is silent on structure |
+| **Structural accuracy against a sound reference** | On P1 the only documents where the backends' heading recovery differs are the ones whose XML reference is known-defective (DeltaTrack#11). Fixing #11, not changing the metric, is what would settle this |
+| **The image-only failure mode's blast radius** | Gate S-1 fails: two different scanned pages compare as "0 changes". This run establishes the failure, not how often staffers would hit it |
+| **A built single-file artifact** | Concern E weighs real component bytes; nobody has written the bundler, so first/repeat load, Pyodide init, peak memory and the JS↔Python transfer volume remain unmeasured |
+| **Reproducible WASM provenance** | npm publishes no `gitHead` for the version we ran and the declared source path has moved, so tarball-to-commit cannot be mapped. The containerized build exists and nobody here has run it |
+| **Human adjudication** | The gold sample is image-adjudicated at best, and its status is recorded in [`results/`](results/) rather than claimed |
+
 <!-- /NOT_SETTLED -->
