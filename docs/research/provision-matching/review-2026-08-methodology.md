@@ -10,7 +10,7 @@ Every claim below was tested against the code and the corpus rather than argued 
 Where a criticism could be decided empirically, a probe decides it, and the probe is committed.
 Failed falsification attempts are reported alongside successful ones.
 
-**How to read this document.** It has three layers and the evolution is deliberately visible.
+**How to read this document.** It has four layers and the evolution is deliberately visible.
 
 - **Round 1** (§"The eleven claims", §A–§E) is the original review. Its text is **unedited**.
   Where round 2 changed a conclusion, the round-1 section carries a **`↪ Round 2`** pointer and
@@ -34,14 +34,27 @@ dominating it is removed (§R2-2). And the round-1 design's suggestion list stil
 establish whether a counterpart exists, which is now demonstrated on the corpus rather than argued
 (§R2-1).
 
-Round 3's, likewise: the anti-circularity guard protected candidate recall and left the other four
+- **Round 4** (§R4) is a fourth adversarial review, targeting rounds 1–3 and specifically asking
+  whether the new oracle and sampling machinery satisfies the rule it was built to enforce. Eleven
+  criticisms. Its central question — *have we built independent ground truth and an independent
+  sampling frame, or only renamed the last dependencies?* — was answered **renamed**, twice.
+
+Round 3's summary: the anti-circularity guard protected candidate recall and left the other four
 metrics consuming the same contaminated truth (§R3-2); `region-exhaustive` was treated as an
 independent oracle when a bounded sweep cannot establish that no counterpart exists anywhere
 (§R3-1); the evaluator identified nodes by their body text, and 33% of real documents contain two
 provisions sharing one body (§R3-4); and the region-sampling design both broke its own sampling
-frame and bought about a dozen independent observations rather than eighty (§R3-3). **Study 2 as
-designed after round 2 could not have produced a valid end-to-end recall or diff-correctness
-number.** It can now, over a smaller and honestly-labeled population.
+frame and bought about a dozen independent observations rather than eighty (§R3-3).
+
+Round 4's: **the sampling frame was still the matcher's output.** `probe_r10` built its anchors from
+`diff_bills` and kept only `removed`/`moved` records, then measured that *those* anchors' regions
+were matcher-independent — a true statement about the wrong population, and every design number
+round 3 reported came from it (§R4-2). Separately, `document-search` granted "the counterpart set is
+complete" on the strength of a reviewer having *searched*, which a reworded counterpart survives
+(§R4-1); and the schema cited a measurement, "R9 §4", **that had never been committed** (§R4-3).
+Correcting the frame changes the picture materially: the real frame is **29,530 anchors in 460
+drawable regions across 12 bills**, not 2,137 in 36 across 4, so the constraint on Study 2 is
+reviewer effort rather than the corpus.
 
 ---
 
@@ -1836,6 +1849,13 @@ same defect as §R3-4, was fixed, and the number did not move.
 
 ## §R3-A. Oracle semantics
 
+> **↪ Round 4 (§R4-1, §R4-8, §R4-A).** Two changes. `document-search` is renamed
+> **`document-exhaustive`** and now grants `complete-in-document` only on *measured review
+> coverage* — the old name licensed "I searched and found nothing", which a transformed counterpart
+> survives. And a fourth proposition, **`affirmed-negative`**, is added: a pairwise false-keep
+> ruling is complete at one comparison and should not be charged for a ~161-adjudication document
+> sweep it does not need.
+
 | oracle | establishes | does NOT establish | metrics it may feed |
 |---|---|---|---|
 | `suggested-list` | `affirmed-positive` — this node is a counterpart | anything about counterparts not shown | ranking only |
@@ -1875,6 +1895,13 @@ competitor make a wrong assignment look right.
 
 ## §R3-C. Frozen sampling design
 
+> **↪ Round 4 (§R4-2, §R4-B).** The frame below was frozen in prose while `probe_r10` measured a
+> different, matcher-selected population, and the numbers that justified the design came from the
+> probe. `study2_frame.py` is now the single executable definition and nothing else may define an
+> anchor. The corrected frame is 13.8× larger and spans 12 bills, so the cluster-count ceiling this
+> section reasoned from does not exist. Step 1's "≥10 anchors" floor and the region/anchor
+> ambiguity (§R4-6) are resolved there.
+
 **Estimand.** None. Study 2 is a **development and challenge dataset**, not a population-estimation
 study (§R3-3). Every metric it produces is a statement about the sampled units, reported with its
 selection rule, and never extrapolated to "the operational rate".
@@ -1909,6 +1936,15 @@ per-region numbers and no aggregate.
 ---
 
 ## §R3-D. Node identity
+
+> **↪ Round 4 (§R4-3, §R4-4, §R4-C).** The direction was right and both halves of the execution
+> were wrong. The claim that `element_id` is unique cited **R9 §4, a section that did not exist** —
+> the measurement was run in a shell and never committed. It is committed now, and element_id does
+> hold (0 empty, 0 duplicates over 73,296 nodes). It is still not the key: identity is
+> `(source_sha256, parser_commit, **node_ordinal**)`, because uniqueness by construction beats an
+> empirical regularity of GPO markup, and `parser_commit` already makes cross-parser stability
+> irrelevant. The v2 validator also compared only `text_sha256`, so two distinct provisions sharing
+> a body — the boilerplate case — collided undetected.
 
 Three separate things, kept separate (full rationale in §R3-4):
 
@@ -2011,4 +2047,521 @@ call rather than an implementation task.
    re-scoped to the challenge strata only and the population question deferred to a corpus that can
    support it. The analysis says the dataset is worth building as a dev/challenge set; whether it is
    worth *this much labeling effort* is a product call.
+5. **Applying §E's documentation corrections**, still proposed and not applied.
+
+---
+---
+
+# §R4 — Fourth adversarial review (round 4)
+
+**Target: rounds 1–3, and specifically whether the new machinery obeys its own rule.** Eleven
+criticisms. Seven hold as stated, two in part, one is rejected, one is preserved-as-asked. The
+review's framing question was:
+
+> Have we actually built independent ground truth and an independent sampling frame, or have we only
+> renamed the final remaining dependencies?
+
+**Renamed, twice.** The sampling frame was still `diff_bills` output (§R4-2). The strongest oracle
+still granted completeness for *searching* rather than for *covering* (§R4-1). Each had been
+described in the review as independent, and each description was true of something other than what
+the code did.
+
+A third finding is about this document rather than the design: the schema cited **"R9 §4"** as
+evidence for a load-bearing invariant, and that section had never been written (§R4-3). The
+measurement had been run in a shell during round 3 and never committed. This programme has now
+caught the same defect four times — `paper.md`'s unreproducible Appendix A, round 1's un-probed
+"all five versions", round 3's uncommitted §4, and round 3's prose/code divergence on the frame.
+The pattern is not carelessness about any one claim; it is that **prose and code were never forced
+to agree**, so a citation could name a reproducer that did not exist and nothing turned red.
+
+| # | criticism | verdict | what changed |
+|---|---|---|---|
+| 1 | `document-search` ≠ `complete-in-document` | **CONFIRMED** | renamed `document-exhaustive`; completeness granted on a measured count |
+| 2 | `probe_r10`'s frame is matcher-selected | **CONFIRMED** | `study2_frame.py` is now the only definition; frame is 13.8× larger |
+| 3 | `element_id` uniqueness cited but not measured | **CONFIRMED** | R9 §4 written; element_id holds, and is demoted anyway |
+| 4 | the validator misses same-identity same-text collisions | **CONFIRMED** | compares every attribute; identity moves to `node_ordinal` |
+| 5 | n_eff/±28 is sensitivity, not measured precision | **CONFIRMED**, and worse | proxies span ICC 0.058–0.700; reframed |
+| 6 | "every anchor" vs "8 × 10" is ambiguous | **CONFIRMED** | `draw_study2_sample` makes both explicit |
+| 7 | schema docstring contradicts schema v2 | **CONFIRMED** | rewritten as one authoritative v3 description |
+| 8 | `affirmed-negative` is missing | **CONFIRMED** | added; pairwise challenges no longer buy completeness |
+| 9 | re-decide the study shape on the corrected frame | **PARTLY CONFIRMED** | re-run; conclusion changes (§R4-G) |
+| 10 | preserve what round 3 fixed | **ACCEPTED** | nothing reopened |
+| 11 | annotation blockers stand | **ACCEPTED** | §R4-H |
+
+---
+
+## §R4-1. `document-search` did not establish `complete-in-document`
+
+**Verdict: CONFIRMED.**
+
+**Falsification attempted.** The criticism offers a way out: if the workflow already required
+reviewing *every* provision in the target document, with search merely reordering the queue, then
+the oracle was sound and only its name was wrong. Reading the artifacts, it did not. The schema
+described it as *"the human searched the whole new version by their own means (text search, table of
+contents)"* and *"reserved for anchors where region-exhaustive returned none and the reviewer
+suspects a cross-region move"*. That is workflow **A** in the criticism's terms — arbitrary queries
+until satisfied — and nothing in the schema, the evaluator or the protocol constrained it further.
+
+**Why it matters.** A counterpart whose header changed, whose wording was rewritten, and which moved
+to an unexpected title survives every query the reviewer did not think to type. The record then
+claims the counterpart set is complete, candidate recall drops the anchor from its denominator, and
+diff correctness certifies the matcher's `removed`. This is the same circularity one layer out: the
+*reviewer's search vocabulary* takes over the role the retrievers had.
+
+**Action — the completeness contract is now a count, not a promise.** The oracle is renamed
+**`document-exhaustive`** and `truth.coverage` is mandatory:
+
+```
+truth.coverage = {"rule": "all-nodes-with-body", "eligible_total": 161, "reviewed": 161}
+```
+
+`complete-in-document` is granted **only when `reviewed >= eligible_total`**. Retrieval, search and
+structural navigation may order the queue; they may not end it. `rule` must come from
+`COVERAGE_RULES`, an allowlist of measure-independent rules — a rule that consulted containment
+would let a system under evaluation set the denominator of its own completeness claim, which is the
+defect one layer further out again.
+
+A reviewer who stops early does not produce a defective record. They produce a record that claims
+less, and the evaluator refuses it for the metrics that need more.
+
+**Test.** `a16-incomplete-document-sweep` names `document-exhaustive` with coverage 40/161 and is
+refused by all three completeness metrics; completing the sweep admits it and raises
+`diff_correctness.n` from 11 to 12. Both directions are pinned.
+
+**The cost this exposes, which drives §R4-G.** `probe_r10` §4: a target version holds a **median of
+161** provisions. One document-complete record therefore costs ~161 adjudications. That is the real
+constraint on Study 2, and it was invisible while the oracle could be satisfied by searching.
+
+---
+
+## §R4-2. The sampling frame was still the matcher's output
+
+**Verdict: CONFIRMED. This is the most consequential finding of the round.**
+
+**Falsification attempted, and it failed at line 97.** `probe_r10_sampling_design.py`:
+
+```python
+d = diff_bills(told, tnew)
+...
+if c.change_type not in ("removed", "moved") or not c.old_text:
+    continue
+```
+
+Round 3 wrote: *"every anchor IS a node of the old version, so its region is read off the same parse
+that produced the anchor"*. True — of the anchors the matcher had already selected. The probe
+measured that the **region** was matcher-independent and reported it as evidence that the
+**population** was.
+
+**Consequence.** Every design number round 3 published came from a matcher-conditioned sample:
+2,137 anchors, 147 regions, 36 drawable, 4 bills, ICC 0.27–0.29, n_eff 12.2, ±28 points — and the
+decision to downgrade Study 2 rested on the last two.
+
+**The corrected frame**, from `study2_frame.py`, which does not import `diff_bill` at all:
+
+| | matcher-conditioned (round 3) | canonical frame (round 4) |
+|---|---:|---:|
+| eligible anchors | 2,137 | **29,530** |
+| old-side regions | 147 | **1,029** |
+| drawable regions (≥10 anchors) | 36 | **460** |
+| bills with a drawable region | 4 | **12** |
+| median drawable region size | — | 34 |
+
+**Answering the criticism's question directly — what IS the anchor population?** Option **A**: every
+eligible provision in the old version. Eligibility is two structural predicates and nothing else —
+non-empty body text, non-empty structural path — and both are read from the parse. No diff, no
+matcher, no similarity measure, no retrieval.
+
+That population deliberately includes provisions the matcher handles perfectly. Those are not wasted
+labels: a correspondence dataset containing only cases the matcher already flagged cannot measure
+whether it is right about the ordinary ones, and *"the matcher says this is unchanged"* is a claim
+that can be wrong.
+
+**Action — one canonical implementation.** `probes/study2_frame.py` exposes
+`enumerate_study2_anchors`, `enumerate_study2_regions` and `draw_study2_sample`; `probe_r10` now
+consumes it; and `tests/test_research_probes.py` plus the contract suite assert **statically** that
+it never imports `diff_bill`. The deeper fix is that the frame is now code that three consumers
+share, rather than a concept each was free to re-invent.
+
+---
+
+## §R4-3. The `element_id` invariant was cited, not measured
+
+**Verdict: CONFIRMED, and the citation was to a section that did not exist.**
+
+`pass2_schema.py` asserted element_id was *"unique and non-empty on all 106 documents (R9 §4)"*.
+`probe_r9_node_identity.py` had three sections and no mention of `element_id`. The check was run in
+a shell during round 3 and never committed.
+
+**Measured now** (R9 §4, committed):
+
+```
+documents checked                                 : 106
+nodes checked                                     : 73296
+nodes with an empty element_id                    : 0
+documents with a duplicated element_id            : 0
+maximum element_id multiplicity                   : 1
+```
+
+So the claim was **true**. That is exactly why the defect is worth recording: an unreproducible
+citation that happens to be correct is indistinguishable, to every later reader, from one that is
+not — and this document's own standard is that empirical claims carry reproducers.
+
+---
+
+## §R4-4. The validator could not see the collision that matters
+
+**Verdict: CONFIRMED, and the proposed identity change is adopted.**
+
+**Falsification attempted — the criticism's counterexample was constructed and run.** v2's validator
+grouped refs by observation id and flagged an id mapping to more than one `text_sha256`. Give two
+*distinct* provisions the same identity and the same body — the boilerplate case, present in 33% of
+documents — and there is no conflicting hash to find. Measured on a deliberately corrupted fixture:
+
+```
+v2 text-only validator would flag: 0 collisions
+v3 validator: REJECTED -> observation id collision: ...
+```
+
+**Identity changed to `node_ordinal`**, per the criticism's reasoning, which survives scrutiny: the
+key already carries `parser_commit`, so cross-parser stability was never required, and a changed
+parser must re-quarantine the observation anyway (round 2's drift finding) — which a shifted ordinal
+forces. Uniqueness by construction beats an empirical regularity of GPO markup, especially for a
+study whose purpose is legislation the corpus has not seen. `element_id` is retained as a recorded
+attribute for traceability and is asserted, by test, **not** to affect any join.
+
+The validator now compares every recorded attribute (`text_sha256`, `match_path`, `element_id`)
+across a shared identity, so a generator that assigns one ordinal to two nodes is caught whenever
+those nodes differ in any recorded way.
+
+---
+
+## §R4-5. n_eff and ±28 were a sensitivity calculation
+
+**Verdict: CONFIRMED — and the corrected frame makes the point far more sharply than the criticism
+did.**
+
+**Falsification attempted.** Is there a reason either proxy bounds the true-label ICC? No. Both
+round-3 proxies were matcher- or measure-derived, and neither has any argued relationship to the
+clustering of human correspondence judgments. The tight range they produced (0.271–0.291) read as
+precision and was really two views of one quantity on one selected population.
+
+**Evidence, on the corrected frame.** `probe_r10` §2 now reports three proxies, two of them purely
+structural:
+
+| proxy | prevalence | region-level ICC |
+|---|---:|---:|
+| A structural: duplicated body | 2.9% | **0.118** |
+| B structural: above-median length | 49.9% | **0.058** |
+| C matcher: in the hard neighbourhood | 7.2% | **0.700** |
+
+**A twelve-fold spread.** The proxies disagree so strongly that no single one of them can stand in
+for the unknown outcome, which is the criticism's point made in data rather than in principle.
+
+**Adopted framing**, in the probe and here:
+
+> Proxy outcomes show clustering ranging from weak (ICC 0.058) to very strong (0.700) depending on
+> which proxy is chosen. Under those bounds an 8-region × 10-anchor design behaves like anywhere
+> between 11 and 53 independent observations, i.e. a worst-case half-width between ±14 and ±30
+> points. This is a design **sensitivity** calculation, not the measured precision of an unlabeled
+> outcome.
+
+**The main conclusion survives and does not depend on the exact ICC**: this corpus and this labeling
+budget cannot credibly estimate an operational error rate. Neither end of the range makes it
+possible.
+
+---
+
+## §R4-6. "Every anchor" vs "8 × 10" was two designs
+
+**Verdict: CONFIRMED.** §R3-C said *"take every anchor in a drawn region"*; the cost table priced
+*"8 regions × 10 anchors"*. With a median drawable region of 34 anchors those are different designs
+with different inclusion probabilities, and prose cannot arbitrate between them.
+
+**Action.** `draw_study2_sample(n_regions, seed, anchors_per_region)` makes both explicit and
+records which was used. `anchors_per_region=None` takes every anchor; an integer draws uniformly
+without replacement within the region. Either way the per-anchor inclusion probability
+`P(region) × P(within region)` is computed and persisted, along with the seed, the corpus manifest
+digest, the selected region keys and the selected anchor identities. Regions are drawn without
+replacement and stratified round-robin across bills, so one bill cannot supply the sample.
+
+**The algorithm is frozen in this PR; the study's draw is not performed.** A demonstration draw runs
+in `__main__` and in tests, to prove the algorithm reproduces under a fixed seed.
+
+---
+
+## §R4-7. The schema docstring still described v1
+
+**Verdict: CONFIRMED, and this is the failure mode the programme itself named.**
+
+The live `pass2_schema.py` still said `suggested-list` was *"sufficient for ranking, assignment, and
+diff correctness"* — while its own executable rules refused it for two of those — and described
+document search as discretionary while the rules made escalation systematic. It also referenced
+`truth.oracle`, a field v2 had replaced with `truth.oracles`.
+
+Round 2's §R2-6 finding was that stale explanatory prose preserves a superseded methodology after
+the implementation changes. Round 3 shipped exactly that defect inside the new contract.
+
+**Action.** The docstring is rewritten as a single authoritative description of v3 and nothing else,
+with an explicit note that history belongs in this document rather than in the module.
+
+---
+
+## §R4-8. `affirmed-negative` was a real missing concept
+
+**Verdict: CONFIRMED.**
+
+**Falsification attempted.** Could the existing representation express it? A pairwise DIFFERENT
+ruling could only be recorded by *omitting* the node from `counterparts`, which is indistinguishable
+from never having seen it — the same conflation as "not retrieved" vs "does not exist", now on the
+negative side. And `challenge_requires` accepted only `affirmed-positive` or `complete-in-document`,
+so a stratum claiming *"this high-containment pair is actually DIFFERENT"* had to declare
+`complete-in-document` and buy a ~161-adjudication document sweep for a judgment that is complete at
+one comparison.
+
+**Action.** Fourth proposition `affirmed-negative`, granted by every oracle under per-candidate
+binary judgment; `truth.rejected` records the nodes a human looked at and ruled DIFFERENT;
+`challenge_requires` accepts it; and the challenge metric branches on the stratum's declared claim
+rather than applying the completeness test to everything.
+
+Two useful side effects. Candidate-recall misses can now be split into *"the retriever never showed
+it"* and *"the retriever showed it and the human ruled it out"*. And a stratum may not mix
+requirements — a validator rule added after the v3 fixture exposed that a single reported rate would
+otherwise pool two different propositions.
+
+| challenge claim | needs |
+|---|---|
+| "this high-containment pair is actually DIFFERENT" | `affirmed-negative` |
+| "the matcher failed to retrieve the true counterpart" | `affirmed-positive` (+ completeness for a rate) |
+| "there is no counterpart anywhere" | `complete-in-document` |
+
+---
+
+## §R4-9. Re-deciding the study shape on the corrected frame
+
+**Verdict: PARTLY CONFIRMED. The premise was right, the expected direction was not.**
+
+The criticism says: do not choose between a general dev sample and challenge-only using numbers
+generated from matcher-selected anchors. Correct, and round 3 did exactly that.
+
+**Falsification attempted on the conclusion itself.** Round 3 downgraded Study 2 partly because
+*"only 36 regions hold ≥10 anchors and they sit in 4 bills"*. On the real frame that is **460 regions
+across 12 bills**. The corpus constraint round 3 reasoned from does not exist.
+
+**But the decision does not flip**, because §R4-1 replaced it with a harder one: every metric except
+ranking needs `complete-in-document`, and that now costs a median of **161 adjudications per
+anchor**. Cluster count is free; reviewer effort is not.
+
+| | measured |
+|---|---|
+| region sweep (median drawable region) | ~34 adjudications |
+| document sweep (median target version) | ~161 adjudications |
+| eligible anchors / drawable regions / bills | 29,530 / 460 / 12 |
+
+**What the general sample adds that the challenge strata cannot** — the criticism's decisive
+question. Challenge strata are selected for being hard, so they can only ever answer "does this
+failure mode occur, and how badly". They structurally cannot answer *"does the matcher get ordinary
+correspondences right, and does a change break any of them"*. That is regression coverage, it is the
+thing every future change to the measure needs, and it is cheap: it needs only `affirmed-positive`,
+so a region sweep suffices and no document escalation is required.
+
+**Recommendation: Option 3, a three-tier design** (§R4-G), because the cost structure is no longer
+uniform across the metrics and a single-tier design has to price everything at the most expensive
+oracle.
+
+---
+
+## §R4-10 / 11. Preserved, and still open
+
+Nothing from round 3 was reopened: metric-specific truth requirements, systematic escalation for
+negatives, rejection of suggestion-list negatives for completeness metrics, rejection of
+`text_sha256` as identity, the duplicate-body prevalence result, the cluster-aware downgrade of
+rate-parity significance, the descriptive-only same-bill effect, drift-vs-label-validity, IDF
+robustness on the nine resolving observations, the financial-miner and consolidation-miner
+circularity results, the corpus manifest and probe guards, and the withdrawal of the
+population-estimation claim. Round 4's changes extend these rather than revisiting them.
+
+The existing annotation blockers stand unchanged and are re-listed in §R4-H.
+
+---
+
+## §R4-A. Oracle completeness contract
+
+What a human must have done before a record may receive `complete-in-document`:
+
+1. The queue was **every provision in the target version** admitted by a declared `coverage.rule`
+   from `COVERAGE_RULES` — an allowlist whose members consult only the parse, never a similarity
+   measure or a ranking.
+2. The reviewer **adjudicated every item in that queue** — accept or reject — and the counts are
+   recorded: `coverage.reviewed` and `coverage.eligible_total`.
+3. `establishes(truth, "complete-in-document")` returns true only when `reviewed >= eligible_total`.
+
+Retrieval, text search and structural navigation may set the **order** of the queue. They may not
+set its **end**. That single sentence is the round-4 contract, and the count is what makes it
+enforceable rather than aspirational.
+
+| | region-exhaustive | document-exhaustive |
+|---|---|---|
+| coverage | one named region | whole target version, under a declared rule |
+| grants | `complete-within-region` | `complete-in-document`, **iff reviewed ≥ eligible_total** |
+| measured cost | ~34 adjudications | ~161 adjudications |
+
+---
+
+## §R4-B. Canonical Study 2 sampling implementation
+
+`probes/study2_frame.py` is authoritative for all four questions, and nothing else may answer them:
+
+| question | function | matcher-independent? |
+|---|---|---|
+| anchor eligibility | `enumerate_study2_anchors` | **yes** — non-empty body, non-empty path; asserted by static import test |
+| region construction | `enumerate_study2_regions` | yes — top-level unit of the old parse |
+| region draw | `draw_study2_sample` | yes — seeded, without replacement, stratified by bill |
+| within-region selection | `draw_study2_sample(anchors_per_region=…)` | yes — uniform, or take all |
+
+Anchor eligibility is **matcher-independent**, not "intentionally matcher-conditioned": the frame
+contains provisions the matcher never flagged, by design.
+
+---
+
+## §R4-C. Observation identity experiment
+
+Measured over the whole corpus (R9 §4): 106 documents, 73,296 nodes, **0** empty `element_id`, **0**
+duplicate `element_id` within a document. The invariant holds — and identity is
+`(source_sha256, parser_commit, node_ordinal)` regardless, because ordinal uniqueness is by
+construction rather than by observation, and `parser_commit` already scopes the key to one parse so
+cross-parser instability is not a defect. `element_id` is recorded, and a test asserts changing it
+does not change any join.
+
+---
+
+## §R4-D. Capability model (v3, exhaustive)
+
+| proposition | granted by | needs per-candidate binary |
+|---|---|---|
+| `affirmed-positive` | all three oracles | yes |
+| `affirmed-negative` | all three oracles | yes |
+| `complete-within-region` | `region-exhaustive`, `document-exhaustive` | yes |
+| `complete-in-document` | `document-exhaustive` **and** complete measured coverage | yes |
+
+Under `forced-choice` the table collapses to nothing: "the best of these eight" is a claim about the
+candidate set, not the legislation.
+
+---
+
+## §R4-E. Contract fixture
+
+17 records. Rounds 1–3 shapes plus round 4's two: `a16-incomplete-document-sweep` (searched, not
+covered) and `a17-pairwise-false-keep` (a pairwise DIFFERENT ruling under a suggestion-list oracle,
+`relation: uncertain` because the counterpart set genuinely is). The duplicate-identity case is
+constructed in a test rather than committed, because it must fail validation.
+
+Every guard is tested by removal: restoring the content-hash join improves three metrics; admitting
+the three bounded-search negatives raises diff correctness from 6/11 to 9/14; completing a16's sweep
+admits it; a forced-choice dataset produces zero admissible records for every metric.
+
+---
+
+## §R4-F. Revised sampling analysis
+
+Run against the canonical frame, with the three categories kept apart:
+
+- **Measured**: 29,530 anchors; 1,029 regions; 460 drawable; 12 bills; median drawable region 34;
+  median target version 161 provisions; proxy ICCs 0.058 / 0.118 / 0.700.
+- **Sensitivity (assumed)**: n_eff and interval widths, which depend on an outcome ICC nobody has
+  measured and which the proxies bracket only loosely.
+- **Product choice**: the tier structure in §R4-G.
+
+---
+
+## §R4-G. Revised Study 2 recommendation — Option 3, three tiers
+
+The cost structure is no longer uniform across the metrics, so a single-tier design has to price
+every anchor at the most expensive oracle. Three tiers instead:
+
+| tier | oracle | supports | scale | cost |
+|---|---|---|---|---|
+| **A — regression** | region-exhaustive | ranking (top-1, MRR) | 20–30 regions × 10 anchors, 8–12 bills | ~34 adj./region, amortised across its anchors |
+| **B — diagnostic** | document-exhaustive | candidate recall, assignment, diff correctness | **tens** of anchors, concentrated in few version pairs | ~161 adj. each, amortised when anchors share a target version |
+| **C — challenge** | suggested-list + `affirmed-negative` | failure-mode rates | existing pools | one comparison each |
+
+Tier A is the general development sample and is cheap because ranking needs only
+`affirmed-positive`. Tier B is where the expensive truth lives and is deliberately small; its
+numbers are **diagnostic**, never operational rates. Tier C becomes affordable for the first time
+because §R4-8 stopped charging pairwise claims for document completeness.
+
+Concentrating tier B within a few version pairs amortises the document sweep — a reviewer reads the
+target document once and judges several anchors against it — which trades cluster diversity for
+depth. That trade is a real one and is the main open judgment call.
+
+**Study 2 still does not estimate operational prevalence**, on any tier.
+
+---
+
+## §R4-H. Blocker table
+
+**1 — required to merge this methodology review**
+
+| item | state |
+|---|---|
+| Commit the element_id measurement the schema cites (§R4-3) | **done** — R9 §4 |
+| Rewrite the schema docstring to describe v3 only (§R4-7) | **done** |
+| Reframe n_eff/±28 as sensitivity, with the proxy spread shown (§R4-5) | **done** — `probe_r10` §2–3 |
+| Correct round 3's frame numbers wherever cited (§R4-2) | **done** |
+
+**2 — required before ANY human annotation**
+
+| item | state |
+|---|---|
+| Completeness granted on measured coverage (§R4-1) | **done** — schema v3 |
+| Canonical matcher-free frame, one implementation (§R4-2, §R4-B) | **done** — `study2_frame.py` + static gate |
+| Identity on `node_ordinal`; validator compares all attributes (§R4-3, §R4-4) | **done** — schema v3 |
+| `affirmed-negative` and `truth.rejected` (§R4-8) | **done** — schema v3 |
+| Sampling algorithm unambiguous and reproducible (§R4-6) | **done** — `draw_study2_sample`; **draw not performed** |
+| Adjudicate the three drifted observations | **OPEN — packet ready, deliberately not adjudicated** |
+| Add provenance to the answer key (`text_sha256`, `source_sha256`, `node_ordinal`) | **OPEN — Will's call** |
+| Re-mine the financial stratum without signal-conditioned discovery | **OPEN — not started** |
+| Apply the Study 1 premise corrections to `paper.md` / `pass2-protocol.md` | **OPEN — proposed, not applied** |
+| Choose the tier-A/B/C scale and run the draw (§R4-G) | **OPEN — Will's call** |
+
+**3 — required before held-out evaluation**
+
+| item | state |
+|---|---|
+| Held-out split at the **region** level, drawn from the canonical frame | not started |
+| `challenge_requires` declared for every existing challenge pool | not started |
+| Reporting layer: cluster-aware intervals, per-stratum breakdowns, kappa | not started |
+
+**4 — deferred future research**
+
+Theory rewrite around the overlap coefficient; directional-variant benchmark; whether to adopt
+structural confirmers; re-running the frozen IDF ablation after re-adjudication (variants frozen,
+**do not re-tune**).
+
+**Human labeling remains gated**: five open items in tier 2, all of them judgment calls.
+
+---
+
+## §R4 — probes added and changed
+
+| probe | decides | headline output |
+|---|---|---|
+| `study2_frame.py` *(new)* | §R4-2, §R4-6 | 29,530 anchors / 1,029 regions / 460 drawable / 12 bills; seeded reproducible draw |
+| `probe_r9_node_identity.py` *(§4 added)* | §R4-3 | 73,296 nodes, 0 empty and 0 duplicate element_id; ordinal chosen anyway |
+| `probe_r10_sampling_design.py` *(rewritten)* | §R4-2, §R4-5, §R4-9 | proxy ICC 0.058–0.700; document sweep ~161 adjudications |
+| `pass2_schema.py` *(v3)* | §R4-1, §R4-4, §R4-7, §R4-8 | coverage-gated completeness; ordinal identity; `affirmed-negative` |
+| `eval_pass2.py` *(changed)* | §R4-1, §R4-8 | per-claim challenge test; uncertain records reach pairwise strata |
+| `make_readjudication_packet.py` *(changed)* | §R4-4 | `node_ordinal` recorded in the sealed provenance |
+
+---
+
+## §R4 — what still requires human judgment
+
+1. **The three drifted observations.** Unchanged since round 2: packet ready, not adjudicated.
+2. **Provenance fields on `tests/data/similarity_labels.json`.** Now `text_sha256`,
+   `source_sha256`, `node_ordinal`. Still a committed-fixture rewrite.
+3. **Tier scale, and the tier-B concentration trade.** How many regions in tier A; how many
+   document-complete anchors in tier B; and whether to concentrate them in few version pairs to
+   amortise the sweep, at the cost of cluster diversity.
+4. **Whether tier B is worth ~161 adjudications per anchor at all**, or whether candidate recall and
+   diff correctness should wait for a cheaper oracle or a larger budget.
 5. **Applying §E's documentation corrections**, still proposed and not applied.

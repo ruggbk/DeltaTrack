@@ -111,6 +111,19 @@ def at_path(bill: str, version: str, match_path: list[str]) -> list:
     return [n for n in tree(bill, version).nodes if tuple(n.match_path) == mp]
 
 
+def ordinal_of(bill: str, version: str, node) -> int:
+    """The node's index in its parse -- the observation identity under schema v3.
+
+    Identity by object position, not by any content attribute: two provisions in one version may
+    legitimately share body text (33% of documents in this corpus contain such a pair), so a
+    ruling that attached to the text rather than to the node could attach to the wrong provision.
+    """
+    for i, n in enumerate(tree(bill, version).nodes):
+        if n is node:
+            return i
+    raise LookupError(f"node not found in {bill}/{version}")
+
+
 def render_node(n, index: int, total: int) -> str:
     tag = f"OPTION {index} of {total}" if total > 1 else "THE OLD-VERSION PROVISION"
     head = n.header_text or "(no header)"
@@ -241,6 +254,10 @@ def main() -> None:
                     "parser_commit": head,
                     "source_sha256_old": source_sha(bill, vo),
                     "source_sha256_new": source_sha(bill, vn),
+                    # `node_ordinal` is the observation identity (schema v3); `element_id` is
+                    # recorded alongside it for traceability only. Both are needed here because a
+                    # re-adjudicated ruling has to attach to one specific parsed node, and two
+                    # provisions in a version may legitimately share body text.
                     "old_side_options": [
                         {
                             "index": j,
@@ -248,6 +265,7 @@ def main() -> None:
                             "display_path": list(n.display_path),
                             "header_text": n.header_text,
                             "length": len(n.body_text),
+                            "node_ordinal": ordinal_of(bill, vo, n),
                             "element_id": n.element_id,
                             "text_sha256": sha(n.body_text),
                         }
@@ -259,6 +277,8 @@ def main() -> None:
                             "display_path": list(new_hits[0].display_path),
                             "header_text": new_hits[0].header_text,
                             "length": len(new_hits[0].body_text),
+                            "node_ordinal": ordinal_of(bill, vn, new_hits[0]),
+                            "element_id": new_hits[0].element_id,
                             "text_sha256": sha(new_hits[0].body_text),
                         }
                         if new_hits

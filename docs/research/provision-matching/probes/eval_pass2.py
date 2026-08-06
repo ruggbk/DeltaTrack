@@ -80,12 +80,15 @@ def _key(ref: dict) -> tuple:
 
 
 def _admits(rec: dict, metric: str) -> bool:
-    """Can this record's truth support the proposition `metric` assumes?"""
+    """Can this record's truth support the proposition `metric` assumes?
+
+    `establishes` takes the whole truth block in v3, because `complete-in-document` now depends on
+    measured review coverage rather than only on which oracle steps ran.
+    """
     need = METRIC_TRUTH_REQUIREMENTS[metric]["requires"]
     if need == "per-stratum":
         need = rec.get("challenge_requires", "affirmed-positive")
-    truth = rec["truth"]
-    return establishes(truth["oracles"], truth["judgment_mode"], need)
+    return establishes(rec["truth"], need)
 
 
 def _partition(records: list[dict], metric: str) -> tuple[list[dict], list[dict]]:
@@ -235,6 +238,23 @@ def diff_correctness(records: list[dict]) -> dict:
     }
 
 
+def _mode_occurred(rec: dict) -> bool:
+    """Did the failure this stratum claims actually happen, for this record?
+
+    The test depends on what the stratum is claiming, which is why `challenge_requires` is data.
+    v2 applied one test to every stratum -- "does the system's assignment differ from truth's
+    counterpart set" -- which is only correct for the completeness strata, and which silently
+    required document-wide truth for a claim that is purely pairwise.
+    """
+    sys_set = {_key(a) for a in rec["system"]["assigned"]}
+    if rec.get("challenge_requires") == "affirmed-negative":
+        # "the matcher kept a pair a human ruled DIFFERENT". Purely pairwise: it needs the rejected
+        # node and the system's output, and nothing about where the anchor's real counterpart is.
+        rejected = {_key(x) for x in rec["truth"].get("rejected", [])}
+        return bool(sys_set & rejected)
+    return {_key(cp) for cp in rec["truth"]["counterparts"]} != sys_set
+
+
 def failure_modes(records: list[dict]) -> dict:
     """Target 5. Challenge strata only. A RATE within a rigged population, never a precision."""
     out: dict[str, dict] = {}
@@ -248,9 +268,7 @@ def failure_modes(records: list[dict]) -> dict:
             continue
         b = out.setdefault(stratum, {"n": 0, "mode_occurred": 0, "requires": r.get("challenge_requires")})
         b["n"] += 1
-        truth_set = {_key(cp) for cp in r["truth"]["counterparts"]}
-        sys_set = {_key(a) for a in r["system"]["assigned"]}
-        b["mode_occurred"] += truth_set != sys_set
+        b["mode_occurred"] += _mode_occurred(r)
     for b in out.values():
         b["rate"] = _rate(b["mode_occurred"], b["n"])
         b["NOT_a_precision"] = "base rate is rigged by construction (protocol §7)"
@@ -273,7 +291,13 @@ def evaluate(records: list[dict]) -> dict:
         "ranking": ranking(scored),
         "assignment": assignment(scored),
         "diff_correctness": diff_correctness(scored),
-        "failure_modes": failure_modes(scored),
+        # v3: challenge records see EVERY record, `uncertain` included. The blanket exclusion was
+        # right for the four metrics that need to know the anchor's counterpart set and wrong here:
+        # a pairwise false-keep claim ("this proposed pair is not the same provision") has a
+        # definite answer even when nobody has established where the anchor's real counterpart is.
+        # Forcing `relation` to something other than `uncertain` in order to be scored would have
+        # made the labeler assert a counterpart set they never determined.
+        "failure_modes": failure_modes(records),
     }
 
 

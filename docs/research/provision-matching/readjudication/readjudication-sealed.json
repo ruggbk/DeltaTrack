@@ -27,7 +27,7 @@
       },
       "current_observation": {
         "note": "What the pipeline produces today from the same source bytes. Awaiting a ruling; it carries no label and must not inherit the historical one.",
-        "parser_commit": "95fc41258bf951c01a637cd647a70ae09af20ec1",
+        "parser_commit": "55cec02ba6bfe50c94e2a5285f47e6c9374b3048",
         "source_sha256_old": "1ffb81c413c007f999df117c9509d976c76cbe0c55f63d43dad920d7fe5bf772",
         "source_sha256_new": "4be06372badb910c815956bdf89f900e6de77279457c0d1559605a820125d358",
         "old_side_options": [
@@ -46,6 +46,7 @@
             ],
             "header_text": "",
             "length": 563,
+            "node_ordinal": 34,
             "element_id": "idB9E2164FCD204CBEA5E9867D044BAEA1",
             "text_sha256": "010dce57c9af83a70f94bb2a3efd299fec840ff43a80d5aa3697838feb9fdebe"
           }
@@ -64,6 +65,8 @@
           ],
           "header_text": "",
           "length": 229,
+          "node_ordinal": 30,
+          "element_id": "H9E619E8D514E47D4852C57453F08F0BA",
           "text_sha256": "e43d6721dd4ef9be037e82d2158ece62c8d6d3b553e349cf7def75c68dc6c000"
         }
       }
@@ -94,7 +97,7 @@
       },
       "current_observation": {
         "note": "What the pipeline produces today from the same source bytes. Awaiting a ruling; it carries no label and must not inherit the historical one.",
-        "parser_commit": "95fc41258bf951c01a637cd647a70ae09af20ec1",
+        "parser_commit": "55cec02ba6bfe50c94e2a5285f47e6c9374b3048",
         "source_sha256_old": "1ffb81c413c007f999df117c9509d976c76cbe0c55f63d43dad920d7fe5bf772",
         "source_sha256_new": "4be06372badb910c815956bdf89f900e6de77279457c0d1559605a820125d358",
         "old_side_options": [
@@ -113,6 +116,7 @@
             ],
             "header_text": "",
             "length": 766,
+            "node_ordinal": 431,
             "element_id": "id2561D9CF1BB84C72AE9EF14E9B3A23BB",
             "text_sha256": "84c53deaef53236db179fa6bef66d8439e780ba429018448a181ee580dbbe2a9"
           }
@@ -131,6 +135,8 @@
           ],
           "header_text": "",
           "length": 502,
+          "node_ordinal": 425,
+          "element_id": "HE69D0E10C00E47BE9C16C01414432A7A",
           "text_sha256": "663d845c3d3bfed6af77aaf55aa8c68c7d67779250c63f1bc21a3f8053c15a94"
         }
       }
@@ -161,7 +167,7 @@
       },
       "current_observation": {
         "note": "What the pipeline produces today from the same source bytes. Awaiting a ruling; it carries no label and must not inherit the historical one.",
-        "parser_commit": "95fc41258bf951c01a637cd647a70ae09af20ec1",
+        "parser_commit": "55cec02ba6bfe50c94e2a5285f47e6c9374b3048",
         "source_sha256_old": "c837c7f62418fda8c22d19a11a40c12f99261e144634509b5e0c042242630858",
         "source_sha256_new": "71822471fd717b67495ae467e82923db8d375e10f42f7299459baddde092431a",
         "old_side_options": [
@@ -179,6 +185,7 @@
             ],
             "header_text": "Alien SNAP eligibility",
             "length": 1443,
+            "node_ordinal": 22,
             "element_id": "H960F5C40AA784D49A69DEBA67A3D1844",
             "text_sha256": "a5b55a0912dcde7bc46d88dc8e4f06db1ad7b91a4b5ddeb317ce0c2ee01653cc"
           },
@@ -196,6 +203,7 @@
             ],
             "header_text": "Emergency food assistance",
             "length": 133,
+            "node_ordinal": 23,
             "element_id": "H1C6FEE557E87454387DDDE5AB9737D24",
             "text_sha256": "af59676d897931004aeb67065913d33fc0f1a63ebb5c068e84f6131aff1b93b5"
           }
@@ -213,6 +221,8 @@
           ],
           "header_text": "Alien SNAP eligibility",
           "length": 2242,
+          "node_ordinal": 22,
+          "element_id": "H8E51016337D14CC9A85A79B8C760F4B0",
           "text_sha256": "21d86f503f397cefec568ee73e9c7d3342c5a2bb036777d3e43def6e0e97da52"
         }
       }

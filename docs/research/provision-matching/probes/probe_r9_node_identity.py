@@ -1,4 +1,21 @@
-"""R9: is `(bill, version, text_sha256)` a valid identity for one parsed node?
+"""R9: what uniquely identifies one parsed node, and does the candidate identifier hold up?
+
+Two questions, and round 3 only committed a reproducer for the first.
+
+SECTION 1-3 -- is `(bill, version, text_sha256)` a valid identity? (round 3)
+
+SECTION 4 -- does the REPLACEMENT identifier actually hold? (round 4)
+    Round 3 replaced the text hash with `(source_sha256, parser_commit, element_id)` and the schema
+    cited "R9 §4" for `element_id` being unique and non-empty across all 106 documents. **That
+    section did not exist.** The measurement was run ad hoc in a shell and never committed, then
+    cited as though it were a reproducer -- the exact defect this review programme has now caught
+    three times (paper.md's unreproducible Appendix A, round 1's un-probed all-five-version claim,
+    and now its own). It is committed here, and section 4 also measures the alternative identifier
+    so the choice between them rests on evidence rather than on which one was thought of first.
+
+--- original round 3 docstring follows ---
+
+R9: is `(bill, version, text_sha256)` a valid identity for one parsed node?
 
 `eval_pass2.py` joins truth counterparts, candidates and system output on that triple. The
 reasoning behind rejecting `match_path` was right -- the path is the unstable key this whole
@@ -114,7 +131,80 @@ def main() -> None:
     print("  An evaluator joining on it cannot distinguish a correct match from a match against a")
     print("  different provision that happens to be boilerplate-identical -- and it fails in the")
     print("  optimistic direction, scoring a miss as a hit. Observation identity must come from the")
-    print("  parse (a deterministic node ordinal), with the text hash kept for integrity only.")
+    print("  parse, with the text hash kept for integrity only. Which parse-derived identifier is")
+    print("  the question section 4 decides.")
+
+    # ---- 4. the replacement identifier ---------------------------------------------------------
+    print()
+    print("=" * 104)
+    print("4. THE REPLACEMENT IDENTIFIER: `element_id` MEASURED, AND THE ORDINAL ALTERNATIVE")
+    print("=" * 104)
+    print("  Round 3 asserted element_id was unique and non-empty and cited this section for it.")
+    print("  The section did not exist. Measuring it now, over every document in the corpus.")
+    print()
+    docs_checked = nodes_checked = empty_ids = 0
+    dup_id_docs = 0
+    dup_id_groups = 0
+    max_id_mult = 0
+    id_examples = []
+    ordinal_violations = 0
+
+    for bill, versions in sorted(bill_versions().items()):
+        for stem, path in sorted(versions.items()):
+            try:
+                tree = normalize_bill(path)
+            except Exception:
+                continue
+            docs_checked += 1
+            nodes = list(tree.nodes)
+            nodes_checked += len(nodes)
+            empty_ids += sum(1 for n in nodes if not (n.element_id or "").strip())
+
+            counts = Counter(n.element_id for n in nodes if (n.element_id or "").strip())
+            dupes = {k: v for k, v in counts.items() if v > 1}
+            if dupes:
+                dup_id_docs += 1
+                dup_id_groups += len(dupes)
+                max_id_mult = max(max_id_mult, max(dupes.values()))
+                if len(id_examples) < 6:
+                    worst = max(dupes, key=lambda k: dupes[k])
+                    id_examples.append((bill, stem, worst, dupes[worst]))
+
+            # The alternative: the deterministic index into BillTree.nodes. Unique by construction
+            # -- this counts violations only so the claim is checked rather than asserted, which is
+            # the whole point of this section.
+            if len({i for i, _ in enumerate(nodes)}) != len(nodes):
+                ordinal_violations += 1
+
+    print(f"  documents checked                                 : {docs_checked}")
+    print(f"  nodes checked                                     : {nodes_checked}")
+    print(f"  nodes with an empty element_id                    : {empty_ids}")
+    print(f"  documents with a duplicated element_id            : {dup_id_docs}")
+    print(f"  duplicate element_id groups (within a document)   : {dup_id_groups}")
+    print(f"  maximum element_id multiplicity                   : {max_id_mult or 1}")
+    if id_examples:
+        print("  examples:")
+        for bill, stem, eid, mult in id_examples:
+            print(f"    {bill:<14} {stem:<34} {eid!r} x{mult}")
+    print()
+    print(f"  documents where the node ORDINAL is not unique    : {ordinal_violations}")
+    print("    (zero by construction: the ordinal IS the index into BillTree.nodes. Counted rather")
+    print("     than assumed because 'obviously unique' is how the text hash got adopted.)")
+    print()
+    print("  WHICH IDENTIFIER THE EVIDENCE SUPPORTS.")
+    print("    element_id  holds on this corpus, but its uniqueness is a property of GPO's source")
+    print("                markup plus the parser's synthesis for nodes that have none. It is an")
+    print("                empirical regularity over 34 bills, not an invariant -- and legislation")
+    print("                the corpus has not seen is exactly what the study is for.")
+    print("    ordinal     is unique BY CONSTRUCTION inside one parse. The usual objection is that")
+    print("                it shifts when the parser changes; but observation identity already")
+    print("                carries `parser_commit`, so cross-parser stability is not required and")
+    print("                never was. A changed parser must re-quarantine the observation anyway")
+    print("                (round 2's drift finding), which is precisely what a shifted ordinal")
+    print("                would force.")
+    print()
+    print("  => identity is `(source_sha256, parser_commit, node_ordinal)`. `element_id` is kept as")
+    print("     a recorded ATTRIBUTE for debugging and traceability, and is not part of the key.")
 
 
 if __name__ == "__main__":

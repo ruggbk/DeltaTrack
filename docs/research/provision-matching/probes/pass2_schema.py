@@ -1,4 +1,4 @@
-"""The frozen Pass 2 annotation schema, and the invariant that makes candidate recall computable.
+"""The frozen Pass 2 annotation schema (v3). ONE authoritative description of the semantics.
 
 WHY A SCHEMA BEFORE ANY LABELS EXIST. The protocol promises five outputs from one dataset:
 candidate recall, ranking accuracy, assignment accuracy, final diff correctness, and challenge-set
@@ -7,238 +7,246 @@ never collected is the expensive failure, and it is invisible until you try to c
 So the schema is fixed first and an evaluator is written against it first (`eval_pass2.py`), on a
 synthetic fixture, before a human rules anything.
 
-THE INVARIANT, and how it is enforced rather than asserted:
+THE INVARIANT:
 
-    Candidate generators may help a human FIND a counterpart. They may not define whether one
-    EXISTS.
+    A method under evaluation may help a human FIND a counterpart. It may never define whether one
+    EXISTS, directly or indirectly.
 
-That is not enforceable by good intentions, because the natural annotation flow -- show ~8
-retrieved candidates, ask "which of these, or none?" -- makes "not retrieved" and "does not exist"
-the same observation. An anchor whose true counterpart was missed by every retriever is recorded
-as NONE, and candidate recall computed from that dataset is 100% by construction.
+"Indirectly" is where three review rounds have found the failures, each one layer further out:
+first the matcher chose the pairs; then the retrievers chose the candidate list; then a bounded
+region chose the search area; then -- round 4 -- "the reviewer searched and found nothing" was
+being read as "nothing is there". Each fix renamed the dependency rather than removing it. v3
+removes it by making completeness a COUNT rather than a promise (see `document-exhaustive`).
 
-The schema separates the two by recording, per anchor, HOW the truth was established
-(`truth.oracle`) and, per counterpart, HOW it was found (`found_via`). `eval_pass2.py` then
-REFUSES to compute candidate recall over anchors whose oracle is `suggested-list`, because for
-those anchors the candidate set defined the answer. The refusal is the enforcement: a dataset
-labeled entirely through the suggestion list yields a candidate-recall denominator of zero and
-says so, instead of yielding 100%.
+NOTE ON THIS DOCSTRING. v2 shipped with prose that still described v1 semantics -- it said
+`suggested-list` was "sufficient for ranking, assignment and diff correctness" while the executable
+rules refused it for two of those, and described document search as discretionary while the rules
+made escalation systematic. Stale explanatory prose preserving a superseded methodology is one of
+this programme's own named findings, so: this docstring describes v3 and nothing else. Where an
+earlier version differed, the history is in `review-2026-08-methodology.md`, not here.
 
-THE ORACLES, cheapest first. Each is independent of retrieval in a different way; a study picks
-per stratum, and the field records which was used so the population is never assumed.
+--------------------------------------------------------------------------------------------------
+THE FOUR PROPOSITIONS
+--------------------------------------------------------------------------------------------------
+Truth records support propositions, not "confidence levels". Four matter, and they are not nested
+by cost -- which is why the requirement is per metric rather than one global strictness flag.
 
-  suggested-list      The human saw only the retrieved candidates. Sufficient for ranking,
-                      assignment, and diff correctness. NOT ground truth for existence -- carries
-                      no information about counterparts no retriever proposed.
-  region-exhaustive   The human reviewed EVERY provision in a bounded structural region of the new
-                      version (one account, one subcommittee title, one subtree), retrieved or
-                      not. Truth is complete WITHIN that region, so "none" means none-in-region.
-                      This is the cheap oracle, and the one the revised design uses by default:
-                      the regions are small, and a counterpart outside its own account/title is
-                      rare enough to be a separately recorded exception rather than the common
-                      case the sampling has to cover.
-  document-search     The human searched the whole new version by their own means (text search,
-                      table of contents) with no region bound. Most expensive; reserved for
-                      anchors where `region-exhaustive` returned none and the reviewer suspects a
-                      cross-region move.
+  affirmed-positive       "this specific node IS a counterpart of the anchor"
+  affirmed-negative       "this specific node is NOT the same provision as the anchor"
+                          Pairwise, like the positive. Added in v3: a high-containment false keep
+                          can be ruled DIFFERENT without anyone establishing where the anchor's
+                          true counterpart is, and that is legitimate, sufficient evidence for a
+                          false-keep challenge. v2 forced such strata to pay for exhaustive
+                          document review they did not need.
+  complete-within-region  "no counterpart exists in region R" -- and nothing about outside R.
+  complete-in-document    "the counterpart set is exactly this, across the whole target version."
 
-`region_id` is REQUIRED when the oracle is `region-exhaustive`, because "none" is only
-interpretable against a stated region. An anchor labeled none-in-region and later found to
-correspond outside it is not a labeling error; it is a `region-escape`, and it is recorded as one.
+Both pairwise propositions additionally require a PER-CANDIDATE BINARY question. A forced choice
+among a candidate list yields "the best of what I was shown", which the candidate set manufactured.
+`judgment_mode` records it and gates every proposition -- a forced-choice dataset supports nothing.
 
-WHAT IS DELIBERATELY NOT HERE. No score fields on the human-facing record: measures stay in the
-`system` block, which the labeling UI never renders (protocol §5's blindness guarantee, already
-implemented and tested). No `many-to-many` relation -- it is not evidenced in this corpus and
-adding it speculatively would invite its use as a dustbin.
+--------------------------------------------------------------------------------------------------
+THE THREE ORACLES, and what each may claim
+--------------------------------------------------------------------------------------------------
+`truth.oracles` is a LIST of the steps actually performed, because escalation is a sequence and one
+label cannot express it.
+
+  suggested-list        The reviewer saw only retrieved candidates. Supports pairwise propositions
+                        about the pairs shown. Supports NO completeness claim of any kind.
+
+  region-exhaustive     The reviewer adjudicated every provision in one bounded structural region
+                        of the target version, retrieved or not. `region_id` is REQUIRED: "none" is
+                        uninterpretable without the bound it is none within. A counterpart later
+                        found outside that region is a recorded `region-escape`, not a labeling
+                        error.
+
+  document-exhaustive   Renamed in v3 from `document-search`, because the old name licensed the
+                        wrong thing. "The reviewer searched the document by their own means" is a
+                        statement about EFFORT. A transformed counterpart -- changed header,
+                        rewritten wording, moved somewhere unexpected -- survives any number of
+                        queries the reviewer did not think to type, and the record would still have
+                        claimed the counterpart set was complete.
+
+                        v3 requires REVIEW COVERAGE, and measures it:
+
+                            truth.coverage = {"rule": ..., "eligible_total": M, "reviewed": N}
+
+                        `complete-in-document` is granted only when N >= M. Retrieval, search and
+                        structural navigation may order the queue; they may not end it. A reviewer
+                        who stops early does not produce a defective record -- they produce a record
+                        that honestly claims less, and the evaluator refuses it for the metrics that
+                        need more.
+
+                        `rule` defines M and MUST come from `COVERAGE_RULES`, all of which are
+                        measure-independent. A rule that consulted word overlap or containment
+                        would let a method under evaluation set its own denominator, one layer out.
+                        Note the residual honestly: "complete" means complete over the provisions
+                        the declared rule admits, and the rule is recorded so a reader can see what
+                        was excluded.
+
+--------------------------------------------------------------------------------------------------
+WHAT IS DELIBERATELY NOT HERE
+--------------------------------------------------------------------------------------------------
+No score fields on the human-facing record: measures stay in the `system` block, which the labeling
+UI never renders (protocol §5's blindness guarantee, already implemented and tested). No
+`many-to-many` relation -- it is not evidenced in this corpus and adding it speculatively would
+invite its use as a dustbin.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-SCHEMA_VERSION = "pass2-anchor-v2"
+SCHEMA_VERSION = "pass2-anchor-v3"
 
 RELATIONS = ("one-to-one", "one-to-many", "many-to-one", "none", "uncertain")
-ORACLES = ("suggested-list", "region-exhaustive", "document-search")
+ORACLES = ("suggested-list", "region-exhaustive", "document-exhaustive")
 RETRIEVERS = ("structural-path", "word-overlap", "containment")
 CHANGE_TYPES = ("modified", "moved", "removed", "unchanged")
-
-# ---------------------------------------------------------------------------------------------
-# v2: what an oracle can and cannot establish
-# ---------------------------------------------------------------------------------------------
-# v1 had a single flag, INDEPENDENT_ORACLES = (region-exhaustive, document-search), used only to
-# keep suggestion-list anchors out of candidate recall. Round 3 showed that was two errors in one
-# constant.
-#
-# First, it lumped `region-exhaustive` in with `document-search`, so a "none" established by
-# sweeping ONE region was treated as a statement about the whole document. A counterpart that moved
-# to another title is exactly the hard cross-region recall failure the study exists to measure, and
-# under v1 it would have been recorded as truth that no counterpart exists.
-#
-# Second, it was applied to ONE metric. Ranking, assignment, diff correctness and the challenge
-# rates all consumed suggestion-list records unfiltered, and diff correctness is the worst case:
-# a reviewer who sees no counterpart in an incomplete list yields truth `removed`, which then
-# scores the matcher's `removed` as correct. Matcher-conditioned truth, one step downstream.
-#
-# The fix is to stop reasoning about oracles as a rank ordering and state what each one PROVES.
-# Three distinct propositions matter, and they are not nested by cost:
-#
-#   affirmed-positive        "this specific node IS a counterpart of the anchor"
-#                            A positive claim about a pair the human actually looked at. Any oracle
-#                            can support it, PROVIDED the human was asked a per-candidate binary
-#                            question rather than "which of these 8 is it" -- a forced choice over
-#                            an incomplete list manufactures a positive by construction. The
-#                            protocol's card UI is already per-candidate binary; `judgment_mode`
-#                            records it so the guarantee is data rather than a convention.
-#   complete-within-region   "no counterpart exists in region R" -- and nothing outside R.
-#   complete-in-document     "the counterpart set is exactly this, document-wide."
-#
-# Note there is no path from `complete-within-region` to `complete-in-document` by adding regions,
-# because the sweep bound is per anchor. Escalation is the only route, which is why `oracles` is a
-# LIST of the steps actually performed rather than a single label.
-ORACLE_CAPABILITIES: dict[str, frozenset[str]] = {
-    "suggested-list": frozenset({"affirmed-positive"}),
-    "region-exhaustive": frozenset({"affirmed-positive", "complete-within-region"}),
-    "document-search": frozenset({"affirmed-positive", "complete-within-region", "complete-in-document"}),
-}
-
-#: How the human was asked. A forced choice among a candidate list cannot support
-#: `affirmed-positive`, because "the best of these eight" is not "the same provision".
 JUDGMENT_MODES = ("per-candidate-binary", "forced-choice")
 
+#: Eligibility rules that may define the denominator of a coverage claim. Every one is
+#: measure-independent by construction: none consults word overlap, containment, cosine, or any
+#: ranking the systems under evaluation produce. Adding a measure-dependent rule here would
+#: reintroduce the central defect one layer further out, so the allowlist is the enforcement.
+COVERAGE_RULES = (
+    "all-nodes",  # every node the parser emits for the target version
+    "all-nodes-with-body",  # every node with non-empty body text
+)
+
+PAIRWISE = ("affirmed-positive", "affirmed-negative")
+
+ORACLE_CAPABILITIES: dict[str, frozenset[str]] = {
+    "suggested-list": frozenset(PAIRWISE),
+    "region-exhaustive": frozenset((*PAIRWISE, "complete-within-region")),
+    # `complete-in-document` is NOT granted by the oracle's presence alone -- `establishes()`
+    # additionally requires the measured coverage to be complete. That conditionality is the
+    # substance of round 4's first criticism and cannot be expressed in this table.
+    "document-exhaustive": frozenset((*PAIRWISE, "complete-within-region")),
+}
+
 #: What each metric's arithmetic ASSUMES about the truth record it consumes. Data, not prose, so
-#: `eval_pass2` can enforce it and a test can prove the enforcement fires. Deriving these is the
-#: whole of round 3's §2: for each metric, name the proposition its denominator or its correctness
-#: test silently relies on, then admit only oracles that can establish it.
+#: `eval_pass2` can enforce it and a test can prove the enforcement fires.
 METRIC_TRUTH_REQUIREMENTS: dict[str, dict[str, str]] = {
     "candidate_recall": {
-        "proposition": "the complete set of true counterparts is known, document-wide",
+        "proposition": "the complete set of true counterparts is known across the target version",
         "requires": "complete-in-document",
         "why": (
-            "The denominator is 'true counterparts that exist'. A counterpart the human never had "
-            "the opportunity to find is missing from it, and the anchors where that happens are "
-            "exactly the anchors retrieval failed on -- so an incomplete oracle removes the hardest "
-            "cases from the denominator and inflates recall. Note the bias is by SELECTION, not by "
-            "a wrong label: a false NONE does not enter as a miss, it vanishes from the population."
+            "The denominator is 'true counterparts that exist'. A counterpart the reviewer had no "
+            "systematic opportunity to adjudicate is missing from it, and the anchors where that "
+            "happens are exactly the anchors retrieval failed on -- so an incomplete oracle removes "
+            "the hardest cases from the denominator and inflates recall. The bias is by SELECTION, "
+            "not by a wrong label: a false NONE does not enter as a miss, it vanishes."
         ),
     },
     "ranking": {
         "proposition": "this specific node is a true counterpart of the anchor",
         "requires": "affirmed-positive",
         "why": (
-            "Ranking asks where the true counterpart sat in the ordering. That needs the identity "
-            "of one affirmed counterpart, not the completeness of the set -- a second counterpart "
-            "elsewhere in the document does not change where THIS one ranked. So region-local and "
-            "even suggestion-list positives are admissible here, and this is the one metric where "
-            "the cheap oracle is genuinely sufficient."
+            "Where the true counterpart sat in an ordering does not depend on whether a second one "
+            "exists elsewhere. This is the one target the cheapest oracle genuinely supports."
         ),
     },
     "assignment": {
         "proposition": "the complete set of correspondences competing for a node is known",
         "requires": "complete-in-document",
         "why": (
-            "A collision group is only correct if every anchor claiming the contested node has been "
-            "found. An unfound competitor makes a wrong assignment look right, and competitors are "
-            "not confined to one region."
+            "An unfound competitor makes a wrong assignment look right, and competitors are not confined to a region."
         ),
     },
     "diff_correctness": {
         "proposition": "the true change type is known, which requires knowing whether ANY counterpart exists",
         "requires": "complete-in-document",
         "why": (
-            "`removed` versus `moved` is precisely the question of whether a counterpart exists "
-            "somewhere else in the document. Truth built from a bounded search answers a different "
-            "question, and answers it in the matcher's favour whenever the matcher also said "
-            "`removed`."
+            "`removed` versus `moved` IS the question of whether a counterpart exists elsewhere. "
+            "Truth built from a bounded search answers a different question, and answers it in the "
+            "matcher's favour whenever the matcher also said `removed`."
         ),
     },
     "failure_modes": {
-        "proposition": "depends on the challenge claim: existence claims need a positive, "
-        "absence claims need document-wide completeness",
+        "proposition": "depends on the challenge claim; the stratum declares it",
         "requires": "per-stratum",
         "why": (
-            "A stratum claiming 'this false keep happens' needs only an affirmed negative pair. A "
-            "stratum claiming 'the matcher missed a counterpart that exists' needs completeness. "
-            "The stratum declares its own requirement in `challenge_requires`."
+            "'This high-containment pair is actually DIFFERENT' is pairwise and needs only an "
+            "affirmed negative. 'The matcher missed a counterpart that exists' needs a positive. "
+            "'There is no counterpart anywhere' needs document completeness. Charging all three the "
+            "price of the most expensive one would make most challenge work unaffordable for no "
+            "gain in validity."
         ),
     },
 }
 
+#: What a challenge stratum may declare it needs. `affirmed-negative` is v3's addition.
+CHALLENGE_REQUIREMENTS = ("affirmed-positive", "affirmed-negative", "complete-in-document")
 
-def establishes(oracles: list[str], judgment_mode: str, proposition: str) -> bool:
-    """Can a record labeled under these oracles, asked this way, support this proposition?
 
-    The judgment mode gates EVERY proposition, not only `affirmed-positive`. The first cut of this
-    function gated only positives, on the reasoning that completeness is about search coverage
-    rather than about how the question was phrased. A contract test disagreed and it was right:
-    every proposition here is built out of per-pair judgments. A counterpart SET is only as sound as
-    each member's affirmation, so `complete-in-document` inherits the weakness; and a forced choice
-    that offers "none of these" as one option among eight manufactures the false NONE directly,
-    which is the failure this whole design exists to prevent.
+def coverage_is_complete(truth: dict[str, Any]) -> bool:
+    """Did the reviewer actually adjudicate everything the declared rule admits?
 
-    So a forced-choice dataset supports nothing. That is the intended severity: the protocol's card
-    UI is already per-candidate binary, and this field exists to keep it that way rather than to
-    make a weaker mode usable.
+    This is the whole of the v3 change to `document-exhaustive`. `complete-in-document` is a claim
+    about coverage, so it is granted by a COUNT the record carries, never by the name of the step
+    the reviewer says they performed.
     """
-    if judgment_mode != "per-candidate-binary":
+    cov = truth.get("coverage")
+    if not isinstance(cov, dict):
         return False
+    if cov.get("rule") not in COVERAGE_RULES:
+        return False
+    total, reviewed = cov.get("eligible_total"), cov.get("reviewed")
+    if not isinstance(total, int) or not isinstance(reviewed, int) or total <= 0:
+        return False
+    return reviewed >= total
+
+
+def establishes(truth: dict[str, Any], proposition: str) -> bool:
+    """Can this truth record support this proposition?
+
+    Takes the whole record rather than (oracles, judgment_mode) because `complete-in-document` now
+    depends on measured coverage, not only on which oracles ran.
+    """
+    if truth.get("judgment_mode") != "per-candidate-binary":
+        return False
+    oracles = truth.get("oracles") or []
+    if proposition == "complete-in-document":
+        return "document-exhaustive" in oracles and coverage_is_complete(truth)
     caps: set[str] = set()
     for o in oracles:
         caps |= ORACLE_CAPABILITIES.get(o, frozenset())
     return proposition in caps
 
 
-#: Retained for readability at call sites; v1's constant, redefined against the capability table so
-#: the two cannot drift apart.
-INDEPENDENT_ORACLES = tuple(o for o, caps in ORACLE_CAPABILITIES.items() if "complete-in-document" in caps)
+# --------------------------------------------------------------------------------------------
+# observation identity
+# --------------------------------------------------------------------------------------------
+# v2 joined nodes on `(source_sha256, parser_commit, element_id)`, citing a measurement that had
+# never been committed. R9 §4 now measures it: element_id is non-empty and unique across all 73,296
+# nodes in all 106 documents. It holds -- and it is still the wrong key.
+#
+# element_id's uniqueness is an empirical regularity of GPO's markup plus the parser's synthesis for
+# nodes that lack one. It is a property of 34 bills, and legislation the corpus has not seen is
+# exactly what the study is for. The node ORDINAL -- the index into `BillTree.nodes` -- is unique BY
+# CONSTRUCTION inside one parse. The standard objection is that an ordinal shifts when the parser
+# changes; but the key already carries `parser_commit`, so cross-parser stability was never
+# required, and a changed parser must re-quarantine the observation anyway (round 2's drift
+# finding). A shifted ordinal forces exactly that.
+#
+# Three concepts, kept apart:
+#   OBSERVATION IDENTITY   `(source_sha256, parser_commit, node_ordinal)` -- which parsed node.
+#   CONTENT INTEGRITY      `text_sha256` -- drift detection. Two nodes may legitimately share it;
+#                          33% of documents in this corpus contain such a pair (R9 §1).
+#   CROSS-VERSION IDENTITY the human's SAME/DIFFERENT ruling. The study's OUTPUT, never an input key.
+OBSERVATION_ID_FIELDS = ("source_sha256", "parser_commit", "node_ordinal")
 
-#: Provenance fields every observation carries, so a parser or corpus change re-quarantines the
-#: OBSERVATION without touching the human judgment. The 2026-08 review found the existing answer
-#: key carried none of these: three of its twelve pairs stopped resolving and nothing noticed,
-#: and the cause (parser vs source vs judgment) could only be established by a separate
-#: experiment. Each field pins one link in the chain
-#: source legislation -> parser representation -> research observation -> human label.
 PROVENANCE_FIELDS = (
     "bill",
     "version",
-    "source_sha256",  # the XML bytes the observation was derived from
-    "parser_commit",  # the engine commit that produced the representation
-    "schema_version",  # this file's SCHEMA_VERSION
-    "match_path",  # the structural locator, which may legitimately drift
-    "text_sha256",  # the normalized body, which may not, silently
-    "element_id",  # v2: WHICH node this is (see below)
+    "source_sha256",
+    "parser_commit",
+    "node_ordinal",
+    "match_path",
+    "text_sha256",
+    "element_id",  # recorded for traceability; NOT part of the identity
 )
-
-# ---------------------------------------------------------------------------------------------
-# v2: three different things v1 collapsed into one
-# ---------------------------------------------------------------------------------------------
-# v1's evaluator joined nodes on `(bill, version, text_sha256)`, reasoning that `match_path` is the
-# unstable key this program exists because of. The first half of that was right; the conclusion was
-# not, because it assumed body text identifies a node. R9 measured it: **33% of the documents in
-# this corpus contain at least one body text shared by two or more provisions** -- 551 distinct
-# texts, 1,544 node occurrences, up to 12 copies of one text in one version -- and it reaches every
-# version of all four answer-key bills. Appropriations bills are built from repeated boilerplate;
-# "No part of any appropriation contained in this Act shall remain available for obligation beyond
-# the current fiscal year" is one provision per division.
-#
-# A content-hash join collapses those into one node, and it fails OPTIMISTICALLY: a candidate-recall
-# miss against provision X scores as a hit whenever any boilerplate twin Y is in the candidate set.
-#
-# So three concepts, kept apart:
-#
-#   OBSERVATION IDENTITY   which parsed node this is, in one frozen document under one parser.
-#                          `(source_sha256, parser_commit, element_id)`. `element_id` is emitted by
-#                          the parser and is unique and non-empty on all 106 documents measured
-#                          (R9 §4) -- preferred over a traversal ordinal because an ordinal shifts
-#                          when anything earlier in the document changes, while an element id does
-#                          not. It is REQUIRED to be unique; `validate_dataset` fails loudly rather
-#                          than assuming, so a future parser that stops guaranteeing it cannot
-#                          silently reintroduce the collapse.
-#   CONTENT INTEGRITY      `text_sha256`. Detects representation drift (round 2, §R2-6). Never an
-#                          identity: two nodes may legitimately share it.
-#   CROSS-VERSION IDENTITY the thing the human is labeling -- "is this the same provision". It is
-#                          the OUTPUT of the study and must never be used as an input key.
-OBSERVATION_ID_FIELDS = ("source_sha256", "parser_commit", "element_id")
 
 
 def observation_id(ref: dict[str, Any]) -> tuple:
@@ -257,16 +265,14 @@ def _require(cond: bool, msg: str) -> None:
 
 def validate_node_ref(ref: dict[str, Any], where: str) -> None:
     for f in PROVENANCE_FIELDS:
-        if f == "schema_version":
-            continue  # carried once per record, not per node
         _require(f in ref, f"{where}: node ref missing provenance field {f!r}")
     _require(isinstance(ref["match_path"], list), f"{where}: match_path must be a list")
     _require(len(ref["text_sha256"]) == 64, f"{where}: text_sha256 must be a sha256 hex digest")
     _require(
-        bool(ref["element_id"]),
-        f"{where}: node ref has an empty element_id -- without an observation identity, two "
-        "provisions sharing boilerplate body text collapse into one node (33% of documents in "
-        "this corpus contain such a pair)",
+        isinstance(ref["node_ordinal"], int) and ref["node_ordinal"] >= 0,
+        f"{where}: node_ordinal must be a non-negative integer -- it is the identity of the parsed "
+        "node, and without it two provisions sharing boilerplate body text collapse into one (33% "
+        "of documents in this corpus contain such a pair)",
     )
 
 
@@ -283,21 +289,16 @@ def validate_record(rec: dict[str, Any]) -> None:
     _require(truth.get("relation") in RELATIONS, f"{aid}: relation must be one of {RELATIONS}")
     _require(bool(truth.get("adjudicator")), f"{aid}: truth has no adjudicator")
 
-    # v2: `oracles` is a LIST of the search steps actually performed, not one label. A bounded
-    # region sweep followed by a document-wide escalation is the intended workflow for negatives,
-    # and it is a different epistemic position from either step alone -- one label cannot say so.
     oracles = truth.get("oracles")
     _require(
         isinstance(oracles, list) and oracles and all(o in ORACLES for o in oracles),
-        f"{aid}: truth.oracles must be a non-empty list drawn from {ORACLES} (v2 replaced the "
-        "single `oracle` field: escalation from a region sweep to a document search is two steps, "
-        "and collapsing them loses exactly the distinction between none-in-region and none)",
+        f"{aid}: truth.oracles must be a non-empty list drawn from {ORACLES}",
     )
     _require(
         truth.get("judgment_mode") in JUDGMENT_MODES,
         f"{aid}: truth.judgment_mode must be one of {JUDGMENT_MODES} -- a forced choice among a "
-        "candidate list cannot establish that a node IS the counterpart, only that it was the best "
-        "of what was shown",
+        "candidate list cannot establish that a node IS (or is not) the counterpart, only that it "
+        "was the best of what was shown",
     )
 
     if "region-exhaustive" in oracles:
@@ -307,16 +308,39 @@ def validate_record(rec: dict[str, Any]) -> None:
             "'none' is uninterpretable without it",
         )
 
+    if "document-exhaustive" in oracles:
+        cov = truth.get("coverage")
+        _require(
+            isinstance(cov, dict),
+            f"{aid}: document-exhaustive requires truth.coverage -- v3 grants complete-in-document "
+            "on measured REVIEW COVERAGE, never on the reviewer having searched. A transformed "
+            "counterpart survives any number of queries nobody thought to type",
+        )
+        _require(
+            cov.get("rule") in COVERAGE_RULES,
+            f"{aid}: coverage.rule must be one of {COVERAGE_RULES} -- all measure-independent, so "
+            "a system under evaluation cannot define the denominator of its own completeness claim",
+        )
+        for f in ("eligible_total", "reviewed"):
+            _require(isinstance(cov.get(f), int), f"{aid}: coverage.{f} must be an integer")
+        _require(
+            cov["reviewed"] <= cov["eligible_total"],
+            f"{aid}: coverage.reviewed exceeds coverage.eligible_total",
+        )
+
     counterparts = truth.get("counterparts", [])
     _require(isinstance(counterparts, list), f"{aid}: counterparts must be a list")
-    for cp in counterparts:
-        validate_node_ref(cp, aid)
-        _require(
-            cp.get("found_via") in ("suggested", "browse", "region-sweep"),
-            f"{aid}: every counterpart must record how it was FOUND; without it a counterpart the "
-            "retrievers missed is indistinguishable from one they proposed, and candidate recall "
-            "cannot be computed",
-        )
+    rejected = truth.get("rejected", [])
+    _require(isinstance(rejected, list), f"{aid}: truth.rejected must be a list")
+    for group, name in ((counterparts, "counterparts"), (rejected, "rejected")):
+        for cp in group:
+            validate_node_ref(cp, f"{aid} {name}")
+            _require(
+                cp.get("found_via") in ("suggested", "browse", "region-sweep", "document-sweep"),
+                f"{aid}: every {name} entry must record how it was FOUND; without it a counterpart "
+                "the retrievers missed is indistinguishable from one they proposed, and candidate "
+                "recall cannot be computed",
+            )
 
     rel = truth["relation"]
     if rel == "none":
@@ -339,35 +363,29 @@ def validate_record(rec: dict[str, Any]) -> None:
 
     sysb = rec.get("system")
     _require(isinstance(sysb, dict), f"{aid}: no system block (what the matcher actually did)")
-    _require(
-        sysb.get("change_type") in CHANGE_TYPES,
-        f"{aid}: system.change_type must be one of {CHANGE_TYPES}",
-    )
+    _require(sysb.get("change_type") in CHANGE_TYPES, f"{aid}: system.change_type must be one of {CHANGE_TYPES}")
     _require(isinstance(sysb.get("assigned"), list), f"{aid}: system.assigned must be a list")
     for a in sysb["assigned"]:
-        # v2: the system's own output is joined on observation identity like everything else, so it
-        # needs the same fields. v1 left these unvalidated, which meant the one side of the join
-        # most likely to be machine-generated was the one side nothing checked.
         validate_node_ref(a, f"{aid} system.assigned")
 
     if rec.get("is_challenge"):
+        _require(bool(rec.get("stratum")), f"{aid}: a challenge record must name its stratum")
         _require(
-            bool(rec.get("stratum")),
-            f"{aid}: a challenge record must name its stratum -- a failure rate is meaningless "
-            "without the rigged population it was measured in",
+            rec.get("challenge_requires") in CHALLENGE_REQUIREMENTS,
+            f"{aid}: a challenge record must declare `challenge_requires` from "
+            f"{CHALLENGE_REQUIREMENTS} -- a pairwise false-keep claim needs only an affirmed "
+            "negative, and charging it for exhaustive document review buys no validity",
         )
-        _require(
-            rec.get("challenge_requires") in ("affirmed-positive", "complete-in-document"),
-            f"{aid}: a challenge record must declare `challenge_requires` -- an existence claim "
-            "('this false keep happens') needs only an affirmed positive, an absence claim ('the "
-            "matcher missed a counterpart that exists') needs document-wide completeness, and the "
-            "evaluator cannot infer which claim a stratum is making",
-        )
+        if rec["challenge_requires"] == "affirmed-negative":
+            _require(
+                bool(rejected),
+                f"{aid}: a stratum claiming a pair is DIFFERENT must record the rejected node in "
+                "truth.rejected -- otherwise there is nothing the metric can test against",
+            )
 
     _require(
         truth.get("change_type") in CHANGE_TYPES,
-        f"{aid}: truth.change_type must be one of {CHANGE_TYPES} -- final diff correctness is a "
-        "comparison against what the staffer SHOULD have seen, so truth carries it too",
+        f"{aid}: truth.change_type must be one of {CHANGE_TYPES}",
     )
 
 
@@ -377,31 +395,54 @@ def validate_dataset(records: list[dict[str, Any]]) -> None:
         validate_record(rec)
         _require(rec["anchor_id"] not in seen, f"duplicate anchor_id {rec['anchor_id']!r}")
         seen.add(rec["anchor_id"])
-    _require_observation_ids_are_unique(records)
+    _require_observation_ids_identify_one_node(records)
+    _require_one_claim_per_stratum(records)
 
 
-def _require_observation_ids_are_unique(records: list[dict[str, Any]]) -> None:
-    """No two DIFFERENT nodes may share an observation id, within one frozen document.
+def _require_one_claim_per_stratum(records: list[dict[str, Any]]) -> None:
+    """A stratum makes ONE claim, so it has ONE truth requirement.
 
-    The whole node-identity design rests on `element_id` being unique per parse. That holds on all
-    106 documents measured (R9 §4), but "holds today" is not "is guaranteed", and the failure mode
-    if it stops holding is silent: distinct provisions collapse and every metric moves in the
-    optimistic direction. So the dataset asserts it rather than assuming it.
-
-    Two references to the SAME node legitimately repeat -- an anchor's counterpart is usually also
-    one of its candidates. The violation is one observation id carrying two different `text_sha256`
-    values, which can only mean the id is not identifying a node.
+    Two records in one stratum declaring different `challenge_requires` would produce a single
+    reported rate whose denominator mixed two different propositions -- and the evaluator, taking
+    whichever record it saw first, would name only one of them. Found while building the v3
+    fixture, which is what the fixture is for.
     """
-    by_id: dict[tuple, set[str]] = {}
+    by_stratum: dict[str, set[str]] = {}
     for rec in records:
-        refs = [rec["anchor"], *rec["truth"].get("counterparts", []), *rec.get("candidates", [])]
-        refs += rec.get("system", {}).get("assigned", [])
+        if rec.get("is_challenge"):
+            by_stratum.setdefault(rec["stratum"], set()).add(rec["challenge_requires"])
+    mixed = {s: sorted(v) for s, v in by_stratum.items() if len(v) > 1}
+    _require(not mixed, f"a challenge stratum must make one claim, but these mix requirements: {mixed}")
+
+
+def _require_observation_ids_identify_one_node(records: list[dict[str, Any]]) -> None:
+    """One observation id must describe exactly one node, on every recorded attribute.
+
+    v2 compared only `text_sha256`, which round 4 showed was the weaker half of the check: two
+    genuinely distinct provisions that share a body -- the boilerplate case, present in 33% of
+    documents -- would carry the same identity AND the same text hash, and the validator saw no
+    conflict. It compares every non-identity attribute now, so a generator that assigns one ordinal
+    to two nodes is caught whenever those nodes differ in any recorded way.
+
+    Two references to the SAME node legitimately repeat: an anchor's counterpart is usually also one
+    of its candidates. The violation is one identity carrying two different descriptions.
+    """
+    by_id: dict[tuple, dict[str, set]] = {}
+    for rec in records:
+        refs = [rec["anchor"], *rec["truth"].get("counterparts", []), *rec["truth"].get("rejected", [])]
+        refs += rec.get("candidates", []) + rec.get("system", {}).get("assigned", [])
         for ref in refs:
-            by_id.setdefault(observation_id(ref), set()).add(ref["text_sha256"])
-    collisions = {k: v for k, v in by_id.items() if len(v) > 1}
+            slot = by_id.setdefault(
+                observation_id(ref), {"text_sha256": set(), "match_path": set(), "element_id": set()}
+            )
+            slot["text_sha256"].add(ref["text_sha256"])
+            slot["match_path"].add(tuple(ref["match_path"]))
+            slot["element_id"].add(ref["element_id"])
+    bad = {k: {f: v for f, v in attrs.items() if len(v) > 1} for k, attrs in by_id.items()}
+    bad = {k: v for k, v in bad.items() if v}
     _require(
-        not collisions,
-        f"observation id collision: {sorted(str(k) for k in collisions)[:3]} -- one "
-        "(source_sha256, parser_commit, element_id) maps to more than one body text, so it is not "
-        "identifying a single parsed node and every join in the evaluator is unsound",
+        not bad,
+        f"observation id collision: {sorted(str(k) for k in bad)[:3]} -- one "
+        "(source_sha256, parser_commit, node_ordinal) maps to more than one description, so it is "
+        "not identifying a single parsed node and every join in the evaluator is unsound",
     )
