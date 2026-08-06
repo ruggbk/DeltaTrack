@@ -1184,7 +1184,8 @@ Built in this round, deliberately skeletal:
   miss, an assignment collision with one winner and one loser, a suggestion-list-only truth, an
   uncertain, and a challenge-stratum failure.
 - **`probes/eval_pass2.py`** — computes all five targets and enforces each one's population.
-- **`tests/test_pass2_eval_contract.py`** — 14 tests pinning the metrics and proving the guards fire.
+- **`tests/test_pass2_eval_contract.py`** — pins each metric's value on the fixture and proves the
+  guards fire.
 
 Output on the synthetic fixture — every target non-degenerate, with both successes and failures so
 no metric passes by being vacuously 1.0:
@@ -1413,8 +1414,10 @@ change because a percentage was restated, so they do not hold up the labeling.
 | `probe_r3_financial_miner.py` *(changed)* | §R2-3 | denominator stated literally; by-bill support |
 | `probe_r5_idf_ablation.py` *(changed)* | §R2-5 | §2b margins over the 9 resolving pairs — identical |
 
-New tests (these run in CI, unlike the probes): `tests/test_research_probes.py` (42),
-`tests/test_pass2_eval_contract.py` (14).
+New tests, which run in CI unlike the probes themselves: `tests/test_research_probes.py` (the
+import gate, the corpus-view invariants, and the manifest) and `tests/test_pass2_eval_contract.py`
+(the data contract). Both are parametrized over things that will grow, so their counts are not
+quoted here — run them.
 
 ---
 
