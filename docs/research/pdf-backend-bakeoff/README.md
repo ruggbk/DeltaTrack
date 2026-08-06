@@ -4,15 +4,23 @@
   [`RESULTS.md`](RESULTS.md).** Metrics were fixed in advance in
   [`PRE-REGISTRATION.md`](PRE-REGISTRATION.md); licensing is recorded separately in
   [`LICENSING.md`](LICENSING.md).
+- The conclusion was then **adversarially audited** in [`RED-TEAM.md`](RED-TEAM.md), which
+  rejected the first draft's headline. Read that before acting on `RESULTS.md`.
 - **This document was not rewritten to match the results**, deliberately: the value of a
   pre-registered spec is that it can be read against the outcome, including where the
-  outcome contradicted it. Three places it did:
+  outcome contradicted it. Places it did:
   - The Phase 0 gate expected PDFium-WASM might have no credible build exposing the FFI.
-    One exists, works, and won the bake-off.
+    One exists and works.
   - The measured note that "a strict CSP blocked all ten" vectors was taken with an
-    HTTP-only listener. With a UDP listener, WebRTC egress survives CSP.
+    HTTP-only listener. With a UDP listener, WebRTC egress survives CSP — and with 19
+    further vectors, so do Speculation Rules and `window.open`.
   - Gate 3's conservation check does not detect the structural loss the spike actually
     found; breadcrumb recovery does.
+  - **The spec's framing question — "which is the best browser PDF backend" — is one this
+    evidence cannot answer**, and trying to answer it as posed is what produced the
+    overclaim the red team removed. The spec's own warning against a weighted composite
+    was right for a reason it did not anticipate: the candidates lead on *different*
+    axes, and the honest output is two options with a stated tradeoff, not a winner.
 - Predecessor: [`../staffer-delivery/README.md`](../staffer-delivery/README.md), which
   established that the XML pipeline runs byte-identically under Pyodide and left the
   PDF path as the open question.

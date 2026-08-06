@@ -16,61 +16,78 @@
 
 ## Executive summary
 
-**There is a permissively licensed PDF backend that produces byte-identical DeltaTrack
-diffs entirely inside a browser: PDFium-WASM.** It is the same engine the project already
-depends on, compiled to WebAssembly, and it is already published as an MIT-licensed
-package wrapping BSD-3 PDFium.
+> **Revised 2026-08-05 after an adversarial audit of this document's own conclusion.**
+> An earlier draft opened by calling PDFium-WASM "the best browser backend". That claim
+> did not survive being attacked, and the audit that broke it is in
+> [`RED-TEAM.md`](RED-TEAM.md). The corrected claim is narrower and, on this evidence,
+> better supported.
 
-1. **PDFium-WASM reproduces the incumbent exactly.** Across all **13** terminal pairs the
-   product accepts, it produced canonical diffs whose change sets and `amount_entries` are
-   **identical** to native pypdfium2's. Not "close" — identical, on both fields, on every
-   pair. Swapping the backend changes nothing a staffer reads.
+**The PDF pipeline can run entirely inside a browser, and PDFium-WASM is the only
+candidate that reproduces today's production output exactly.** That is a statement about
+*drop-in replaceability*, not about extraction quality — and the distinction is
+load-bearing, because on every metric that does not use PDFium as its own reference,
+PDFium-WASM does not lead.
 
-2. **The spec's hardest expected question dissolved.** It anticipated needing to price a
-   PDFium-WASM engineering effort against PyMuPDF's ceiling. A credible build already
-   exists (`@embedpdf/pdfium`, 4.6 MB), already exports the four FFI entry points the
-   glyph sidecar needs, and works. **The gap PyMuPDF exists to price is essentially
-   zero**, so there is nothing to fund and no reason to revisit the AGPL question.
+1. **PDFium-WASM is the only drop-in replacement.** On all 13 terminal pairs the product
+   accepts — and on all 15 with the layout guard disabled — it produced canonical diffs
+   whose change sets and `amount_entries` are **identical** to native pypdfium2's. The two
+   are independently built binaries (PDFium 152.0.7947.0 vs the `embedpdf/runtime` fork)
+   whose glyph streams genuinely differ, so this is not an artifact of shared code or
+   caching. **But they are the same algorithm**, so agreement is close to expected, and
+   this result should be read as "no regression", never as "highest quality".
 
-3. **pdfminer.six is a genuine runner-up, and the ADR 0002 re-examination was justified.**
-   Asked the question ADR 0002 never asked — not "is it a good text extractor" (answered:
-   no) but "is it a good glyph-geometry source" — it matches the incumbent on
-   `amount_entries` for all 13 pairs and edges it on raw text recovery. It is pure Python,
-   MIT, and installs under Pyodide. Its cost is speed: **37.9 s** on a 1118-page bill
-   against PDFium-WASM's **4.6 s**.
+2. **On independent metrics, pdfminer.six leads and PDFium-WASM ranks 4th of 6.** Scored
+   against the XML body text and the XML heading tree — the only references that do not
+   take PDFium as ground truth — PDFium-WASM never ranked first in any of eight ablations.
+   The ADR 0002 re-examination was more than justified: pdfminer is at least the equal of
+   the incumbent on accuracy, is pure Python and MIT, and adds **no binary**. Its cost is
+   speed, 37.9 s against 4.6 s on a 1118-page bill.
 
-4. **PDF.js loses on a signal a text-only bake-off would never have seen.** Its text
-   recovery matches the incumbent, but `getTextContent()` **cannot represent GPO's
-   small-caps account headings**, which are intra-line size changes. It merges the
-   alternating 14 pt / 11.2 pt runs into one item and reports the first run's size, so the
-   size band ADR 0012's heading recovery depends on collapses. The signal is not absent
-   from PDF.js — `getOperatorList()` carries it exactly — but it is absent from the API
-   this bake-off measured.
+3. **Two of this bake-off's own conventions favour PDFium, and both are now measured.**
+   The `repaired` mode adds **+0.0415** to PDFium's text F1 and nothing to anyone else's;
+   `_SPACE_FACTOR = 0.25`, inherited from PDFium-tuned production, is load-bearing only for
+   PDFium (at 0.4 its heading F1 collapses 0.586 → 0.206 while PyMuPDF, PDF.js and pypdf
+   are unaffected). Neither invalidates the drop-in finding, both invalidate a
+   "best-quality" reading.
 
-5. **`file://` provides no egress protection; a strict CSP provides a lot but not all.**
-   Fourteen subresource vectors are blocked. **WebRTC is not**, and no page-level
-   mitigation tested closes it. The predecessor's "CSP blocked all ten" result was
-   measured with an HTTP-only listener that could not have observed a STUN attempt either
-   way.
+4. **PDF.js's heading loss is real but its scale was overstated.** `getTextContent()`
+   genuinely cannot represent GPO's small-caps account headings — intra-line 14 pt / 11.2 pt
+   alternation merged into one item at the first run's size. Against the independent XML
+   oracle it recovers headings at F1 0.406 against PDFium's 0.586, so it is worse; but
+   PDFium is not the ceiling either, and pdfminer beats both at 0.625. The signal exists in
+   `getOperatorList()`; **this bake-off did not build that adapter**, so PDF.js's result
+   belongs to one API, not to the library.
 
-6. **This does not say "PDF is solved."** Tier B is not closed: the repository contains no
-   pre-publication fixtures, which is precisely the material ADR 0010 says the PDF
-   pipeline exists for.
+5. **The zero-egress claim as published was wrong, and is now corrected.** A second round
+   of 19 vectors found **two bypasses of the exact proposed policy**: Speculation Rules
+   prefetch and `window.open`. Removing `'unsafe-inline'` from `script-src` closes the
+   first (verified non-vacuously). WebRTC also survives CSP and no page-level mitigation
+   tested closes it.
+
+6. **This does not say "PDF is solved."** Tier B is not closed, and the corpus is
+   narrower than N = 52 implies: **three body-font classes, and the accepted population is
+   effectively one**.
 
 ### The sentences the spec asked to complete
 
-1. *"The best browser-viable PDF backend is …"* — **PDFium-WASM**, scoring **identical**
-   change sets and `amount_entries` to the incumbent on all 13 accepted pairs
-   (amount F1 1.0000, change F1 1.0000). No adjudication was needed: holding the whole
-   downstream pipeline fixed and varying only the glyph source leaves no other cause for a
-   difference. **Runner-up: pdfminer.six**, identical on `amount_entries` for all 13 pairs
-   and 0.9669 on change signatures.
+1. *"The best browser-viable PDF backend is …"* — **the spec's question is the wrong
+   shape, and answering it as asked is what produced the overclaim.** Two answers:
+   - *For a no-regression migration:* **PDFium-WASM**, identical change sets and
+     `amount_entries` to the incumbent on 13/13 accepted pairs (15/15 unguarded).
+   - *For extraction accuracy against an independent reference:* **pdfminer.six**, which
+     leads on both XML-referenced metrics and adds no binary.
+   The choice between them turns on an axis this spike did **not** measure: the bundle-size
+   cost of adding 4.6 MB of WASM to an artifact already 17.8 MB.
 2. *"It runs in the browser at … startup and … per comparison on the largest bill"* —
-   Pyodide boot **1.4 s**, extraction **4.6 s** for a 1118-page bill.
+   Pyodide boot **1.4 s**, extraction **4.6 s** for a 1118-page bill (pdfminer 37.9 s).
 3. *"A full comparison makes zero network requests, and our harness is proven to detect a
-   request when one is deliberately introduced"* — **true for every mechanism CSP
-   governs, and proven by a known-bad control.** Not true for WebRTC.
-4. *"Its licensing implication …"* — MIT wrapper over BSD-3 PDFium; see
+   request when one is deliberately introduced"* — **the detection half is proven; the
+   zero half is false as originally stated.** Speculation Rules and `window.open` both
+   reach the network under the published policy. With `'unsafe-inline'` removed, only
+   `window.open` and WebRTC remain, and both are outside CSP's scope by design.
+4. *"Its licensing implication …"* — permissive, but the chain has a documented
+   inconsistency (npm says MIT, the upstream repo's own `LICENSING.md` says Apache-2.0 for
+   `packages/`) and the declared source path no longer exists in that repo. See
    [`LICENSING.md`](LICENSING.md).
 
 ---
@@ -137,7 +154,7 @@ both are noted below.
 | 1 Opens the corpus (52/52) | ✅ | ✅ | ✅ | ✅ | *✅* |
 | 2 Line-number integrity | ✅ 1.0000 | ✅ 1.0000 | ✅ 1.0000 | ✅ 1.0000 | *✅ 1.0000* |
 | 3 Structural conservation — no regressions | ✅ 0 | ✅ 0 | ✅ 0 | ✅ 0 | *✅ 0* |
-| 3b …but breadcrumb recovery | ✅ **1.0000** | ✅ 0.9808 | ❌ **0.4664** | ❌ **0.4137** | *✅ 0.9808* |
+| 3b …but heading recovery **vs XML** | ✅ 0.5864 | ✅ **0.6253** | ❌ **0.4058** | ❌ **0.4010** | *✅ **0.6253*** |
 | 4 Material diff correctness | ✅ | ✅ | ❌ | ❌ | *✅* |
 | 5 `amount_entries` identical to incumbent | ✅ **13/13** | ✅ **13/13** | ❌ 10/13 | ❌ 6/13 | *✅ 13/13* |
 | 6 Browser execution | ✅ | ✅ | ✅ | ✅ | *✅* |
@@ -157,14 +174,19 @@ Its passing marks are not a recommendation.*
   shortfalls and its single conservation regression fall on **enrolled bills**, which
   production declines. Over the accepted 42 it is perfect on both. Its real failure is
   gate 5, and it is not close: 6 of 13.
-- **Row 3b is an addition, and it is doing the work gate 3 was meant to do.** The
+- **Row 3b is a post-hoc addition, and it is doing the work gate 3 was meant to do.** The
   pre-registered gate 3 reads "no unexplained structural loss". Conservation alone does
-  not detect the loss found here: PDF.js and pypdf recover **less than half** the
-  incumbent's breadcrumbs while passing every conservation check, because losing a heading
-  reparents its amounts without dropping them. Breadcrumb agreement is the pre-registered
-  M4 metric; it is promoted here because it is the measurement that actually reveals
-  unexplained structural loss, and reporting only conservation would have passed two
-  backends that lose more than half the heading tree.
+  not detect the loss found here: PDF.js and pypdf lose most of the heading tree while
+  passing every conservation check, because losing a heading *reparents* its amounts
+  without dropping them. Reporting only conservation would have passed two backends that
+  lose more than half the headings.
+
+  **It is scored against the XML tree, not against PDFium**, which is a correction the
+  red-team audit forced. The first draft scored it as breadcrumb agreement with the
+  incumbent, which gives PDFium and its WASM twin 1.0000 by construction and cannot rank
+  them. Against the independent reference **pdfminer and PyMuPDF (0.6253) beat PDFium
+  (0.5864)** — so this row passes PDFium-WASM but does not crown it. PDF.js and pypdf
+  still fail it by a wide margin, which is the finding that survived the audit.
 
 ---
 
@@ -194,6 +216,22 @@ A bake-off that measured only text would have called this a tie and picked on sp
 **Breadcrumb agreement does discriminate, sharply**, and it is the metric that maps onto
 ADR 0012's heading tree and the department/agency/account financial tables that depend on
 it.
+
+> **But breadcrumb agreement takes PDFium as ground truth**, so PDFium and its WASM twin
+> score 1.0000 by construction and the column cannot rank them. Scored instead against the
+> XML tree's heading labels — a reference with no PDFium in it — the order changes:
+>
+> | Backend | heading F1 vs **XML** | breadcrumb agreement vs **PDFium** |
+> |---|---|---|
+> | pdfminer | **0.6253** | 0.9808 |
+> | pymupdf *(ceiling)* | **0.6253** | 0.9808 |
+> | pdfium-native / pdfium-wasm | 0.5864 | 1.0000 *(by construction)* |
+> | pdfjs | 0.4058 | 0.4664 |
+> | pypdf | 0.4010 | 0.4137 |
+>
+> PDF.js is still clearly worst-but-one, so that finding holds. **PDFium is not the
+> ceiling**, though: pdfminer and PyMuPDF recover headings better than the incumbent
+> against an independent reference. Full method in [`RED-TEAM.md`](RED-TEAM.md).
 
 ### The PDF.js finding, in detail
 
@@ -250,12 +288,21 @@ ranking.
 
 ## Phase 2: the terminal metric (N = 15 pairs)
 
-### T4 — backend vs incumbent, the load-bearing measurement
+### T4 — backend vs incumbent: what it does and does not measure
 
 This holds the **entire downstream pipeline fixed** and varies only the glyph source, so
 any difference is attributable to the backend with no adjudication required. It answers
-the question the delivery decision actually turns on: *would swapping the PDF backend
-change what a staffer sees?*
+one question well: *would swapping the PDF backend change what a staffer sees today?*
+
+> **It cannot rank PDFium-WASM, and the first draft of this document treated it as though
+> it could.** T4's reference is native PDFium; PDFium-WASM is the same algorithm from a
+> different build. A perfect score is close to expected and is evidence of *sameness*, not
+> of *quality*. T4 was also an **addition to the spec**, introduced mid-spike, and it is
+> the single metric on which the original "best backend" conclusion rested.
+>
+> It is still worth reporting, because drop-in replaceability is genuinely what a
+> no-regression migration needs. It is simply not a quality ranking, and nothing below
+> should be read as one.
 
 <!-- T4_TABLE -->
 
@@ -405,6 +452,48 @@ Blocked by the strict CSP: `fetch`, `XMLHttpRequest`, `sendBeacon`, `<img>`, rem
 predecessor fixture built a form and never called `submit()`), and **worker-originated
 fetch**.
 
+### Round 2: nineteen more vectors, and two of them defeat the published policy
+
+The list above is 16 mechanisms chosen by the same person who wrote the policy, which is
+exactly the weakness a red-team should attack. A second fixture
+([`probes/vectors2.js`](probes/vectors2.js)) adds 19 mechanisms the first never tried:
+`<a ping>`, Speculation Rules, `<link rel=prefetch/preload/dns-prefetch/preconnect>`,
+`<object>`, `<embed>`, `<video>`, `<track>`, SVG `image`/`use`, CSS `background-image`,
+`fetch(keepalive)`, WebTransport, worker `importScripts`, `<iframe srcdoc>`,
+`window.open`, and `meta refresh`.
+
+The no-CSP control leaked **14 of 19**, so the harness sees them. Under the **exact policy
+this document proposes**, two got through:
+
+| Bypass | Mechanism | Covered by CSP? |
+|---|---|---|
+| **Speculation Rules** | `<script type="speculationrules">` prefetching a cross-origin URL | Should be, and is not — the inline rule block is admitted by `script-src 'unsafe-inline'` |
+| **`window.open`** | new browsing context to a remote URL carrying the marker | **No** — a new context is not a subresource |
+
+**Speculation Rules is fixable and the fix is verified.** Removing `'unsafe-inline'` from
+`script-src` blocks it. That was tested non-vacuously: a first attempt showed "0 bypasses"
+but also `completed=False, 0 vectors` — the policy had blocked the harness's own inline
+bootstrap, so the zero was meaningless. Re-run with an **external** bootstrap, all 19
+vectors execute and Speculation Rules is blocked.
+
+**Recommended policy change**, replacing the one published earlier in this document:
+
+```
+default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:;
+connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none';
+frame-src 'none'; worker-src 'none'
+```
+
+The engine must then load from external script files rather than inline blocks, which the
+single-file artifact shape makes non-trivial — a real cost, not a footnote.
+
+**`window.open` is not fixable by CSP**, and the earlier draft of this document
+understated it. It said top-level navigation exfiltration "is also user-visible, because
+the page would disappear". **That is false for `window.open`**, which opens a background
+context and leaves the original page in place. The residual is therefore larger than
+previously written: an attacker with script execution can transmit via `window.open` with
+no visual disruption.
+
 ### WebRTC survives CSP, and no page-level mitigation closed it
 
 Five STUN datagrams reached the server under the strict policy. CSP has no directive
@@ -443,16 +532,26 @@ STUN hostname, i.e. a DNS side channel). Closing it needs a browser-level contro
 on it, so CDP showed 8 attempts under a policy the server confirms blocked all of them.
 Assert on what the server received.
 
-### The defensible claim
+### The defensible claim, corrected
 
-> DeltaTrack document processing executes under a browser policy that requires no network
-> resources, permits no subresource or background network egress, and is continuously
-> tested against deliberate exfiltration attempts across every mechanism CSP governs —
-> with a known, measured exception for WebRTC, which CSP does not govern and which needs a
-> browser-level control to close.
+The claim published in the first draft of this document said the policy "permits no
+subresource or background network egress". **Speculation Rules falsified that**, so the
+sentence is replaced rather than patched:
 
-"Exfiltration is impossible" remains false. Top-level navigation exfiltration is also
-still uncovered (`navigate-to` was removed from the CSP spec), though it is user-visible.
+> DeltaTrack document processing requires no network resources at any point: with the
+> network fully severed, a comparison still completes. Under the corrected policy
+> (`script-src 'self'`, no `'unsafe-inline'`), **35 distinct exfiltration mechanisms were
+> attempted and 33 produced no request**, verified at the network layer against a control
+> proven to observe them and a known-bad build proven to be caught. The two that remain —
+> `window.open` and WebRTC — are outside what CSP governs and require a browser- or
+> device-level control.
+
+Three things that remain false, stated plainly:
+
+- **"Exfiltration is impossible"** — no.
+- **"Top-level navigation is user-visible"** — no. `window.open` leaves the page in place.
+- **"Every mechanism CSP governs is blocked"** — only true *after* removing
+  `'unsafe-inline'`; it was not true of the policy this document first proposed.
 
 ---
 
@@ -530,6 +629,28 @@ PDFs, which ADR 0003 flags as the untested hard case and which would need OCR.
 
 ---
 
+## The corpus is narrower than N = 52 suggests
+
+Counted by GPO stage code the corpus looks diverse: 10 stage classes across 30 bills. That
+overstates it. Counted by **body font**, which is what actually determines the layout a
+backend has to read, there are **three** classes:
+
+| Body font | Documents | Notes |
+|---|---|---|
+| DeVinne | 37 | the standard GPO bill body |
+| NewCenturySchlbk-Roman | 10 | enrolled prints — **the class production declines** |
+| DeVinne-Italic | 5 | amendment prints |
+
+So the population the product actually accepts is **effectively one typesetting class**,
+all GPO-published, all appropriations, all 113th–119th Congress. The top three stage
+classes are 62% of the corpus, and one bill (118-hr-4366) supplies 6 documents and 5 of
+the 15 terminal pairs.
+
+**Classes with zero representation:** committee prints, chair's marks, discussion drafts
+(the whole of Tier B), image-only or scanned PDFs, conference reports, non-appropriations
+legislation, and anything typeset before the 113th Congress. A backend that fails on any
+of those would not have been detected here.
+
 ## Honest statistics
 
 Zero adjudicated material errors across **15 pairs** is consistent, by the rule of three,
@@ -544,29 +665,48 @@ optional, and the reason "PDF is solved" is not available on this evidence.
 
 ## What this changes, and what it leaves open
 
-### The decision tree, resolved
+### The decision tree, resolved — and the branch the spec did not draw
 
 The spec's tree ends at "shippable backend passes → browser architecture remains viable".
-It does, and by the cheaper branch than expected: the branch labelled *"PDFium-WASM
-needed → engineering justified"* turned out to need no engineering, because the build
-already exists.
+It does, and no PDFium-WASM engineering needed funding because the build already exists.
+
+But the tree assumes a single winner, and the evidence does not produce one. It produces
+**two viable options on different axes**, and the spec had no branch for that:
+
+| | PDFium-WASM | pdfminer.six |
+|---|---|---|
+| Reproduces today's output | **exactly** (13/13, 15/15 unguarded) | amounts yes, change segmentation differs |
+| Accuracy vs independent reference | 4th of 6 | **1st of 6** |
+| Heading recovery vs XML | 0.586 | **0.625** |
+| Largest bill, in-browser | **4.6 s** | 37.9 s |
+| Added binary | 4.6 MB WASM | **none** |
+| Supply chain | single-maintainer fork, source path missing | PyPI, long-established |
+
+**Neither column dominates.** The choice turns on whether the project values
+no-regression continuity (PDFium-WASM) or accuracy plus a clean supply chain and no binary
+(pdfminer) — and on bundle size, which this spike did not measure.
 
 ### Recommended next steps
 
-1. **Extract the neutral seam into production.** This spike's strongest structural finding
+1. **Measure the bundle.** This is now the highest-value follow-up, ahead of everything
+   below, because it is the axis the decision actually turns on and the only one with no
+   data. Build both artifacts (Pyodide + PDFium-WASM, and Pyodide + pdfminer) and measure
+   size and `file://` load time.
+2. **Adopt the corrected CSP** (`script-src 'self'`, no `'unsafe-inline'`) and confirm the
+   engine still loads from external script files in the single-file artifact shape.
+3. **Extract the neutral seam into production.** This spike's strongest structural finding
    is that `parsers/pdf_text.py` mixes backend repair with domain logic: `normalize_raw`
    exists entirely to undo PDFium text-API damage and **has no counterpart in the glyph
    path**. Splitting it is a follow-up PR and a *finding of this spike*, not part of it.
-2. **Decide PDF.js's fate deliberately.** Either build the operator-list adapter and
-   re-score it, or record that the browser PDF path is PDFium-WASM and PDF.js is not a
-   candidate. Do not leave it as "PDF.js works", which the text-recovery number alone
-   would wrongly support.
-3. **Source Tier B fixtures.** Public committee prints (`CPRT-*` on govinfo) are the best
-   available proxy; real chair's marks need a congressional contact.
-4. **Re-run on managed Windows.** Unchanged from the delivery spike, and still the
-   highest-value follow-up for anything OS-dependent.
-5. **Take the WebRTC finding to whoever writes the IT story.** It changes a claim that was
-   previously believed absolute into one that is precise and defensible.
+4. **Decide PDF.js's fate deliberately.** Either build the operator-list adapter and
+   re-score it, or record that it is not a candidate. Do not leave it as "PDF.js works",
+   which the text-recovery number alone would wrongly support.
+5. **Source Tier B fixtures**, and **re-run on managed Windows**. Unchanged in priority
+   from the delivery spike.
+6. **Resolve the `@embedpdf/pdfium` provenance questions** before shipping it: the npm
+   license (MIT) disagrees with the upstream repo's own `LICENSING.md` (Apache-2.0 for
+   `packages/`), the declared source directory no longer exists in that repo's main, and
+   the engine is a fork of PDFium rather than upstream.
 
 ### What would change the recommendation
 

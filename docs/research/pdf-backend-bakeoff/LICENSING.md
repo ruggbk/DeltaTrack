@@ -19,8 +19,8 @@ bake-off actually ran.
 |---|---|---|---|
 | **DeltaTrack** | this tree | Apache-2.0 | `LICENSE` |
 | **PDF.js** (`pdfjs-dist`) | 6.2.108 | Apache-2.0 | `package.json`, `LICENSE` |
-| **PDFium-WASM** (`@embedpdf/pdfium`) | 2.15.0 | MIT (wrapper) | `package.json`, `LICENSE` |
-| ⮑ bundled PDFium engine | — | BSD-3-Clause (PDFium Authors) | `LICENSE.pdfium` |
+| **PDFium-WASM** (`@embedpdf/pdfium`) | 2.15.0 | MIT (wrapper) — **but see the discrepancy below** | `package.json`, `LICENSE` |
+| ⮑ bundled PDFium engine | fork `608d50ef` | BSD-3-Clause (PDFium Authors) | `LICENSE.pdfium` |
 | **pdfminer.six** | 20260107 | MIT | package metadata |
 | **pypdf** | 6.14.2 | BSD-3-Clause | package metadata |
 | **pypdfium2** (incumbent) | 5.12.1 | BSD-3-Clause, Apache-2.0 | package metadata |
@@ -51,6 +51,43 @@ Two specifics worth naming rather than glossing:
   as an **open item**, not cleared. The incumbent `pypdfium2` already carries the same
   question and its metadata hints at it ("dependency licenses"), so this is a
   pre-existing obligation being inherited rather than a new one being taken on.
+  (`zlib` is confirmed present in the shipped `.wasm` by string inspection.)
+
+### Provenance problems found by the red-team audit, and not resolved
+
+These emerged after this memo was first written, and they are the reason
+[`RESULTS.md`](RESULTS.md) now lists resolving them as a precondition for shipping rather
+than a footnote.
+
+- **The declared source directory does not exist.** The published package's
+  `repository.directory` is `packages/pdfium`, and that path is absent from the repo's
+  current `main` (`packages/` holds core, engine, framework, plugin, viewer). The build
+  source for a 4.6 MB binary destined for congressional offices is therefore not locatable
+  at the address the package itself gives.
+- **The licence chain disagrees with itself.** npm metadata and the bundled `LICENSE` say
+  **MIT** (© CloudPDF, Ji Chang); the upstream repo's own `LICENSING.md` says everything
+  under `packages/` is **Apache-2.0**. Both are permissive and neither blocks use, so this
+  is a diligence defect rather than a licensing risk — but it should be resolved in
+  writing before distribution, not assumed away.
+- **The engine is a fork, not upstream.** The pinned artifact comes from
+  `embedpdf/runtime` at commit `608d50ef…`, not `pdfium.googlesource.com`. The fork's
+  patches have not been reviewed here.
+- **Single maintainer**, 16 stars on the runtime fork (4.4k on the parent viewer repo).
+
+**In mitigation**, the build *is* pinned and checksummed: `engine-runtime-build.json`
+carries a per-target SHA-256 for every artifact including `wasm32`, so a consumer can
+verify they received the intended bytes. That is better hygiene than most WASM
+redistributions and materially reduces the substitution risk — it does not address the
+"can we rebuild it ourselves" question.
+
+### If the package disappeared
+
+DeltaTrack **could** vendor or rebuild an equivalent: PDFium is BSD-3 and builds to WASM.
+It is not a trivial undertaking — depot_tools, `gn`/`ninja`, an Emscripten toolchain, plus
+auditing whatever the `embedpdf/runtime` fork changes — but it is a known, bounded
+engineering task rather than a dependency that cannot be replaced. The realistic interim
+mitigation is to **vendor the verified `.wasm` and its checksum into the repo** rather than
+resolve it from npm at build time.
 
 ### PyMuPDF, and why it never enters the decision tree
 
@@ -90,9 +127,16 @@ exposes the FFI the engine needs** — so there is no engineering effort to pric
 
 ## Recommendation
 
-**On licensing grounds alone, three of the four permissive candidates are shippable
-today**, and the choice between them should be made on the technical results rather than
-on license risk. PyMuPDF is excluded by project policy, not by any measured deficiency.
+**On licensing grounds alone, all four permissive candidates are shippable**, and PyMuPDF
+is excluded by project policy rather than by any measured deficiency.
+
+But licence text is not the whole of a distribution decision. On **supply-chain** grounds
+the four are not equivalent, and the ranking is close to the inverse of the technical one:
+pdfminer.six and pypdf come from long-established PyPI projects and add no binary, PDF.js
+is a Mozilla project with a decade of deployment, and  is a
+single-maintainer redistribution of a PDFium **fork** whose declared source path is
+missing. For a tool being handed to congressional offices, that difference deserves
+weight alongside the accuracy numbers.
 
 Two build-time obligations to carry into whichever is chosen:
 
