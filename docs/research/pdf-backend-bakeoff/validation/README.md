@@ -53,16 +53,20 @@ their own API and no value borrowed from PDFium, the same rule scores **0.9275 f
 three engines on the primary adjudication** (0.9683 in phase 1's post-hoc sensitivity
 analysis), disagrees with none of them on the 72 adjudicated pairs, and disagrees once in
 the 195,291 pairs all three engines could align at page scale. The mechanism is narrower
-than the phrasing: over 390,582 endpoints the raw advances agree to within **3.05e-5 pt**,
-below the 5e-5 pt error that rounding to four decimals can itself introduce, and three or
-more orders of magnitude below the smallest perturbation the rule can feel, so the contract
-is not normalising a difference, it is asking for one they barely have. Phase 3 also found that `pdfium_extended.py` was consuming
+than the phrasing, and it sits at three separately measured levels. **Raw:** the engines'
+returned advances are not bit-identical, differing by at most **3.05e-5 pt** over 390,582
+endpoints. **Contract:** once each backend is packed into the four-decimal contract, the
+compared advances are **identical**, max delta **0.0 pt** on the same endpoints, measured
+directly rather than inferred from the raw distance. **Decision:** the rule then differs
+once in 195,291 pairs. So the contract is not normalising a difference, it is asking for one
+the engines barely have. Phase 3 also found that `pdfium_extended.py` was consuming
 PDFium's generated spaces despite its docstring, and that `contract_extended.font_size` has
 no defined axis. Neither moves a phase-2 number; both are recorded rather than repaired.
 
 Two methodological cleanup passes then corrected nine of phase 3's own claims, none of
 which changed the direction of the result. The advance equality was measured after rounding,
-and is equivalence under round-to-nearest rather than identity. The engine-change cost was an
+and is a raw distance rather than identity, with contract-level equality measured directly
+by `h04` instead. The engine-change cost was an
 unpaired subtraction and is now paired (+16.12 and +11.59 points, correcting 18 boundaries
 between them and regressing none). N1 claimed a replication it was not performing and now
 performs it. The post-hoc 0.9683 had been used as the headline in place of the primary

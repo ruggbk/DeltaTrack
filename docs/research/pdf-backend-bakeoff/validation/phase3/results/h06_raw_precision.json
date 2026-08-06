@@ -1,9 +1,9 @@
 {
- "question": "are the engines' RAW advances equal, or only equal after the contract rounds them?",
+ "question": "how far apart are the engines' RAW advances and origins, before the contract rounds them?",
  "thresholds_pt": {
   "quantisation_step_1e_4": 0.0001,
-  "round_to_nearest_max_error_5e_5": 5e-05,
-  "note": "a difference below 5e-5 cannot survive round(x, 4); a difference below 1e-4 still can, because two values under one step apart can straddle a rounding boundary"
+  "half_step_5e_5": 5e-05,
+  "note": "these are reference scales for reading the bins, NOT equivalence criteria. Half a step is the largest error between one value and its own rounded form; it says nothing about whether two independent values round alike, since round(1.234949, 4)=1.2349 and round(1.234951, 4)=1.2350 differ despite being 2e-6 apart. Contract-level equality is measured directly by h04's N12, which compares the adapter-packed values."
  },
  "documents": [
   {
@@ -507,7 +507,7 @@
    "pdfminer": 0,
    "pymupdf": 0
   },
-  "verdict": "NOT IDENTICAL, but EQUIVALENT UNDER ROUND-TO-NEAREST at 4 dp: raw advances differ by up to 3.052e-05 pt, which is below the 5e-05 pt maximum error that round(x, 4) can itself introduce"
+  "verdict": "NOT IDENTICAL: raw advances differ by up to 3.052e-05 pt. h06 draws NO conclusion about rounded equality from this distance -- two values closer than half a quantisation step can still round differently. Contract-level equality is measured directly by h04's N12, which compares the adapter-packed advances and finds max |delta| = 0.0 pt on the same population."
  },
  "unjoined_population": {
   "count": 4579,

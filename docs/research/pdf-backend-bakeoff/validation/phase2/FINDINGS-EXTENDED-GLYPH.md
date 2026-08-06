@@ -267,14 +267,13 @@ reintroduces a different unexplained constant, on a narrow and well-understood p
 > pdfminer's own decision and **+11.59** over PyMuPDF's, correcting 10 and 8 boundaries
 > respectively and regressing none.
 >
-> The *mechanism* is narrower than "the rule is ours" implies, and worth stating precisely:
-> over 390,582 glyph endpoints the three engines return advances that agree to within
-> **3.05e-5 pt**, which is below the 5e-5 pt error that rounding to four decimals can itself
-> introduce, and three or more orders of magnitude below the smallest perturbation the rule
-> can feel. The extended contract is
-> not normalising a difference between engines; it is asking for a quantity on which they
-> barely differ. (Phase 3's first pass said "identical to 0.0 pt"; that was measured after
-> the adapters round, and has been corrected to equivalence at the contract's precision.)
+> The *mechanism* is narrower than "the rule is ours" implies, and it sits at two separately
+> measured levels. **Raw** (`h06`): the engines' returned advances are not bit-identical,
+> differing by at most **3.05e-5 pt** over 390,582 endpoints. **Contract** (`h04` N12): once
+> packed into the four-decimal contract, the compared advances are **identical**, max delta
+> **0.0 pt** on the same endpoints. The second is measured directly on the packed values,
+> not inferred from the size of the first. The extended contract is not normalising a
+> difference between engines; it is asking for a quantity on which they barely differ.
 >
 > Phase 3 also adds a row to the **cost** side that this table does not carry:
 > `contract_extended.font_size` has **no defined axis**, and the ported rule buckets on it.

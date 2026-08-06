@@ -32,19 +32,27 @@ adjudicated sample all three score **0.9275**, the primary result, with zero dis
 between them.
 
 The extended contract is not *normalising* a difference between engines. It is asking for a
-quantity on which they barely differ: on every one of 390,582 glyph endpoints the raw
-advances agree to within **3.05e-5 pt**, below the 5e-5 pt maximum error that rounding to
-four decimals can itself introduce, and about three orders of magnitude below the smallest
-perturbation the spacing rule can feel.
+quantity on which they barely differ, and the evidence for that sits at three separate
+levels, each measured on its own rather than inferred from the one above it:
 
-> **Corrected 2026-08-06, twice.** The first version of this document said the engines
-> return "advances identical to 0.0 pt". That measured the values **after** the adapters
-> round them to four decimal places. Re-read raw (`h06`), they are **not identical**; they
-> are **equivalent under round-to-nearest at four decimals**, which is the sharper and more
-> relevant statement. A second pass then found that `h06`'s own bins were computed against
-> 5e-5 while being labelled as 1e-4, which overstated the *origin* divergence; §4 carries
-> both thresholds explicitly now. The architectural conclusion is unchanged through both,
-> because it needs semantic equivalence and not bit-identity.
+| level | measured by | result |
+|---|---|---|
+| **raw** | `h06` | the engines' returned advances are **not** bit-identical; max delta **3.05e-5 pt** over 390,582 endpoints |
+| **contract** | `h04` N12 | after each backend is packed into the four-decimal contract, the compared advances are **identical**, max delta **0.0 pt** on the same 390,582 endpoints |
+| **decision** | `h04` | the spacing rule then differs **once in 195,291** comparable pairs, and §5's D1 traces that one to `font_size`, not to an advance |
+
+> **Corrected 2026-08-06, three times, and the third correction is the important one.**
+> (i) The first version said the engines return "advances identical to 0.0 pt", which was
+> the **contract-level** measurement reported as if it were the raw one. (ii) A second pass
+> found `h06`'s bins were computed against 5e-5 while labelled 1e-4, overstating the
+> *origin* divergence. (iii) That pass then replaced the withdrawn claim with a **false
+> theorem**: that because every raw advance delta is below 5e-5, the rounded values must be
+> equal. **They need not be.** Half a quantisation step bounds the error between one value
+> and its own rounded form; it is not a pairwise criterion, and two values 2e-6 apart can
+> straddle a boundary — `round(1.234949, 4) = 1.2349` against `round(1.234951, 4) = 1.2350`.
+> Contract-level equality is not derived from raw distance at all. It is measured directly
+> by `h04`'s N12 on the packed values. The architectural conclusion is unchanged through all
+> three, because it never needed bit-identity.
 
 Phase 3 also found **two defects in phase 2's own work**, one of which falsifies a sentence
 in `pdfium_extended.py`'s docstring ([§5](#5-h5--the-two-divergences-diagnosed)), and **eleven
@@ -326,12 +334,12 @@ established equality at the contract's precision and was reported as equality fu
 joined population. Over **390,582 glyph endpoints**, advance available on both sides of
 every one:
 
-**Two thresholds, and the first version of this section conflated them.** The contract's
-four-decimal quantisation **step** is 1e-4. The largest error `round(x, 4)` can itself
-introduce is half a step, **5e-5**. A difference below 5e-5 cannot survive rounding; a
-difference between 5e-5 and 1e-4 still can, because two values less than one step apart can
-straddle a rounding boundary. Both are now reported, and each bin is named for its literal
-threshold.
+**Two reference scales, and neither is an equivalence criterion.** The contract's
+four-decimal quantisation **step** is 1e-4; half a step is **5e-5**, the largest error
+between one value and *its own* rounded form. Both are reported below because they make the
+bins readable, and each bin is named for its literal threshold. **Neither licenses a
+statement about whether two independent values round alike** — that is measured separately,
+at the contract level, by `h04`'s N12.
 
 | raw **advance** vs PDFium | max | median | exactly equal | 0 < d < 5e-5 | **≥ 5e-5** | **≥ 1e-4** |
 |---|---|---|---|---|---|---|
@@ -343,14 +351,22 @@ threshold.
 | pdfminer.six | 2.12e-4 pt | 1.1e-5 | 5,205 | 362,632 | **22,745** | **901** |
 | PyMuPDF | 1.22e-3 pt | 3.1e-5 | 138,100 | 145,341 | **107,141** | **34,157** |
 
-**So: not identical, and the advance statement is stronger than previously written.** No
-advance endpoint differs by as much as **5e-5**, so on every one of the 390,582 endpoints
-the two engines' raw advances are **equivalent under round-to-nearest at four decimals**.
-That is a sharper claim than "below the contract's rounding" and it is the one the
-architecture rests on.
+**So: the raw values are not identical.** The largest advance difference is 4.40e-7 pt
+(pdfminer) and 3.05e-5 pt (PyMuPDF), with no endpoint reaching 5e-5 and none reaching 1e-4.
+The honest reading of those bins is simply that **the raw advance differences are extremely
+small relative to the spacing rule's decision scale** — the rule's own thresholds are
+1.7–2.2 pt, and §4's perturbation bracket puts the smallest relative change it can feel at
+10⁻²–10⁻¹.
 
-The **origins are not equivalent at either threshold**: 22,745 and 107,141 endpoints differ
-by ≥ 5e-5, and **901 and 34,157** differ by ≥ 1e-4.
+Raw origins are further apart: 22,745 and 107,141 endpoints differ by ≥ 5e-5, and **901 and
+34,157** by ≥ 1e-4.
+
+**What none of this establishes is contract-level equality**, and an earlier version of this
+section inferred exactly that from the advance bins. It does not follow: values closer than
+half a step can still round apart. The contract-level fact is measured directly and is
+reported in §4 above — `h04`'s N12 compares the **adapter-packed** advances, the values that
+actually enter `contract_extended`, and finds **max |delta| = 0.0 pt across all 390,582
+endpoints, with the advance available on both sides of every one**.
 
 > **Corrected 2026-08-06.** An earlier version of this table reported 22,745 and 107,141 as
 > the counts differing by more than **1e-4**. They are the counts at or above **5e-5**: the
@@ -558,7 +574,7 @@ simply not to carry U+0020 at all, and that costs nothing.
 | pdfminer's advance field | `.adv` is em units | `.adv` is text-space points; `.width` is its page-space transform. Field choice unchanged |
 | "word quality if the backend changes: fixed" | asserted | **supported**: **0.9275** from all three engines on the primary adjudication (0.9683 post-hoc), 0 pairwise disagreements on the 72 adjudicated pairs, 1 in 195,291 at page scale |
 | "under hybrid the swing is 16 points" | asserted from pdfminer alone | **measured on two engines, paired**: **+16.12 pts** against pdfminer's own decision and **+11.59** against PyMuPDF's, correcting 10 and 8 boundaries respectively and regressing none |
-| the reason it ports | the contract normalises engines | **the engines already agree, to far below what the rule can distinguish**: raw advances within 3.05e-5 pt everywhere, i.e. equivalent under round-to-nearest at 4 dp, and three or more orders of magnitude under the smallest perturbation that changes any decision |
+| the reason it ports | the contract normalises engines | **the engines already agree at the level the contract carries**: raw advances differ by at most 3.05e-5 pt (`h06`), the packed contract advances are identical at max delta 0.0 pt (`h04` N12), and the raw residue is three or more orders of magnitude under the smallest perturbation that changes any decision |
 | `pdfium_extended` consumes no engine space | stated in its docstring | **false as built**; corrected contract scores identically |
 
 **This is the review's Outcome A.** Extended segmentation stays at PDFium accuracy across
@@ -607,9 +623,9 @@ To phase 3's own first pass:
 8. **"Advances identical to 0.0 pt" was measured on ROUNDED values.** Every adapter rounds
    `advance` to 4 dp, so N12 as first written established equality at the contract's
    precision and reported it as equality. Raw, the advances differ by up to 4.40e-7 pt
-   (pdfminer) and 3.05e-5 pt (PyMuPDF), both below the 5e-5 round-to-nearest bound. The
-   claim is now "equivalent under round-to-nearest at 4 dp", with the headroom quantified.
-   `h06`.
+   (pdfminer) and 3.05e-5 pt (PyMuPDF). The raw and contract levels are now reported as
+   the separate measurements they are: `h06` for the raw distance, `h04`'s N12 for equality
+   of the packed values.
 9. **The 16.2-point engine-change cost was an UNPAIRED subtraction** across 69 and 62 pairs.
    Paired, it is +16.12 (pdfminer) and +11.59 (PyMuPDF) on the primary adjudication. The
    number barely moved; the licence to state it did not exist before.
@@ -624,10 +640,14 @@ To phase 3's own first pass:
 12. **`h06`'s bins were computed against 5e-5 and labelled as 1e-4.** The reported "origins
     differ by more than 1e-4 on 22,745 and 107,141 endpoints" was wrong: those are the
     ≥5e-5 counts. The true ≥1e-4 counts are **901 and 34,157**. A reporting and binning
-    defect, not a change in the portability result. It also let the *advance* claim be
-    stated more weakly than the data supports: no advance endpoint differs by as much as
-    5e-5, so the advances are equivalent under round-to-nearest, not merely under the
-    quantisation step.
+    defect, not a change in the portability result.
+12b. **The fix for 12 introduced a false theorem, which is the more serious error.** It
+    argued that because no raw advance delta reaches 5e-5, the rounded values must agree.
+    **That does not follow.** Half a step bounds one value against its own rounded form, not
+    two values against each other: `round(1.234949, 4) = 1.2349` and
+    `round(1.234951, 4) = 1.2350` differ although the inputs are 2e-6 apart. No measurement
+    changed — the repair is to stop inferring and to cite the direct measurement instead.
+    `h04`'s N12 compares the packed contract values and finds max |delta| = 0.0 pt.
 13. **N16's rematch validated only one endpoint.** It required both codepoints and the
     **first** glyph's origin and baseline, then the prose claimed the recovered pairs were
     the same pairs separated by a bucket edge. Both endpoints are now constrained; the

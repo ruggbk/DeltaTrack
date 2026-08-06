@@ -1,16 +1,29 @@
-"""H6 — two things H4 asserted more strongly than it measured.
+"""H6 — the RAW distance between the engines' facts, and what the join gap contains.
 
-H4 reported max |Δ advance| = 0.0 pt over 390,582 endpoints and concluded the engines
-"return the same advances". Both halves need narrowing.
+THREE DIFFERENT CLAIMS LIVE IN PHASE 3, and keeping them apart is the whole point of this
+probe. Each is measured by a different thing and none is inferred from another:
 
-  **A. The comparison ran on ROUNDED values.** Every adapter rounds `advance` to four
-     decimal places on the way into `contract_extended`, so H4 established equality at the
-     contract's 1e-4 pt precision. Whether the engines' raw returns are bit-identical was
-     never tested, and it is a different claim. `raw_facts.py` re-reads the same glyphs at
-     full precision and this probe compares those. **The expected answer is not assumed:**
-     PDFium's glyph width arrives through a `c_float` (24-bit mantissa) and MuPDF's
-     advance is computed in single precision too, so a small non-zero difference is a live
-     possibility and would still leave the architectural result intact.
+    raw level        this probe. How far apart are the values the engines actually return,
+                     before any contract rounding? Answer: close, but NOT identical.
+    contract level   `h04`'s N12. Are the ADAPTER-PACKED values equal? It compares the
+                     already-rounded tuples directly and finds max |delta| = 0.0 pt on
+                     390,582 endpoints. Measured, not derived from the raw distance.
+    decision level   `h04`. Does the spacing rule then agree? Once in 195,291 pairs it does
+                     not, and §5's D1 traces that to `font_size`, not to an advance.
+
+  **A. What H4's N12 did and did not establish.** Every adapter rounds `advance` to four
+     decimal places on the way into `contract_extended`, so N12's zero is a fact about the
+     CONTRACT values. It says nothing about the raw returns, and phase 3's first draft
+     reported it as though it did ("advances identical to 0.0 pt"). `raw_facts.py` re-reads
+     the same glyphs at full precision and this probe compares those. **The expected answer
+     is not assumed:** PDFium's glyph width arrives through a `c_float` (24-bit mantissa)
+     and MuPDF's advance is computed in single precision too, so a small non-zero
+     difference is a live possibility and would still leave the architectural result intact.
+
+     **This probe does not reason from its own numbers back to the contract level.** A raw
+     distance below half a quantisation step does not imply the rounded values match, since
+     two values 2e-6 apart can straddle a rounding boundary. That inference appeared in an
+     earlier verdict string and is wrong; the contract-level fact is `h04`'s to report.
 
   **B. 4,579 of PDFium's 200,684 pairs (2.3 %) never joined**, and H4 reported the coverage
      without saying what was in the gap. If the unjoined population were concentrated on
@@ -24,9 +37,10 @@ NEGATIVE CONTROLS.
        agreement.
   N14  the joined population is asserted to match H4's committed totals exactly. If the
        key set here differed, the "same population" claim in A would be false.
-  N15  the raw comparison reports the EXACTLY-EQUAL count separately from the
-       below-contract-precision count. Collapsing them is what produced the overstatement
-       being corrected.
+  N15  the raw comparison reports the EXACTLY-EQUAL count separately from every distance
+       bin, and each bin names its literal threshold. Collapsing them, and naming a bin
+       after a threshold it was not computed against, are the two reporting defects this
+       probe has already had.
   N16  the unjoined diagnosis attempts a tolerance-based nearest-neighbour rematch. That is
        a diagnostic, not a repair: it exists to say whether the gap is a quantisation
        artefact of the join or a real difference between engines, and the rematched pairs
@@ -56,18 +70,29 @@ import raw_facts  # noqa: E402
 from contract_extended import ADVANCE, BASELINE, CP, ORIGIN_X, UPRIGHT  # noqa: E402
 from h04_page_scale_agreement import BACKENDS, DOCUMENTS, PAGES, _adjacent_pairs, _extract, _key  # noqa: E402
 
-# TWO DIFFERENT QUANTITIES, and the first version of this probe conflated them.
+# TWO DIFFERENT QUANTITIES, and this probe has now conflated them in two different ways.
 #
-#   QUANT_STEP        the contract's four-decimal quantisation step. Two values that differ
-#                     by less than this can still round to different 4 dp results.
-#   ROUND_MAX_ERROR   the largest error `round(x, 4)` can introduce, which is half a step.
-#                     A difference below this is invisible to round-to-nearest.
+#   QUANT_STEP        the contract's four-decimal quantisation step.
+#   HALF_STEP         half a step. This is the largest error between ONE value and ITS OWN
+#                     rounded form. It is NOT a pairwise equivalence criterion.
 #
-# The bug: bins were computed against ROUND_MAX_ERROR and then labelled
+# Defect 1 (fixed): bins were computed against HALF_STEP and labelled
 # "at_or_above_contract_precision", so counts at or above 5e-5 were reported as counts at
-# or above 1e-4. Every bin below now names its literal threshold instead.
+# or above 1e-4. Every bin below now names its literal threshold.
+#
+# Defect 2 (fixed here): the verdict then inferred that because every raw advance delta is
+# below HALF_STEP, the rounded values must be equal. THAT IMPLICATION IS FALSE. Two values
+# arbitrarily close together can straddle a rounding boundary:
+#
+#     round(1.234949, 4) = 1.2349      round(1.234951, 4) = 1.2350
+#     |a - b| = 2e-6, far below 5e-5, yet the rounded values differ.
+#
+# So this probe reports raw distance and NOTHING about rounded equality. Contract-level
+# equality is a separate, directly measured fact: `h04`'s N12 compares the ADAPTER-PACKED
+# (already rounded) advances and finds max |delta| = 0.0 pt over the same 390,582
+# endpoints. Measured, not inferred.
 QUANT_STEP = 1e-4
-ROUND_MAX_ERROR = QUANT_STEP / 2
+HALF_STEP = QUANT_STEP / 2
 
 ORIGIN_TOL = 0.05
 BASELINE_TOL = 0.6
@@ -159,8 +184,8 @@ def _pct(vals: list[float]) -> dict:
         # would take as 1e-4. Both are now reported, separately, and neither name implies
         # a rounding interpretation the number does not carry.
         "exactly_zero": sum(1 for v in s if v == 0.0),
-        "gt_zero_and_lt_5e_5": sum(1 for v in s if 0.0 < v < ROUND_MAX_ERROR),
-        "ge_5e_5": sum(1 for v in s if v >= ROUND_MAX_ERROR),
+        "gt_zero_and_lt_5e_5": sum(1 for v in s if 0.0 < v < HALF_STEP),
+        "ge_5e_5": sum(1 for v in s if v >= HALF_STEP),
         "ge_1e_4": sum(1 for v in s if v >= QUANT_STEP),
     }
 
@@ -193,13 +218,16 @@ def main() -> int:
 
     pages = list(range(1, args.pages + 1))
     result: dict = {
-        "question": "are the engines' RAW advances equal, or only equal after the contract rounds them?",
+        "question": "how far apart are the engines' RAW advances and origins, before the contract rounds them?",
         "thresholds_pt": {
             "quantisation_step_1e_4": QUANT_STEP,
-            "round_to_nearest_max_error_5e_5": ROUND_MAX_ERROR,
+            "half_step_5e_5": HALF_STEP,
             "note": (
-                "a difference below 5e-5 cannot survive round(x, 4); a difference below 1e-4 still can, "
-                "because two values under one step apart can straddle a rounding boundary"
+                "these are reference scales for reading the bins, NOT equivalence criteria. Half a step is the "
+                "largest error between one value and its own rounded form; it says nothing about whether two "
+                "independent values round alike, since round(1.234949, 4)=1.2349 and round(1.234951, 4)=1.2350 "
+                "differ despite being 2e-6 apart. Contract-level equality is measured directly by h04's N12, "
+                "which compares the adapter-packed values."
             ),
         },
         "documents": [],
@@ -416,14 +444,10 @@ def main() -> int:
         "IDENTICAL: every raw advance matches bit for bit"
         if all_zero
         else (
-            f"NOT IDENTICAL, but EQUIVALENT UNDER ROUND-TO-NEAREST at 4 dp: raw advances differ by up to "
-            f"{worst:.3e} pt, which is below the {ROUND_MAX_ERROR} pt maximum error that round(x, 4) "
-            f"can itself introduce"
-            if worst < ROUND_MAX_ERROR
-            else (
-                f"NOT IDENTICAL: raw advances differ by up to {worst:.3e} pt, which is at or above the "
-                f"{ROUND_MAX_ERROR} pt round-to-nearest error bound -- state the threshold explicitly"
-            )
+            f"NOT IDENTICAL: raw advances differ by up to {worst:.3e} pt. h06 draws NO conclusion about "
+            f"rounded equality from this distance -- two values closer than half a quantisation step can "
+            f"still round differently. Contract-level equality is measured directly by h04's N12, which "
+            f"compares the adapter-packed advances and finds max |delta| = 0.0 pt on the same population."
         )
     )
     result["unjoined_population"] = {
