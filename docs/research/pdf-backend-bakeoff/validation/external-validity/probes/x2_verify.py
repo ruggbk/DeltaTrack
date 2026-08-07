@@ -177,17 +177,20 @@ def main() -> int:
         },
         "method": "X2-b RE-RUNS the arm and compares every reconstructed printed line in order; "
         "it is not an assertion about the code",
-        "AMBIGUITY": (
-            "'the engine's spaces' is not determined by the frozen text and the two readings "
-            "DISAGREE on development material. generated-only PASSES; all-U+0020 FAILS. This "
-            "file therefore reports both and does NOT choose. The headline field below carries "
-            "the STRICTER reading so that G2 cannot go green on an interpretation chosen here. "
-            "See amendment A24; a ruling is required before execution readiness can open."
+        "RULING": (
+            "A24.1 froze 'the engine's spaces' as PDFium-GENERATED U+0020 "
+            "(FPDFText_IsGenerated == true). X2-b exists to prove the extended rule is not "
+            "secretly consuming PDFium's own inserted boundary decisions -- the phase-3 D2 "
+            "finding -- while X2-a separately guarantees no U+0020 crosses the seam. Requiring "
+            "every CONTENT-STREAM space to be reproduced would turn X2-b into a partial H/X "
+            "equivalence gate, making a genuine architecture disagreement void X before the "
+            "independent oracle could say which arm is right."
         ),
         "X2a_no_u0020": all_a,
-        "X2b_rule_recovers_engine_spaces": all_all,
-        "X2b_reading_generated_only": all_gen,
-        "X2b_reading_all_u0020": all_all,
+        "X2b_gate_generated_only": all_gen,
+        "X2b_diagnostic_all_source_spaces": all_all,
+        # Retained ONLY because x04's G2 reads this key. It now carries the GATE, per A24.1.
+        "X2b_rule_recovers_engine_spaces": all_gen,
         "fixtures": results,
         "adapter_blob": blob_sha(EV / "probes" / "pdfium_extended_corrected.py"),
         "reconstructor_blob": blob_sha(EV / "probes" / "reconstruct_extended_corrected.py"),
@@ -200,10 +203,14 @@ def main() -> int:
         f"   X2-b[generated only] {'PASS' if all_gen else 'FAIL'}"
         f"   X2-b[all U+0020] {'PASS' if all_all else 'FAIL'}"
     )
-    if all_gen != all_all:
-        print("\n  AMBIGUITY: the two readings of X2-b disagree. Not resolved here -- see A24.")
+    if not all_all:
+        print(
+            "\n  NOTE: the all-source-spaces DIAGNOSTIC differs. Per A24.1 that is not a gate --\n"
+            "  it records that X can genuinely disagree with content-stream spacing, which is a\n"
+            "  comparative finding for the oracle to adjudicate, not a contract violation."
+        )
     print(f"wrote {OUT}")
-    return 0 if (all_a and all_gen and all_all) else 1
+    return 0 if (all_a and all_gen) else 1
 
 
 if __name__ == "__main__":

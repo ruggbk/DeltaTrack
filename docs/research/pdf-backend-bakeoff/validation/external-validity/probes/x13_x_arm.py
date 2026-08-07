@@ -91,7 +91,7 @@ def main(limit: int = 6) -> int:
         spaces_with_gid = 0
         for xp in x_pages:
             for e in xp["emitted"]:
-                spaces_with_gid += sum(1 for gid, ch in e.cells if ch == " " and gid is not None)
+                spaces_with_gid += sum(1 for c in e.cells if c.char == " " and c.ngid is not None)
         check(
             f"{name}: no space X emits carries a source gid",
             0,

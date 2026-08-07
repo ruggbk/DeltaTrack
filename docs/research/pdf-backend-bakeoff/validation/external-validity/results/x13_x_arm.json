@@ -18,7 +18,7 @@
    "M0b_segmentation_rate": 0.0,
    "M0b_rate_on_defined": 0.0,
    "both_absent": 10,
-   "x_source_glyph_loss_lines": 150
+   "x_source_glyph_loss_lines": 134
   },
   {
    "document": "118-s-4795/1",
@@ -35,7 +35,7 @@
    "M0b_segmentation_rate": 0.0,
    "M0b_rate_on_defined": 0.0,
    "both_absent": 10,
-   "x_source_glyph_loss_lines": 157
+   "x_source_glyph_loss_lines": 141
   }
  ],
  "tests": [

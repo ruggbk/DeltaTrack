@@ -33,9 +33,9 @@
    "baseline_delta_median": 0.0,
    "baseline_delta_max": 0.0,
    "x_overlap_median": 1.0,
-   "x_overlap_min": 1.0,
+   "x_overlap_min": 0.9987,
    "x0_delta_median_pdfium_minus_pymupdf": 0.602,
-   "x1_delta_median_pdfium_minus_pymupdf": 0.0,
+   "x1_delta_median_pdfium_minus_pymupdf": -0.637,
    "per_page": [
     {
      "page": 1,
@@ -117,9 +117,9 @@
    "baseline_delta_median": 0.0,
    "baseline_delta_max": 0.0002,
    "x_overlap_median": 1.0,
-   "x_overlap_min": 1.0,
+   "x_overlap_min": 0.998,
    "x0_delta_median_pdfium_minus_pymupdf": 0.602,
-   "x1_delta_median_pdfium_minus_pymupdf": -0.0002,
+   "x1_delta_median_pdfium_minus_pymupdf": -0.4061,
    "per_page": [
     {
      "page": 1,

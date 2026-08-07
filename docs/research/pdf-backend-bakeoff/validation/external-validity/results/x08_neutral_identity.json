@@ -278,6 +278,20 @@
    "observed": false,
    "pass": true,
    "implication": ""
+  },
+  {
+   "test": "A24.2: a content-stream U+0020 with a positive-area box is INELIGIBLE",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "implication": "the box PDFium reports for a real space is 3.6 x 0.014 pt and clears 'positive area'; geometry alone cannot express the ink/non-ink distinction"
+  },
+  {
+   "test": "...while the same geometry with an ink codepoint stays eligible",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": "the exclusion is exactly U+0020, not a size threshold"
   }
  ],
  "failures": [],
@@ -287,18 +301,18 @@
    "pages": 12,
    "chars": 15453,
    "generated": 2461,
-   "geometrically_eligible": 12992,
-   "excluded": 2461,
-   "excluded_ONLY_by_a_codepoint_rule": 0
+   "geometrically_eligible": 12691,
+   "excluded": 2762,
+   "excluded_ONLY_by_a_codepoint_rule": 301
   },
   {
    "document": "118-s-4795/1",
    "pages": 12,
    "chars": 16276,
    "generated": 788,
-   "geometrically_eligible": 15488,
-   "excluded": 788,
-   "excluded_ONLY_by_a_codepoint_rule": 0
+   "geometrically_eligible": 13317,
+   "excluded": 2959,
+   "excluded_ONLY_by_a_codepoint_rule": 2171
   }
  ]
 }

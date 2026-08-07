@@ -68,7 +68,7 @@ sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(BAKE / "probes"))
 sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
-from neutral_identity import SourceGlyph, cluster, eligible  # noqa: E402
+from neutral_identity import SPACE, SourceGlyph, cluster, eligible  # noqa: E402
 
 OUT = EV / "results" / "x09_skeleton_cross_engine.json"
 DOCS = [
@@ -160,7 +160,7 @@ def gate(pages: list[dict]) -> dict:
 
 def pdfium_lines(path: Path, limit: int):
     import pdfium_hybrid
-    from contract_hybrid import GEN, UPRIGHT, VBOX, X0, X1
+    from contract_hybrid import CP, GEN, UPRIGHT, VBOX, X0, X1
 
     pages, _ = pdfium_hybrid.extract(path, limit=limit)
     out: dict[int, list] = {}
@@ -168,7 +168,7 @@ def pdfium_lines(path: Path, limit: int):
         for i, c in enumerate(p.chars):
             box = None if c[X0] is None or c[X1] is None or c[VBOX] is None else (c[X0], c[VBOX][0], c[X1], c[VBOX][1])
             gid = None if c[GEN] else i
-            if eligible(gid, box, bool(c[UPRIGHT])):
+            if eligible(gid, box, bool(c[UPRIGHT]), c[CP]):
                 out.setdefault(p.page_number, []).append(SourceGlyph(gid, c[2], box[0], box[1], box[2], box[3]))
     return {pg: cluster(gs, pg) for pg, gs in out.items()}
 
@@ -195,6 +195,13 @@ def pymupdf_lines(path: Path, limit: int):
                     # nothing, which reads like engine disagreement rather than a bug.
                     origin, bx = ch[2], ch[3]
                     if bx is None or origin is None:
+                        continue
+                    # A24.2, applied to BOTH engines. `get_texttrace()` gives the codepoint
+                    # as ch[0], so PyMuPDF's skeleton excludes U+0020 by exactly the rule
+                    # the PDFium side uses. Without this the control would compare two
+                    # differently DEFINED frames and report the definition gap as engine
+                    # disagreement.
+                    if ch[0] == SPACE:
                         continue
                     x0, y0, x1, y1 = bx
                     if (x1 - x0) <= 0 or (y1 - y0) <= 0:

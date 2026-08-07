@@ -271,13 +271,27 @@ def part5_symmetry() -> None:
 
 
 def part6_eligibility() -> None:
-    check("generated space (gid None) is ineligible", False, eligible(None, (1, 1, 2, 2), True))
-    check("missing box is ineligible", False, eligible(5, None, True))
-    check("zero-area box is ineligible", False, eligible(5, (10, 10, 10, 10), True))
-    check("zero-width box is ineligible", False, eligible(5, (10, 10, 10, 20), True))
-    check("non-upright glyph is ineligible", False, eligible(5, (10, 10, 20, 20), False))
-    check("a real ink mark is eligible", True, eligible(5, (10, 10, 20, 20), True))
-    check("None coordinate is ineligible", False, eligible(5, (10, None, 20, 20), True))
+    A = ord("A")
+    check("generated space (gid None) is ineligible", False, eligible(None, (1, 1, 2, 2), True, 32))
+    check("missing box is ineligible", False, eligible(5, None, True, A))
+    check("zero-area box is ineligible", False, eligible(5, (10, 10, 10, 10), True, A))
+    check("zero-width box is ineligible", False, eligible(5, (10, 10, 10, 20), True, A))
+    check("non-upright glyph is ineligible", False, eligible(5, (10, 10, 20, 20), False, A))
+    check("a real ink mark is eligible", True, eligible(5, (10, 10, 20, 20), True, A))
+    check("None coordinate is ineligible", False, eligible(5, (10, None, 20, 20), True, A))
+    check(
+        "A24.2: a content-stream U+0020 with a positive-area box is INELIGIBLE",
+        False,
+        eligible(5, (10, 10, 13.6, 10.014), True, 32),
+        "the box PDFium reports for a real space is 3.6 x 0.014 pt and clears 'positive "
+        "area'; geometry alone cannot express the ink/non-ink distinction",
+    )
+    check(
+        "...while the same geometry with an ink codepoint stays eligible",
+        True,
+        eligible(5, (10, 10, 13.6, 10.014), True, A),
+        "the exclusion is exactly U+0020, not a size threshold",
+    )
 
 
 def part7_development(limit: int = 12) -> list[dict]:
@@ -313,7 +327,7 @@ def part7_development(limit: int = 12) -> list[dict]:
                     else (c[X0], c[VBOX][0], c[X1], c[VBOX][1])
                 )
                 gid = None if c[GEN] else i
-                ok = eligible(gid, box, bool(c[UPRIGHT]))
+                ok = eligible(gid, box, bool(c[UPRIGHT]), c[CP])
                 if c[GEN]:
                     gen += 1
                 if ok:

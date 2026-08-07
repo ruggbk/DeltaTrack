@@ -38,10 +38,12 @@ sys.path.insert(0, str(HERE.parent))
 
 from m3_boundaries import HeadingOutcome, decompose, heading_outcome  # noqa: E402
 from neutral_identity import (  # noqa: E402
+    Cell,
     EmittedLine,
     SourceGlyph,
     build_owner,
     cluster,
+    contribution,
     line_discordance,
     line_state,
     m0,
@@ -734,6 +736,174 @@ def part9_frame_conditioning() -> dict:
     return out
 
 
+# -------------------------------------------------------------------------- part 10
+#
+# A24.2: PROVENANCE is not NEUTRAL INK IDENTITY. A content-stream space has real provenance
+# and no physical ink identity. These cases pin that the split preserves architecture TEXT
+# while removing the space from IDENTITY -- the failure mode being that a space, once it
+# loses its gid, gets treated as a foreign glyph and erased from the projection.
+
+
+# One neutral line of ink: gids 0,1,2 = A B C. Spaces never own identity.
+def cs_space(sci):
+    """A CONTENT-STREAM space: real provenance, no neutral identity."""
+    return Cell(ngid=None, char=" ", sci=sci, generated=False)
+
+
+def gen_space(sci):
+    """A PDFium-GENERATED space: provenance if useful, no neutral identity."""
+    return Cell(ngid=None, char=" ", sci=sci, generated=True)
+
+
+def ins_space():
+    """An X-INSERTED space: no provenance at all, no neutral identity."""
+    return Cell(ngid=None, char=" ", sci=None, generated=False)
+
+
+def part10_provenance_vs_identity() -> list[dict]:
+    rows, bad = [], []
+
+    def case(name, emitted, line, expected):
+        got = contribution(emitted, line)
+        rows.append({"case": name, "expected": expected, "observed": got})
+        if got != expected:
+            bad.append(f"{name}: expected {expected!r} observed {got!r}")
+
+    # 1. content-stream space BETWEEN ink of the same neutral line -> KEPT
+    case(
+        "content-stream space between ink of one neutral line",
+        [EmittedLine([Cell(0, "A", 0), cs_space(1), Cell(1, "B", 2)])],
+        LINES[0],
+        "A B",
+    )
+    # 2. generated space, same position -> KEPT, identically
+    case(
+        "generated space between ink of one neutral line",
+        [EmittedLine([Cell(0, "A", 0), gen_space(1), Cell(1, "B", 2)])],
+        LINES[0],
+        "A B",
+    )
+    # 3. X-inserted space -> KEPT, identically
+    case(
+        "X-inserted space between ink of one neutral line",
+        [EmittedLine([Cell(0, "A", 0), ins_space(), Cell(1, "B", 2)])],
+        LINES[0],
+        "A B",
+    )
+    # 4. space between ink of DIFFERENT neutral lines -> dropped from both
+    merged = [EmittedLine([Cell(0, "A", 0), cs_space(1), Cell(3, "D", 2)])]
+    case("space across two neutral lines, seen from N0", merged, LINES[0], "A")
+    case("space across two neutral lines, seen from N1", merged, LINES[1], "D")
+    # 5. leading space -> dropped
+    case("leading space before the first ink glyph", [EmittedLine([cs_space(9), Cell(0, "A", 0)])], LINES[0], "A")
+    # 6. trailing space -> dropped
+    case("trailing space after the last ink glyph", [EmittedLine([Cell(0, "A", 0), cs_space(9)])], LINES[0], "A")
+    # 7. consecutive spaces -> kept together
+    case(
+        "consecutive spaces between owned ink",
+        [EmittedLine([Cell(0, "A", 0), cs_space(1), ins_space(), Cell(1, "B", 2)])],
+        LINES[0],
+        "A  B",
+    )
+    # 8. space between owned ink and a FOREIGN glyph -> dropped
+    case(
+        "space between owned ink and a foreign glyph",
+        [EmittedLine([Cell(0, "A", 0), cs_space(1), Cell(99, "Z", 2)])],
+        LINES[0],
+        "A",
+    )
+    check("Model G attachment holds for every space provenance and position", [], bad)
+
+    # a space must never become identity merely because it needs attachment semantics
+    el_line = EmittedLine([Cell(0, "A", 0), cs_space(1), Cell(1, "B", 2)])
+    check(
+        "a content-stream space contributes TEXT but never IDENTITY",
+        ([0, 1], "A B"),
+        (sorted(el_line.gids), el_line.text()),
+        "gids carries neutral ink only; the space is visible in text and absent from identity",
+    )
+    check(
+        "provenance survives on the cell even with no neutral identity",
+        (None, 1, False),
+        (el_line.cells[1].ngid, el_line.cells[1].sci, el_line.cells[1].generated),
+    )
+    # spaces cannot move the signature, whatever their provenance
+    plain = reconstruction_signature([EmittedLine([Cell(0, "A", 0), Cell(1, "B", 1)])], LINES[0], OWNER, {0, 1, 2})
+    check(
+        "no space provenance can move the reconstruction signature",
+        [plain, plain, plain],
+        [
+            reconstruction_signature(
+                [EmittedLine([Cell(0, "A", 0), cs_space(1), Cell(1, "B", 2)])], LINES[0], OWNER, {0, 1, 2}
+            ),
+            reconstruction_signature(
+                [EmittedLine([Cell(0, "A", 0), gen_space(1), Cell(1, "B", 2)])], LINES[0], OWNER, {0, 1, 2}
+            ),
+            reconstruction_signature(
+                [EmittedLine([Cell(0, "A", 0), ins_space(), Cell(1, "B", 2)])], LINES[0], OWNER, {0, 1, 2}
+            ),
+        ],
+        "segmentation must respond to grouping, never to spacing",
+    )
+    return rows
+
+
+# -------------------------------------------------------------------------- part 11
+
+
+def part11_hr_fixture() -> dict:
+    """The `H. R. 2029` disagreement, frozen as a regression fixture.
+
+    A24.1 ruled that X2-b is about PDFium-GENERATED spaces, so X declining to reproduce a
+    CONTENT-STREAM space is not a contract violation -- it is a genuine architecture
+    disagreement, and deciding who is right is the ORACLE's job, not the gate's.
+
+    This fixture exists so that ruling cannot silently rot: the disagreement must stay
+    visible as comparative TEXT discordance and must remain scorable by M3.
+    """
+    # 'H','.','R','.','2','0','2','9' are ink; the two spaces are content-stream.
+    glyphs = [SourceGlyph(i, 500.0, 72.0 + 12 * i, 500.0, 80.0 + 12 * i, 512.0) for i in range(8)]
+    lines = cluster(glyphs, 1)
+    owner = build_owner(lines)
+    ln = lines[0]
+    chars = "H.R.2029"
+    h_cells = []
+    for i, ch in enumerate(chars):
+        h_cells.append(Cell(i, ch, i))
+        if i in (1, 3):  # H. _ R. _ 2029, spaces supplied by the content stream
+            h_cells.append(cs_space(100 + i))
+    h = [EmittedLine(h_cells)]
+    x = [EmittedLine([Cell(i, ch, i) for i, ch in enumerate(chars)])]
+
+    st = line_state(h, x, ln, owner)
+    outcome, hs, xs = heading_outcome("H. R. 2029", st["h_text"], st["x_text"])
+    check("H.R. fixture: H projects the content-stream spaces", "H. R. 2029", st["h_text"])
+    check("H.R. fixture: X projects no space it did not derive", "H.R.2029", st["x_text"])
+    check("H.R. fixture: this is TEXT discordance", True, text_discordance(st))
+    check(
+        "H.R. fixture: and NOT segmentation discordance",
+        False,
+        segmentation_discordance(st),
+        "the arms grouped the same ink identically; only the spacing differs",
+    )
+    check("H.R. fixture: it enters the D-frame", True, line_discordance(st))
+    check(
+        "H.R. fixture: it stays scorable by M3 rather than being filtered by the contract",
+        (HeadingOutcome.X_REGRESSES, True, False),
+        (outcome, hs.clean, xs.clean),
+        "the eligibility gate does not decide correctness -- the oracle does",
+    )
+    return {
+        "h_text": st["h_text"],
+        "x_text": st["x_text"],
+        "text_discordance": text_discordance(st),
+        "segmentation_discordance": segmentation_discordance(st),
+        "m3_outcome": str(outcome),
+        "m3_x_weld": xs.weld,
+        "m3_x_split": xs.split,
+    }
+
+
 def main() -> int:
     print("== part 1: the defect, reproduced under the superseded rule ==")
     defect = part1_defect()
@@ -753,6 +923,10 @@ def main() -> int:
     denom = part8_denominator()
     print("\n== part 9: does the frame condition RQ1? ==")
     framing = part9_frame_conditioning()
+    print("\n== part 10: provenance is not neutral ink identity ==")
+    provenance = part10_provenance_vs_identity()
+    print("\n== part 11: the H. R. 2029 fixture ==")
+    hr = part11_hr_fixture()
 
     doc = {
         "population": "SYNTHETIC only -- no holdout opened, no architecture run",
@@ -762,6 +936,8 @@ def main() -> int:
         "coverage_vs_grouping": coverage,
         "denominator": denom,
         "frame_conditioning": framing,
+        "provenance_vs_identity": provenance,
+        "hr_fixture": hr,
         "m0": m0_out,
         "tests": ROWS,
         "failures": FAILED,

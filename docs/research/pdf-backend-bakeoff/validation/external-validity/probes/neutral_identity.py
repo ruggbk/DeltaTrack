@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 BASELINE_TOL_FACTOR = 0.5
 
@@ -73,14 +74,41 @@ class SourceGlyph:
         return max(self.y1 - self.y0, 0.0)
 
 
-def eligible(gid: int | None, box: tuple | None, upright: bool) -> bool:
-    """Neutral-eligible iff it is a real ink mark. NO codepoint is consulted.
+SPACE = 0x20
 
-    Generated spaces have `gid is None` (engine inventions), newlines and control entries
-    have no box or a degenerate one. Nothing here can condition on H-vs-X text behaviour,
-    because nothing here reads text.
+
+def eligible(gid: int | None, box: tuple | None, upright: bool, codepoint: int | None) -> bool:
+    """Neutral-eligible iff it is a real ink mark.
+
+    A24.2 WITHDRAWS A19/A21's absolute phrase "NO codepoint is consulted". `x12` falsified
+    the assumption that sentence rested on -- that a positive-area PDFium character box
+    identifies a physical ink mark. It does not: PDFium reports a box for a content-stream
+    U+0020 about 3.6 pt wide and 0.014 pt tall, against 7.9 pt for a capital, so "positive
+    area" admits it by a hair and every real word space entered the supposedly ink-only
+    skeleton.
+
+    THE NARROW REPLACEMENT INVARIANT:
+
+        neutral-eligible iff  a source character exists
+                          AND codepoint != U+0020
+                          AND the box is valid, finite and positive-area
+                          AND the character is upright
+
+    WHY THIS ONE LEXICAL EXCEPTION IS LEGITIMATE, and does not reopen the principle it
+    narrows:
+
+      * U+0020 is a BELOW-SEAM SOURCE FACT, available before either architecture runs;
+      * X-2 already froze the architectural judgment that a space "carries no ink" -- this
+        rule adopts a decision the protocol had already made, it does not invent one;
+      * it reads no H or X output, so it cannot favour either arm;
+      * `x12` measured that PDFium's char-box API simply does not encode the ink/non-ink
+        distinction by area, so geometry alone cannot express the intended rule.
+
+    NOT A WHITESPACE BLACKLIST. Only U+0020 is excluded, and only because X-2 froze it and
+    x12 measured it. Newlines, generated spaces and control entries are still excluded by
+    geometry alone. If another non-ink category appears, it is reported, not quietly added.
     """
-    if gid is None or box is None:
+    if gid is None or box is None or codepoint == SPACE:
         return False
     x0, y0, x1, y1 = box
     if any(v is None for v in (x0, y0, x1, y1)):
@@ -150,6 +178,35 @@ def build_owner(lines: list[NeutralLine]) -> dict[int, tuple[int, int]]:
 # --------------------------------------------------------------- architecture output
 
 
+class Cell(NamedTuple):
+    """One character in an emitted printed line, with PROVENANCE and IDENTITY separated.
+
+    A24.2 proved these are two different concepts that a single `gid` was overloading:
+
+        ngid   NEUTRAL INK IDENTITY -- which physical mark owns a place in the skeleton.
+               `None` for anything that is not neutral ink.
+        sci    SOURCE PROVENANCE -- which PDFium text-page character produced this output.
+               `None` only when the architecture INVENTED the character.
+
+    A content-stream space has real provenance and NO physical ink identity. Collapsing the
+    two made that state unrepresentable, which is why spaces were entering the skeleton.
+
+        ordinary ink              ngid=123  sci=123  char='A'  generated=False
+        content-stream U+0020     ngid=None sci=124  char=' '  generated=False
+        PDFium-generated U+0020   ngid=None sci=125  char=' '  generated=True
+        X-inserted space          ngid=None sci=None char=' '  generated=False
+
+    Only `ngid` may reach the neutral skeleton, `common`, the reconstruction signature or a
+    loss diagnostic. `sci` and `char` are the architecture's own output and stay visible to
+    projected text and therefore to M2/M3.
+    """
+
+    ngid: int | None
+    char: str
+    sci: int | None = None
+    generated: bool = False
+
+
 @dataclass
 class EmittedLine:
     """ONE reconstructed printed line, as the architecture actually emits it.
@@ -165,21 +222,30 @@ class EmittedLine:
     Page.print_lines)`. It exists so that "these two glyphs were emitted on the same line"
     is a recorded fact rather than something re-derived from geometry.
 
-    Each cell is `(gid, char)`. A gid of None is a character the architecture INSERTED --
-    a word space it decided on, or an engine-generated space it consumed. That is precisely
-    the thing under test, so it is carried, never normalised away, and it never enters the
-    reconstruction signature.
+    Each cell is a `Cell`, which keeps NEUTRAL INK IDENTITY (`ngid`) separate from SOURCE
+    PROVENANCE (`sci`). A cell with `ngid is None` is not neutral ink -- an inserted word
+    space, an engine-generated space, or a content-stream space that has real provenance but
+    no physical ink identity. All three are carried, never normalised away, and none of them
+    can enter the reconstruction signature.
+
+    A bare `(ngid, char)` pair is accepted and widened to a `Cell`, so the synthetic fixtures
+    stay readable; anything constructed that way has no provenance, which is exactly right
+    for a fixture that is not describing a real extraction.
     """
 
-    cells: list[tuple[int | None, str]] = field(default_factory=list)
+    cells: list[Cell] = field(default_factory=list)
     lid: tuple[int, int] | None = None
+
+    def __post_init__(self) -> None:
+        self.cells = [c if isinstance(c, Cell) else Cell(*c) for c in self.cells]
 
     @property
     def gids(self) -> set[int]:
-        return {g for g, _ in self.cells if g is not None}
+        """NEUTRAL INK identities only. Never provenance."""
+        return {c.ngid for c in self.cells if c.ngid is not None}
 
     def text(self) -> str:
-        return "".join(c for _, c in self.cells)
+        return "".join(c.char for c in self.cells)
 
 
 def contribution(emitted: list[EmittedLine], line: NeutralLine) -> str:
@@ -187,10 +253,30 @@ def contribution(emitted: list[EmittedLine], line: NeutralLine) -> str:
 
     Set membership on gids. No tolerance, no nearest-anything, no text similarity.
 
-    Spacing is PRESERVED, which is the whole point: an inserted character (gid None) is kept
-    when it sits BETWEEN two retained glyphs of this line. So the same gid set yields
-    "FAMILYHOUSING" from an architecture that welded and "FAMILY HOUSING" from one that did
-    not -- the neutral skeleton supplies identity and never supplies spacing.
+    Spacing is PRESERVED, which is the whole point: a NON-NEUTRAL character (`ngid is None`)
+    is kept when it sits BETWEEN two retained ink glyphs of this line. So the same ink set
+    yields "FAMILYHOUSING" from an architecture that welded and "FAMILY HOUSING" from one
+    that did not -- the neutral skeleton supplies identity and never supplies spacing.
+
+    THE ATTACHMENT RULE, frozen by A24.2 and unchanged in substance by it:
+
+        a non-neutral character contributes to neutral line N iff, in the architecture's own
+        emitted order, it lies BETWEEN two ink glyphs that N owns, with no ink glyph of
+        another neutral line intervening.
+
+    A24.2 makes this rule carry more traffic than before -- a content-stream space now has
+    `ngid is None` like an inserted one -- and it needed no change to do so, which is the
+    point: the rule was already about ATTACHMENT, not about identity. Its consequences,
+    each tested rather than argued:
+
+      * leading and trailing spaces are dropped (nothing owned precedes / follows them);
+      * a space between ink of two DIFFERENT neutral lines is dropped from both, since a
+        foreign ink glyph clears the pending buffer. It belongs to neither exclusively and
+        no tie-break is invented;
+      * consecutive spaces are kept or dropped together;
+      * a content-stream space, a generated space and an X-inserted space are treated
+        identically here, because at this point they differ only in provenance -- which is
+        recorded on the cell and never consulted for attachment.
 
     Emitted lines are concatenated in the order of their FIRST owned gid, so ordering is a
     function of source identity rather than of emission order: reversing the list cannot
@@ -210,32 +296,37 @@ def contribution(emitted: list[EmittedLine], line: NeutralLine) -> str:
     while a split MID-word still registers as a real boundary defect, which is correct --
     the arm did break the word across two printed lines.
     """
-    owned: list[tuple[list[tuple[int | None, str]], int]] = []
+    owned: list[tuple[list[Cell], int]] = []
     for frag in emitted:
-        kept: list[tuple[int | None, str]] = []
-        pending: list[tuple[int | None, str]] = []
+        kept: list[Cell] = []
+        pending: list[Cell] = []
         seen_owned = False
-        for gid, ch in frag.cells:
+        for cell in frag.cells:
+            gid = cell.ngid
             if gid is None:
-                (pending if seen_owned else []).append((gid, ch))
+                (pending if seen_owned else []).append(cell)
                 continue
             if gid in line.gids:
                 if seen_owned:
                     kept.extend(pending)
                 pending = []
-                kept.append((gid, ch))
+                kept.append(cell)
                 seen_owned = True
             else:
                 pending = []  # an inserted char adjacent to a foreign glyph is not ours
         if kept:
-            first = min(g for g, _ in kept if g is not None)
+            first = min(c.ngid for c in kept if c.ngid is not None)
             owned.append((kept, first))
     owned.sort(key=lambda kv: kv[1])
-    return "\n".join("".join(ch for _, ch in cells) for cells, _ in owned)
+    return "\n".join("".join(c.char for c in cells) for cells, _ in owned)
 
 
 def emitted_gids(emitted: list[EmittedLine]) -> set[int]:
-    """Every source glyph this architecture emitted anywhere on the page."""
+    """Every NEUTRAL INK glyph this architecture emitted anywhere on the page.
+
+    Neutral identities only. A24.2: a content-stream space has provenance but no ink
+    identity, so it can never enter `common`, a signature, or a loss diagnostic.
+    """
     return {g for f in emitted for g in f.gids}
 
 
@@ -338,8 +429,8 @@ def line_state(
 
     h_gids = {g for f in h_emitted for g in f.gids} & line.gids
     x_gids = {g for f in x_emitted for g in f.gids} & line.gids
-    h_seq = [g for f in h_own for g, _ in f.cells if g in line.gids]
-    x_seq = [g for f in x_own for g, _ in f.cells if g in line.gids]
+    h_seq = [c.ngid for f in h_own for c in f.cells if c.ngid in line.gids]
+    x_seq = [c.ngid for f in x_own for c in f.cells if c.ngid in line.gids]
     return {
         "line": line.key,
         "state": state,

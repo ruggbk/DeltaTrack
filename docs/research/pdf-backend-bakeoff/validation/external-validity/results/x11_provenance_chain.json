@@ -16,7 +16,7 @@
     "1": 288
    },
    "neutral_lines_with_a_cross_line_merge": 0,
-   "max_source_char_index_seen": 1465
+   "max_source_char_index_seen": 1464
   },
   {
    "document": "118-s-4795/1",
@@ -28,7 +28,7 @@
     "1": 291
    },
    "neutral_lines_with_a_cross_line_merge": 0,
-   "max_source_char_index_seen": 1520
+   "max_source_char_index_seen": 1519
   }
  ],
  "tests": [

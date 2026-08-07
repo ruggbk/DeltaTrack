@@ -37,7 +37,7 @@ import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_raw
 import reconstruct_hybrid
 from contract_hybrid import BASELINE, CP, GEN, SIZE, UPRIGHT, VBOX, X0, X1
-from neutral_identity import EmittedLine, SourceGlyph, cluster, eligible
+from neutral_identity import SPACE, Cell, EmittedLine, SourceGlyph, cluster, eligible
 
 _FONT_BUF = 256
 _UPRIGHT_EPS = 1e-6
@@ -140,20 +140,24 @@ def _cells_for_row(row: list[tuple[int, tuple]]) -> list[tuple[int | None, str]]
     Mirrors the frozen transformation exactly: drop CR/LF, render the soft hyphen as an
     ASCII hyphen, collapse each run of spaces to its FIRST cell, then strip the ends.
     """
-    cells: list[tuple[int | None, str]] = []
+    cells: list[Cell] = []
     for gid, c in row:
         ch = chr(c[CP])
         if ch in ("\r", "\n"):
             continue
-        cells.append((None if c[GEN] else gid, "-" if ch == _SOFT_HYPHEN else ch))
-    collapsed: list[tuple[int | None, str]] = []
+        # A24.2: PROVENANCE is always recorded; NEUTRAL IDENTITY only for real ink. A
+        # content-stream space keeps its `sci` and loses its `ngid`, which is exactly the
+        # state the old single-`gid` representation could not express.
+        neutral = None if (c[GEN] or c[CP] == SPACE) else gid
+        cells.append(Cell(ngid=neutral, char="-" if ch == _SOFT_HYPHEN else ch, sci=gid, generated=bool(c[GEN])))
+    collapsed: list[Cell] = []
     for cell in cells:
-        if cell[1] == " " and collapsed and collapsed[-1][1] == " ":
+        if cell.char == " " and collapsed and collapsed[-1].char == " ":
             continue
         collapsed.append(cell)
-    while collapsed and collapsed[0][1] == " ":
+    while collapsed and collapsed[0].char == " ":
         collapsed.pop(0)
-    while collapsed and collapsed[-1][1] == " ":
+    while collapsed and collapsed[-1].char == " ":
         collapsed.pop()
     return collapsed
 
@@ -196,7 +200,7 @@ def emitted_lines(page_number: int, chars_with_gids: list[tuple[int, tuple]]) ->
     for row in rows:
         pairs = [(g, c) for _p, g, c in row]
         cells = _cells_for_row(pairs)
-        text = "".join(ch for _, ch in cells)
+        text = "".join(c.char for c in cells)
         if reconstruct_hybrid.is_chrome(text, [c for _g, c in pairs], body_size):
             continue
         m = _NUMBERED_LINE.match(text)
@@ -213,17 +217,16 @@ def neutral_skeleton(page_number: int, chars_with_gids: list[tuple[int, tuple]])
     from here and from the X arm's runner, so the skeleton cannot diverge between arms and
     an amendment to eligibility is a one-line change in one place.
 
-    RECORDED LIMIT, measured not assumed (see `x12_skeleton_eligibility.py`): PDFium reports
-    a positive-area box for a real U+0020, about 3.6 pt wide and 0.014 pt tall against 8.44
-    pt for a capital. "Positive area" therefore admits it, so every content-stream space is
-    a skeleton member. That follows from the frozen geometric rule and is NOT silently
-    changed here.
+    A24.2: eligibility now also excludes U+0020 by codepoint. `x12` measured that PDFium
+    reports a positive-area box for a real space -- about 3.6 pt wide and 0.014 pt tall
+    against 7.9 pt for a capital -- so "positive area" cannot express the ink/non-ink
+    distinction on its own, and the skeleton was admitting every word space.
     """
     glyphs = []
     for gid, c in chars_with_gids:
         box = None if c[X0] is None or c[X1] is None or c[VBOX] is None else (c[X0], c[VBOX][0], c[X1], c[VBOX][1])
         g = None if c[GEN] else gid
-        if eligible(g, box, bool(c[UPRIGHT])):
+        if eligible(g, box, bool(c[UPRIGHT]), c[CP]):
             glyphs.append(SourceGlyph(gid, c[BASELINE], box[0], box[1], box[2], box[3]))
     return cluster(glyphs, page_number)
 

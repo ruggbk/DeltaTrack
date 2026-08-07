@@ -5,11 +5,11 @@
   "X2b": "re-admitting the engine's spaces changes no reconstructed printed line"
  },
  "method": "X2-b RE-RUNS the arm and compares every reconstructed printed line in order; it is not an assertion about the code",
- "AMBIGUITY": "'the engine's spaces' is not determined by the frozen text and the two readings DISAGREE on development material. generated-only PASSES; all-U+0020 FAILS. This file therefore reports both and does NOT choose. The headline field below carries the STRICTER reading so that G2 cannot go green on an interpretation chosen here. See amendment A24; a ruling is required before execution readiness can open.",
+ "RULING": "A24.1 froze 'the engine's spaces' as PDFium-GENERATED U+0020 (FPDFText_IsGenerated == true). X2-b exists to prove the extended rule is not secretly consuming PDFium's own inserted boundary decisions -- the phase-3 D2 finding -- while X2-a separately guarantees no U+0020 crosses the seam. Requiring every CONTENT-STREAM space to be reproduced would turn X2-b into a partial H/X equivalence gate, making a genuine architecture disagreement void X before the independent oracle could say which arm is right.",
  "X2a_no_u0020": true,
- "X2b_rule_recovers_engine_spaces": false,
- "X2b_reading_generated_only": true,
- "X2b_reading_all_u0020": false,
+ "X2b_gate_generated_only": true,
+ "X2b_diagnostic_all_source_spaces": false,
+ "X2b_rule_recovers_engine_spaces": true,
  "fixtures": [
   {
    "path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
@@ -43,6 +43,6 @@
   }
  ],
  "adapter_blob": "ed3dcd909b0db5bb46223e826e72c7646f73208d",
- "reconstructor_blob": "316b563d4b8d8b142505657948f2dc8b4dfb867e",
- "verifier_blob": "bf79d08992fd6ab5ffebeecd543f5b35409bbfac"
+ "reconstructor_blob": "ed6ea3db3d4992693088a40723aab99ff80e75cd",
+ "verifier_blob": "d0f198cc1a1d3be33a7891b1b204d4886e8fcf20"
 }

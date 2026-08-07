@@ -676,6 +676,17 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
                 want, have = ev.get(f"{label}_blob"), blob_sha(path)
                 if not want or want != have:
                     problems.append(f"{label}_blob {str(want)[:8]!r} != committed {have[:8]!r}")
+            # A24.1/G2: EXECUTE the verifier, do not trust its artifact. Every binding check
+            # above still runs -- they prove the evidence names real, non-holdout fixtures
+            # and matches the committed code -- but a stored `true` is a claim, and this
+            # gate exists to establish a BEHAVIOUR. So the authoritative verifier is run
+            # live and must exit 0. Without this, an evidence file could assert its own
+            # success against code that no longer produces it.
+            live = subprocess.run(
+                [sys.executable, str(X2_VERIFIER)], capture_output=True, text=True, cwd=str(EV / "probes")
+            )
+            if live.returncode != 0:
+                problems.append(f"live x2_verify exited {live.returncode}")
             ok = (
                 bool(a)
                 and bool(b)

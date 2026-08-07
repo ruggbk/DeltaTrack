@@ -37,7 +37,7 @@ _src = _here.parents[5] / "src"
 if _src.is_dir() and str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from neutral_identity import EmittedLine  # noqa: E402
+from neutral_identity import Cell, EmittedLine  # noqa: E402
 from pdfium_extended_corrected import ADVANCE, CP, ORIGIN_X, SCI, SIZE, UPRIGHT, X0, X1  # noqa: E402
 from pdfium_extended_corrected import BASELINE as EBASELINE  # noqa: E402
 
@@ -112,29 +112,32 @@ def _cells(cluster: list) -> list[tuple[int | None, str]]:
     assumes. Every space here is INSERTED by the rule, so it carries `gid=None`.
     """
     items = sorted(cluster, key=lambda g: g[ORIGIN_X])
-    out: list[tuple[int | None, str]] = []
+    out: list[Cell] = []
     prev = None
     for g in items:
         if prev is not None and wants_space(prev, g):
-            out.append((None, " "))
-        out.append((g[SCI], chr(g[CP])))
+            # X INVENTED this space: no provenance and no neutral identity.
+            out.append(Cell(ngid=None, char=" ", sci=None))
+        # X's contract carries no U+0020 at all, so every glyph here is neutral ink and
+        # its provenance and its identity coincide.
+        out.append(Cell(ngid=g[SCI], char=chr(g[CP]), sci=g[SCI]))
         prev = g
     # collapse space runs and strip ends, exactly as the frozen module's
-    # `re.sub(r" +", " ", ...).strip()` does, but cell-wise so gids survive
-    collapsed: list[tuple[int | None, str]] = []
+    # `re.sub(r" +", " ", ...).strip()` does, but cell-wise so identities survive
+    collapsed: list[Cell] = []
     for cell in out:
-        if cell[1] == " " and collapsed and collapsed[-1][1] == " ":
+        if cell.char == " " and collapsed and collapsed[-1].char == " ":
             continue
         collapsed.append(cell)
-    while collapsed and collapsed[0][1] == " ":
+    while collapsed and collapsed[0].char == " ":
         collapsed.pop(0)
-    while collapsed and collapsed[-1][1] == " ":
+    while collapsed and collapsed[-1].char == " ":
         collapsed.pop()
     return collapsed
 
 
 def _line_text(cluster: list) -> str:
-    return "".join(ch for _, ch in _cells(cluster))
+    return "".join(c.char for c in _cells(cluster))
 
 
 def cluster_lines(page) -> list[list]:
@@ -198,7 +201,7 @@ def reconstruct_page(page) -> tuple[Page, list[EmittedLine], dict]:
         ordered = sorted(row, key=lambda g: g[ORIGIN_X])
         n_no_adv += sum(1 for g in ordered if g[ADVANCE] is None)
         cells = _cells(ordered)
-        text = "".join(ch for _, ch in cells)
+        text = "".join(c.char for c in cells)
         if is_chrome(text, ordered, body_size):
             n_chrome += 1
             continue

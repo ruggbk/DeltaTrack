@@ -907,6 +907,62 @@
    "rate": 0.5
   }
  },
+ "provenance_vs_identity": [
+  {
+   "case": "content-stream space between ink of one neutral line",
+   "expected": "A B",
+   "observed": "A B"
+  },
+  {
+   "case": "generated space between ink of one neutral line",
+   "expected": "A B",
+   "observed": "A B"
+  },
+  {
+   "case": "X-inserted space between ink of one neutral line",
+   "expected": "A B",
+   "observed": "A B"
+  },
+  {
+   "case": "space across two neutral lines, seen from N0",
+   "expected": "A",
+   "observed": "A"
+  },
+  {
+   "case": "space across two neutral lines, seen from N1",
+   "expected": "D",
+   "observed": "D"
+  },
+  {
+   "case": "leading space before the first ink glyph",
+   "expected": "A",
+   "observed": "A"
+  },
+  {
+   "case": "trailing space after the last ink glyph",
+   "expected": "A",
+   "observed": "A"
+  },
+  {
+   "case": "consecutive spaces between owned ink",
+   "expected": "A  B",
+   "observed": "A  B"
+  },
+  {
+   "case": "space between owned ink and a foreign glyph",
+   "expected": "A",
+   "observed": "A"
+  }
+ ],
+ "hr_fixture": {
+  "h_text": "H. R. 2029",
+  "x_text": "H.R.2029",
+  "text_discordance": true,
+  "segmentation_discordance": false,
+  "m3_outcome": "HeadingOutcome.X_REGRESSES",
+  "m3_x_weld": 2,
+  "m3_x_split": 0
+ },
  "m0": {
   "neutral_lines_in_scope": 5,
   "risk_set": 4,
@@ -1436,6 +1492,160 @@
    ],
    "pass": true,
    "implication": "the conditioning is on denominators and populations, NOT on verdict direction -- stated precisely rather than overclaimed"
+  },
+  {
+   "test": "Model G attachment holds for every space provenance and position",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "a content-stream space contributes TEXT but never IDENTITY",
+   "expected": [
+    [
+     0,
+     1
+    ],
+    "A B"
+   ],
+   "observed": [
+    [
+     0,
+     1
+    ],
+    "A B"
+   ],
+   "pass": true,
+   "implication": "gids carries neutral ink only; the space is visible in text and absent from identity"
+  },
+  {
+   "test": "provenance survives on the cell even with no neutral identity",
+   "expected": [
+    null,
+    1,
+    false
+   ],
+   "observed": [
+    null,
+    1,
+    false
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "no space provenance can move the reconstruction signature",
+   "expected": [
+    [
+     [
+      [
+       0,
+       1
+      ],
+      []
+     ]
+    ],
+    [
+     [
+      [
+       0,
+       1
+      ],
+      []
+     ]
+    ],
+    [
+     [
+      [
+       0,
+       1
+      ],
+      []
+     ]
+    ]
+   ],
+   "observed": [
+    [
+     [
+      [
+       0,
+       1
+      ],
+      []
+     ]
+    ],
+    [
+     [
+      [
+       0,
+       1
+      ],
+      []
+     ]
+    ],
+    [
+     [
+      [
+       0,
+       1
+      ],
+      []
+     ]
+    ]
+   ],
+   "pass": true,
+   "implication": "segmentation must respond to grouping, never to spacing"
+  },
+  {
+   "test": "H.R. fixture: H projects the content-stream spaces",
+   "expected": "H. R. 2029",
+   "observed": "H. R. 2029",
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "H.R. fixture: X projects no space it did not derive",
+   "expected": "H.R.2029",
+   "observed": "H.R.2029",
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "H.R. fixture: this is TEXT discordance",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "H.R. fixture: and NOT segmentation discordance",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "implication": "the arms grouped the same ink identically; only the spacing differs"
+  },
+  {
+   "test": "H.R. fixture: it enters the D-frame",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "H.R. fixture: it stays scorable by M3 rather than being filtered by the contract",
+   "expected": [
+    "X_REGRESSES",
+    true,
+    false
+   ],
+   "observed": [
+    "X_REGRESSES",
+    true,
+    false
+   ],
+   "pass": true,
+   "implication": "the eligibility gate does not decide correctness -- the oracle does"
   }
  ],
  "failures": []
