@@ -184,9 +184,11 @@ Money extraction is a function of the **corresponding text pair, not of the chan
 and this is already true in the code: `bill_diff_to_dict` computes it for every change
 whatever its `change_type`. So financial interpretation consumes the correspondence, in
 parallel with classification rather than downstream of it, and **may not participate in
-deciding identity**. #368 is what this rule prevents: money reported exactly what
-correspondence handed it, and the error was made a stage earlier. Placing money after
-classification would imply the change type is an input to it, which is false.
+deciding identity**. [#368](https://github.com/AgoraDMV/DeltaTrack/issues/368) traces the
+failure mode this rule guards: when correspondence is wrong, money still reports correctly on
+the text pair it receives, so the defect originates in correspondence rather than in financial
+interpretation. Placing money after classification would imply the change type is an input to
+it, which is false.
 
 ### What this record does not decide
 
@@ -252,9 +254,9 @@ the contents of one stage change.
   the identity measure no longer edits what the renderer shows, because the renderer's
   legibility cutoff stops being the differ's identity cutoff.
 
-- **#368 becomes fixable at its cause.** Whether a heavily edited section is one provision or
-  two is an assignment question; how its money is paired is a consequence. Today they are one
-  expression.
+- **#368's failure mode becomes addressable at its cause.** Whether a heavily edited section
+  is one provision or two is an assignment question; how its money is paired is a consequence.
+  Today they are one expression.
 
 - **Retrieval becomes additive.** A new retriever joins a union instead of becoming another
   pass over the whole bill after classification.
@@ -334,8 +336,8 @@ reached assignment" passes in the first case.
 
 ## Relationship to other records
 
-- **[ADR 0019](0019-observation-identity.md)** (proposed) — supplies the identity every type
-  here references. This record adds no competing identity.
+- **[ADR 0019](0019-observation-identity.md)** — supplies the identity every type here
+  references. This record adds no competing identity.
 - **[ADR 0006](0006-canonical-diff-contract.md)** — a hard constraint. The contract's shape
   does not change; the non-binary projection above is where a future amendment would be
   argued.
