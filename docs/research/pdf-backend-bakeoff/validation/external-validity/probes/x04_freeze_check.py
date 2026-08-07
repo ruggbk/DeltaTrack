@@ -33,7 +33,9 @@ to fail, because a gate that has never produced a negative cannot tell "ready" f
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import re
 import subprocess
@@ -58,11 +60,43 @@ ADAPTER = EV / "probes" / "pdfium_extended_corrected.py"
 RECONSTRUCTOR = EV / "probes" / "reconstruct_extended_corrected.py"
 X2_EVIDENCE = EV / "results" / "x2_contract_assertions.json"
 ADJUDICATOR_PROMPT = EV / "probes" / "adjudicator_prompt.md"
+X2_VERIFIER = EV / "probes" / "x2_verify.py"
 AMENDMENTS = EV / "PRE-EXECUTION-AMENDMENTS.md"
 # The one-way boundary. Before it: no confirmatory output may exist, and SUBSTANTIVE
 # pre-execution amendments are allowed. After it: confirmatory output may exist, and a
 # scoring-rule change is a DEVIATION, not an amendment.
 EXECUTION_MARKER = EV / "results" / "EXECUTION-START.json"
+
+# THE POPULATION FREEZE IS A HISTORICAL FACT, PINNED, not "whatever commit last touched
+# the manifest". Deriving it from last_commit(MEMBERSHIP) makes the boundary movable: a
+# later committed edit to the manifest would silently become the new freeze, move F3's
+# pre-selection snapshot to that commit's parent, and shrink F9's post-freeze window to
+# exclude everything before it. A later membership modification is RESELECTION, not a new
+# freeze, and F11 fails rather than re-anchoring.
+POPULATION_FREEZE_COMMIT = "4e2b520d993167fc4e2836ffa3f63f1a4de3d759"
+
+# Result-bearing methodology surface: files that can move which records enter a frame,
+# what an adjudicator sees, which oracle label attaches to which region, a metric outcome,
+# or the architecture decision. Every one must exist and be committed before execution may
+# be authorized. Presentation-only code is deliberately absent.
+METHODOLOGY_SURFACE = {
+    "probes/pdfium_extended_corrected.py": "X's character facts -> every X metric",
+    "probes/reconstruct_extended_corrected.py": "X's word segmentation -> every X metric",
+    "probes/run_hybrid.py": "H's extraction -> every H metric",
+    "probes/run_extended.py": "X's extraction -> every X metric",
+    "probes/build_frames.py": "which records enter the C-frame and D-frame",
+    "probes/build_oracle.py": "what the adjudicator sees; which label binds to which region",
+    "probes/m3_boundaries.py": "WELD/SPLIT/TEXT_ERROR and the heading-level decision unit",
+    "probes/score_metrics.py": "M0-M9 outcomes",
+    "probes/decide_architecture.py": "the architecture decision itself",
+    "probes/x2_verify.py": "whether X's contract assertions actually hold",
+    "probes/adjudicator_prompt.md": "what the adjudicator is asked and shown",
+}
+
+# Files whose post-freeze modification is a methodological change and must be declared
+# commit-by-commit in the ledger.
+PROTECTED_SUFFIXES = (".py", ".md")
+PROTECTED_EXEMPT = {"PRE-EXECUTION-AMENDMENTS.md"}
 
 AMENDMENT_CLASSES = {"CLERICAL", "SUBSTANTIVE", "TOOLING"}
 # Paths that are outputs of running the gate itself, or scratch, and are not part of the
@@ -70,9 +104,48 @@ AMENDMENT_CLASSES = {"CLERICAL", "SUBSTANTIVE", "TOOLING"}
 F9_IGNORE = {"results/DEVIATIONS.md"}
 
 
+def blob_sha(path: Path, commit: str = "") -> str:
+    """git blob hash of a path, at `commit` or in the working tree."""
+    rel = str(path.relative_to(REPO))
+    if commit:
+        return git("rev-parse", f"{commit}:{rel}")
+    return git("hash-object", rel) if path.exists() else ""
+
+
+def marker_state() -> tuple[str, str, list[str]]:
+    """(state, boundary_commit, errors) for the execution-start marker.
+
+    WRITE-ONCE. `last_commit` would make the boundary MOVABLE: authorize at M, edit the
+    marker at N, and a substantive change between M and N would appear to predate the
+    boundary. `first_commit` alone is not enough either -- this study has already shown a
+    path being deleted and recreated, after which first_commit names a version that no
+    longer exists. So immutability is asserted directly:
+
+        the path has exactly ONE modifying commit, and
+        the current blob equals the blob introduced by that commit.
+
+    States: ABSENT, UNCOMMITTED, MUTATED, VALID.
+    """
+    if not EXECUTION_MARKER.exists():
+        return "ABSENT", "", []
+    if not committed(EXECUTION_MARKER):
+        return "UNCOMMITTED", "", ["marker exists on disk but is not committed unmodified"]
+
+    rel = str(EXECUTION_MARKER.relative_to(REPO))
+    commits = git("log", "--format=%H", "--", rel).splitlines()
+    errors = []
+    if len(commits) != 1:
+        errors.append(f"marker has {len(commits)} modifying commits; it must be write-once")
+    boundary = commits[-1] if commits else ""
+    if boundary and blob_sha(EXECUTION_MARKER) != blob_sha(EXECUTION_MARKER, boundary):
+        errors.append("current marker blob differs from the blob introduced at its first commit")
+    return ("VALID" if not errors else "MUTATED"), boundary, errors
+
+
 def marker_commit() -> str:
-    """The commit that authorized confirmatory execution, or "" if none."""
-    return last_commit(EXECUTION_MARKER) if EXECUTION_MARKER.exists() else ""
+    """The immutable execution boundary, or "" if there is not a valid one."""
+    state, boundary, _ = marker_state()
+    return boundary if state == "VALID" else ""
 
 
 def amendment_commits(records: list[dict]) -> dict[str, str]:
@@ -323,8 +396,7 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
     # appears in pdf_committed and pdf_in_history by construction, and "current exposure
     # minus current membership" forgives a document that was ALREADY exposed before it was
     # picked -- the one case freshness exists to catch.
-    mc_for_pre = last_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
-    pre_classes, pre_commit, pre_errors = preselection_exposure(mc_for_pre)
+    pre_classes, pre_commit, pre_errors = preselection_exposure(POPULATION_FREEZE_COMMIT)
     hits = contaminated(members, pre_classes)
     results.append(
         (
@@ -347,7 +419,7 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
     # it would judge the current protocol against a population that no longer exists --
     # and it read FAIL for exactly that reason before this was fixed.
     pl, pf = last_commit(PREREG), first_commit(PREREG)
-    mc = last_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
+    mc = POPULATION_FREEZE_COMMIT
     results.append(
         (
             "F4 FINAL protocol committed before the population",
@@ -451,25 +523,87 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         )
     )
 
+    # F11 -- the current population IS the population frozen at POPULATION_FREEZE_COMMIT.
+    # F10 catches uncommitted tampering; this catches a COMMITTED modification, which
+    # would otherwise redefine the freeze rather than fail.
+    frozen_raw = git("show", f"{POPULATION_FREEZE_COMMIT}:{MEMBERSHIP.relative_to(REPO)}")
+    p_err = []
+    if not frozen_raw:
+        p_err.append(f"cannot read membership at {POPULATION_FREEZE_COMMIT[:8]}")
+    else:
+        frozen_doc = json.loads(frozen_raw)
+        f_members = frozen_doc.get("members", [])
+        if blob_sha(MEMBERSHIP) != blob_sha(MEMBERSHIP, POPULATION_FREEZE_COMMIT):
+            p_err.append("membership blob differs from the blob frozen at the population commit")
+        if {m["id"] for m in f_members} != {m["id"] for m in members}:
+            p_err.append("member id set differs from the frozen set")
+        frozen_files = {(f["path"], f["sha256"]) for m in f_members for f in m["files"]}
+        now_files = {(f["path"], f["sha256"]) for m in members for f in m["files"]}
+        if frozen_files != now_files:
+            p_err.append("member file paths or recorded SHA-256s differ from the frozen set")
+    results.append(
+        (
+            "F11 population identical to the one frozen at the population commit",
+            bool(members) and not p_err,
+            "; ".join(p_err)
+            or (
+                f"{len(members)} members, blob {blob_sha(MEMBERSHIP)[:8]} == frozen blob, paths and hashes identical"
+                if members
+                else "VACUOUS -- no members"
+            ),
+        )
+    )
+
     # F9 -- anything in this study modified AFTER the population was frozen must be
     # declared as an amendment. This is the general form of the defect above: code or
     # prose changing under a frozen population without a record.
+    # BOUND TO COMMITS, NOT PATHS. The previous rule unioned every `files_touched` and
+    # subtracted it from the set of changed paths, so a path that had been declared ONCE
+    # excused every later change to it: x04_freeze_check.py has 9 modifying commits and
+    # "mentioned in some amendment" made all of them acceptable. The property is that
+    # every methodological change after the freeze has an amendment describing THAT
+    # change, so each protected-touching commit must be declared by SHA.
     records, errors = parse_amendments()
-    declared = {f for r in records for f in r.get("files_touched", [])}
-    changed_after = set()
-    if mc:
-        out = git("diff", "--name-only", f"{mc}..HEAD", "--", str(EV.relative_to(REPO)))
-        for line in out.splitlines():
-            rel = str(Path(line).relative_to(EV.relative_to(REPO)))
-            if rel not in F9_IGNORE:
-                changed_after.add(rel)
-    undeclared = sorted(changed_after - declared)
+    # Resolve declared refs through git rather than slicing strings: the ledger records
+    # short SHAs and a fixed-width prefix comparison silently matches nothing.
+    declared_commits = set()
+    for r in records:
+        for c in r.get("commits", []):
+            full = git("rev-parse", str(c))
+            if not full:
+                errors.append(f"amendment {r.get('id', '?')} declares unknown commit {c!r}")
+            else:
+                declared_commits.add(full)
+
+    undeclared_commits = []
+    for sha in git("log", "--format=%H", f"{POPULATION_FREEZE_COMMIT}..HEAD").splitlines():
+        touched = [
+            str(Path(line).relative_to(EV.relative_to(REPO)))
+            for line in git("show", "--name-only", "--format=", "-r", sha, "--", str(EV.relative_to(REPO))).splitlines()
+            if line.strip()
+        ]
+        protected = [
+            t for t in touched if t.endswith(PROTECTED_SUFFIXES) and t not in PROTECTED_EXEMPT and t not in F9_IGNORE
+        ]
+        if protected and sha not in declared_commits:
+            undeclared_commits.append(f"{sha[:8]} ({', '.join(sorted(protected)[:3])})")
+
+    # SEAL: after a valid marker, the ledger itself is immutable.
+    marker = marker_commit()
+    if marker:
+        rel_amd = str(AMENDMENTS.relative_to(REPO))
+        for sha in git("log", "--format=%H", f"{marker}..HEAD", "--", rel_amd).splitlines():
+            errors.append(f"PRE-EXECUTION-AMENDMENTS.md modified at {sha[:8]}, after the execution boundary")
+
     results.append(
         (
-            "F9 post-freeze changes are declared amendments",
-            not errors and not undeclared,
-            "; ".join(errors + [f"UNDECLARED {u}" for u in undeclared])
-            or f"{len(records)} amendments, {len(changed_after)} files changed since the freeze, all declared",
+            "F9 every post-freeze methodological COMMIT is declared",
+            not errors and not undeclared_commits,
+            "; ".join(errors + [f"UNDECLARED COMMIT {u}" for u in undeclared_commits])
+            or (
+                f"{len(records)} amendments declaring {len(declared_commits)} commits; "
+                "all protected commits accounted for"
+            ),
         )
     )
     return results
@@ -493,22 +627,55 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
     # of proxy defect as trusting a `.pdf` filename over PDF bytes: an evidence file could
     # claim DEVELOPMENT while having been produced on holdout members. So the documents it
     # names are checked against membership directly, and the label is not sufficient.
+    # PROVENANCE, not a claim. A hand-written file naming "fake-doc-123" satisfied the
+    # previous rule: it was labelled DEVELOPMENT and named no holdout member, so G2 went
+    # green while proving only that a file asserts its own success. The evidence must now
+    # bind to artifacts that exist in this repository and hash to what it says:
+    #   * every fixture path resolves inside the repo and is NOT a holdout member;
+    #   * every recorded fixture SHA-256 matches the file on disk;
+    #   * the adapter, reconstructor and verifier blob SHAs match the committed files,
+    #     so evidence cannot outlive the code that produced it.
     ok, detail = False, "x2_contract_assertions.json not written"
     if X2_EVIDENCE.exists():
         try:
             ev = json.loads(X2_EVIDENCE.read_text())
             a, b = ev.get("X2a_no_u0020"), ev.get("X2b_rule_recovers_engine_spaces")
             pop = ev.get("population", "")
-            docs = ev.get("documents", [])
-            member_ids = {m["id"] for m in members} | {m["id"].upper() for m in members}
-            leaked = sorted({d for d in docs if d in member_ids or str(d).upper() in member_ids})
-            ok = bool(a) and bool(b) and pop == "DEVELOPMENT" and bool(docs) and not leaked and committed(X2_EVIDENCE)
-            detail = f"X2a={a} X2b={b} population={pop!r} docs={len(docs)} committed={committed(X2_EVIDENCE)}" + (
-                f" -- HOLDOUT MEMBERS PRESENT: {leaked}" if leaked else ""
+            fixtures = ev.get("fixtures", [])
+            problems = []
+            member_paths = {f["path"] for m in members for f in m["files"]}
+            for fx in fixtures:
+                fp = REPO / str(fx.get("path", ""))
+                if not fp.is_file():
+                    problems.append(f"fixture {fx.get('path')!r} does not exist")
+                    continue
+                if (
+                    str(fx.get("path", "")).startswith(str(DOCS_DIR.relative_to(REPO)))
+                    or fx.get("path") in member_paths
+                ):
+                    problems.append(f"fixture {fx.get('path')!r} is a HOLDOUT document")
+                    continue
+                if hashlib.sha256(fp.read_bytes()).hexdigest() != fx.get("sha256"):
+                    problems.append(f"fixture {fx.get('path')!r} sha256 mismatch")
+            for label, path in (("adapter", ADAPTER), ("reconstructor", RECONSTRUCTOR), ("verifier", X2_VERIFIER)):
+                want, have = ev.get(f"{label}_blob"), blob_sha(path)
+                if not want or want != have:
+                    problems.append(f"{label}_blob {str(want)[:8]!r} != committed {have[:8]!r}")
+            ok = (
+                bool(a)
+                and bool(b)
+                and pop == "DEVELOPMENT"
+                and bool(fixtures)
+                and not problems
+                and committed(X2_EVIDENCE)
             )
-        except (json.JSONDecodeError, AttributeError) as exc:
+            detail = (
+                f"X2a={a} X2b={b} population={pop!r} fixtures={len(fixtures)} committed={committed(X2_EVIDENCE)}"
+                + ("; " + "; ".join(problems[:3]) if problems else "")
+            )
+        except (json.JSONDecodeError, AttributeError, TypeError) as exc:
             detail = f"unreadable: {exc}"
-    results.append(("G2 X2-a / X2-b assertions recorded, passing, on non-holdout documents", ok, detail))
+    results.append(("G2 X2 evidence bound to real development fixtures and current code", ok, detail))
 
     results.append(
         (
@@ -523,6 +690,25 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
         n = len(json.loads(EXPOSURE.read_text()).get("design_exposed", []))
     results.append(
         ("G4 design-exposure list present and non-empty", bool(n) and committed(EXPOSURE), f"{n} design-exposed ids")
+    )
+
+    # G5 -- THE WHOLE RESULT-BEARING SURFACE, not just the adapter.
+    #
+    # G1-G4 green did not mean the study could be run: no runner, frame builder, oracle
+    # builder, scorer or decision evaluator had to exist. Authorizing then would permit
+    # inspecting confirmatory H/X output and finishing the scorer afterwards -- innocently
+    # or not, the scoring rule would postdate the data. Every file that can move which
+    # records enter a frame, what the adjudicator sees, which label binds to which region,
+    # a metric outcome, or the decision must exist and be committed FIRST.
+    missing = sorted(p for p in METHODOLOGY_SURFACE if not committed(EV / p))
+    results.append(
+        (
+            "G5 result-bearing methodology surface exists and is committed",
+            not missing,
+            f"MISSING {len(missing)}/{len(METHODOLOGY_SURFACE)}: " + ", ".join(missing[:4])
+            if missing
+            else f"all {len(METHODOLOGY_SURFACE)} result-bearing files committed",
+        )
     )
     return results
 
@@ -702,44 +888,85 @@ def self_test(contam: dict, exposure: dict) -> int:
         finally:
             MEMBERSHIP.write_text(saved_mem)
 
+    # --- execution state machine -------------------------------------------------
+    # Writing the marker must NOT authorize anything; only a committed write-once file.
+    saved_marker = EXECUTION_MARKER.read_text() if EXECUTION_MARKER.exists() else None
+    try:
+        EXECUTION_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        EXECUTION_MARKER.write_text(json.dumps({"authorized": True}))
+        st, _, _ = marker_state()
+        checks.append(("marker written but uncommitted is NOT authorization", st == "UNCOMMITTED"))
+        checks.append(("...and yields no boundary commit", marker_commit() == ""))
+    finally:
+        EXECUTION_MARKER.unlink(missing_ok=True)
+        if saved_marker is not None:
+            EXECUTION_MARKER.write_text(saved_marker)
+    st_absent, _, _ = marker_state()
+    checks.append(("absent marker reports ABSENT, not VALID", st_absent == "ABSENT"))
+
+    # F/G green with no marker must still forbid execution -- the defect that let
+    # EXECUTION PERMITTED print with no boundary in existence.
+    real_f, real_g = check_freeze, check_execution
+    try:
+        globals()["check_freeze"] = lambda m, lk: [("F-stub", True, "")]
+        globals()["check_execution"] = lambda m: [("G-stub", True, "")]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc_nomarker = main([])
+        checks.append(("F/G green but NO marker still forbids execution", rc_nomarker != 0))
+        checks.append(("...and says READY TO AUTHORIZE", "READY TO AUTHORIZE" in buf.getvalue()))
+    finally:
+        globals()["check_freeze"], globals()["check_execution"] = real_f, real_g
+
+    # F11: the population must be the one frozen at the pinned commit.
+    frozen_ok = blob_sha(MEMBERSHIP) == blob_sha(MEMBERSHIP, POPULATION_FREEZE_COMMIT)
+    checks.append(("F11 anchors to the PINNED freeze commit, not last_commit", frozen_ok))
+
     # The execution boundary must refuse to open while readiness is closed.
     rc_auth = main(["--authorize-execution"])
     checks.append(("execution authorization is REFUSED while readiness is closed", rc_auth != 0))
     checks.append(("...and no marker was written", not EXECUTION_MARKER.exists()))
 
-    # G2 must reject evidence that passed on the HOLDOUT rather than on development.
+    # G2 must bind PROVENANCE, not accept a claim. Each case is committed-simulated so the
+    # test exercises the provenance logic rather than the "is it committed" precondition.
     saved = X2_EVIDENCE.read_text() if X2_EVIDENCE.exists() else None
+    real_committed = committed
     try:
         X2_EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
-        X2_EVIDENCE.write_text(
-            json.dumps(
-                {
-                    "X2a_no_u0020": True,
-                    "X2b_rule_recovers_engine_spaces": True,
-                    "population": "HOLDOUT",
-                    "documents_checked": 5,
-                }
-            )
-        )
-        g2 = dict((n[:2], ok) for n, ok, _ in check_execution(members))
-        checks.append(("G2 rejects assertions self-labelled HOLDOUT", not g2["G2"]))
+        globals()["committed"] = lambda p: True if p == X2_EVIDENCE else real_committed(p)
 
-        # The proxy defect: the LABEL says DEVELOPMENT while the documents are holdout
-        # members. Believing the label is the same mistake as trusting a `.pdf` filename.
-        leaked_id = members[0]["id"] if members else "113-hr-933"
-        X2_EVIDENCE.write_text(
-            json.dumps(
-                {
-                    "X2a_no_u0020": True,
-                    "X2b_rule_recovers_engine_spaces": True,
-                    "population": "DEVELOPMENT",
-                    "documents": [leaked_id],
-                }
+        def g2_ok(payload: dict) -> bool:
+            X2_EVIDENCE.write_text(json.dumps(payload))
+            return dict((n[:2], ok) for n, ok, _ in check_execution(members))["G2"]
+
+        base = {"X2a_no_u0020": True, "X2b_rule_recovers_engine_spaces": True, "population": "DEVELOPMENT"}
+        checks.append(("G2 rejects assertions self-labelled HOLDOUT", not g2_ok({**base, "population": "HOLDOUT"})))
+        # THE CASE THAT USED TO PASS: a hand-written file naming a document that does not exist.
+        checks.append(
+            (
+                "G2 rejects a FABRICATED fixture id that resolves to no file",
+                not g2_ok({**base, "fixtures": [{"path": "fake-doc-123", "sha256": "0" * 64}]}),
             )
         )
-        g2b = dict((n[:2], ok) for n, ok, _ in check_execution(members))
-        checks.append(("G2 rejects evidence LABELLED development that names a holdout member", not g2b["G2"]))
+        # A real repository file, but with a wrong hash -> provenance broken.
+        real_dev = "tests/corpus/118-hr-4366/5_engrossed-amendment-house.pdf"
+        checks.append(
+            (
+                "G2 rejects a real fixture whose recorded sha256 does not match",
+                not g2_ok({**base, "fixtures": [{"path": real_dev, "sha256": "0" * 64}]}),
+            )
+        )
+        # A HOLDOUT document may never be a fixture.
+        holdout_rel = str((DOCS_DIR / members[0]["files"][0]["path"]).relative_to(REPO)) if members else real_dev
+        checks.append(
+            (
+                "G2 rejects a HOLDOUT document used as an X2 fixture",
+                not g2_ok({**base, "fixtures": [{"path": holdout_rel, "sha256": "0" * 64}]}),
+            )
+        )
+        checks.append(("G2 rejects evidence with no fixtures at all", not g2_ok(base)))
     finally:
+        globals()["committed"] = real_committed
         if saved is None:
             X2_EVIDENCE.unlink(missing_ok=True)
         else:
@@ -786,6 +1013,18 @@ def main(argv: list[str]) -> int:
                 {
                     "authorized": True,
                     "head_at_authorization": git("rev-parse", "HEAD"),
+                    # The marker IDENTIFIES the exact population and the exact
+                    # result-bearing methodology being authorized, so that "this rule
+                    # existed before execution" is checkable afterwards rather than
+                    # assumed. Normal x04 re-verifies these and fails on drift.
+                    "population_freeze_commit": POPULATION_FREEZE_COMMIT,
+                    "membership_blob": blob_sha(MEMBERSHIP),
+                    "frozen_blobs": {
+                        **{rel: blob_sha(EV / rel) for rel in sorted(METHODOLOGY_SURFACE)},
+                        "PRE-REGISTRATION.md": blob_sha(PREREG),
+                        "PRE-EXECUTION-AMENDMENTS.md": blob_sha(AMENDMENTS),
+                        "results/holdout_membership.json": blob_sha(MEMBERSHIP),
+                    },
                     "repository_fact": "no canonical score artifact existed at this commit",
                     "process_attestation": (
                         "The maintainer attests that no confirmatory H/X extraction had been run "
@@ -810,14 +1049,52 @@ def main(argv: list[str]) -> int:
     freeze_failed = render("FREEZE INTEGRITY", check_freeze(members, lookup))
     exec_failed = render("EXECUTION READINESS", check_execution(members))
 
+    state, boundary, m_errors = marker_state()
+
     print()
     print(f"FREEZE INTEGRITY:    {'COMPLETE' if not freeze_failed else 'INCOMPLETE -- ' + '; '.join(freeze_failed)}")
     print(f"EXECUTION READINESS: {'OPEN' if not exec_failed else 'CLOSED -- ' + '; '.join(exec_failed)}")
+    print(f"EXECUTION BOUNDARY:  {state}" + (f" at {boundary[:8]}" if boundary else ""))
+    for e in m_errors:
+        print(f"                     ! {e}")
     print()
+
+    # THE STATE MACHINE. Writing the marker file is NOT authorization; only its committed,
+    # write-once presence is. Previously this block never consulted the marker at all, so
+    # green F/G alone printed EXECUTION PERMITTED and returned 0 with no boundary in
+    # existence -- the authorization step was optional.
     if freeze_failed or exec_failed:
         print("EXECUTION FORBIDDEN. Nothing may be scored.")
         return 1
-    print("EXECUTION PERMITTED.")
+    if state == "ABSENT":
+        print("READY TO AUTHORIZE. Run --authorize-execution, then COMMIT the marker.")
+        print("EXECUTION FORBIDDEN. Nothing may be scored.")
+        return 1
+    if state == "UNCOMMITTED":
+        print("AUTHORIZATION PENDING COMMIT. Writing the marker is not authorizing execution.")
+        print("EXECUTION FORBIDDEN. Nothing may be scored.")
+        return 1
+    if state == "MUTATED":
+        print("EXECUTION BOUNDARY VIOLATED -- the marker is not write-once.")
+        print("EXECUTION FORBIDDEN. Nothing may be scored.")
+        return 1
+
+    # VALID marker: the authorized methodology must still be the current methodology.
+    drifted = []
+    try:
+        manifest = json.loads(EXECUTION_MARKER.read_text()).get("frozen_blobs", {})
+    except json.JSONDecodeError:
+        manifest = {}
+    for rel, want in manifest.items():
+        have = blob_sha(EV / rel)
+        if have != want:
+            drifted.append(f"{rel}: {want[:8]} -> {have[:8] or 'ABSENT'}")
+    if drifted:
+        print("METHODOLOGY DRIFT since authorization: " + "; ".join(drifted[:5]))
+        print("This is a DEVIATION, not an amendment. EXECUTION INTEGRITY FAILS.")
+        return 1
+
+    print(f"EXECUTION PERMITTED. Boundary {boundary[:8]}, {len(manifest)} result-bearing blobs unchanged.")
     return 0
 
 

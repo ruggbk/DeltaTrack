@@ -227,7 +227,7 @@ output in existence.
 ## A6 — TOOLING. Harness repairs after the population freeze
 
 ```json
-{"id": "A6", "class": "TOOLING", "confirmatory_output_at_time": "none",
+{"id": "A6", "class": "TOOLING", "commits": ["3d3e3fc", "481731b"], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x03_select_holdout.py",
                    "PRE-EXECUTION-AMENDMENTS.md",
@@ -431,7 +431,7 @@ written as "H empirically beat X."** Hybrid remains the default by prior, not by
 ## A11 — SUBSTANTIVE. A one-way execution boundary, and F9 hardening
 
 ```json
-{"id": "A11", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+{"id": "A11", "class": "SUBSTANTIVE", "commits": ["c111433"], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
  "note": "A12 also changes this file; both are SUBSTANTIVE, so neither hides behind a TOOLING declaration."}
@@ -473,7 +473,7 @@ The duplicate declaration was removed.
 ## A12 — SUBSTANTIVE. Two more proxy/property mismatches, found by targeted sweep
 
 ```json
-{"id": "A12", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+{"id": "A12", "class": "SUBSTANTIVE", "commits": ["0e877b4"], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": []}
 ```
@@ -508,7 +508,7 @@ a score. Recorded SUBSTANTIVE rather than TOOLING because each changes what a ga
 ## A13 — SUBSTANTIVE. The gate validated the working tree against itself
 
 ```json
-{"id": "A13", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+{"id": "A13", "class": "SUBSTANTIVE", "commits": ["641013c"], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
  "note": "A11 and A12 also touch this file; all three are SUBSTANTIVE, so nothing hides behind a TOOLING declaration."}
@@ -556,6 +556,129 @@ and "F1 no longer calls a MODIFIED manifest committed", giving **24/24**.
 **Can this affect membership or scoring?** No. Membership is unchanged and re-verified at
 17; this is gate strictness only. Recorded SUBSTANTIVE because it changes what *every*
 freeze invariant means, on the dividing line A11 established.
+
+---
+
+## A14 — SUBSTANTIVE. Two post-freeze methodological commits were never declared
+
+```json
+{"id": "A14", "class": "SUBSTANTIVE", "commits": ["70ec76c", "985def9"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x04_freeze_check.py"],
+ "note": "Retroactive declaration. Found by binding F9 to commits instead of paths; the path-union rule had silently excused these."}
+```
+
+**Found by the F9 repair, in this study's own history.** The old F9 unioned every
+`files_touched` and subtracted it from the changed-path set, so a path declared **once**
+excused every later change to it. `probes/x04_freeze_check.py` has **nine** modifying
+commits and was "declared", so all nine passed.
+
+Binding declarations to commits instead exposed **two post-freeze commits that no amendment
+ever described**:
+
+| commit | change | why it is methodological |
+|---|---|---|
+| `70ec76c` | F4 compared against the withdrawn population — `first_commit(MEMBERSHIP)` returned the design-era commit after the file was re-created | changed what F4 *means* |
+| `985def9` | F3 read the raw contamination classes rather than the exemption classes | changed what F3 *means* |
+
+Both are gate-semantics changes made with no confirmatory output in existence, neither
+touches membership, and neither computes a score — but neither was recorded, and under the
+old rule neither ever would have been. They are declared here rather than excused.
+
+**Why the population stays valid.** Both changes made gates *stricter* and neither can
+select or deselect a document; membership is unchanged and re-verified at 17 by F11.
+
+---
+
+## A15 — SUBSTANTIVE. The freeze and the boundary were snapshots, not historical facts
+
+```json
+{"id": "A15", "class": "SUBSTANTIVE", "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x04_freeze_check.py"],
+ "note": "This pass's own commit is declared by the commit that lands it; F9 requires it."}
+```
+
+Five defects, each an instance of *the gate checks a proxy for the property*.
+
+**1. A committed marker was never required for execution.** The final block of `main()`
+consulted the marker **not at all**: with F/G green and no marker anywhere, x04 printed
+`EXECUTION PERMITTED` and returned 0. Measured by stubbing both gate functions to pass —
+authorization was optional. There is now a state machine: `ABSENT` → *READY TO AUTHORIZE*,
+`UNCOMMITTED` → *AUTHORIZATION PENDING COMMIT*, `MUTATED` → *BOUNDARY VIOLATED*, all
+`EXECUTION FORBIDDEN` with exit 1. Only a **valid committed write-once** marker permits
+execution. Writing the file is not authorizing.
+
+**2. The boundary was movable.** `marker_commit()` used `last_commit`, so editing the
+marker at N would move the boundary to N and make a substantive change between M and N
+appear to predate it. `first_commit` alone is not sufficient either — this study already
+saw a path deleted and re-created. Immutability is now asserted directly: **exactly one
+modifying commit, and the current blob equals the blob introduced by it.**
+
+**3. The population freeze was movable.** F3, F4 and F9 derived it from
+`last_commit(MEMBERSHIP)`, so a later committed edit to the manifest would have become the
+new freeze, moved the pre-selection snapshot to that commit's parent, and shrunk the
+post-freeze window. `POPULATION_FREEZE_COMMIT` is now **pinned to `4e2b520`**, and new
+**F11** proves the current population is byte-identical to the frozen one (blob, id set,
+paths, recorded SHA-256s). A later membership change now **fails** instead of re-anchoring.
+
+**4. F9 bound declarations to paths, not changes** — see A14.
+
+**5. The ledger was not sealed.** Nothing stopped `PRE-EXECUTION-AMENDMENTS.md` changing
+after authorization. F9 now rejects any commit touching it after a valid boundary.
+
+**Also:** the marker becomes a **manifest** of the exact frozen surface
+(`population_freeze_commit`, `membership_blob`, `frozen_blobs` over every result-bearing
+file), and normal x04 re-verifies those blobs afterwards, reporting **METHODOLOGY DRIFT**
+as a deviation rather than silently moving to the new version.
+
+---
+
+## A16 — SUBSTANTIVE. Execution readiness did not cover the machinery that produces the answer
+
+```json
+{"id": "A16", "class": "SUBSTANTIVE", "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The conceptual gap.** G1–G4 covered the adapter, its evidence, the adjudicator prompt and
+the exposure list. None of the **runners, frame builders, oracle builder, scorers or
+decision evaluator** had to exist. Authorizing on that basis would have permitted inspecting
+confirmatory H/X output and *then* finishing the scorer — innocently or not, the scoring
+rule would postdate the data.
+
+**G5** now requires the whole result-bearing surface to exist and be committed:
+
+| file | what answer it can move |
+|---|---|
+| `pdfium_extended_corrected.py` | X's character facts → every X metric |
+| `reconstruct_extended_corrected.py` | X's word segmentation → every X metric |
+| `run_hybrid.py` / `run_extended.py` | each architecture's extraction → every metric |
+| `build_frames.py` | which records enter the C-frame and D-frame |
+| `build_oracle.py` | what the adjudicator sees; which label binds to which region |
+| `m3_boundaries.py` | WELD/SPLIT/TEXT_ERROR and the heading-level decision unit |
+| `score_metrics.py` | M0–M9 outcomes |
+| `decide_architecture.py` | the architecture decision itself |
+| `x2_verify.py` | whether X's contract assertions actually hold |
+| `adjudicator_prompt.md` | what the adjudicator is asked and shown |
+
+**Deliberately NOT frozen:** report generation, table formatting, summary prose and
+diagnostics that cannot affect inclusion, oracle data, metric classification or the
+decision. Freezing them would be ceremony.
+
+**G2 strengthened in the same pass.** A hand-written file naming `fake-doc-123`, labelled
+DEVELOPMENT, made G2 green — proving only that a file asserts its own success. Evidence must
+now bind provenance: every fixture path must **exist in the repo**, not be a holdout
+document, and hash to its recorded SHA-256; and the adapter, reconstructor and verifier blob
+SHAs must match the committed files, so evidence cannot outlive the code that produced it.
+
+**Consequence, stated plainly:** most of this surface does not exist yet, so the study is
+**not** ready to authorize. That is the honest state rather than a gate that reads green on
+four files.
 
 ---
 
