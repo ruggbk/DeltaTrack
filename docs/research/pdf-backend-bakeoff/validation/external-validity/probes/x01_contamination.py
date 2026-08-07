@@ -89,6 +89,13 @@ def scan_text() -> tuple[set[str], set[str]]:
     """Bill ids and report packages NAMED anywhere in the research tree or production src.
 
     Reading a document contaminates it as surely as committing it does.
+
+    GENERATED ARTIFACTS ARE NOT SCANNED, and that exclusion is load-bearing. This probe
+    writes results/contamination.json, which RECORDS the 2,963 xml-only bills it
+    deliberately does not exclude. Scanning its own output re-ingested every one of them as
+    "named_in_research" on the next run: 93 excluded bills became 3,080, and all 17
+    confirmatory holdout members were condemned by a probe that had simply read what it
+    previously wrote. An output that is also an input is not a derivation, it is a ratchet.
     """
     bills: set[str] = set()
     reports: set[str] = set()
@@ -98,6 +105,8 @@ def scan_text() -> tuple[set[str], set[str]]:
             continue
         for f in root.rglob("*"):
             if not f.is_file() or "node_modules" in f.parts or "__pycache__" in f.parts:
+                continue
+            if "results" in f.parts:  # generated; see the docstring above
                 continue
             if f.suffix.lower() not in {".py", ".md", ".json", ".mjs", ".txt", ".toml", ".yml", ".yaml"}:
                 continue
@@ -144,8 +153,20 @@ def main() -> None:
             if d.is_dir() and BILL_DIR_RE.match(d.name):
                 xml_only.add(bill_id(*BILL_DIR_RE.match(d.name).groups()))
 
-    excluded_bills = sorted(wt_bills | hist_bills | named_bills | main_bills)
-    excluded_reports = sorted(wt_reports | hist_reports | named_reports)
+    # THIS STUDY'S OWN FROZEN POPULATION is committed under external-validity/holdout/, so
+    # from the moment it is frozen every class above reports it as exposed. Left alone,
+    # re-running this probe condemns the very documents it was run to protect, and F3 turns
+    # a valid holdout invalid. They are recorded in their own class and subtracted.
+    #
+    # This is NOT a licence to reuse them: a FUTURE study must treat them as exposed, and
+    # the class name says so. It is scoped to the study that froze them.
+    own: set[str] = set()
+    membership = EV / "results" / "holdout_membership.json"
+    if membership.exists():
+        own = {m["id"] for m in json.loads(membership.read_text()).get("members", [])}
+
+    excluded_bills = sorted((wt_bills | hist_bills | named_bills | main_bills) - own)
+    excluded_reports = sorted((wt_reports | hist_reports | named_reports) - {o.upper() for o in own})
 
     doc = {
         "protocol": "validation/external-validity/PRE-REGISTRATION.md",
@@ -167,6 +188,15 @@ def main() -> None:
             "named_in_research": {"bills": sorted(named_bills), "reports": sorted(named_reports)},
             "main_checkout": {"bills": sorted(main_bills)},
             "xml_only_not_excluded": {"n_bills": len(xml_only), "bills": sorted(xml_only)},
+            "own_study_population_not_excluded": {
+                "n": len(own),
+                "ids": sorted(own),
+                "note": (
+                    "This study's own frozen holdout, committed under external-validity/holdout/. "
+                    "Exposed by construction from the moment it is frozen, so it is subtracted "
+                    "HERE and only here. A future study must treat these as contaminated."
+                ),
+            },
         },
         "excluded_bills": excluded_bills,
         "excluded_bills_n": len(excluded_bills),
@@ -174,7 +204,34 @@ def main() -> None:
         "excluded_reports_n": len(excluded_reports),
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
+
     OUT.write_text(json.dumps(doc, indent=1))
+
+    # IDEMPOTENCE GATE, and it tests the right thing.
+    #
+    # The defect was that this probe's OUTPUT was also its INPUT: it scanned BAKE for
+    # .json, read the contamination.json it had just written, and re-ingested the 2,963
+    # xml-only bills it had deliberately declined to exclude -- 93 excluded bills became
+    # 3,080 and all 17 holdout members were condemned.
+    #
+    # A first version of this gate compared against the COMMITTED artifact and failed on
+    # any change. That is wrong: the exclusion set legitimately GROWS as new material is
+    # committed, and a gate that forbids honest growth would be permanently red. The
+    # property that actually matters is that re-deriving AFTER a write reproduces the same
+    # answer, so the check re-derives with the freshly written file in place.
+    again_bills, again_reports = scan_text()
+    a_bills = sorted((wt_bills | hist_bills | again_bills | main_bills) - own)
+    a_reports = sorted((wt_reports | hist_reports | again_reports) - {o.upper() for o in own})
+    if (a_bills, a_reports) != (doc["excluded_bills"], doc["excluded_reports"]):
+        d_b = set(a_bills) ^ set(doc["excluded_bills"])
+        d_r = set(a_reports) ^ set(doc["excluded_reports"])
+        print(
+            "NOT IDEMPOTENT: re-deriving with this run's own output on disk changed the "
+            f"answer ({len(d_b)} bills, {len(d_r)} reports differ). The output is feeding "
+            "the input again.",
+            file=sys.stderr,
+        )
+        return 3
 
     print(f"pdf_committed      : {len(wt_pdfs):4} files -> {len(wt_bills)} bills, {len(wt_reports)} reports")
     print(f"pdf_in_history     : {len(hist_pdfs):4} files -> {len(hist_bills)} bills, {len(hist_reports)} reports")

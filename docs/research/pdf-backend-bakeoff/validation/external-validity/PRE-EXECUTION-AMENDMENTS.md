@@ -252,6 +252,52 @@ writes unmanifested files into the frozen population directory on any future run
 
 ---
 
+## A7 — TOOLING. The contamination probe was reading its own output
+
+```json
+{"id": "A7", "class": "TOOLING", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x01_contamination.py", "results/contamination.json"]}
+```
+
+**Found while sweeping for the same class of defect as A6: a closed world that is not
+closed.** `x01` scans the research tree for `.json` to find bill ids "named in research".
+Its own output, `results/contamination.json`, is a `.json` in that tree, and it **records**
+the 2,963 xml-only bills it deliberately does **not** exclude. So a second run re-ingested
+every one of them as `named_in_research`.
+
+**Measured:** re-running against the frozen artifact took the exclusion set from **93 bills
+to 3,080**, and flagged **all 17 confirmatory holdout members** as contaminated. F3 reads
+the committed file, so the frozen gate was never wrong — but any re-derivation would have
+condemned the population the probe exists to protect, and the failure would have looked
+like a contamination finding rather than a bug.
+
+**Repairs.**
+
+1. Generated artifacts are no longer scanned (`"results" in f.parts`). An output that is
+   also an input is a ratchet, not a derivation.
+2. **This study's own frozen population is subtracted**, in its own recorded class
+   `own_study_population_not_excluded`. Once a holdout is committed it is exposed by
+   construction, so without this the probe condemns it forever. The class name states the
+   scope: a **future** study must treat these 17 as contaminated.
+3. An **idempotence gate**: after writing, the derivation is re-run with the new file in
+   place and must reproduce the same answer, else exit 3.
+
+**A first version of that gate was wrong and is worth recording.** It compared against the
+*committed* artifact and failed on any change — but the exclusion set legitimately **grows**
+as material is committed, so it fired on honest growth (+17 bills, +5 reports, all of them
+the withdrawn design PDFs that are now in git history). A gate that forbids legitimate
+change is not a gate, it is a permanent red light. It now tests the property that actually
+matters: re-deriving with its own output present must be a no-op.
+
+**Verified:** two consecutive runs produce byte-identical output
+(`5866c7da…`), and the honest exclusion set is now **110 bills / 38 report packages**.
+
+**Can this affect membership or scoring?** No. Membership is unchanged, and the 17 members
+are exempted rather than re-selected.
+
+---
+
 ## What was deliberately NOT amended
 
 - **Membership.** Unchanged, 17 documents. The orphan `CRPT-118HRPT146.pdf` was never a
