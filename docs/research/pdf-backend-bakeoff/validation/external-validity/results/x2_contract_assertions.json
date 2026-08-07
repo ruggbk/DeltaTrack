@@ -1,0 +1,48 @@
+{
+ "population": "DEVELOPMENT",
+ "assertions": {
+  "X2a": "no glyph with codepoint 32 exists in the contract, on any page",
+  "X2b": "re-admitting the engine's spaces changes no reconstructed printed line"
+ },
+ "method": "X2-b RE-RUNS the arm and compares every reconstructed printed line in order; it is not an assertion about the code",
+ "AMBIGUITY": "'the engine's spaces' is not determined by the frozen text and the two readings DISAGREE on development material. generated-only PASSES; all-U+0020 FAILS. This file therefore reports both and does NOT choose. The headline field below carries the STRICTER reading so that G2 cannot go green on an interpretation chosen here. See amendment A24; a ruling is required before execution readiness can open.",
+ "X2a_no_u0020": true,
+ "X2b_rule_recovers_engine_spaces": false,
+ "X2b_reading_generated_only": true,
+ "X2b_reading_all_u0020": false,
+ "fixtures": [
+  {
+   "path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "pages": 8,
+   "glyphs": 8656,
+   "u0020_dropped": 1576,
+   "X2a_codepoint_32_glyphs": 0,
+   "X2a_pass": true,
+   "X2b_reconstructed_lines_compared": 191,
+   "X2b_generated_only_pass": true,
+   "X2b_generated_only_differing_lines": [],
+   "X2b_all_u0020_pass": false,
+   "X2b_all_u0020_differing_lines": [
+    "p1 line 4: 'H.R. 2029' != 'H. R. 2029'"
+   ]
+  },
+  {
+   "path": "tests/corpus/118-s-4795/1_reported-in-senate.pdf",
+   "sha256": "7f7d022501496236b1b3fcc5dea7a8af4eed7ea9d272fd3568d71d8bc01766e8",
+   "pages": 8,
+   "glyphs": 8577,
+   "u0020_dropped": 1612,
+   "X2a_codepoint_32_glyphs": 0,
+   "X2a_pass": true,
+   "X2b_reconstructed_lines_compared": 191,
+   "X2b_generated_only_pass": true,
+   "X2b_generated_only_differing_lines": [],
+   "X2b_all_u0020_pass": true,
+   "X2b_all_u0020_differing_lines": []
+  }
+ ],
+ "adapter_blob": "ed3dcd909b0db5bb46223e826e72c7646f73208d",
+ "reconstructor_blob": "316b563d4b8d8b142505657948f2dc8b4dfb867e",
+ "verifier_blob": "0d70d5165289b6c578c2e38c4d89a04077409b7a"
+}

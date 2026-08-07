@@ -1,0 +1,37 @@
+{
+ "population": "DEVELOPMENT -- no holdout opened",
+ "frozen_rule": "eligible iff valid finite positive-area ink box AND upright; no codepoint consulted",
+ "finding": "the rule admits every content-stream U+0020, because PDFium reports a positive-area box for it. A21 measured eligibility only in the exclusion direction, so this was not visible: nothing is excluded ONLY by a codepoint rule, but spaces are INCLUDED that a codepoint rule would have removed.",
+ "consequence": "those gids are skeleton members X can never emit (X-2 drops all U+0020), so they sit permanently outside `common` and inside X_SOURCE_GLYPH_LOSS, and they widen each neutral line's x-extent, which feeds region geometry and the oracle bbox",
+ "not_done_here": "no threshold is chosen. A minimum ink height would stay purely geometric and separates space from capital by ~600x, but picking one is outcome-affecting and belongs in an amendment",
+ "documents": [
+  {
+   "document": "114-hr-2029/4",
+   "pages": 8,
+   "u0020_chars": 1576,
+   "u0020_admitted_to_skeleton": 229,
+   "space_box_median_width": 3.626,
+   "space_box_median_height": 0.014,
+   "space_box_max_height": 0.036,
+   "capital_box_median_height": 7.944,
+   "height_ratio_capital_over_space": 568.4,
+   "neutral_lines": 205,
+   "neutral_lines_containing_a_space_gid": 141,
+   "share_of_lines_affected": 0.6878
+  },
+  {
+   "document": "118-s-4795/1",
+   "pages": 8,
+   "u0020_chars": 1612,
+   "u0020_admitted_to_skeleton": 1398,
+   "space_box_median_width": 3.626,
+   "space_box_median_height": 0.014,
+   "space_box_max_height": 0.036,
+   "capital_box_median_height": 7.4651,
+   "height_ratio_capital_over_space": 532.9,
+   "neutral_lines": 205,
+   "neutral_lines_containing_a_space_gid": 190,
+   "share_of_lines_affected": 0.9268
+  }
+ ]
+}
