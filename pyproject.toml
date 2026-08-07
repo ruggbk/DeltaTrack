@@ -107,7 +107,15 @@ src = ["src", ".", "tools"]
 # Research reproducibility scripts are frozen artifacts (hardcoded paths, ad-hoc
 # one-liners) that reproduce a study's numbers, not maintained source. Exclude them
 # from lint/format so they stay verbatim. Applies to future studies' probes too.
-extend-exclude = ["docs/research/**/probes"]
+#
+# The `.md` rule is the same principle one level up: `ruff format` reformats Python inside
+# fenced code blocks, and a study's write-up quotes its own probes verbatim. Formatting
+# those quotes edits a finished research document to satisfy a style rule it was never written
+# against, and several of these files are hashed into a frozen preservation manifest, so a
+# whitespace change there reads as tampering. Scoped to markdown deliberately: the probes
+# are excluded wholesale, but `validation/*.py` and any future maintained research module
+# stay linted.
+extend-exclude = ["docs/research/**/probes", "docs/research/**/*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
