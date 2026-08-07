@@ -1,8 +1,12 @@
 # Pre-registration: external validity of the PDF extraction seam
 
-- **Status: PROTOCOL FROZEN, POPULATION NOT YET FROZEN, NOTHING SCORED.**
-  `probes/x04_freeze_check.py` reports two gates separately and both must hold before any
-  score exists.
+- **Status: PROTOCOL FROZEN. NOTHING SCORED.** This document must not be edited again
+  before the confirmatory population is committed — `x04`'s F4 requires its
+  **last-modifying** commit to strictly precede the membership commit, so any later edit
+  closes the gate by construction. The authoritative state is whatever
+  `probes/x04_freeze_check.py` prints; the population is whatever
+  `results/holdout_membership.json` records. Neither is restated here, deliberately: a
+  status line describing an outcome is a status line written after seeing it.
 - **Everything committed up to `1350710` is DESIGN, not pre-registration, and is retained
   as such.** An external review found that the protocol was materially amended *after*
   selection ran — §4.4.1, M9, Rule 0 and the revised selection rules were all written
