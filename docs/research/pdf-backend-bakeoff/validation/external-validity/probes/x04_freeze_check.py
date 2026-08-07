@@ -80,7 +80,10 @@ def amendment_commits(records: list[dict]) -> dict[str, str]:
     out = {}
     for rec in records:
         commits = [last_commit(EV / f) for f in rec.get("files_touched", []) if (EV / f).exists()]
-        out[rec.get("id", "?")] = max(commits, key=lambda c: git("rev-list", "--count", c) or "0") if commits else ""
+        # `rev-list --count` returns a STRING, so an unconverted max() compares
+        # lexicographically and "9" beats "1003" -- selecting the wrong commit as an
+        # amendment's latest touch, which would silently misjudge the one-way boundary.
+        out[rec.get("id", "?")] = max(commits, key=lambda c: int(git("rev-list", "--count", c) or 0)) if commits else ""
     return out
 
 
@@ -156,9 +159,21 @@ def git(*args: str) -> str:
 
 
 def committed(path: Path) -> bool:
+    """Tracked by git AND identical to the committed version.
+
+    "Tracked" alone is a PROXY: `git ls-files --error-unmatch` succeeds for a file with
+    uncommitted modifications, so every gate built on it validated the WORKING TREE
+    against itself rather than against the freeze. Demonstrated: deleting 7 members from
+    holdout_membership.json and their PDFs, without committing, made the whole gate report
+    FREEZE INTEGRITY COMPLETE over a 10-document population while the committed freeze was
+    17. Frozen means frozen in git, not merely present on disk.
+    """
     if not path.exists():
         return False
-    return bool(git("ls-files", "--error-unmatch", str(path.relative_to(REPO))))
+    rel = str(path.relative_to(REPO))
+    if not git("ls-files", "--error-unmatch", rel):
+        return False
+    return not git("status", "--porcelain", "--", rel)
 
 
 def first_commit(path: Path) -> str:
@@ -412,6 +427,30 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         )
     )
 
+    # F10 -- the frozen artifacts must have NO uncommitted change of any kind.
+    #
+    # Every other invariant reads the working tree. Without this one they validate the
+    # working tree against itself: a tamper that edits the manifest AND removes the
+    # matching PDFs is internally consistent, so F1/F2/F3/F7/F8 all pass and the gate
+    # reports COMPLETE over a population that is not the committed one. Measured: 17
+    # members silently became 10 and freeze integrity still read COMPLETE.
+    frozen_paths = [MEMBERSHIP, CONTAM, EXPOSURE, PREREG, AMENDMENTS, DOCS_DIR]
+    dirty = []
+    for p in frozen_paths:
+        if not p.exists():
+            continue
+        st = git("status", "--porcelain", "--", str(p.relative_to(REPO)))
+        if st:
+            dirty.extend(line.strip() for line in st.splitlines())
+    results.append(
+        (
+            "F10 frozen artifacts have no uncommitted changes",
+            not dirty,
+            "; ".join(dirty[:6]) + (f" (+{len(dirty) - 6} more)" if len(dirty) > 6 else "")
+            or f"{len(frozen_paths)} frozen paths clean against HEAD",
+        )
+    )
+
     # F9 -- anything in this study modified AFTER the population was frozen must be
     # declared as an amendment. This is the general form of the defect above: code or
     # prose changing under a frozen population without a record.
@@ -647,6 +686,21 @@ def self_test(contam: dict, exposure: dict) -> int:
     finally:
         if saved_amend2 is not None:
             AMENDMENTS.write_text(saved_amend2)
+
+    # F10 must fire on an uncommitted edit to a frozen artifact. This is the control for
+    # the tamper that made every other invariant pass over a 10-document population.
+    if MEMBERSHIP.exists():
+        saved_mem = MEMBERSHIP.read_text()
+        try:
+            doc = json.loads(saved_mem)
+            doc["members"] = doc["members"][:10]
+            MEMBERSHIP.write_text(json.dumps(doc, indent=1))
+            tampered = json.loads(MEMBERSHIP.read_text())["members"]
+            by_id = {n.split()[0]: ok for n, ok, _ in check_freeze(tampered, lookup)}
+            checks.append(("F10 detects an uncommitted edit to the frozen manifest", not by_id["F10"]))
+            checks.append(("F1 no longer calls a MODIFIED manifest committed", not by_id["F1"]))
+        finally:
+            MEMBERSHIP.write_text(saved_mem)
 
     # The execution boundary must refuse to open while readiness is closed.
     rc_auth = main(["--authorize-execution"])

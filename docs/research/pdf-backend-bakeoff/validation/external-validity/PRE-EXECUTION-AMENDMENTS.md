@@ -505,6 +505,60 @@ a score. Recorded SUBSTANTIVE rather than TOOLING because each changes what a ga
 
 ---
 
+## A13 — SUBSTANTIVE. The gate validated the working tree against itself
+
+```json
+{"id": "A13", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x04_freeze_check.py"],
+ "note": "A11 and A12 also touch this file; all three are SUBSTANTIVE, so nothing hides behind a TOOLING declaration."}
+```
+
+**Found by a targeted sweep for the study's recurring pattern — the gate checks a proxy for
+the property we care about. This is the most serious instance yet, because it defeats every
+other freeze invariant at once.**
+
+`committed()` was `git ls-files --error-unmatch`, which proves a path is **tracked**. The
+property we need is that the artifact is **identical to what was committed**. Since every
+invariant reads the working tree, they collectively validated the working tree *against
+itself*.
+
+**Demonstrated, not argued.** Deleting 7 members from `holdout_membership.json` and
+removing their 7 PDFs — **no commit** — leaves an internally consistent tree, so:
+
+| invariant | result on the tampered tree |
+|---|---|
+| F1 membership committed | **PASS** — "10 members, committed=True" |
+| F2 hashes match | **PASS** — 10 files match |
+| F3 freshness | **PASS** — 10 members clean |
+| F7 set equality | **PASS** — 10 files == 10 manifested |
+| F8 PDF headers | **PASS** |
+| **FREEZE INTEGRITY** | **COMPLETE** — over a population that is not the committed one |
+
+**Repairs.**
+
+1. `committed()` now means **tracked AND unmodified against HEAD**.
+2. **F10** asserts that the frozen artifacts — membership, contamination, design exposure,
+   the pre-registration, this file, and the whole `holdout/` directory — carry **no
+   uncommitted change of any kind**. Scoped to frozen artifacts: probe code is expected to
+   change and is policed by F9 instead.
+
+**A second, latent defect fixed in the same sweep.** `amendment_commits` selected an
+amendment's latest commit with `max(commits, key=lambda c: git("rev-list","--count",c))`.
+`rev-list --count` returns a **string**, so the comparison was lexicographic and `"9"`
+beats `"1003"`. It is dormant today because no execution-start marker exists, but it would
+have silently misjudged the one-way boundary the moment execution was authorized — the
+check most likely to be trusted without re-derivation. Now compared as integers.
+
+**Controls:** `--self-test` gains "F10 detects an uncommitted edit to the frozen manifest"
+and "F1 no longer calls a MODIFIED manifest committed", giving **24/24**.
+
+**Can this affect membership or scoring?** No. Membership is unchanged and re-verified at
+17; this is gate strictness only. Recorded SUBSTANTIVE because it changes what *every*
+freeze invariant means, on the dividing line A11 established.
+
+---
+
 ## What was deliberately NOT amended
 
 - **Membership.** Unchanged, 17 documents. The orphan `CRPT-118HRPT146.pdf` was never a
