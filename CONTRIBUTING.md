@@ -109,7 +109,8 @@ Not sure whether an issue is a good fit? Ask in a comment or at the regular sync
 ### Branch workflow
 
 `develop` is the integration branch; `main` is the protected release branch. Day-to-day
-work targets `develop`, not `main`.
+work targets `develop`, not `main`. Promoting `develop` to `main` is a separate,
+maintainer-initiated step: see [docs/release.md](docs/release.md).
 
 1. Create a branch from `develop` for your work
 2. Make your changes in small, focused commits

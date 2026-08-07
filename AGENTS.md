@@ -107,6 +107,7 @@ Every accepted ADR, title as written. The titles are claims, so this list is the
 - [16. Separate the product, the acquisition tooling, and the delivery channel in the layout](docs/decisions/0016-product-tooling-surface-split.md)
 - [17. Ship the diff engine as an installable `src/deltatrack` package](docs/decisions/0017-installable-engine-package.md)
 - [18. Read appropriations phrases for money, never for structure](docs/decisions/0018-text-triggers-are-financial-only.md)
+- [19. Identify a parsed observation by its source, its parser revision and its ordinal; never by its text](docs/decisions/0019-observation-identity.md)
 
 ## Key architecture concepts
 
