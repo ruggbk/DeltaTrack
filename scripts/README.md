@@ -13,6 +13,7 @@ root.
 | `generate_validation_report.py` | Generate `docs/parser-validation.md`, the team-facing parser-accuracy report, from those fixtures. |
 | `fetch_test_assets.py` | Re-fetch a bill-print PDF the slow suite needs that `tools/fetch_bills.py` cannot produce (it defaults to XML). Every asset it lists is committed, so this is a provenance record plus a way to restore one you deleted, not a setup step. Committee-report PDFs are **not** fetched here — the ones the gates read are committed fixtures ([ADR 0015](../docs/decisions/0015-corpus-test-fixtures.md)). |
 | `compare_differs.py <a> <b>` | Compare DeltaTrack against off-the-shelf differs on the same bill pair (evidence for [ADR 0001](../docs/decisions/0001-structured-money-diff.md)). |
+| `probe_observation_identity.py [root]` | Measure what can serve as an observation address: duplicated body texts, duplicated `match_path`s, emission determinism, and how much of `element_id` is recoverable from the source rather than synthesized. Read-only; the evidence behind [ADR 0019](../docs/decisions/0019-observation-identity.md). Defaults to the committed `tests/corpus`, so it needs no downloads. Re-run under a different `PYTHONHASHSEED` to check the determinism digest does not move. |
 
 ### Refreshing the validation evidence
 
