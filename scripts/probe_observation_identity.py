@@ -1,42 +1,93 @@
-"""Evidence for ADR 0019: which node fields can and cannot serve as an address.
+"""Evidence for ADR 0019: what can and cannot serve as an observation address.
 
 Read-only. Writes nothing, mutates nothing, and takes no threshold.
 
-Reports, over every bill XML under a corpus root:
+Three questions, in the order the record argues them.
 
-- **body text** as an identity — how often two distinct nodes in one document carry the
-  same body. This is the measurement ADR 0019 rests on, and the answer is "often":
-  appropriations bills are assembled from repeated boilerplate, so a content-hash join
-  collapses distinct provisions. It fails *optimistically*, which is why it has to be
-  measured rather than assumed safe.
-- **match_path** as an address — how often it is duplicated. Expected to be duplicated,
-  by design: it is a blocking key, not an identity, and this prints the scale of that.
-- **element_id** as an address — empty and duplicated counts. This is the field ADR 0019
-  adopts, and the probe exists partly so the claim "it is unique and non-empty" is a
-  measurement rather than an assumption.
+**1. Can body text be an identity?** No. Appropriations bills are assembled from repeated
+boilerplate, so the same body appears at several distinct places in one document. A
+content join therefore collapses distinct provisions, and it fails *optimistically*: the
+lookup that should miss instead hits the wrong twin, so whatever is being measured looks
+better than it is.
+
+**2. Can `match_path` be an address?** No, and it is not meant to be. It is a grouping key
+that deliberately collides, and this prints the scale of that.
+
+**3. Which address: `element_id`, or the node's ordinal in the emitted sequence?** The
+observation key is `(source_sha256, parser_revision, address)`, so the address only has to
+designate one node *within one source under one parser revision*. This section measures
+the three properties that choice turns on:
+
+- **uniqueness** — `element_id`'s is an empirical property of GPO's XML that we can only
+  sample. An ordinal's is a property of a list index.
+- **determinism** — the ordinal's precondition. Reported as a digest over the whole
+  emitted sequence, which moves if any node's content or POSITION moves. Re-run under a
+  different ``PYTHONHASHSEED``; the digest must not move.
+- **reconstructability** — whether each `element_id` is actually recoverable from the raw
+  source bytes, or is synthesized by the parser. This tests the one requirement that
+  might have favoured `element_id`, and it is only partly met.
 
 Usage, from the repo root:
 
-    PYTHONPATH=src .venv/bin/python scripts/probe_observation_identity.py tests/corpus
+    uv run python scripts/probe_observation_identity.py tests/corpus
 
 The default root is `tests/corpus`, the committed set (ADR 0015), so the numbers are
 reproducible on a fresh clone with no downloads. Pass another root to sweep a wider
-locally-fetched set; the numbers then describe that set, and ADR 0019's quoted figures
-are the committed one.
+locally-fetched set; the numbers then describe that set, and ADR 0019 says which corpus
+each of its figures came from.
 """
 
 from __future__ import annotations
 
+import hashlib
+import re
 import sys
 from collections import Counter
 from pathlib import Path
 
-from deltatrack.bill_tree import normalize_bill
+from deltatrack.bill_tree import BillNode, normalize_bill
 
 DEFAULT_ROOT = Path("tests/corpus")
 
+# Every `id="..."` literally present in the source, found without parsing the XML, so
+# this measurement does not depend on the parser it is being used to judge.
+_ID_ATTR = re.compile(rb'\bid="([^"]*)"')
 
-def main(argv: list[str]) -> int:
+
+def node_signature(node: BillNode) -> str:
+    """Everything about an emitted node a consumer could observe."""
+    return "\x1f".join(
+        [
+            node.tag,
+            node.element_id,
+            "\x1e".join(node.match_path),
+            "\x1e".join(node.display_path),
+            node.header_text,
+            node.body_text,
+            node.section_number,
+            node.division_label,
+            node.division_key,
+            node.display_text,
+            str(node.body_index),
+        ]
+    )
+
+
+def sequence_digest(nodes: list[BillNode]) -> str:
+    """A digest over the emitted sequence that moves if content OR position moves.
+
+    The ordinal is folded in deliberately. A digest over the node *set* would be blind to
+    a reordering, which is the one fault an ordinal address cares about.
+    """
+    hasher = hashlib.sha256()
+    for ordinal, node in enumerate(nodes):
+        hasher.update(f"{ordinal}\x00".encode())
+        hasher.update(node_signature(node).encode())
+        hasher.update(b"\x00")
+    return hasher.hexdigest()
+
+
+def main(argv: list[str]) -> int:  # noqa: C901 - one report, read top to bottom
     root = Path(argv[1]) if len(argv) > 1 else DEFAULT_ROOT
     docs = sorted(root.glob("*/*.xml"))
     if not docs:
@@ -46,75 +97,106 @@ def main(argv: list[str]) -> int:
         return 1
 
     nodes_total = 0
-    empty_ids = 0
-    empty_by_tag: Counter[str] = Counter()
-    docs_with_empty_id = 0
-    docs_with_dup_id = 0
-    docs_with_dup_path = 0
-    nodes_in_dup_path = 0
-    docs_with_dup_body = 0
-    dup_body_texts = 0
-    nodes_in_dup_body = 0
-    max_body_multiplicity = 0
+    parsed = 0
     skipped: list[str] = []
+
+    dup_body_docs = 0
+    dup_body_texts = 0
+    dup_body_nodes = 0
+    max_body_multiplicity = 0
+
+    dup_path_docs = 0
+    dup_path_nodes = 0
+
+    empty_ids = 0
+    dup_id_groups = 0
+    synthesized_ids = 0
+    synthesized_by_tag: Counter[str] = Counter()
+    docs_with_synthesized = 0
+
+    nondeterministic: list[str] = []
+    per_doc_digest: dict[str, str] = {}
 
     for path in docs:
         try:
-            tree = normalize_bill(path)
+            first = normalize_bill(path)
+            second = normalize_bill(path)
         except Exception as exc:  # a parse failure is not what this probe measures
             skipped.append(f"{path}: {type(exc).__name__}: {exc}")
             continue
 
-        nodes = tree.nodes
+        parsed += 1
+        nodes = first.nodes
         nodes_total += len(nodes)
 
-        empty = [n for n in nodes if not n.element_id]
-        if empty:
-            docs_with_empty_id += 1
-            empty_ids += len(empty)
-            for node in empty:
-                empty_by_tag[node.tag] += 1
+        digest_a, digest_b = sequence_digest(nodes), sequence_digest(second.nodes)
+        if digest_a != digest_b:
+            nondeterministic.append(f"{path}: {digest_a[:12]} != {digest_b[:12]}")
+        per_doc_digest[str(path)] = digest_a
 
-        ids = Counter(n.element_id for n in nodes if n.element_id)
-        if any(v > 1 for v in ids.values()):
-            docs_with_dup_id += 1
+        bodies = Counter(n.body_text for n in nodes if n.body_text.strip())
+        dups = [v for v in bodies.values() if v > 1]
+        if dups:
+            dup_body_docs += 1
+            dup_body_texts += len(dups)
+            dup_body_nodes += sum(dups)
+            max_body_multiplicity = max(max_body_multiplicity, max(dups))
 
         paths = Counter(n.match_path for n in nodes)
         dup_paths = [v for v in paths.values() if v > 1]
         if dup_paths:
-            docs_with_dup_path += 1
-            nodes_in_dup_path += sum(dup_paths)
+            dup_path_docs += 1
+            dup_path_nodes += sum(dup_paths)
 
-        bodies = Counter(n.body_text for n in nodes if n.body_text.strip())
-        dup_bodies = [v for v in bodies.values() if v > 1]
-        if dup_bodies:
-            docs_with_dup_body += 1
-            dup_body_texts += len(dup_bodies)
-            nodes_in_dup_body += sum(dup_bodies)
-            max_body_multiplicity = max(max_body_multiplicity, max(dup_bodies))
+        empty_ids += sum(1 for n in nodes if not n.element_id)
+        ids = Counter(n.element_id for n in nodes if n.element_id)
+        dup_id_groups += sum(1 for v in ids.values() if v > 1)
+
+        source_ids = {m.group(1).decode("utf-8", "replace") for m in _ID_ATTR.finditer(path.read_bytes())}
+        synthesized = [n for n in nodes if n.element_id and n.element_id not in source_ids]
+        if synthesized:
+            docs_with_synthesized += 1
+            synthesized_ids += len(synthesized)
+            for node in synthesized:
+                synthesized_by_tag[node.tag] += 1
+
+    corpus_digest = hashlib.sha256()
+    for key in sorted(per_doc_digest):
+        corpus_digest.update(key.encode())
+        corpus_digest.update(per_doc_digest[key].encode())
 
     print(f"corpus root                                   : {root}")
-    print(f"documents parsed                              : {len(docs) - len(skipped)}")
+    print(f"documents parsed                              : {parsed}")
     print(f"nodes total                                   : {nodes_total}")
     for row in skipped:
         print(f"  SKIPPED {row}")
 
-    print("\n--- element_id as an address (ADR 0019 adopts this) ---")
-    print(f"nodes with an EMPTY element_id                : {empty_ids}")
-    print(f"documents containing at least one             : {docs_with_empty_id}")
-    for tag, count in empty_by_tag.most_common():
-        print(f"    tag={tag!r:32} {count}")
-    print(f"documents with a DUPLICATED element_id        : {docs_with_dup_id}")
-
-    print("\n--- match_path as an address (a blocking key, not an identity) ---")
-    print(f"documents with a duplicated match_path        : {docs_with_dup_path}")
-    print(f"nodes involved in a match_path collision      : {nodes_in_dup_path}")
-
-    print("\n--- body text as an identity (the finding ADR 0019 rests on) ---")
-    print(f"documents with at least one duplicated body   : {docs_with_dup_body}")
+    print("\n--- 1. body text as an identity (it cannot be one) ---")
+    print(f"documents with at least one duplicated body   : {dup_body_docs}")
     print(f"distinct body texts occurring more than once  : {dup_body_texts}")
-    print(f"node occurrences in a duplicate group         : {nodes_in_dup_body}")
+    print(f"node occurrences in a duplicate group         : {dup_body_nodes}")
     print(f"largest multiplicity (one text, one document) : {max_body_multiplicity}")
+
+    print("\n--- 2. match_path as an address (a grouping key, not an identity) ---")
+    print(f"documents with a duplicated match_path        : {dup_path_docs}")
+    print(f"nodes involved in a match_path collision      : {dup_path_nodes}")
+
+    print("\n--- 3a. emission determinism (the ordinal's precondition) ---")
+    print(f"documents whose two parses disagreed          : {len(nondeterministic)}")
+    for row in nondeterministic[:10]:
+        print(f"    {row}")
+    print(f"corpus sequence digest                        : {corpus_digest.hexdigest()}")
+    print("    re-run under a different PYTHONHASHSEED; this value must not move.")
+
+    print("\n--- 3b. element_id, measured rather than assumed ---")
+    print(f"nodes with an EMPTY element_id                : {empty_ids}")
+    print(f"duplicated element_id groups                  : {dup_id_groups}")
+    print(f"element_ids SYNTHESIZED by the parser         : {synthesized_ids}")
+    print(f"documents containing a synthesized id         : {docs_with_synthesized}")
+    for tag, count in synthesized_by_tag.most_common():
+        print(f"    tag={tag!r:32} {count}")
+    print("    A synthesized id is not recoverable from the source bytes, so the")
+    print("    'traceable back to the document' property is partial, not absolute.")
     return 0
 
 

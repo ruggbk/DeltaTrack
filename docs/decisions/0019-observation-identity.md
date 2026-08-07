@@ -1,7 +1,7 @@
-# 19. Identify a parsed observation by its source, its parser revision and its address; never by its text
+# 19. Identify a parsed observation by its source, its parser revision and its ordinal; never by its text
 
 - Status: Proposed
-- Date: 2026-08-06
+- Date: 2026-08-07
 
 ## Context
 
@@ -39,10 +39,6 @@ design: it is a blocking key that groups candidates, and treating it as identity
 natural-key mistake the matching research names explicitly. It is also the shape
 [#518](https://github.com/AgoraDMV/DeltaTrack/issues/518) reports.
 
-**An address does already exist on the XML side.** `element_id` (the GPO XML `@id`) is
-non-empty and unique for all 49,747 nodes across all 58 documents. Nothing asserts that,
-so it holds by observation rather than by construction.
-
 ### What went wrong, stated as a gap rather than a fault
 
 `tests/data/similarity_labels.json` stores `text_old` and `text_new` verbatim and carries
@@ -73,14 +69,31 @@ same source as the code. The case here is that a test's *subject* comes from the
 an artifact keyed on the parser's own output confirms whatever the parser now says, and
 stays green while the thing it described stops existing.
 
+### What the address actually has to do
+
+This is the part a first draft of this record got wrong, so it is worth stating exactly.
+
+Because the key is scoped by source digest and parser revision, a change to the source
+bytes produces a different observation identity, and so does a change to the parser. The
+address therefore does not have to survive either. Its whole job is:
+
+> Given exact source bytes and exact parser revision, designate one emitted observation,
+> uniquely and deterministically, and be defined for every emitted observation.
+
+Two candidates meet that bar differently. The XML `element_id` is unique and non-empty on
+every document measured, but that is an empirical property of GPO's markup, sampled from
+the corpora we happen to hold. The node's **ordinal in the emitted sequence** is unique
+because a list index is unique, which is not a property of anything a third party
+controls. See the alternatives below for the falsification that decided this.
+
 ## Decision
 
-We will identify a parsed observation by **`(source digest, parser revision, node
-address)`**, and keep three questions permanently apart.
+We will identify a parsed observation by **`(source_sha256, parser_revision,
+node_ordinal)`**, and keep three questions permanently apart.
 
 | question | field | may two distinct nodes share it? |
 |---|---|---|
-| **observation identity** — which parsed node is this? | `(source_sha256, parser_revision, node address)` | **No.** Asserted, not assumed. |
+| **observation identity** — which parsed node is this? | `(source_sha256, parser_revision, node_ordinal)` | **No.** Unique by construction. |
 | **content integrity** — is this still the same text? | `text_sha256` | **Yes, routinely.** That is the measured finding above, not a defect. |
 | **cross-version identity** — is this the same provision as that one? | the human's or the matcher's correspondence ruling | It is an **output**, never an input key. |
 
@@ -93,32 +106,73 @@ The three components:
   tier should it ever need reproducibility". This record is where that reservation is
   cashed in: any artifact referencing a source outside git must carry the digest.
 
-- **Parser revision.** Derived from the code that emits nodes, **not declared**. A
-  SHA-256 over the source of the entry module and every `deltatrack.*` module it
-  transitively imports, resolved by AST. Deliberately over-broad; see Consequences.
+- **Parser revision.** The architectural requirement is:
 
-- **Node address.** The parser-emitted id: `element_id` on the XML side. Unique and
-  non-empty within one parse.
+  > `parser_revision` is derived from the parser implementation, and changes whenever
+  > code capable of changing the emitted observations changes.
+
+  *Derived* rather than declared is the load-bearing word; the mechanism is not fixed
+  here. A content hash over the entry module and its transitive `deltatrack` imports,
+  resolved by AST, is an accepted implementation and is the one the research code already
+  runs. Replacing it with another mechanism that meets the requirement above needs no
+  amendment to this record.
+
+- **Node ordinal.** The node's zero-based index in the parser's complete emitted
+  sequence for that source. Unique by construction, and defined for every node.
 
 `text_sha256` is recorded alongside, for drift detection only. It is never a key.
+
+**`element_id` is recorded, not relied upon.** It stays on the node and should be written
+into artifacts beside the ordinal, because it is genuinely useful for tracing an
+observation back to an element in the source document and for debugging. It is not what
+correctness rests on, so a future bill whose markup omits or repeats an id degrades
+traceability rather than breaking identity.
 
 **Scope.** This governs *stored artifacts that record a judgment about a parsed node* —
 test fixtures, goldens, labeled datasets, research probe output. It does not change the
 engine's runtime behaviour, and it does not add a field to the canonical diff contract
 (see Undecided).
 
-**This is identity within one parse, not across versions.** `element_id` being the address
-does not make it a cross-version match key, and this record does not claim it is. The
+**This is identity within one parse, not across versions.** Neither an ordinal nor an
+element id is a cross-version match key, and this record does not claim otherwise. The
 source audit found the XML `@id` conflict-prone in that role: roughly 59 conflict-free
-net-new matches corpus-wide, with 34 of 93 candidates contradicting the path matcher. It
-is a guarded low-priority supplement to matching at best. Cross-version identity stays
-the matcher's or the human's output, per the table above.
+net-new matches corpus-wide, with 34 of 93 candidates contradicting the path matcher.
+Cross-version identity stays the matcher's or the human's output, per the table above.
 
 ### Alternatives rejected
 
 - **Body text, or a hash of it, as the key.** Rejected on measurement: not unique in 23
   of 58 documents, and it fails optimistically, so every artifact keyed this way reports
   better numbers than the truth. This is the status quo for the answer key.
+
+- **`element_id` as the address.** Considered at length, and rejected after trying to
+  falsify the ordinal instead. Four findings decided it:
+
+  1. **Its uniqueness is contingent; the ordinal's is not.** `element_id` is unique and
+     non-empty on all 129 documents measured across two corpus roots, and that could not
+     be broken. But it is a property of a third party's markup that we can only sample,
+     and `bill_tree` reads it as `el.attrib.get("id", "")`, so an empty string is already
+     representable. A list index needs no corpus to be unique.
+  2. **The traceability advantage is partial, and is kept anyway.** The one requirement
+     that might have favoured `element_id` is being reconstructable from the source
+     without running the parser. Measured, that holds for 49,603 of 49,747 nodes: **144
+     ids, in 48 of 58 documents, are synthesized by the parser** (`front-matter-…`) and
+     appear nowhere in the source bytes. So the property is strong but not absolute — and
+     recording `element_id` alongside the ordinal preserves all of it, without making it
+     load-bearing.
+  3. **Its stability across a parser change is a hazard here, not a feature.** An
+     `element_id` survives a change to how a node's body is extracted, because it is read
+     from the source element while the body is computed. That is exactly the change that
+     drifted the answer key: the flagship observation kept its section and its header
+     while its body went from 81 to 1,443 characters. A key that still resolves across
+     that change invites auto-migrating a judgment onto a node that is no longer the same
+     unit. An ordinal fails closed instead. Under this contract both records are refused
+     anyway, because `parser_revision` moved; the difference is which one tempts a
+     shortcut afterwards.
+  4. **The ordinal generalizes across formats and `element_id` does not.** A PDF block
+     carries a page and a line but no id, so an `element_id` contract would have been
+     XML-only by construction. An ordinal over an emitted sequence is the same construct
+     in both pipelines. (Its determinism on the PDF side is untested; see Undecided.)
 
 - **A git commit as the parser revision.** Rejected in both directions. It moves when
   documentation changes, forcing re-verification that buys nothing; and it does *not*
@@ -131,12 +185,8 @@ the matcher's or the human's output, per the table above.
   well-formed but wrong value still certified a universe. A field that names its own
   correctness and is checked by nobody is decorative.
 
-- **A traversal ordinal alone as the address.** Rejected: an ordinal shifts when anything
-  earlier in the document changes, which is exactly the edit it would need to survive. An
-  element id does not.
-
 - **`match_path` as the address.** Rejected on measurement: duplicated in 32 of 58
-  documents, 2,832 nodes involved. It is a blocking key and must stay one.
+  documents, 2,832 nodes involved. It is a grouping key and must stay one.
 
 - **Do nothing; re-derive fixtures on demand.** Rejected: that is the status quo, and
   under the status quo the answer key cannot be re-derived at all.
@@ -148,20 +198,33 @@ the matcher's or the human's output, per the table above.
   redefining them. Today there is nothing to check, because the fixture carries no field
   to check against.
 
-- **The answer key becomes regenerable**, once the builder is repaired and the fields
-  added. That unblocks the ground-truth work originating in #8 and the Study 2 labeling
-  pipeline, both of which currently rest on a fixture that cannot be rebuilt.
+- **Future and migrated fixtures become provenance-verifiable and regenerable**, once the
+  builder is repaired and the provenance fields exist. This does **not** retroactively
+  repair the existing answer key: its twelve records cannot gain provenance that was never
+  stored, and three of them still require human legislative adjudication before they mean
+  anything. What changes is that the *next* fixture cannot decay the same way unnoticed.
 
-- **`element_id` becomes load-bearing rather than incidental.** It holds today by
-  observation, not by assertion, and `bill_tree` reads it as `el.attrib.get("id", "")` —
-  an empty string is representable. Making it an invariant is new work, and any node type
-  that cannot supply one needs a deterministic synthesized address (front-matter nodes
-  already have one).
+- **Emission order becomes load-bearing, and therefore becomes a tested invariant.** This
+  is the one real cost of the ordinal. Under `element_id` a reordering that preserved the
+  node set would have been harmless; under an ordinal it is a silent remapping. Two things
+  make the trade acceptable: [ADR 0008](0008-deterministic-engine.md) already commits the
+  engine to determinism, so this asserts an existing promise rather than adding one; and
+  the property is directly testable, whereas `element_id` uniqueness can only ever be
+  sampled. Measured: identical node sequences across repeated parses and across
+  `PYTHONHASHSEED` values, on 129 documents over two corpus roots.
 
-- **The parser revision is deliberately over-broad, and that costs work.** The transitive
-  module set will include modules that cannot affect node emission, so an unrelated edit
-  forces re-verification. That direction wastes effort; the other direction silently
-  certifies records derived by different code. The trade is taken knowingly.
+- **The ordinal is meaningful only against the complete emitted sequence.** Indexing a
+  filtered or sorted view produces an address that looks valid and points at the wrong
+  node. `element_id` has no such failure mode. This is a genuine new hazard and it needs
+  an invariant of its own rather than a convention.
+
+- **`element_id` stays useful and stops being load-bearing.** Recording it preserves
+  source traceability and debuggability. Note that production *already* relies on it
+  elsewhere: `formatters/text_serializer` builds an `{element_id: (start, end)}` span
+  index that the canonical producer reads, and its docstring says correctness there
+  "rests on element_ids being present (verified on the corpus)". That is a within-one-run
+  map rather than a stored key, so a missing id degrades one report instead of redefining
+  a stored judgment, but this record does not claim `element_id` is unused.
 
 - **A committed fixture has to be rewritten** to carry the new fields. That is a
   deliberate change to `tests/data/similarity_labels.json`, not a drive-by edit, and it
@@ -171,9 +234,6 @@ the matcher's or the human's output, per the table above.
   exists only in the provision-matching review branch, which cannot merge while CI is
   unavailable. Implementing this record depends on that repair landing.
 
-- **The PDF pipeline has no node address at all today**, so this record is enforceable on
-  the XML side first. That is a real asymmetry, not a temporary one (see Undecided).
-
 - **Nothing about the shipped diff changes.** No canonical field is added, no engine
   behaviour moves, and no consumer of the published schema is affected.
 
@@ -182,21 +242,22 @@ the matcher's or the human's output, per the table above.
 Stated explicitly, so a later reader does not mistake silence for a ruling.
 
 1. **Whether provenance reaches the canonical diff contract.** It does not today: the
-   canonical `id` is a per-document change sequence (`c-0001`), and `element_id` is not in
-   the contract at all. Adding it would be an additive-minor bump under
+   canonical `id` is a per-document change sequence (`c-0001`), and no node address is in
+   the contract at all. Adding one would be an additive-minor bump under
    [ADR 0006](0006-canonical-diff-contract.md) and needs a real consumer first
    ([#366](https://github.com/AgoraDMV/DeltaTrack/issues/366), or BillTrax). **Not decided
    here, deliberately.**
 
-2. **The PDF node address.** A PDF block carries an `Anchor` of
-   `(kind, text, page_number, line_number)` and no id. Whether the address becomes that
-   tuple, a synthesized per-parse ordinal, or something else is a genuine open question,
-   and answering it badly would re-introduce a text-bearing key. This record is scoped to
-   formats whose parser emits an id, and names PDF as the open case.
+2. **Whether the PDF pipeline's emission order is deterministic.** The ordinal *construct*
+   generalizes to PDF where `element_id` could not, which is one reason it was chosen. But
+   determinism has been measured on the XML pipeline only. The PDF side needs the same
+   test before an artifact addresses a PDF block by ordinal, and this record does not
+   assume the result.
 
 3. **Whether, and when, the committed answer-key fixture is rewritten** to carry the
    fields. Rewriting a committed fixture that encodes human rulings is a maintainer
-   decision.
+   decision, and the three unresolved observations need legislative adjudication
+   regardless.
 
 4. **The drift response policy for committed fixtures.** `pass2-protocol.md` §4 already
    prescribes quarantine-for-re-review rather than auto-refreeze, for research candidates.
@@ -226,6 +287,8 @@ recoverable if the node it refers to is still identifiable.
 
 Also related:
 
+- **[ADR 0008](0008-deterministic-engine.md)** — the ordinal's precondition. This record
+  turns an existing commitment into an asserted, corpus-tested invariant.
 - **[ADR 0015](0015-corpus-test-fixtures.md)** — consistent with, and cashes in, its
   reserved checksum-registry clause for the non-committed tier.
 - **[ADR 0006](0006-canonical-diff-contract.md)** — unaffected. The contract's shape does
@@ -242,26 +305,34 @@ each row names how the check is proven capable of firing.
 
 | # | invariant | proven able to fail by |
 |---|---|---|
-| 1 | Every node a parser emits has a non-empty address, unique within its parse | a fixture node with a blanked or duplicated id must fail the sweep |
-| 2 | An artifact whose recorded parser revision is not the checked-out one is **refused**, not silently accepted | mutate the recorded revision to a well-formed but different value; the record must be refused by every metric that consumes it |
-| 3 | An artifact whose recorded source digest does not match the file it names is refused | flip one byte of the source |
-| 4 | A stored text whose `text_sha256` no longer matches the re-derived node quarantines that record | edit a stored text and assert the record is quarantined, not re-scored |
-| 5 | The parser revision is **derived**, not declared: editing a parser module moves it, and restoring the module returns it | the test is itself the falsification: edit `bill_tree.py`, assert movement, restore, assert return |
-| 6 | No artifact-reading code joins on body text | plant a text-keyed join in a newly created module and assert the gate flags it, on the fail-closed pattern [ADR 0018](0018-text-triggers-are-financial-only.md) already uses (allowlist checked to name only modules that exist) |
-| 7 | The regeneration path actually executes in CI rather than being trusted | **this one starts red**: `scripts/build_similarity_labels.py` exits on `ImportError` on `develop` today |
+| 1 | **Emission is deterministic**: identical source bytes under one parser revision produce an identical node sequence, in content and in order | swap two adjacent nodes and assert the sequence digest moves. Verified: the digest changes, while a digest over the node *set* does not, which is why the check has to fold the ordinal in |
+| 2 | The ordinal indexes the **complete** emitted sequence, never a filtered or re-sorted view | resolve an address against a filtered sequence and assert it is refused rather than silently returning the wrong node |
+| 3 | An artifact whose recorded parser revision is not the current one is **refused**, not silently accepted | mutate the recorded revision to a well-formed but different value; the record must be refused by every metric that consumes it |
+| 4 | An artifact whose recorded source digest does not match the file it names is refused | flip one byte of the source |
+| 5 | A stored text whose `text_sha256` no longer matches the node at that address quarantines that record | edit a stored text and assert the record is quarantined, not re-scored |
+| 6 | `parser_revision` is **derived**, not declared: editing a module capable of changing emission moves it, and restoring the module returns it | the test is itself the falsification: edit `bill_tree.py`, assert movement, restore, assert return |
+| 7 | No artifact-reading code joins on body text | plant a text-keyed join in a newly created module and assert the gate flags it, on the fail-closed pattern [ADR 0018](0018-text-triggers-are-financial-only.md) already uses (allowlist checked to name only modules that exist) |
+| 8 | The regeneration path actually executes in CI rather than being trusted | **this one starts red**: `scripts/build_similarity_labels.py` exits on `ImportError` on `develop` today |
 
-Two notes on the shape of these:
+Three notes on the shape of these:
 
-- Invariant 2 is the one the research programme got wrong first time, in its own code. A
+- Invariants 1 and 2 exist *because* the address is an ordinal. They are the price of not
+  making a property of GPO's markup load-bearing, and both are cheap and directly
+  testable.
+- Invariant 3 is the one the research programme got wrong first time, in its own code. A
   provenance field that no verifier reads is worse than no field, because it reads as
   compliance. Its test must mutate the field and assert refusal, not merely assert that
   the field is present.
-- Invariant 7 is written to start failing on purpose. A regeneration script that has never
+- Invariant 8 is written to start failing on purpose. A regeneration script that has never
   been executed by CI is indistinguishable from one that cannot run, which is the
   condition this record exists to end.
 
-The evidence in Context is reproducible with:
+There is no invariant requiring `element_id` to be unique or non-empty. That is the point
+of the change: the property is still true on every document measured, and nothing now
+depends on it staying true.
+
+The evidence in Context and in the alternatives is reproducible with:
 
 ```
-PYTHONPATH=src .venv/bin/python scripts/probe_observation_identity.py tests/corpus
+uv run python scripts/probe_observation_identity.py tests/corpus
 ```
