@@ -70,3 +70,4 @@ record means updating both.
 | [0016](0016-product-tooling-surface-split.md) | Separate the product, the acquisition tooling, and the delivery channel in the layout |
 | [0017](0017-installable-engine-package.md) | Ship the diff engine as an installable `src/deltatrack` package |
 | [0018](0018-text-triggers-are-financial-only.md) | Read appropriations phrases for money, never for structure |
+| [0019](0019-observation-identity.md) | Identify a parsed observation by its source, its parser revision and its address; never by its text |
