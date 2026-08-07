@@ -157,10 +157,10 @@ Four rules follow, and none is optional:
   becomes a named evidence signal rather than weight acquired accidentally from how the
   candidate set was built.
 
-**Multi-round retrieval is permitted.** A later round may consume `Correspondence` settled by
-an earlier one; matching a container because its descendants matched is a technique the
-provision-matching study defers rather than rejects. The circularity forbidden above is
-narrower: retrieval consuming the evidence computed for the very candidates it is emitting.
+**Multi-round retrieval is permitted.** Retrieval may run in multiple rounds before
+classification. A later round may use 'Correspondence' settled by an earlier round, but
+retrieval may not use the identity 'Evidence' for the candidates it is deciding whether
+to emit. 
 
 ### Correspondence
 
