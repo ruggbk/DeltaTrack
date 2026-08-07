@@ -188,42 +188,74 @@ a recall figure is meaningless without the configuration that produced it.
 
 ### The candidate-set contract
 
-A candidate is a pairing of two observations (identified per
-[ADR 0019](0019-observation-identity.md)) plus provenance:
+There are two levels here, and collapsing them is a mistake worth naming, because an
+earlier draft of this record made it.
 
-| field | required | what it is |
-|---|---|---|
-| the two observation ids | yes | what is being proposed |
-| `retriever_name` | yes | **set-valued.** Which retrievers surfaced this pairing |
-| `retrieval_rank` | no | this retriever's rank for the pairing, where it ranks |
-| `retrieval_score` | no | this retriever's own score, where it has one |
+> **A candidate exists once per observation pair. Every retriever invocation that surfaced
+> it retains its own provenance and its own retrieval metadata.**
 
-Three properties matter.
+**The candidate** is the pairing of two observations, identified per
+[ADR 0019](0019-observation-identity.md). Its identity is that pair and nothing else. One
+pair, one candidate, no matter how many retrievers found it.
+
+**A proposal** is one retriever invocation's claim that the pair is worth evaluating. It
+identifies the retriever, the round or invocation where more than one exists, and optionally
+that invocation's rank and score. A candidate carries one or more proposals.
+
+**A retriever invocation** is a retriever running under a particular configuration — its
+bounds, cutoffs and K — in a particular round. Each proposal is traceable to the invocation
+that produced it.
+
+Illustratively, and this shape is not frozen:
+
+```text
+Candidate(old=A, new=B)
+  proposals:
+    - retriever: path        round: 1   rank: null  score: null
+    - retriever: rare_token  round: 1   rank: 3     score: 0.81
+```
+
+**Why rank and score cannot sit on the candidate.** They are properties of one retriever's
+invocation, not of the observation pair. On a deduplicated candidate proposed by two
+retrievers there is no answer to "what is its rank?", and forcing one would mean picking a
+retriever silently. Worse, two retrievers' scores are on unrelated scales — a path
+retriever's membership, a lexical retriever's overlap, an approximate-nearest-neighbour
+distance — so a single field invites comparisons that are not meaningful. Keeping them on
+the proposal makes the scale question answerable: a score is only ever comparable within one
+retriever's invocation.
+
+**Configuration is per invocation, not per set.** A single set-level configuration is not
+enough once several retrievers run with different parameters, or one retriever runs in
+several rounds, or a later round consumes settled correspondence. Every proposal must be
+traceable to the invocation and configuration that produced it, which is what makes a
+candidate-recall figure reproducible and comparable against another run.
+
+Three rules govern how proposals may be used.
 
 **A retriever need not produce a number.** A structural or path retriever emits membership
-and provenance and nothing else. Requiring a score would push every retriever into inventing
-one, and an invented score is worse than an absent field because it looks comparable.
+and provenance and nothing else. A proposal with null rank and null score is fully valid.
+Requiring a score would push every retriever into inventing one, and an invented score is
+worse than an absent field because it looks comparable.
 
 **A retrieval score is not identity evidence.** It exists for observability and for
 candidate-recall and ranking analysis. Assignment must not read it as though it were a signal
 about correspondence; if a retriever's score is genuinely informative about identity, the way
 to use it is to compute it as a named evidence signal, where it can be measured.
 
-**A pairing proposed by several retrievers is one candidate, not several.** The provenance is
-a union, so "which retrievers found this?" survives, and a pairing does not gain weight in
-assignment merely by being proposed twice.
-
-The retrieval **configuration** — the bounds, cutoffs and K in force — is recorded alongside
-the set. A candidate-recall figure without the configuration that produced it is not
-reproducible and cannot be compared against another run.
+**Proposals are provenance, not votes.** A pair surfaced by three retrievers is one candidate
+with three proposals, and it reaches identity evidence and assignment exactly once. Assignment
+must not infer that agreement among retrievers is evidence of correspondence. That inference
+might turn out to be true, and it is exactly the kind of thing later research could establish
+— at which point it becomes a *named identity-evidence signal* that can be measured, not an
+emergent property of how the candidate set happened to be built.
 
 **Multi-round retrieval is permitted, and is not the circularity the constraint forbids.**
 A second round may consume `Correspondence` already settled by an earlier round: matching a
 container because its descendants matched is a real technique that the provision-matching
 study defers rather than rejects. What requirement 1 forbids is narrower and is genuinely
 circular — retrieval consuming the identity evidence computed for the very candidates it is
-deciding whether to emit. Where rounds exist, each candidate's provenance records the round
-that produced it, so recall stays attributable.
+deciding whether to emit. Where rounds exist, each proposal records its round, so recall
+stays attributable to the invocation that earned it.
 
 ### The correspondence type
 
@@ -408,8 +440,10 @@ rewrite.
 
 **Required by this record** — the data contracts, and only these:
 
-- `CandidateSet`, carrying set-valued per-candidate retriever provenance, optional
-  `retrieval_rank` and `retrieval_score`, and the retrieval configuration in force;
+- `CandidateSet`, in which one observation pair appears once, each candidate carrying one or
+  more retrieval proposals; each proposal identifies its retriever, its round where rounds
+  exist, and optionally that invocation's rank and score, and is traceable to the invocation
+  and configuration that produced it;
 - `Evidence`, carrying named signals and no correspondence verdict, retained for candidates
   reaching assignment;
 - `Correspondence`, first-class, capable of 1:1 / 1:0 / 0:1 / 1:N / N:1, each link carrying
@@ -488,22 +522,31 @@ Each names the direction that can regress, and how the check is proven capable o
 | # | invariant | proven able to fail by |
 |---|---|---|
 | 1 | Retrieval does not consume the identity evidence computed for the candidates it emits, and no retrieval runs after classification | a retriever that reads the `Evidence` for its own candidates fails an import-graph gate; assert no retrieval pass exists after the classification stage. A later *round* consuming settled `Correspondence` is permitted and must not trip it |
-| 2 | Every candidate records its retriever provenance, set-valued, and a pairing proposed twice is one candidate | a candidate with empty provenance is rejected; propose one pairing from two retrievers and assert one candidate with two names, not two candidates |
-| 3 | The retrieval configuration in force is recorded with the candidate set, so a candidate-recall figure is attributable and reproducible | compute recall from a set carrying no configuration and assert the measurement refuses rather than reporting an unattributable number |
-| 4 | **Identity evidence carries no correspondence verdict** and applies no assignment rule | the evidence module may not import a correspondence-policy constant; plant one and assert the gate fires, on the fail-closed pattern ADR 0018 uses |
-| 5 | **Every threshold or rule that decides whether a candidate becomes a correspondence lives in assignment** | plant a correspondence decision in retrieval, evidence or classification and assert the gate flags it. A retrieval bound must **not** trip it, and a rendering legibility cutoff must not either |
-| 6 | Classification may read evidence but may not change which observations correspond | feed classification a fixed correspondence, perturb the evidence, and assert the emitted correspondence set is unchanged |
-| 7 | Evidence is retained for every candidate that reaches assignment | drop an evidence value and assert ranking measurement refuses rather than silently scoring over a subset |
-| 8 | `Correspondence` round-trips 1:1 / 1:0 / 0:1 / 1:N / N:1 without loss | construct each shape by hand and assert it survives; an N:1 that silently becomes two 1:1s must fail |
-| 9 | The canonical projection of a non-binary correspondence degrades **explicitly**, and never duplicates a side's amounts | project a hand-built N:1 and assert each amount appears exactly once across the emitted rows |
-| 10 | Phase 1 changes no output | canonical JSON byte-identical across the corpus, both pipelines. This gate must itself be shown able to fail: perturb a cutoff and confirm it goes red before trusting a green |
-| 11 | Each stage is deterministic in isolation (ADR 0008) | same inputs, repeated calls, identical outputs, per stage |
+| 2 | **One observation pair appears once in the candidate set**, carrying one or more proposals | propose the same pair from two retrievers with different ranks and scores; assert exactly one candidate reaches identity evidence and assignment, and that **both** proposals survive on it with their own metadata |
+| 3 | A candidate with no proposal is rejected, and every proposal identifies its retriever and its round where rounds exist | construct a candidate with an empty proposal list and assert it is refused |
+| 4 | Rank and score are scoped to one retriever invocation, are optional, and are never compared across retrievers | a proposal with null rank and null score is valid; assert nothing ranks or orders candidates by comparing scores from different retrievers |
+| 5 | Every proposal is traceable to the invocation and configuration that produced it, so a candidate-recall figure is reproducible | compute recall from a set whose proposals carry no invocation and assert the measurement refuses rather than reporting an unattributable number |
+| 6 | **Duplicate proposals change neither candidate multiplicity nor assignment weight** | run assignment over a pair proposed once and the same pair proposed three times, holding evidence fixed, and assert the resulting correspondence is identical |
+| 7 | **Identity evidence carries no correspondence verdict** and applies no assignment rule | the evidence module may not import a correspondence-policy constant; plant one and assert the gate fires, on the fail-closed pattern ADR 0018 uses |
+| 8 | **Every threshold or rule that decides whether a candidate becomes a correspondence lives in assignment** | plant a correspondence decision in retrieval, evidence or classification and assert the gate flags it. A retrieval bound must **not** trip it, and a rendering legibility cutoff must not either |
+| 9 | Classification may read evidence but may not change which observations correspond | feed classification a fixed correspondence, perturb the evidence, and assert the emitted correspondence set is unchanged |
+| 10 | Evidence is retained for every candidate that reaches assignment | drop an evidence value and assert ranking measurement refuses rather than silently scoring over a subset |
+| 11 | `Correspondence` round-trips 1:1 / 1:0 / 0:1 / 1:N / N:1 without loss | construct each shape by hand and assert it survives; an N:1 that silently becomes two 1:1s must fail |
+| 12 | The canonical projection of a non-binary correspondence degrades **explicitly**, and never duplicates a side's amounts | project a hand-built N:1 and assert each amount appears exactly once across the emitted rows |
+| 13 | Phase 1 changes no output | canonical JSON byte-identical across the corpus, both pipelines. This gate must itself be shown able to fail: perturb a cutoff and confirm it goes red before trusting a green |
+| 14 | Each stage is deterministic in isolation (ADR 0008) | same inputs, repeated calls, identical outputs, per stage |
 
-Invariants 1 and 5 are the pair that carries the corrected boundary, and they are worth
-reading together: a retrieval bound may exclude a candidate and must not trip invariant 5,
+Invariants 1 and 8 are the pair that carries the retrieval boundary, and they are worth
+reading together: a retrieval bound may exclude a candidate and must not trip invariant 8,
 while anything that declares a correspondence must trip it wherever it is written.
 
-Invariant 10 is the one that carries the others. A byte-identical-output claim from a gate
+Invariants 2 and 6 are the pair that carries the candidate contract. Invariant 2 is the one
+to write first, because it is the only test here that can fail in two opposite directions:
+deduplicating too eagerly loses a proposal's metadata, and not deduplicating lets one pair
+reach assignment twice. A test asserting only that "one candidate reached assignment" passes
+in the first case, which is why it must also assert both proposals survived.
+
+Invariant 13 is the one that carries the others. A byte-identical-output claim from a gate
 nobody has seen fail is indistinguishable from a gate that is not reading the output, and
 the corpus gates are exactly where that has bitten before
 ([#299](https://github.com/AgoraDMV/DeltaTrack/issues/299),
