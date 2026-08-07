@@ -108,6 +108,17 @@ documents comes from those files; none is transcribed by hand. Run from the repo
 `.venv/bin/python`, except `phase2/g02_wasm_advance.mjs` and `phase3/h02_pdfjs_percharacter.mjs`,
 which need `NODE_PATH=../../probes/js/node_modules node`.
 
+**`phase2/g07_extraction_cost.py` was missing and has been reconstructed** (2026-08-07, found
+during a repository-hygiene review and unrelated to it). `results/g07_extraction_cost.json`
+was committed without its probe while this section and phase 2 both promised `g01`–`g07`,
+and phase 2 cites its output three times — the 1.01–1.13× extraction-cost figure. That was
+one load-bearing number with no committed probe behind it, against the rule stated in the
+paragraph above. The page limit was **recovered, not guessed**: the frozen file carries two
+machine-independent counts per document, and a sweep over 1–60 pages reproduces both on all
+three documents at exactly 40 and nowhere else. `g07 --verify` re-measures and asserts those
+six counts against the committed file; it does not assert the timings, which are wall-clock
+on one machine. No phase-2 number changed.
+
 Phase 3 needs the benchmark backends installed
 (`probes/requirements.txt`: pdfminer.six 20260107, PyMuPDF 1.28.0). PyMuPDF is AGPL-3.0 and
 is a ceiling reference only, per [`../LICENSING.md`](../LICENSING.md); phase 3 scores it and
