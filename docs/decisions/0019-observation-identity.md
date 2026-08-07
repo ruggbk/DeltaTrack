@@ -1,6 +1,6 @@
 # 19. Identify a parsed observation by its source, its parser revision and its ordinal; never by its text
 
-- Status: Accepted
+- Status: Proposed
 - Date: 2026-08-07
 
 ## Context
