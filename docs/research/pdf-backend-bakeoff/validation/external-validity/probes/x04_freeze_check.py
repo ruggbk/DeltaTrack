@@ -587,6 +587,21 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         ]
         if protected and sha not in declared_commits:
             undeclared_commits.append(f"{sha[:8]} ({', '.join(sorted(protected)[:3])})")
+            continue
+        if not protected:
+            continue
+        # BIDIRECTIONAL. Declaring the COMMIT is not enough: every protected file that commit
+        # touched must be named by a declaration FOR THAT COMMIT. Otherwise a commit changing
+        # score_metrics.py and build_frames.py passes while declaring only the first, and the
+        # second slips in unrecorded under a legitimate-looking declaration.
+        named = {
+            f
+            for r in records
+            if any(git("rev-parse", str(c)) == sha for c in r.get("commits", []))
+            for f in r.get("files_touched", [])
+        }
+        for f in sorted(set(protected) - named):
+            undeclared_commits.append(f"{sha[:8]} declares the commit but not its file {f}")
 
     # SEAL: after a valid marker, the ledger itself is immutable.
     marker = marker_commit()
@@ -887,6 +902,37 @@ def self_test(contam: dict, exposure: dict) -> int:
             checks.append(("F1 no longer calls a MODIFIED manifest committed", not by_id["F1"]))
         finally:
             MEMBERSHIP.write_text(saved_mem)
+
+    # F9 BIDIRECTIONAL: a declared commit whose OTHER protected files are unnamed must fail.
+    # Driven against a real commit that touched four protected files.
+    saved_amd3 = AMENDMENTS.read_text() if AMENDMENTS.exists() else None
+    try:
+        AMENDMENTS.write_text(
+            "```json\n"
+            + json.dumps(
+                {
+                    "id": "PARTIAL",
+                    "class": "SUBSTANTIVE",
+                    "confirmatory_output_at_time": "none",
+                    "affects_membership": False,
+                    "commits": ["c111433"],
+                    "files_touched": ["probes/m3_boundaries.py"],
+                }
+            )
+            + "\n```\n"
+        )
+        by_id = {n.split()[0]: (ok, detail) for n, ok, detail in check_freeze(members, lookup)}
+        ok_f9, detail_f9 = by_id["F9"]
+        checks.append(("F9 rejects a declared commit whose other protected files are unnamed", not ok_f9))
+        checks.append(
+            (
+                "...naming the specific unaccounted file",
+                "declares the commit but not its file" in detail_f9,
+            )
+        )
+    finally:
+        if saved_amd3 is not None:
+            AMENDMENTS.write_text(saved_amd3)
 
     # --- execution state machine -------------------------------------------------
     # Writing the marker must NOT authorize anything; only a committed write-once file.

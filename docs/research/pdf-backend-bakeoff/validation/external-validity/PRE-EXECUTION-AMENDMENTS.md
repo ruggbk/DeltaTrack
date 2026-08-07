@@ -227,11 +227,10 @@ output in existence.
 ## A6 — TOOLING. Harness repairs after the population freeze
 
 ```json
-{"id": "A6", "class": "TOOLING", "commits": ["3d3e3fc", "481731b"], "confirmatory_output_at_time": "none",
+{"id": "A6", "class": "TOOLING", "commits": [], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": ["probes/x03_select_holdout.py",
-                   "PRE-EXECUTION-AMENDMENTS.md",
-                   "holdout/CRPT-118HRPT146/CRPT-118HRPT146.pdf"],
+ "files_touched": ["holdout/CRPT-118HRPT146/CRPT-118HRPT146.pdf"],
+ "accounting_delegated_to": "A18",
  "note": "probes/x04_freeze_check.py moved to A11, which changes what the gate MEANS and is recorded SUBSTANTIVE."}
 ```
 
@@ -431,7 +430,7 @@ written as "H empirically beat X."** Hybrid remains the default by prior, not by
 ## A11 — SUBSTANTIVE. A one-way execution boundary, and F9 hardening
 
 ```json
-{"id": "A11", "class": "SUBSTANTIVE", "commits": ["c111433"], "confirmatory_output_at_time": "none",
+{"id": "A11", "class": "SUBSTANTIVE", "commits": [], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
  "note": "A12 also changes this file; both are SUBSTANTIVE, so neither hides behind a TOOLING declaration."}
@@ -473,7 +472,7 @@ The duplicate declaration was removed.
 ## A12 — SUBSTANTIVE. Two more proxy/property mismatches, found by targeted sweep
 
 ```json
-{"id": "A12", "class": "SUBSTANTIVE", "commits": ["0e877b4"], "confirmatory_output_at_time": "none",
+{"id": "A12", "class": "SUBSTANTIVE", "commits": [], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": []}
 ```
@@ -508,7 +507,7 @@ a score. Recorded SUBSTANTIVE rather than TOOLING because each changes what a ga
 ## A13 — SUBSTANTIVE. The gate validated the working tree against itself
 
 ```json
-{"id": "A13", "class": "SUBSTANTIVE", "commits": ["641013c"], "confirmatory_output_at_time": "none",
+{"id": "A13", "class": "SUBSTANTIVE", "commits": [], "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
  "note": "A11 and A12 also touch this file; all three are SUBSTANTIVE, so nothing hides behind a TOOLING declaration."}
@@ -562,7 +561,7 @@ freeze invariant means, on the dividing line A11 established.
 ## A14 — SUBSTANTIVE. Two post-freeze methodological commits were never declared
 
 ```json
-{"id": "A14", "class": "SUBSTANTIVE", "commits": ["70ec76c", "985def9"],
+{"id": "A14", "class": "SUBSTANTIVE", "commits": [],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
@@ -594,7 +593,7 @@ select or deselect a document; membership is unchanged and re-verified at 17 by 
 ## A15 — SUBSTANTIVE. The freeze and the boundary were snapshots, not historical facts
 
 ```json
-{"id": "A15", "class": "SUBSTANTIVE", "commits": ["2b07a60"],
+{"id": "A15", "class": "SUBSTANTIVE", "commits": [],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
@@ -639,7 +638,7 @@ as a deviation rather than silently moving to the new version.
 ## A16 — SUBSTANTIVE. Execution readiness did not cover the machinery that produces the answer
 
 ```json
-{"id": "A16", "class": "SUBSTANTIVE", "commits": ["2b07a60"],
+{"id": "A16", "class": "SUBSTANTIVE", "commits": [],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"]}
@@ -685,7 +684,7 @@ four files.
 ## A17 — BLOCKING AMBIGUITY. The frozen protocol is not executable as written
 
 ```json
-{"id": "A17", "class": "SUBSTANTIVE", "commits": ["c394e7b"],
+{"id": "A17", "class": "SUBSTANTIVE", "commits": [],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/x06_m6_feasibility.py", "results/x06_m6_feasibility.json"],
@@ -777,6 +776,241 @@ step once A17 is resolved.
 
 **Population impact: none.** No membership change, no scoring performed, no holdout document
 opened.
+
+---
+
+## A19 — A17-N RESOLVED. The comparison unit is a neutral ink-line skeleton
+
+```json
+{"id": "A19", "class": "SUBSTANTIVE", "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/neutral_geometry.py", "probes/x07_neutral_geometry.py",
+                   "results/x07_neutral_geometry.json"],
+ "supersedes_text_in": "PRE-REGISTRATION.md 5.3, 5.8",
+ "resolves": ["A17.2", "A17.3", "A17.4"]}
+```
+
+**This is a post-selection protocol change.** No confirmatory output exists, so it is a
+legitimate pre-execution amendment — but it changes what the adjudication unit *is*, and it
+is recorded as substantive rather than clerical.
+
+### Previous ambiguous rule
+
+§5.3: the unit is "6–10 **printed lines**". §5.8: the D-frame is regions where "the two
+architectures' **reconstructed printed-line** text differs", and the C-frame samples pages
+carrying a line in "the document's **sub-body size cluster**". Printed lines are produced by
+H and by X; the sub-body cluster had no implementation that does not read character identity.
+
+### New rule
+
+**Which source facts are below both seams, stated rather than assumed.** H and X differ in
+exactly one place: who decides word spaces, and whether the engine's character ordering is
+consumed. Both adapters read the *same* PDFium calls for geometry —
+`FPDFText_GetCharBox`, `FPDFText_GetCharOrigin`, `FPDFText_GetFontSize`. So **ink glyph boxes
+and baselines are common to both arms** and are legitimate neutral facts. Engine-generated
+spaces are excluded (they carry no ink, and X-2 excludes them anyway), which is what makes
+the skeleton *identical* under both architectures.
+
+*Caveat, stated not waived:* these facts are still PDFium's. "Common to both arms" is not
+"engine-independent" — a mis-boxed glyph would be inherited by both arms and the skeleton
+together. §5.8's 10 % PyMuPDF cross-check remains the control, **re-pointed at the skeleton**
+(per-page neutral line counts) rather than at the withdrawn page predicate.
+
+1. **Neutral line clustering.** Tolerance `= 0.5 × median ink height on the page` — derived
+   from page geometry, not a constant. Sort ink glyphs by descending baseline
+   (top-to-bottom); start a new line when the baseline differs from the **current cluster's
+   first-glyph anchor** by more than the tolerance. An anchor rather than a running mean, so
+   gentle drift cannot walk one cluster down a page.
+2. **Neutral line identity** = `(document_sha256, page_number, ordinal)`, the ordinal being
+   the index in that top-to-bottom order. A pure function of geometry: **MEASURED** stable
+   under glyph-order shuffling, and it never reads text, so repeated or duplicate headings
+   cannot collide.
+3. **Neutral regions** = **non-overlapping windows of 8 consecutive neutral lines**, aligned
+   to the page start, short trailing window kept. No sampling decision enters region
+   identity. Regions do not cross pages. The same regions serve the C-frame, the D-frame,
+   oracle rendering and both projections.
+4. **Projection is by GLYPH MEMBERSHIP**, not baseline proximity: a reconstructed line
+   belongs to the neutral line owning the plurality of its glyphs, ties to the lowest
+   ordinal. **This replaced a rule that failed its own test** — a line merging two neutral
+   lines can sit 6 pt from both when the tolerance is 5 pt, and baseline-proximity projection
+   returned `None`, silently deleting the comparison unit for exactly the merge case the
+   D-frame exists to detect. Membership needs no tolerance. **No text similarity is ever
+   consulted**, so a spacing or character difference cannot move a line to another slot.
+5. **H ≠ X is evaluated per neutral line**, then lifted to the region. Per neutral line the
+   outcome is one of: `SAME`, `TEXT_DIFFERS`, `H_ABSENT`, `X_ABSENT`. A region enters the
+   D-frame if any of its lines is not `SAME`, or if the two architectures' emitted anchor
+   sets for the region differ. Symmetric under swapping H and X by construction: every
+   outcome has a mirror.
+6. **A17.4 disappears** because comparison is per neutral line, so differing line *counts*
+   no longer break alignment: a merge shows as `X_ABSENT` on one slot, a split as two slots
+   each carrying text.
+
+### The C-frame enrichment predicate is WITHDRAWN, on evidence
+
+**MEASURED** ([`results/x07_neutral_geometry.json`](results/x07_neutral_geometry.json), four
+development documents × 20 pages): **both** candidate geometry-only predicates select
+**100 % of pages** on the three appropriations bills.
+
+| predicate | pages selected | share |
+|---|---|---|
+| sub-body line height (quantised mode) | 20 / 20 on each bill | **1.0** |
+| narrow-and-centred line | 20 / 20 on each bill | **1.0** |
+
+A predicate that selects everything enriches nothing. GPO appropriations pages are dense
+enough that essentially every page carries some short centred line. Rather than tune a
+fragile classifier toward a target it cannot hit, the enrichment is **removed**:
+
+> **C-frame regions are drawn by a seeded uniform sample over the neutral regions of every
+> page of every P-head document, at most 8 regions per document.**
+
+**Why this costs little.** Page-level enrichment existed to avoid sampling structureless
+pages — the disease that voided the prior holdout. That is now handled at the **document**
+level by the selection frame (GPO title convention plus a 25-page floor, §4.4), so page-level
+enrichment was redundant. The §5.8 clause reserving 40 % of C-regions for amount-bearing
+pages is **retained**, because it is a *content* stratification, not a heading classifier.
+
+### What changes, and what it cannot do
+
+| | |
+|---|---|
+| metric/denominator | M0's denominator becomes **neutral lines**, not "aligned printed lines". M1/M2/M3/M4 denominators become headings matched within neutral regions |
+| claim | unchanged for RQ1; RQ2's C-frame is now an unenriched page sample, so its precision per unit of adjudication falls and that is accepted explicitly |
+| can it favour H or X? | **No.** Every rule reads only facts both arms share, and the D-frame predicate is symmetric. The skeleton cannot be tuned toward either because it never sees either's output |
+| known limit, recorded | a **two-column page merges its columns** into one neutral line (asserted as a test, not discovered later). GPO bills are single-column; committee-report tables are not, and P-robust is where those live |
+| known limit | baselines closer than half the median ink height are one neutral line |
+
+**Development evidence:** 23/23 synthetic adversarial fixtures pass, covering adjacent
+lines, sub-tolerance baselines, superscripts, subscripts, display headings, letter-spaced
+caps, margin numbers, split text objects, two-column merge, table rows, identity stability,
+all four projection cases, and region partitioning. Four development documents produce
+26–47 neutral lines per page, consistent with GPO's ~25-line measure plus running heads.
+
+**Population impact: none.** No membership change; no holdout document was opened.
+
+---
+
+## A20 — A17-M6 PROPOSED RESOLUTION: defer M6 to a separate validation study
+
+```json
+{"id": "A20", "class": "SUBSTANTIVE", "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/x06_m6_feasibility.py", "results/x06_m6_feasibility.json"],
+ "supersedes_text_in": "PRE-REGISTRATION.md 6 (M6), 7.2 rule 1",
+ "resolves": ["A17.1"],
+ "status": "RECOMMENDED -- awaiting review before it is treated as frozen"}
+```
+
+### What the evidence actually says, corrected
+
+x06's reference is the nearest preceding account/agency anchor **that production's
+`extract_anchors` emits from the HYBRID reconstruction**. That is architecture-derived, not
+independent truth. The supported statement is therefore:
+
+> On three development documents, the nearest preceding **hybrid-produced** account/agency
+> anchor lies within 6 reconstructed lines for **0.434** of observed amounts and within 10
+> for **0.571**; a 50-line span reaches **0.823**.
+
+It does **not** establish the distribution of distances to the *true* governing heading. It
+does establish that a 6–10 line viewport cannot support a long-range attribution claim,
+which is the design question. A17's earlier wording overstated this and is corrected here.
+
+### Path A — build an independent long-range oracle: specified, then rejected as disproportionate
+
+To adjudicate `amount occurrence → governing account` without using H or X as truth, an
+oracle would need: the amount identified by neutral geometry (which neutral line, which
+occurrence index within it, since identical dollar figures recur); the account identified by
+its own printed occurrence, not by a label string, since account names repeat across
+divisions; enough rendered context to contain **both**, which x06 shows means *hundreds* of
+lines and frequently **spans pages**; a rule for continuation pages, where the governing
+heading appeared on an earlier page under a running head; and controls that make it
+falsifiable. The adjudicator would be reading a multi-page span to answer one question.
+
+**Estimated burden on this study's own population:** P-head is 12 documents / 2,864 pages.
+Even a modest sample of amounts would require adjudicating multi-page spans repeatedly, and
+each item is far more work than a region item. This is a second research project — a
+financial-semantics oracle — living inside a seam ADR.
+
+### Path B — defer M6, and narrow RQ2 explicitly *(recommended)*
+
+**Reasons, against the criteria the brief sets.**
+
+| criterion | assessment |
+|---|---|
+| decision relevance | **low.** M3 is the primary comparative metric, M1 the primary absolute one, M4 tests immediate hierarchy. The seam governs word boundaries; attribution is downstream of the *tree*, not of the seam |
+| whether failure could distinguish H from X | **very unlikely.** The design pilot found H and X differ on 2 of 3,381 printed lines and **0 of 85** headings. An attribution difference requires a heading difference first |
+| oracle independence | Path A's oracle is buildable but its context spans pages, so blinding and provenance get materially harder |
+| implementation complexity / human burden | highest of any component, by a wide margin |
+| hidden degrees of freedom | high: context size, occurrence matching and continuation rules would all be *invented* now |
+
+**The resolution.**
+
+1. **M6 is removed from this study**, and from §7.2 rule 1's vetoes. Rule 1 becomes:
+   `X_CORRECTS ≥ 5`, `X_REGRESSES == 0`, **no M4 regression** — the M6 veto is struck.
+2. **RQ2 is narrowed** to: seam → heading presence / text / boundary integrity → **immediate
+   hierarchy**. It stops there.
+3. **The claim "the money lands under the right account" is withdrawn from this study.** It
+   may not appear in any table or summary.
+4. **Stated explicitly, because the inference is tempting and wrong:** correct headings and
+   correct immediate hierarchy do **not** establish correct financial attribution. Attribution
+   depends on the full ancestor chain, on continuation handling across pages, and on amount
+   parsing — none of which this study measures.
+5. M6 is preserved as **future research** — a dedicated financial-attribution validation with
+   its own oracle — not as an unvalidated implication of this one.
+
+**This is a real weakening of the intended claim**, and it is the point of recording it. The
+study answers the seam question and stops short of the money question rather than answering
+the money question badly.
+
+**Can this favour H or X?** No. It *removes* a veto that could only ever have blocked an X
+win, so if anything it very slightly loosens the bar for X — which is why it is recorded as
+substantive and why rule 1's other two conditions (including `X_REGRESSES == 0`) are
+unchanged.
+
+**Population impact: none.**
+
+---
+
+## A18 — the commit ↔ file accounting of record
+
+```json
+{"id": "A18", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "commits": ["70ec76c", "3d3e3fc", "481731b", "985def9", "c111433", "0e877b4", "641013c",
+             "2b07a60", "c394e7b"],
+ "files_touched": ["probes/x01_contamination.py", "probes/x03_select_holdout.py",
+                   "probes/x04_freeze_check.py", "probes/m3_boundaries.py",
+                   "probes/m3_selftest.py", "probes/x06_m6_feasibility.py"]}
+```
+
+**Why one accounting block rather than per-theme attribution.** F9 is now **bidirectional**:
+declaring a commit is not enough, every protected file that commit touched must be named by
+a declaration *for that commit*. Applying that to the existing thematic amendments exposed
+real gaps — `c111433` touched four protected files while A11 named one, and `0e877b4` was
+declared with `files_touched: []`. Spreading the files back across A3/A4/A6/A11–A17 by theme
+would be **invented attribution**: several commits carried more than one theme, and a
+reviewer cannot check a guess. So the accounting lives here, in one reviewable block, and the
+thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
+
+**The complete post-freeze protected history**, from
+`git log 4e2b520..HEAD`:
+
+| commit | protected files touched | theme |
+|---|---|---|
+| `70ec76c` | `x04_freeze_check.py` | F4 vs the withdrawn population (A14) |
+| `3d3e3fc` | `m3_boundaries.py`, `m3_selftest.py`, `x03_select_holdout.py`, `x04_freeze_check.py` | orphan file, M3 executable (A3/A4/A6) |
+| `481731b` | `x01_contamination.py` | contamination self-ingestion (A7) |
+| `985def9` | `x04_freeze_check.py` | F3 read raw classes (A14) |
+| `c111433` | `m3_boundaries.py`, `m3_selftest.py`, `x01_contamination.py`, `x04_freeze_check.py` | freshness snapshot, UNALIGNABLE, >60, boundary (A8–A11) |
+| `0e877b4` | `x04_freeze_check.py` | F6/G2 proxy sweep (A12) |
+| `641013c` | `x04_freeze_check.py` | working-tree-vs-committed (A13) |
+| `2b07a60` | `x04_freeze_check.py` | freeze/boundary as historical facts (A15/A16) |
+| `c394e7b` | `x06_m6_feasibility.py` | M6 feasibility probe (A17) |
+
+**No file is declared under both a SUBSTANTIVE and a TOOLING amendment**: A6 hands its
+protected-file accounting here and keeps only the deleted orphan PDF, which is not a
+protected suffix.
 
 ---
 

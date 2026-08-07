@@ -16,10 +16,22 @@ below the heading that owns them. If the governing heading is outside the render
 the adjudicator cannot state the amount's account from the evidence it is shown, and M6 has
 no oracle for that amount.
 
-This measures the distance, in printed lines, from each dollar amount to the nearest
-preceding account/agency heading, and reports what share would be answerable inside a
-region of each candidate size. It decides whether M6 is implementable AS FROZEN, or whether
-it needs a pre-execution amendment.
+WHAT THIS MEASURES, AND WHAT IT DOES NOT. The reference here is the nearest preceding
+account/agency anchor that PRODUCTION's `extract_anchors` emits from the HYBRID
+reconstruction. That is an architecture-derived reference, NOT independent truth. So this
+probe measures:
+
+    the distance from each amount to the nearest preceding HYBRID-PRODUCED anchor
+
+and NOT:
+
+    the distance from each amount to its TRUE governing account heading.
+
+The distinction matters: if hybrid misses a heading, the measured distance to the next one
+back is too large; if hybrid invents one, too small. The measurement is still decisive for
+the design question -- a 6-10 line viewport is far too small for a claim about long-range
+attribution -- but it does not establish the true distance distribution, and A17 must not
+be worded as though it does.
 
 Uses the hybrid path only: the question is about the PROTOCOL's geometry, not about a
 difference between architectures, and both arms see the same headings here.
@@ -129,15 +141,21 @@ def main(limit: int = 30) -> int:
     # would license a metric whose oracle is silently absent for two amounts in five. The
     # judgement belongs in the amendment, next to the number, not in a canned string here.
     verdict = (
-        f"{pooled.get('6')} of amounts have their governing account heading within 6 printed "
-        f"lines and {pooled.get('10')} within 10 -- the region sizes PRE-REGISTRATION.md 5.3 "
-        f"fixes. The remainder cannot be attributed by an adjudicator who sees only the "
-        f"region, because the heading that owns the amount is not in it. Even a 50-line "
-        f"region reaches only {pooled.get('50')}. See PRE-EXECUTION-AMENDMENTS.md A17."
+        f"On three development documents, the nearest preceding HYBRID-PRODUCED "
+        f"account/agency anchor lies within 6 reconstructed lines for {pooled.get('6')} of "
+        f"observed amounts and within 10 for {pooled.get('10')}; a 50-line span reaches "
+        f"{pooled.get('50')}. The reference is architecture-derived, so this is NOT the "
+        f"share of amounts whose TRUE governing heading is in range. It does show that a "
+        f"6-10 line viewport cannot support a long-range attribution claim. "
+        f"See PRE-EXECUTION-AMENDMENTS.md A17."
     )
     doc = {
         "population": "DEVELOPMENT -- not a holdout",
         "question": "can M6's amount->account attribution be adjudicated inside a 6-10 printed-line region?",
+        "reference_is_architecture_derived": (
+            "distances are to the nearest preceding anchor emitted by production "
+            "extract_anchors over the HYBRID reconstruction, not to independent truth"
+        ),
         "protocol_region_size": "6-10 printed lines (PRE-REGISTRATION.md 5.3)",
         "pooled_share_answerable_within_region_of_N_lines": pooled,
         "amounts_total": len(all_distances),
