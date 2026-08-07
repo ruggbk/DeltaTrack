@@ -1,9 +1,12 @@
 # Pre-execution amendments
 
-**Every amendment here was made while NO confirmatory architecture output existed.** No H
-or X output has ever been produced on any confirmatory holdout document. `x04`'s F5 asserts
-that mechanically, and it is the condition that makes amending a frozen protocol before
-execution methodologically legitimate rather than a degree of freedom.
+**Every amendment here was made while no confirmatory architecture output existed.** That
+is the condition making it legitimate to amend a frozen protocol before execution rather
+than a degree of freedom. **Its evidence is of two different strengths, and A11 separates
+them:** F5 establishes as a *repository fact* that no canonical score artifact exists; that
+no H/X extraction was ever *run* is an **attestation**, because git cannot prove a command
+was never executed. The provable ordering fact is enforced instead by the execution-start
+marker (A11).
 
 ## Why this file exists, and the invariant it protects
 
@@ -134,7 +137,7 @@ Mechanically, implemented and tested in `probes/m3_boundaries.py`:
 | `X_REGRESSES` | H clean, X not clean |
 | `BOTH_CLEAN` | both clean |
 | `BOTH_DIRTY` | neither clean, **whatever the defect counts** |
-| `UNSCORABLE` | either side `UNALIGNABLE` |
+| `UNSCORABLE` | **superseded by A9**: only when the ORACLE has no text. `UNALIGNABLE` is withdrawn |
 
 **The case the review raised is answered explicitly: if H has two WELDs and X repairs one,
 that is `BOTH_DIRTY` and is NOT a correction.** A half-repaired account label is still a
@@ -430,7 +433,8 @@ written as "H empirically beat X."** Hybrid remains the default by prior, not by
 ```json
 {"id": "A11", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": ["probes/x04_freeze_check.py"]}
+ "files_touched": ["probes/x04_freeze_check.py"],
+ "note": "A12 also changes this file; both are SUBSTANTIVE, so neither hides behind a TOOLING declaration."}
 ```
 
 **The defect.** This file claimed F5 "mechanically establishes" that no confirmatory output
@@ -463,6 +467,41 @@ amendment; and a TOOLING amendment that claims to change a scoring rule.
 **F9 caught this file.** `m3_boundaries.py` and `m3_selftest.py` were declared under A3/A4
 (SUBSTANTIVE) *and* A6 (TOOLING) — the exact hiding pattern the check exists to prevent.
 The duplicate declaration was removed.
+
+---
+
+## A12 — SUBSTANTIVE. Two more proxy/property mismatches, found by targeted sweep
+
+```json
+{"id": "A12", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": []}
+```
+
+The recurring pattern in this study is *the gate checks a proxy for the property we care
+about*. A deliberate sweep for further instances found two.
+
+**F6 repeated F4's exact defect, in the check that proves BLINDING.** It compared
+`first_commit(oracle_key)` against `first_commit(oracle_adjudicated)`. The membership file
+has already demonstrated that an artifact can be withdrawn and re-created at the same path,
+after which `first_commit` returns a commit for a version that no longer exists — so F6
+would have "proved" the ordering of a key nobody would score against. Both sides now use
+the last-modifying commit, matching F4.
+
+**G2 believed a self-reported label.** The evidence file declares
+`"population": "DEVELOPMENT"`, and G2 accepted that string as proof the X2 assertions were
+not run on the holdout. A file can say DEVELOPMENT while having been produced on holdout
+members — the same class as trusting a `.pdf` filename over PDF bytes. G2 now requires the
+evidence to *list its documents* and checks them against membership directly; the label
+alone is no longer sufficient, and a non-empty document list is required so the check
+cannot pass vacuously.
+
+**Controls:** `--self-test` gains "G2 rejects evidence LABELLED development that names a
+holdout member" alongside the existing self-labelled-HOLDOUT case, giving 22/22.
+
+**Can this affect membership or scoring?** No. Both are gate strictness; neither computes
+a score. Recorded SUBSTANTIVE rather than TOOLING because each changes what a gate
+*means*, and A11 established that as the dividing line.
 
 ---
 

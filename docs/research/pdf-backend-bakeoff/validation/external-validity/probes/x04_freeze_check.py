@@ -357,7 +357,11 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
     )
 
     if KEY.exists() and ADJ.exists():
-        kc, ac = first_commit(KEY), first_commit(ADJ)
+        # LAST-modifying commits, for the same reason F4 uses them: an artifact that is
+        # withdrawn and re-created at the same path keeps its original first_commit, so a
+        # first-commit comparison would prove the ordering of a key that no longer exists.
+        # This is the identical defect F4 carried, in the check that proves BLINDING.
+        kc, ac = last_commit(KEY), last_commit(ADJ)
         results.append(
             (
                 "F6 answer key committed before adjudication",
@@ -432,7 +436,7 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
     return results
 
 
-def check_execution() -> list[tuple[str, bool, str]]:
+def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
     results: list[tuple[str, bool, str]] = []
 
     have_adapter = committed(ADAPTER) and committed(RECONSTRUCTOR)
@@ -445,18 +449,27 @@ def check_execution() -> list[tuple[str, bool, str]]:
     )
 
     # G2 -- the X2 assertions must have RUN and PASSED, on development documents.
+    #
+    # `population: "DEVELOPMENT"` is a SELF-REPORTED LABEL. Believing it is the same class
+    # of proxy defect as trusting a `.pdf` filename over PDF bytes: an evidence file could
+    # claim DEVELOPMENT while having been produced on holdout members. So the documents it
+    # names are checked against membership directly, and the label is not sufficient.
     ok, detail = False, "x2_contract_assertions.json not written"
     if X2_EVIDENCE.exists():
         try:
             ev = json.loads(X2_EVIDENCE.read_text())
             a, b = ev.get("X2a_no_u0020"), ev.get("X2b_rule_recovers_engine_spaces")
             pop = ev.get("population", "")
-            ndocs = ev.get("documents_checked", 0)
-            ok = bool(a) and bool(b) and pop == "DEVELOPMENT" and ndocs > 0 and committed(X2_EVIDENCE)
-            detail = f"X2a={a} X2b={b} population={pop!r} docs={ndocs} committed={committed(X2_EVIDENCE)}"
+            docs = ev.get("documents", [])
+            member_ids = {m["id"] for m in members} | {m["id"].upper() for m in members}
+            leaked = sorted({d for d in docs if d in member_ids or str(d).upper() in member_ids})
+            ok = bool(a) and bool(b) and pop == "DEVELOPMENT" and bool(docs) and not leaked and committed(X2_EVIDENCE)
+            detail = f"X2a={a} X2b={b} population={pop!r} docs={len(docs)} committed={committed(X2_EVIDENCE)}" + (
+                f" -- HOLDOUT MEMBERS PRESENT: {leaked}" if leaked else ""
+            )
         except (json.JSONDecodeError, AttributeError) as exc:
             detail = f"unreadable: {exc}"
-    results.append(("G2 X2-a / X2-b assertions recorded and passing", ok, detail))
+    results.append(("G2 X2-a / X2-b assertions recorded, passing, on non-holdout documents", ok, detail))
 
     results.append(
         (
@@ -654,10 +667,24 @@ def self_test(contam: dict, exposure: dict) -> int:
                 }
             )
         )
-        g2 = dict((n, ok) for n, ok, _ in check_execution())
-        checks.append(
-            ("G2 rejects assertions recorded on the HOLDOUT", not g2["G2 X2-a / X2-b assertions recorded and passing"])
+        g2 = dict((n[:2], ok) for n, ok, _ in check_execution(members))
+        checks.append(("G2 rejects assertions self-labelled HOLDOUT", not g2["G2"]))
+
+        # The proxy defect: the LABEL says DEVELOPMENT while the documents are holdout
+        # members. Believing the label is the same mistake as trusting a `.pdf` filename.
+        leaked_id = members[0]["id"] if members else "113-hr-933"
+        X2_EVIDENCE.write_text(
+            json.dumps(
+                {
+                    "X2a_no_u0020": True,
+                    "X2b_rule_recovers_engine_spaces": True,
+                    "population": "DEVELOPMENT",
+                    "documents": [leaked_id],
+                }
+            )
         )
+        g2b = dict((n[:2], ok) for n, ok, _ in check_execution(members))
+        checks.append(("G2 rejects evidence LABELLED development that names a holdout member", not g2b["G2"]))
     finally:
         if saved is None:
             X2_EVIDENCE.unlink(missing_ok=True)
@@ -692,7 +719,7 @@ def main(argv: list[str]) -> int:
         # are open, so execution can never be authorized while a prerequisite is missing.
         members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
         lookup = exposure_ids(contam, exposure)
-        f_res, g_res = check_freeze(members, lookup), check_execution()
+        f_res, g_res = check_freeze(members, lookup), check_execution(members)
         blocked = [n for n, ok, _ in f_res + g_res if not ok]
         if blocked:
             print("REFUSED: cannot authorize execution while these are open:\n  " + "\n  ".join(blocked))
@@ -727,7 +754,7 @@ def main(argv: list[str]) -> int:
     lookup = exposure_ids(contam, exposure)
 
     freeze_failed = render("FREEZE INTEGRITY", check_freeze(members, lookup))
-    exec_failed = render("EXECUTION READINESS", check_execution())
+    exec_failed = render("EXECUTION READINESS", check_execution(members))
 
     print()
     print(f"FREEZE INTEGRITY:    {'COMPLETE' if not freeze_failed else 'INCOMPLETE -- ' + '; '.join(freeze_failed)}")
