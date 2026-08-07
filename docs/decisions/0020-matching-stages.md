@@ -45,14 +45,17 @@ version pairs of the committed corpus. That is the volume of correspondence the 
 retriever structurally cannot reach, and neither pass produces an inspectable candidate set
 against which recall could be computed.
 
-**A fused correspondence decision surfaces as a money defect.** A path-matched pair whose
+**A fused correspondence decision can surface as a money defect.** A path-matched pair whose
 similarity falls below the split cutoff becomes a `removed` carrying only the old text and an
-`added` carrying only the new; money extraction then runs one-sided on each. On the committed
-corpus, **27** of 327 such splits carry dollar amounts on *both* sides, so a value edit inside
-a rewritten section renders as the whole old amount removed and the whole new amount added.
-The money layer is behaving correctly on the input it is given
-([#368](https://github.com/AgoraDMV/DeltaTrack/issues/368)); the error is a correspondence
-failure surfacing one stage later.
+`added` carrying only the new; money extraction then runs one-sided on each, so an edit to a
+value renders as the whole old amount removed and the whole new amount added. On the committed
+corpus, **27** of 327 such splits carry dollar amounts on *both* sides. That is the measured
+population in which a correspondence decision can propagate into materially different
+financial output — not a count of confirmed errors, since none of the 27 has been adjudicated.
+The mechanism itself is not in doubt — [#368](https://github.com/AgoraDMV/DeltaTrack/issues/368)
+traces it through the code — and it is the direction of failure that matters here: where a
+split is wrong, the money layer still reports correctly on the input it was given, so a
+correspondence error surfaces one stage later as a financial one.
 
 **The result type cannot express a real legislative shape.** `match_nodes` returns
 `list[tuple[BillNode | None, BillNode | None]]` — two sides, one node each — so a provision
@@ -210,10 +213,12 @@ the contents of one stage change.
 
 ### Alternatives rejected
 
-- **Keep the stages fused and tune the thresholds.** One number decides identity and render
-  form, so a tuning change is untestable in isolation; and no threshold value fixes the 27
-  split-with-money instances, because the two populations that cutoff separates — genuine
-  false matches, and heavily rewritten real sections — are not separated by that measure.
+- **Keep the stages fused and tune the thresholds.** Tuning does not touch the coupling: one
+  number still decides identity, classification and render form together, so a change to it is
+  untestable in isolation whatever its value. It is also not established that a better cutoff
+  exists — the provision-matching research finds heavily rewritten true counterparts and
+  genuine false matches poorly separated by a single fixed overlap measure. The separation
+  this record makes holds whichever measure later wins.
 - **Add tracing instead of materialising a `CandidateSet`.** The closest alternative.
   Instrumentation would let ranking be measured over the pairs that *are* scored, but it
   cannot supply the denominator: pairs the path grouping never forms produce no event to
