@@ -1086,11 +1086,13 @@ unchanged.
 {"id": "A18", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "commits": ["70ec76c", "3d3e3fc", "481731b", "985def9", "c111433", "0e877b4", "641013c",
-             "2b07a60", "c394e7b", "c3cb3c0"],
+             "2b07a60", "c394e7b", "c3cb3c0", "6b6eb7e"],
  "files_touched": ["probes/x01_contamination.py", "probes/x03_select_holdout.py",
                    "probes/x04_freeze_check.py", "probes/m3_boundaries.py",
                    "probes/m3_selftest.py", "probes/x06_m6_feasibility.py",
-                   "probes/neutral_geometry.py", "probes/x07_neutral_geometry.py"]}
+                   "probes/neutral_geometry.py", "probes/x07_neutral_geometry.py",
+                   "probes/neutral_identity.py", "probes/x08_neutral_identity.py",
+                   "probes/x09_skeleton_cross_engine.py"]}
 ```
 
 **Why one accounting block rather than per-theme attribution.** F9 is now **bidirectional**:
