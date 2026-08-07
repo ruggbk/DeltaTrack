@@ -1,20 +1,34 @@
-"""x04 -- audit the freeze invariants. Exit non-zero if the study may not proceed.
+"""x04 -- audit the freeze and the execution gate. Exit non-zero if execution is forbidden.
 
-PRE-REGISTRATION.md, "Execution gate". Every property below is one a reviewer would
-otherwise have to take on trust, and each has a known-bad case so a green run means the
-check ran rather than that it could not fail.
+PRE-REGISTRATION.md, "Execution gate".
 
+TWO GATES, REPORTED SEPARATELY, because conflating them let this script print
+"EXECUTION GATE OPEN" while the protocol's own gate listed two unmet prerequisites it
+never checked. Freeze integrity is about whether the protocol and population are honestly
+frozen; execution readiness is about whether the machinery the protocol requires exists.
+Both must hold before anything may be scored.
+
+FREEZE INTEGRITY
   F1  membership exists, is committed, and records a SHA-256 for every file
   F2  every file on disk still hashes to its recorded SHA-256
-  F3  NO member appears in ANY contamination class -- the freshness gate
-  F4  the pre-registration is committed, and its commit is an ancestor of (or equal to)
-      the membership commit, so the protocol was frozen no later than the population
+  F3  no member appears in any contamination class, or in the design-exposure list
+  F4  the pre-registration's LAST-MODIFYING commit is an ancestor of the membership
+      commit. First-commit is not enough: it proves only that SOME version of the
+      protocol predated the population, which is exactly the hole the external review
+      found -- the protocol was materially amended after selection.
   F5  nothing that would count as a confirmatory score exists yet
-  F6  the answer key, if it exists, was committed BEFORE the adjudication -- checked by
-      git log order, never by file mtime
+  F6  the answer key, if it exists, was committed BEFORE the adjudication, by git order
 
-Run with --self-test to prove F3 can fail: it re-runs the freshness gate against a member
-list deliberately seeded with a known-contaminated bill and requires a FAIL.
+EXECUTION READINESS
+  G1  the corrected extended-glyph adapter and reconstructor exist and are committed
+  G2  their X2-a / X2-b assertion evidence exists, is committed, and PASSES -- recorded
+      on DEVELOPMENT documents, never on the holdout
+  G3  the adjudicator prompt exists and is committed
+  G4  the design-exposure list exists and is non-empty
+
+--self-test drives every gate that has a constructible known-bad case and requires each
+to fail, because a gate that has never produced a negative cannot tell "ready" from
+"blind".
 """
 
 from __future__ import annotations
@@ -31,11 +45,18 @@ REPO = EV.parents[4]
 
 MEMBERSHIP = EV / "results" / "holdout_membership.json"
 CONTAM = EV / "results" / "contamination.json"
+EXPOSURE = EV / "results" / "design_exposure.json"
 PREREG = EV / "PRE-REGISTRATION.md"
 DOCS_DIR = EV / "holdout"
 KEY = EV / "results" / "oracle_key.json"
 ADJ = EV / "results" / "oracle_adjudicated.json"
 SCORES = EV / "results" / "scores.json"
+
+# Execution prerequisites named by PRE-REGISTRATION.md's execution gate.
+ADAPTER = EV / "probes" / "pdfium_extended_corrected.py"
+RECONSTRUCTOR = EV / "probes" / "reconstruct_extended_corrected.py"
+X2_EVIDENCE = EV / "results" / "x2_contract_assertions.json"
+ADJUDICATOR_PROMPT = EV / "probes" / "adjudicator_prompt.md"
 
 
 def git(*args: str) -> str:
@@ -43,14 +64,18 @@ def git(*args: str) -> str:
 
 
 def committed(path: Path) -> bool:
-    rel = path.relative_to(REPO)
-    return bool(git("ls-files", "--error-unmatch", str(rel)))
+    if not path.exists():
+        return False
+    return bool(git("ls-files", "--error-unmatch", str(path.relative_to(REPO))))
 
 
 def first_commit(path: Path) -> str:
-    rel = path.relative_to(REPO)
-    out = git("log", "--reverse", "--format=%H", "--", str(rel))
+    out = git("log", "--reverse", "--format=%H", "--", str(path.relative_to(REPO)))
     return out.splitlines()[0] if out else ""
+
+
+def last_commit(path: Path) -> str:
+    return git("log", "-1", "--format=%H", "--", str(path.relative_to(REPO)))
 
 
 def is_ancestor(a: str, b: str) -> bool:
@@ -62,65 +87,46 @@ def is_ancestor(a: str, b: str) -> bool:
     return r.returncode == 0
 
 
-def contaminated(members: list[dict], contam: dict) -> list[tuple[str, str]]:
-    """Members appearing in ANY exposure class. This is the gate F3 enforces, factored
-    out so --self-test can drive it with a known-bad input."""
-    classes = contam["classes"]
-    lookup: dict[str, set[str]] = {}
-    for name, block in classes.items():
-        ids = set(block.get("bills", [])) | {r.upper() for r in block.get("reports", [])}
+def exposure_ids(contam: dict, exposure: dict) -> dict[str, set[str]]:
+    """Every id a frozen member must not be. Keyed by class so a hit names its class."""
+    out: dict[str, set[str]] = {}
+    for name, block in contam.get("classes", {}).items():
         if name == "xml_only_not_excluded":
             continue  # recorded, deliberately not excluded (PRE-REGISTRATION 4.3)
-        lookup[name] = ids
+        out[name] = set(block.get("bills", [])) | {r.upper() for r in block.get("reports", [])}
+    ids = set(exposure.get("design_exposed", []))
+    out["design_exposed"] = ids | {i.upper() for i in ids}
+    return out
+
+
+def contaminated(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple[str, str]]:
     hits = []
     for m in members:
-        mid = m["id"].upper() if m.get("kind") == "report" else m["id"]
+        mid = m["id"]
         for name, ids in lookup.items():
-            if mid in ids or m["id"] in ids:
-                hits.append((m["id"], name))
+            if mid in ids or mid.upper() in ids:
+                hits.append((mid, name))
     return hits
 
 
-def main(argv: list[str]) -> int:
-    if not CONTAM.exists():
-        print("FATAL: contamination.json missing; run x01 first.")
-        return 2
-    contam = json.loads(CONTAM.read_text())
-
-    if "--self-test" in argv:
-        # Known-bad case for F3. A gate that has never produced a positive result cannot
-        # distinguish "clean" from "broken".
-        poisoned = [{"id": contam["excluded_bills"][0], "kind": "bill"}]
-        hits = contaminated(poisoned, contam)
-        ok = bool(hits)
-        print(f"F3 self-test: seeded {poisoned[0]['id']} -> {'DETECTED' if ok else 'MISSED'} {hits}")
-        print("SELF-TEST PASS" if ok else "SELF-TEST FAIL -- the freshness gate cannot fire")
-        return 0 if ok else 1
-
+def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple[str, bool, str]]:
     results: list[tuple[str, bool, str]] = []
 
-    # F1
-    if not MEMBERSHIP.exists():
-        results.append(("F1 membership exists", False, "holdout_membership.json not written"))
-        members = []
-    else:
-        doc = json.loads(MEMBERSHIP.read_text())
-        members = doc.get("members", [])
-        missing = [f["path"] for m in members for f in m["files"] if not f.get("sha256")]
-        results.append(
-            (
-                "F1 membership exists, committed, every file hashed",
-                bool(members) and not missing and committed(MEMBERSHIP),
-                f"{len(members)} members, {sum(len(m['files']) for m in members)} files, "
-                f"{len(missing)} unhashed, committed={committed(MEMBERSHIP) if MEMBERSHIP.exists() else False}",
-            )
-        )
-
-    # F2
-    # F2 and F3 are ASSERTIONS OVER THE MEMBERS. With no members they are satisfied
-    # vacuously, and a vacuous pass is indistinguishable from a real one -- which is the
-    # failure mode this whole study exists to avoid. They report VACUOUS and do not hold.
     n_files = sum(len(m["files"]) for m in members)
+    results.append(
+        (
+            "F1 membership exists, committed, every file hashed",
+            bool(members)
+            and committed(MEMBERSHIP)
+            and not [f for m in members for f in m["files"] if not f.get("sha256")],
+            f"{len(members)} members, {n_files} files, committed={committed(MEMBERSHIP)}"
+            if members
+            else "holdout_membership.json not written",
+        )
+    )
+
+    # F2/F3 are assertions OVER the members. With no members they hold vacuously, and a
+    # vacuous pass is indistinguishable from a real one.
     bad = []
     for m in members:
         for f in m["files"]:
@@ -137,31 +143,29 @@ def main(argv: list[str]) -> int:
         )
     )
 
-    # F3
-    hits = contaminated(members, contam)
+    hits = contaminated(members, lookup)
     results.append(
         (
-            "F3 no member appears in any contamination class",
+            "F3 no member is contaminated or design-exposed",
             bool(members) and not hits,
             "; ".join(f"{i} in {c}" for i, c in hits)
             or (f"{len(members)} members clean" if members else "VACUOUS -- no members to check"),
         )
     )
 
-    # F4
-    pc, mc = first_commit(PREREG), first_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
+    # F4 -- the LAST-modifying commit of the protocol, not the first.
+    pl, pf = last_commit(PREREG), first_commit(PREREG)
+    mc = first_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
     results.append(
         (
-            "F4 pre-registration committed no later than membership",
-            bool(pc) and (not mc or is_ancestor(pc, mc)),
-            f"prereg={pc[:8] or 'UNCOMMITTED'} membership={mc[:8] or 'UNCOMMITTED'}",
+            "F4 FINAL protocol committed before the population",
+            bool(pl) and bool(mc) and is_ancestor(pl, mc) and pl != mc,
+            f"prereg last={pl[:8] or 'UNCOMMITTED'} (first={pf[:8] or '-'}) membership={mc[:8] or 'UNCOMMITTED'}",
         )
     )
 
-    # F5
     results.append(("F5 no confirmatory score exists yet", not SCORES.exists(), str(SCORES.exists())))
 
-    # F6
     if KEY.exists() and ADJ.exists():
         kc, ac = first_commit(KEY), first_commit(ADJ)
         results.append(
@@ -173,17 +177,142 @@ def main(argv: list[str]) -> int:
         )
     else:
         results.append(("F6 answer key ordering", True, "not applicable yet -- adjudication has not run"))
+    return results
 
+
+def check_execution() -> list[tuple[str, bool, str]]:
+    results: list[tuple[str, bool, str]] = []
+
+    have_adapter = committed(ADAPTER) and committed(RECONSTRUCTOR)
+    results.append(
+        (
+            "G1 corrected extended-glyph adapter committed",
+            have_adapter,
+            f"adapter={committed(ADAPTER)} reconstructor={committed(RECONSTRUCTOR)}",
+        )
+    )
+
+    # G2 -- the X2 assertions must have RUN and PASSED, on development documents.
+    ok, detail = False, "x2_contract_assertions.json not written"
+    if X2_EVIDENCE.exists():
+        try:
+            ev = json.loads(X2_EVIDENCE.read_text())
+            a, b = ev.get("X2a_no_u0020"), ev.get("X2b_rule_recovers_engine_spaces")
+            pop = ev.get("population", "")
+            ndocs = ev.get("documents_checked", 0)
+            ok = bool(a) and bool(b) and pop == "DEVELOPMENT" and ndocs > 0 and committed(X2_EVIDENCE)
+            detail = f"X2a={a} X2b={b} population={pop!r} docs={ndocs} committed={committed(X2_EVIDENCE)}"
+        except (json.JSONDecodeError, AttributeError) as exc:
+            detail = f"unreadable: {exc}"
+    results.append(("G2 X2-a / X2-b assertions recorded and passing", ok, detail))
+
+    results.append(
+        (
+            "G3 adjudicator prompt committed",
+            committed(ADJUDICATOR_PROMPT),
+            str(ADJUDICATOR_PROMPT.relative_to(EV)) if committed(ADJUDICATOR_PROMPT) else "not committed",
+        )
+    )
+
+    n = 0
+    if EXPOSURE.exists():
+        n = len(json.loads(EXPOSURE.read_text()).get("design_exposed", []))
+    results.append(
+        ("G4 design-exposure list present and non-empty", bool(n) and committed(EXPOSURE), f"{n} design-exposed ids")
+    )
+    return results
+
+
+def render(title: str, results: list[tuple[str, bool, str]]) -> list[str]:
     width = max(len(n) for n, _, _ in results)
+    print(f"\n== {title} ==")
     for name, ok, detail in results:
         print(f"[{'PASS' if ok else 'FAIL'}] {name:<{width}}  {detail}")
+    return [n for n, ok, _ in results if not ok]
 
-    failed = [n for n, ok, _ in results if not ok]
-    print(f"\n{len(results) - len(failed)}/{len(results)} invariants hold")
-    if failed:
-        print("EXECUTION GATE CLOSED: " + "; ".join(failed))
+
+def self_test(contam: dict, exposure: dict) -> int:
+    """Every gate with a constructible known-bad case must fail on it."""
+    checks: list[tuple[str, bool]] = []
+    lookup = exposure_ids(contam, exposure)
+
+    poisoned = [{"id": contam["excluded_bills"][0], "kind": "bill", "files": []}]
+    checks.append(("F3 detects a contaminated member", bool(contaminated(poisoned, lookup))))
+
+    exposed = [{"id": exposure["design_exposed"][0], "kind": "bill", "files": []}]
+    hits = contaminated(exposed, lookup)
+    checks.append(("F3 detects a design-exposed member", any(c == "design_exposed" for _, c in hits)))
+
+    checks.append(
+        (
+            "F2/F3 refuse to pass vacuously on an empty member list",
+            not any(ok for _, ok, _ in check_freeze([], lookup)[1:3]),
+        )
+    )
+
+    checks.append(("F4 rejects a non-ancestor pair", not is_ancestor("0" * 40, "1" * 40)))
+
+    # G2 must reject evidence that passed on the HOLDOUT rather than on development.
+    saved = X2_EVIDENCE.read_text() if X2_EVIDENCE.exists() else None
+    try:
+        X2_EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
+        X2_EVIDENCE.write_text(
+            json.dumps(
+                {
+                    "X2a_no_u0020": True,
+                    "X2b_rule_recovers_engine_spaces": True,
+                    "population": "HOLDOUT",
+                    "documents_checked": 5,
+                }
+            )
+        )
+        g2 = dict((n, ok) for n, ok, _ in check_execution())
+        checks.append(
+            ("G2 rejects assertions recorded on the HOLDOUT", not g2["G2 X2-a / X2-b assertions recorded and passing"])
+        )
+    finally:
+        if saved is None:
+            X2_EVIDENCE.unlink(missing_ok=True)
+        else:
+            X2_EVIDENCE.write_text(saved)
+
+    width = max(len(n) for n, _ in checks)
+    print("== SELF-TEST: every gate must fail on its known-bad case ==")
+    for name, ok in checks:
+        print(f"[{'PASS' if ok else 'FAIL'}] {name:<{width}}")
+    bad = [n for n, ok in checks if not ok]
+    print(f"\n{len(checks) - len(bad)}/{len(checks)} gates demonstrably able to fail")
+    if bad:
+        print("SELF-TEST FAIL: " + "; ".join(bad))
         return 1
-    print("EXECUTION GATE OPEN")
+    print("SELF-TEST PASS")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if not CONTAM.exists() or not EXPOSURE.exists():
+        print("FATAL: run x01_contamination.py and x05_design_exposure.py first.")
+        return 2
+    contam = json.loads(CONTAM.read_text())
+    exposure = json.loads(EXPOSURE.read_text())
+
+    if "--self-test" in argv:
+        return self_test(contam, exposure)
+
+    members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
+    lookup = exposure_ids(contam, exposure)
+
+    freeze_failed = render("FREEZE INTEGRITY", check_freeze(members, lookup))
+    exec_failed = render("EXECUTION READINESS", check_execution())
+
+    print()
+    print(f"FREEZE INTEGRITY:    {'COMPLETE' if not freeze_failed else 'INCOMPLETE -- ' + '; '.join(freeze_failed)}")
+    print(f"EXECUTION READINESS: {'OPEN' if not exec_failed else 'CLOSED -- ' + '; '.join(exec_failed)}")
+    print()
+    if freeze_failed or exec_failed:
+        print("EXECUTION FORBIDDEN. Nothing may be scored.")
+        return 1
+    print("EXECUTION PERMITTED.")
     return 0
 
 

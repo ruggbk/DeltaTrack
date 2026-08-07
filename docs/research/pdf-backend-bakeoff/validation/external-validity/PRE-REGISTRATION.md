@@ -1,16 +1,25 @@
 # Pre-registration: external validity of the PDF extraction seam
 
-- **Status: protocol frozen, population frozen, NOTHING SCORED.** The holdout is selected
-  and hashed in [`results/holdout_membership.json`](results/holdout_membership.json); no
-  extractor has been run on any member. See [§ Execution gate](#execution-gate) for the
-  remaining conditions, which `probes/x04_freeze_check.py` enforces.
-- **The frozen population, as selected:** 19 documents, 5,744 pages, **7 of 8 strata
-  filled** → adequacy *generalization*, pending §4.5's ≥ 800 heading-occurrence check at
-  extraction time. **P-head 14 documents / 4,950 pages** (numbered-layout appropriations
-  acts, 106–1,547 pp, both chambers, Congresses 113–119); **P-robust 5 documents /
-  794 pages** (2 enrolled bills, 3 appropriations committee reports).
-  **Stratum 5 filled 1 of 2** — its whole candidate pool is 8 bills and all 8 were
-  examined, so this is scarcity, not a budget artifact, and §4.5 names it in the headline.
+- **Status: PROTOCOL FROZEN, POPULATION NOT YET FROZEN, NOTHING SCORED.**
+  `probes/x04_freeze_check.py` reports two gates separately and both must hold before any
+  score exists.
+- **Everything committed up to `1350710` is DESIGN, not pre-registration, and is retained
+  as such.** An external review found that the protocol was materially amended *after*
+  selection ran — §4.4.1, M9, Rule 0 and the revised selection rules were all written
+  because of facts the selection runs surfaced — and that the freeze check tested only the
+  **first** commit of this file, which proves merely that *some* version predated the
+  population. Both findings are correct. The consequence:
+  - the five design selection runs are preserved in
+    [`results/design_runs/`](results/design_runs/);
+  - the **37 documents** they selected are enumerated in
+    [`results/design_exposure.json`](results/design_exposure.json) and are **excluded** from
+    the confirmatory population;
+  - the confirmatory selection uses a **new seed (20260808)**;
+  - `x04`'s F4 now tests the **last-modifying** commit of this file, so a protocol amended
+    after selection fails the gate mechanically rather than being caught by a reviewer.
+- **What this costs:** the 19-document population described in earlier commits is
+  **withdrawn as confirmatory** and kept only as design history. No score was ever computed
+  on it.
 - This is a new study in the bake-off lineage, not a fourth phase of the old one. Phases
   1–3 repeatedly interrogated **development** evidence; this study tests **external
   validity** with a new oracle and a new population. The directory name says so on purpose.
@@ -50,7 +59,7 @@ PDF → text → headings → hierarchy → account attribution → financial in
 ```
 
 This study measures it as far as **account attribution**. It stops there deliberately;
-[§ 6.1](#61-what-is-deliberately-not-measured) says why, rather than implying coverage it
+[§ 6.4](#64-what-is-deliberately-not-measured) says why, rather than implying coverage it
 does not have.
 
 ---
@@ -294,7 +303,24 @@ extractor is imported.
 | 5–6 strata filled | reported as *"extends to the classes actually sampled"*, unfilled strata named in the headline |
 | < 5 strata, **or** < 300 heading occurrences | **holdout declared inadequate**; RQ2 is not claimed and RQ1 reports a bound only |
 
-## 4.6 The rule that makes a holdout a holdout
+## 4.6 The only admissible exclusions after freezing
+
+A frozen document may be removed from a denominator **only** for one of the reasons below.
+Each is a property of the **file**, decidable without running either architecture, and each
+must be recorded with evidence in `results/DEVIATIONS.md`.
+
+| # | admissible source-level exclusion |
+|---|---|
+| 1 | the file does not open as a PDF, or its SHA-256 no longer matches the frozen membership |
+| 2 | the document carries **no extractable text layer at all** (an image-only scan) — a property of the file, not of a seam |
+| 3 | the document is of the wrong class for its stratum (mis-selected: not an appropriations measure, wrong chamber, wrong version code) |
+| 4 | govinfo has withdrawn or replaced the package, so the frozen bytes no longer correspond to a published document |
+
+**Nothing else.** In particular, "the extractors performed badly on it", "it has no
+headings", "the oracle found it hard", and "it dragged the average down" are **not**
+admissible, and a document removed for any of them invalidates the run.
+
+## 4.7 The rule that makes a holdout a holdout
 
 **No holdout result may change a metric, threshold, normalisation, parameter, adapter,
 repair rule, contract field or population.** An architecture crashing on a holdout document
@@ -402,10 +428,37 @@ it — reading only `oracle_blind.json` and the image directory. **Its prompt an
 transcript are committed.** A reviewer can verify what it was able to see rather than
 trusting a claim about what it looked at.
 
-**Honest naming, carried from the prior protocol.** This is **image-adjudicated**, not
-human-adjudicated, and every table says so. A seeded 25-item subsample is written to
-`results/oracle_human_check.md` for Will; **until he signs it off, every oracle-derived
-number is published as provisional.**
+**Honest naming, and it is stricter than the prior protocol's.** The coverage-frame oracle
+is **AI image-adjudication**, not human ground truth, and every table says so in those
+words. A seeded 25-item human audit **does not convert the key into human ground truth**:
+it estimates the AI adjudicator's agreement with a human on 25 items and nothing more. The
+licensed phrase is *"AI image-adjudicated, human-audited on a 25-item subsample at
+agreement rate a"* — never *"human-adjudicated"* and never *"ground truth"*.
+
+### 5.5.1 The D-frame requires human adjudication, item by item
+
+**DESIGN JUDGMENT, and it is the one place this protocol spends a human.** The D-frame is
+the census of items where the two architectures disagree. It is expected to be **small**
+(the development pilot found 2 differing lines in 3,381 and 0 differing headings in 85),
+and it is the **only** evidence that can satisfy §7.2 rule 1 and flip the ADR. Deciding an
+architecture on an AI adjudicator's unaudited reading of a handful of images is not a
+standard this decision should rest on.
+
+Therefore:
+
+| frame | adjudication | licenses |
+|---|---|---|
+| **C-frame** (coverage, RQ2) | AI image-adjudication, 25-item human audit, agreement rate reported | absolute correctness figures, labelled AI-adjudicated |
+| **D-frame** (discordance, RQ1) | **every item human-adjudicated by Will**, blind, from the same region images and the same blind file | the architecture decision |
+
+If the D-frame census is too large for that (> 60 items), the protocol does **not** silently
+fall back to AI adjudication: it reports the census size, adjudicates a seeded random
+**subsample** of 60 by human, and states that rule 1 was evaluated on a subsample with the
+sampling fraction in the headline.
+
+**Consequence, stated so it is not discovered later:** §7.2 rule 1 cannot be evaluated, and
+no architecture may be chosen over the other, until that human adjudication exists. Until
+then the study reports RQ2 and the descriptive RQ1 result only.
 
 ## 5.6 Negative controls — a green oracle that cannot go red is not evidence
 
@@ -474,8 +527,8 @@ content-bearing denominator is zero is reported as VACUOUS, never as agreement.*
 |---|---|---|---|---|---|
 | **M0** | **seam discordance rate** — fraction of aligned printed lines whose text differs between H and X; and the symmetric difference of emitted heading sets | **none needed** | **100 % of the holdout** | **S1** advances × 1.25 must raise it | the resolution at which RQ1's equivalence statement is made |
 | **M1** | heading presence — recall and precision of emitted heading occurrences against the adjudicated enumeration, matched by printed-line position | adjudicator | C-regions with ≥ 1 adjudicated heading (recall) / ≥ 1 emitted heading (precision) | N-A, N-C | "the seam family finds X % of printed headings on fresh appropriations documents" |
-| **M2** | heading text exactness — emitted text == adjudicated printed text under a **frozen** normalisation (NFKC; collapse internal whitespace **runs** to one space; strip ends). Case preserved. **Internal spacing is NOT normalised away** | adjudicator | matched headings | N-A's welded-word region must fail M2 | "…and reads them correctly, character for character" |
-| **M3** | **heading word-boundary integrity** — emitted token multiset vs adjudicated, split by direction **WELDED** / **SPLIT** | adjudicator | matched headings | N-A | the failure class the seam actually controls, **and its direction** |
+| **M2** | heading text exactness — emitted == adjudicated under a **frozen** normalisation (NFKC; collapse internal whitespace **runs** to one space; strip ends). Case preserved | adjudicator | matched headings | N-A's welded-word region must fail M2 | "…and reads them correctly **up to whitespace-run normalisation**" — see §6.2 |
+| **M3** | **heading word-boundary integrity**, defined at the boundary level in §6.3 — never a token multiset | adjudicator | matched headings that ALIGN (§6.3) | N-A | the failure class the seam actually controls, **and its direction** |
 | **M4** | parent/child correctness — emitted immediate heading-ish parent's text vs adjudicated parent | adjudicator | matched headings whose parent is in-region or resolvable | delete agency-level anchors; M4 must fall further than M1 | "the hierarchy is right, not merely the labels" |
 | **M5** | role agreement, on a coarsened leaf-vs-container map | adjudicator | matched headings, **gated on R1 role ≥ 0.80** | R1 | corroboration only — **may never decide** |
 | **M6** | **amount → heading attribution** — for each dollar amount in a C-region, emitted nearest heading-ish ancestor vs adjudicated | adjudicator | C-regions containing ≥ 1 amount | shift heading baselines one line-height; M6 must fall further than M1 | "the money lands under the right account" |
@@ -513,7 +566,56 @@ licenses an attribution sentence, and it has its own oracle, denominator and con
 prohibition is part of the protocol because the failure it prevents — measuring headings
 and concluding about money — is one this research has already made.
 
-## 6.1 What is deliberately not measured
+## 6.2 What M2 licenses, exactly
+
+M2's normalisation collapses internal whitespace **runs** to a single space, so
+`FAMILY  HOUSING` and `FAMILY HOUSING` compare **equal**. An earlier draft normalised that
+way and then licensed the phrase *"character for character"*, which the measurement does
+not support.
+
+> **M2 licenses: "the emitted heading matches the printed heading exactly, up to
+> normalisation of whitespace runs and Unicode NFKC form."** It does **not** license
+> "character for character", and it cannot distinguish one space from three.
+
+Single-versus-multiple spacing is not silently lost, though — it is **M3's** business, and
+M3 is defined below at the level where it is visible.
+
+## 6.3 M3, defined at the boundary level
+
+A token **multiset** cannot represent word-boundary integrity: it discards order, so
+`FAMILY HOUSING` and `HOUSING FAMILY` compare equal; and it cannot separate a spacing error
+from a character error, so a misread letter is silently charged to the seam. M3 is
+therefore defined on **boundaries between adjacent characters**, not on tokens.
+
+Per matched heading, for each of H, X and the adjudicated printed text:
+
+1. **Normalise** with the frozen non-spacing normalisation only (NFKC, strip ends). Casing
+   and every character are preserved. **Spaces are not touched at this step.**
+2. Form the **non-space character sequence** and its **boundary vector**: for each adjacent
+   pair of non-space characters, `1` if one or more spaces separate them in the source
+   string, else `0`.
+3. **Align** the extractor's non-space sequence to the oracle's. Alignment is on characters
+   only, so a spacing difference can never cause a misalignment.
+4. **Classify each aligned boundary position**:
+
+| outcome | condition |
+|---|---|
+| **WELD** | oracle boundary = 1, extractor boundary = 0 — the extractor ran two words together |
+| **SPLIT** | oracle boundary = 0, extractor boundary = 1 — the extractor inserted a boundary that is not printed |
+| **OK** | boundaries agree |
+| **TEXT_ERROR** | the aligned characters differ — a **character** defect, reported in its own column and **never** counted as WELD or SPLIT |
+| **UNALIGNABLE** | the two non-space sequences cannot be aligned within the frozen edit budget — reported as its own explicit outcome, **never** silently dropped and never scored as agreement |
+
+`UNALIGNABLE` counts are reported per architecture and **split by discordance status**, for
+the same reason `UNREADABLE` is (§9 row 5): an alignment failure concentrated on discordant
+items would be an exclusion that removes exactly the distinguishing cases.
+
+**The decision rule consumes this definition.** §7.2 rule 1's "corrects ≥ 5 headings that H
+welds or splits, regresses ≤ 1" counts **WELD and SPLIT outcomes at aligned boundary
+positions**, and `TEXT_ERROR` and `UNALIGNABLE` are excluded from that count and reported
+separately.
+
+## 6.4 What is deliberately not measured
 
 **Downstream diff correctness.** It needs two versions adjudicated rather than one, it
 inherits §2's line-level discordance and adds version-alignment noise on top, and this
@@ -533,46 +635,57 @@ Fixed before any confirmatory result exists.
 > `_ADVANCE_FALLBACK_EM`, no three-call Experimental handle chain — and therefore fewer
 > maintenance and API obligations.
 
-## 7.1 The equivalence margin, and its justification
+## 7.1 There is no per-heading equivalence margin
 
-> **δ = 0.005 of heading occurrences** (5 in 1,000).
+An earlier draft set **δ = 0.005 of heading occurrences**. §8.1 shows that margin cannot be
+carried by this design: it lives on a unit (the heading) that the protocol's own clustering
+argument denies is independent, and at the achievable sample size it overstates precision
+by **39×**. It is withdrawn.
 
-**MEASURED** anchor: the largest development appropriations bill recovers **652 headings**
-(`118-hr-4366/5`, RESULTS-CONFIRMATORY). At δ = 0.005 that is **3.3 headings on the largest
-single document a staffer would compare** — about one account's worth of the financial data
-contract, the same unit the prior protocol used to set its 0.020 threshold, **tightened
-four-fold** because this comparison is paired on the same characters from the same engine
-and is therefore far less noisy than a between-backend one.
-
-δ is fixed now, is justified from a measurement rather than from convenience, and **the
-achieved bound is reported alongside it** so a reader may apply their own margin.
+**The comparative rules below are COUNT-based and need no population model.** A census of
+the cases where the two architectures disagree, adjudicated for direction, is a description
+of what happened on 19 named documents. It requires no estimate of a universal rate, which
+is the only reason the decision survives §8's demotion intact.
 
 ## 7.2 The rules
 
 Applied in order.
 
-0. **M9 supersedes everything below.** If either architecture loses `derive_size_bands`,
-   falls below the 0.85 coverage floor, or loses margin-numbered lines on a document the
-   other keeps, **that architecture is rejected outright**, regardless of every other
-   metric. Losing the heading tree for a whole document is a heading failure of the largest
-   available magnitude, and it is the one failure that would otherwise be reported as an
-   empty denominator rather than as an error. If both lose the same document, it is a
-   property of the document and is excluded from P-head with a stated reason.
-1. **Choose corrected extended glyph** if, on the D-frame census, X beats H on **M3** by
-   more than δ, **and** the discordant counts are one-directional — X corrects **≥ 5**
-   heading occurrences H gets wrong and regresses **≤ 1** — **and** M1 / M2 / M4 / M6 do
-   not move against X by more than δ.
-2. **Choose hybrid** if either the reverse of (1) holds, **or** the two are **equivalent**:
-   the 95 % upper bound on |paired difference| in M3 lies below δ.
-3. **Declare the evidence insufficient** if **any** of: total emitted heading occurrences
-   < **600** (below which no 95 % upper bound under δ = 0.005 is achievable even at zero
-   observed discordance); the R1 reliability gate fails; any of N-A / N-B / N-C fails;
-   S1 does not fire; X2-a or X2-b fails; or §4.5 returns *inadequate*.
+0. **M9 supersedes everything below, and RQ1 and RQ2 read it differently.**
+   - **If exactly one architecture** loses `derive_size_bands`, falls below the 0.85
+     coverage floor, or loses margin-numbered lines on a document the other keeps, **that
+     architecture is rejected outright**, regardless of every other metric. Losing a
+     document's whole heading tree is the largest available heading failure and is the one
+     failure that would otherwise surface as an empty denominator rather than an error.
+   - **If BOTH lose the same document**, it is **neutral for RQ1** — a shared failure
+     distinguishes nothing — **and it is retained as a FAILURE in RQ2**, in M9 and in the
+     RQ2 denominator. A fresh, in-scope P-head document on which both seams lose the
+     heading tree is a **major negative result about the seam family**, and excluding it
+     would condition absolute correctness on successful extraction and inflate it.
+   - **No frozen document may be removed from the denominator by its own result.** The only
+     admissible removals are the **source-level exclusions pre-specified in §4.6**, which
+     are properties of the file, decidable without running either architecture.
+1. **Choose corrected extended glyph** if, on the D-frame census, the discordant counts are
+   one-directional in its favour — X corrects **≥ 5** printed account or agency headings
+   that H welds or splits and regresses **≤ 1** — **and** no other metric moves against X
+   by more than one heading occurrence per affected document.
+2. **Choose hybrid** if either the reverse of (1) holds, **or** the census yields **no
+   heading-level discordance in X's favour meeting (1)**. The tie is broken by the
+   architectural prior above, explicitly and in advance, not by a claim that the two are
+   provably identical.
+3. **Declare the evidence insufficient** if **any** of: the R1 reliability gate fails; any
+   of N-A / N-B / N-C fails; S1 does not fire; X2-a or X2-b fails; the M9 gate cannot be
+   evaluated; or §4.5 returns *inadequate*.
 
-**Pre-committed reporting for the most likely outcome.** If the census is small and every
+**Pre-committed reporting for the most likely outcome.** If the census is empty and every
 metric returns no difference, the result is written as
-**"EQUIVALENT AT RESOLUTION r"**, where *r* is the achieved 95 % upper bound, with the
-content-bearing denominator printed beside it — **never** as "the architectures agree".
+
+> **"On the 19 frozen documents, comprising H heading occurrences, no heading-level
+> discordance was observed. Exact 95 % upper bound on the per-document discordance rate:
+> r."**
+
+— with the content-bearing denominator printed beside it, **never** as "the architectures
+agree" and **never** as a per-heading rate.
 
 ## 7.3 What would falsify the preferred hybrid hypothesis
 
@@ -606,18 +719,64 @@ from the withdrawn headline that started the audit.
 
 # 8. Statistics
 
+## 8.1 The estimand problem this section exists to fix
+
+An earlier draft set δ on **heading occurrences**, required ≥ 600 of them, and proposed an
+exact Clopper–Pearson bound plus a cluster bootstrap by document. **Those three statements
+are mutually incompatible, and the incompatibility is measured, not argued.**
+
+| | |
+|---|---|
+| 0 events / 600 **headings**, treated as iid Bernoulli trials | 95 % upper bound **0.00498** |
+| 0 events / 14 **documents**, the unit this protocol itself calls independent | 95 % upper bound **0.1926** |
+| ratio | **39×** |
+
+Headings inside one bill share a face, a size, a producer and a typesetting run, and the
+one discordance mechanism observed to date — letter-spaced display type — is a property of
+**the document's typography**, not of an individual heading. Treating 600 such headings as
+600 independent trials asserts an independence the design explicitly denies two rows above
+it. To reach a 0.005 bound on the *document* unit would need **598 documents**.
+
+**The zero-event cluster bootstrap is worse: it is degenerate.** Simulated on the outcome
+this design expects (14 documents, all with zero discordances, 10,000 resamples,
+seed 20260807), every resample of all-zero clusters is zero, so the percentile interval is
+**[0.0, 0.0]** and the set of distinct bootstrap statistics is `{0.0}`. It carries **no**
+information about a new document, precisely in the case the study is most likely to hit.
+
+## 8.2 What is claimed instead
+
+**The primary outcome is DESCRIPTIVE.** The study does not estimate a universal
+per-heading probability, and no longer pretends to.
+
+> On *N* fresh, structurally diverse appropriations documents comprising *H* heading
+> occurrences, hybrid and corrected extended glyph produced identical heading output on
+> *D* of *N* documents; the observed resolution is *r*.
+
+Reported alongside, always: heading occurrences per document and per stratum; the D-frame
+census as **raw occurrences and as documents-affected** (40 discordances on one bill is one
+finding, not forty); and the content-bearing denominator for every metric.
+
+## 8.3 The single inferential statement, if one is made
+
 | element | frozen choice |
 |---|---|
-| resampling unit | **the document.** Regions are nested in pages in documents; one appropriations bill supplies hundreds of headings in one face at one size, and treating them as independent draws is pseudo-replication |
-| primary statistic | paired per-document difference, aggregated as an **unweighted mean over documents** |
-| secondary | occurrence-weighted, reported as a sensitivity check only |
-| interval | cluster bootstrap by document, 10,000 resamples, seed **20260807**, percentile 95 % |
-| zero-event bounds | exact (Clopper–Pearson) upper bound, because the expected count is small |
-| always reported | **per stratum and per document**, never only pooled |
-| the D-frame census | reported **both** as raw occurrences **and** as documents-affected — 40 discordances on one bill is one finding, not forty |
+| **estimand** | π — the probability that a document drawn from the target population exhibits **≥ 1 heading-level discordance** between H and X |
+| **independent unit** | **the document** (the same unit the margin and the sample-size logic use) |
+| **margin on that unit** | none is pre-set, because no achievable *N* here supports a small one; the **achieved** bound is reported and the reader applies their own |
+| **procedure** | exact one-sided Clopper–Pearson upper bound on π. With zero events this is the closed form 1 − 0.05^(1/N) |
+| **sample-size logic** | stated as a limit, not a justification: at N ≈ 14 the tightest achievable zero-event bound is **≈ 19 %**. This holdout can **fail to falsify** equivalence and bound it loosely. It cannot establish a small per-document rate |
+| **bootstrap** | used **only** where the event count is non-zero. At zero events it is degenerate (§8.1) and is not reported |
+| **paired comparisons** | per-document paired differences, unweighted mean over documents, reported with per-document detail rather than as a single number |
 
 **Overlapping independent confidence intervals are not evidence of anything** and are not
 reported as such.
+
+**What this costs, stated plainly.** The equivalence branch of the decision rule is now
+carried by a descriptive result and a weak bound, not by a tight statistical guarantee. That
+is a real weakening of the intended claim, and it is the honest strength of a 14-document
+holdout. The architectural decision can rest on it because the decision rule's equivalence
+branch defers to a **pre-stated architectural prior**, not to a precise measurement of
+sameness.
 
 ---
 
@@ -646,6 +805,11 @@ an explicitly narrowed claim.
 | 16 | **A stratum that structurally cannot carry the metric** | Found at design time, not after: enrolled bills are declined by `_is_unnumbered_layout` and report PDFs have no production heading consumer, so both would have contributed a zero denominator. **Control:** §4.4.1 splits P-head from P-robust in advance and the adequacy count runs on P-head only |
 | 17 | **"Appropriations" selected by committee referral is not "carries an account tree"** | Found by running the selection: the first pass chose three sub-6-page bills referred to Appropriations that carry no heading at all — the prior holdout's disease exactly. **Control:** GPO's title convention plus a 25-page floor, both BILLSTATUS/container facts. The superseded run is recorded in the membership artifact and nothing from it was scored |
 | 18 | **A silent zero in the sampling frame reads as an empty collection** | Hit **twice**. The CRPT sitemap pattern required a trailing slash the URLs do not have and returned 0 packages; then the MODS classifier fetched from `/content/pkg` instead of `/metadata/pkg`, took 404 on all 60 candidates it examined, and reported "0 appropriations reports" — which is what a genuinely rare class also looks like. **Controls:** `stopped_on_budget` separates a budget-limited stratum from an exhausted one, and `mods_liveness` records whether the classifier could resolve *anything*, so a broken query can no longer present as scarcity |
+| 19 | **The executable gate can contradict the protocol** | It did: `x04` checked 6 freeze invariants, printed `EXECUTION GATE OPEN`, and never tested the adapter or the adjudicator prompt that the prose gate required. **Control:** two separately reported gates, every prose condition is now an assertion, and `--self-test` drives each one that has a known-bad case |
+| 20 | **"Frozen before selection" can be true of a superseded protocol** | It was: F4 tested the **first** commit of this file. The protocol was then materially amended in the *same* commit as the population (`1350710`), so the current protocol did **not** predate selection. **Control:** F4 now tests the **last-modifying** commit and requires a strict ancestor; the old population is withdrawn as confirmatory and its documents excluded via `design_exposure.json` |
+| 21 | **A margin on the wrong statistical unit fakes precision** | δ = 0.005 on heading occurrences implied a 95 % bound of 0.005 where the document-unit bound at the same sample size is 0.193 — a **39×** overstatement — and the zero-event cluster bootstrap is degenerate at `[0, 0]`. **Control:** §8 withdraws the per-heading margin, makes the primary outcome descriptive, and confines inference to a document-unit exact bound whose weakness is stated |
+| 22 | **A shared failure can be excluded and inflate absolute correctness** | Rule 0 previously dropped documents where **both** architectures lose the heading tree. That is neutral for RQ1 but is a **major negative result** for RQ2, and removing it conditions absolute correctness on successful extraction. **Control:** shared failures are neutral for RQ1 and **retained as failures** in RQ2 and M9; only §4.6's source-level exclusions may remove a frozen document |
+| 23 | **A token multiset cannot represent word-boundary integrity** | It discards order and charges character errors to the seam. **Control:** §6.3 defines M3 on aligned character boundaries with explicit `TEXT_ERROR` and `UNALIGNABLE` outcomes, and `UNALIGNABLE` is reported split by discordance status |
 
 ---
 
@@ -693,7 +857,7 @@ which**; why; and which scores, rankings or gates it could move.
 |---|---|
 | Non-appropriations legislation | §4.1 deliberately trades breadth for the ability to exercise the downstream contract |
 | Whether a second engine should be adopted | ADR 0002 has declined it; portability is carried as **PROVISIONAL** from phase 3 and is not re-measured |
-| Downstream diff correctness | §6.1 — not independently adjudicable at any available budget |
+| Downstream diff correctness | §6.4 — not independently adjudicable at any available budget |
 | Genuine pre-publication material | Chair's marks and discussion drafts need a congressional contact; unchanged since the prior protocol |
 | Windows | Everything is macOS / arm64 |
 | Human-grade adjudication | Image-adjudicated until Will signs the 25-item check |
@@ -702,21 +866,40 @@ which**; why; and which scores, rankings or gates it could move.
 
 # Execution gate
 
-**The protocol is NOT frozen and MUST NOT be executed until all of the following are true:**
+**Two gates, machine-checked, both must hold.** An earlier version of this section listed
+five prose conditions while `x04` checked only the first two and then printed
+`EXECUTION GATE OPEN` — so the executable gate contradicted the protocol it was meant to
+enforce. Every condition below is now an assertion in `probes/x04_freeze_check.py`, and
+each one that has a constructible known-bad case is exercised by `--self-test`.
 
-1. `results/holdout_membership.json` exists, with per-file SHA-256, and is **committed**.
-2. Every member is verified absent from `results/contamination.json` by
-   `probes/x04_freeze_check.py`, which **fails** if any member appears in any exposure
-   class.
-3. The corrected extended-glyph adapter and reconstructor implementing §3.2 exist, are
-   committed, and pass **X2-a** and **X2-b** on the *development* documents — never on the
-   holdout.
-4. The adjudicator prompt is committed.
-5. This document is committed and its freeze commit is recorded in `FINDINGS.md`.
+### Gate A — FREEZE INTEGRITY
+
+| id | condition |
+|---|---|
+| **F1** | `results/holdout_membership.json` exists, is committed, and records a SHA-256 for every file |
+| **F2** | every holdout file on disk still hashes to its recorded SHA-256 |
+| **F3** | no member appears in any contamination class **or** in `results/design_exposure.json` |
+| **F4** | the **last-modifying** commit of this document is a strict ancestor of the membership commit |
+| **F5** | no confirmatory score file exists |
+| **F6** | if adjudication has run, the answer key was committed **before** it, by git order |
+
+### Gate B — EXECUTION READINESS
+
+| id | condition |
+|---|---|
+| **G1** | the corrected extended-glyph adapter and reconstructor implementing §3.2 exist and are committed |
+| **G2** | `results/x2_contract_assertions.json` exists, is committed, records `population = "DEVELOPMENT"`, checks ≥ 1 document, and reports **X2-a and X2-b both passing**. Recorded on development documents, **never** on the holdout |
+| **G3** | the adjudicator prompt is committed |
+| **G4** | `results/design_exposure.json` exists, is committed, and is non-empty |
+
+**Both gates open ⇒ `EXECUTION PERMITTED` and exit 0. Anything else ⇒
+`EXECUTION FORBIDDEN`, exit 1, and nothing may be scored.** The two are reported on
+separate lines so "the freeze is honest" and "the machinery exists" can never again be
+collapsed into one green word.
 
 **Then, and only then**, in this order: extract → build both frames → render → write
-`oracle_key.json` and **commit** → adjudicate → write `oracle_adjudicated.json` and
-**commit** → join → score.
+`oracle_key.json` and **commit** → adjudicate (C-frame by AI, **D-frame by Will**, §5.5.1)
+→ write `oracle_adjudicated.json` and **commit** → join → score.
 
-**The commit boundary is part of the methodology.** The protocol and the population must be
-visibly frozen in `git log` before any confirmatory result exists.
+**The commit boundary is part of the methodology.** The final protocol and the population
+must be visibly frozen in `git log`, in that order, before any confirmatory result exists.

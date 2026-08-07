@@ -44,7 +44,10 @@ REPO = EV.parents[4]
 sys.path.insert(0, str(REPO / "tools"))
 from fetch_govinfo import order_versions  # noqa: E402
 
-SEED = 20260807
+# A NEW seed for the confirmatory selection. Seed 20260807 belongs to the design runs,
+# whose selection rules were revised after seeing what they produced; reusing it would let
+# a document that a design run surfaced reappear by the same draw order.
+SEED = 20260808
 CONTENT = "https://www.govinfo.gov/content/pkg"
 BULK = "https://www.govinfo.gov/bulkdata/BILLSTATUS"
 SITEMAP = "https://www.govinfo.gov/sitemap/CRPT_{year}_sitemap.xml"
@@ -55,6 +58,7 @@ APPROPS_CODES = {"hsap00", "ssap00"}
 
 OUT = EV / "results" / "holdout_membership.json"
 CONTAM = EV / "results" / "contamination.json"
+DESIGN_EXPOSURE = EV / "results" / "design_exposure.json"
 DOCS_DIR = EV / "holdout"
 BS_DIR = Path(os.environ.get("EV_BILLSTATUS", Path(os.environ.get("CLAUDE_JOB_DIR", "/tmp")) / "tmp" / "billstatus"))
 
@@ -429,7 +433,25 @@ def main() -> int:
     contam = json.loads(CONTAM.read_text())
     excluded_bills = set(contam["excluded_bills"])
     excluded_reports = {r.upper() for r in contam["excluded_reports"]}
-    print(f"exclusions: {len(excluded_bills)} bills, {len(excluded_reports)} report packages", file=sys.stderr)
+
+    # Documents surfaced by the DESIGN runs, whose selection rules were revised after
+    # seeing what they produced. Excluding them is what makes this selection confirmatory
+    # rather than a re-run of a tuned procedure.
+    if not DESIGN_EXPOSURE.exists():
+        print(f"FATAL: {DESIGN_EXPOSURE} missing. Run x05_design_exposure.py first.", file=sys.stderr)
+        return 2
+    exposure = json.loads(DESIGN_EXPOSURE.read_text())
+    design_exposed = set(exposure["design_exposed"])
+    if not design_exposed:
+        print("FATAL: design_exposure.json lists nothing; refusing to treat that as clean.", file=sys.stderr)
+        return 2
+    excluded_bills |= {d for d in design_exposed if not d.upper().startswith("CRPT")}
+    excluded_reports |= {d.upper() for d in design_exposed if d.upper().startswith("CRPT")}
+    print(
+        f"exclusions: {len(excluded_bills)} bills, {len(excluded_reports)} report packages "
+        f"(of which {len(design_exposed)} are design-exposed)",
+        file=sys.stderr,
+    )
 
     client = httpx.Client(headers={"User-Agent": "DeltaTrack-external-validity/1.0"})
 
@@ -605,8 +627,12 @@ def main() -> int:
             "excluding them would bias the frame against exactly the well-formed "
             "appropriations acts the study needs."
         ),
-        "exclusions_from": "results/contamination.json",
-        "exclusions": {"bills": len(excluded_bills), "reports": len(excluded_reports)},
+        "exclusions_from": ["results/contamination.json", "results/design_exposure.json"],
+        "exclusions": {
+            "bills": len(excluded_bills),
+            "reports": len(excluded_reports),
+            "design_exposed": sorted(design_exposed),
+        },
         "frames": {
             "F1": {
                 "source": "govinfo BILLSTATUS",
