@@ -46,24 +46,39 @@ from deltatrack.parsers.pdf_anchors import extract_anchors  # noqa: E402
 BACKENDS = ("pdfium-wasm", "pdfminer")
 
 
+# Every fixture is REQUIRED, and the count is pinned. This list used to be assembled with
+# `if path.exists()`, which meant a tree missing `p3/imageonly.pdf` and `p3/nongpo.pdf`
+# scored the remaining thirteen, found no violation and reported gate S-1 as PASSING -- on
+# a population that no longer contained the two fixtures that fail it. A gate whose
+# negative evidence can silently leave the population is not a gate.
+_REQUIRED = (
+    ("P3a real non-corpus GPO", "CRPT-118srpt198.pdf"),
+    ("P3a real non-corpus GPO", "BILLS-118s4795rs.pdf"),
+    ("P3a real committee print (markup)", "p3/CPRT-119HPRT63305.pdf"),
+    ("P3b synthetic: image-only", "p3/imageonly.pdf"),
+    ("P3b synthetic: non-GPO producer", "p3/nongpo.pdf"),
+)
+_N_SUBCOMMITTEE = 10  # tests/data/subcommittee/*.pdf, as scored in confirm_safe_failure.json
+
+
 def fixtures() -> list[tuple[str, str, Path]]:
-    out: list[tuple[str, str, Path]] = []
     d = REPO / "tests/data"
-    for name in ("CRPT-118srpt198.pdf", "BILLS-118s4795rs.pdf"):
-        if (d / name).exists():
-            out.append(("P3a real non-corpus GPO", name, d / name))
-    for p in sorted((d / "subcommittee").glob("*.pdf")):
-        out.append(("P3a real non-corpus GPO", p.name, p))
-    p3 = d / "p3"
-    if (p3 / "CPRT-119HPRT63305.pdf").exists():
-        out.append(("P3a real committee print (markup)", "CPRT-119HPRT63305.pdf", p3 / "CPRT-119HPRT63305.pdf"))
-    for name, label in (
-        ("imageonly.pdf", "P3b synthetic: image-only"),
-        ("nongpo.pdf", "P3b synthetic: non-GPO producer"),
-    ):
-        if (p3 / name).exists():
-            out.append((label, name, p3 / name))
-    return out
+    sub = sorted((d / "subcommittee").glob("*.pdf"))
+
+    # Order matches confirm_safe_failure.json: the two named GPO documents, the
+    # subcommittee prints, then the committee print and the two synthetic degradations.
+    named = [(k, d / rel) for k, rel in _REQUIRED]
+    ordered = named[:2] + [("P3a real non-corpus GPO", p) for p in sub] + named[2:]
+
+    missing = [str(p.relative_to(d)) for _, p in named if not p.exists()]
+    if missing:
+        raise SystemExit(f"required P3 fixtures missing under tests/data: {', '.join(missing)}")
+    if len(sub) != _N_SUBCOMMITTEE:
+        raise SystemExit(
+            f"tests/data/subcommittee holds {len(sub)} PDFs, expected {_N_SUBCOMMITTEE}; "
+            "the P3a population has changed and confirm_safe_failure.json is no longer comparable"
+        )
+    return [(k, p.name, p) for k, p in ordered]
 
 
 def classify(pdf: Path, backend: str) -> dict:

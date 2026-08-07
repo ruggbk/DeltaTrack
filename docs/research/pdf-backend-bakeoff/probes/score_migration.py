@@ -62,17 +62,30 @@ MODES = ("repaired", "strict")  # repaired first: it is the primary
 
 
 def holdout_pairs() -> list[tuple[str, int, int, Path, Path, Path, Path]]:
+    """The 32 consecutive-version holdout pairs named by the frozen membership.
+
+    Same fail-loud reasoning as `score_confirmatory.p2_documents`: the holdout files are
+    fetched rather than committed, and skipping absent ones silently produced a zero-pair
+    run that still wrote a results file and exited 0.
+    """
     doc = json.loads((REPO / "docs/research/pdf-backend-bakeoff/results/holdout_membership.json").read_text())
     root = REPO / "docs/research/pdf-backend-bakeoff/holdout"
-    out = []
+    out, missing = [], []
     for m in doc["members"]:
         vs = sorted(m["versions"], key=lambda v: v["index"])
         for a, b in zip(vs, vs[1:], strict=False):
             d = root / m["bill_id"]
             pa, pb = d / Path(a["pdf"]["path"]).name, d / Path(b["pdf"]["path"]).name
             xa, xb = d / Path(a["xml"]["path"]).name, d / Path(b["xml"]["path"]).name
-            if all(p.exists() for p in (pa, pb, xa, xb)):
-                out.append((m["bill_id"], a["index"], b["index"], pa, pb, xa, xb))
+            missing.extend(str(p.relative_to(root)) for p in (pa, pb, xa, xb) if not p.exists())
+            out.append((m["bill_id"], a["index"], b["index"], pa, pb, xa, xb))
+    if missing:
+        raise SystemExit(
+            f"{len(set(missing))} holdout files are missing, so the P2 pairs cannot be scored. "
+            f"Restore them first:\n"
+            f"    .venv/bin/python docs/research/pdf-backend-bakeoff/probes/fetch_holdout.py\n"
+            f"first missing: {', '.join(sorted(set(missing))[:4])}"
+        )
     return out
 
 

@@ -106,7 +106,8 @@ Run from the repo root. **Order matters only where noted.**
 
 | # | Command | Produces | Wall time |
 |---|---|---|---|
-| 0 | `.venv/bin/python docs/research/pdf-backend-bakeoff/probes/select_holdout.py` | `holdout_membership.json` + the holdout files. Needs BILLSTATUS ZIPs in `$BAKEOFF_BILLSTATUS`; **already committed, re-running is only for audit** | ~10 min + fetch |
+| 0 | `.venv/bin/python docs/research/pdf-backend-bakeoff/probes/fetch_holdout.py` | **run this first**: restores the 88 holdout files from govinfo and verifies every byte against the frozen `holdout_membership.json`. Network | ~2 min |
+| 0 | `.venv/bin/python docs/research/pdf-backend-bakeoff/probes/select_holdout.py` | the SELECTION procedure, which rewrites `holdout_membership.json`. Needs BILLSTATUS ZIPs in `$BAKEOFF_BILLSTATUS` and `$CLAUDE_JOB_DIR`. **Not the way to restore the corpus** — the membership is frozen and must not be regenerated; re-running is for auditing the draw only | ~10 min + fetch |
 | 1 | `… probes/score_confirmatory.py --population p1 --out …/results/confirm_p1.json` | Concern B raw, 52 docs × 3 backends × 6 sabotages × 2 modes | **~75 min** |
 | 1 | `… probes/score_confirmatory.py --population p2 --out …/results/confirm_p2.json` | same, 44 holdout docs | ~15 min |
 | 2 | `… probes/report_confirmatory.py --results …/confirm_p1.json --mode strict` | Δ, cluster bootstrap, B0 rows, quoted-block stratum. Repeat with `--mode repaired` and for `p2` | seconds |
@@ -120,6 +121,20 @@ Run from the repo root. **Order matters only where noted.**
 | 8 | `… probes/confirm_safe_failure.py` | P3 robustness + gate S-1 | ~5 min |
 | 9 | `… probes/confirm_vs_production.py` | glyph layer vs production's text API | ~12 min |
 | — | `… probes/fill_confirmatory.py` | regenerates every table in `RESULTS-CONFIRMATORY.md` | seconds |
+
+### The holdout corpus is fetched, not committed
+
+The 88 P2 holdout documents (16.4 MB) are **not in git**. `results/holdout_membership.json`
+is, and it records the govinfo package id, sha256 and byte count of every one of them, so
+the population is fully specified and hash-verifiable without the bytes. `fetch_holdout.py`
+restores them and refuses to write any file whose sha256 does not match the frozen record;
+`--verify-only` checks a tree without downloading. All 88 re-fetched byte-identical on
+2026-08-07.
+
+`score_confirmatory.py --population p2` and `score_migration.py --population p2` now **fail
+loudly** if any holdout file is absent. They used to skip missing documents, which meant a
+tree without the corpus scored zero documents, wrote a well-formed results file and exited
+0 — a vacuous pass in the holdout arm specifically.
 
 ### What a reviewer should check first
 

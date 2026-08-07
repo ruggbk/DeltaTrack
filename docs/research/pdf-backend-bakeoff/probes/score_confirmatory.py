@@ -52,15 +52,33 @@ MODES = ("strict", "repaired")
 
 
 def p2_documents(membership: Path) -> list[tuple[str, int, Path, Path]]:
+    """The 44 holdout documents named by the frozen membership.
+
+    The holdout files are fetched rather than committed (`probes/fetch_holdout.py`), so a
+    tree where nobody has run the fetcher is the ORDINARY state, not an exotic one. This
+    used to skip any document whose files were absent, which meant that tree scored zero
+    documents, wrote a well-formed results file and exited 0 -- a vacuous pass in the exact
+    place the confirmatory run's holdout arm lives. Missing files now raise.
+    """
     doc = json.loads(membership.read_text())
     root = REPO / "docs/research/pdf-backend-bakeoff/holdout"
-    out = []
+    out, missing = [], []
     for m in doc["members"]:
         for v in m["versions"]:
             pdf = root / m["bill_id"] / Path(v["pdf"]["path"]).name
             xml = root / m["bill_id"] / Path(v["xml"]["path"]).name
-            if pdf.exists() and xml.exists():
-                out.append((m["bill_id"], v["index"], pdf, xml))
+            missing.extend(str(p.relative_to(root)) for p in (pdf, xml) if not p.exists())
+            out.append((m["bill_id"], v["index"], pdf, xml))
+    if missing:
+        raise SystemExit(
+            f"{len(missing)} of {2 * len(out)} holdout files are missing, so the P2 population "
+            f"cannot be scored. Restore them first:\n"
+            f"    .venv/bin/python docs/research/pdf-backend-bakeoff/probes/fetch_holdout.py\n"
+            f"first missing: {', '.join(missing[:4])}"
+        )
+    expected = doc["n_documents"]
+    if len(out) != expected:
+        raise SystemExit(f"membership names {len(out)} documents, its own n_documents says {expected}")
     return out
 
 
