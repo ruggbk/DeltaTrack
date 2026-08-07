@@ -1552,19 +1552,142 @@ EXECUTION FORBIDDEN**.
 
 ---
 
-## A24 — BLOCKING AMBIGUITY. Two frozen rules do not determine what the code should do
+## A24 — Two frozen rules did not determine what the code should do. **RESOLVED**
 
 ```json
 {"id": "A24", "class": "SUBSTANTIVE",
- "commits": ["db3c0d2"],
+ "commits": ["db3c0d2", "277a0e5"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/run_hybrid.py", "probes/pdfium_extended_corrected.py",
                    "probes/reconstruct_extended_corrected.py", "probes/run_extended.py",
                    "probes/x2_verify.py", "probes/x11_provenance_chain.py",
-                   "probes/x12_skeleton_eligibility.py", "probes/x13_x_arm.py"],
- "status": "OPEN -- a ruling is required before execution readiness can open"}
+                   "probes/x12_skeleton_eligibility.py", "probes/x13_x_arm.py",
+                   "probes/neutral_identity.py", "probes/x08_neutral_identity.py",
+                   "probes/x09_skeleton_cross_engine.py",
+                   "probes/x10_reconstruction_signature.py", "probes/x04_freeze_check.py"],
+ "supersedes_text_in": "PRE-REGISTRATION.md X-2 (X2-b scope); PRE-EXECUTION-AMENDMENTS.md A19, A21 (eligibility)",
+ "status": "RESOLVED -- both rulings implemented and measured"}
 ```
+
+**The ruling, recorded before the evidence that motivated it.** The frozen prose PERMITTED
+both readings in each case; neither alternative was unreasonable, and implementation is what
+exposed the ambiguity. That is why both are recorded as amendments rather than as defects.
+
+### A24.1 — CLARIFICATION. "the engine's spaces" means PDFium-*generated* U+0020
+
+> **X2-b: re-admitting PDFium-generated U+0020 characters (`FPDFText_IsGenerated == true`)
+> must change no reconstructed printed line.**
+
+X2-b is **not** required to reproduce every content-stream U+0020. Why:
+
+- **X2-a already carries the contract invariant** that no U+0020 crosses the X seam. The two
+  assertions have different jobs and X2-b need not re-state X2-a's.
+- **X2-b's purpose is independence from PDFium's own inserted boundary decisions.** Its
+  provenance is phase 3's D2 finding: the earlier extended adapter was taking most word
+  boundaries from PDFium-generated spaces while claiming to derive them geometrically.
+- **A content-stream U+0020 was supplied by the PDF, not invented by PDFium**, so
+  reproducing it is not evidence about engine independence.
+- **The strict reading would have made X2-b a partial H/X equivalence gate**, so a genuine
+  architecture disagreement would make X unscorable *before* the independent oracle could
+  determine which architecture is right. That inverts the study.
+
+**Implemented** in `x2_verify.py` as `X2b_gate_generated_only` (the gate) and
+`X2b_diagnostic_all_source_spaces` (DEVELOPMENT diagnostic only). The generic
+`X2b_rule_recovers_engine_spaces` key is retained solely because `x04` reads it, and it now
+carries the **gate**. A diagnostic failure is reported with its differing lines, does **not**
+close G2, and does **not** void X.
+
+**MEASURED**: `X2a` PASS on both development documents; `X2b` gate PASS on both; the
+all-source-spaces diagnostic differs on `114-hr-2029/4` at one line in 191.
+
+### A24.2 — SUBSTANTIVE. Positive-area geometry does not uniquely identify ink
+
+`x12` falsified the assumption underneath A19/A21: PDFium reports a positive-area character
+box for a content-stream U+0020 — about **3.6 pt wide and 0.014 pt tall** against ~**7.9 pt**
+for a capital — so the geometric rule was admitting every word space into a skeleton defined
+as ink-only.
+
+**The absolute phrase "NO codepoint is consulted" is WITHDRAWN.** The replacement invariant:
+
+> **Neutral physical-line identity is formed from upright source characters with valid,
+> finite, positive-area geometry, EXCLUDING U+0020.**
+
+**No ink-height threshold is introduced.** A minimum height would be a new tunable constant
+and would immediately raise punctuation, tiny type, diacritics, footnote marks, superscripts
+and unusual fonts. The lexical exception is narrower and is legitimate because: U+0020 is a
+**below-seam source fact** available before either architecture runs; **X-2 already froze**
+the judgment that a space carries no ink, so this adopts a decision the protocol had made
+rather than inventing one; it reads **no H or X output**; it **cannot favour either arm**;
+and `x12` measured that PDFium's char-box API simply does not encode the ink/non-ink
+distinction by area. **Scope is U+0020 alone — this is not a whitespace blacklist.**
+
+#### The representation repair, which is the substance
+
+`source_char_index` was serving as **both** provenance and neutral ink identity. A24.2 proves
+those are different concepts: a content-stream space has real provenance and **no** physical
+ink identity — a state the single field could not express. Cells are now
+`Cell(ngid, char, sci, generated)`:
+
+| | `sci` | `ngid` | text | status |
+|---|---|---|---|---|
+| ordinary ink | 123 | **123** | `A` | source |
+| content-stream U+0020 | 124 | **None** | `␠` | source |
+| PDFium-generated U+0020 | 125 | **None** | `␠` | `generated=True` |
+| X-inserted space | **None** | **None** | `␠` | architecture decision |
+
+Only `ngid` may reach the neutral skeleton, `common`, the reconstruction signature or a loss
+diagnostic. `sci` and the character stay visible to projected text, and therefore to M2/M3.
+
+**Model G needed no change** to keep spaces in projected text — its rule was always about
+ATTACHMENT, not identity:
+
+> A non-neutral character contributes to neutral line N iff, in the architecture's own
+> emitted order, it lies between two ink glyphs N owns, with no ink glyph of another neutral
+> line intervening.
+
+Tested across every provenance and position: content-stream, generated and X-inserted spaces
+between owned ink are kept **identically**; leading, trailing, cross-neutral-line and
+adjacent-to-foreign spaces are dropped; consecutive spaces travel together. A space never
+becomes identity merely because it needed attachment semantics.
+
+#### MEASURED, paired on one population and one page limit
+
+| | `114-hr-2029/4` | `118-s-4795/1` |
+|---|---|---|
+| U+0020 admitted to skeleton, before → after | 229 → **0** | 1398 → **0** |
+| neutral line count, before → after | 205 → **205** | 205 → **205** |
+| pages where the **ink** partition changed | **0** | **0** |
+| neutral lines whose x-extent changed | 132 | 138 |
+| X source-glyph loss, **X-only** | **0** | **0** |
+| X source-glyph loss, shared with H | 188 | 188 |
+| cross-engine matched fraction, before → after | 1.0 → **1.0** | 0.9961 → **0.9961** |
+
+Removing spaces is **not** geometrically inert for bounding boxes but **is** inert for which
+ink glyphs share a physical line, which is the property that matters. The surviving loss is
+**shared** — the GPO margin number, which §3.3 has both arms strip identically — so the
+diagnostic is interpretable again instead of saturated by contractually excluded spaces.
+
+**The cross-engine control now applies the same exclusion on both sides**, reading the
+codepoint from PyMuPDF's own trace. Without that it would have compared two differently
+*defined* frames and reported the definition gap as engine disagreement. Thresholds are
+**unchanged** at 0.95 document / 0.75 page.
+
+#### The `H. R. 2029` disagreement is preserved, not normalised
+
+Frozen as a regression fixture: H projects `H. R. 2029`, X projects `H.R.2029`. That is
+**TEXT discordance and NOT segmentation discordance**, it enters the D-frame, and it reaches
+M3 as `X_REGRESSES`. **The eligibility gate does not decide correctness — the oracle does.**
+
+#### G2 now executes rather than trusts
+
+`x04`'s G2 runs the authoritative verifier live and requires exit 0, on top of the existing
+fixture-provenance and blob-binding checks. **Proven able to fail**: with `x2_verify`
+temporarily faulted, G2 reported `live x2_verify exited 1` while the stored artifact still
+read `X2a=True X2b=True` — precisely the failure mode the live check exists to catch.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
+no holdout document opened.
 
 Building the arms exposed two places where the frozen protocol does not determine the
 executable behaviour, and in both the candidate readings give **different outcomes on real
@@ -1705,6 +1828,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `7644687` | `x09_skeleton_cross_engine.py` | cross-engine gate frozen (A22) |
 | `2f548f0` | `neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x11_provenance_chain.py` | grouping ≠ coverage; M0 risk set (A23) |
 | `db3c0d2` | `run_hybrid.py`, `pdfium_extended_corrected.py`, `reconstruct_extended_corrected.py`, `run_extended.py`, `x2_verify.py`, `x11_provenance_chain.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | H/X arms; two frozen-text ambiguities (A24) |
+| `277a0e5` | `neutral_identity.py`, `run_hybrid.py`, `reconstruct_extended_corrected.py`, `pdfium_extended_corrected.py`, `x2_verify.py`, `x04_freeze_check.py`, `x08_neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | A24 resolved: X2-b gate scope; ink identity vs provenance (A24.1/A24.2) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
