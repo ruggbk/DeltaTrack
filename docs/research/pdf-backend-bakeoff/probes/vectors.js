@@ -1,6 +1,25 @@
 // Every exfiltration mechanism a page can attempt, each tagged so the receiving server
 // says which ones actually established egress.
 //
+// CODEQL: this file deliberately trips `js/functionality-from-untrusted-source` twice, at
+// the `script` and `iframe` vectors below (alerts #6 and #7 on PR #553, "Script/Iframe
+// loaded using unencrypted connection"). Both are the thing under test, not a defect:
+//
+//   - This is attack-vector code. Its entire job is to attempt loading executable content
+//     from a remote origin, so that `confirm_egress.py` / `redteam_egress2.py` can prove
+//     Content-Security-Policy blocks it. A vector that could not attempt the load would
+//     measure nothing, and a probe rewritten to satisfy the rule would silently stop
+//     testing `script-src` and `frame-src` -- the two directives these vectors exist for.
+//   - The "untrusted source" is `http://127.0.0.1:8973`, the harness's own logging server
+//     (`serve.py`, which binds 127.0.0.1 on TCP and UDP). Nothing is fetched from a third
+//     party and no traffic leaves the machine.
+//   - Plain HTTP is required, not incidental. The measurement is whether the request is
+//     issued at all; TLS to a loopback listener would add a certificate to the harness
+//     without changing what is observed.
+//
+// None of this ships: the file is a research probe under docs/research/, never imported by
+// src/deltatrack, and never served to a user.
+//
 // The returned string reports what the PAGE saw (attempted / threw). That is diagnostic
 // only. The claim is decided by what the SERVER received: under CSP most of these report
 // `attempted` with no JavaScript exception and simply produce no request, so a harness
@@ -39,6 +58,8 @@ window.__tryAll = async function (tag) {
     i.src = U("img");
     document.body.appendChild(i);
   });
+  // CodeQL js/functionality-from-untrusted-source (alert #6): intentional. Exercises
+  // CSP `script-src` against the loopback listener; see the header note.
   await t("script", () => {
     const s = document.createElement("script");
     s.src = U("script");
@@ -70,6 +91,8 @@ window.__tryAll = async function (tag) {
   await t("eventsrc", () => {
     new EventSource(U("eventsource"));
   });
+  // CodeQL js/functionality-from-untrusted-source (alert #7): intentional. Exercises
+  // CSP `frame-src` against the loopback listener; see the header note.
   await t("iframe", () => {
     const f = document.createElement("iframe");
     f.src = U("iframe");

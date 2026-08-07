@@ -113,11 +113,16 @@ during a repository-hygiene review and unrelated to it). `results/g07_extraction
 was committed without its probe while this section and phase 2 both promised `g01`–`g07`,
 and phase 2 cites its output three times — the 1.01–1.13× extraction-cost figure. That was
 one load-bearing number with no committed probe behind it, against the rule stated in the
-paragraph above. The page limit was **recovered, not guessed**: the frozen file carries two
-machine-independent counts per document, and a sweep over 1–60 pages reproduces both on all
-three documents at exactly 40 and nowhere else. `g07 --verify` re-measures and asserts those
-six counts against the committed file; it does not assert the timings, which are wall-clock
-on one machine. No phase-2 number changed.
+paragraph above. The frozen file carries two machine-independent counts per document, and a
+sweep over 1–60 pages reproduces both on all three documents at exactly 40 and at no other N
+in that range — so the page limit is **uniquely reconstructed from the frozen outputs within
+the tested range**, on six exact matches. That is deliberately weaker than calling it a
+recovered fact: nothing records the original invocation, the sweep was bounded at 60, and
+matching these counts is agreement on outputs, so another configuration yielding identical
+counts would be indistinguishable. It establishes that the probe regenerates the committed
+numbers, not what the original run was called with. `g07 --verify` re-measures and asserts
+those six counts; it does not assert the timings, which are wall-clock on one machine. No
+phase-2 number changed.
 
 Phase 3 needs the benchmark backends installed
 (`probes/requirements.txt`: pdfminer.six 20260107, PyMuPDF 1.28.0). PyMuPDF is AGPL-3.0 and

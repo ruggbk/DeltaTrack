@@ -8,14 +8,21 @@ phase 2 with no committed probe behind it, against the study's own stated rule t
 number is computed by a named probe and none is transcribed. This file closes that gap. It
 is NOT a new measurement and it does not revise a phase-2 conclusion.
 
-HOW THE CONFIGURATION WAS RECOVERED, rather than guessed. The frozen JSON carries two
-deterministic fields per document -- `extended_no_advance` and `extended_zero_advance` --
-which are pure counts over the extracted characters and do not depend on the machine. A
-sweep of `pdfium_extended.extract(limit=N)` over N = 1..60 reproduces BOTH counts on ALL
-THREE documents at exactly N = 40, and at no other N (N = 41 overshoots every one). Forty
-pages is also the limit `probe_hybrid_signals.py` and `probe_hybrid_portability.py` take.
-So the page limit below is a recovered fact with a six-way exact match behind it, not a
-plausible reconstruction.
+HOW THE PAGE LIMIT WAS ARRIVED AT. The frozen JSON carries two deterministic fields per
+document -- `extended_no_advance` and `extended_zero_advance` -- which are pure counts over
+the extracted characters and do not depend on the machine. A sweep of
+`pdfium_extended.extract(limit=N)` over N = 1..60 reproduces BOTH counts on ALL THREE
+documents at exactly N = 40, and at no other N in that range (N = 41 overshoots every one).
+Forty pages is also the limit `probe_hybrid_signals.py` and `probe_hybrid_portability.py`
+take.
+
+State the status of that precisely: N = 40 is **uniquely reconstructed from the frozen
+outputs within the tested range**, on six exact matches. It is not a recovered fact. Nothing
+in the tree records what the original run was invoked with, the sweep was bounded at 60, and
+agreement on these two counts is agreement on the OUTPUTS -- another configuration that
+produced identical counts would be indistinguishable here. What the reconstruction licenses
+is that this probe regenerates the committed numbers, which is what the missing-probe defect
+required; it does not license a claim about the original invocation.
 
 WHAT WILL NOT REPRODUCE, and it is the reason `--verify` checks what it checks.
 `hybrid_ms`, `extended_ms` and `ratio` are wall-clock on one machine. The committed values
