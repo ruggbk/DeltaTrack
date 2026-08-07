@@ -142,11 +142,22 @@ def f4_ok(protocol_commit: str, population_commit: str) -> bool:
 
 def exposure_ids(contam: dict, exposure: dict) -> dict[str, set[str]]:
     """Every id a frozen member must not be. Keyed by class so a hit names its class."""
+    # Classes whose ids are RECORDED but deliberately do not disqualify a member.
+    #   xml_only               -- no PDF extractor has ever run on them (PRE-REGISTRATION 4.3)
+    #   own_study_population   -- this study's own frozen holdout, which is exposed by
+    #                             construction the moment it is committed. Without this the
+    #                             gate condemns the population it exists to protect. Scoped
+    #                             to THIS study; a future one must treat them as exposed.
+    recorded_not_excluded = {"xml_only_not_excluded", "own_study_population_not_excluded"}
+    own = set(contam.get("classes", {}).get("own_study_population_not_excluded", {}).get("ids", []))
+    own |= {o.upper() for o in own}
+
     out: dict[str, set[str]] = {}
     for name, block in contam.get("classes", {}).items():
-        if name == "xml_only_not_excluded":
-            continue  # recorded, deliberately not excluded (PRE-REGISTRATION 4.3)
-        out[name] = set(block.get("bills", [])) | {r.upper() for r in block.get("reports", [])}
+        if name in recorded_not_excluded:
+            continue
+        ids = set(block.get("bills", [])) | {r.upper() for r in block.get("reports", [])}
+        out[name] = ids - own
     ids = set(exposure.get("design_exposed", []))
     out["design_exposed"] = ids | {i.upper() for i in ids}
     return out
