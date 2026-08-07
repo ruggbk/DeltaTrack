@@ -1080,6 +1080,250 @@ unchanged.
 
 ---
 
+## A22 — A21's discordance semantics, corrected. Identity ≠ architecture output
+
+```json
+{"id": "A22", "class": "SUBSTANTIVE",
+ "commits": ["89e9d91", "e277a3e", "7644687"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/neutral_identity.py", "probes/x08_neutral_identity.py",
+                   "probes/x10_reconstruction_signature.py",
+                   "probes/x11_provenance_chain.py",
+                   "probes/x09_skeleton_cross_engine.py"],
+ "supersedes_text_in": "PRE-EXECUTION-AMENDMENTS.md A21, A19; PRE-REGISTRATION.md 5.8, 6 (M0)",
+ "status": "FROZEN pending external review"}
+```
+
+**A21's neutral identity is retained unchanged.** What it got wrong is what to *do* with it.
+
+### The distinction this amendment freezes
+
+> **Identity normalisation is not architecture-output normalisation.**
+
+Model G answers *which physical line each source glyph belongs to*. That question has one
+right answer and both arms are held to it. It must not be allowed to answer the different
+question of *how many lines the architecture emitted, and which glyphs it grouped together*
+— because that grouping **is** an architecture output, and it is one of the two things the
+seam can change.
+
+**MEASURED** ([`results/x10_reconstruction_signature.json`](results/x10_reconstruction_signature.json)):
+
+| | neutral N0 | neutral N1 |
+|---|---|---|
+| H emitted lines | `ABCDEF` (one line, spanning both) | — |
+| X emitted lines | `ABC` | `DEF` |
+| Model G projected text | H `ABC` / X `ABC` | H `DEF` / X `DEF` |
+| state under A21 | `SAME` | `SAME` |
+| **A21 D-frame** | **excluded** | **excluded** |
+| `H_CROSS_LINE_MERGE` | `True` — a diagnostic that entered nothing | `True` |
+| **A22 D-frame** | **included** | **included** |
+
+Partition hands each neutral line back exactly its own glyphs, so the text *cannot* differ.
+`differs()` read only `state["state"]`, so the reconstruction disagreement A17.4 exists to
+observe was erased. The repair is not to weaken the projection — that would give back the
+identity defect A21 fixed — but to compare a **second, independent quantity**.
+
+### The architecture's reconstructed printed line, stated exactly
+
+> **One emitted line = one element of `Page.print_lines`.**
+
+Both arms have the identical pipeline shape: cluster glyphs into rows on baseline → drop
+chrome rows → strip the GPO margin number → `print_lines` → `_merge_print_lines` →
+`Page.lines`. Production documents `print_lines` as "one entry per line the GPO actually
+printed", which is precisely §5.8's "reconstructed printed line".
+
+**`Page.lines` is NOT the unit.** It is the later `_merge_print_lines` soft-hyphen
+recombination — *shared production code, called identically by both arms* — and one merged
+line spans several physical lines by design. Scoring it would manufacture a cross-line merge
+on every hyphenated line in **both** arms at once. It is also strictly less sensitive: it is
+a deterministic function of `print_lines`, so any disagreement it shows, `print_lines` shows
+first. This is exactly the review's caution about not making a test abstraction the metric
+unit, resolved against the real emitted contract rather than against a `Fragment` object.
+
+### The reconstruction signature
+
+For a neutral line `N` under architecture `A`, one element per emitted line carrying at
+least one of `N`'s glyphs, **ordered by its first owned gid**:
+
+```
+signature(A, N) = ( (gids of N that this emitted line carries,
+                     other neutral lines this emitted line reaches),  ... )
+```
+
+Its length is the emitted-line cardinality, so a **split** shows; its first member
+partitions `N`'s glyphs, so **where** a split falls shows; its second member names the
+cross-line grouping, so a **merge** shows and merges with **different spans** are
+distinguishable from each other.
+
+Deliberately absent, each for a reason: **text and inserted characters**, so a word-space
+decision can never register as a segmentation difference; **emitted-line ids**, since two
+arms numbering their lines differently is not a disagreement about grouping; **glyphs off
+the neutral skeleton**, which are a coverage fact counted separately.
+
+### The three discordance predicates, and the D-frame
+
+Every predicate is an **inequality between the two arms' own values**, so
+`D(H,X) == D(X,H)` holds by construction rather than by test:
+
+| predicate | definition |
+|---|---|
+| `TEXT_DISCORDANCE(N)` | `projected_text(H,N) != projected_text(X,N)` |
+| `SEGMENTATION_DISCORDANCE(N)` | `signature(H,N) != signature(X,N)` |
+| `ANCHOR_DISCORDANCE(R)` | `set(anchors(H,R)) != set(anchors(X,R))` |
+
+> **A neutral region enters the D-frame iff any of its neutral lines has
+> `TEXT_DISCORDANCE` or `SEGMENTATION_DISCORDANCE`, or the region has `ANCHOR_DISCORDANCE`.**
+
+An anchor is placed in a region **by identity**: the neutral line owning the first gid of
+the emitted line it was read from decides its region.
+
+**One-arm flags are deliberately not used.** A rule reading `H_CROSS_LINE_MERGE or
+X_CROSS_LINE_MERGE` would include a region where **both** arms merged `N0+N1` identically —
+structurally odd, but no H/X discordance to adjudicate. It may still matter to RQ2, where
+the C-frame is the population; it is not comparative evidence.
+
+### Two further defects found while reproducing the first
+
+**1. Agreement was scored as discordance.** `BOTH_ABSENT != "SAME"`, so every neutral line
+*neither* arm emitted — running heads, page numbers, `VerDate` stamps, all correctly dropped
+as chrome by both — entered a **census** D-frame. **MEASURED**
+([`results/x11_provenance_chain.json`](results/x11_provenance_chain.json)): 22 of 310 and 22
+of 313 neutral lines carry no hybrid emitted line, so on the condition that X drops the same
+furniture, roughly **7 % of the D-frame was page furniture**. §5.8 is explicit that the
+D-frame "cannot see a failure both architectures share. That is exactly why the C-frame
+exists", so a shared drop belongs to RQ2. It is excluded from the comparative frame and
+reported as the `both_absent` count.
+
+**2. A split was projected as a weld.** A21 joined an arm's emitted-line contributions with
+`""`, asserting an adjacency the arm never produced. A heading split at a word boundary
+projected as `FAMILYHOUSING`, would have scored a **fabricated M3 weld** against an oracle
+reading `FAMILY HOUSING`, and would have counted as **`X_REGRESSES` — a veto term in Rule
+1**. The join is now `"\n"`, which is what production already puts between printed lines
+(`Page.text`) and which `m3_boundaries.decompose` already reads as a word boundary via
+`ch.isspace()`. No new machinery. A split **mid-word** still scores a real boundary defect,
+which is correct: the arm did break the word across two printed lines.
+
+### M0, with its components preserved
+
+The A19 denominator (neutral lines) is kept. **No weighted composite is invented.** One
+denominator for the three line-rate components, so they are comparable to each other:
+
+| | numerator | denominator |
+|---|---|---|
+| **M0a** | neutral lines with `TEXT_DISCORDANCE` | every neutral line in scope |
+| **M0b** | neutral lines with `SEGMENTATION_DISCORDANCE` | *same* |
+| **M0-any** | neutral lines with either — the **union**, never a sum | *same* |
+| **M0c** | regions with `ANCHOR_DISCORDANCE` | neutral regions in scope — **reported separately, never pooled with the line rates** |
+
+`M0a_only`, `M0b_only` and `both_absent` are preserved raw beside them. **`M0b_only` is the
+count this amendment exists to make reachable**: neutral lines where the arms agree on every
+character but disagree on how they cut the page into lines. Under A21 it was structurally
+zero. M0's control is unchanged: **S1 must raise it**.
+
+### Why this does not disturb M3
+
+Text correctness and line segmentation stay separate concepts, and that is tested rather
+than argued:
+
+- `FAMILYHOUSING` vs `FAMILY HOUSING` on the same glyphs → `TEXT_DISCORDANCE`, **no**
+  segmentation discordance, reaches M3 as `X_CORRECTS` with H scoring exactly one weld;
+- the same heading text under a different emitted-line grouping → `SEGMENTATION_DISCORDANCE`,
+  enters the D-frame, and M3 returns `BOTH_CLEAN` — **no fabricated boundary error**;
+- inserted characters carry no gid, so the signature is **provably insensitive** to a
+  spacing decision.
+
+### The cross-engine control: threshold and consequence, frozen
+
+A21 left "no threshold adopted", a degree of freedom that must not survive into execution.
+
+| | |
+|---|---|
+| metric | one-to-one matched neutral lines / **max**(PDFium, PyMuPDF) lines, per document, over §5.8's 10 % page subsample |
+| threshold | `>= 0.95` per document **and** `>= 0.75` on every sampled page |
+| consequence | a failing document labels every table using it **PDFIUM-CONDITIONED FRAME**; failing **more than a third** of sampled documents moves that label into RQ2's **headline**. **RQ1 is unaffected either way** — both arms inherit the same skeleton, so a frame error cannot favour H or X, only move the unit both are scored on. **Execution is never blocked by this gate.** |
+
+The denominator is the **larger** count so that over-segmentation by *either* engine lowers
+the score. **Why 0.95 permits ~25× the observed disagreement** (development: 514/515
+matched): development is two GPO **bills**, the holdout contains three **committee reports**,
+and A19 already records that a two-column page merges its columns into one neutral line. On
+that class the engines can disagree for a reason internal to the skeleton's own design, and a
+threshold tuned on 20 pages of one document class would be pretending that sample establishes
+a population error rate. The **per-page floor** exists because a document fraction hides the
+failure that matters: one wholly divergent 26-line page still scores 0.91 across 300 lines.
+**What it permits, plainly:** 5 % of a document's lines and 25 % of any single page's,
+unlabelled.
+
+**The gate is shown capable of failing** rather than assumed sound — five injected frames per
+document: one page displaced 200 pt → FAIL (page floor); every line pairwise-merged → FAIL;
+every line split in two → FAIL (the case the `max()` denominator exists for); a tenth of one
+page dropped → PASS, permitted; baselines nudged 0.4 × tolerance → PASS, permitted, being
+below the tolerance that *defines* a line.
+
+### What the x-overlap evidence does and does not say
+
+The two engines' x extents are **not the same quantity**, and phase 3 already measured this,
+so it is cited rather than re-derived: `h01` found `bbox[0] == origin[0]` to 0.0 pt on every
+sampled character — which **no ink box can satisfy** — and `h08` traced it to
+`jm_trace_text_span`'s `x1 = x0 + adv`. PyMuPDF's line span therefore runs from the first pen
+origin to the last advance, while PDFium's runs between ink edges, so the PyMuPDF span
+*contains* the PDFium span and the overlap ratio pins to 1.0 — `x_overlap_min` is exactly
+**1.0 on every matched line of both development documents**. Measured here: median `x0` delta
+**0.602 pt** (the left side bearing), median `x1` delta **0.0**.
+
+**So the x-overlap is a coarse guard**, whose real job is to stop two horizontally disjoint
+lines that share a baseline (the two-column case) from matching. It is **not** evidence of
+fine geometric agreement and is not reported as such. **Baseline is like-for-like** — both
+are pen origins — and carries the control. The **vertical box is not comparable and is not
+compared**: only PDFium's height is used, and only to set the tolerance.
+
+### Source-glyph provenance: carried on development, not yet in a real adapter
+
+**MEASURED** ([`results/x11_provenance_chain.json`](results/x11_provenance_chain.json)) —
+the chain `PDFium char i → extracted record → reconstruction row → emitted printed line →
+neutral projection` holds on two development documents, 12 pages each.
+
+**The adapters are NOT modified**, and that is deliberate: `probes/backends/pdfium_hybrid.py`,
+`probes/contract_hybrid.py` and `probes/reconstruct_hybrid.py` are byte-pinned in
+[`validation/PRESERVED-MANIFEST.txt`](../PRESERVED-MANIFEST.txt) under tag
+`pdf-bakeoff-prevalidation`, and **every `.py` in that manifest verifies clean today**. Those
+are the exact bytes that produced the prior spike's confirmatory results; changing them would
+retire that claim to buy a field a wrapper can carry.
+
+Instrumenting a frozen implementation means duplicating it, and a duplicate drifts and then
+measures a different population while reporting agreement. Both duplications are therefore
+**gated by equality against the frozen original**: the instrumented extraction must reproduce
+`pdfium_hybrid.extract` field-for-field on every character, and the provenance-carrying
+reconstruction must reproduce `Page.print_lines` exactly and in order.
+
+> **The membership contract is therefore NOT yet proven end-to-end in the harness.** It is
+> proven on the development hybrid path, through a wrapper whose fidelity is asserted.
+
+**G1 checklist — where the field must actually land:**
+
+1. `contract_hybrid.CHAR_FIELDS` — append `source_char_index`; add `SCI = 9`. Append only,
+   so every existing positional index is unchanged.
+2. `pdfium_hybrid.extract` — append `i` to both `chars.append(...)` tuples (generated and
+   non-generated). The loop already has `i`; no decision changes.
+3. `contract_extended` / `pdfium_extended` — the same append on the X arm, from the same
+   `FPDFText_*` index.
+4. `reconstruct_hybrid.cluster_lines` — it already carries `i` internally and discards it in
+   the final comprehension; return the pair instead.
+5. `reconstruct_extended.cluster_lines` / `_line_text` — carry the gid through the
+   `sorted(..., key=ORIGIN_X)` reordering, and emit `(gid, char)` cells with `gid=None` for
+   every space **the rule inserts**.
+6. Both `reconstruct_page`s — emit `EmittedLine(cells, lid=(page, index into print_lines))`
+   beside each `Line`.
+7. Re-hash the affected manifest entries **in the same commit**, with the old and new digests
+   recorded, so the preservation claim is retired knowingly rather than silently.
+
+**Population impact: none.** No membership change, no scoring performed, no holdout document
+opened, no architecture run on holdout material. `x08` 31/31, `x10` 30/30 including negative
+controls showing every predicate returning both answers, `x11` 8/8, `x09` gate PASS on both
+development documents with all 10 injected-fault expectations met.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
@@ -1118,6 +1362,16 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `641013c` | `x04_freeze_check.py` | working-tree-vs-committed (A13) |
 | `2b07a60` | `x04_freeze_check.py` | freeze/boundary as historical facts (A15/A16) |
 | `c394e7b` | `x06_m6_feasibility.py` | M6 feasibility probe (A17) |
+| `c3cb3c0` | `neutral_geometry.py`, `x07_neutral_geometry.py` | neutral ink-line skeleton (A19) |
+| `6b6eb7e` | `neutral_identity.py`, `x08_neutral_identity.py`, `x09_skeleton_cross_engine.py` | literal glyph membership (A21) |
+| `89e9d91` | `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | segmentation discordance (A22) |
+| `e277a3e` | `x11_provenance_chain.py` | source-glyph provenance (A22) |
+| `7644687` | `x09_skeleton_cross_engine.py` | cross-engine gate frozen (A22) |
+
+The last three are declared **by A22's own JSON block**, not by this one, so the record that
+carries the reasoning also carries the bookkeeping for the commits it produced. They are
+listed here because this table claims to be the complete post-freeze history, and a table
+that silently stopped short of HEAD would be the same defect A18 was written to remove.
 
 **No file is declared under both a SUBSTANTIVE and a TOOLING amendment**: A6 hands its
 protected-file accounting here and keeps only the deleted orphan PDF, which is not a
