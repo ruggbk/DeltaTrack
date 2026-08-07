@@ -682,6 +682,104 @@ four files.
 
 ---
 
+## A17 — BLOCKING AMBIGUITY. The frozen protocol is not executable as written
+
+```json
+{"id": "A17", "class": "SUBSTANTIVE", "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/x06_m6_feasibility.py", "results/x06_m6_feasibility.json"],
+ "status": "OPEN -- resolution required before the harness can be completed"}
+```
+
+Deriving the executable pipeline from `PRE-REGISTRATION.md` + amendments, **before writing
+the harness**, exposed four places where the frozen protocol does not determine what the
+code should do. Per the standing instruction to stop at an ambiguity rather than code
+through it, the harness is **not** completed past these. Each is recorded with what it
+could bias.
+
+### A17.1 — M6 has no oracle for most of its population *(blocking, measured)*
+
+§6 defines M6 as "for each dollar amount in a C-region, emitted nearest heading-ish
+ancestor **vs adjudicated**", while §5.3 fixes the adjudicated unit as a region of **6–10
+printed lines** and §5.4 shows the adjudicator **only that region**. In GPO appropriations
+an account heading governs a long run of prose, so the heading that owns an amount is
+usually not in the region.
+
+**MEASURED** ([`results/x06_m6_feasibility.json`](results/x06_m6_feasibility.json), three
+development documents × 30 pages, 226 amounts):
+
+| region size (printed lines) | 6 | 8 | **10** | 15 | 25 | 50 |
+|---|---|---|---|---|---|---|
+| share of amounts whose governing heading is inside | 0.434 | 0.491 | **0.571** | 0.677 | 0.774 | 0.823 |
+
+Median distance to the governing heading is 5, 12 and 9 lines by document; the maximum is
+**288**. At the protocol's own region size, **roughly two amounts in five have no oracle at
+all** — and they are systematically the amounts deepest inside long appropriations blocks,
+which is exactly where a misattribution does the most damage. A metric silently missing
+40 % of its population, non-randomly, is not the metric §6 licenses.
+
+**Could it favour H or X?** Not directly — the viewport is common to both arms. The risk is
+to **RQ2**: absolute attribution correctness would be computed on the subset of amounts
+that sit close to their heading, which is the easy subset, and reported as if it covered
+the whole. That inflates the absolute claim.
+
+**Resolution options, none adopted here.** (a) Give the adjudicator a *governing-heading
+banner* derived from an architecture-neutral source, and adjudicate only whether the amount
+belongs to it; (b) make M6's unit the **account block** rather than the region, with a
+larger rendered span; (c) restrict M6's licensed claim to *in-region* attributions and say
+so in every table. Each changes what the adjudicator sees, so each needs review before it is
+frozen — which is why none is chosen unilaterally.
+
+### A17.2 — The C-frame predicate cannot be implemented as described
+
+§5.8 requires "an **ink-geometry predicate that reads no character identity and no word
+spacing**: a page carrying ≥ 1 line whose median glyph height sits in the document's
+**sub-body size cluster**". But the repository's only implementation of that clustering,
+`pdf_anchors.derive_size_bands`, decides body size from lines carrying **lowercase letters**
+and heading size from lines that are **uppercase headings** — both are character identity.
+So the predicate as frozen has no implementation, and reusing production's would violate
+its own stated neutrality.
+
+"Sub-body size cluster" is also not operationally defined without that helper: no clustering
+method, no threshold, no tie rule.
+
+**Could it favour H or X?** No — it is common to both arms. It determines the **C-frame
+population**, so it affects RQ2's denominator and nothing about the comparison.
+
+### A17.3 — "Region" is defined in architecture-derived units
+
+§5.3 fixes the region as "6–10 **printed lines**". Printed lines are produced by H and by X,
+and §5.8's D-frame exists precisely because the two can **disagree about line segmentation**.
+Defining the neutral adjudication unit in terms of an architecture-derived quantity is the
+identity defect this study has repeatedly guarded against.
+
+A neutral substitute exists — cluster **ink baselines**, which come from PDFium glyph boxes
+common to both arms and are not the thing under test — but choosing it is a protocol
+decision, not an implementation detail, and it changes which lines land in which region.
+
+### A17.4 — No rule for comparing H and X text when line counts differ
+
+The D-frame is "every region where the two architectures' reconstructed printed-line text
+differs". The design pilot `x00` compared by `(page, ordinal)`, which is only valid when
+both produce the same number of lines. §5.8 gives no rule for the case it exists to detect.
+Once A17.3 fixes a neutral region grid this becomes tractable — assign each architecture's
+lines to regions geometrically and compare per region — but it is unspecified today.
+
+### Why the harness stops here
+
+Every remaining component (`build_frames`, `build_oracle`, `score_metrics`,
+`decide_architecture`) consumes the region identity and the M6 unit. Implementing them now
+would mean **inventing** A17.1–A17.4 in code and calling the result "the frozen protocol",
+which is the specific failure this whole review sequence exists to prevent. The components
+that do **not** depend on the open questions are still tractable and are the natural next
+step once A17 is resolved.
+
+**Population impact: none.** No membership change, no scoring performed, no holdout document
+opened.
+
+---
+
 ## What was deliberately NOT amended
 
 - **Membership.** Unchanged, 17 documents. The orphan `CRPT-118HRPT146.pdf` was never a
