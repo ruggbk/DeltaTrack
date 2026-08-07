@@ -7,11 +7,13 @@
   "matching": "greedy by ascending baseline distance, one-to-one, ties on lower PDFium ordinal",
   "text_used": false
  },
- "threshold_note": "No threshold is adopted here. The protocol's old 0.95 belonged to a different estimand (agreement on a page SET) and must not be transplanted. A threshold should be set from the distribution below, before execution, and stated.",
- "observed_matched_fraction": [
-  1.0,
-  0.9961
- ],
+ "gate": {
+  "metric": "one-to-one matched neutral lines / max(pdfium, pymupdf) lines, per document",
+  "document_threshold": 0.95,
+  "page_threshold": 0.75,
+  "consequence": "FAIL on a document labels every table using it PDFIUM-CONDITIONED FRAME; FAIL on more than a third of sampled documents moves that label into RQ2's headline. RQ1 is unaffected either way -- both arms inherit the same skeleton. Execution is never blocked."
+ },
+ "geometry_caveat": "baseline is like-for-like (both are pen origins) and carries the control. The x extent is NOT: PyMuPDF's texttrace bbox is constructed from the glyph advance at the pen origin (phase3 h01 measured bbox[0] == origin[0] to 0.0 pt; h08 traced it to jm_trace_text_span), so the PyMuPDF span contains the PDFium ink span and the overlap ratio pins to 1.0. The x-overlap is a coarse guard against horizontally disjoint lines, not fine agreement. The vertical box is not comparable and is not compared.",
  "documents": [
   {
    "document": "114-hr-2029/4",
@@ -19,11 +21,83 @@
    "pdfium_neutral_lines": 256,
    "pymupdf_neutral_lines": 256,
    "one_to_one_matched": 256,
-   "matched_fraction_of_pdfium": 1.0,
+   "gate": {
+    "matched_fraction": 1.0,
+    "worst_page": 1,
+    "worst_page_fraction": 1.0,
+    "document_threshold": 0.95,
+    "page_threshold": 0.75,
+    "pass": true,
+    "failed_on": []
+   },
    "baseline_delta_median": 0.0,
    "baseline_delta_max": 0.0,
    "x_overlap_median": 1.0,
-   "x_overlap_min": 1.0
+   "x_overlap_min": 1.0,
+   "x0_delta_median_pdfium_minus_pymupdf": 0.602,
+   "x1_delta_median_pdfium_minus_pymupdf": 0.0,
+   "per_page": [
+    {
+     "page": 1,
+     "pdfium": 17,
+     "pymupdf": 17,
+     "matched": 17
+    },
+    {
+     "page": 2,
+     "pdfium": 26,
+     "pymupdf": 26,
+     "matched": 26
+    },
+    {
+     "page": 3,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 4,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 5,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 6,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 7,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 8,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 9,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 10,
+     "pdfium": 24,
+     "pymupdf": 24,
+     "matched": 24
+    }
+   ]
   },
   {
    "document": "118-s-4795/1",
@@ -31,11 +105,194 @@
    "pdfium_neutral_lines": 259,
    "pymupdf_neutral_lines": 258,
    "one_to_one_matched": 258,
-   "matched_fraction_of_pdfium": 0.9961,
+   "gate": {
+    "matched_fraction": 0.9961,
+    "worst_page": 1,
+    "worst_page_fraction": 0.9583,
+    "document_threshold": 0.95,
+    "page_threshold": 0.75,
+    "pass": true,
+    "failed_on": []
+   },
    "baseline_delta_median": 0.0,
    "baseline_delta_max": 0.0002,
    "x_overlap_median": 1.0,
-   "x_overlap_min": 1.0
+   "x_overlap_min": 1.0,
+   "x0_delta_median_pdfium_minus_pymupdf": 0.602,
+   "x1_delta_median_pdfium_minus_pymupdf": -0.0002,
+   "per_page": [
+    {
+     "page": 1,
+     "pdfium": 24,
+     "pymupdf": 23,
+     "matched": 23
+    },
+    {
+     "page": 2,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 3,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 4,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 5,
+     "pdfium": 26,
+     "pymupdf": 26,
+     "matched": 26
+    },
+    {
+     "page": 6,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 7,
+     "pdfium": 24,
+     "pymupdf": 24,
+     "matched": 24
+    },
+    {
+     "page": 8,
+     "pdfium": 23,
+     "pymupdf": 23,
+     "matched": 23
+    },
+    {
+     "page": 9,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    },
+    {
+     "page": 10,
+     "pdfium": 27,
+     "pymupdf": 27,
+     "matched": 27
+    }
+   ]
   }
- ]
+ ],
+ "fault_injection": [
+  {
+   "document": "114-hr-2029/4",
+   "fault": "one page's frame displaced 200 pt",
+   "matched_fraction": 0.9453,
+   "worst_page_fraction": 0.1765,
+   "gate_pass": false,
+   "expected_gate_pass": false,
+   "failed_on": [
+    "document 0.9453 < 0.95",
+    "page 1 0.1765 < 0.75"
+   ]
+  },
+  {
+   "document": "114-hr-2029/4",
+   "fault": "every line pairwise-merged",
+   "matched_fraction": 0.0312,
+   "worst_page_fraction": 0.0,
+   "gate_pass": false,
+   "expected_gate_pass": false,
+   "failed_on": [
+    "document 0.0312 < 0.95",
+    "page 2 0.0000 < 0.75"
+   ]
+  },
+  {
+   "document": "114-hr-2029/4",
+   "fault": "every line split in two",
+   "matched_fraction": 0.5,
+   "worst_page_fraction": 0.5,
+   "gate_pass": false,
+   "expected_gate_pass": false,
+   "failed_on": [
+    "document 0.5000 < 0.95",
+    "page 1 0.5000 < 0.75"
+   ]
+  },
+  {
+   "document": "114-hr-2029/4",
+   "fault": "a tenth of one page's lines dropped",
+   "matched_fraction": 0.9922,
+   "worst_page_fraction": 0.8824,
+   "gate_pass": true,
+   "expected_gate_pass": true,
+   "failed_on": []
+  },
+  {
+   "document": "114-hr-2029/4",
+   "fault": "every baseline nudged 0.4 x tolerance",
+   "matched_fraction": 1.0,
+   "worst_page_fraction": 1.0,
+   "gate_pass": true,
+   "expected_gate_pass": true,
+   "failed_on": []
+  },
+  {
+   "document": "118-s-4795/1",
+   "fault": "one page's frame displaced 200 pt",
+   "matched_fraction": 0.9382,
+   "worst_page_fraction": 0.3333,
+   "gate_pass": false,
+   "expected_gate_pass": false,
+   "failed_on": [
+    "document 0.9382 < 0.95",
+    "page 1 0.3333 < 0.75"
+   ]
+  },
+  {
+   "document": "118-s-4795/1",
+   "fault": "every line pairwise-merged",
+   "matched_fraction": 0.0347,
+   "worst_page_fraction": 0.0,
+   "gate_pass": false,
+   "expected_gate_pass": false,
+   "failed_on": [
+    "document 0.0347 < 0.95",
+    "page 5 0.0000 < 0.75"
+   ]
+  },
+  {
+   "document": "118-s-4795/1",
+   "fault": "every line split in two",
+   "matched_fraction": 0.5,
+   "worst_page_fraction": 0.5,
+   "gate_pass": false,
+   "expected_gate_pass": false,
+   "failed_on": [
+    "document 0.5000 < 0.95",
+    "page 1 0.5000 < 0.75"
+   ]
+  },
+  {
+   "document": "118-s-4795/1",
+   "fault": "a tenth of one page's lines dropped",
+   "matched_fraction": 0.9846,
+   "worst_page_fraction": 0.8333,
+   "gate_pass": true,
+   "expected_gate_pass": true,
+   "failed_on": []
+  },
+  {
+   "document": "118-s-4795/1",
+   "fault": "every baseline nudged 0.4 x tolerance",
+   "matched_fraction": 0.9961,
+   "worst_page_fraction": 0.9583,
+   "gate_pass": true,
+   "expected_gate_pass": true,
+   "failed_on": []
+  }
+ ],
+ "failures": []
 }
