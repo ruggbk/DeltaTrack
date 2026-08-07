@@ -1,0 +1,209 @@
+"""Canonical XML diff output is pinned byte for byte across the committed corpus.
+
+ADR 0020 makes the staged-matching extraction conditional on one acceptance criterion:
+the canonical JSON must stay byte-identical while the stages are separated. That is
+enforcement rather than convention — a matching-policy change necessarily moves a byte,
+so the refactor and the policy change cannot be smuggled into one commit without this
+going red.
+
+**What it runs.** Every adjacent version pair of the committed manifest
+(``tests/corpus_manifest.toml``), through ``compare.xml.compare_xml`` — the public
+canonical producer the web app calls, not a chain reassembled here. Measuring at the
+consumed output is the point: a gate that re-implemented the parse → diff → serialize
+composition could stay green while production's composition changed.
+
+**Why a digest and not the JSON.** The manifest pairs serialize to roughly 22 MB, which
+is not a reviewable committed artifact. A SHA-256 over the sorted-key serialization
+answers the only question asked — did any byte move — and cannot be satisfied by
+coincidence. The summary counts beside it assert nothing the digest does not; they exist
+so a failure reads "modified 812 → 790" instead of "two hex strings differ", which is
+the difference between a diagnosis and a bisect.
+
+**What was already guarded, and what this adds.** ``test_committed_examples`` re-renders
+the committed example reports and so already reddens on a matching change — but it
+covers three pairs across two bills, compares rendered HTML rather than the canonical
+contract, and its remedy line reads "regenerate the examples", which invites
+regeneration as the fix for a signal that is not about the examples at all. This runs
+every adjacent manifested pair, asserts at the layer ADR 0020 names, and attributes a
+failure to the bill and the counts that moved. Measured on this branch: disabling
+``_match_collision_group``'s cross-division fallback reddens both, but only this gate
+names 115-hr-5895, 117-hr-4502 and 114-hr-2029 as affected.
+
+**The self-reference, stated rather than assumed.** The expected values are produced by
+the code under test, so regenerating them makes any change look intended. Three things
+keep that from being free. Regeneration is opt-in (``UPDATE_BASELINE=1``), so it cannot
+happen as a side effect of a normal run. The rewritten file lands in the diff, where a
+reviewer sees which pairs moved. And ADR 0020 requires independent precision and recall
+evidence in the pull request that changes matching policy, so a baseline update with no
+such evidence is the review signal, not a formality.
+
+To regenerate after an INTENTIONAL canonical-output change, then review the JSON diff:
+
+    UPDATE_BASELINE=1 uv run pytest tests/test_canonical_baseline.py
+
+Regeneration is all-or-nothing: a missing fixture refuses the write rather than
+committing a baseline that silently covers fewer pairs (the shape #296 closed for the
+PDF extraction golden).
+
+**Scope: XML only, deliberately.** The PDF pipeline's observation contract is under
+active research (ADR 0019's open question 2 — its emission determinism is unmeasured),
+so pinning its bytes now would fire on that track's expected changes rather than on a
+matching regression. The PDF baseline is owed before any PDF-side stage extraction, and
+is not owed by an XML-only refactor.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from deltatrack.compare.xml import compare_xml
+from deltatrack.version_stems import label_from_stem
+from tests.conftest import assert_manifest_committed, manifest_xml_ids
+from tests.corpus_paths import DATA_DIR, FIXTURES_DIR
+
+pytestmark = pytest.mark.slow
+
+_BASELINE = DATA_DIR / "canonical_baseline.json"
+
+REGENERATE = "Regenerate with `UPDATE_BASELINE=1 uv run pytest tests/test_canonical_baseline.py`."
+
+
+def _stage_num(stem: str) -> int:
+    """Leading ordinal of a version stem (``4_engrossed-... -> 4``).
+
+    Numeric, not lexicographic: a string sort puts ``10_`` before ``2_``. No corpus bill
+    reaches stage 10 today, so this is a latent guard rather than a live fix — the same
+    one ``tests/conftest._stage_num`` carries for the diff smoke.
+    """
+    return int(stem.split("_", 1)[0])
+
+
+def baseline_pairs() -> list[tuple[str, Path, Path]]:
+    """``(key, old, new)`` for every adjacent manifested XML pair, sorted.
+
+    Built from ``manifest_xml_ids()`` rather than ``manifest_version_pairs()`` because
+    that helper widens under ``CORPUS_SWEEP=1``. A stored baseline is calibrated against
+    the committed corpus, so a swept pair would have no entry and the key-set assertion
+    below would fail on a machine where nothing is wrong. Same reasoning that made
+    ``manifest_xml_ids`` sweep-blind for the baseline-dict staleness guards (#496).
+    """
+    by_bill: dict[str, list[str]] = {}
+    for fixture_id in manifest_xml_ids():
+        bill, name = fixture_id.split("/", 1)
+        by_bill.setdefault(bill, []).append(name.removesuffix(".xml"))
+
+    pairs: list[tuple[str, Path, Path]] = []
+    for bill in sorted(by_bill):
+        stems = sorted(by_bill[bill], key=_stage_num)
+        for old_stem, new_stem in zip(stems, stems[1:]):
+            pairs.append(
+                (
+                    f"{bill}/{old_stem}->{new_stem}",
+                    FIXTURES_DIR / bill / f"{old_stem}.xml",
+                    FIXTURES_DIR / bill / f"{new_stem}.xml",
+                )
+            )
+    return pairs
+
+
+_PAIRS = baseline_pairs()
+
+
+def canonical_record(old_path: Path, new_path: Path) -> dict:
+    """One pair's pinned record: the digest, plus counts that make a failure legible."""
+    canonical = compare_xml(
+        old_path.read_bytes(),
+        new_path.read_bytes(),
+        start_label=label_from_stem(old_path.stem),
+        end_label=label_from_stem(new_path.stem),
+    )
+    blob = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "sha256": hashlib.sha256(blob).hexdigest(),
+        "bytes": len(blob),
+        "changes": len(canonical["changes"]),
+        "summary": canonical["summary"],
+    }
+
+
+def _load_baseline() -> dict:
+    assert _BASELINE.exists(), f"canonical baseline missing at {_BASELINE}. {REGENERATE}"
+    return json.loads(_BASELINE.read_text())
+
+
+def _regenerated() -> dict:
+    """The rebuilt baseline, or nothing at all.
+
+    All-or-nothing: an absent fixture raises rather than writing a baseline that covers
+    fewer pairs than the manifest declares. A partial file would pass its own key-set
+    check forever after, retiring the pairs it dropped without a word (#296).
+    """
+    missing = [str(p) for _, old, new in _PAIRS for p in (old, new) if not p.exists()]
+    if missing:
+        raise AssertionError(f"refusing to write a partial baseline; fixtures absent: {missing}")
+    return {key: canonical_record(old, new) for key, old, new in _PAIRS}
+
+
+def test_manifest_fixtures_committed():
+    """Fail closed if a manifested bill is uncommitted, rather than pinning fewer pairs."""
+    assert_manifest_committed(_PAIRS, "canonical-baseline")
+
+
+def test_baseline_covers_exactly_the_manifest_pairs():
+    """The stored key set is the derived key set — no dropped pair, no stale key.
+
+    The floor above proves fixtures are committed; this proves the *baseline* kept up
+    with them. Without it a pair could leave the file and the parametrized case for it
+    would simply stop existing, which is the shape that reads as a clean run.
+    """
+    stored = set(_load_baseline())
+    derived = {key for key, _, _ in _PAIRS}
+    assert stored == derived, (
+        f"baseline key set drifted from the manifest. "
+        f"only in baseline: {sorted(stored - derived)}; "
+        f"only in manifest: {sorted(derived - stored)}. {REGENERATE}"
+    )
+
+
+@pytest.mark.skipif(os.environ.get("UPDATE_BASELINE") != "1", reason="not in baseline-update mode")
+def test_regenerate_baseline():
+    """Rewrite the baseline from current output. Skipped unless UPDATE_BASELINE=1."""
+    _BASELINE.write_text(json.dumps(_regenerated(), indent=2, sort_keys=True) + "\n")
+
+
+def test_regeneration_refuses_a_partial_baseline(monkeypatch):
+    """An absent fixture must refuse the write, not shrink the pinned set.
+
+    Simulates the absence rather than deleting a committed fixture, so the guard is
+    proven on every checkout instead of only where something is already broken.
+    """
+    key, old, new = _PAIRS[0]
+    monkeypatch.setattr(
+        f"{__name__}._PAIRS",
+        [(key, old, new), ("gone/1_a->2_b", FIXTURES_DIR / "gone" / "1_a.xml", FIXTURES_DIR / "gone" / "2_b.xml")],
+    )
+    with pytest.raises(AssertionError, match="refusing to write a partial baseline"):
+        _regenerated()
+
+
+@pytest.mark.parametrize(("key", "old_path", "new_path"), _PAIRS, ids=[p[0] for p in _PAIRS])
+def test_canonical_output_matches_baseline(key: str, old_path: Path, new_path: Path):
+    """Canonical JSON for this pair is byte-identical to the pinned baseline."""
+    expected = _load_baseline()[key]
+    actual = canonical_record(old_path, new_path)
+    if actual["sha256"] != expected["sha256"]:
+        pytest.fail(
+            f"canonical output changed for {key}.\n"
+            f"  digest: {expected['sha256'][:16]} -> {actual['sha256'][:16]}\n"
+            f"  bytes:  {expected['bytes']} -> {actual['bytes']}\n"
+            f"  changes: {expected['changes']} -> {actual['changes']}\n"
+            f"  summary: {expected['summary']} -> {actual['summary']}\n"
+            f"If this change is intended, ADR 0020 asks for the precision and recall "
+            f"evidence in the same pull request. {REGENERATE}"
+        )
+    assert actual == expected, f"digest held but a recorded count moved for {key}. {REGENERATE}"

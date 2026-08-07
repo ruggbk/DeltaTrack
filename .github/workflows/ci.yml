@@ -153,6 +153,12 @@ jobs:
         # it runnable; naming it here is what makes it run. Its skipif channel is watched by
         # the content-skip ceiling (CORPUS_GATE_MODULES in tests/conftest.py), so deleting
         # the fixture goes red instead of quiet.
+        #
+        # test_canonical_baseline is the eighth. It pins the canonical XML diff byte for
+        # byte over the same manifest pairs, which is ADR 0020's stated acceptance
+        # criterion for extracting the matching stages. Named here for the reason every
+        # step in this job repeats: the marker makes a gate runnable, naming its module is
+        # what makes it run.
         run: >
           uv run pytest -v -m slow
           tests/test_corpus_properties.py
@@ -163,6 +169,7 @@ jobs:
           tests/test_pdf_subsection_recall.py
           tests/test_manifest_report_fixtures.py
           tests/test_financial_callout_whole_item.py
+          tests/test_canonical_baseline.py
 
       - name: Run the packaging gate (build, install, diff from outside the checkout)
         if: ${{ !cancelled() }}
