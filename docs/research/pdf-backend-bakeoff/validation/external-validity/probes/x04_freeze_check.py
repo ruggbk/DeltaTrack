@@ -87,6 +87,21 @@ def is_ancestor(a: str, b: str) -> bool:
     return r.returncode == 0
 
 
+def f4_ok(protocol_commit: str, population_commit: str) -> bool:
+    """F4's predicate: the protocol must be committed STRICTLY before the population.
+
+    Strictly, because a commit is its own ancestor -- so without the inequality a protocol
+    amended in the population's own commit would pass, which is exactly how a materially
+    revised protocol was once reported as having predated its own holdout.
+    """
+    return (
+        bool(protocol_commit)
+        and bool(population_commit)
+        and protocol_commit != population_commit
+        and is_ancestor(protocol_commit, population_commit)
+    )
+
+
 def exposure_ids(contam: dict, exposure: dict) -> dict[str, set[str]]:
     """Every id a frozen member must not be. Keyed by class so a hit names its class."""
     out: dict[str, set[str]] = {}
@@ -154,12 +169,18 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
     )
 
     # F4 -- the LAST-modifying commit of the protocol, not the first.
+    #
+    # And the LAST-modifying commit of the membership, not its first: the design-era
+    # population was withdrawn and a confirmatory one written to the same path, so
+    # `git log --reverse` on that path still reports the DESIGN commit. Comparing against
+    # it would judge the current protocol against a population that no longer exists --
+    # and it read FAIL for exactly that reason before this was fixed.
     pl, pf = last_commit(PREREG), first_commit(PREREG)
-    mc = first_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
+    mc = last_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
     results.append(
         (
             "F4 FINAL protocol committed before the population",
-            bool(pl) and bool(mc) and is_ancestor(pl, mc) and pl != mc,
+            f4_ok(pl, mc),
             f"prereg last={pl[:8] or 'UNCOMMITTED'} (first={pf[:8] or '-'}) membership={mc[:8] or 'UNCOMMITTED'}",
         )
     )
@@ -250,7 +271,13 @@ def self_test(contam: dict, exposure: dict) -> int:
         )
     )
 
-    checks.append(("F4 rejects a non-ancestor pair", not is_ancestor("0" * 40, "1" * 40)))
+    # F4's predicate, driven directly with real commits from this repository.
+    head = git("rev-parse", "HEAD")
+    parent = git("rev-parse", "HEAD~1")
+    checks.append(("F4 accepts a strict-ancestor protocol", f4_ok(parent, head)))
+    checks.append(("F4 rejects a protocol amended in the population's OWN commit", not f4_ok(head, head)))
+    checks.append(("F4 rejects a protocol committed AFTER the population", not f4_ok(head, parent)))
+    checks.append(("F4 rejects an uncommitted protocol", not f4_ok("", head)))
 
     # G2 must reject evidence that passed on the HOLDOUT rather than on development.
     saved = X2_EVIDENCE.read_text() if X2_EVIDENCE.exists() else None
