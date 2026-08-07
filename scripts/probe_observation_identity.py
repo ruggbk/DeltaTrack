@@ -27,6 +27,12 @@ the three properties that choice turns on:
   source bytes, or is synthesized by the parser. This tests the one requirement that
   might have favoured `element_id`, and it is only partly met.
 
+**4. Does the existing answer key still resolve?** `tests/data/similarity_labels.json`
+records human rulings about parsed nodes, keyed on nothing but the stored text. This counts
+how many of its observations can still be found. The lookup is by text, which the record
+says is not an identity — deliberately, because it is the weakest possible test: a label that
+fails it is unreachable by any means the fixture records.
+
 Usage, from the repo root:
 
     uv run python scripts/probe_observation_identity.py tests/corpus
@@ -40,14 +46,24 @@ each of its figures came from.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sys
 from collections import Counter
 from pathlib import Path
 
-from deltatrack.bill_tree import BillNode, normalize_bill
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+
+from deltatrack.bill_tree import BillNode, normalize_bill  # noqa: E402
+from tests.corpus_paths import DATA_DIR  # noqa: E402
 
 DEFAULT_ROOT = Path("tests/corpus")
+
+#: The fixture path comes from corpus_paths, never respelled here (#404): a CWD-relative
+#: spelling resolves only when run from the repository root, and a fourth spelling of the
+#: same location is what let a broken one hide. `tests/test_fixture_layout.py` enforces it.
+ANSWER_KEY = DATA_DIR / "similarity_labels.json"
 
 # Every `id="..."` literally present in the source, found without parsing the XML, so
 # this measurement does not depend on the parser it is being used to judge.
@@ -85,6 +101,39 @@ def sequence_digest(nodes: list[BillNode]) -> str:
         hasher.update(node_signature(node).encode())
         hasher.update(b"\x00")
     return hasher.hexdigest()
+
+
+def report_answer_key(root: Path) -> None:
+    """How many stored answer-key observations still resolve to a node, by text."""
+    if not ANSWER_KEY.exists():
+        print(f"\n--- 4. answer-key resolution: {ANSWER_KEY} not present, skipped ---")
+        return
+
+    pairs = json.loads(ANSWER_KEY.read_text())["pairs"]
+    unresolved: dict[str, list[str]] = {}
+    missing_version = 0
+    parsed: dict[Path, set[str]] = {}
+
+    for pair in pairs:
+        for side, version_key, text_key in (("old", "version_old", "text_old"), ("new", "version_new", "text_new")):
+            path = root / pair["bill"] / f"{pair[version_key]}.xml"
+            if not path.exists():
+                missing_version += 1
+                continue
+            if path not in parsed:
+                parsed[path] = {" ".join(n.body_text.split()) for n in normalize_bill(path).nodes}
+            if " ".join(pair[text_key].split()) not in parsed[path]:
+                unresolved.setdefault(pair["id"], []).append(side)
+
+    print("\n--- 4. does the stored answer key still resolve? ---")
+    print(f"labels in {ANSWER_KEY.name:<28}: {len(pairs)}")
+    print(f"labels with an UNRESOLVED side              : {len(unresolved)}")
+    for label_id, sides in sorted(unresolved.items()):
+        print(f"    {label_id} ({', '.join(sides)})")
+    if missing_version:
+        print(f"sides whose version file is not under {root}: {missing_version}")
+    print("    Looked up by text, which is the weakest possible test: a label failing it")
+    print("    is unreachable by any means the fixture records.")
 
 
 def main(argv: list[str]) -> int:  # noqa: C901 - one report, read top to bottom
@@ -197,6 +246,8 @@ def main(argv: list[str]) -> int:  # noqa: C901 - one report, read top to bottom
         print(f"    tag={tag!r:32} {count}")
     print("    A synthesized id is not recoverable from the source bytes, so the")
     print("    'traceable back to the document' property is partial, not absolute.")
+
+    report_answer_key(root)
     return 0
 
 
