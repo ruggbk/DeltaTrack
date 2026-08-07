@@ -124,30 +124,47 @@ Until 2026-08-06 nothing outside this directory was touched, so
 `git diff pdf-bakeoff-prevalidation HEAD -- <spike> ':!validation'` was empty, and that
 one command proved the audit had not edited the thing it was auditing. The cost was that a
 reader arriving at the spike's own front door had no path to the work that partly overturns
-it. Three pointers were added, and the check becomes: **exactly three files differ, and
-each diff is an added pointer block and nothing else.**
+it. Three pointers were added, and a 2026-08-07 repository-hygiene pass then touched four
+more files, so the git-diff form of the check no longer has a single expected shape:
 
 ```
 git diff --stat pdf-bakeoff-prevalidation HEAD -- \
     docs/research/pdf-backend-bakeoff ':!docs/research/pdf-backend-bakeoff/validation'
 ```
 
-must list only `README.md`, `RESULTS.md` and `RESULTS-HYBRID.md`. Drop `--stat` to confirm
-the content: **additions only, no deletions, no changed line** (23 insertions, 0 deletions
-as of this writing). Every other spike file, and the prior content of those three, still
-verifies against the manifest and the tag.
+lists the three pointer files (additions only, 23 insertions and 0 deletions), plus
+`probes/README.md`, `probes/score_confirmatory.py`, `probes/score_migration.py` and
+`probes/confirm_safe_failure.py` from the hygiene pass, plus the deleted `holdout/` tree.
+**No spike finding, table or number is edited by any of them.** Every other spike file, and
+the prior content of all seven, still verifies against the manifest and the tag.
+
+Because "which files differ" now has to be read against an expected list rather than
+counted, the authority is the script below and not this paragraph.
 
 The manifest check is the stronger of the two, because it fails loudly rather than
-silently. From `docs/research/pdf-backend-bakeoff/`:
+silently. Run it from the repo root:
 
 ```
-grep '^[0-9a-f]' validation/PRESERVED-MANIFEST.txt | shasum -a 256 -c
+.venv/bin/python docs/research/pdf-backend-bakeoff/validation/check_preservation.py
 ```
 
-112 entries, of which exactly three report `FAILED` and every other reports `OK`. Those
-three are the pointer blocks. **A run where nothing fails would mean the check is not
-reading the files at all**, which is worth knowing: this command is one of the few here
-that has a known-bad case built into it.
+112 entries. Every divergence from the frozen state is declared in that script, file by
+file with a reason, and the check compares the declared set against the observed one **in
+both directions**: an undeclared change fails, and so does a declared exception that has
+stopped diverging. **A run where nothing diverges is a broken check rather than a clean
+tree**, and the script says so rather than printing a pass.
+
+The eight current divergences are the three pointer blocks, one gitignored file, and four
+repository-hygiene edits that touch no finding, table or number (2026-08-07: the holdout
+corpus stopped being committed, and the probes that read it stopped failing open).
+
+`check_preservation.py --self-test` proves the check can fail, against three controls: an
+exception removed, an exception invented for an unchanged file, and no exceptions at all.
+
+This replaces an earlier instruction to run `shasum -a 256 -c` over the manifest and
+confirm "exactly three `FAILED`". That was inaccurate from the start — it omitted
+`probes/js/package-lock.json`, which is gitignored and therefore unreadable in any clean
+clone — and counting failures cannot tell a declared exception from an undeclared one.
 
 **No spike conclusion was edited to agree with this directory.** `RESULTS-HYBRID.md` keeps
 its falsified rationale in place and says so at the top, on the same principle that keeps
