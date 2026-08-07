@@ -13,10 +13,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from m3_boundaries import (  # noqa: E402
+    NO_REFERENCE,
     OK,
     SPLIT,
     TEXT_ERROR,
-    UNALIGNABLE,
     WELD,
     HeadingOutcome,
     decompose,
@@ -39,7 +39,7 @@ def check(name: str, got, want) -> None:
 
 
 def counts(s) -> tuple[int, int, int, bool]:
-    return (s.weld, s.split, s.text_error, s.unalignable)
+    return (s.weld, s.split, s.text_error, s.no_reference)
 
 
 # -- decomposition ------------------------------------------------------------
@@ -65,22 +65,31 @@ check("repeated-character outcomes are positional", ab.outcomes, [OK, WELD, OK])
 multi = score_heading("A B C D", "AB CD")
 check("two welds in one heading", counts(multi), (2, 0, 0, False))
 
-# Unalignable: nothing in common at all.
-# UNALIGNABLE is TERMINAL: it is a single explicit outcome, and does not additionally
-# accumulate per-character defects. Reporting both would double-count one heading as six
-# text errors AND unalignable.
+# UNALIGNABLE is WITHDRAWN. Severe corruption is a severe TEXT_ERROR and the heading stays
+# in the denominator; making it unscorable removed precisely the worst failures from the
+# comparison. Only a MISSING ORACLE REFERENCE is unscorable.
 check(
-    "UNALIGNABLE only when nothing is shared, and is terminal",
+    "total corruption is a maximal TEXT_ERROR, still scored",
     counts(score_heading("ABCDEF", "123456")),
-    (0, 0, 0, True),
+    (0, 0, 6, False),
 )
-check("UNALIGNABLE reported as its own outcome", score_heading("ABCDEF", "123456").outcomes, [UNALIGNABLE])
-check("empty extraction is UNALIGNABLE", counts(score_heading("ABC", "")), (0, 0, 0, True))
+check("total corruption is NOT clean", score_heading("ABCDEF", "123456").clean, False)
+check("sharing no subsequence is a DIAGNOSTIC flag only", score_heading("ABCDEF", "123456").no_common_subsequence, True)
+check("empty extraction loses every printed character", counts(score_heading("ABC", "")), (0, 0, 3, False))
+check("missing ORACLE text is the only unscorable state", counts(score_heading("", "ABC")), (0, 0, 0, True))
+check("missing reference reported as its own outcome", score_heading("", "ABC").outcomes, [NO_REFERENCE])
+
+# The adversarial cases: strings that SHARE subsequences but whose minimum-cost alignment
+# may contain no exact match. The withdrawn rule called these unalignable.
+for _o, _e in [("AB", "BA"), ("ABA", "BAA"), ("ABC", "BAC"), ("AAB", "ABA"), ("ABAB", "BABA"), ("AAAAAB", "BAAAAA")]:
+    _sc = score_heading(_o, _e)
+    check(f"{_o} vs {_e}: shares a subsequence, not flagged as sharing nothing", _sc.no_common_subsequence, False)
+    check(f"{_o} vs {_e}: remains scorable", _sc.no_reference, False)
 
 # A long shared run with one substitution is NOT unalignable -- no edit budget to trip.
 check(
     "no edit budget: long string, many errors, still aligned",
-    score_heading("A" * 40 + "Z", "A" * 40 + "Q").unalignable,
+    score_heading("A" * 40 + "Z", "A" * 40 + "Q").no_reference,
     False,
 )
 
@@ -110,8 +119,18 @@ check(
     HeadingOutcome.X_REGRESSES,
 )
 check(
-    "unalignable on either side -> UNSCORABLE",
+    "X emitting garbage is X_REGRESSES, NOT an exclusion",
     heading_outcome("FAMILY HOUSING", "FAMILY HOUSING", "999999")[0],
+    HeadingOutcome.X_REGRESSES,
+)
+check(
+    "H emitting garbage is X_CORRECTS, symmetrically",
+    heading_outcome("FAMILY HOUSING", "999999", "FAMILY HOUSING")[0],
+    HeadingOutcome.X_CORRECTS,
+)
+check(
+    "ONLY a missing oracle reference is UNSCORABLE",
+    heading_outcome("", "FAMILY HOUSING", "FAMILY HOUSING")[0],
     HeadingOutcome.UNSCORABLE,
 )
 

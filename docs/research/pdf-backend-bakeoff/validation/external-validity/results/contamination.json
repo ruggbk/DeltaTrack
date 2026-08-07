@@ -1,7 +1,7 @@
 {
  "protocol": "validation/external-validity/PRE-REGISTRATION.md",
  "generated_from": "the repository, by git and by text scan; no network",
- "head": "3d3e3fc0580a92062243753aca703a6c0fe7bf89",
+ "head": "985def924ace0eb3dd0e50fe6910ce87cb965202",
  "classes": {
   "pdf_committed": {
    "n_files": 129,
@@ -3499,7 +3499,7 @@
     "CRPT-114HRPT605",
     "CRPT-119HRPT632"
    ],
-   "note": "This study's own frozen holdout, committed under external-validity/holdout/. Exposed by construction from the moment it is frozen, so it is subtracted HERE and only here. A future study must treat these as contaminated."
+   "note": "This study's own frozen holdout. Exposed by construction from the moment it was committed, and RECORDED AS EXPOSED in the classes above -- it is not subtracted. Freshness at admission is decided by x04's F3 against the pre-selection snapshot, not by this file. A future study must exclude these."
   }
  },
  "excluded_bills": [
@@ -3507,6 +3507,7 @@
   "113-hr-3547",
   "113-hr-4745",
   "113-hr-83",
+  "113-hr-933",
   "113-s-2323",
   "113-s-2499",
   "114-hr-2029",
@@ -3514,12 +3515,18 @@
   "114-hr-5325",
   "114-s-1463",
   "114-s-1725",
+  "114-s-3001",
   "115-hjres-128",
   "115-hr-1625",
   "115-hr-244",
   "115-hr-5895",
   "115-hr-5952",
+  "115-hr-5961",
+  "115-hr-6147",
+  "115-hr-6157",
   "115-hr-880",
+  "115-s-1609",
+  "115-s-2976",
   "115-s-3108",
   "116-hjres-31",
   "116-hr-133",
@@ -3530,12 +3537,16 @@
   "116-hr-3163",
   "116-hr-3504",
   "116-hr-5430",
+  "116-hr-7611",
+  "116-hr-7617",
   "116-s-1046",
   "117-hr-2471",
+  "117-hr-3237",
   "117-hr-4432",
   "117-hr-4502",
   "117-hr-5705",
   "117-hr-803",
+  "117-s-4663",
   "118-hconres-5",
   "118-hr-1",
   "118-hr-10445",
@@ -3593,7 +3604,10 @@
   "119-hr-1",
   "119-hr-1234",
   "119-hr-6703",
+  "119-hr-6938",
   "119-hr-7147",
+  "119-hr-7148",
+  "119-hr-8469",
   "119-hr-9770",
   "119-hr-9999",
   "119-hres-137",
@@ -3614,10 +3628,12 @@
   "999-s-8",
   "999-s-9"
  ],
- "excluded_bills_n": 110,
+ "excluded_bills_n": 124,
  "excluded_reports": [
   "CRPT-113HRPT483",
   "CRPT-113SRPT181",
+  "CRPT-114HRPT215",
+  "CRPT-114HRPT605",
   "CRPT-114HRPT92",
   "CRPT-114SRPT57",
   "CRPT-115HRPT697",
@@ -3653,7 +3669,8 @@
   "CRPT-119HRPT106-PT1",
   "CRPT-119HRPT106-PT2",
   "CRPT-119HRPT212",
+  "CRPT-119HRPT632",
   "CRPT-FAKE"
  ],
- "excluded_reports_n": 38
+ "excluded_reports_n": 41
 }

@@ -59,11 +59,29 @@ RECONSTRUCTOR = EV / "probes" / "reconstruct_extended_corrected.py"
 X2_EVIDENCE = EV / "results" / "x2_contract_assertions.json"
 ADJUDICATOR_PROMPT = EV / "probes" / "adjudicator_prompt.md"
 AMENDMENTS = EV / "PRE-EXECUTION-AMENDMENTS.md"
+# The one-way boundary. Before it: no confirmatory output may exist, and SUBSTANTIVE
+# pre-execution amendments are allowed. After it: confirmatory output may exist, and a
+# scoring-rule change is a DEVIATION, not an amendment.
+EXECUTION_MARKER = EV / "results" / "EXECUTION-START.json"
 
 AMENDMENT_CLASSES = {"CLERICAL", "SUBSTANTIVE", "TOOLING"}
 # Paths that are outputs of running the gate itself, or scratch, and are not part of the
 # frozen study surface F9 polices.
 F9_IGNORE = {"results/DEVIATIONS.md"}
+
+
+def marker_commit() -> str:
+    """The commit that authorized confirmatory execution, or "" if none."""
+    return last_commit(EXECUTION_MARKER) if EXECUTION_MARKER.exists() else ""
+
+
+def amendment_commits(records: list[dict]) -> dict[str, str]:
+    """Last-modifying commit of each amendment's touched files, by amendment id."""
+    out = {}
+    for rec in records:
+        commits = [last_commit(EV / f) for f in rec.get("files_touched", []) if (EV / f).exists()]
+        out[rec.get("id", "?")] = max(commits, key=lambda c: git("rev-list", "--count", c) or "0") if commits else ""
+    return out
 
 
 def parse_amendments() -> tuple[list[dict], list[str]]:
@@ -93,7 +111,43 @@ def parse_amendments() -> tuple[list[dict], list[str]]:
             errors.append(f"amendment {rec.get('id', '?')} claims to change MEMBERSHIP -- that is a re-selection")
         if rec.get("class") == "CLERICAL" and rec.get("affects_scoring_rule"):
             errors.append(f"amendment {rec.get('id', '?')} is CLERICAL but changes a scoring rule")
+        if rec.get("class") == "TOOLING" and rec.get("affects_scoring_rule"):
+            errors.append(f"amendment {rec.get('id', '?')} is TOOLING but changes a scoring rule")
         records.append(rec)
+
+    # A declared amendment is not automatically acceptable just because a path appears in
+    # files_touched. The rest of these are the ways a declaration can still be a fiction.
+    ids = [r.get("id") for r in records]
+    for dup in {i for i in ids if ids.count(i) > 1}:
+        errors.append(f"duplicate amendment id {dup!r}")
+
+    for rec in records:
+        for f in rec.get("files_touched", []):
+            if (EV / f).exists():
+                continue
+            # A path may legitimately be absent if the amendment DELETED it -- but only
+            # when it is actually gone from the tree AND was present in history.
+            deleted = git("log", "--diff-filter=D", "--format=%H", "-1", "--", str((EV / f).relative_to(REPO)))
+            if not deleted:
+                errors.append(f"amendment {rec.get('id', '?')} touches {f}, which neither exists nor was deleted")
+
+    # A file whose change alters scoring must not be hidden under a TOOLING declaration
+    # while a SUBSTANTIVE amendment quietly relies on it.
+    substantive = {f for r in records if r.get("class") == "SUBSTANTIVE" for f in r.get("files_touched", [])}
+    tooling_only = {f for r in records if r.get("class") == "TOOLING" for f in r.get("files_touched", [])}
+    for f in sorted(substantive & tooling_only):
+        errors.append(f"{f} is declared under both a SUBSTANTIVE and a TOOLING amendment")
+
+    # ONE-WAY BOUNDARY: no SUBSTANTIVE amendment after execution was authorized.
+    marker = marker_commit()
+    if marker:
+        commits = amendment_commits(records)
+        for rec in records:
+            if rec.get("class") != "SUBSTANTIVE":
+                continue
+            c = commits.get(rec.get("id", "?"), "")
+            if c and not is_ancestor(c, marker):
+                errors.append(f"SUBSTANTIVE amendment {rec.get('id', '?')} lands after the execution-start marker")
     return records, errors
 
 
@@ -125,6 +179,48 @@ def is_ancestor(a: str, b: str) -> bool:
     return r.returncode == 0
 
 
+def preselection_exposure(population_commit: str) -> tuple[dict[str, set[str]], str, list[str]]:
+    """The exposure inventory as it stood IMMEDIATELY BEFORE the population was committed.
+
+    This is the only state that can decide freshness. It is read from git at
+    `<population_commit>~1`, so it is immutable, cannot be edited by any later run, and
+    by construction cannot contain exposure that this study itself caused by committing
+    its own holdout.
+
+    Returns (disqualifying classes, resolved commit, errors).
+    """
+    errors: list[str] = []
+    if not population_commit:
+        return {}, "", ["no population commit"]
+    pre = git("rev-parse", f"{population_commit}~1")
+    if not pre:
+        return {}, "", [f"cannot resolve {population_commit}~1"]
+
+    rel_c = str(CONTAM.relative_to(REPO))
+    rel_e = str(EXPOSURE.relative_to(REPO))
+    raw_c = git("show", f"{pre}:{rel_c}")
+    raw_e = git("show", f"{pre}:{rel_e}")
+    if not raw_c:
+        errors.append(f"no contamination artifact at {pre[:8]}")
+    if not raw_e:
+        errors.append(f"no design-exposure artifact at {pre[:8]}")
+    if errors:
+        return {}, pre, errors
+
+    try:
+        contam, exposure = json.loads(raw_c), json.loads(raw_e)
+    except json.JSONDecodeError as exc:
+        return {}, pre, [f"unparseable pre-selection artifact: {exc}"]
+
+    # A pre-selection snapshot that already carries an own-study exemption would be one
+    # written AFTER the population existed -- i.e. not a pre-selection snapshot at all.
+    if "own_study_population_not_excluded" in contam.get("classes", {}):
+        errors.append("pre-selection snapshot carries an own-study exemption; it is not pre-selection")
+
+    classes = exposure_ids(contam, exposure)
+    return classes, pre, errors
+
+
 def f4_ok(protocol_commit: str, population_commit: str) -> bool:
     """F4's predicate: the protocol must be committed STRICTLY before the population.
 
@@ -142,22 +238,21 @@ def f4_ok(protocol_commit: str, population_commit: str) -> bool:
 
 def exposure_ids(contam: dict, exposure: dict) -> dict[str, set[str]]:
     """Every id a frozen member must not be. Keyed by class so a hit names its class."""
-    # Classes whose ids are RECORDED but deliberately do not disqualify a member.
-    #   xml_only               -- no PDF extractor has ever run on them (PRE-REGISTRATION 4.3)
-    #   own_study_population   -- this study's own frozen holdout, which is exposed by
-    #                             construction the moment it is committed. Without this the
-    #                             gate condemns the population it exists to protect. Scoped
-    #                             to THIS study; a future one must treat them as exposed.
-    recorded_not_excluded = {"xml_only_not_excluded", "own_study_population_not_excluded"}
-    own = set(contam.get("classes", {}).get("own_study_population_not_excluded", {}).get("ids", []))
-    own |= {o.upper() for o in own}
-
+    # Only xml-only exposure is recorded-but-not-disqualifying: no PDF extractor has ever
+    # run on those documents (PRE-REGISTRATION 4.3).
+    #
+    # There is deliberately NO own-study exemption here any more. Subtracting current
+    # membership from historical exposure classes cannot distinguish
+    #   (A) a document exposed BY this study, after it was frozen -- harmless, from
+    #   (B) a document already exposed BEFORE selection and picked anyway -- disqualifying,
+    # and it silently forgives (B). Freshness is therefore decided against the PRE-SELECTION
+    # snapshot (see `preselection_exposure`), which cannot contain any exposure this study
+    # later caused, so no exemption is needed at all.
     out: dict[str, set[str]] = {}
     for name, block in contam.get("classes", {}).items():
-        if name in recorded_not_excluded:
+        if name in {"xml_only_not_excluded", "own_study_population_not_excluded"}:
             continue
-        ids = set(block.get("bills", [])) | {r.upper() for r in block.get("reports", [])}
-        out[name] = ids - own
+        out[name] = set(block.get("bills", [])) | {r.upper() for r in block.get("reports", [])}
     ids = set(exposure.get("design_exposed", []))
     out["design_exposed"] = ids | {i.upper() for i in ids}
     return out
@@ -207,13 +302,25 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         )
     )
 
-    hits = contaminated(members, lookup)
+    # F3 -- FRESHNESS AT ADMISSION, decided against the pre-selection snapshot.
+    #
+    # Not against the current inventory: once the holdout is committed, every member
+    # appears in pdf_committed and pdf_in_history by construction, and "current exposure
+    # minus current membership" forgives a document that was ALREADY exposed before it was
+    # picked -- the one case freshness exists to catch.
+    mc_for_pre = last_commit(MEMBERSHIP) if MEMBERSHIP.exists() else ""
+    pre_classes, pre_commit, pre_errors = preselection_exposure(mc_for_pre)
+    hits = contaminated(members, pre_classes)
     results.append(
         (
-            "F3 no member is contaminated or design-exposed",
-            bool(members) and not hits,
-            "; ".join(f"{i} in {c}" for i, c in hits)
-            or (f"{len(members)} members clean" if members else "VACUOUS -- no members to check"),
+            "F3 no member was exposed BEFORE selection",
+            bool(members) and not hits and not pre_errors,
+            "; ".join(pre_errors + [f"{i} in {c}" for i, c in hits])
+            or (
+                f"{len(members)} members absent from every disqualifying class at {pre_commit[:8]}"
+                if members
+                else "VACUOUS -- no members to check"
+            ),
         )
     )
 
@@ -234,7 +341,20 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         )
     )
 
-    results.append(("F5 no confirmatory score exists yet", not SCORES.exists(), str(SCORES.exists())))
+    # F5 -- NARROWED, deliberately. This establishes that no canonical score ARTIFACT
+    # exists. It does NOT and cannot establish that no H/X computation was ever performed:
+    # git cannot prove the absence of a command. The process claim ("confirmatory
+    # extraction has not been run") is an ATTESTATION recorded in the execution-start
+    # marker, and is evidentially weaker than this repository fact. The two are reported
+    # as different things.
+    authorized = bool(marker_commit())
+    results.append(
+        (
+            "F5 no canonical score artifact exists (repository fact, not proof of non-execution)",
+            authorized or not SCORES.exists(),
+            "execution authorized -- scores permitted" if authorized else f"scores.json exists: {SCORES.exists()}",
+        )
+    )
 
     if KEY.exists() and ADJ.exists():
         kc, ac = first_commit(KEY), first_commit(ADJ)
@@ -375,6 +495,39 @@ def self_test(contam: dict, exposure: dict) -> int:
     hits = contaminated(exposed, lookup)
     checks.append(("F3 detects a design-exposed member", any(c == "design_exposed" for _, c in hits)))
 
+    # The two controls the freshness architecture turns on. Case B must FAIL and case A
+    # must PASS, and a blanket "current exposure minus current membership" cannot tell
+    # them apart -- which is why F3 reads the pre-selection snapshot instead.
+    real_member = json.loads(MEMBERSHIP.read_text())["members"][0]["id"] if MEMBERSHIP.exists() else "999-hr-1"
+
+    # CASE B: exposed BEFORE selection, then selected anyway, then also in own-study.
+    pre_b = {"pdf_in_history": {real_member, real_member.upper()}}
+    checks.append(
+        (
+            "F3 case B: pre-selection contamination is NOT erased by own-study membership",
+            bool(contaminated([{"id": real_member, "files": []}], pre_b)),
+        )
+    )
+
+    # CASE A: clean before selection; exposed only because its frozen PDF was committed.
+    pre_a: dict[str, set[str]] = {"pdf_in_history": set(), "named_in_research": set()}
+    checks.append(
+        (
+            "F3 case A: post-freeze self-exposure does NOT retroactively fail freshness",
+            not contaminated([{"id": real_member, "files": []}], pre_a),
+        )
+    )
+
+    # A snapshot carrying an own-study exemption was written AFTER the population existed,
+    # so it is not a pre-selection snapshot and must be refused. HEAD~1 is such a state.
+    _, _, errs_pre = preselection_exposure(git("rev-parse", "HEAD"))
+    checks.append(
+        (
+            "F3 refuses a 'pre-selection' snapshot that carries an own-study exemption",
+            any("not pre-selection" in e for e in errs_pre),
+        )
+    )
+
     checks.append(
         (
             "F2/F3 refuse to pass vacuously on an empty member list",
@@ -437,6 +590,56 @@ def self_test(contam: dict, exposure: dict) -> int:
         if saved_amend is not None:
             AMENDMENTS.write_text(saved_amend)
 
+    # F9 hardening: a declaration must not be acceptable merely because a path is listed.
+    saved_amend2 = AMENDMENTS.read_text() if AMENDMENTS.exists() else None
+    try:
+        base = '{"id": "%s", "class": "%s", "confirmatory_output_at_time": "none", "affects_membership": false%s}'
+        AMENDMENTS.write_text(
+            "```json\n" + base % ("DUP", "TOOLING", ', "files_touched": []') + "\n```\n"
+            "```json\n" + base % ("DUP", "TOOLING", ', "files_touched": []') + "\n```\n"
+        )
+        checks.append(("F9 rejects duplicate amendment ids", any("duplicate" in e for e in parse_amendments()[1])))
+
+        AMENDMENTS.write_text(
+            "```json\n" + base % ("GHOST", "TOOLING", ', "files_touched": ["probes/does_not_exist.py"]') + "\n```\n"
+        )
+        checks.append(
+            (
+                "F9 rejects a files_touched path that neither exists nor was deleted",
+                any("neither exists nor was deleted" in e for e in parse_amendments()[1]),
+            )
+        )
+
+        AMENDMENTS.write_text(
+            "```json\n" + base % ("S1", "SUBSTANTIVE", ', "files_touched": ["probes/m3_boundaries.py"]') + "\n```\n"
+            "```json\n" + base % ("T1", "TOOLING", ', "files_touched": ["probes/m3_boundaries.py"]') + "\n```\n"
+        )
+        checks.append(
+            (
+                "F9 rejects a file declared under BOTH substantive and tooling",
+                any("both a SUBSTANTIVE and a TOOLING" in e for e in parse_amendments()[1]),
+            )
+        )
+
+        AMENDMENTS.write_text(
+            "```json\n" + '{"id": "X", "class": "TOOLING", "confirmatory_output_at_time": "none",'
+            ' "affects_membership": false, "affects_scoring_rule": true, "files_touched": []}' + "\n```\n"
+        )
+        checks.append(
+            (
+                "F9 rejects TOOLING that changes a scoring rule",
+                any("TOOLING but changes a scoring rule" in e for e in parse_amendments()[1]),
+            )
+        )
+    finally:
+        if saved_amend2 is not None:
+            AMENDMENTS.write_text(saved_amend2)
+
+    # The execution boundary must refuse to open while readiness is closed.
+    rc_auth = main(["--authorize-execution"])
+    checks.append(("execution authorization is REFUSED while readiness is closed", rc_auth != 0))
+    checks.append(("...and no marker was written", not EXECUTION_MARKER.exists()))
+
     # G2 must reject evidence that passed on the HOLDOUT rather than on development.
     saved = X2_EVIDENCE.read_text() if X2_EVIDENCE.exists() else None
     try:
@@ -483,6 +686,42 @@ def main(argv: list[str]) -> int:
 
     if "--self-test" in argv:
         return self_test(contam, exposure)
+
+    if "--authorize-execution" in argv:
+        # The ONE-WAY BOUNDARY is crossed here and nowhere else. Refused unless both gates
+        # are open, so execution can never be authorized while a prerequisite is missing.
+        members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
+        lookup = exposure_ids(contam, exposure)
+        f_res, g_res = check_freeze(members, lookup), check_execution()
+        blocked = [n for n, ok, _ in f_res + g_res if not ok]
+        if blocked:
+            print("REFUSED: cannot authorize execution while these are open:\n  " + "\n  ".join(blocked))
+            return 1
+        if EXECUTION_MARKER.exists():
+            print(f"REFUSED: already authorized at {marker_commit()[:8]}")
+            return 1
+        EXECUTION_MARKER.write_text(
+            json.dumps(
+                {
+                    "authorized": True,
+                    "head_at_authorization": git("rev-parse", "HEAD"),
+                    "repository_fact": "no canonical score artifact existed at this commit",
+                    "process_attestation": (
+                        "The maintainer attests that no confirmatory H/X extraction had been run "
+                        "on any holdout member before this marker. This is an ATTESTATION, not a "
+                        "repository proof: git cannot establish that a command was never executed."
+                    ),
+                    "after_this_marker": [
+                        "confirmatory output may exist",
+                        "no further SUBSTANTIVE pre-execution amendment is permitted",
+                        "a scoring-rule change becomes a DEVIATION, not an amendment",
+                    ],
+                },
+                indent=1,
+            )
+        )
+        print(f"AUTHORIZED. Commit {EXECUTION_MARKER.relative_to(EV)} to make the boundary immutable.")
+        return 0
 
     members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
     lookup = exposure_ids(contam, exposure)

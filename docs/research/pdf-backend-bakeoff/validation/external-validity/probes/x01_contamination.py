@@ -154,19 +154,24 @@ def main() -> None:
                 xml_only.add(bill_id(*BILL_DIR_RE.match(d.name).groups()))
 
     # THIS STUDY'S OWN FROZEN POPULATION is committed under external-validity/holdout/, so
-    # from the moment it is frozen every class above reports it as exposed. Left alone,
-    # re-running this probe condemns the very documents it was run to protect, and F3 turns
-    # a valid holdout invalid. They are recorded in their own class and subtracted.
+    # from the moment it is frozen every class above reports it as exposed. That is TRUE
+    # and this inventory now says so: the ids are recorded in their own class AND left in
+    # their natural classes, so a FUTURE study reading this file correctly excludes them.
     #
-    # This is NOT a licence to reuse them: a FUTURE study must treat them as exposed, and
-    # the class name says so. It is scoped to the study that froze them.
+    # An earlier version SUBTRACTED them, to stop a re-derivation condemning the holdout.
+    # That was the wrong fix in the wrong place: "current exposure minus current
+    # membership" cannot distinguish exposure this study caused after freezing from
+    # exposure that existed before selection, so it forgives the second. Freshness is
+    # instead decided by x04's F3 against the PRE-SELECTION snapshot, which by
+    # construction cannot contain any exposure this study later caused -- so this file no
+    # longer needs to lie to protect the population.
     own: set[str] = set()
     membership = EV / "results" / "holdout_membership.json"
     if membership.exists():
         own = {m["id"] for m in json.loads(membership.read_text()).get("members", [])}
 
-    excluded_bills = sorted((wt_bills | hist_bills | named_bills | main_bills) - own)
-    excluded_reports = sorted((wt_reports | hist_reports | named_reports) - {o.upper() for o in own})
+    excluded_bills = sorted(wt_bills | hist_bills | named_bills | main_bills)
+    excluded_reports = sorted(wt_reports | hist_reports | named_reports)
 
     doc = {
         "protocol": "validation/external-validity/PRE-REGISTRATION.md",
@@ -192,9 +197,10 @@ def main() -> None:
                 "n": len(own),
                 "ids": sorted(own),
                 "note": (
-                    "This study's own frozen holdout, committed under external-validity/holdout/. "
-                    "Exposed by construction from the moment it is frozen, so it is subtracted "
-                    "HERE and only here. A future study must treat these as contaminated."
+                    "This study's own frozen holdout. Exposed by construction from the moment it "
+                    "was committed, and RECORDED AS EXPOSED in the classes above -- it is not "
+                    "subtracted. Freshness at admission is decided by x04's F3 against the "
+                    "pre-selection snapshot, not by this file. A future study must exclude these."
                 ),
             },
         },
@@ -220,8 +226,8 @@ def main() -> None:
     # property that actually matters is that re-deriving AFTER a write reproduces the same
     # answer, so the check re-derives with the freshly written file in place.
     again_bills, again_reports = scan_text()
-    a_bills = sorted((wt_bills | hist_bills | again_bills | main_bills) - own)
-    a_reports = sorted((wt_reports | hist_reports | again_reports) - {o.upper() for o in own})
+    a_bills = sorted(wt_bills | hist_bills | again_bills | main_bills)
+    a_reports = sorted(wt_reports | hist_reports | again_reports)
     if (a_bills, a_reports) != (doc["excluded_bills"], doc["excluded_reports"]):
         d_b = set(a_bills) ^ set(doc["excluded_bills"])
         d_r = set(a_reports) ^ set(doc["excluded_reports"])

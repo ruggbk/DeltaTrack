@@ -226,10 +226,10 @@ output in existence.
 ```json
 {"id": "A6", "class": "TOOLING", "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": ["probes/x03_select_holdout.py", "probes/x04_freeze_check.py",
-                   "probes/m3_boundaries.py", "probes/m3_selftest.py",
+ "files_touched": ["probes/x03_select_holdout.py",
                    "PRE-EXECUTION-AMENDMENTS.md",
-                   "holdout/CRPT-118HRPT146/CRPT-118HRPT146.pdf"]}
+                   "holdout/CRPT-118HRPT146/CRPT-118HRPT146.pdf"],
+ "note": "probes/x04_freeze_check.py moved to A11, which changes what the gate MEANS and is recorded SUBSTANTIVE."}
 ```
 
 **What changed.**
@@ -237,7 +237,10 @@ output in existence.
 1. `x03_select_holdout.py` — every download-rejection path now deletes the file, and a
    download must begin with `%PDF-` to be accepted (`accept_download`).
 2. `x04_freeze_check.py` — F7, F8 and F9 added, with self-tests.
-3. `m3_boundaries.py` / `m3_selftest.py` — new, per A3/A4.
+3. `m3_boundaries.py` / `m3_selftest.py` are declared under **A3/A4 only**. They
+   carry scoring semantics, so listing them here as TOOLING as well would let a
+   substantive change hide behind a tooling declaration — F9 now rejects exactly that,
+   and it rejected this file until the duplicate was removed.
 
 **Why it cannot change membership, with evidence rather than assertion.** The only
 behavioural change in the selector is that a non-PDF download is now rejected by a header
@@ -257,7 +260,8 @@ writes unmanifested files into the frozen population directory on any future run
 ```json
 {"id": "A7", "class": "TOOLING", "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": ["probes/x01_contamination.py", "results/contamination.json"]}
+ "files_touched": [], "superseded_by": "A8",
+ "note": "A8 now owns probes/x01_contamination.py and results/contamination.json as a SUBSTANTIVE change; declaring them here as well would let a substantive change hide behind a tooling declaration, which F9 rejects."}
 ```
 
 **Found while sweeping for the same class of defect as A6: a closed world that is not
@@ -295,6 +299,170 @@ matters: re-deriving with its own output present must be a no-op.
 
 **Can this affect membership or scoring?** No. Membership is unchanged, and the 17 members
 are exempted rather than re-selected.
+
+---
+
+## A8 — SUBSTANTIVE. Freshness is decided against a pre-selection snapshot, not by subtraction
+
+```json
+{"id": "A8", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x01_contamination.py", "results/contamination.json"],
+ "supersedes_text_in": "PRE-EXECUTION-AMENDMENTS.md A7"}
+```
+
+**The defect.** A7 subtracted the study's own membership from every exposure class. That
+cannot distinguish
+
+- **(A)** exposure this study *caused*, by committing its own frozen holdout — harmless;
+- **(B)** exposure that existed *before* selection, on a document picked anyway —
+  disqualifying,
+
+and it silently forgives **(B)**. "Current exposure minus current membership" is a proxy
+for freshness, not freshness.
+
+**Repair.** Freshness is now decided against the **pre-selection snapshot**: the
+contamination and design-exposure artifacts as they stood at the commit immediately before
+the population commit, read from git at `<population_commit>~1`. That state is immutable,
+cannot be edited by any later run, and **by construction cannot contain exposure this
+study later caused**. No exemption is therefore needed, and the own-study subtraction is
+**withdrawn**: `contamination.json` now records the 17 members as exposed in their natural
+classes, which is true and which a future study needs.
+
+**The audit result, which is the reason no reselection follows.** At `c399e9d` — the
+pre-selection state — the inventory carried **93 excluded bills, 33 report packages** and
+**no own-study class at all**, and **all 17 confirmatory members were absent from every
+disqualifying exposure class**. Reproduce with
+`git show c399e9d:…/results/contamination.json`.
+
+**Controls.** Two self-tests now encode the distinction: case **B** (contaminated before
+selection, later a member) must fail; case **A** (clean before selection, exposed only by
+its own frozen commit) must pass. A snapshot that already carries an own-study exemption is
+refused as not-pre-selection.
+
+**Class note.** Recorded SUBSTANTIVE rather than TOOLING because it changes what F3 *means*,
+even though it changes no score. It does not touch membership, and the audit shows the
+answer is unchanged.
+
+---
+
+## A9 — SUBSTANTIVE. `UNALIGNABLE` is withdrawn; severe corruption stays in the denominator
+
+```json
+{"id": "A9", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/m3_boundaries.py", "probes/m3_selftest.py"],
+ "supersedes_text_in": "PRE-EXECUTION-AMENDMENTS.md A4"}
+```
+
+**The defect, confirmed by the reviewer's own case.** A4 documented `UNALIGNABLE` as "the
+two sequences share no common subsequence", but the code declared it when the *chosen
+minimum-cost alignment* contained no exact match. **Measured:** `AB` against `BA` has
+LCS = 1 — it plainly shares `A` and `B` — yet minimum cost is two substitutions, the
+DIAGONAL tie-break selects them, and the implementation returned `UNALIGNABLE`. Prose and
+code disagreed.
+
+**The deeper problem, which decided the repair.** `UNALIGNABLE` made the heading
+`UNSCORABLE`, which removed it from the comparison — so the mechanism **excluded precisely
+the worst failures**. If X emitted garbage where H read the label correctly, X's
+catastrophic failure vanished instead of counting as `X_REGRESSES`. That is an exclusion
+that removes the distinguishing cases, the recurring defect of this study.
+
+**Repair: the category is withdrawn rather than repaired.** Severe corruption is a severe
+`TEXT_ERROR`; the heading is not clean and stays in the denominator. This needed neither of
+the two offered options, because the semantic mismatch disappears with the category.
+
+- `NO_REFERENCE` replaces it, and fires **only when the oracle has no text** for a heading
+  (unreadable region). A missing *reference* is an oracle limit; a garbage *extraction* is
+  an architecture result.
+- `no_common_subsequence` survives as a **diagnostic flag** with no effect on scoring.
+- An empty extraction now scores `TEXT_ERROR` on every printed character, not an exclusion.
+
+**Direction of effect:** strictly *safer for the incumbent*. Catastrophic X output now
+counts against X, where before it was discarded.
+
+**Tests.** All six adversarial pairs (`AB/BA`, `ABA/BAA`, `ABC/BAC`, `AAB/ABA`,
+`ABAB/BABA`, `AAAAAB/BAAAAA`) remain scorable and are not flagged as sharing nothing; a
+garbage extraction is `X_REGRESSES` in both directions; only a missing oracle reference is
+`UNSCORABLE`.
+
+---
+
+## A10 — SUBSTANTIVE. A count threshold may not be applied to a D-frame subsample
+
+```json
+{"id": "A10", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": [],
+ "supersedes_text_in": "PRE-REGISTRATION.md 5.5.1 and PRE-EXECUTION-AMENDMENTS.md A5"}
+```
+
+**The defect.** §5.5.1 allows a seeded 60-item subsample when the D-frame census exceeds the
+human adjudication budget, while A5's Rule 1 uses **raw counts** (`X_CORRECTS ≥ 5`,
+`X_REGRESSES == 0`). A raw count is valid on a **census** and not on a **sample**: five
+corrections among 60 sampled items says nothing definite about 150, and zero regressions
+among 60 does not establish zero among 150.
+
+**Repair, frozen.**
+
+> If the D-frame contains more items than the pre-set human budget can adjudicate, **Rule 1
+> cannot choose corrected extended glyph.** The outcome is `INSUFFICIENT_COMPARATIVE_EVIDENCE`.
+
+A seeded 60-item sample may still be adjudicated **for descriptive diagnosis**, and is
+reported as such, but the `≥5 / ==0` thresholds are **not** applied to it. No sampling
+estimator is built for a contingency the pilot suggests is rare.
+
+**Three outcomes, kept distinct, and never collapsed.**
+
+| outcome | meaning |
+|---|---|
+| `HYBRID_BY_PRIOR` | the pre-stated architectural prior stands; comparative evidence did not overturn it |
+| `EXTENDED_BY_RULE_1` | X met every condition of Rule 1 on a **full census** |
+| `INSUFFICIENT_COMPARATIVE_EVIDENCE` | Rule 1 could not be evaluated — census too large for the human budget, or a control failed |
+
+**"X failed to prove a win because we did not adjudicate enough items" must never be
+written as "H empirically beat X."** Hybrid remains the default by prior, not by victory.
+
+---
+
+## A11 — SUBSTANTIVE. A one-way execution boundary, and F9 hardening
+
+```json
+{"id": "A11", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The defect.** This file claimed F5 "mechanically establishes" that no confirmatory output
+existed. F5 checks `not scores.json.exists()`. That is a claim about **one artifact**; it
+cannot establish that nobody ran H or X locally, wrote output elsewhere, or deleted it.
+**Git cannot prove a computation was never performed.**
+
+**Repair — narrow the claim, then make the useful fact provable.**
+
+| claim | evidence |
+|---|---|
+| *no canonical score artifact exists* | **repository fact**, F5 |
+| *no confirmatory H/X extraction has been run* | **attestation** recorded in the marker; weaker, and labelled so |
+
+The provable and useful fact becomes **ordering**: *this scoring rule existed before the
+commit that authorized execution.* That is enforced by an **execution-start marker**,
+`results/EXECUTION-START.json`, emitted only by `x04 --authorize-execution`, which
+**refuses** while any freeze or readiness gate is open. After the marker:
+
+- no further `SUBSTANTIVE` pre-execution amendment is permitted — F9 rejects one whose
+  commit is not an ancestor of the marker;
+- a scoring-rule change becomes a **deviation**, not an amendment;
+- confirmatory output may exist, and F5 stops requiring its absence.
+
+**F9 hardening**, because a declaration must not be acceptable merely because a path is
+listed. F9 now also rejects: duplicate amendment ids; a `files_touched` path that neither
+exists nor was deleted; a file declared under **both** a SUBSTANTIVE and a TOOLING
+amendment; and a TOOLING amendment that claims to change a scoring rule.
+
+**F9 caught this file.** `m3_boundaries.py` and `m3_selftest.py` were declared under A3/A4
+(SUBSTANTIVE) *and* A6 (TOOLING) — the exact hiding pattern the check exists to prevent.
+The duplicate declaration was removed.
 
 ---
 

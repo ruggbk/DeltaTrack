@@ -70,7 +70,9 @@ WELD = "WELD"
 SPLIT = "SPLIT"
 OK = "OK"
 TEXT_ERROR = "TEXT_ERROR"
-UNALIGNABLE = "UNALIGNABLE"
+# Replaces the withdrawn UNALIGNABLE. It fires only when the ORACLE has no text for a
+# heading, never because an extractor produced something unrecognisable.
+NO_REFERENCE = "NO_REFERENCE"
 
 
 class HeadingOutcome(str, Enum):
@@ -142,6 +144,23 @@ def align(a: str, b: str) -> list[tuple[int | None, int | None]]:
     return out
 
 
+def longest_common_subsequence(a: str, b: str) -> int:
+    """Length of the LCS. DIAGNOSTIC ONLY -- it no longer gates scorability.
+
+    Kept because "these two strings share nothing" is worth reporting, and because the
+    previous implementation conflated it with "the chosen minimum-cost alignment happens
+    to contain no exact match", which are not the same thing: `AB` against `BA` shares the
+    subsequences `A` and `B`, yet a minimum-cost alignment is two substitutions.
+    """
+    prev = [0] * (len(b) + 1)
+    for ch in a:
+        cur = [0]
+        for j, ch2 in enumerate(b):
+            cur.append(prev[j] + 1 if ch == ch2 else max(prev[j + 1], cur[j]))
+        prev = cur
+    return prev[len(b)]
+
+
 @dataclass
 class BoundaryScore:
     outcomes: list[str] = field(default_factory=list)
@@ -149,30 +168,46 @@ class BoundaryScore:
     split: int = 0
     ok: int = 0
     text_error: int = 0
-    unalignable: bool = False
+    no_reference: bool = False
+    no_common_subsequence: bool = False  # diagnostic; does NOT affect `clean`
 
     @property
     def clean(self) -> bool:
-        return not self.unalignable and self.weld == 0 and self.split == 0 and self.text_error == 0
+        return not self.no_reference and self.weld == 0 and self.split == 0 and self.text_error == 0
 
 
 def score_heading(oracle: str, extracted: str) -> BoundaryScore:
-    """Boundary-level M3 for one heading, one architecture, against the oracle."""
+    """Boundary-level M3 for one heading, one architecture, against the oracle.
+
+    SEVERE CORRUPTION IS A SEVERE TEXT_ERROR, NOT AN EXCLUSION. An earlier version
+    declared the pair UNALIGNABLE when the chosen alignment held no exact match, and the
+    heading then became UNSCORABLE -- which removed from the comparison exactly the cases
+    where an architecture failed worst. If X emits garbage where H reads the label
+    correctly, that must count as X_REGRESSES, not vanish.
+
+    The only thing that makes a heading unscorable is a MISSING REFERENCE: the oracle has
+    no text for it (unreadable region). That is a limit of the oracle, never a result of
+    an extractor.
+    """
     o_chars, o_bounds = decompose(oracle)
     e_chars, e_bounds = decompose(extracted)
     res = BoundaryScore()
 
-    if not o_chars or not e_chars:
-        res.unalignable = True
-        res.outcomes = [UNALIGNABLE]
+    if not o_chars:
+        res.no_reference = True
+        res.outcomes = [NO_REFERENCE]
+        return res
+
+    res.no_common_subsequence = longest_common_subsequence(o_chars, e_chars) == 0
+
+    if not e_chars:
+        # The extractor produced nothing. Every printed character is lost: a maximal text
+        # error against this heading, and the heading stays in the denominator.
+        res.text_error = len(o_chars)
+        res.outcomes = [TEXT_ERROR] * len(o_chars)
         return res
 
     pairs = align(o_chars, e_chars)
-    # UNALIGNABLE means genuinely nothing in common, not "worse than a threshold".
-    if not any(oi is not None and ei is not None and o_chars[oi] == e_chars[ei] for oi, ei in pairs):
-        res.unalignable = True
-        res.outcomes = [UNALIGNABLE]
-        return res
 
     # Character defects: substitutions and indels.
     o_to_e: dict[int, int] = {}
@@ -207,7 +242,9 @@ def score_heading(oracle: str, extracted: str) -> BoundaryScore:
 def heading_outcome(oracle: str, hybrid: str, extended: str) -> tuple[HeadingOutcome, BoundaryScore, BoundaryScore]:
     """The DECISION-RULE unit: one heading occurrence, H versus X against the oracle."""
     h, x = score_heading(oracle, hybrid), score_heading(oracle, extended)
-    if h.unalignable or x.unalignable:
+    # UNSCORABLE only when the REFERENCE is missing. An extractor's failure -- however
+    # severe -- keeps the heading in the denominator and counts against that architecture.
+    if h.no_reference or x.no_reference:
         return HeadingOutcome.UNSCORABLE, h, x
     if h.clean and x.clean:
         return HeadingOutcome.BOTH_CLEAN, h, x
