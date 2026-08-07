@@ -594,11 +594,11 @@ select or deselect a document; membership is unchanged and re-verified at 17 by 
 ## A15 — SUBSTANTIVE. The freeze and the boundary were snapshots, not historical facts
 
 ```json
-{"id": "A15", "class": "SUBSTANTIVE", "commits": [],
+{"id": "A15", "class": "SUBSTANTIVE", "commits": ["2b07a60"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"],
- "note": "This pass's own commit is declared by the commit that lands it; F9 requires it."}
+ "note": "Declared after the fact by a LEDGER-ONLY commit, which is itself exempt from F9 -- so the loop closes rather than requiring an infinite regress of declarations."}
 ```
 
 Five defects, each an instance of *the gate checks a proxy for the property*.
@@ -639,7 +639,7 @@ as a deviation rather than silently moving to the new version.
 ## A16 — SUBSTANTIVE. Execution readiness did not cover the machinery that produces the answer
 
 ```json
-{"id": "A16", "class": "SUBSTANTIVE", "commits": [],
+{"id": "A16", "class": "SUBSTANTIVE", "commits": ["2b07a60"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x04_freeze_check.py"]}
