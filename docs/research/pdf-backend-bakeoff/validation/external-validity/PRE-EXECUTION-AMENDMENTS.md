@@ -1552,6 +1552,114 @@ EXECUTION FORBIDDEN**.
 
 ---
 
+## A24 — BLOCKING AMBIGUITY. Two frozen rules do not determine what the code should do
+
+```json
+{"id": "A24", "class": "SUBSTANTIVE",
+ "commits": ["db3c0d2"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/run_hybrid.py", "probes/pdfium_extended_corrected.py",
+                   "probes/reconstruct_extended_corrected.py", "probes/run_extended.py",
+                   "probes/x2_verify.py", "probes/x11_provenance_chain.py",
+                   "probes/x12_skeleton_eligibility.py", "probes/x13_x_arm.py"],
+ "status": "OPEN -- a ruling is required before execution readiness can open"}
+```
+
+Building the arms exposed two places where the frozen protocol does not determine the
+executable behaviour, and in both the candidate readings give **different outcomes on real
+development material**. Per the standing instruction to stop at an ambiguity rather than
+code through it, neither is resolved here.
+
+### A24.1 — "the engine's spaces" in X2-b *(blocking; decides whether X is scorable)*
+
+X-2 freezes two assertions. X2-a is unambiguous and **passes**. X2-b says *"re-admitting the
+engine's spaces changes no reconstructed line"*, and **"the engine's spaces" has two
+defensible readings that disagree**:
+
+| reading | textual support | result |
+|---|---|---|
+| **generated only** — spaces PDFium *invented* | X-2's own sentence that not carrying U+0020 "excludes **engine-invented** spaces without the Experimental predicate"; X2-b's "the boundaries **they** were supplying" | **PASSES** on both development documents |
+| **all U+0020** the contract drops | X-2's rationale "a space carries **no ink**", equally true of a content-stream space; X2-a is stated over **all** codepoint-32 glyphs | **FAILS** on `114-hr-2029/4` |
+
+**MEASURED** ([`results/x2_contract_assertions.json`](results/x2_contract_assertions.json)):
+one differing line in 191 — the rule yields `H.R. 2029` where the engine had `H. R. 2029`.
+**Both of those spaces are `generated=False`**: real content-stream spaces PDFium never
+decided, which is precisely why the two readings separate here.
+
+**The mechanism, measured rather than inferred.** On that line `'.'→'R'` and `'.'→'2'` have
+an **identical 5.940 pt gap at size 36**, and the ported rule returns `False` for the first
+and `True` for the second. `wants_space` scales its threshold by the **larger of the two
+advances**: `R` (24.48) lifts the threshold to 6.12 pt, above the gap; `2` (20.16) leaves it
+at 5.04 pt, below. So the rule misses a real word boundary whenever a wide glyph follows a
+narrow one at display size. That is a property of the port, not a defect in this adapter.
+
+**Why it is blocking.** §5 states that an X2-b failure means "the rule is not doing the work
+and the run is **void for X**". So this single sentence decides whether the X arm can be
+scored at all. `x2_verify` reports **both** readings and sets the headline field to the
+**stricter** one, so G2 cannot open on an interpretation chosen by the implementation.
+
+**Not adopted here**, and each needs review: (a) rule that X2-b means generated spaces only;
+(b) keep the strict reading and treat the display-type miss as a real X defect, voiding X;
+(c) keep the strict reading with a stated tolerance — but a tolerance is a scoring-rule
+change and cannot be introduced by the implementation.
+
+### A24.2 — geometric eligibility admits every content-stream space *(blocking)*
+
+A19/A21 froze eligibility as **geometric**, specifically to avoid a codepoint filter, and
+A21 measured it in **one direction only**: "the number excluded *only* by a codepoint rule
+is 0". That check cannot see what the rule **includes**.
+
+**MEASURED** ([`results/x12_skeleton_eligibility.json`](results/x12_skeleton_eligibility.json)):
+PDFium reports a positive-area box for a content-stream U+0020 — about **3.6 pt wide and
+0.014 pt tall**, against **7.9 pt** for a capital, a **568×** height ratio. It clears
+`(y1 − y0) > 0` by a hair, so `eligible()` admits it and every real word space becomes a
+**neutral skeleton member**.
+
+| | `114-hr-2029/4` | `118-s-4795/1` |
+|---|---|---|
+| U+0020 admitted to the skeleton | 229 | 1398 |
+| neutral lines containing a space gid | **141 / 205 (69 %)** | **190 / 205 (93 %)** |
+| lines showing X source-glyph loss | **150 / 151** | **157 / 158** |
+
+**Why it is blocking.** X-2 drops every U+0020, so X can never emit these gids. They sit
+permanently outside `common` and permanently inside `X_SOURCE_GLYPH_LOSS`, which is
+therefore **structurally saturated and currently uninformative** — a reader would reasonably
+read "X lost source glyphs on 157 of 158 lines" as X dropping content. They also widen each
+neutral line's x-extent, which feeds region geometry and the **oracle's rendered bbox**.
+
+**Not adopted here.** A minimum ink height would separate a space from a capital by ~568×
+and would stay **purely geometric** — it needs no codepoint, so it does not reopen the
+frozen "geometric eligibility" principle — but **choosing the threshold is a new
+outcome-affecting decision** and belongs in an amendment. The frozen rule is implemented
+faithfully and its consequence is measured.
+
+### What was built, and what it is held to
+
+Five result-bearing components are committed, each carrying
+`frozen rule → executable behaviour → test → evidence` in its header:
+`run_hybrid.py`, `pdfium_extended_corrected.py`, `reconstruct_extended_corrected.py`,
+`run_extended.py`, `x2_verify.py`.
+
+**The X contract is corrected against a measured defect.**
+`validation/phase2/pdfium_extended.py` keys its undecodable rule on `cp < 0x20`, so U+0020
+fell through: **1142 of 7382 glyphs (15.5 %)** on six pages, **947 of them PDFium's own
+inventions**. That is phase 3's D2 finding, and X2-a failing on that adapter is now a
+standing negative control.
+
+**The A19 one-skeleton invariant is asserted, not assumed.** Both runners call the same
+`run_hybrid.neutral_skeleton`, and `x13` checks per page that the results are identical.
+Deriving the skeleton from X's own glyphs would have omitted every content-stream space and
+silently given the two arms different adjudication units.
+
+**DEVELOPMENT observations, which are explicitly not results** — no holdout document is
+opened, no oracle exists, no decision rule has been evaluated: M0a 35/141 and 36/148;
+**M0b 0 on both**, consistent with §3.3 holding line clustering identical across the arms.
+
+**Population impact: none.** No membership change, no scoring, no holdout document opened.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
@@ -1596,6 +1704,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `e277a3e` | `x11_provenance_chain.py` | source-glyph provenance (A22) |
 | `7644687` | `x09_skeleton_cross_engine.py` | cross-engine gate frozen (A22) |
 | `2f548f0` | `neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x11_provenance_chain.py` | grouping ≠ coverage; M0 risk set (A23) |
+| `db3c0d2` | `run_hybrid.py`, `pdfium_extended_corrected.py`, `reconstruct_extended_corrected.py`, `run_extended.py`, `x2_verify.py`, `x11_provenance_chain.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | H/X arms; two frozen-text ambiguities (A24) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
