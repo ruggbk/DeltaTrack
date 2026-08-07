@@ -41,26 +41,47 @@ HERE = Path(__file__).resolve().parent
 SPIKE = HERE.parent
 MANIFEST = HERE / "PRESERVED-MANIFEST.txt"
 
-# path relative to the spike root -> (state, why)
+# path relative to the spike root -> (allowed states, why)
 #
 # CHANGED    the file is present and its bytes differ from the frozen manifest
 # UNREADABLE the file is not present (gitignored, or otherwise absent from a clean clone)
-EXCEPTIONS: dict[str, tuple[str, str]] = {
-    "README.md": ("CHANGED", "pointer block to validation/, added 2026-08-06; additions only"),
-    "RESULTS.md": ("CHANGED", "pointer block to validation/, added 2026-08-06; additions only"),
-    "RESULTS-HYBRID.md": ("CHANGED", "pointer block to validation/, added 2026-08-06; additions only"),
+#
+# Most entries allow exactly one state. A set of two is only correct where the state is a
+# property of the ENVIRONMENT rather than of the tree, and there is exactly one such case.
+EXCEPTIONS: dict[str, tuple[frozenset[str], str]] = {
+    "README.md": (frozenset({"CHANGED"}), "pointer block to validation/, added 2026-08-06; additions only"),
+    "RESULTS.md": (frozenset({"CHANGED"}), "pointer block to validation/, added 2026-08-06; additions only"),
+    "RESULTS-HYBRID.md": (
+        frozenset({"CHANGED"}),
+        "pointer block to validation/, added 2026-08-06; additions only",
+    ),
     "probes/js/package-lock.json": (
-        "UNREADABLE",
-        "gitignored per probes/README.md; never present in a clean clone, and was already "
-        "unreadable when the manifest was written",
+        frozenset({"UNREADABLE", "CHANGED"}),
+        "gitignored per probes/README.md, so its state depends on whether `npm install` has "
+        "been run here: ABSENT in a clean clone, and PRESENT-but-different afterwards, "
+        "because npm regenerates the lockfile rather than restoring the frozen bytes. It can "
+        "never read OK, and it was already unreadable when the manifest was written. This is "
+        "the only entry whose state is a property of the environment rather than of the tree",
     ),
     # --- repository hygiene, 2026-08-07. No finding, table or number is touched by any of
     # these; they exist because the 88-file holdout corpus stopped being committed and the
     # probes that read it had to stop failing open. See probes/README.md.
-    "probes/README.md": ("CHANGED", "hygiene: documents fetch_holdout.py and the fetched-not-committed holdout"),
-    "probes/score_confirmatory.py": ("CHANGED", "hygiene: p2_documents raises on missing holdout files"),
-    "probes/score_migration.py": ("CHANGED", "hygiene: holdout_pairs raises on missing holdout files"),
-    "probes/confirm_safe_failure.py": ("CHANGED", "hygiene: required P3 fixtures raise instead of being skipped"),
+    "probes/README.md": (
+        frozenset({"CHANGED"}),
+        "hygiene: documents fetch_holdout.py and the fetched-not-committed holdout",
+    ),
+    "probes/score_confirmatory.py": (
+        frozenset({"CHANGED"}),
+        "hygiene: p2_documents raises on missing holdout files",
+    ),
+    "probes/score_migration.py": (
+        frozenset({"CHANGED"}),
+        "hygiene: holdout_pairs raises on missing holdout files",
+    ),
+    "probes/confirm_safe_failure.py": (
+        frozenset({"CHANGED"}),
+        "hygiene: required P3 fixtures raise instead of being skipped",
+    ),
 }
 
 
@@ -87,12 +108,12 @@ def observe(entries: list[tuple[str, str]]) -> dict[str, str]:
     return diverged
 
 
-def report(entries: list[tuple[str, str]], expected: dict[str, tuple[str, str]]) -> int:
+def report(entries: list[tuple[str, str]], expected: dict[str, tuple[frozenset[str], str]]) -> int:
     seen = observe(entries)
     ok = len(entries) - len(seen)
 
     undeclared = {r: s for r, s in seen.items() if r not in expected}
-    wrong_state = {r: (s, expected[r][0]) for r, s in seen.items() if r in expected and s != expected[r][0]}
+    wrong_state = {r: (s, expected[r][0]) for r, s in seen.items() if r in expected and s not in expected[r][0]}
     no_longer = {r: v for r, v in expected.items() if r not in seen}
 
     print(f"{len(entries)} manifest entries: {ok} byte-identical, {len(seen)} diverged")
@@ -115,11 +136,12 @@ def report(entries: list[tuple[str, str]], expected: dict[str, tuple[str, str]])
         )
         problems += 1
     for rel, (got, want) in sorted(wrong_state.items()):
-        print(f"\nFAIL: {rel} is {got}, declared as {want}.")
+        print(f"\nFAIL: {rel} is {got}, declared as {'/'.join(sorted(want))}.")
         problems += 1
-    for rel, (state, why) in sorted(no_longer.items()):
+    for rel, (states, why) in sorted(no_longer.items()):
         print(
-            f"\nFAIL: {rel} now matches the manifest, but is declared {state} ({why}). "
+            f"\nFAIL: {rel} now matches the manifest, but is declared "
+            f"{'/'.join(sorted(states))} ({why}). "
             f"The change the exception describes is no longer in the tree."
         )
         problems += 1
@@ -147,12 +169,17 @@ def main() -> int:
         bad = {k: v for k, v in EXCEPTIONS.items() if k != "RESULTS.md"}
         rc1 = report(entries, bad)
         print("\n--- control 2: an exception is invented for an unchanged file")
-        bad2 = {**EXCEPTIONS, "LICENSING.md": ("CHANGED", "invented")}
+        bad2 = {**EXCEPTIONS, "LICENSING.md": (frozenset({"CHANGED"}), "invented")}
         rc2 = report(entries, bad2)
         print("\n--- control 3: no exceptions declared at all")
         rc3 = report(entries, {})
-        good = rc1 == 1 and rc2 == 1 and rc3 == 1
-        print(f"\nself-test {'PASSED' if good else 'FAILED'}: controls returned {rc1}, {rc2}, {rc3}, all must be 1")
+        print("\n--- control 4: a declared state that is the wrong one")
+        bad4 = {**EXCEPTIONS, "README.md": (frozenset({"UNREADABLE"}), "wrong state")}
+        rc4 = report(entries, bad4)
+        good = rc1 == 1 and rc2 == 1 and rc3 == 1 and rc4 == 1
+        print(
+            f"\nself-test {'PASSED' if good else 'FAILED'}: controls returned {rc1}, {rc2}, {rc3}, {rc4}, all must be 1"
+        )
         return 0 if good else 1
 
     return report(entries, EXCEPTIONS)
