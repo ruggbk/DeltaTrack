@@ -1,6 +1,6 @@
 # 20. Separate candidate generation, identity evidence, correspondence assignment and change classification
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-07
 
 ## Context
