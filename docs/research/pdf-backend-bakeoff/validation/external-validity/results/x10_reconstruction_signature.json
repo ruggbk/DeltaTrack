@@ -1,6 +1,6 @@
 {
  "population": "SYNTHETIC only -- no holdout opened, no architecture run",
- "supersedes": "A21's D-frame membership rule (any line not SAME)",
+ "supersedes": "A21's D-frame membership rule (any line not SAME); A22's gid-subset signature",
  "defect": [
   {
    "scenario": "H merges N0+N1, X emits them separately",
@@ -539,17 +539,389 @@
    "REGION_IN_D_FRAME": true
   }
  ],
+ "coverage_vs_grouping": [
+  {
+   "case": "same one-line grouping, X drops a glyph",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "AC",
+   "common_gids": [
+    0,
+    2
+   ],
+   "expected": {
+    "text": true,
+    "segmentation": false,
+    "diagnostic": "X_LOSS"
+   },
+   "observed": {
+    "text": true,
+    "segmentation": false,
+    "diagnostic": "X_LOSS"
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "same one-line grouping, X duplicates a glyph",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "ABBC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": true,
+    "segmentation": false,
+    "diagnostic": "X_DUP"
+   },
+   "observed": {
+    "text": true,
+    "segmentation": false,
+    "diagnostic": "X_DUP"
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "same glyphs, 1 emitted line vs 2",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "A\nBC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": true,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": true,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "H merges N0+N1, X emits separately",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "ABC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "H merges N0+N1, X emits separately",
+   "line": [
+    1,
+    1
+   ],
+   "h_text": "DEF",
+   "x_text": "DEF",
+   "common_gids": [
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "H merges N0+N1 AND loses gid 5, X emits separately",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "ABC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "H merges N0+N1 AND loses gid 5, X emits separately",
+   "line": [
+    1,
+    1
+   ],
+   "h_text": "DE",
+   "x_text": "DEF",
+   "common_gids": [
+    3,
+    4
+   ],
+   "expected": {
+    "text": true,
+    "segmentation": true,
+    "diagnostic": "H_LOSS"
+   },
+   "observed": {
+    "text": true,
+    "segmentation": true,
+    "diagnostic": "H_LOSS"
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "both arms lose the same glyph, grouping identical",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "AC",
+   "x_text": "AC",
+   "common_gids": [
+    0,
+    2
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": false,
+    "diagnostic": "SHARED_LOSS"
+   },
+   "observed": {
+    "text": false,
+    "segmentation": false,
+    "diagnostic": "SHARED_LOSS"
+   },
+   "in_d_frame": false
+  },
+  {
+   "case": "both arms merge N0+N1 identically",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "ABC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": false,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": false,
+    "diagnostic": null
+   },
+   "in_d_frame": false
+  },
+  {
+   "case": "both arms merge N0+N1 identically",
+   "line": [
+    1,
+    1
+   ],
+   "h_text": "DEF",
+   "x_text": "DEF",
+   "common_gids": [
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": false,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": false,
+    "diagnostic": null
+   },
+   "in_d_frame": false
+  },
+  {
+   "case": "different merge spans (H: N0+N1, X: N1+N2)",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "ABC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "different merge spans (H: N0+N1, X: N1+N2)",
+   "line": [
+    1,
+    1
+   ],
+   "h_text": "DEF",
+   "x_text": "DEF",
+   "common_gids": [
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "different merge spans (H: N0+N1, X: N1+N2)",
+   "line": [
+    1,
+    2
+   ],
+   "h_text": "GHI",
+   "x_text": "GHI",
+   "common_gids": [
+    6,
+    7,
+    8
+   ],
+   "expected": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": false,
+    "segmentation": true,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  },
+  {
+   "case": "spacing-only difference",
+   "line": [
+    1,
+    0
+   ],
+   "h_text": "ABC",
+   "x_text": "A BC",
+   "common_gids": [
+    0,
+    1,
+    2
+   ],
+   "expected": {
+    "text": true,
+    "segmentation": false,
+    "diagnostic": null
+   },
+   "observed": {
+    "text": true,
+    "segmentation": false,
+    "diagnostic": null
+   },
+   "in_d_frame": true
+  }
+ ],
+ "denominator": {
+  "population": "1 discordant + 1 agreeing + 3 jointly absent",
+  "all_lines_denominator": 5,
+  "risk_set_denominator": 2,
+  "M0_any_rate_risk_set": 0.5,
+  "M0_any_rate_all_lines_superseded": 0.2
+ },
+ "frame_conditioning": {
+  "fine_frame": {
+   "lines": 3,
+   "M0_any": 2,
+   "rate": 0.666667
+  },
+  "coarse_frame": {
+   "lines": 2,
+   "M0_any": 1,
+   "rate": 0.5
+  }
+ },
  "m0": {
-  "neutral_lines": 5,
+  "neutral_lines_in_scope": 5,
+  "risk_set": 4,
   "M0a_text": 2,
   "M0b_segmentation": 2,
   "M0_any": 3,
   "M0b_only_segmentation": 1,
   "M0a_only_text": 1,
   "both_absent": 1,
-  "M0a_text_rate": 0.4,
-  "M0b_segmentation_rate": 0.4,
-  "M0_any_rate": 0.6
+  "M0b_defined": 4,
+  "M0a_text_rate": 0.5,
+  "M0b_segmentation_rate": 0.5,
+  "M0_any_rate": 0.75,
+  "M0b_rate_on_defined": 0.5,
+  "M0_any_rate_ALL_LINES_superseded": 0.6
  },
  "tests": [
   {
@@ -776,9 +1148,79 @@
    "implication": "the arm genuinely broke FAMILY across two printed lines"
   },
   {
+   "test": "a dropped character is TEXT discordance with NO segmentation discordance",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "...and reaches M3 as a dirty X against a clean H",
+   "expected": [
+    "X_REGRESSES",
+    true,
+    false
+   ],
+   "observed": [
+    "X_REGRESSES",
+    true,
+    false
+   ],
+   "pass": true,
+   "implication": "M3 consumes text and oracle evidence, never an M0b label"
+  },
+  {
+   "test": "...scored as a text error, not a boundary error",
+   "expected": [
+    1,
+    0,
+    0
+   ],
+   "observed": [
+    1,
+    0,
+    0
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "a duplicated character is TEXT discordance with NO segmentation discordance",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "implication": "EmittedLine.gids is a set, so a repeated gid cannot reach the signature"
+  },
+  {
+   "test": "...and reaches M3 as a dirty X",
+   "expected": [
+    "X_REGRESSES",
+    false
+   ],
+   "observed": [
+    "X_REGRESSES",
+    false
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
    "test": "M0's components decompose the population exactly",
    "expected": {
-    "neutral_lines": 5,
+    "in_scope": 5,
+    "risk_set": 4,
     "M0a_text": 2,
     "M0b_segmentation": 2,
     "M0_any": 3,
@@ -787,7 +1229,8 @@
     "both_absent": 1
    },
    "observed": {
-    "neutral_lines": 5,
+    "in_scope": 5,
+    "risk_set": 4,
     "M0a_text": 2,
     "M0b_segmentation": 2,
     "M0_any": 3,
@@ -804,6 +1247,32 @@
    "observed": true,
    "pass": true,
    "implication": ""
+  },
+  {
+   "test": "the risk set excludes BOTH_ABSENT and nothing else",
+   "expected": [
+    4,
+    1
+   ],
+   "observed": [
+    4,
+    1
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "the denominator change RAISES the rate, so it cannot be motivated by the number",
+   "expected": [
+    0.75,
+    0.6
+   ],
+   "observed": [
+    0.75,
+    0.6
+   ],
+   "pass": true,
+   "implication": "RQ1 seeks an equivalence statement, so a higher discordance rate makes the study's own claim harder to support, not easier"
   },
   {
    "test": "TEXT_DISCORDANCE returns both True and False on the matrix",
@@ -895,6 +1364,78 @@
    "observed": true,
    "pass": true,
    "implication": ""
+  },
+  {
+   "test": "the signature is INSENSITIVE to a repeated gid",
+   "expected": [
+    [
+     [
+      0,
+      1,
+      2
+     ],
+     []
+    ]
+   ],
+   "observed": [
+    [
+     [
+      0,
+      1,
+      2
+     ],
+     []
+    ]
+   ],
+   "pass": true,
+   "implication": "EmittedLine.gids is a set, so duplication could never move the signature -- measured, not assumed: duplication was already classified correctly before the common-domain repair, and only LOSS was mis-classified"
+  },
+  {
+   "test": "coverage defects and grouping defects are classified independently",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": "loss and duplication must never move the segmentation metric; a merge must still be detected when the merging arm ALSO loses a glyph"
+  },
+  {
+   "test": "the two denominators give materially different rates on the same population",
+   "expected": [
+    0.5,
+    0.2
+   ],
+   "observed": [
+    0.5,
+    0.2
+   ],
+   "pass": true,
+   "implication": "3 of 5 lines are page furniture neither arm emitted; counting them as agreements makes the reported rate a function of how much chrome the document carries"
+  },
+  {
+   "test": "jointly absent lines are retained as a raw count, not discarded",
+   "expected": 3,
+   "observed": 3,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "identical architecture output scores a DIFFERENT M0 under a different frame",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": "so RQ1's reported numbers are conditional on the PDFium frame, and a failed cross-engine control must qualify RQ1 as well as RQ2"
+  },
+  {
+   "test": "...while the per-line comparative verdict itself survived both frames",
+   "expected": [
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true
+   ],
+   "pass": true,
+   "implication": "the conditioning is on denominators and populations, NOT on verdict direction -- stated precisely rather than overclaimed"
   }
  ],
  "failures": []

@@ -381,6 +381,40 @@ def part4_m3_preserved() -> None:
         "the arm genuinely broke FAMILY across two printed lines",
     )
 
+    # (d) X DROPS a character -> a text defect, and NOT a segmentation-derived one
+    x_drop = head_line(([g for g in all_g if g != 5], 4))
+    st4 = line_state(h_one, x_drop, HEAD, HEAD_OWNER)
+    outcome4, hs4, xs4 = heading_outcome(ORACLE, st4["h_text"], st4["x_text"])
+    check(
+        "a dropped character is TEXT discordance with NO segmentation discordance",
+        (True, False),
+        (text_discordance(st4), segmentation_discordance(st4)),
+    )
+    check(
+        "...and reaches M3 as a dirty X against a clean H",
+        (HeadingOutcome.X_REGRESSES, True, False),
+        (outcome4, hs4.clean, xs4.clean),
+        "M3 consumes text and oracle evidence, never an M0b label",
+    )
+    check("...scored as a text error, not a boundary error", (1, 0, 0), (xs4.text_error, xs4.weld, xs4.split))
+
+    # (e) X DUPLICATES a character -> likewise a text defect only
+    x_dup_cells = list(head_line((all_g, 5))[0].cells)
+    x_dup = [EmittedLine(x_dup_cells[:2] + [x_dup_cells[1]] + x_dup_cells[2:])]
+    st5 = line_state(h_one, x_dup, HEAD, HEAD_OWNER)
+    outcome5, _hs5, xs5 = heading_outcome(ORACLE, st5["h_text"], st5["x_text"])
+    check(
+        "a duplicated character is TEXT discordance with NO segmentation discordance",
+        (True, False),
+        (text_discordance(st5), segmentation_discordance(st5)),
+        "EmittedLine.gids is a set, so a repeated gid cannot reach the signature",
+    )
+    check(
+        "...and reaches M3 as a dirty X",
+        (HeadingOutcome.X_REGRESSES, False),
+        (outcome5, xs5.clean),
+    )
+
 
 # --------------------------------------------------------------------------- part 5
 
@@ -398,7 +432,8 @@ def part5_m0() -> dict:
     check(
         "M0's components decompose the population exactly",
         {
-            "neutral_lines": 5,
+            "in_scope": 5,
+            "risk_set": 4,
             "M0a_text": 2,
             "M0b_segmentation": 2,
             "M0_any": 3,
@@ -407,7 +442,8 @@ def part5_m0() -> dict:
             "both_absent": 1,
         },
         {
-            "neutral_lines": got["neutral_lines"],
+            "in_scope": got["neutral_lines_in_scope"],
+            "risk_set": got["risk_set"],
             "M0a_text": got["M0a_text"],
             "M0b_segmentation": got["M0b_segmentation"],
             "M0_any": got["M0_any"],
@@ -418,6 +454,18 @@ def part5_m0() -> dict:
         "M0b_only is the count that was structurally unreachable under the superseded rule",
     )
     check("M0_any is the UNION, never a sum", True, got["M0_any"] < got["M0a_text"] + got["M0b_segmentation"])
+    check(
+        "the risk set excludes BOTH_ABSENT and nothing else",
+        (4, 1),
+        (got["risk_set"], got["neutral_lines_in_scope"] - got["risk_set"]),
+    )
+    check(
+        "the denominator change RAISES the rate, so it cannot be motivated by the number",
+        (0.75, 0.6),
+        (got["M0_any_rate"], got["M0_any_rate_ALL_LINES_superseded"]),
+        "RQ1 seeks an equivalence statement, so a higher discordance rate makes the "
+        "study's own claim harder to support, not easier",
+    )
     return got
 
 
@@ -444,24 +492,246 @@ def part6_negative_controls() -> None:
             region_discordance([], h_anchors=("ACCOUNT: X",), x_anchors=()),
         ],
     )
-    # the signature itself must be able to distinguish, not merely to be equal
-    sig_merge = reconstruction_signature([el(0, 1, 2, 3, 4, 5)], LINES[0], OWNER)
-    sig_plain = reconstruction_signature([el(0, 1, 2)], LINES[0], OWNER)
-    sig_split = reconstruction_signature([el(0), el(1, 2)], LINES[0], OWNER)
-    check("the signature separates merge, plain and split", 3, len({sig_merge, sig_plain, sig_split}))  # noqa: E501
+    # the signature itself must be able to distinguish, not merely to be equal. ALL is the
+    # jointly observed domain when both arms emitted every glyph, which is the condition
+    # under which grouping alone is being varied.
+    all_gids = set(range(9))
+    sig_merge = reconstruction_signature([el(0, 1, 2, 3, 4, 5)], LINES[0], OWNER, all_gids)
+    sig_plain = reconstruction_signature([el(0, 1, 2)], LINES[0], OWNER, all_gids)
+    sig_split = reconstruction_signature([el(0), el(1, 2)], LINES[0], OWNER, all_gids)
+    check("the signature separates merge, plain and split", 3, len({sig_merge, sig_plain, sig_split}))
     check(
         "the signature is INSENSITIVE to an inserted space",
-        reconstruction_signature([el(0, 1, 2)], LINES[0], OWNER),
-        reconstruction_signature([el(0, 1, 2, insert_after=0)], LINES[0], OWNER),
+        reconstruction_signature([el(0, 1, 2)], LINES[0], OWNER, all_gids),
+        reconstruction_signature([el(0, 1, 2, insert_after=0)], LINES[0], OWNER, all_gids),
         "a word-space decision must never register as a segmentation difference, or M3 "
         "would see a boundary error that does not exist",
     )
     check(
         "the signature names the merge SPAN, so different spans are distinguishable",
         True,
-        reconstruction_signature([el(3, 4, 5, 0, 1, 2)], LINES[1], OWNER)
-        != reconstruction_signature([el(3, 4, 5, 6, 7, 8)], LINES[1], OWNER),
+        reconstruction_signature([el(3, 4, 5, 0, 1, 2)], LINES[1], OWNER, all_gids)
+        != reconstruction_signature([el(3, 4, 5, 6, 7, 8)], LINES[1], OWNER, all_gids),
     )
+    check(
+        "the signature is INSENSITIVE to a repeated gid",
+        reconstruction_signature([el(0, 1, 2)], LINES[0], OWNER, all_gids),
+        reconstruction_signature([EmittedLine([(0, "A"), (1, "B"), (1, "B"), (2, "C")])], LINES[0], OWNER, all_gids),
+        "EmittedLine.gids is a set, so duplication could never move the signature -- "
+        "measured, not assumed: duplication was already classified correctly before the "
+        "common-domain repair, and only LOSS was mis-classified",
+    )
+
+
+# --------------------------------------------------------------------------- part 7
+#
+# COVERAGE IS NOT GROUPING. The signature originally read the exact emitted gid subset, so
+# pure character LOSS moved it and was reported as a segmentation difference. These cases
+# pin the separation in both directions: a coverage defect must not manufacture a topology
+# difference, and a coverage defect must not be able to HIDE one either.
+
+# gids 0,1,2 = N0 (ABC); 3,4,5 = N1 (DEF); 6,7,8 = N2 (GHI)
+COVERAGE_CASES = [
+    # name, H, X, {line: (expect_text, expect_segmentation, expect_diagnostic)}
+    (
+        "same one-line grouping, X drops a glyph",
+        [el(0, 1, 2)],
+        [el(0, 2)],
+        {N0: (True, False, "X_LOSS")},
+    ),
+    (
+        "same one-line grouping, X duplicates a glyph",
+        [el(0, 1, 2)],
+        [EmittedLine([(0, "A"), (1, "B"), (1, "B"), (2, "C")])],
+        {N0: (True, False, "X_DUP")},
+    ),
+    (
+        "same glyphs, 1 emitted line vs 2",
+        [el(0, 1, 2)],
+        [el(0), el(1, 2)],
+        {N0: (True, True, None)},
+    ),
+    (
+        "H merges N0+N1, X emits separately",
+        [el(0, 1, 2, 3, 4, 5)],
+        [el(0, 1, 2), el(3, 4, 5)],
+        {N0: (False, True, None), N1: (False, True, None)},
+    ),
+    (
+        "H merges N0+N1 AND loses gid 5, X emits separately",
+        [el(0, 1, 2, 3, 4)],
+        [el(0, 1, 2), el(3, 4, 5)],
+        {N0: (False, True, None), N1: (True, True, "H_LOSS")},
+    ),
+    (
+        "both arms lose the same glyph, grouping identical",
+        [el(0, 2)],
+        [el(0, 2)],
+        {N0: (False, False, "SHARED_LOSS")},
+    ),
+    (
+        "both arms merge N0+N1 identically",
+        [el(0, 1, 2, 3, 4, 5)],
+        [el(0, 1, 2, 3, 4, 5)],
+        {N0: (False, False, None), N1: (False, False, None)},
+    ),
+    (
+        "different merge spans (H: N0+N1, X: N1+N2)",
+        [el(0, 1, 2, 3, 4, 5), el(6, 7, 8)],
+        [el(0, 1, 2), el(3, 4, 5, 6, 7, 8)],
+        {N0: (False, True, None), N1: (False, True, None), N2: (False, True, None)},
+    ),
+    (
+        "spacing-only difference",
+        [el(0, 1, 2)],
+        [el(0, 1, 2, insert_after=0)],
+        {N0: (True, False, None)},
+    ),
+]
+
+
+def diagnostic_label(st: dict) -> str | None:
+    d = st["diagnostics"]
+    if d["SHARED_SOURCE_GLYPH_LOSS"]:
+        return "SHARED_LOSS"
+    if d["H_SOURCE_GLYPH_LOSS"]:
+        return "H_LOSS"
+    if d["X_SOURCE_GLYPH_LOSS"]:
+        return "X_LOSS"
+    if d["H_SOURCE_GLYPH_DUPLICATION"]:
+        return "H_DUP"
+    if d["X_SOURCE_GLYPH_DUPLICATION"]:
+        return "X_DUP"
+    return None
+
+
+def part7_coverage_vs_grouping() -> list[dict]:
+    rows, bad = [], []
+    for name, h, x, expect in COVERAGE_CASES:
+        for ln in LINES:
+            if ln.key not in expect:
+                continue
+            st = line_state(h, x, ln, OWNER)
+            et, es, ed = expect[ln.key]
+            ot, os_, od = text_discordance(st), segmentation_discordance(st), diagnostic_label(st)
+            rows.append(
+                {
+                    "case": name,
+                    "line": list(ln.key),
+                    "h_text": st["h_text"],
+                    "x_text": st["x_text"],
+                    "common_gids": st["common_gids"],
+                    "expected": {"text": et, "segmentation": es, "diagnostic": ed},
+                    "observed": {"text": ot, "segmentation": os_, "diagnostic": od},
+                    "in_d_frame": line_discordance(st),
+                }
+            )
+            if (et, es, ed) != (ot, os_, od):
+                bad.append(f"{name}@{ln.ordinal} expected=({et},{es},{ed}) observed=({ot},{os_},{od})")
+            print(
+                f"  {name[:44]:44} line{ln.ordinal} text={ot!s:5} seg={os_!s:5} diag={od!s:12} "
+                f"{'OK' if (et, es, ed) == (ot, os_, od) else 'MISMATCH'}"
+            )
+    check(
+        "coverage defects and grouping defects are classified independently",
+        [],
+        bad,
+        "loss and duplication must never move the segmentation metric; a merge must still "
+        "be detected when the merging arm ALSO loses a glyph",
+    )
+    return rows
+
+
+# --------------------------------------------------------------------------- part 8
+
+
+def part8_denominator() -> dict:
+    """Both denominators on one population, so the estimand choice is visible, not asserted."""
+    both_absent = [line_state([], [], ln, OWNER) for ln in LINES]  # page furniture
+    discordant = line_state([el(0, 1, 2)], [el(0), el(1, 2)], LINES[0], OWNER)
+    agreeing = line_state([el(3, 4, 5)], [el(3, 4, 5)], LINES[1], OWNER)
+    pop = [discordant, agreeing] + both_absent
+    got = m0(pop)
+    out = {
+        "population": "1 discordant + 1 agreeing + 3 jointly absent",
+        "all_lines_denominator": got["neutral_lines_in_scope"],
+        "risk_set_denominator": got["risk_set"],
+        "M0_any_rate_risk_set": got["M0_any_rate"],
+        "M0_any_rate_all_lines_superseded": got["M0_any_rate_ALL_LINES_superseded"],
+    }
+    check(
+        "the two denominators give materially different rates on the same population",
+        (0.5, 0.2),
+        (got["M0_any_rate"], got["M0_any_rate_ALL_LINES_superseded"]),
+        "3 of 5 lines are page furniture neither arm emitted; counting them as agreements "
+        "makes the reported rate a function of how much chrome the document carries",
+    )
+    check(
+        "jointly absent lines are retained as a raw count, not discarded",
+        3,
+        got["both_absent"],
+    )
+    return out
+
+
+# --------------------------------------------------------------------------- part 9
+
+
+def part9_frame_conditioning() -> dict:
+    """Does the neutral frame condition RQ1's numbers, or only RQ2's?
+
+    A22 said RQ1 was "unaffected" by a failed cross-engine control because both arms
+    inherit the same frame. That is too strong, and this measures why.
+
+    TESTED FIRST, and it did NOT support the obvious argument: the per-line comparative
+    VERDICT proved robust to the partitions tried here -- a merge/split disagreement is
+    still detected whether the frame separates the two physical lines or merges them. So
+    the conditioning does NOT enter by flipping an individual verdict, and claiming it did
+    would have been an argument constructed rather than measured.
+
+    It enters through the DENOMINATOR AND POPULATION. The same architecture outputs, scored
+    against two different neutral partitions of the same glyphs, give different M0 rates,
+    because the frame decides how many neutral lines exist, which of them are in the risk
+    set, and -- through the 8-line region grid -- which regions enter the D-frame and which
+    are drawn into the C-frame.
+    """
+    h = [el(0, 1, 2, 3, 4, 5), el(6, 7, 8)]
+    x = [el(0, 1, 2), el(3, 4, 5), el(6, 7, 8)]
+
+    fine = [line_state(h, x, ln, OWNER) for ln in LINES]  # N0, N1, N2
+    # a coarser frame: N0 and N1 seen as ONE physical line, exactly A19's recorded
+    # two-column limit, with N2 unchanged
+    coarse_lines = cluster(
+        [sg(i, 700.0 if i < 6 else 676.0, 72 + 20 * (i % 3), 90 + 20 * (i % 3)) for i in range(9)], 1
+    )
+    coarse_owner = build_owner(coarse_lines)
+    coarse = [line_state(h, x, ln, coarse_owner) for ln in coarse_lines]
+
+    m_fine, m_coarse = m0(fine), m0(coarse)
+    out = {
+        "fine_frame": {"lines": m_fine["risk_set"], "M0_any": m_fine["M0_any"], "rate": m_fine["M0_any_rate"]},
+        "coarse_frame": {"lines": m_coarse["risk_set"], "M0_any": m_coarse["M0_any"], "rate": m_coarse["M0_any_rate"]},
+    }
+    check(
+        "identical architecture output scores a DIFFERENT M0 under a different frame",
+        True,
+        m_fine["M0_any_rate"] != m_coarse["M0_any_rate"],
+        "so RQ1's reported numbers are conditional on the PDFium frame, and a failed "
+        "cross-engine control must qualify RQ1 as well as RQ2",
+    )
+    check(
+        "...while the per-line comparative verdict itself survived both frames",
+        (True, True),
+        (
+            any(line_discordance(s) for s in fine),
+            any(line_discordance(s) for s in coarse),
+        ),
+        "the conditioning is on denominators and populations, NOT on verdict direction -- "
+        "stated precisely rather than overclaimed",
+    )
+    print(f"  fine frame:   {out['fine_frame']}")
+    print(f"  coarse frame: {out['coarse_frame']}")
+    return out
 
 
 def main() -> int:
@@ -477,12 +747,21 @@ def main() -> int:
     m0_out = part5_m0()
     print("\n== part 6: negative controls ==")
     part6_negative_controls()
+    print("\n== part 7: coverage is not grouping ==")
+    coverage = part7_coverage_vs_grouping()
+    print("\n== part 8: M0's denominator ==")
+    denom = part8_denominator()
+    print("\n== part 9: does the frame condition RQ1? ==")
+    framing = part9_frame_conditioning()
 
     doc = {
         "population": "SYNTHETIC only -- no holdout opened, no architecture run",
-        "supersedes": "A21's D-frame membership rule (any line not SAME)",
+        "supersedes": "A21's D-frame membership rule (any line not SAME); A22's gid-subset signature",
         "defect": defect,
         "matrix": matrix,
+        "coverage_vs_grouping": coverage,
+        "denominator": denom,
+        "frame_conditioning": framing,
         "m0": m0_out,
         "tests": ROWS,
         "failures": FAILED,

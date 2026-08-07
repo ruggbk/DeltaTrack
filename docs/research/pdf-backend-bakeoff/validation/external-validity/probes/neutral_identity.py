@@ -234,41 +234,69 @@ def contribution(emitted: list[EmittedLine], line: NeutralLine) -> str:
     return "\n".join("".join(ch for _, ch in cells) for cells, _ in owned)
 
 
-def reconstruction_signature(emitted: list[EmittedLine], line: NeutralLine, owner: dict[int, tuple[int, int]]) -> tuple:
-    """How this architecture GROUPED this neutral line's glyphs into emitted printed lines.
+def emitted_gids(emitted: list[EmittedLine]) -> set[int]:
+    """Every source glyph this architecture emitted anywhere on the page."""
+    return {g for f in emitted for g in f.gids}
 
-    The smallest representation that captures the behaviour the D-frame must respond to.
-    One element per emitted line that carries at least one of this neutral line's glyphs,
-    ordered by its first owned gid:
 
-        (this line's gids that the emitted line carries,  other neutral lines it reaches)
+def reconstruction_signature(
+    emitted: list[EmittedLine],
+    line: NeutralLine,
+    owner: dict[int, tuple[int, int]],
+    common: set[int],
+) -> tuple:
+    """How this architecture GROUPED the JOINTLY OBSERVED glyphs of this neutral line.
 
-    That pair is exactly enough, and no more:
+    One element per emitted line carrying at least one jointly observed gid of this neutral
+    line, ordered by its first such gid:
 
-      * its LENGTH is the emitted-line cardinality for this neutral line, so a split shows;
-      * its first member partitions the line's glyphs, so WHERE a split falls shows;
-      * its second member names the cross-neutral-line grouping, so a merge shows, and
-        merges with DIFFERENT spans are distinguishable from each other.
+        (this line's COMMON gids the emitted line carries,
+         other neutral lines it reaches THROUGH COMMON gids)
 
-    Deliberately absent:
+    `common` is the page-wide set of gids BOTH arms emitted. Restricting to it is what
+    separates grouping from coverage, and it is the whole of this repair.
+
+    WHY THE RESTRICTION IS NECESSARY. Without it the signature reads the exact emitted gid
+    subset, so PURE CHARACTER LOSS moves it: H emitting {0,1,2} as one line and X emitting
+    {0,2} as one line gave `((0,1,2),())` vs `((0,2),())` -- unequal -- and reported a
+    SEGMENTATION difference where both arms produced ONE line with identical grouping
+    topology and X had simply dropped a glyph. Coverage was masquerading as topology.
+
+    WHY IT MUST ALSO GOVERN `others`. Suppose H emits one line carrying N1's glyphs plus a
+    glyph of N2 that X never emits. Reading `others` over ALL gids would name N2 for H and
+    nothing for X, manufacturing a cross-line merge out of a coverage difference. Reading
+    it over `common` cannot: a glyph only one arm emitted is not evidence about how the two
+    arms GROUP anything, and it is already visible as loss and as a text difference.
+
+    WHY TOPOLOGY STILL SURVIVES A COVERAGE DEFECT. The restriction removes gids, never
+    grouping. If H merges N0+N1 while ALSO losing a glyph of N1, the surviving jointly
+    observed glyphs of N1 are still carried by an emitted line that also carries N0's, so
+    `others` still names N0 for H and not for X. Merge detection is untouched -- tested.
+
+    Deliberately absent, each for a reason:
 
       * text and inserted characters -- a word-space difference must not register as a
         segmentation difference, or M3 would see a boundary error that does not exist;
+      * REPEATED gids -- `EmittedLine.gids` is a set, so duplication cannot move the
+        signature. (Measured: it never did. Duplication was already classified correctly
+        before this repair, and only loss was mis-classified.);
       * emitted-line ids -- two arms numbering their lines differently is not a disagreement
         about grouping, and including lids would make every comparison trivially unequal;
-      * glyphs off the neutral skeleton -- an arm may emit a mark the skeleton excludes
-        (H keeps `size > 1.0`, the skeleton requires positive ink area), and that is a
-        coverage fact, counted separately, not a grouping fact.
+      * glyphs off the neutral skeleton -- a coverage fact, counted separately.
 
-    Tuples rather than frozensets so the value is ordered, hashable, comparable and
-    JSON-representable without a normalisation step that could differ between arms.
+    VACUOUS CASE, stated rather than hidden. When no gid of this line is jointly observed --
+    one arm emitted nothing for it -- the signature is `()` for both arms and segmentation is
+    concordant. That is correct: with no shared evidence there is no grouping to disagree
+    about. The case is carried in full by text/coverage discordance, so it never leaves the
+    D-frame; only its ATTRIBUTION between the two components changes.
     """
     parts: list[tuple[tuple[int, ...], tuple[tuple[int, int], ...], int]] = []
     for frag in emitted:
-        owned = sorted(g for g in frag.gids if g in line.gids)
+        shared = frag.gids & common
+        owned = sorted(shared & line.gids)
         if not owned:
             continue
-        others = sorted({owner[g] for g in frag.gids if g in owner and owner[g] != line.key})
+        others = sorted({owner[g] for g in shared if g in owner and owner[g] != line.key})
         parts.append((tuple(owned), tuple(others), owned[0]))
     parts.sort(key=lambda t: t[2])
     return tuple((o, ot) for o, ot, _ in parts)
@@ -279,18 +307,25 @@ def line_state(
     x_emitted: list[EmittedLine],
     line: NeutralLine,
     owner: dict[int, tuple[int, int]],
+    common: set[int] | None = None,
 ) -> dict:
     """The frozen per-neutral-line comparison object.
 
     Carries BOTH comparable quantities -- projected text and reconstruction signature --
     plus the coarse presence label and the diagnostics. The label is for reading; the two
     quantities are what the discordance predicates consume.
+
+    `common` is the page-wide jointly emitted gid set. It is a property of the PAGE, not of
+    the line, so the harness computes it once per page and passes it in; it is derived here
+    when omitted so a caller comparing a single line cannot accidentally get it wrong.
     """
     h_own = [f for f in h_emitted if f.gids & line.gids]
     x_own = [f for f in x_emitted if f.gids & line.gids]
+    if common is None:
+        common = emitted_gids(h_emitted) & emitted_gids(x_emitted)
     h_text, x_text = contribution(h_emitted, line), contribution(x_emitted, line)
-    h_sig = reconstruction_signature(h_emitted, line, owner)
-    x_sig = reconstruction_signature(x_emitted, line, owner)
+    h_sig = reconstruction_signature(h_emitted, line, owner, common)
+    x_sig = reconstruction_signature(x_emitted, line, owner, common)
 
     if not h_own and not x_own:
         state = "BOTH_ABSENT"
@@ -312,15 +347,21 @@ def line_state(
         "x_text": x_text,
         "h_signature": h_sig,
         "x_signature": x_sig,
+        "common_gids": sorted(line.gids & common),
         "diagnostics": {
             "H_EMITTED_LINE_COUNT": len(h_own),
             "X_EMITTED_LINE_COUNT": len(x_own),
             "H_SOURCE_GLYPH_LOSS": sorted(line.gids - h_gids),
             "X_SOURCE_GLYPH_LOSS": sorted(line.gids - x_gids),
+            "SHARED_SOURCE_GLYPH_LOSS": sorted(line.gids - h_gids - x_gids),
             "H_SOURCE_GLYPH_DUPLICATION": len(h_seq) != len(set(h_seq)),
             "X_SOURCE_GLYPH_DUPLICATION": len(x_seq) != len(set(x_seq)),
             "H_CROSS_LINE_MERGE": any(f.gids - line.gids for f in h_own),
             "X_CROSS_LINE_MERGE": any(f.gids - line.gids for f in x_own),
+            # segmentation is only DEFINED where the two arms share evidence about this
+            # line. Recorded so a zero M0b can never be read as "the arms agreed" when it
+            # actually means "there was nothing to compare".
+            "SEGMENTATION_DEFINED": bool(line.gids & common),
         },
     }
 
@@ -381,33 +422,77 @@ def region_discordance(states: list[dict], h_anchors=(), x_anchors=()) -> bool:
     return any(line_discordance(s) for s in states) or anchor_discordance(h_anchors, x_anchors)
 
 
+def in_risk_set(state: dict) -> bool:
+    """Is this neutral line a unit on which the two arms could have differed at all?
+
+    THE COMPARATIVE RISK SET: neutral lines emitted by AT LEAST ONE architecture. A line
+    neither arm emitted is not an aligned printed line, and there is nothing about it to
+    compare.
+
+    "At least one", never "both": an arm emitting a line the other dropped is one of the
+    strongest discordances there is, and a both-arms denominator would delete the
+    numerator's own members from the population it is a fraction of.
+    """
+    return state["state"] != "BOTH_ABSENT"
+
+
 def m0(states: list[dict]) -> dict:
     """M0's components. Raw counts preserved; no weighted composite is invented.
 
-    One denominator for the three line-rate components -- every neutral line in scope --
-    so M0a, M0b and M0_any are directly comparable to each other. The anchor component has
-    a different denominator (regions) and is therefore reported separately by the caller
-    and never pooled with these.
+    DENOMINATOR: the comparative risk set -- neutral lines emitted by at least one arm.
 
-    `M0b_only` is the number this repair exists to produce: neutral lines where the arms
-    agree on every character but disagree on how they cut the page into lines. Under the
-    superseded rule that count was structurally unreachable.
+    WHY BOTH_ABSENT IS OUT. PRE-REGISTRATION 6 defines M0 as the fraction of aligned
+    printed lines "whose text differs BETWEEN H AND X". A line neither arm emitted is not a
+    comparative observation on which they agreed; it is a unit not at risk. Counting it as
+    an agreement makes the reported rate depend on how much page furniture a document
+    carries -- running heads, page numbers, VerDate stamps -- which is a property of GPO's
+    LAYOUT, not of the seam. That is a nuisance variable in the denominator, and it is worse
+    than dilution: committee reports and bills carry different chrome densities, so a
+    P-head/P-robust difference in M0 could be pure furniture.
+
+    The question "discordance per physical ink line on the page" is a real question, but it
+    is an ABSOLUTE coverage question -- did the arms emit the page's content at all -- and
+    that is RQ2's, answered by the C-frame against an adjudicated oracle. M0 is RQ1's
+    comparative resolution statement and may not silently answer a different one.
+
+    NOTE THE DIRECTION, so the choice cannot be read as chosen for the number: removing
+    BOTH_ABSENT SHRINKS the denominator and therefore RAISES every reported discordance
+    rate. On development material the shift is about +7 % relative. RQ1 seeks an equivalence
+    statement, so this change makes the study's own claim HARDER to support, not easier.
+
+    `both_absent` is preserved as a raw count and is NOT discarded -- see `in_risk_set`.
+
+    `M0b_only` is the number the segmentation repair exists to produce: neutral lines where
+    the arms agree on every character but disagree on how they cut the page into lines.
+
+    `M0b_defined` / `M0b_rate_on_defined` are reported beside the headline because
+    segmentation is only DEFINED where the arms share evidence about a line. A zero M0b on
+    the risk set must never be readable as "the arms grouped identically" when it could mean
+    "one arm emitted nothing to group".
     """
-    n = len(states)
-    text = [s for s in states if text_discordance(s)]
-    seg = [s for s in states if segmentation_discordance(s)]
-    any_d = [s for s in states if line_discordance(s)]
+    risk = [s for s in states if in_risk_set(s)]
+    n = len(risk)
+    text = [s for s in risk if text_discordance(s)]
+    seg = [s for s in risk if segmentation_discordance(s)]
+    any_d = [s for s in risk if line_discordance(s)]
     seg_only = [s for s in seg if not text_discordance(s)]
     text_only = [s for s in text if not segmentation_discordance(s)]
+    defined = [s for s in risk if s["diagnostics"]["SEGMENTATION_DEFINED"]]
     return {
-        "neutral_lines": n,
+        "neutral_lines_in_scope": len(states),
+        "risk_set": n,
         "M0a_text": len(text),
         "M0b_segmentation": len(seg),
         "M0_any": len(any_d),
         "M0b_only_segmentation": len(seg_only),
         "M0a_only_text": len(text_only),
         "both_absent": sum(1 for s in states if s["state"] == "BOTH_ABSENT"),
+        "M0b_defined": len(defined),
         "M0a_text_rate": round(len(text) / n, 6) if n else None,
         "M0b_segmentation_rate": round(len(seg) / n, 6) if n else None,
         "M0_any_rate": round(len(any_d) / n, 6) if n else None,
+        "M0b_rate_on_defined": round(len(seg) / len(defined), 6) if defined else None,
+        # the superseded denominator, kept so the two estimands stay comparable in the
+        # record rather than the change being invisible after the fact
+        "M0_any_rate_ALL_LINES_superseded": round(len(any_d) / len(states), 6) if states else None,
     }

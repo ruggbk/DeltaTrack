@@ -112,14 +112,22 @@ OVERLAP_MIN = 0.5
 #
 # CONSEQUENCE (frozen; execution is NEVER blocked by this gate)
 #   PASS everywhere        the skeleton is reported as cross-engine corroborated.
-#   FAIL on document d     every table reporting a result computed on d carries
-#                          "PDFIUM-CONDITIONED FRAME". Both RQ1 and RQ2 are still reported
-#                          and the decision rule is unchanged.
+#   FAIL on document d     every RQ1 **and** RQ2 result or table computed on d carries
+#                          "PDFIUM-CONDITIONED FRAME". Both are still reported and the
+#                          decision rule is unchanged.
 #   FAIL on more than a
-#   third of sampled docs  RQ2's absolute claim is labelled PDFium-conditioned in the
-#                          HEADLINE, not only in the tables. RQ1 is unaffected either way:
-#                          both arms inherit the same skeleton, so a frame error cannot
-#                          favour H or X -- it can only move the unit both are scored on.
+#   third of sampled docs  the headline qualification applies to BOTH RQ1 and RQ2.
+#
+# WHY RQ1 IS NOT EXEMPT. An earlier version of this rule said RQ1 was "unaffected" because
+# both arms inherit the same frame. That is too strong, and x10 part 9 measured why rather
+# than arguing it. A common frame cannot DIRECTLY favour H or X -- and the per-line
+# comparative verdict did in fact survive every partition tried, so the overclaim was not
+# that a verdict flips. The conditioning enters through the DENOMINATOR AND POPULATION: the
+# frame decides how many neutral lines exist, which are in M0's comparative risk set, and
+# -- through the 8-line region grid -- which regions enter the D-frame and which are drawn
+# into the C-frame. Identical architecture output scored against two different neutral
+# partitions of the same glyphs gives different M0 rates. So RQ1's NUMBERS are conditional
+# on the PDFium frame even though its DIRECTION is not, and the label belongs on both.
 DOC_MIN = 0.95
 PAGE_MIN = 0.75
 
@@ -402,9 +410,12 @@ def main(limit: int = 10) -> int:
             "document_threshold": DOC_MIN,
             "page_threshold": PAGE_MIN,
             "consequence": (
-                "FAIL on a document labels every table using it PDFIUM-CONDITIONED FRAME; FAIL on more "
-                "than a third of sampled documents moves that label into RQ2's headline. RQ1 is "
-                "unaffected either way -- both arms inherit the same skeleton. Execution is never blocked."
+                "FAIL on a document labels every RQ1 AND RQ2 result computed on it PDFIUM-CONDITIONED "
+                "FRAME; FAIL on more than a third of sampled documents applies that qualification to "
+                "BOTH RQ1's and RQ2's headline. RQ1 is NOT exempt: a common frame cannot directly "
+                "favour either arm, but it sets M0's denominator and the D/C-frame populations, so "
+                "RQ1's numbers are frame-conditional even where its direction is not. Execution is "
+                "never blocked by this gate."
             ),
         },
         "geometry_caveat": (

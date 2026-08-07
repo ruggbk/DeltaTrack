@@ -65,6 +65,7 @@ from neutral_identity import (  # noqa: E402
     build_owner,
     cluster,
     eligible,
+    emitted_gids,
     reconstruction_signature,
 )
 
@@ -343,7 +344,10 @@ def main(limit: int = 12) -> int:
             for e in emitted:
                 unknown_gids += [f"p{pno} emitted {g}" for g in e.gids - known]
             for ln in lines:
-                sig = reconstruction_signature(emitted, ln, owner)
+                # Single-arm structural report: the "jointly observed" domain of a
+                # one-arm run is that arm's own emission, which is what "how did H group
+                # what it emitted" means. There is no X adapter to intersect with yet.
+                sig = reconstruction_signature(emitted, ln, owner, emitted_gids(emitted))
                 shape[len(sig)] += 1
                 if any(others for _owned, others in sig):
                     cross += 1

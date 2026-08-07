@@ -11,7 +11,7 @@
   "metric": "one-to-one matched neutral lines / max(pdfium, pymupdf) lines, per document",
   "document_threshold": 0.95,
   "page_threshold": 0.75,
-  "consequence": "FAIL on a document labels every table using it PDFIUM-CONDITIONED FRAME; FAIL on more than a third of sampled documents moves that label into RQ2's headline. RQ1 is unaffected either way -- both arms inherit the same skeleton. Execution is never blocked."
+  "consequence": "FAIL on a document labels every RQ1 AND RQ2 result computed on it PDFIUM-CONDITIONED FRAME; FAIL on more than a third of sampled documents applies that qualification to BOTH RQ1's and RQ2's headline. RQ1 is NOT exempt: a common frame cannot directly favour either arm, but it sets M0's denominator and the D/C-frame populations, so RQ1's numbers are frame-conditional even where its direction is not. Execution is never blocked by this gate."
  },
  "geometry_caveat": "baseline is like-for-like (both are pen origins) and carries the control. The x extent is NOT: PyMuPDF's texttrace bbox is constructed from the glyph advance at the pen origin (phase3 h01 measured bbox[0] == origin[0] to 0.0 pt; h08 traced it to jm_trace_text_span), so the PyMuPDF span contains the PDFium ink span and the overlap ratio pins to 1.0. The x-overlap is a coarse guard against horizontally disjoint lines, not fine agreement. The vertical box is not comparable and is not compared.",
  "documents": [
