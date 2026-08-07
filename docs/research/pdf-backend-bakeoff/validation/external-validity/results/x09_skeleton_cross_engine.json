@@ -1,0 +1,41 @@
+{
+ "population": "DEVELOPMENT -- not a holdout",
+ "property": "do two independent engines see substantially the same physical line skeleton?",
+ "rule": {
+  "baseline_tolerance": "0.5 * median PDFium ink height on the page",
+  "x_overlap_min": 0.5,
+  "matching": "greedy by ascending baseline distance, one-to-one, ties on lower PDFium ordinal",
+  "text_used": false
+ },
+ "threshold_note": "No threshold is adopted here. The protocol's old 0.95 belonged to a different estimand (agreement on a page SET) and must not be transplanted. A threshold should be set from the distribution below, before execution, and stated.",
+ "observed_matched_fraction": [
+  1.0,
+  0.9961
+ ],
+ "documents": [
+  {
+   "document": "114-hr-2029/4",
+   "pages": 10,
+   "pdfium_neutral_lines": 256,
+   "pymupdf_neutral_lines": 256,
+   "one_to_one_matched": 256,
+   "matched_fraction_of_pdfium": 1.0,
+   "baseline_delta_median": 0.0,
+   "baseline_delta_max": 0.0,
+   "x_overlap_median": 1.0,
+   "x_overlap_min": 1.0
+  },
+  {
+   "document": "118-s-4795/1",
+   "pages": 10,
+   "pdfium_neutral_lines": 259,
+   "pymupdf_neutral_lines": 258,
+   "one_to_one_matched": 258,
+   "matched_fraction_of_pdfium": 0.9961,
+   "baseline_delta_median": 0.0,
+   "baseline_delta_max": 0.0002,
+   "x_overlap_median": 1.0,
+   "x_overlap_min": 1.0
+  }
+ ]
+}

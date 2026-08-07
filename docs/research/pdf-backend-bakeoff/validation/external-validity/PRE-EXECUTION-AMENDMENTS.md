@@ -890,7 +890,115 @@ all four projection cases, and region partitioning. Four development documents p
 
 ---
 
-## A20 — A17-M6 PROPOSED RESOLUTION: defer M6 to a separate validation study
+## A21 — A19's projection semantics, corrected. The neutral identity contract
+
+```json
+{"id": "A21", "class": "SUBSTANTIVE", "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/neutral_identity.py", "probes/x08_neutral_identity.py",
+                   "probes/x09_skeleton_cross_engine.py",
+                   "results/x08_neutral_identity.json", "results/x09_skeleton_cross_engine.json"],
+ "supersedes_text_in": "PRE-EXECUTION-AMENDMENTS.md A19"}
+```
+
+**A19's concept is retained; three of its statements were false of its own code and are
+withdrawn.**
+
+| A19 said | actually |
+|---|---|
+| "projection is by GLYPH MEMBERSHIP" | `project_by_glyphs` received only **baselines** and took the nearest neutral line |
+| "membership needs no tolerance" | it had **no maximum distance at all**: a glyph at `y = -5000` was still assigned to a neutral line |
+| "a split [appears] as two slots each carrying text" | both fragments of a split contain glyphs of the **same** neutral line, so they projected to one slot |
+
+### The neutral glyph identity
+
+> **`gid = (document_sha256, page_number, source_char_index)`**, where `source_char_index`
+> is the index `i` in `FPDFText_CountChars` order.
+
+**MEASURED against the adapters:** neither contract stores it today — both `continue` past
+rejected characters, so a list position is *not* the index. Recording `i` is pure
+provenance: both loops already have it, and it changes no extraction decision on either arm.
+No other exact common identity exists — geometry is a *measurement*, not an identity, and
+two marks can share a box.
+
+**Generated spaces have `gid = None`** and can never be a member of a neutral line. They are
+engine inventions with no ink, which is exactly why the skeleton is identical under both
+arms.
+
+### Eligibility is geometric, and now literally so
+
+A19 claimed the skeleton reads "no codepoint" while `x07` filtered `cp in (10, 13, 32)`. The
+filter is **removed**. A source glyph is neutral-eligible iff it has a **valid, finite,
+positive-area ink box** and is upright.
+
+**MEASURED** ([`results/x08_neutral_identity.json`](results/x08_neutral_identity.json), two
+development documents, 31,729 characters): the number excluded **only** by a codepoint rule
+is **0**. Every non-eligible character is excluded by geometry alone. The invariant is now
+true rather than aspirational.
+
+### Projection is MODEL G — source-glyph partition
+
+For each neutral line and each architecture, the contribution is the architecture's own text
+restricted to the glyphs **that line owns**, by set membership on `gid`. No tolerance, no
+nearest-anything, no text similarity.
+
+**Spacing is preserved, which is the point.** An architecture's inserted character (a `gid`
+of `None` — its own word-space decision) is kept when it sits *between* two retained glyphs
+of that line. So the same gid set yields `FAMILYHOUSING` from an arm that welded and
+`FAMILY HOUSING` from one that did not. **The skeleton supplies identity and never supplies
+spacing.**
+
+Fragments are concatenated in order of their first owned `gid`, so ordering is a function of
+source identity: **reversing the fragment list cannot change the result** (tested).
+
+### Why partition beats plurality
+
+| case | plurality (Model P) | partition (Model G) | preferred |
+|---|---|---|---|
+| merge 3/1 | whole merged text → line 0, line 1 **blanked** — one glyph double-counted, one physical line vanishes | each line keeps its own glyphs | **G** |
+| merge 50/50 | needs an **arbitrary tie-break** | no tie-break exists to need | **G** |
+| split 1→2 | both fragments hit one slot; the second is lost or overwrites | rejoined in source order | **G** |
+
+**MEASURED:** partition conserves every glyph exactly once; plurality does not.
+
+### Per-neutral-line comparison state, frozen
+
+State — `SAME` / `TEXT_DIFFERS` / `H_ABSENT` / `X_ABSENT` / `BOTH_ABSENT`.
+Diagnostics travel **alongside** and do not enter the state, so nothing disappears silently:
+`H/X_MULTIPART`, `H/X_SOURCE_GLYPH_LOSS`, `H/X_SOURCE_GLYPH_DUPLICATION`,
+`H/X_CROSS_LINE_MERGE`.
+
+**D-frame membership** = any line not `SAME`, or an anchor-set difference for the region.
+**MEASURED symmetric:** `D(H,X) == D(X,H)` across every cardinality case, and the asymmetric
+states are explicit mirrors (`H_ABSENT` ↔ `X_ABSENT`).
+
+### The cross-engine control, strengthened
+
+A19 re-pointed it at per-page line **counts**, which the review correctly calls
+insufficient — two engines can report 30 lines each and disagree about every one. It is now
+a **geometric correspondence**: a PDFium line matches a PyMuPDF line iff their baselines are
+within `0.5 × median PDFium ink height` **and** their x-spans overlap by ≥ 0.5 of the
+smaller; greedy by ascending baseline distance, one-to-one, ties on the lower ordinal. No
+text.
+
+**MEASURED** ([`results/x09_skeleton_cross_engine.json`](results/x09_skeleton_cross_engine.json),
+10 pages each): `114-hr-2029/4` **256/256** matched, `118-s-4795/1` **258/259**; median
+baseline delta **0.0**, median x-overlap **1.0**.
+
+**No threshold is adopted.** The old 0.95 belonged to a different estimand (agreement on a
+page *set*) and is not transplanted. A threshold must be set from this distribution, before
+execution, and stated. *Caveat:* PyMuPDF's char box is an **advance** box, not an ink box,
+so the x-overlap compares slightly different quantities; at line level the extents nearly
+coincide, which the median of 1.0 reflects.
+
+**Can any of this favour H or X?** No. Every input is a fact both arms share, the projection
+reads no text, and D-frame membership is measured symmetric. **30/30 synthetic and
+development tests pass.** Population impact: none.
+
+---
+
+## A20 — A17-M6 FROZEN: M6 is deferred to a separate validation study
 
 ```json
 {"id": "A20", "class": "SUBSTANTIVE", "commits": [],
@@ -899,7 +1007,7 @@ all four projection cases, and region partitioning. Four development documents p
  "files_touched": ["probes/x06_m6_feasibility.py", "results/x06_m6_feasibility.json"],
  "supersedes_text_in": "PRE-REGISTRATION.md 6 (M6), 7.2 rule 1",
  "resolves": ["A17.1"],
- "status": "RECOMMENDED -- awaiting review before it is treated as frozen"}
+ "status": "FROZEN -- accepted by external review"}
 ```
 
 ### What the evidence actually says, corrected
@@ -939,7 +1047,7 @@ financial-semantics oracle — living inside a seam ADR.
 | criterion | assessment |
 |---|---|
 | decision relevance | **low.** M3 is the primary comparative metric, M1 the primary absolute one, M4 tests immediate hierarchy. The seam governs word boundaries; attribution is downstream of the *tree*, not of the seam |
-| whether failure could distinguish H from X | **very unlikely.** The design pilot found H and X differ on 2 of 3,381 printed lines and **0 of 85** headings. An attribution difference requires a heading difference first |
+| whether failure could distinguish H from X | **weak.** The design pilot found H and X differ on 2 of 3,381 printed lines and 0 of 85 headings, so a difference is unlikely to appear at all. **Not** because attribution requires a heading difference first: equal heading output does not prove equal attribution, since hierarchy, continuation handling and positional association can all differ downstream |
 | oracle independence | Path A's oracle is buildable but its context spans pages, so blinding and provenance get materially harder |
 | implementation complexity / human burden | highest of any component, by a wide margin |
 | hidden degrees of freedom | high: context size, occurrence matching and continuation rules would all be *invented* now |
