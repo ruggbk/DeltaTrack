@@ -1143,6 +1143,11 @@ unit, resolved against the real emitted contract rather than against a `Fragment
 
 ### The reconstruction signature
 
+> **SUPERSEDED BY A23.** The signature below reads the exact emitted gid subset, so pure
+> character **loss** moves it and is reported as a segmentation difference. A23 restricts
+> both members to the jointly observed gid domain. The *shape* of the signature and
+> everything it is designed to detect are unchanged; only the domain changes.
+
 For a neutral line `N` under architecture `A`, one element per emitted line carrying at
 least one of `N`'s glyphs, **ordered by its first owned gid**:
 
@@ -1206,6 +1211,11 @@ which is correct: the arm did break the word across two printed lines.
 
 ### M0, with its components preserved
 
+> **DENOMINATOR SUPERSEDED BY A23.** "Every neutral line in scope" includes lines *neither*
+> arm emitted, which are not comparative observations. A23 replaces it with the comparative
+> risk set. The component structure below — separate M0a/M0b, union not sum, anchors never
+> pooled — is unchanged.
+
 The A19 denominator (neutral lines) is kept. **No weighted composite is invented.** One
 denominator for the three line-rate components, so they are comparable to each other:
 
@@ -1241,7 +1251,7 @@ A21 left "no threshold adopted", a degree of freedom that must not survive into 
 |---|---|
 | metric | one-to-one matched neutral lines / **max**(PDFium, PyMuPDF) lines, per document, over §5.8's 10 % page subsample |
 | threshold | `>= 0.95` per document **and** `>= 0.75` on every sampled page |
-| consequence | a failing document labels every table using it **PDFIUM-CONDITIONED FRAME**; failing **more than a third** of sampled documents moves that label into RQ2's **headline**. **RQ1 is unaffected either way** — both arms inherit the same skeleton, so a frame error cannot favour H or X, only move the unit both are scored on. **Execution is never blocked by this gate.** |
+| consequence | **SUPERSEDED BY A23** — the "RQ1 is unaffected" clause is withdrawn. ~~a failing document labels every table using it PDFIUM-CONDITIONED FRAME; failing more than a third of sampled documents moves that label into RQ2's headline. RQ1 is unaffected either way — both arms inherit the same skeleton, so a frame error cannot favour H or X, only move the unit both are scored on.~~ **Execution is never blocked by this gate**, which stands. |
 
 The denominator is the **larger** count so that over-segmentation by *either* engine lowers
 the score. **Why 0.95 permits ~25× the observed disagreement** (development: 514/515
@@ -1324,6 +1334,224 @@ development documents with all 10 injected-fault expectations met.
 
 ---
 
+## A23 — A22's metric semantics, corrected. Grouping ≠ coverage; M0's risk set
+
+```json
+{"id": "A23", "class": "SUBSTANTIVE",
+ "commits": ["2f548f0"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/neutral_identity.py", "probes/x10_reconstruction_signature.py",
+                   "probes/x11_provenance_chain.py", "probes/x09_skeleton_cross_engine.py"],
+ "supersedes_text_in": "PRE-EXECUTION-AMENDMENTS.md A22 (signature domain, M0 denominator, cross-engine consequence)",
+ "status": "FROZEN pending external review"}
+```
+
+**A22's concept is retained in full.** Text and segmentation remain separate concepts, the
+emitted-line unit remains `Page.print_lines`, the D-frame remains the union of comparative
+discordances. Three metric-semantics defects are corrected.
+
+### 1. Segmentation conflated glyph loss with line grouping
+
+A22's signature read the exact emitted gid subset, so **pure character loss moved it**.
+
+**MEASURED before repair** ([`results/x10_reconstruction_signature.json`](results/x10_reconstruction_signature.json)):
+
+| | H | X |
+|---|---|---|
+| emitted | `{0,1,2}` → `ABC`, one line | `{0,2}` → `AC`, one line |
+| signature | `((0,1,2),())` | `((0,2),())` |
+| `TEXT_DISCORDANCE` | \- | **True** ✔ correct |
+| `SEGMENTATION_DISCORDANCE` | \- | **True** ✘ **wrong** — both arms emitted *one* line |
+
+**Duplication was already correct and is reported as such**, not as a repair:
+`EmittedLine.gids` is a `set`, so a repeated gid can never reach the signature. Measured:
+`H={0,1,2}` vs `X={0,1,1,2}` gave `TEXT=True, SEGMENTATION=False` *before* this amendment.
+
+### 2. Segmentation is now defined on the jointly observed domain
+
+> **`common`** = the page-wide set of gids **both** arms emitted.
+> `signature(A,N)` = one element per emitted line of `A` carrying ≥1 gid of `N ∩ common`,
+> ordered by its first such gid:
+> **`( sorted(e.gids ∩ common ∩ N.gids),  sorted({owner[g] for g in e.gids ∩ common} − {N}) )`**
+
+**Both members are restricted, and the second matters as much as the first.** Reading
+`others` over all gids would let an emitted line be recorded as reaching a neutral line via
+a glyph *only one arm emitted* — manufacturing a cross-line merge out of a coverage
+difference.
+
+**Topology survives a coverage defect**, which is the case that makes this non-trivial. If
+H merges `N0+N1` **and** loses a glyph of `N1`, the surviving jointly observed glyphs of
+`N1` are still carried by an emitted line that also carries `N0`'s, so `others` still names
+`N0` for H and not for X. **Measured: segmentation discordance on both lines, with the loss
+separately visible as `H_SOURCE_GLYPH_LOSS`.** Coverage cannot hide topology; topology
+cannot be manufactured from coverage.
+
+**Vacuous case, stated not hidden.** When no gid of a line is jointly observed — one arm
+emitted nothing for it — both signatures are `()` and segmentation is concordant. That is
+correct: with no shared evidence there is no grouping to disagree about. The case is carried
+in full by text/coverage discordance, so it never leaves the D-frame; only its *attribution*
+between the two components changes. `SEGMENTATION_DEFINED` records it per line, so a zero
+M0b can never be misread as "the arms grouped identically" when it means "there was nothing
+to compare".
+
+### 3. The segmentation estimand, in one sentence
+
+> **M0b is the fraction of neutral physical lines in the comparative risk set on which H and
+> X group their jointly observed source glyphs into emitted printed lines differently.**
+
+It does **not** measure — each of these belongs elsewhere and is reported elsewhere:
+
+| not measured by segmentation | where it lives |
+|---|---|
+| character loss | `H/X/SHARED_SOURCE_GLYPH_LOSS`, and M0a via the projected text |
+| character substitution | M0a; M2/M3 against the oracle |
+| duplicate characters | `H/X_SOURCE_GLYPH_DUPLICATION`, and M0a |
+| inserted spaces | M0a; M3's boundary vector |
+| oracle correctness | M1–M4, C-frame only |
+
+### 4. M0's denominator is the comparative risk set
+
+| | |
+|---|---|
+| **old** | every neutral line in scope, **including lines neither arm emitted** |
+| **new** | **neutral lines emitted by at least one architecture** (`state != BOTH_ABSENT`) |
+| `BOTH_ABSENT` | **excluded from every M0 denominator**, **retained as a raw count**, and handled by the C-frame / RQ2 |
+
+**Why, and the challenge answered.** §6 defines M0 as the fraction of aligned printed lines
+whose text differs *between H and X*. A line neither arm emitted is not a comparative
+observation on which they agreed; it is a unit **not at risk**. Including it would answer
+the question "discordance per physical ink line on the page" — a real question, but an
+**absolute coverage** one (did the arms emit the page's content at all), which is RQ2's and
+is answered by the C-frame against an adjudicated oracle. M0 is RQ1's comparative resolution
+statement and may not silently answer a different one.
+
+The concrete harm is not dilution but **confounding**: the rate would depend on how much
+page furniture a document carries, which is a property of GPO's *layout*, not of the seam.
+Committee reports and bills carry different chrome densities, so a P-head/P-robust gap in M0
+could be pure furniture.
+
+**"At least one", never "both":** an arm emitting a line the other dropped is among the
+strongest discordances there is, and a both-arms denominator would delete the numerator's
+own members from the population it is a fraction of.
+
+**MEASURED direction, so the choice cannot be read as chosen for the number.** Excluding
+`BOTH_ABSENT` **shrinks** the denominator and therefore **raises** every reported rate. On
+the synthetic denominator fixture, `M0_any` moves 0.2 → 0.5; on development material 22 of
+310 and 22 of 313 neutral lines are emitted by no hybrid line at all, about a **+7 %
+relative** shift conditional on X dropping the same furniture. **RQ1 seeks an equivalence
+statement, so this makes the study's own claim harder to support, not easier.**
+
+`M0b_defined` and `M0b_rate_on_defined` are reported beside the headline, and
+`M0_any_rate_ALL_LINES_superseded` is emitted alongside so the two estimands stay comparable
+in the record rather than the change becoming invisible after the fact.
+
+### 5. Where a shared failure is caught, since M0 no longer sees it
+
+`H absent + X absent + oracle says true content` is **not** an M0 or D-frame question — §5.8
+already states the D-frame "cannot see a failure both architectures share. That is exactly
+why the C-frame exists." **Verified against the frozen protocol**, the mechanism is already
+specified and does not depend on M0:
+
+1. **C-frame regions are drawn over the NEUTRAL SKELETON** (A19), not over either arm's
+   emitted lines, so a jointly dropped line **can** be sampled.
+2. **The oracle image is rendered from the region's PDF geometry** — §5.7 records "bbox in
+   PDF points", DPI and the rendered PNG's SHA-256 — not from either arm's text, so a
+   jointly dropped line **is still printed in what the adjudicator sees**.
+3. **M1's recall denominator is the adjudicated enumeration**, not the emitted one, so a
+   heading both arms missed is a recall miss for both.
+4. **M9** independently reports `derive_size_bands` / `_coverage ≥ 0.85` / margin-numbered
+   lines recovered, per document per architecture, catching a shared coverage collapse.
+
+**REQUIRED INVARIANTS for `build_frames.py` / `score_metrics.py`** (none of which exist yet
+— G5 lists them as missing), stated now so they cannot be violated silently later:
+
+- **I1.** C-frame region enumeration reads the neutral skeleton **only**. Enumerating from
+  emitted lines would make a shared drop structurally unsamplable, and the failure would be
+  invisible rather than merely unmeasured.
+- **I2.** Oracle rendering uses the region bbox in PDF points. No arm's text may reach the
+  renderer.
+- **I3.** M1 recall is computed against the adjudicated enumeration; the emitted set may
+  only supply the precision numerator.
+- **I4.** `both_absent` and `SHARED_SOURCE_GLYPH_LOSS` are carried into the per-document
+  report so the C-frame result can be read against them.
+
+Absolute correctness is **not** solved inside M0, and this amendment does not attempt it.
+
+### 6. A failed cross-engine control qualifies RQ1 as well as RQ2
+
+A22 said RQ1 was "unaffected" because both arms inherit the same frame. **Withdrawn.**
+
+**MEASURED, and it did not support the obvious argument.** The per-line comparative
+*verdict* proved **robust** to every partition tried — a merge/split disagreement is still
+detected whether the frame separates two physical lines or merges them. Claiming a verdict
+flips would have been an argument constructed rather than measured. The conditioning enters
+through the **denominator and population**: identical architecture output scored against two
+different neutral partitions of the same glyphs gives `M0_any` **0.667** and **0.5**,
+because the frame decides how many neutral lines exist, which are in the risk set, and —
+through the 8-line region grid — which regions enter the D-frame and which are drawn into
+the C-frame.
+
+> **A failed cross-engine control does not directly favour either architecture, because the
+> frame is common to both. But every comparative and absolute result computed on that
+> document remains conditional on the PDFium-defined frame.**
+
+| | frozen consequence |
+|---|---|
+| one document fails | every **RQ1 and RQ2** result or table computed on it carries **PDFIUM-CONDITIONED FRAME** |
+| more than ⅓ of sampled documents fail | the headline qualification applies to **both RQ1 and RQ2** |
+| execution | **never blocked by this gate** — this is claim qualification, not post-hoc exclusion |
+
+**Thresholds are unchanged at 0.95 document / 0.75 page.** They are already frozen,
+deliberately loose, exercised by five injected faults per document, and explicit about what
+they permit; nothing in this repair reveals a defect in the metric itself, so only the
+consequence wording moves.
+
+### 7. M0 and the D-frame have one eligibility set, not two
+
+| | rule |
+|---|---|
+| **D-frame** | census of regions with **any** comparative discordance: text **or** segmentation **or** anchor |
+| **M0** | descriptive rates over the comparative **risk set** (neutral lines emitted by ≥1 arm) |
+
+- Every M0a/M0b discordant line **is** in the risk set, and its region **does** enter the
+  D-frame — the same two predicates decide both, so no line can count toward M0 without
+  putting its region in the frame.
+- **Anchor** discordance can put a region in the D-frame **without** affecting M0a/M0b — it
+  is region-level, and M0c carries it on the region denominator, never pooled with the line
+  rates.
+- `BOTH_ABSENT` affects **neither** the D-frame **nor** any M0 rate, and is reported raw.
+- Shared failures stay eligible for RQ2 via the C-frame, under I1–I4.
+
+### 8. M3 remains insulated
+
+All four controls measured, the last two new:
+
+| case | result |
+|---|---|
+| `FAMILYHOUSING` vs `FAMILY HOUSING` | `TEXT_DIFFERS`, **no** segmentation discordance, M3 `X_CORRECTS`, H weld 1 |
+| same heading text, different line grouping | segmentation discordance, in the D-frame, M3 **`BOTH_CLEAN`** — no fabricated boundary error |
+| X drops a character | text discordance, **no** segmentation discordance, M3 `X_REGRESSES` with `text_error 1 / weld 0 / split 0` |
+| X duplicates a character | text discordance, **no** segmentation discordance, M3 `X_REGRESSES`, X dirty |
+
+**M3 consumes text and oracle evidence and never an M0b label**, which is what keeps
+segmentation out of the boundary metric.
+
+### 9. Provenance scope is unchanged
+
+The development wrapper still proves the chain without touching the byte-pinned prior-bakeoff
+adapters, and `probes/backends/pdfium_hybrid.py`, `probes/contract_hybrid.py` and
+`probes/reconstruct_hybrid.py` remain unmodified — re-verified against
+[`PRESERVED-MANIFEST.txt`](../PRESERVED-MANIFEST.txt). A22's G1 checklist stands unchanged;
+it is a known implementation gap, not a new blocker.
+
+**Population impact: none.** No membership change, no scoring, no holdout document opened,
+no architecture run on holdout material. `x08` 31/31, `x10` 43/43, `x11` 8/8, `x09` gate PASS
+with all 10 injected-fault expectations met, `x04` unchanged at **FREEZE INTEGRITY COMPLETE /
+EXECUTION FORBIDDEN**.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
@@ -1367,6 +1595,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `89e9d91` | `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | segmentation discordance (A22) |
 | `e277a3e` | `x11_provenance_chain.py` | source-glyph provenance (A22) |
 | `7644687` | `x09_skeleton_cross_engine.py` | cross-engine gate frozen (A22) |
+| `2f548f0` | `neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x11_provenance_chain.py` | grouping ≠ coverage; M0 risk set (A23) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
