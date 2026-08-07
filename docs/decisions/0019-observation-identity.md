@@ -1,6 +1,6 @@
 # 19. Identify a parsed observation by its source, its parser revision and its ordinal; never by its text
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-07
 
 ## Context
@@ -70,8 +70,6 @@ an artifact keyed on the parser's own output confirms whatever the parser now sa
 stays green while the thing it described stops existing.
 
 ### What the address actually has to do
-
-This is the part a first draft of this record got wrong, so it is worth stating exactly.
 
 Because the key is scoped by source digest and parser revision, a change to the source
 bytes produces a different observation identity, and so does a change to the parser. The
