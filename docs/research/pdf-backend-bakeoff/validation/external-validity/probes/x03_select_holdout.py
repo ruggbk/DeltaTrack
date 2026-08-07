@@ -117,6 +117,39 @@ def download(client: httpx.Client, url: str, dest: Path) -> str:
     return hashlib.sha256(r.content).hexdigest()
 
 
+def looks_like_pdf(path: Path) -> bool:
+    """Does this file actually begin with a PDF header?
+
+    govinfo answers a missing package with HTTP 200 and an HTML landing page, so
+    `download()` succeeds and writes 44 KB of `<!DOCTYPE html>` to a path named `.pdf`.
+    The first selection run did exactly that for CRPT-118HRPT146: page_count raised, the
+    candidate was correctly rejected, and the HTML file was left on disk beside the
+    manifest, where nothing checked for it.
+    """
+    try:
+        with path.open("rb") as fh:
+            return fh.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
+def accept_download(path: Path, min_pages: int) -> int | None:
+    """Page count if this download is a usable PDF, else None -- and DELETE it if not.
+
+    Every rejection path removes the file. A partial or wrong-type download that survives
+    rejection is an unmanifested artifact sitting inside the frozen population directory.
+    """
+    try:
+        ok = looks_like_pdf(path)
+        pages = page_count(path) if ok else -1
+    except Exception:
+        ok, pages = False, -1
+    if not ok or pages < min_pages:
+        path.unlink(missing_ok=True)
+        return None
+    return pages
+
+
 def page_count(path: Path) -> int:
     """Container fact only. pypdfium2 is used for the page count and nothing else; no
     text page is opened, so this cannot condition selection on extraction."""
@@ -500,12 +533,13 @@ def main() -> int:
                 dest = DOCS_DIR / rec["id"] / f"{rec['id']}.pdf"
                 try:
                     sha = download(client, pdf_url, dest)
-                    pages = page_count(dest)
                 except Exception as exc:
+                    dest.unlink(missing_ok=True)
                     print(f"    fetch fail {rec['id']}: {exc}", file=sys.stderr)
                     continue
-                if pages < st.get("min_pages", 0):
-                    dest.unlink(missing_ok=True)
+                pages = accept_download(dest, st.get("min_pages", 0))
+                if pages is None:
+                    print(f"    rejected {rec['id']}: not a usable PDF or under page floor", file=sys.stderr)
                     continue
                 rec = {
                     **rec,
@@ -540,12 +574,13 @@ def main() -> int:
                 dest = DOCS_DIR / rec["id"] / f"{v['code']}.pdf"
                 try:
                     sha = download(client, pdf_url, dest)
-                    pages = page_count(dest)
                 except Exception as exc:
+                    dest.unlink(missing_ok=True)
                     print(f"    fetch fail {rec['id']}: {exc}", file=sys.stderr)
                     continue
-                if pages < st.get("min_pages", 0):
-                    dest.unlink(missing_ok=True)
+                pages = accept_download(dest, st.get("min_pages", 0))
+                if pages is None:
+                    print(f"    rejected {rec['id']}: not a usable PDF or under page floor", file=sys.stderr)
                     continue
                 rec = {
                     **rec,

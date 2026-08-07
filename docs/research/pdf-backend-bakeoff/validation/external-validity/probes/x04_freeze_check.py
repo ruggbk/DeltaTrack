@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -57,6 +58,43 @@ ADAPTER = EV / "probes" / "pdfium_extended_corrected.py"
 RECONSTRUCTOR = EV / "probes" / "reconstruct_extended_corrected.py"
 X2_EVIDENCE = EV / "results" / "x2_contract_assertions.json"
 ADJUDICATOR_PROMPT = EV / "probes" / "adjudicator_prompt.md"
+AMENDMENTS = EV / "PRE-EXECUTION-AMENDMENTS.md"
+
+AMENDMENT_CLASSES = {"CLERICAL", "SUBSTANTIVE", "TOOLING"}
+# Paths that are outputs of running the gate itself, or scratch, and are not part of the
+# frozen study surface F9 polices.
+F9_IGNORE = {"results/DEVIATIONS.md"}
+
+
+def parse_amendments() -> tuple[list[dict], list[str]]:
+    """Amendment records from the fenced JSON blocks in PRE-EXECUTION-AMENDMENTS.md.
+
+    Returns (records, errors). Kept in the prose file so an amendment cannot be declared
+    in a machine-readable side-channel that no reviewer reads.
+    """
+    if not AMENDMENTS.exists():
+        return [], ["PRE-EXECUTION-AMENDMENTS.md missing"]
+    text = AMENDMENTS.read_text()
+    records, errors = [], []
+    for block in re.findall(r"```json\s*(\{.*?\})\s*```", text, re.S):
+        try:
+            rec = json.loads(block)
+        except json.JSONDecodeError as exc:
+            errors.append(f"unparseable amendment block: {exc}")
+            continue
+        for key in ("id", "class", "confirmatory_output_at_time", "affects_membership", "files_touched"):
+            if key not in rec:
+                errors.append(f"amendment {rec.get('id', '?')} missing {key}")
+        if rec.get("class") not in AMENDMENT_CLASSES:
+            errors.append(f"amendment {rec.get('id', '?')} has class {rec.get('class')!r}")
+        if rec.get("confirmatory_output_at_time") != "none":
+            errors.append(f"amendment {rec.get('id', '?')} was made with confirmatory output in existence")
+        if rec.get("affects_membership"):
+            errors.append(f"amendment {rec.get('id', '?')} claims to change MEMBERSHIP -- that is a re-selection")
+        if rec.get("class") == "CLERICAL" and rec.get("affects_scoring_rule"):
+            errors.append(f"amendment {rec.get('id', '?')} is CLERICAL but changes a scoring rule")
+        records.append(rec)
+    return records, errors
 
 
 def git(*args: str) -> str:
@@ -198,6 +236,68 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         )
     else:
         results.append(("F6 answer key ordering", True, "not applicable yet -- adjudication has not run"))
+
+    # F7 -- SET EQUALITY, not "every manifest entry exists". F1/F2 iterate the manifest, so
+    # a file sitting in the population directory that the manifest never names is invisible
+    # to them. One did: an HTML error page saved as CRPT-118HRPT146.pdf by a rejected
+    # download that was never deleted. A manifest is not authoritative if unmanifested
+    # artifacts can sit beside it unnoticed.
+    on_disk = {str(p.relative_to(DOCS_DIR)) for p in DOCS_DIR.rglob("*") if p.is_file()} if DOCS_DIR.exists() else set()
+    manifested = {f["path"] for m in members for f in m["files"]}
+    extra, missing = sorted(on_disk - manifested), sorted(manifested - on_disk)
+    results.append(
+        (
+            "F7 holdout/ contains exactly the manifested files",
+            bool(manifested) and not extra and not missing,
+            (
+                "; ".join([f"EXTRA {e}" for e in extra] + [f"MISSING {m}" for m in missing])
+                or (
+                    f"{len(on_disk)} files == {len(manifested)} manifested"
+                    if manifested
+                    else "VACUOUS -- empty manifest"
+                )
+            ),
+        )
+    )
+
+    # F8 -- type validation. govinfo answers a missing package with HTTP 200 and HTML.
+    not_pdf = []
+    for path in sorted(manifested):
+        p = DOCS_DIR / path
+        try:
+            if p.open("rb").read(5) != b"%PDF-":
+                not_pdf.append(path)
+        except OSError:
+            not_pdf.append(f"{path} (unreadable)")
+    results.append(
+        (
+            "F8 every manifested file is really a PDF",
+            bool(manifested) and not not_pdf,
+            "; ".join(not_pdf) or (f"{len(manifested)} files carry a %PDF- header" if manifested else "VACUOUS"),
+        )
+    )
+
+    # F9 -- anything in this study modified AFTER the population was frozen must be
+    # declared as an amendment. This is the general form of the defect above: code or
+    # prose changing under a frozen population without a record.
+    records, errors = parse_amendments()
+    declared = {f for r in records for f in r.get("files_touched", [])}
+    changed_after = set()
+    if mc:
+        out = git("diff", "--name-only", f"{mc}..HEAD", "--", str(EV.relative_to(REPO)))
+        for line in out.splitlines():
+            rel = str(Path(line).relative_to(EV.relative_to(REPO)))
+            if rel not in F9_IGNORE:
+                changed_after.add(rel)
+    undeclared = sorted(changed_after - declared)
+    results.append(
+        (
+            "F9 post-freeze changes are declared amendments",
+            not errors and not undeclared,
+            "; ".join(errors + [f"UNDECLARED {u}" for u in undeclared])
+            or f"{len(records)} amendments, {len(changed_after)} files changed since the freeze, all declared",
+        )
+    )
     return results
 
 
@@ -278,6 +378,53 @@ def self_test(contam: dict, exposure: dict) -> int:
     checks.append(("F4 rejects a protocol amended in the population's OWN commit", not f4_ok(head, head)))
     checks.append(("F4 rejects a protocol committed AFTER the population", not f4_ok(head, parent)))
     checks.append(("F4 rejects an uncommitted protocol", not f4_ok("", head)))
+
+    # F7 must close the gate when an unmanifested file appears in the population directory.
+    # This is the exact defect that shipped: an HTML error page named .pdf, left by a
+    # rejected download, invisible to every manifest-driven check.
+    members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
+    intruder = DOCS_DIR / "_selftest_intruder" / "not_a_member.pdf"
+    try:
+        intruder.parent.mkdir(parents=True, exist_ok=True)
+        intruder.write_bytes(b"<!DOCTYPE html>\n")
+        f7 = dict((n[:2], ok) for n, ok, _ in check_freeze(members, lookup))
+        checks.append(("F7 detects an unmanifested file in holdout/", not f7["F7"]))
+    finally:
+        intruder.unlink(missing_ok=True)
+        intruder.parent.rmdir()
+
+    # F8 must reject a manifested file that is not actually a PDF.
+    victim = None
+    if members:
+        victim = DOCS_DIR / members[0]["files"][0]["path"]
+        saved_bytes = victim.read_bytes()
+        try:
+            victim.write_bytes(b"<!DOCTYPE html>\n" + saved_bytes[:100])
+            f8 = dict((n[:2], ok) for n, ok, _ in check_freeze(members, lookup))
+            checks.append(("F8 detects a manifested file that is not a PDF", not f8["F8"]))
+        finally:
+            victim.write_bytes(saved_bytes)
+
+    # F9 must reject an amendment that claims to change membership.
+    saved_amend = AMENDMENTS.read_text() if AMENDMENTS.exists() else None
+    try:
+        AMENDMENTS.write_text(
+            '```json\n{"id": "SELFTEST", "class": "CLERICAL", "confirmatory_output_at_time": "none",'
+            ' "affects_membership": true, "files_touched": []}\n```\n'
+        )
+        _, errs = parse_amendments()
+        checks.append(("F9 rejects an amendment claiming to change membership", any("MEMBERSHIP" in e for e in errs)))
+        AMENDMENTS.write_text(
+            '```json\n{"id": "SELFTEST", "class": "CLERICAL", "confirmatory_output_at_time": "some",'
+            ' "affects_membership": false, "files_touched": []}\n```\n'
+        )
+        _, errs = parse_amendments()
+        checks.append(
+            ("F9 rejects an amendment made after confirmatory output", any("in existence" in e for e in errs))
+        )
+    finally:
+        if saved_amend is not None:
+            AMENDMENTS.write_text(saved_amend)
 
     # G2 must reject evidence that passed on the HOLDOUT rather than on development.
     saved = X2_EVIDENCE.read_text() if X2_EVIDENCE.exists() else None
