@@ -7,9 +7,13 @@ Part 1  the old projection defect, demonstrated then shown repaired
 Part 2  cardinality: 1->1, 1->many, many->1, 50/50, reversed order, duplicate, unowned
 Part 3  Model P (plurality) vs Model G (source-glyph partition)
 Part 4  spacing preservation under partition
-Part 5  D-frame symmetry under H/X swap
+Part 5  D-frame symmetry under H/X swap, and NON-VACUOUSLY so
 Part 6  eligibility is geometric, measured on DEVELOPMENT documents
 Part 7  identity diagnostics carrying H reconstruction on DEVELOPMENT documents
+
+The discordance semantics themselves (reconstruction signature, the three predicates, M0's
+components) are exercised in `x10_reconstruction_signature.py`; this file keeps the
+identity/projection evidence A21 rests on.
 """
 
 from __future__ import annotations
@@ -29,12 +33,13 @@ sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 from neutral_geometry import cluster_page, project_by_glyphs  # noqa: E402
 from neutral_identity import (  # noqa: E402
-    Fragment,
+    EmittedLine,
     SourceGlyph,
+    build_owner,
     cluster,
     contribution,
-    differs,
     eligible,
+    line_discordance,
     line_state,
 )
 
@@ -69,6 +74,7 @@ GLYPHS = [
     sg(5, 688, 112, 130),
 ]
 LINES = cluster(GLYPHS, 1)
+OWNER = build_owner(LINES)
 
 
 def part1_defect() -> None:
@@ -82,30 +88,31 @@ def part1_defect() -> None:
     check(
         "NEW membership: a foreign gid contributes nothing",
         "",
-        contribution([Fragment([(99, "Z")])], LINES[0]),
+        contribution([EmittedLine([(99, "Z")])], LINES[0]),
         "set membership cannot invent ownership",
     )
 
 
 def part2_cardinality() -> None:
-    check("1 neutral -> 1 fragment", "ABC", contribution([Fragment([(0, "A"), (1, "B"), (2, "C")])], LINES[0]))
+    check("1 neutral -> 1 emitted line", "ABC", contribution([EmittedLine([(0, "A"), (1, "B"), (2, "C")])], LINES[0]))
     check(
-        "1 neutral -> 2 fragments, joined by source order",
-        "ABC",
-        contribution([Fragment([(0, "A")]), Fragment([(1, "B"), (2, "C")])], LINES[0]),
+        "1 neutral -> 2 emitted lines: the SPLIT is preserved as a line break",
+        "A\nBC",
+        contribution([EmittedLine([(0, "A")]), EmittedLine([(1, "B"), (2, "C")])], LINES[0]),
+        "joining by '' would assert an adjacency the architecture never emitted",
     )
     check(
-        "1 neutral -> 3 fragments",
-        "ABC",
-        contribution([Fragment([(0, "A")]), Fragment([(1, "B")]), Fragment([(2, "C")])], LINES[0]),
+        "1 neutral -> 3 emitted lines",
+        "A\nB\nC",
+        contribution([EmittedLine([(0, "A")]), EmittedLine([(1, "B")]), EmittedLine([(2, "C")])], LINES[0]),
     )
     check(
-        "fragment order REVERSED gives the same contribution",
-        "ABC",
-        contribution([Fragment([(2, "C")]), Fragment([(1, "B")]), Fragment([(0, "A")])], LINES[0]),
+        "emitted-line order REVERSED gives the same contribution",
+        "A\nB\nC",
+        contribution([EmittedLine([(2, "C")]), EmittedLine([(1, "B")]), EmittedLine([(0, "A")])], LINES[0]),
         "ordering is a function of source identity, not of emission order",
     )
-    merged = [Fragment([(0, "A"), (1, "B"), (2, "C"), (3, "D"), (4, "E"), (5, "F")])]
+    merged = [EmittedLine([(0, "A"), (1, "B"), (2, "C"), (3, "D"), (4, "E"), (5, "F")])]
     check(
         "many neutral -> 1 merged line: line 0 keeps only its own glyphs",
         "ABC",
@@ -113,7 +120,7 @@ def part2_cardinality() -> None:
         "MODEL G -- a merge no longer blanks the other line",
     )
     check("many neutral -> 1 merged line: line 1 keeps its own glyphs", "DEF", contribution(merged, LINES[1]))
-    fifty = [Fragment([(0, "A"), (3, "D")])]
+    fifty = [EmittedLine([(0, "A"), (3, "D")])]
     check(
         "exact 50/50 merge splits by ownership, not by plurality",
         ("A", "D"),
@@ -123,18 +130,20 @@ def part2_cardinality() -> None:
     check(
         "duplicate gid is retained in the contribution",
         "AAB",
-        contribution([Fragment([(0, "A"), (0, "A"), (1, "B")])], LINES[0]),
+        contribution([EmittedLine([(0, "A"), (0, "A"), (1, "B")])], LINES[0]),
         "duplication is visible, then flagged as a diagnostic",
     )
     check(
-        "unowned glyph contributes nothing", "AB", contribution([Fragment([(0, "A"), (99, "Z"), (1, "B")])], LINES[0])
+        "unowned glyph contributes nothing",
+        "AB",
+        contribution([EmittedLine([(0, "A"), (99, "Z"), (1, "B")])], LINES[0]),
     )
-    check("lost glyph simply does not appear", "AC", contribution([Fragment([(0, "A"), (2, "C")])], LINES[0]))
+    check("lost glyph simply does not appear", "AC", contribution([EmittedLine([(0, "A"), (2, "C")])], LINES[0]))
 
 
 def part3_models() -> str:
     """Model P (plurality whole-line) vs Model G (source-glyph partition)."""
-    merged = [Fragment([(0, "F"), (1, "H"), (2, "!"), (3, "P")])]  # 3 glyphs of line0, 1 of line1
+    merged = [EmittedLine([(0, "F"), (1, "H"), (2, "!"), (3, "P")])]  # 3 glyphs of line0, 1 of line1
     p_line0 = merged[0].text()  # plurality: whole text to line 0
     p_line1 = "ABSENT"  # plurality: line 1 blanked
     g_line0 = contribution(merged, LINES[0])
@@ -152,24 +161,24 @@ def part3_models() -> str:
             "case": "merge 50/50",
             "plurality": "tie-break decides which line is blanked",
             "partition": [
-                contribution([Fragment([(0, "A"), (3, "D")])], LINES[0]),
-                contribution([Fragment([(0, "A"), (3, "D")])], LINES[1]),
+                contribution([EmittedLine([(0, "A"), (3, "D")])], LINES[0]),
+                contribution([EmittedLine([(0, "A"), (3, "D")])], LINES[1]),
             ],
             "preferred": "G",
             "why": "G needs no tie-break; P needs an arbitrary one",
         },
         {
             "case": "split 1->2",
-            "plurality": "both fragments -> same line; second is lost or overwrites",
-            "partition": "fragments rejoined in source order",
+            "plurality": "both emitted lines -> same slot; second is lost or overwrites",
+            "partition": "rejoined in source order",
             "preferred": "G",
-            "why": "P has no defined aggregation for two fragments on one line",
+            "why": "P has no defined aggregation for two emitted lines on one slot",
         },
     ]
     check(
         "MODEL P double-counts a merged glyph",
         True,
-        "P" == "P" and p_line0 == "FH!P",
+        p_line0 == "FH!P" and p_line1 == "ABSENT",
         "whole merged text lands on line 0 while line 1 is blanked",
     )
     check(
@@ -184,11 +193,11 @@ def part3_models() -> str:
 def part4_spacing() -> None:
     """The skeleton supplies identity and must never supply spacing."""
     gids = [(0, "F"), (1, "H")]
-    h_weld = [Fragment(list(gids))]
-    x_space = [Fragment([(0, "F"), (None, " "), (1, "H")])]
+    h_weld = [EmittedLine(list(gids))]
+    x_space = [EmittedLine([(0, "F"), (None, " "), (1, "H")])]
     check("same gids, H welds -> no space", "FH", contribution(h_weld, LINES[0]))
     check("same gids, X inserts a space -> space preserved", "F H", contribution(x_space, LINES[0]))
-    st = line_state(h_weld, x_space, LINES[0])
+    st = line_state(h_weld, x_space, LINES[0], OWNER)
     check(
         "the weld/space difference is TEXT_DIFFERS",
         "TEXT_DIFFERS",
@@ -196,41 +205,68 @@ def part4_spacing() -> None:
         "the seam difference survives projection -- it is not normalised away",
     )
     # letter-spaced display caps, the R E P O R T case
-    h_spaced = [Fragment([(0, "R"), (None, " "), (1, "E"), (None, " "), (2, "P")])]
-    x_tight = [Fragment([(0, "R"), (1, "E"), (2, "P")])]
-    check("R E P vs REP is TEXT_DIFFERS", "TEXT_DIFFERS", line_state(h_spaced, x_tight, LINES[0])["state"])
+    h_spaced = [EmittedLine([(0, "R"), (None, " "), (1, "E"), (None, " "), (2, "P")])]
+    x_tight = [EmittedLine([(0, "R"), (1, "E"), (2, "P")])]
+    check("R E P vs REP is TEXT_DIFFERS", "TEXT_DIFFERS", line_state(h_spaced, x_tight, LINES[0], OWNER)["state"])
     # a dropped glyph
-    st_drop = line_state([Fragment([(0, "A"), (1, "B"), (2, "C")])], [Fragment([(0, "A"), (2, "C")])], LINES[0])
+    st_drop = line_state(
+        [EmittedLine([(0, "A"), (1, "B"), (2, "C")])], [EmittedLine([(0, "A"), (2, "C")])], LINES[0], OWNER
+    )
     check("a dropped glyph is TEXT_DIFFERS", "TEXT_DIFFERS", st_drop["state"])
     check("...and is recorded as X source-glyph loss", [1], st_drop["diagnostics"]["X_SOURCE_GLYPH_LOSS"])
-    st_dup = line_state([Fragment([(0, "A"), (1, "B")])], [Fragment([(0, "A"), (0, "A"), (1, "B")])], LINES[0])
+    st_dup = line_state(
+        [EmittedLine([(0, "A"), (1, "B")])], [EmittedLine([(0, "A"), (0, "A"), (1, "B")])], LINES[0], OWNER
+    )
     check("a duplicated glyph is flagged", True, st_dup["diagnostics"]["X_SOURCE_GLYPH_DUPLICATION"])
 
 
 def part5_symmetry() -> None:
+    """Symmetry, and -- the point A21's version missed -- symmetry that is not vacuous.
+
+    The previous test asserted only `D(H,X) == D(X,H)`. `False == False` satisfies that,
+    so it passed on the merge/split case even while the merge/split disagreement was being
+    erased entirely. Every case below therefore carries its EXPECTED membership too.
+    """
     cases = {
-        "both present, same": ([Fragment([(0, "A")])], [Fragment([(0, "A")])]),
-        "both present, differ": ([Fragment([(0, "A")])], [Fragment([(0, "B")])]),
-        "H only": ([Fragment([(0, "A")])], []),
-        "X only": ([], [Fragment([(0, "A")])]),
-        "neither": ([], []),
-        "merge vs split": ([Fragment([(0, "A"), (3, "D")])], [Fragment([(0, "A")]), Fragment([(3, "D")])]),
+        # name: (H, X, expected D-frame membership on the lines it touches)
+        "both present, same": ([EmittedLine([(0, "A")])], [EmittedLine([(0, "A")])], False),
+        "both present, differ": ([EmittedLine([(0, "A")])], [EmittedLine([(0, "B")])], True),
+        "H only": ([EmittedLine([(0, "A")])], [], True),
+        "X only": ([], [EmittedLine([(0, "A")])], True),
+        "neither": ([], [], False),
+        "merge vs split": (
+            [EmittedLine([(0, "A"), (3, "D")])],
+            [EmittedLine([(0, "A")]), EmittedLine([(3, "D")])],
+            True,
+        ),
     }
     asym = []
-    for name, (h, x) in cases.items():
+    wrong = []
+    for name, (h, x, expected) in cases.items():
         for ln in LINES:
-            fwd = differs(line_state(h, x, ln))
-            rev = differs(line_state(x, h, ln))
+            fwd = line_discordance(line_state(h, x, ln, OWNER))
+            rev = line_discordance(line_state(x, h, ln, OWNER))
             if fwd != rev:
                 asym.append(f"{name}@{ln.key}")
+            # the touched line is line 0 for every case here; line 1 is touched only by the
+            # merge/split case, where it must also fire.
+            touched = ln.key == (1, 0) or name == "merge vs split"
+            if touched and fwd != expected:
+                wrong.append(f"{name}@{ln.key} expected={expected} observed={fwd}")
     check(
         "D-frame membership is invariant under swapping H and X",
         [],
         asym,
         "D(H,X) == D(X,H) for every cardinality case",
     )
-    mirror = line_state([Fragment([(0, "A")])], [], LINES[0])["state"]
-    mirror_rev = line_state([], [Fragment([(0, "A")])], LINES[0])["state"]
+    check(
+        "...and each case has the EXPECTED membership, so symmetry is not vacuous",
+        [],
+        wrong,
+        "False == False no longer passes for a case that must be True",
+    )
+    mirror = line_state([EmittedLine([(0, "A")])], [], LINES[0], OWNER)["state"]
+    mirror_rev = line_state([], [EmittedLine([(0, "A")])], LINES[0], OWNER)["state"]
     check("the asymmetric states are explicit mirrors", ("X_ABSENT", "H_ABSENT"), (mirror, mirror_rev))
 
 
@@ -245,7 +281,15 @@ def part6_eligibility() -> None:
 
 
 def part7_development(limit: int = 12) -> list[dict]:
-    """Eligibility and identity diagnostics carrying HYBRID reconstruction, dev docs only."""
+    """Eligibility measured on DEVELOPMENT documents, hybrid only.
+
+    NOTE on the gid used here: this part counts how many characters the GEOMETRIC rule
+    excludes, so it needs a per-character handle, not the study's identity. It uses the
+    list position, which is NOT `source_char_index` -- the adapter `continue`s past
+    rejected characters. That does not affect the count being reported (each character is
+    visited exactly once either way). The real end-to-end identity is carried and checked
+    in `x11_provenance_chain.py`.
+    """
     import pdfium_hybrid
     from contract_hybrid import CP, GEN, UPRIGHT, VBOX, X0, X1
 

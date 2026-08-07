@@ -29,10 +29,10 @@
   },
   {
    "case": "split 1->2",
-   "plurality": "both fragments -> same line; second is lost or overwrites",
-   "partition": "fragments rejoined in source order",
+   "plurality": "both emitted lines -> same slot; second is lost or overwrites",
+   "partition": "rejoined in source order",
    "preferred": "G",
-   "why": "P has no defined aggregation for two fragments on one line"
+   "why": "P has no defined aggregation for two emitted lines on one slot"
   }
  ],
  "tests": [
@@ -51,30 +51,30 @@
    "implication": "set membership cannot invent ownership"
   },
   {
-   "test": "1 neutral -> 1 fragment",
+   "test": "1 neutral -> 1 emitted line",
    "expected": "ABC",
    "observed": "ABC",
    "pass": true,
    "implication": ""
   },
   {
-   "test": "1 neutral -> 2 fragments, joined by source order",
-   "expected": "ABC",
-   "observed": "ABC",
+   "test": "1 neutral -> 2 emitted lines: the SPLIT is preserved as a line break",
+   "expected": "A\nBC",
+   "observed": "A\nBC",
+   "pass": true,
+   "implication": "joining by '' would assert an adjacency the architecture never emitted"
+  },
+  {
+   "test": "1 neutral -> 3 emitted lines",
+   "expected": "A\nB\nC",
+   "observed": "A\nB\nC",
    "pass": true,
    "implication": ""
   },
   {
-   "test": "1 neutral -> 3 fragments",
-   "expected": "ABC",
-   "observed": "ABC",
-   "pass": true,
-   "implication": ""
-  },
-  {
-   "test": "fragment order REVERSED gives the same contribution",
-   "expected": "ABC",
-   "observed": "ABC",
+   "test": "emitted-line order REVERSED gives the same contribution",
+   "expected": "A\nB\nC",
+   "observed": "A\nB\nC",
    "pass": true,
    "implication": "ordering is a function of source identity, not of emission order"
   },
@@ -209,6 +209,13 @@
    "observed": [],
    "pass": true,
    "implication": "D(H,X) == D(X,H) for every cardinality case"
+  },
+  {
+   "test": "...and each case has the EXPECTED membership, so symmetry is not vacuous",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": "False == False no longer passes for a case that must be True"
   },
   {
    "test": "the asymmetric states are explicit mirrors",
