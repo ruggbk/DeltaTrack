@@ -1,6 +1,6 @@
 # 19. Identify a parsed observation by its source, its parser revision and its ordinal; never by its text
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-07
 
 ## Context
@@ -205,9 +205,6 @@ worth calling out. Invariant 1's check must fold the ordinal in: a digest over t
 is blind to a reordering, which is the one fault it exists to catch. Invariant 4's must
 mutate the recorded revision and assert refusal, rather than asserting the field is present;
 a provenance field no verifier reads is worse than no field, because it reads as compliance.
-
-Implementing this record depends on the answer key's rebuild script being repaired; it does
-not currently run.
 
 The measurements above are reproducible with:
 
