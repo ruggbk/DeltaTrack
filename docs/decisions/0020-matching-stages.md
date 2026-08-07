@@ -9,7 +9,7 @@ Comparing two versions of a bill means answering four different questions:
 
 ```text
 Which nodes are plausible counterparts?          (retrieval)
-How much evidence supports each pairing?         (scoring)
+How much evidence supports each pairing?         (identity evidence)
 Which pairings should actually be selected?      (assignment)
 Given those, what changed?                       (classification)
 ```
@@ -113,13 +113,13 @@ give each stage one responsibility.
 ```text
 observations (ADR 0019 identity)
       ↓
-  RETRIEVAL      → CandidateSet    which pairings are worth evaluating
+  RETRIEVAL         → CandidateSet    which pairings are worth evaluating.
+      ↓                               May be bounded. Owns retrieval policy.
+  IDENTITY EVIDENCE → Evidence        what supports each pairing. Decides nothing.
       ↓
-  SCORING        → Evidence        what supports each pairing, with no decision taken
-      ↓
-  ASSIGNMENT     → Correspondence  which pairings are selected. Owns every threshold.
-      ↓
-  CLASSIFICATION → Changes         what changed, given the selected correspondence
+  ASSIGNMENT        → Correspondence  which pairings are selected.
+      ↓                               Owns correspondence policy.
+  CLASSIFICATION    → Changes         what changed, given the correspondence
       ↓
   canonical diff JSON (ADR 0006, unchanged)
 ```
@@ -127,28 +127,103 @@ observations (ADR 0019 identity)
 Money is deliberately **not** a stage in that chain. See "Where financial interpretation
 sits" below.
 
+The line the whole record turns on:
+
+> **Retrieval policy controls consideration. Assignment policy controls correspondence.**
+> A retrieval bound may exclude a candidate. Only assignment may declare a retrieved
+> candidate to be, or not be, a correspondence.
+
 Four requirements, one per boundary.
 
-**1. Retrieval is a named stage whose output is a value.** A `CandidateSet` enumerates the
-pairings that will be evaluated, and records for each which retriever proposed it.
-Retrieval may consult structure, text, or anything else, and may be a union of several
-retrievers. It may not read a score produced by the scoring stage, and it may not be
-performed a second time after classification.
+**1. Retrieval is a named stage whose output is a value, and it may be bounded.** A
+`CandidateSet` enumerates the pairings that will be evaluated. Retrieval may consult
+structure, text or anything else, may be a union of several retrievers, and **may use its
+own scores, bounds, filters, top-K and cutoffs** to decide what enters the set. What it may
+not do is consume the identity `Evidence` computed for the candidates it is emitting, or
+declare that two observations correspond. Its controls must be explicit and recorded, and
+it may not be performed again after classification.
 
-**2. Scoring produces evidence and takes no decision.** For a candidate pairing, the scoring
-stage yields an `Evidence` value carrying named signals. It applies no threshold, selects
-nothing, and has no knowledge of policy. Evidence is retained for the candidates that reach
-assignment, so ranking can be measured after the fact.
+**2. Identity evidence describes a pairing and decides nothing.** For a candidate pairing,
+this stage yields an `Evidence` value carrying named signals. It may carry booleans as
+signals — header equality, path equality — but it may not carry a verdict about
+correspondence, and it applies no assignment rule. Evidence is retained for the candidates
+that reach assignment, so ranking can be measured after the fact.
 
-**3. Assignment owns all policy.** Converting candidates plus evidence into a
-`Correspondence` is one stage, and **every threshold in the matching path lives there**. Its
-output is a first-class type, not a tuple.
+**3. Assignment owns correspondence policy.** Converting candidates plus evidence into a
+`Correspondence` is one stage, and **every threshold or rule that decides whether a
+candidate becomes a correspondence lives there**, along with the competition policy among
+candidates. Its output is a first-class type, not a tuple.
 
 **4. Classification consumes correspondence and does not relitigate it.** Given the selected
 correspondence, classification decides what changed. It may compare the corresponding texts
-directly — exact equality, a word-level diff, whether a path or a label moved. It may **not**
-apply a threshold to an identity score. Once a correspondence is assigned, it is not
-revisited.
+directly — exact equality, a word-level diff, whether a path or a label moved — and it may
+read evidence in order to present it. It may **not** apply a threshold to identity evidence,
+and it may not change which observations correspond.
+
+### Why retrieval may be bounded, when assignment owns the thresholds
+
+This looks like a contradiction and is not, so it is worth stating rather than leaving to be
+rediscovered.
+
+A retrieval bound and an assignment threshold answer different questions. `move_candidates`
+in `deltatrack.similarity` is the existing proof: it takes a threshold, prunes with
+`real_quick_ratio`/`quick_ratio` upper bounds so impossible pairs are never fully scored, and
+returns the survivors with their similarity. That is a bounded, ranked retriever, and it
+exists for a good reason — on one large bill it evaluates on the order of 78,000 candidate
+pairs, of which the overwhelming majority are worthless.
+
+Forbidding scores and cutoffs in retrieval would leave two options, both bad. Exhaustive
+Cartesian retrieval is not affordable at that scale. Or the pruning survives but hides inside
+a retriever that pretends not to have it, which is worse than the status quo: the boundary
+was introduced precisely to make what gets considered inspectable.
+
+So the constraint is not "no thresholds before assignment". It is that a retrieval bound
+**excludes a candidate from consideration** and says nothing about whether the pairs it keeps
+correspond, while an assignment threshold **declares a correspondence**. A retriever that
+returned "these two are the same provision" would be assigning, whatever it was called.
+
+The measurable consequence is that a retrieval bound moves **candidate recall**, and that is
+where its cost shows up. That is exactly why the bound has to be recorded rather than banned:
+a recall figure is meaningless without the configuration that produced it.
+
+### The candidate-set contract
+
+A candidate is a pairing of two observations (identified per
+[ADR 0019](0019-observation-identity.md)) plus provenance:
+
+| field | required | what it is |
+|---|---|---|
+| the two observation ids | yes | what is being proposed |
+| `retriever_name` | yes | **set-valued.** Which retrievers surfaced this pairing |
+| `retrieval_rank` | no | this retriever's rank for the pairing, where it ranks |
+| `retrieval_score` | no | this retriever's own score, where it has one |
+
+Three properties matter.
+
+**A retriever need not produce a number.** A structural or path retriever emits membership
+and provenance and nothing else. Requiring a score would push every retriever into inventing
+one, and an invented score is worse than an absent field because it looks comparable.
+
+**A retrieval score is not identity evidence.** It exists for observability and for
+candidate-recall and ranking analysis. Assignment must not read it as though it were a signal
+about correspondence; if a retriever's score is genuinely informative about identity, the way
+to use it is to compute it as a named evidence signal, where it can be measured.
+
+**A pairing proposed by several retrievers is one candidate, not several.** The provenance is
+a union, so "which retrievers found this?" survives, and a pairing does not gain weight in
+assignment merely by being proposed twice.
+
+The retrieval **configuration** — the bounds, cutoffs and K in force — is recorded alongside
+the set. A candidate-recall figure without the configuration that produced it is not
+reproducible and cannot be compared against another run.
+
+**Multi-round retrieval is permitted, and is not the circularity the constraint forbids.**
+A second round may consume `Correspondence` already settled by an earlier round: matching a
+container because its descendants matched is a real technique that the provision-matching
+study defers rather than rejects. What requirement 1 forbids is narrower and is genuinely
+circular — retrieval consuming the identity evidence computed for the very candidates it is
+deciding whether to emit. Where rounds exist, each candidate's provenance records the round
+that produced it, so recall stays attributable.
 
 ### The correspondence type
 
@@ -201,7 +276,9 @@ becomes wrong** — only the contents of one stage change.
   demoted to tiebreaker" framing is stronger than the research supports and is not adopted
   here);
 - whether header equality is privileged;
-- which retrievers ultimately ship;
+- which retrievers ultimately ship, **and what bounds, K or cutoffs they use**. Retrieval
+  policy is permitted and must be recorded; no value for it is chosen here, and choosing one
+  is a candidate-recall question for measurement rather than for this record;
 - whether global collision resolution ships at all;
 - the algorithm for many-to-one assignment;
 - whether GumTree-style descendant propagation or any other tree differ is adopted;
@@ -227,12 +304,23 @@ becomes wrong** — only the contents of one stage change.
   retriever today means adding another whole-pipeline pass, which is what `reconcile_moves`
   already is.
 
-- **Let the score object carry its own policy** (an `Evidence` that decides). Rejected: one
-  score is already consumed by three different policies (split at one cutoff, move at
+- **Let the evidence object carry its own policy** (an `Evidence` that decides). Rejected:
+  one score is already consumed by three different policies (split at one cutoff, move at
   another, collision assignment by rank with no cutoff) plus the renderer. A policy-bearing
-  score object either picks one of them, which is wrong, or grows one per consumer, which is
-  the same coupling with more indirection. It would also put the differ's policy inside the
-  rendering layer, which `similarity.py` was extracted specifically to avoid.
+  evidence object either picks one of them, which is wrong, or grows one per consumer, which
+  is the same coupling with more indirection. It would also put the differ's policy inside
+  the rendering layer, which `similarity.py` was extracted specifically to avoid.
+
+- **Ban every score and threshold from retrieval, so that "all thresholds live in
+  assignment" holds literally.** Rejected, and an earlier draft of this record got it wrong
+  this way. `move_candidates` is the counterexample from the code this record cites as
+  evidence: it takes a threshold, prunes with upper bounds, and returns survivors with their
+  scores, because on one large bill it faces roughly 78,000 candidate pairs. The literal rule
+  forces either exhaustive Cartesian retrieval, which is unaffordable, or pruning that hides
+  inside a retriever declining to admit it has any — which defeats the reason the candidate
+  boundary exists. The rule that survives distinguishes what a bound *does*: excluding a
+  pairing from consideration is retrieval policy, declaring a pairing to be a correspondence
+  is assignment policy.
 
 - **Let classification re-consult similarity.** Rejected as stated, with a carve-out.
   Classification legitimately asks *how much* the corresponding texts differ — that is what
@@ -320,12 +408,13 @@ rewrite.
 
 **Required by this record** — the data contracts, and only these:
 
-- `CandidateSet`, carrying per-candidate retriever provenance;
-- `Evidence`, carrying named signals and no decision, retained for candidates reaching
-  assignment;
+- `CandidateSet`, carrying set-valued per-candidate retriever provenance, optional
+  `retrieval_rank` and `retrieval_score`, and the retrieval configuration in force;
+- `Evidence`, carrying named signals and no correspondence verdict, retained for candidates
+  reaching assignment;
 - `Correspondence`, first-class, capable of 1:1 / 1:0 / 0:1 / 1:N / N:1, each link carrying
   its evidence;
-- assignment as the sole owner of thresholds;
+- assignment as the sole owner of correspondence policy;
 - classification as a consumer of correspondence that applies no identity threshold;
 - an explicit, tested canonical projection, including the degradation above.
 
@@ -398,18 +487,23 @@ Each names the direction that can regress, and how the check is proven capable o
 
 | # | invariant | proven able to fail by |
 |---|---|---|
-| 1 | Retrieval reads no score, and runs once. No retrieval happens after classification | a retriever that consults evidence fails an import-graph gate; assert no second retrieval pass exists after the classification stage |
-| 2 | The candidate set is inspectable, and every candidate records which retriever proposed it | a candidate with no retriever provenance is rejected |
-| 3 | Scoring applies no threshold and selects nothing | the scoring module may not import a threshold constant; plant one and assert the gate fires, on the fail-closed pattern ADR 0018 uses |
-| 4 | **Every threshold in the matching path lives in assignment** | plant a threshold comparison in retrieval, scoring or classification and assert the gate flags it |
-| 5 | Classification applies no identity threshold, and does not change which observations correspond | feed classification a fixed correspondence, perturb the evidence, and assert the emitted change set is unchanged |
-| 6 | Evidence is retained for every candidate that reaches assignment | drop an evidence value and assert ranking measurement refuses rather than silently scoring over a subset |
-| 7 | `Correspondence` round-trips 1:1 / 1:0 / 0:1 / 1:N / N:1 without loss | construct each shape by hand and assert it survives; an N:1 that silently becomes two 1:1s must fail |
-| 8 | The canonical projection of a non-binary correspondence degrades **explicitly**, and never duplicates a side's amounts | project a hand-built N:1 and assert each amount appears exactly once across the emitted rows |
-| 9 | Phase 1 changes no output | canonical JSON byte-identical across the corpus, both pipelines. This gate must itself be shown able to fail: perturb a cutoff and confirm it goes red before trusting a green |
-| 10 | Each stage is deterministic in isolation (ADR 0008) | same inputs, repeated calls, identical outputs, per stage |
+| 1 | Retrieval does not consume the identity evidence computed for the candidates it emits, and no retrieval runs after classification | a retriever that reads the `Evidence` for its own candidates fails an import-graph gate; assert no retrieval pass exists after the classification stage. A later *round* consuming settled `Correspondence` is permitted and must not trip it |
+| 2 | Every candidate records its retriever provenance, set-valued, and a pairing proposed twice is one candidate | a candidate with empty provenance is rejected; propose one pairing from two retrievers and assert one candidate with two names, not two candidates |
+| 3 | The retrieval configuration in force is recorded with the candidate set, so a candidate-recall figure is attributable and reproducible | compute recall from a set carrying no configuration and assert the measurement refuses rather than reporting an unattributable number |
+| 4 | **Identity evidence carries no correspondence verdict** and applies no assignment rule | the evidence module may not import a correspondence-policy constant; plant one and assert the gate fires, on the fail-closed pattern ADR 0018 uses |
+| 5 | **Every threshold or rule that decides whether a candidate becomes a correspondence lives in assignment** | plant a correspondence decision in retrieval, evidence or classification and assert the gate flags it. A retrieval bound must **not** trip it, and a rendering legibility cutoff must not either |
+| 6 | Classification may read evidence but may not change which observations correspond | feed classification a fixed correspondence, perturb the evidence, and assert the emitted correspondence set is unchanged |
+| 7 | Evidence is retained for every candidate that reaches assignment | drop an evidence value and assert ranking measurement refuses rather than silently scoring over a subset |
+| 8 | `Correspondence` round-trips 1:1 / 1:0 / 0:1 / 1:N / N:1 without loss | construct each shape by hand and assert it survives; an N:1 that silently becomes two 1:1s must fail |
+| 9 | The canonical projection of a non-binary correspondence degrades **explicitly**, and never duplicates a side's amounts | project a hand-built N:1 and assert each amount appears exactly once across the emitted rows |
+| 10 | Phase 1 changes no output | canonical JSON byte-identical across the corpus, both pipelines. This gate must itself be shown able to fail: perturb a cutoff and confirm it goes red before trusting a green |
+| 11 | Each stage is deterministic in isolation (ADR 0008) | same inputs, repeated calls, identical outputs, per stage |
 
-Invariant 9 is the one that carries the others. A byte-identical-output claim from a gate
+Invariants 1 and 5 are the pair that carries the corrected boundary, and they are worth
+reading together: a retrieval bound may exclude a candidate and must not trip invariant 5,
+while anything that declares a correspondence must trip it wherever it is written.
+
+Invariant 10 is the one that carries the others. A byte-identical-output claim from a gate
 nobody has seen fail is indistinguishable from a gate that is not reading the output, and
 the corpus gates are exactly where that has bitten before
 ([#299](https://github.com/AgoraDMV/DeltaTrack/issues/299),
