@@ -685,7 +685,7 @@ four files.
 ## A17 — BLOCKING AMBIGUITY. The frozen protocol is not executable as written
 
 ```json
-{"id": "A17", "class": "SUBSTANTIVE", "commits": [],
+{"id": "A17", "class": "SUBSTANTIVE", "commits": ["c394e7b"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/x06_m6_feasibility.py", "results/x06_m6_feasibility.json"],
