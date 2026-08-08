@@ -1953,11 +1953,11 @@ no holdout document opened.
 
 ```json
 {"id": "A26", "class": "TOOLING",
- "commits": ["af10155"],
+ "commits": [],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": ["HARNESS-PLAN.md"],
- "status": "PLAN ONLY -- nothing in it is frozen protocol"}
+ "files_touched": [],
+ "status": "PLAN ONLY -- reasoning only; accounting handed to A27"}
 ```
 
 `HARNESS-PLAN.md` maps the already-frozen methodology onto executable contracts for the five
@@ -1986,6 +1986,13 @@ Two further items are implementation-only: confirming `Anchor` carries enough to
 anchor on a neutral region by identity, and keeping `X_CORRECTS` counted in heading
 occurrences rather than boundary-level tallies.
 
+**A26 hands its protected-file accounting to A27**, and keeps only the reasoning above. When
+A26 was written the plan froze nothing, so TOOLING was the honest class. A27 then put frozen
+rulings *into* `HARNESS-PLAN.md`, which makes that file substantive — and F9 forbids one file
+being declared under both a SUBSTANTIVE and a TOOLING amendment, correctly. Rather than
+relabel A26's reasoning as substantive when it is not, the file and both its commits are
+declared under A27, exactly as A6 hands its accounting to A18.
+
 **Population impact: none.** No membership change, no scoring, no holdout document opened,
 no component built.
 
@@ -1995,7 +2002,7 @@ no component built.
 
 ```json
 {"id": "A27", "class": "SUBSTANTIVE",
- "commits": ["2938312"],
+ "commits": ["af10155", "2938312"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["HARNESS-PLAN.md", "probes/x14_anchor_bridge.py"],
@@ -2190,7 +2197,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `070098e` | `x2_verify.py`, `x04_freeze_check.py`, `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | A24 record cleanup + finite-geometry enforcement (A24); X2-b vacuity found (A25) |
 | `46b343a` | `x2_verify.py`, `x04_freeze_check.py`, `reconstruct_extended_corrected.py` | A25 resolved: X2-b boundary-decision counterfactual |
 | `4db8cc8` | `x2_verify.py` | A25 defects: raw boundary stream; page-qualified sabotage |
-| `af10155` | `HARNESS-PLAN.md` | downstream-harness contract/dependency plan (A26, TOOLING) |
+| `af10155` | `HARNESS-PLAN.md` | harness plan created; reasoning A26, **accounting A27** |
 | `2938312` | `HARNESS-PLAN.md`, `probes/x14_anchor_bridge.py` | harness contract rulings + anchor bridge proof (A27) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
