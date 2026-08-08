@@ -8,7 +8,7 @@ separate, byte-identical change.
 
 **Nothing imports this yet, and that is the design.** ADR 0020's implementation rule is
 to introduce the contracts behaviour-preservingly before changing matching policy, with
-canonical JSON byte-identical across the corpus as the acceptance criterion
+canonical JSON byte-identical over the committed XML corpus as the acceptance criterion
 (``tests/test_canonical_baseline.py``). A slice that both defined the types and rewired
 the differ could not report that criterion as evidence of anything, because the two
 changes would be inseparable in the result.
@@ -58,7 +58,19 @@ generalises to PDF where ``element_id`` does not.
   multiplicity nor assignment weight.
 - **Evidence carries no correspondence verdict**, and no assignment policy.
 - **Correspondence is first-class and not pair-shaped**, so a consolidation has a
-  production shape to be measured against.
+  production shape to be measured against — and **every selected link carries the
+  evidence that selected it**, exactly one record per link.
+
+## Canonical form is an invariant of the type, not of one constructor
+
+``RetrieverInvocation.config`` and ``Evidence.signals`` are name-sorted, and
+``Candidate.proposals`` is ordered by ``(round, retriever, config)``, in
+``__post_init__`` rather than in the ``of()`` helpers. A normalisation that only the
+convenience constructor applies is not a normalisation: the ordinary dataclass
+constructor stays reachable, so two spellings of one configuration would compare unequal,
+and ``CandidateSet`` keys proposals by invocation — meaning a bypassed sort would
+silently hold two copies of one invocation. The determinism tests would still pass,
+because they would be exercising the one path that normalises.
 
 ## Deliberately absent
 
@@ -90,12 +102,16 @@ SIDES = frozenset({OLD, NEW})
 
 
 def _freeze(mapping: Mapping[str, Scalar] | Iterable[tuple[str, Scalar]]) -> tuple[tuple[str, Scalar], ...]:
-    """A mapping as a name-sorted tuple of pairs.
+    """A mapping as a name-sorted tuple of pairs, rejecting a repeated name.
 
     Sorted rather than insertion-ordered so that two callers building the same
     configuration or signal set in different orders produce equal values. Without it,
     equality and hashing would depend on keyword order, and a deduplication keyed on a
     configuration would silently keep two copies of one invocation.
+
+    Called from ``__post_init__``, never only from a convenience constructor, so it
+    normalises whichever way the value was built. Idempotent, so re-freezing an
+    already-canonical tuple is a no-op.
     """
     items = tuple(mapping.items()) if isinstance(mapping, Mapping) else tuple(mapping)
     names = [name for name, _ in items]
@@ -137,7 +153,9 @@ class RetrieverInvocation:
 
     ``config`` records the bounds, cutoffs and K the retriever ran under. It is a
     name-sorted tuple rather than a dict so an invocation is hashable and two callers
-    spelling the same configuration in different orders produce equal invocations.
+    spelling the same configuration in different orders produce equal invocations. The
+    sort happens here, in ``__post_init__``, so the ordinary constructor cannot bypass
+    it — see the module docstring for why that matters to proposal deduplication.
     """
 
     retriever: str
@@ -149,11 +167,23 @@ class RetrieverInvocation:
             raise ValueError("retriever must be named")
         if self.round < 0:
             raise ValueError(f"round must be non-negative, got {self.round}")
+        object.__setattr__(self, "config", _freeze(self.config))
 
     @classmethod
     def of(cls, retriever: str, *, round: int = 0, **config: Scalar) -> RetrieverInvocation:
         """Build one from keyword configuration: ``of("path_group", threshold=0.4)``."""
-        return cls(retriever=retriever, round=round, config=_freeze(config))
+        return cls(retriever=retriever, round=round, config=tuple(config.items()))
+
+    @property
+    def _order_key(self) -> tuple[int, str, str]:
+        """A total order over invocations, for canonicalising proposal order.
+
+        ``repr`` of the (already canonical) config rather than the config itself, because
+        :data:`Scalar` admits mixed types and ``(("k", None),) < (("k", 1),)`` raises
+        ``TypeError``. Nothing reads proposal order as meaning, so a total order matters
+        here and a semantically meaningful one does not.
+        """
+        return (self.round, self.retriever, repr(self.config))
 
 
 @dataclass(frozen=True, order=True)
@@ -190,6 +220,15 @@ class Candidate:
     A candidate cannot exist without at least one proposal. A pair that reached
     evaluation without a recorded retriever invocation is a pair whose recall cannot be
     attributed, which is the observability the candidate boundary exists to buy.
+
+    **Proposal order is canonical, not the order the retrievers happened to run in.**
+    Ordered by ``(round, retriever, config)``, so two runs that surface one pair from the
+    same two invocations in opposite order produce identical candidates, provenance
+    included. Round is a field on the invocation, so sorting preserves round grouping
+    rather than destroying it; what it removes is same-round scheduling, which ADR 0020
+    gives no meaning to — proposals are provenance, not votes, and a pair surfaced by
+    three retrievers reaches assignment exactly once. Leaving execution order observable
+    would make it contract state that a later stage could come to depend on.
     """
 
     old: ObservationRef
@@ -201,6 +240,7 @@ class Candidate:
             raise ValueError(f"a candidate pairs one old-side and one new-side observation, got {self.old}, {self.new}")
         if not self.proposals:
             raise ValueError(f"candidate {self.pair} has no retrieval provenance")
+        object.__setattr__(self, "proposals", tuple(sorted(self.proposals, key=lambda p: p.invocation._order_key)))
 
     @property
     def pair(self) -> tuple[int, int]:
@@ -209,7 +249,7 @@ class Candidate:
 
     @property
     def invocations(self) -> tuple[RetrieverInvocation, ...]:
-        """The invocations that surfaced this candidate, in the order they proposed it."""
+        """The invocations that surfaced this candidate, in canonical proposal order."""
         return tuple(proposal.invocation for proposal in self.proposals)
 
 
@@ -274,8 +314,8 @@ class CandidateSet:
         That keeps each stage a deterministic function of its input (ADR 0008) even as
         retrieval grows from one retriever to a union of several.
 
-        Proposals within a candidate keep insertion order, because that order is the
-        round order and carries meaning a sort would destroy.
+        Proposal order within each candidate is canonicalised by :class:`Candidate`
+        itself, for the same reason one level down.
         """
         return tuple(
             Candidate(old=old, new=new, proposals=tuple(by_invocation.values()))
@@ -303,8 +343,17 @@ class Evidence:
     coupling with more indirection.
 
     ``signals`` is a name-sorted tuple of scalars, so an evidence value is hashable and
-    order-independent. Booleans are welcome (header equality, path equality); what is not
-    welcome is a name that answers "do these correspond?".
+    order-independent. The sort happens in ``__post_init__``, not only in ``of()``, so
+    the ordinary constructor cannot produce a record that compares unequal to the same
+    signals written in another order. Booleans are welcome (header equality, path
+    equality); what is not welcome is a name that answers "do these correspond?".
+
+    **An empty signal set is valid**, and deliberately so. A correspondence must carry
+    one evidence record per selected link, but *what* a signal is remains Phase 2 work.
+    Requiring a non-empty set would be this slice choosing which signals must exist,
+    which is precisely the policy ADR 0020 leaves open. The structural constraint that
+    does bite is the count and the addressing: a 1:N with two of its three links
+    documented is refused.
 
     Growing the vocabulary means adding a signal, never a field.
     ``tests/test_matching_contracts.py`` pins the field set for that reason: a new field
@@ -315,10 +364,18 @@ class Evidence:
     new: ObservationRef
     signals: tuple[tuple[str, Scalar], ...] = ()
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "signals", _freeze(self.signals))
+
     @classmethod
     def of(cls, old: ObservationRef, new: ObservationRef, **signals: Scalar) -> Evidence:
         """Build evidence from named signals: ``Evidence.of(o, n, header_equal=True)``."""
-        return cls(old=old, new=new, signals=_freeze(signals))
+        return cls(old=old, new=new, signals=tuple(signals.items()))
+
+    @property
+    def link(self) -> tuple[ObservationRef, ObservationRef]:
+        """The pair this evidence describes."""
+        return (self.old, self.new)
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -337,20 +394,32 @@ class Evidence:
 class Correspondence:
     """Which observations correspond. Assignment's output, and the only place that decides.
 
-    Sides are tuples rather than one node each, so 1:1, 1:0, 0:1, 1:N and N:1 are all
-    representable without loss — and N:M falls out, which is honest rather than
-    accidental: nothing here forbids it, and a type that permitted the five but not the
-    sixth would be arbitrary.
+    Sides are tuples rather than one node each, so the five shapes ADR 0020 requires —
+    1:1, 1:0, 0:1, 1:N and N:1 — are representable without loss.
 
     **Representable is not produced.** The current assigner emits only 1:1, 1:0 and 0:1,
     and ADR 0020 does not change that. What changes is that the type stops being the
     reason a real legislative shape cannot be expressed, so a later algorithm change is
     not also a type migration through every consumer.
 
-    ``evidence`` carries the evidence that selected each link, so a 1:N holds N entries
-    and a 1:0 holds none. Each entry must name observations this correspondence actually
-    relates; evidence about some other pair would make the record unreadable and is
-    refused.
+    ## Every selected link carries exactly one evidence record
+
+    A **link** is a selected (old, new) pair. For the required shapes that is
+    unambiguous: 1:1 has one link, 1:N has one per new-side observation, N:1 one per
+    old-side observation, and 1:0 and 0:1 select no pair at all and so carry no evidence.
+    A missing record is refused, and so is a second record for one link — "the evidence
+    that selected it" is singular, and two records leave no way to say which one did.
+
+    ## N:M is refused, deliberately
+
+    A both-sides-plural correspondence is *not* in ADR 0020's required list, and the
+    record defers global collision resolution without choosing an algorithm — which is
+    the assignment work that would produce one. More to the point, its link structure is
+    undefined: nothing says whether N:M means the full cross product, a matching, or
+    something else, so "each link carries the evidence that selected it" has no meaning
+    for it yet. Representing a shape whose links are undefined is not free, so this
+    refuses it rather than inventing a resolution. Lifting the refusal is a one-line
+    change once an assignment stage defines what an N:M link is.
     """
 
     old: tuple[ObservationRef, ...] = ()
@@ -369,9 +438,30 @@ class Correspondence:
         for side, refs in (("old", self.old), ("new", self.new)):
             if len(set(refs)) != len(refs):
                 raise ValueError(f"{side} side repeats an observation: {refs}")
+        if len(self.old) > 1 and len(self.new) > 1:
+            raise ValueError(
+                f"both sides plural ({len(self.old)}:{len(self.new)}). ADR 0020 requires 1:1, 1:0, 0:1, 1:N and "
+                "N:1; it defers global collision resolution and defines no link structure for a many-to-many "
+                "correspondence, so there is no rule yet for which pairs carry evidence."
+            )
+
+        links = {(old_ref, new_ref) for old_ref in self.old for new_ref in self.new}
+        documented: set[tuple[ObservationRef, ObservationRef]] = set()
         for item in self.evidence:
-            if item.old not in self.old or item.new not in self.new:
+            if item.link not in links:
                 raise ValueError(f"evidence names a pair outside this correspondence: {item.old}, {item.new}")
+            if item.link in documented:
+                raise ValueError(
+                    f"two evidence records for one link {item.old}->{item.new}; "
+                    "'the evidence that selected it' is singular"
+                )
+            documented.add(item.link)
+        if missing := sorted(links - documented, key=lambda link: (link[0].ordinal, link[1].ordinal)):
+            raise ValueError(
+                f"{len(missing)} of {len(links)} selected link(s) carry no evidence: {missing[:4]}. "
+                "ADR 0020 requires each link to carry the evidence that selected it; a record with no "
+                "signals is valid, an absent record is not."
+            )
 
     @property
     def cardinality(self) -> tuple[int, int]:
@@ -379,16 +469,17 @@ class Correspondence:
         return (len(self.old), len(self.new))
 
     @property
+    def links(self) -> tuple[tuple[ObservationRef, ObservationRef], ...]:
+        """The selected pairs, ordered by ordinal. Empty for a 1:0 or a 0:1."""
+        return tuple((old_ref, new_ref) for old_ref in self.old for new_ref in self.new)
+
+    @property
     def shape(self) -> str:
-        """The cardinality as ADR 0020 names it: ``1:1``, ``1:0``, ``0:1``, ``1:N``, ``N:1``, ``N:M``."""
+        """The cardinality as ADR 0020 names it: ``1:1``, ``1:0``, ``0:1``, ``1:N`` or ``N:1``."""
         old_n, new_n = self.cardinality
         if old_n <= 1 and new_n <= 1:
             return f"{old_n}:{new_n}"
-        if old_n == 1:
-            return "1:N"
-        if new_n == 1:
-            return "N:1"
-        return "N:M"
+        return "1:N" if old_n == 1 else "N:1"
 
     @property
     def is_binary(self) -> bool:

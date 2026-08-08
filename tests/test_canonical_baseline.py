@@ -1,10 +1,21 @@
-"""Canonical XML diff output is pinned byte for byte across the committed corpus.
+"""Canonical XML diff output is pinned byte for byte over the committed XML corpus.
 
 ADR 0020 makes the staged-matching extraction conditional on one acceptance criterion:
-the canonical JSON must stay byte-identical while the stages are separated. That is
-enforcement rather than convention — a matching-policy change necessarily moves a byte,
-so the refactor and the policy change cannot be smuggled into one commit without this
-going red.
+the canonical JSON must stay byte-identical while the stages are separated. This is the
+XML half of it, and the claim it supports is exactly this wide:
+
+    A matching-policy change that affects one of the committed XML corpus pairs will
+    move this baseline.
+
+Not "any matching-policy change moves a byte". A change reachable only by an input the
+corpus does not contain stays green here, and the corpus bounds the *observed* input
+space rather than the space the matcher accepts. That is the general limit of a
+corpus gate, and it is why this sits alongside the ADR's other requirement — that a
+matching-policy change carry independent precision and recall evidence — rather than
+standing in for it.
+
+What it does buy is that a refactor claiming to change nothing cannot also change
+something on twelve real bills without saying so.
 
 **What it runs.** Every adjacent version pair of the committed manifest
 (``tests/corpus_manifest.toml``), through ``compare.xml.compare_xml`` — the public
@@ -45,11 +56,12 @@ Regeneration is all-or-nothing: a missing fixture refuses the write rather than
 committing a baseline that silently covers fewer pairs (the shape #296 closed for the
 PDF extraction golden).
 
-**Scope: XML only, deliberately.** The PDF pipeline's observation contract is under
-active research (ADR 0019's open question 2 — its emission determinism is unmeasured),
-so pinning its bytes now would fire on that track's expected changes rather than on a
-matching regression. The PDF baseline is owed before any PDF-side stage extraction, and
-is not owed by an XML-only refactor.
+**Scope: this is the XML extraction baseline.** ADR 0020 eventually requires
+behaviour-preserving extraction on both pipelines, and a PDF baseline is owed before any
+PDF-side stage extraction happens. None happens here, and the PDF observation contract is
+intentionally unsettled meanwhile — ADR 0019's open question 2 records its emission
+determinism as unmeasured — so pinning its bytes now would fire on that track's expected
+changes rather than on a matching regression.
 """
 
 from __future__ import annotations

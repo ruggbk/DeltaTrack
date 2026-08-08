@@ -155,10 +155,11 @@ jobs:
         # the fixture goes red instead of quiet.
         #
         # test_canonical_baseline is the eighth. It pins the canonical XML diff byte for
-        # byte over the same manifest pairs, which is ADR 0020's stated acceptance
-        # criterion for extracting the matching stages. Named here for the reason every
-        # step in this job repeats: the marker makes a gate runnable, naming its module is
-        # what makes it run.
+        # byte over the same manifest pairs, which is the XML half of ADR 0020's stated
+        # acceptance criterion for extracting the matching stages: a matching-policy
+        # change that affects one of those pairs moves the baseline. Named here for the
+        # reason every step in this job repeats: the marker makes a gate runnable, naming
+        # its module is what makes it run.
         #
         # test_matching_contracts is the ninth, and only PART of it is slow: its ADR 0020
         # contract cases are fast and run in the fast step above. What runs here is the

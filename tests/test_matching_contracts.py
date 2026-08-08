@@ -47,6 +47,24 @@ PATH_GROUP = RetrieverInvocation.of("path_group")
 MOVE_SCAN = RetrieverInvocation.of("move_scan", round=1, threshold=0.6)
 
 
+def link(old_ref: ObservationRef, new_ref: ObservationRef) -> Evidence:
+    """An evidence record for one selected link, carrying no signals.
+
+    Valid by design: a correspondence must carry one record per link, but which signals
+    exist is Phase 2 policy this slice does not choose. See `Evidence`.
+    """
+    return Evidence.of(old_ref, new_ref)
+
+
+def documented(old_refs: tuple[ObservationRef, ...], new_refs: tuple[ObservationRef, ...]) -> Correspondence:
+    """A correspondence with every selected link documented, for tests about other rules."""
+    return Correspondence(
+        old=old_refs,
+        new=new_refs,
+        evidence=tuple(link(o, n) for o in old_refs for n in new_refs),
+    )
+
+
 # --- Invariant 1: one observation pair, one candidate --------------------------
 
 
@@ -193,14 +211,13 @@ def test_evidence_is_immutable():
         ("0:1", (), (new(7),)),
         ("1:N", (old(3),), (new(7), new(8), new(9))),
         ("N:1", (old(3), old(4)), (new(7),)),
-        ("N:M", (old(3), old(4)), (new(7), new(8))),
     ],
 )
-def test_correspondence_represents_every_shape_without_loss(shape, old_refs, new_refs):
+def test_correspondence_represents_every_required_shape_without_loss(shape, old_refs, new_refs):
     """ADR 0020 invariant 9. Fails on a pair-shaped result type — today's
     ``list[tuple[BillNode | None, BillNode | None]]`` — which degrades a consolidation to
     unrelated removals and additions before any consumer can see it."""
-    correspondence = Correspondence(old=old_refs, new=new_refs)
+    correspondence = documented(old_refs, new_refs)
     assert correspondence.shape == shape
     assert correspondence.cardinality == (len(old_refs), len(new_refs))
     assert correspondence.old == old_refs
@@ -215,12 +232,77 @@ def test_a_correspondence_relates_at_least_one_observation():
         Correspondence()
 
 
+# --- Each link carries the evidence that selected it ---------------------------
+
+
+@pytest.mark.parametrize(
+    ("label", "old_refs", "new_refs", "evidence"),
+    [
+        ("1:1 with none at all", (old(3),), (new(7),), ()),
+        ("1:N with none at all", (old(3),), (new(7), new(8)), ()),
+        ("1:N with one link documented", (old(3),), (new(7), new(8)), (Evidence.of(old(3), new(7)),)),
+        ("N:1 with one link documented", (old(3), old(4)), (new(7),), (Evidence.of(old(3), new(7)),)),
+    ],
+)
+def test_a_selected_link_without_evidence_is_refused(label, old_refs, new_refs, evidence):
+    """ADR 0020: "with each link carrying the evidence that selected it".
+
+    Fails if evidence is merely permitted rather than required — the state the first
+    version of this type was in, where a 1:N could reach a consumer with two of its three
+    links unexplained and nothing saying which one the assigner actually acted on.
+    """
+    with pytest.raises(ValueError, match="carry no evidence"):
+        Correspondence(old=old_refs, new=new_refs, evidence=evidence)
+
+
+@pytest.mark.parametrize(
+    ("label", "old_refs", "new_refs"),
+    [("removal", (old(3),), ()), ("addition", (), (new(7),))],
+)
+def test_a_one_sided_correspondence_needs_no_evidence(label, old_refs, new_refs):
+    """The other half of the rule: 1:0 and 0:1 select no pair, so there is no link to
+    document. Fails if the requirement is written as "evidence is non-empty", which would
+    demand a record about a pair that does not exist."""
+    correspondence = Correspondence(old=old_refs, new=new_refs)
+    assert correspondence.links == ()
+    assert correspondence.evidence == ()
+
+
+def test_one_link_may_not_carry_two_evidence_records():
+    """ "The evidence that selected it" is singular. Fails if duplicates are tolerated,
+    which leaves a reader unable to say which record the assigner acted on — and would let
+    a later ranking analysis double-count one link's signals."""
+    with pytest.raises(ValueError, match="two evidence records for one link"):
+        Correspondence(
+            old=(old(3),),
+            new=(new(7),),
+            evidence=(Evidence.of(old(3), new(7), header_equal=True), Evidence.of(old(3), new(7), header_equal=False)),
+        )
+
+
 def test_evidence_must_name_a_pair_the_correspondence_relates():
-    """ADR 0020: each link carries the evidence that selected it. Fails if unrelated
-    evidence can be attached, which makes the retained record unreadable — the reader
-    cannot tell which link a signal describes."""
+    """Fails if unrelated evidence can be attached, which makes the retained record
+    unreadable — the reader cannot tell which link a signal describes."""
     with pytest.raises(ValueError, match="outside this correspondence"):
         Correspondence(old=(old(3),), new=(new(7),), evidence=(Evidence.of(old(3), new(99)),))
+
+
+def test_a_many_to_many_correspondence_is_refused():
+    """ADR 0020 requires 1:1, 1:0, 0:1, 1:N and N:1, and defers global collision
+    resolution without choosing an algorithm.
+
+    Nothing defines what a link *is* for a both-sides-plural correspondence — cross
+    product, matching, or something else — so "each link carries the evidence that
+    selected it" has no meaning for one. This refuses the shape rather than inventing a
+    resolution. Fails if the guard is dropped, which would silently reinstate a shape
+    whose evidence rule is undefined.
+    """
+    with pytest.raises(ValueError, match="both sides plural"):
+        Correspondence(
+            old=(old(3), old(4)),
+            new=(new(7), new(8)),
+            evidence=tuple(Evidence.of(o, n) for o in (old(3), old(4)) for n in (new(7), new(8))),
+        )
 
 
 def test_a_side_may_not_repeat_an_observation():
@@ -228,16 +310,16 @@ def test_a_side_may_not_repeat_an_observation():
     later canonical projection count one side's amounts twice — the double-count ADR 0001
     forbids and ADR 0020 invariant 10 restates."""
     with pytest.raises(ValueError, match="repeats an observation"):
-        Correspondence(old=(old(3),), new=(new(7), new(7)))
+        Correspondence(old=(old(3),), new=(new(7), new(7)), evidence=(Evidence.of(old(3), new(7)),))
 
 
 def test_an_observation_corresponds_at_most_once():
     """The per-anchor competition policy, measured on the corpus below before being
     encoded. Fails if two correspondences may claim one observation, which would let a
     node appear in two changes and its money be reported twice."""
-    settled = CorrespondenceSet([Correspondence(old=(old(3),), new=(new(7),))])
+    settled = CorrespondenceSet([documented((old(3),), (new(7),))])
     with pytest.raises(ValueError, match="already claimed"):
-        settled.add(Correspondence(old=(old(3),), new=(new(8),)))
+        settled.add(documented((old(3),), (new(8),)))
 
 
 # --- Invariant 11: each stage deterministic in isolation -----------------------
@@ -253,10 +335,71 @@ def test_configuration_order_does_not_change_an_invocation():
     assert hash(a) == hash(b)
 
 
+def test_the_plain_constructor_canonicalises_a_configuration_too():
+    """The same rule, reached without ``of()``.
+
+    Fails if normalisation lives only in the convenience constructor — the state the
+    first version of this type was in. That is a false green rather than a cosmetic gap:
+    the test above would keep passing while the ordinary dataclass constructor produced
+    unequal invocations for one configuration, and ``CandidateSet`` keys proposals by
+    invocation, so one retriever would occupy two provenance slots on one candidate.
+    """
+    a = RetrieverInvocation("move_scan", config=(("threshold", 0.6), ("top_k", 50)))
+    b = RetrieverInvocation("move_scan", config=(("top_k", 50), ("threshold", 0.6)))
+    assert a == b
+    assert hash(a) == hash(b)
+    assert a.config == (("threshold", 0.6), ("top_k", 50)), "stored form must be name-sorted"
+    assert a == RetrieverInvocation.of("move_scan", top_k=50, threshold=0.6), "both paths agree"
+
+
+def test_the_deduplication_survives_a_plain_constructed_invocation():
+    """The consequence the rule above exists for, asserted end to end.
+
+    Fails if canonicalisation is bypassable: the two spellings would key two entries, and
+    one retriever would look like two on the candidate's provenance.
+    """
+    candidates = CandidateSet()
+    candidates.propose(old(3), new(7), RetrieverInvocation("move_scan", config=(("threshold", 0.6), ("top_k", 50))))
+    candidates.propose(old(3), new(7), RetrieverInvocation("move_scan", config=(("top_k", 50), ("threshold", 0.6))))
+    (candidate,) = candidates.candidates()
+    assert len(candidate.proposals) == 1
+
+
 def test_signal_order_does_not_change_evidence():
     """Same rule for evidence: two stages computing the same signals in different orders
     must produce one value, or a retained record cannot be compared between runs."""
     assert Evidence.of(old(3), new(7), b=2, a=1) == Evidence.of(old(3), new(7), a=1, b=2)
+
+
+def test_the_plain_constructor_canonicalises_signals_too():
+    """Evidence's half of the same false green. Fails if ``_freeze`` is only reached
+    through ``of()``, which would let two records of one signal set compare unequal and
+    make a retained evidence set incomparable between runs."""
+    a = Evidence(old(3), new(7), signals=(("word_overlap", 0.42), ("header_equal", True)))
+    b = Evidence(old(3), new(7), signals=(("header_equal", True), ("word_overlap", 0.42)))
+    assert a == b
+    assert hash(a) == hash(b)
+    assert a.names == ("header_equal", "word_overlap")
+    assert a == Evidence.of(old(3), new(7), word_overlap=0.42, header_equal=True)
+
+
+@pytest.mark.parametrize(
+    ("label", "build"),
+    [
+        ("invocation config", lambda: RetrieverInvocation("r", config=(("k", 1), ("k", 2)))),
+        ("evidence signals", lambda: Evidence(old(3), new(7), signals=(("k", 1), ("k", 2)))),
+    ],
+)
+def test_a_repeated_name_is_rejected_by_the_plain_constructor(label, build):
+    """A repeated config or signal name has no single value, so it is refused rather than
+    silently resolved to whichever was written last.
+
+    Only the plain constructor is exercised because that is the only path that can express
+    a duplicate: ``of()`` takes keywords, and ``f(k=1, k=2)`` is a SyntaxError before any
+    of this runs. Fails if the check sits in ``of()`` rather than in ``__post_init__``.
+    """
+    with pytest.raises(ValueError, match="duplicate names"):
+        build()
 
 
 def test_candidate_order_does_not_depend_on_which_retriever_ran_first():
@@ -272,6 +415,43 @@ def test_candidate_order_does_not_depend_on_which_retriever_ran_first():
 
     assert [c.pair for c in forward.candidates()] == [(0, 5), (1, 2)]
     assert forward.candidates() == reverse.candidates()
+
+
+def test_proposal_order_does_not_depend_on_which_retriever_ran_first():
+    """The case the test above does not reach: two invocations surfacing the **same**
+    pair, in opposite execution order.
+
+    ``Candidate.__eq__`` reads the pair alone, so equality cannot see this — the
+    assertion has to compare the retained provenance directly, which is what makes it
+    fault-sensitive. Fails if proposals keep insertion order, which would make
+    same-round retriever scheduling observable contract state that a later stage could
+    come to depend on. Round is a field on the invocation, so canonical order still
+    groups by round; what it removes is the arbitrary part.
+    """
+    run_a = CandidateSet()
+    run_a.propose(old(3), new(7), PATH_GROUP, rank=0, score=0.91)
+    run_a.propose(old(3), new(7), MOVE_SCAN, rank=4, score=0.62)
+    run_b = CandidateSet()
+    run_b.propose(old(3), new(7), MOVE_SCAN, rank=4, score=0.62)
+    run_b.propose(old(3), new(7), PATH_GROUP, rank=0, score=0.91)
+
+    (a,) = run_a.candidates()
+    (b,) = run_b.candidates()
+    assert a.proposals == b.proposals
+    assert a.invocations == b.invocations == (PATH_GROUP, MOVE_SCAN)
+
+
+def test_proposal_order_groups_by_round_before_retriever():
+    """Canonical order is ``(round, retriever, config)``, so a later round sorts after an
+    earlier one whatever the retriever is called. Fails if the key leads with the
+    retriever name, which would interleave rounds and lose the one ordering that does
+    carry meaning."""
+    round_two = RetrieverInvocation.of("aaa_scan", round=2)
+    candidates = CandidateSet()
+    candidates.propose(old(3), new(7), round_two)
+    candidates.propose(old(3), new(7), PATH_GROUP)
+    (candidate,) = candidates.candidates()
+    assert candidate.invocations == (PATH_GROUP, round_two)
 
 
 def test_a_reference_names_a_side_and_a_position_in_the_complete_sequence():
@@ -352,10 +532,16 @@ class TestAssignmentExclusivityOnTheCorpus:
 
             settled = CorrespondenceSet()
             for old_node, new_node in match_nodes(old_tree, new_tree):
+                old_refs = () if old_node is None else (ObservationRef(OLD, old_at[id(old_node)]),)
+                new_refs = () if new_node is None else (ObservationRef(NEW, new_at[id(new_node)]),)
+                # One evidence record per selected link, carrying no signals. This harness
+                # measures exclusivity, and naming a signal here would assert something
+                # about what the current matcher weighs, which is Phase 2's question.
                 settled.add(
                     Correspondence(
-                        old=() if old_node is None else (ObservationRef(OLD, old_at[id(old_node)]),),
-                        new=() if new_node is None else (ObservationRef(NEW, new_at[id(new_node)]),),
+                        old=old_refs,
+                        new=new_refs,
+                        evidence=tuple(Evidence.of(o, n) for o in old_refs for n in new_refs),
                     )
                 )
 
