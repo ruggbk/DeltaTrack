@@ -1949,6 +1949,48 @@ no holdout document opened.
 
 ---
 
+## A26 — TOOLING. The downstream-harness contract and dependency plan
+
+```json
+{"id": "A26", "class": "TOOLING",
+ "commits": ["PENDING"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["HARNESS-PLAN.md"],
+ "status": "PLAN ONLY -- nothing in it is frozen protocol"}
+```
+
+`HARNESS-PLAN.md` maps the already-frozen methodology onto executable contracts for the five
+unbuilt components (`build_frames`, `build_oracle`, `score_metrics`, `decide_architecture`,
+`adjudicator_prompt`): inputs, output schema, the frozen rule each implements, what each may
+and may not decide, invariants, positive and negative controls with "what fact would make
+this fail" for every gate, and the dependency order.
+
+**It changes no scoring rule and freezes nothing**, which is why it is TOOLING. Where the
+frozen rules do not determine an outcome-affecting choice, the plan **surfaces** the
+ambiguity rather than resolving it. Three are methodological and need a ruling before the
+components they gate are written:
+
+- **M1–M4's matching key under A19.** §6 matches "by printed-line position"; A19 moved the
+  unit to neutral lines and restated only the *denominators*. The key itself is unspecified
+  in neutral terms, and it determines which emitted heading pairs with which adjudicated
+  heading — hence `X_CORRECTS` / `X_REGRESSES`, hence Rule 1.
+- **The 40 % amount-bearing C-frame reservation after A20.** Its stated purpose was to give
+  M6 a population; M6 is deferred, yet A19 retained the clause. It now constrains 40 % of a
+  scarce adjudication budget for a metric the study may not report.
+- **D-frame subsampling, 60 items (§5.5.1) vs 120 regions (§5.8).** A10 supersedes §5.5.1
+  but does not name §5.8; applying §5.8's subsample first would let X win on a sample, which
+  A10 forbids.
+
+Two further items are implementation-only: confirming `Anchor` carries enough to place an
+anchor on a neutral region by identity, and keeping `X_CORRECTS` counted in heading
+occurrences rather than boundary-level tallies.
+
+**Population impact: none.** No membership change, no scoring, no holdout document opened,
+no component built.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
