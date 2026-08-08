@@ -209,7 +209,12 @@ event          per DOCUMENT: "has >= 1 heading-level H/X discordance"
 estimand       pi = P(a document from the target population shows that event)
 bound          exact one-sided 95% Clopper-Pearson upper bound on pi, unit = DOCUMENT
 zero events    closed form 1 - 0.05**(1/N); NO bootstrap (degenerate, measured in 8.1)
-non-zero       bootstrap permitted, reported alongside
+non-zero       cluster bootstrap by document, reported alongside. A29 freezes HOW:
+               10,000 resamples, unit = document with replacement, drawn by
+               domain-separated hash `bootstrap-document|20260807|<statistic id>|
+               <replicate>|<draw>` over a canonically sorted document list -- no RNG
+               object, no input-order dependence. SUPPLEMENTARY ONLY: never an input
+               to Rule 0/1/2/3, any adequacy gate, or decide_architecture
 paired         per-document paired differences; UNWEIGHTED mean over documents;
                per-document detail is mandatory, never collapsed to one number
 forbidden      any per-heading probability, any heading-as-iid-trial denominator
@@ -362,6 +367,12 @@ hands an outcome-affecting choice to future implementation. **Three hits, none o
 `build_frames` permits "JSON layout only"; `build_oracle` permits "NONE that affect an
 outcome"; §8's "bootstrap permitted" is the frozen rule itself (allowed only at non-zero
 events). No further edge cases are manufactured.
+
+**A29 closed the one residue in that third hit.** "Permitted" was never an outcome freedom —
+Rule 3's gate vector has no bootstrap term — but the resample count and draw procedure were
+unfrozen, so two honest runs could print different intervals. That was a *reproducibility*
+gap, not an outcome gap, and it is now frozen. The remaining implementation freedoms are
+JSON layout and the blind-ID alias encoding, neither of which can move a number.
 
 > **Unresolved outcome-affecting ambiguities: ZERO.**
 

@@ -2282,6 +2282,70 @@ no holdout document opened, no harness component built.
 
 ---
 
+## A29 — SUBSTANTIVE. The supplementary bootstrap is reproducible, and it is not evidence
+
+```json
+{"id": "A29", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["HARNESS-PLAN.md", "probes/methodology_contracts.py",
+                   "probes/x15_methodology_contracts.py"],
+ "supersedes_text_in": "HARNESS-PLAN.md 8 (\"bootstrap permitted\")",
+ "status": "FROZEN"}
+```
+
+A28's closing sweep recorded three surviving "permitted" phrases and ruled none of them an
+open outcome-affecting ambiguity. That ruling stands. But the third — §8's non-zero-event
+bootstrap — left the **resample count and the draw procedure** unfrozen, so two honest runs
+of the same committed inputs could print different intervals. That is a **reproducibility**
+gap, not an outcome gap, and this record closes it without touching the statistical method.
+
+**`affects_scoring_rule` is `false` on purpose.** Nothing here changes what is measured or
+how anything is decided.
+
+### A29.1 — the bootstrap is frozen procedurally, not merely seeded
+
+> **10,000 resamples. Resampling unit = document, with replacement** (the unit A27.5 already
+> fixed). Draw `d` of replicate `r` takes the document at index
+> `sha256("bootstrap-document|20260807|<canonical statistic id>|<r>|<d>")[:8] mod n` from the
+> **canonically sorted** document list.
+
+Hash-derived rather than PRNG-drawn. Saying "seed the RNG" would freeze the interval only for
+one library's generator and one consumption order; this depends on nothing but committed
+identity and two ordinals, so any implementation in any language reproduces the same
+resample. The namespace joins A27.7's frozen seed family rooted at `20260807`.
+
+**The canonical sort is load-bearing, and a control found that the hard way.** The draw is an
+index, so without sorting, the caller's listing order silently selects different documents —
+the exact input-order dependence this ruling forbids. `x15`'s ordering control failed on the
+first implementation and passes on the fixed one.
+
+### A29.2 — the interval is reporting, never evidence
+
+> **The non-zero-event bootstrap interval is supplementary reporting only. It is not an input
+> to Rule 0, Rule 1, Rule 2, Rule 3, any adequacy gate, or any architecture-selection
+> outcome.**
+
+Freezing reproducibility must not quietly promote the number into decision evidence. The
+primary inference is unchanged and remains A27.5's exact one-sided 95 % Clopper–Pearson bound
+on the document unit. Zero-event behaviour is unchanged: the bootstrap is **refused**, not
+reported as a degenerate `[0.0, 0.0]`.
+
+To make "not a gate input" checkable rather than promised, A27.6's gate vector is now written
+down in `methodology_contracts.GATE_VECTOR` and a control asserts no member of it is a
+bootstrap term.
+
+**Executable owner:** `methodology_contracts.bootstrap_interval` / `bootstrap_resample` /
+`bootstrap_draw_index`. **Controls:** `x15_methodology_contracts.py` — reproducibility,
+order-independence, a non-vacuous namespace-change control on a varied fixture where the
+procedure is load-bearing, zero-event refusal, and non-gating.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
+no holdout document opened, no harness component built.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json

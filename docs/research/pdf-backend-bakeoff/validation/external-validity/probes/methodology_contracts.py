@@ -133,3 +133,80 @@ def adequacy(strata_filled: int, occurrences: int) -> str:
     if strata_filled >= 7 and occurrences >= 800:
         return "GENERALISABLE"
     return "LIMITED"
+
+
+# ------------------------------------------------- A29 supplementary bootstrap (NON-GATING)
+
+#: A27.6's decision-blocking conditions, written down so "the bootstrap is not one of them"
+#: is a checkable statement rather than a promise in prose. Cross-engine (x09) is absent on
+#: purpose: it qualifies reporting and never blocks a decision.
+GATE_VECTOR = (
+    "R1",
+    "N-A",
+    "N-B",
+    "N-C",
+    "S1",
+    "confirmatory X2-a",
+    "confirmatory X2-b",
+    "M9 evaluability",
+    "4.5 adequacy",
+)
+
+BOOTSTRAP_NAMESPACE = "bootstrap-document"
+BOOTSTRAP_RESAMPLES = 10_000
+
+
+def bootstrap_draw_index(statistic_id, replicate: int, draw: int, n: int) -> int:
+    """Which document the `draw`-th pick of `replicate` takes, from `n` documents.
+
+    Hash-derived rather than drawn from a PRNG. A seeded PRNG would freeze the interval only
+    for one library's generator and one consumption order; this depends on nothing but the
+    committed identity of the comparison and the two ordinals, so any implementation in any
+    language reproduces the same resample. There is no RNG object and no input-order
+    dependence to leak in.
+    """
+    digest = hashlib.sha256(
+        f"{BOOTSTRAP_NAMESPACE}|{SELECTION_SEED}|{canonical(statistic_id)}|{replicate}|{draw}".encode()
+    ).digest()
+    return int.from_bytes(digest[:8], "big") % n
+
+
+def bootstrap_resample(statistic_id, documents: list, replicate: int) -> list:
+    """One replicate: `n` draws WITH REPLACEMENT over documents, the resampling unit (A27.5).
+
+    The document list is CANONICALLY SORTED before any draw. The draw is an index, so without
+    this the caller's listing order would silently select different documents and two runs
+    over the same set could print different intervals -- which is precisely the freedom this
+    ruling exists to remove. Caught by `x15`'s ordering control.
+    """
+    ordered = sorted(documents, key=canonical)
+    n = len(ordered)
+    return [ordered[bootstrap_draw_index(statistic_id, replicate, d, n)] for d in range(n)]
+
+
+def bootstrap_interval(statistic_id, documents: list, statistic, events: int) -> dict:
+    """SUPPLEMENTARY ONLY. A 95 % percentile interval over 10,000 document resamples.
+
+    **This value is reporting, never evidence.** It is not an input to Rule 0, Rule 1,
+    Rule 2, Rule 3, any adequacy gate, or any architecture-selection outcome. A27.5 already
+    fixed the inference: the primary bound is the exact one-sided 95 % Clopper-Pearson bound
+    on the document unit. A29 freezes only how this companion number is produced, so that two
+    runs of the same committed inputs print the same interval.
+
+    Refuses at zero events rather than returning a degenerate `[0.0, 0.0]`, which section 8.1
+    measured and section 8 forbids.
+    """
+    if events == 0:
+        return {"reported": False, "reason": "ZERO_EVENTS_BOOTSTRAP_REFUSED"}
+    stats = sorted(statistic(bootstrap_resample(statistic_id, documents, r)) for r in range(BOOTSTRAP_RESAMPLES))
+    lo = stats[int(0.025 * (BOOTSTRAP_RESAMPLES - 1))]
+    hi = stats[int(0.975 * (BOOTSTRAP_RESAMPLES - 1))]
+    return {
+        "reported": True,
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "namespace": BOOTSTRAP_NAMESPACE,
+        "seed": SELECTION_SEED,
+        "unit": "document",
+        "interval": [lo, hi],
+        "gating": False,
+    }
