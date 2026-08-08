@@ -1,6 +1,6 @@
 # 21. Name things in the vocabulary an outside reader already speaks, scoped to the boundary being named
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-08
 
 ## Context
