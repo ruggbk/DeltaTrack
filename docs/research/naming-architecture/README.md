@@ -6,11 +6,15 @@ capabilities and interfaces from the names alone.
 
 **This is the spike, not the decision.** It records evidence and recommends what an ADR
 should and should not freeze; it deliberately argues against several of its own proposals
-(§7) rather than presenting a settled scheme. The decision drawn from it is
-[ADR 0021](../../decisions/0021-naming-authority-and-boundaries.md), which freezes the
-surviving rules and is the binding record. Where the two differ, the ADR governs.
+(§7) rather than presenting a settled scheme. It binds nothing on its own.
 
-**Status:** audit only. No code, config, or ADR written.
+The decision drawn from it is
+[ADR 0021](../../decisions/0021-naming-authority-and-boundaries.md), proposed separately so
+that the evidence and the decision can be reviewed apart. **The ADR is the binding record;
+where the two differ, the ADR governs.** Recommendations below are inputs to that decision,
+not the decision — several were narrowed or dropped before it was written.
+
+**Status:** audit only. No code or configuration changes accompany this report.
 **Revision 6.** A scoping correction. Rev. 5 read the normative sources (§1.0, §10),
 overturned one of this report's own claims and falsified two of its criticisms — then
 overextended the govinfo result by letting an *acquisition-register* fact govern the
