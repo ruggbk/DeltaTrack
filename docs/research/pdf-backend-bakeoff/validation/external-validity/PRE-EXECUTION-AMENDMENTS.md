@@ -1991,6 +1991,156 @@ no component built.
 
 ---
 
+## A27 — SUBSTANTIVE. The harness contract: matching key, frames, budget, outcomes, statistics, determinism
+
+```json
+{"id": "A27", "class": "SUBSTANTIVE",
+ "commits": ["PENDING"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["HARNESS-PLAN.md", "probes/x14_anchor_bridge.py"],
+ "supersedes_text_in": "PRE-REGISTRATION.md 4.5, 5.5.1, 5.8, 6 (M1 matching), 7.2; PRE-EXECUTION-AMENDMENTS.md A10, A19 (40% clause)",
+ "status": "FROZEN -- rulings recorded before any harness component exists"}
+```
+
+Mapping the frozen methodology onto executable contracts (A26) exposed places where two
+readings would produce different numbers. These are the rulings. **No harness component is
+built**, and no confirmatory output exists.
+
+### A27.1 — M1–M4 heading matching is a source-position key, never text
+
+> **Occurrence identity = `(document_sha256, page_number, start_neutral_line_key,
+> occurrence_ordinal_on_that_line)`.**
+
+A wrapped heading takes its **first physical neutral line**. Where several occurrences begin
+on one neutral line they are separated by **source order on that line**. Architecture output
+is mapped to this key through source/physical identity; **the oracle must record enough
+source position to name the same key**.
+
+**Text similarity and occurrence-order-within-region are both rejected.** §6's "matched by
+printed-line position" names an architecture *output*, and A19 moved the unit to neutral
+lines while restating only the denominators. Matching on text would be circular — text is
+the thing under measurement — and order-within-region silently re-indexes every later
+heading when an earlier one is missed.
+
+If an emitted or adjudicated occurrence cannot be mapped **uniquely**, it is `UNMATCHED`.
+**There is no text-similarity fallback**, and `UNMATCHED` is reported, never quietly dropped.
+
+Required adversarial controls: a missing earlier heading does not shift later matches;
+identical heading text on two neutral lines does not collide; a wrapped heading maps to its
+first physical neutral line; an architecture merge or split does not move the positional
+identity; two occurrences on one physical line stay separately matchable.
+
+### A27.2 — the 40 % amount-bearing C-frame reservation is REMOVED
+
+§5.8 reserved 40 % of C-regions for amount-bearing pages, for the stated purpose of giving
+M6 a population. **A20 deferred M6 and forbade this study from claiming amount attribution**,
+so the reservation now shapes the C-frame for no surviving estimand while spending 40 % of a
+scarce adjudication budget.
+
+> **Operative C-frame: a deterministic uniform selection over the neutral regions of every
+> page of every P-head document, at most 8 regions per document, with NO amount-bearing
+> enrichment and no other stratification.**
+
+Recorded as substantive rather than folded into A19 silently: it changes which regions are
+adjudicated, hence every M1–M5 denominator.
+
+### A27.3 — the D-frame adjudication item is a REGION, and the budget is 60 regions
+
+> The complete D-frame **region** census is always enumerated **before** any sampling.
+>
+> - **≤ 60 regions** → human-adjudicate the **complete census**; Rule 1 may be evaluated.
+> - **> 60 regions** → **Rule 1 cannot choose X**; the outcome is
+>   `INSUFFICIENT_COMPARATIVE_EVIDENCE`. A 60-region sample may be adjudicated for
+>   **descriptive diagnosis only**.
+
+§5.8's 120-region subsampling clause is **superseded** for operative D-frame behaviour.
+**Rule 1 must never run on a 60- or a 120-region sample.** A10's principle is unchanged —
+a raw count is valid on a census and not on a sample — but its unit is now stated: A10 spoke
+of "items", §5.5.1 of 60 items, and §5.8 of 120 regions; the operative item is the
+**region**.
+
+### A27.4 — Rule 0 (M9) needs its own outcomes
+
+The three-outcome enum could not express a decision made *before* Rule 1. Added:
+
+| outcome | when |
+|---|---|
+| `EXTENDED_BY_RULE_0_M9` | H has an asymmetric M9 loss, X has none |
+| `HYBRID_BY_RULE_0_M9` | X has an asymmetric M9 loss, H has none |
+
+If **each** architecture has at least one asymmetric M9 loss, on different documents, then
+**both have been rejected by the frozen Rule 0**. No comparison by number or severity of
+losses is invented: the outcome is `INSUFFICIENT_COMPARATIVE_EVIDENCE`. A document **both**
+lose stays neutral for RQ1 and a failure for RQ2, exactly as §7.2 rule 0 already freezes.
+
+### A27.5 — the §8 statistical contract has an executable owner
+
+`score_metrics.py` (or an explicitly named downstream output) must implement §8 in full:
+
+- the per-document event **"this document has ≥ 1 heading-level H/X discordance"**;
+- the **exact one-sided 95 % Clopper–Pearson upper bound** on that **document-level** rate;
+- the **zero-event closed form** `1 − 0.05^(1/N)`;
+- **no bootstrap at zero events** (§8.1 measured it degenerate: every resample is 0.0);
+- **bootstrap only** when the event count is non-zero;
+- per-document paired differences, **unweighted mean over documents**, with the
+  **mandatory per-document detail**;
+- the frozen descriptive wording, and the prohibition on converting any of it into a
+  **per-heading probability**.
+
+Required control: a test that **fails** if the implementation treats headings as independent
+observations — e.g. asserting the bound computed on `N` documents does not equal the bound
+computed on `H` headings whenever `H != N`. §8.1's own measurement (0.1926 vs 0.00498, a 39×
+ratio) is the fixture.
+
+### A27.6 — Rule 3's gate vector is explicit and inspectable
+
+`decide_architecture` receives a named status for every decision-blocking condition still
+operative: **R1, N-A, N-B, N-C, S1, confirmatory X2-a, confirmatory X2-b, M9 evaluability,
+§4.5 adequacy.** Any failure → `INSUFFICIENT_COMPARATIVE_EVIDENCE`.
+
+**Cross-engine (x09) failure is a reporting qualification, not a decision blocker** — it
+labels results `PDFIUM-CONDITIONED FRAME` and never changes the outcome.
+
+**G2 is not the confirmatory X2 run.** G2 proves on DEVELOPMENT that the verifier and its
+denominator machinery exist and are falsifiable. The study still requires **X2-a and X2-b on
+every confirmatory holdout document** before scoring. That execution-time path is planned and
+**not run** in this pass.
+
+### A27.7 — all randomization is frozen, deterministically and by domain
+
+Every remaining "seeded" phrase named no seed and no procedure. Frozen:
+
+> **Selection seed `20260807`, applied as a domain-separated deterministic ranking:** for
+> purpose `P`, rank candidates ascending by `sha256(f"{P}|20260807|{stable_item_id}")` and
+> take the first *k*. No RNG object, no input-order dependence, no post-hoc seed.
+
+| purpose | namespace `P` | stable item id |
+|---|---|---|
+| C-frame region selection | `cframe-select` | `(document_sha256, page_number, region_ordinal)` |
+| D-frame descriptive sample | `dframe-descriptive` | same |
+| C-frame 25-item human audit | `cframe-audit` | stimulus blind id |
+| R1 10 % repeat selection | `r1-repeat` | stimulus blind id |
+| blind presentation order | `blind-order` | stimulus blind id |
+
+Population selection keeps its own already-executed seeds — **20260807** for the stratum
+permutation and **20260808** for the confirmatory draw — which are historical facts at
+`4e2b520` and are not re-run. **Requirement: the same inputs at the same commit select
+exactly the same items in exactly the same order.**
+
+### A27.8 — §4.5 adequacy: the gap is recorded, the ruling is NOT taken here
+
+§4.5 says "≥ 800 **emitted** heading occurrences" without saying **whose** count when H and X
+differ, and its rows are not exhaustive. **Both are outcome-affecting and neither is decided
+in this amendment** — see the analysis returned with A26/A27, which sets out the competing
+interpretations, what each changes, and a recommendation. `decide_architecture` may not be
+built until §4.5 is ruled.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
+no holdout document opened, no harness component built.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
