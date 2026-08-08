@@ -72,3 +72,4 @@ record means updating both.
 | [0018](0018-text-triggers-are-financial-only.md) | Read appropriations phrases for money, never for structure |
 | [0019](0019-observation-identity.md) | Identify a parsed observation by its source, its parser revision and its ordinal; never by its text |
 | [0020](0020-matching-stages.md) | Separate candidate generation, identity evidence, correspondence assignment and change classification |
+| [0021](0021-naming-authority-and-boundaries.md) | Name things in the vocabulary an outside reader already speaks, scoped to the boundary being named |

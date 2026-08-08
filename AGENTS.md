@@ -109,6 +109,7 @@ Every accepted ADR, title as written. The titles are claims, so this list is the
 - [18. Read appropriations phrases for money, never for structure](docs/decisions/0018-text-triggers-are-financial-only.md)
 - [19. Identify a parsed observation by its source, its parser revision and its ordinal; never by its text](docs/decisions/0019-observation-identity.md)
 - [20. Separate candidate generation, identity evidence, correspondence assignment and change classification](docs/decisions/0020-matching-stages.md)
+- [21. Name things in the vocabulary an outside reader already speaks, scoped to the boundary being named](docs/decisions/0021-naming-authority-and-boundaries.md)
 
 ## Key architecture concepts
 

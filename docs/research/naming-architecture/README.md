@@ -4,10 +4,11 @@ A research spike on how this repository names things: whether product branding i
 entangled with technical identity, and whether an unfamiliar human or agent can infer
 capabilities and interfaces from the names alone.
 
-**This is a spike, not a decision.** It records evidence and recommends what a future ADR
-should and should not freeze. Nothing here is binding, no code or configuration changes
-accompany it, and no ADR has been written. The report deliberately argues against several
-of its own proposals (§7) rather than presenting a settled scheme.
+**This is the spike, not the decision.** It records evidence and recommends what an ADR
+should and should not freeze; it deliberately argues against several of its own proposals
+(§7) rather than presenting a settled scheme. The decision drawn from it is
+[ADR 0021](../../decisions/0021-naming-authority-and-boundaries.md), which freezes the
+surviving rules and is the binding record. Where the two differ, the ADR governs.
 
 **Status:** audit only. No code, config, or ADR written.
 **Revision 6.** A scoping correction. Rev. 5 read the normative sources (§1.0, §10),
@@ -427,7 +428,8 @@ bill versions" (`diff_pdf.py:601`). An agent generalizing from the first invokes
 | `source: "xml"\|"pdf"` | canonical contract | **Input representation** |
 
 `source` is the worse of the two: the contract version is a schema `enum` — published,
-versioned, load-bearing. Four concepts across two overloaded words.
+versioned, load-bearing. Three distinct concepts — output representation, input
+representation, and provider/origin — across two overloaded words.
 
 ### 3.4 `normalize_bill` names one step of a composite
 
@@ -611,11 +613,11 @@ institution uses one term for two concepts on two surfaces, two pages apart in o
 sources differ, document the conflict and record which was chosen and why. §1.2, §1.3 and
 §1.6 are the first three entries.
 
-### 7.3 Amend the representation freeze — provider is a fourth concept
+### 7.3 Amend the representation freeze — provider/origin is another distinct concept
 
 Adopt "input representation, output representation, operation, and result are different
-concepts," and extend it: **provider/origin is a fourth** (§3.3). Also soften the absolute
-form:
+concepts," and add **provider/origin as another distinct concept** (§3.3). Also soften the
+absolute form:
 
 > Input representation should not create a separate user-facing operation when user intent
 > and the operation's contract are otherwise the same. It may remain visible where it
