@@ -1217,6 +1217,33 @@
    "fails_when": ""
   },
   {
+   "test": "an UNRECOGNISED population string -> ABORT, not a quiet empty C-frame",
+   "expected": "UNKNOWN_POPULATION",
+   "observed": "UNKNOWN_POPULATION",
+   "pass": true,
+   "fails_when": "'not P-head' would otherwise draw zero C regions and look like a valid frame"
+  },
+  {
+   "test": "...while the two real populations still build",
+   "expected": [
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "a region size other than the A19-frozen 8 -> ABORT",
+   "expected": "REGION_SIZE_NOT_FROZEN",
+   "observed": "REGION_SIZE_NOT_FROZEN",
+   "pass": true,
+   "fails_when": "a different grid would look entirely valid while partitioning the page differently"
+  },
+  {
    "test": "per-page extraction produces a DIFFERENT anchor census than document-scope",
    "expected": true,
    "observed": true,

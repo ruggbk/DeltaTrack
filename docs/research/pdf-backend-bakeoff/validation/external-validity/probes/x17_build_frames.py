@@ -499,6 +499,28 @@ def part_preconditions() -> dict:
     )
     check("...and it too is NOT interpreted as ANCHOR_DISCORDANCE", True, x_reason != BF.ANCHOR_DISCORDANCE)
 
+    # --- the two remaining silent-reduction paths, closed
+    check(
+        "an UNRECOGNISED population string -> ABORT, not a quiet empty C-frame",
+        BF.UNKNOWN_POPULATION,
+        refusal_reason(lambda: frame_of([simple_page(1, 8)], population="P-Head")),
+        "'not P-head' would otherwise draw zero C regions and look like a valid frame",
+    )
+    check(
+        "...while the two real populations still build",
+        (True, True),
+        (
+            refusal_reason(lambda: frame_of([simple_page(1, 8)], population=BF.P_HEAD)) is None,
+            refusal_reason(lambda: frame_of([simple_page(1, 8)], population=BF.P_ROBUST)) is None,
+        ),
+    )
+    check(
+        "a region size other than the A19-frozen 8 -> ABORT",
+        BF.REGION_SIZE_NOT_FROZEN,
+        refusal_reason(lambda: BF.build_document_frame("s", "d", BF.P_HEAD, [simple_page(1, 8)], region_size=7)),
+        "a different grid would look entirely valid while partitioning the page differently",
+    )
+
     # --- WHY per-page extraction is forbidden, proven on a constructed page collection.
     body = ["The Secretary shall carry out the program.", "Amounts are available until expended."]
     p1 = fake_arm_page(1, body, gid_base=0, glyph_size=10.0)

@@ -2586,6 +2586,19 @@ every harness-consumed page is now literally true.
 frame and no later code can ignore one. **No caller obligation can silently produce a reduced
 frame.**
 
+Two further silent-reduction paths were found by auditing for the same defect class and
+closed. An **unrecognised population string** previously read as "not P-head" and drew **zero**
+C-frame regions while still producing a valid-looking frame; the population set is now closed
+and validated (`UNKNOWN_POPULATION`). A **region size other than the A19-frozen 8** was
+honoured rather than rejected, which would have partitioned every page differently while
+looking entirely valid (`REGION_SIZE_NOT_FROZEN`).
+
+**One seam remains, by design.** `build_document_frame` accepts hand-constructed `PageInput`
+objects and therefore bypasses the four structural preconditions, which live in
+`page_inputs_from_arms`. That separation is required — the frame-building logic has to be
+callable directly so synthetic controls can construct inputs no PDF would produce — and every
+real path goes through `page_inputs_from_arms`. It is recorded here rather than left implicit.
+
 Each repair carries injected negative controls: page-set mismatch in both directions, a
 one-glyph skeleton difference, an emitted-line deletion, a same-length text drift, and an
 unplaceable anchor in **each** arm via a different refusal class — each also asserting the

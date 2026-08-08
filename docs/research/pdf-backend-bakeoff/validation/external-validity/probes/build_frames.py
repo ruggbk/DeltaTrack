@@ -45,6 +45,11 @@ from deltatrack.parsers.pdf_anchors import extract_anchors
 REGION_SIZE = 8  # A19, frozen
 C_FRAME_MAX_PER_DOCUMENT = 8  # A27.2, frozen
 P_HEAD = MC.P_HEAD
+P_ROBUST = "P-robust"
+# The C-frame draw is P-head-only, so an UNRECOGNISED population string would silently yield
+# zero C-frame regions instead of an error -- the same silent-reduction failure the structural
+# preconditions exist to prevent. The set is closed and validated rather than trusted.
+KNOWN_POPULATIONS = frozenset({P_HEAD, P_ROBUST})
 
 # anchor placement refusals -- the x14 rule, which refuses rather than guessing
 AMBIGUOUS_MARGIN_NUMBER_ON_PAGE = "AMBIGUOUS_MARGIN_NUMBER_ON_PAGE"
@@ -58,6 +63,8 @@ SEGMENTATION_DISCORDANCE = "SEGMENTATION_DISCORDANCE"
 ANCHOR_DISCORDANCE = "ANCHOR_DISCORDANCE"
 
 # structural preconditions -- each ABORTS, none is representable in a frame
+UNKNOWN_POPULATION = "UNKNOWN_POPULATION"
+REGION_SIZE_NOT_FROZEN = "REGION_SIZE_NOT_FROZEN"
 PAGE_SET_MISMATCH = "PAGE_SET_MISMATCH"
 NEUTRAL_SKELETON_MISMATCH = "NEUTRAL_SKELETON_MISMATCH"
 PRINT_LINES_EMITTED_DRIFT = "PRINT_LINES_EMITTED_DRIFT"
@@ -327,6 +334,9 @@ def select_c_frame(
     precisely the shared-failure evidence RQ2 exists to collect, and would make the sample
     a function of the thing being measured.
     """
+    # An unknown population string must not read as "not P-head" and quietly draw nothing.
+    if population not in KNOWN_POPULATIONS:
+        raise FrameConstructionError(UNKNOWN_POPULATION, detail={"population": population})
     if population != P_HEAD:
         return []
     identities = [
@@ -341,6 +351,10 @@ def build_document_frame(
     document_sha256: str, document_id: str, population: str, pages: list[PageInput], region_size: int = REGION_SIZE
 ) -> dict:
     """The per-document frame object. Frame building only -- no artifact is written here."""
+    # A19 froze the region size. A caller passing anything else would produce a different,
+    # silently valid-looking grid, so it is rejected rather than honoured.
+    if region_size != REGION_SIZE:
+        raise FrameConstructionError(REGION_SIZE_NOT_FROZEN, detail={"region_size": region_size})
     page_frames = [build_page_frame(p, region_size) for p in pages]
 
     selected = select_c_frame(document_sha256, population, page_frames)
