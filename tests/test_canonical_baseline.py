@@ -20,8 +20,9 @@ something on twelve real bills without saying so.
 **What it runs.** Every adjacent version pair of the committed manifest
 (``tests/corpus_manifest.toml``), through ``compare.xml.compare_xml`` — the public
 canonical producer the web app calls, not a chain reassembled here. Measuring at the
-consumed output is the point: a gate that re-implemented the parse → diff → serialize
-composition could stay green while production's composition changed.
+consumed output is the point: a gate that re-implemented the parse → compare → serialize
+composition could stay green while production's composition changed. (*Compare* is the
+operation and *diff* is the artifact it produces, per ADR 0021 §3.)
 
 **Why a digest and not the JSON.** The manifest pairs serialize to roughly 22 MB, which
 is not a reviewable committed artifact. A SHA-256 over the sorted-key serialization
@@ -85,12 +86,22 @@ _BASELINE = DATA_DIR / "canonical_baseline.json"
 REGENERATE = "Regenerate with `UPDATE_BASELINE=1 uv run pytest tests/test_canonical_baseline.py`."
 
 
-def _stage_num(stem: str) -> int:
-    """Leading ordinal of a version stem (``4_engrossed-... -> 4``).
+def _version_ordinal(stem: str) -> int:
+    """The per-bill version ordinal leading a fixture stem (``4_engrossed-... -> 4``).
+
+    "Version ordinal" is ADR 0013's term — *version is a per-bill ordinal, not a
+    universal one*. Not ``_stage_num``: ADR 0020 now uses "stage" for retrieval, identity
+    evidence, assignment and classification, so a second meaning inside the matching work
+    would collide with it (ADR 0021 §3).
 
     Numeric, not lexicographic: a string sort puts ``10_`` before ``2_``. No corpus bill
-    reaches stage 10 today, so this is a latent guard rather than a live fix — the same
-    one ``tests/conftest._stage_num`` carries for the diff smoke.
+    reaches version 10 today, so this is a latent guard rather than a live fix.
+
+    Pre-existing debt, recorded rather than fixed here: ``tests/conftest._stage_num``
+    computes the same thing from a ``Path`` under the older name, and
+    ``tests/corpus_manifest.toml`` spells the field ``stage``. Renaming those reaches well
+    outside this pull request, so this one is named correctly and the older spelling is
+    left for a change that owns it.
     """
     return int(stem.split("_", 1)[0])
 
@@ -111,7 +122,7 @@ def baseline_pairs() -> list[tuple[str, Path, Path]]:
 
     pairs: list[tuple[str, Path, Path]] = []
     for bill in sorted(by_bill):
-        stems = sorted(by_bill[bill], key=_stage_num)
+        stems = sorted(by_bill[bill], key=_version_ordinal)
         for old_stem, new_stem in zip(stems, stems[1:]):
             pairs.append(
                 (
@@ -126,8 +137,13 @@ def baseline_pairs() -> list[tuple[str, Path, Path]]:
 _PAIRS = baseline_pairs()
 
 
-def canonical_record(old_path: Path, new_path: Path) -> dict:
-    """One pair's pinned record: the digest, plus counts that make a failure legible."""
+def baseline_record(old_path: Path, new_path: Path) -> dict:
+    """One pair's pinned baseline entry: the digest, plus counts that make a failure legible.
+
+    Not ``canonical_record``: it returns baseline metadata *about* the canonical diff —
+    digest, byte count, change count, summary — never the canonical document itself
+    (ADR 0021 §3, a name describes what it actually represents).
+    """
     canonical = compare_xml(
         old_path.read_bytes(),
         new_path.read_bytes(),
@@ -158,7 +174,7 @@ def _regenerated() -> dict:
     missing = [str(p) for _, old, new in _PAIRS for p in (old, new) if not p.exists()]
     if missing:
         raise AssertionError(f"refusing to write a partial baseline; fixtures absent: {missing}")
-    return {key: canonical_record(old, new) for key, old, new in _PAIRS}
+    return {key: baseline_record(old, new) for key, old, new in _PAIRS}
 
 
 def test_manifest_fixtures_committed():
@@ -207,7 +223,7 @@ def test_regeneration_refuses_a_partial_baseline(monkeypatch):
 def test_canonical_output_matches_baseline(key: str, old_path: Path, new_path: Path):
     """Canonical JSON for this pair is byte-identical to the pinned baseline."""
     expected = _load_baseline()[key]
-    actual = canonical_record(old_path, new_path)
+    actual = baseline_record(old_path, new_path)
     if actual["sha256"] != expected["sha256"]:
         pytest.fail(
             f"canonical output changed for {key}.\n"

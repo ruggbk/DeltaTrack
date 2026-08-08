@@ -101,8 +101,15 @@ NEW = "new"
 SIDES = frozenset({OLD, NEW})
 
 
-def _freeze(mapping: Mapping[str, Scalar] | Iterable[tuple[str, Scalar]]) -> tuple[tuple[str, Scalar], ...]:
-    """A mapping as a name-sorted tuple of pairs, rejecting a repeated name.
+def _normalize_named_scalars(
+    mapping: Mapping[str, Scalar] | Iterable[tuple[str, Scalar]],
+) -> tuple[tuple[str, Scalar], ...]:
+    """Named scalars in canonical form: name-sorted, immutable, no repeated name.
+
+    Accepts a mapping or an iterable of pairs, rejects a name appearing twice, orders by
+    name, and returns a tuple. Named for the whole of that rather than for the immutable
+    result alone, because the sort and the duplicate check are what callers depend on
+    (ADR 0021 §3: a name describes the job it actually performs).
 
     Sorted rather than insertion-ordered so that two callers building the same
     configuration or signal set in different orders produce equal values. Without it,
@@ -110,7 +117,7 @@ def _freeze(mapping: Mapping[str, Scalar] | Iterable[tuple[str, Scalar]]) -> tup
     configuration would silently keep two copies of one invocation.
 
     Called from ``__post_init__``, never only from a convenience constructor, so it
-    normalises whichever way the value was built. Idempotent, so re-freezing an
+    normalizes whichever way the value was built. Idempotent, so re-normalizing an
     already-canonical tuple is a no-op.
     """
     items = tuple(mapping.items()) if isinstance(mapping, Mapping) else tuple(mapping)
@@ -167,7 +174,7 @@ class RetrieverInvocation:
             raise ValueError("retriever must be named")
         if self.round < 0:
             raise ValueError(f"round must be non-negative, got {self.round}")
-        object.__setattr__(self, "config", _freeze(self.config))
+        object.__setattr__(self, "config", _normalize_named_scalars(self.config))
 
     @classmethod
     def of(cls, retriever: str, *, round: int = 0, **config: Scalar) -> RetrieverInvocation:
@@ -186,8 +193,12 @@ class RetrieverInvocation:
         return (self.round, self.retriever, repr(self.config))
 
 
-def _settle_proposals(proposals: Iterable[Proposal]) -> tuple[Proposal, ...]:
-    """One proposal per invocation, in canonical ``(round, retriever, config)`` order.
+def _normalize_proposals(proposals: Iterable[Proposal]) -> tuple[Proposal, ...]:
+    """Retrieval provenance in canonical form: one proposal per invocation, ordered.
+
+    *Normalize*, not *settle*: ADR 0020 gives "settled" to correspondence after
+    assignment, and one word meaning both that and "deduplicated provenance" would blur
+    the retrieval/assignment boundary the record exists to draw (ADR 0021 §3).
 
     Idempotent where an invocation repeats with identical metadata; a raise where it
     repeats with different metadata. Keeping the first would make the recorded rank a
@@ -197,17 +208,17 @@ def _settle_proposals(proposals: Iterable[Proposal]) -> tuple[Proposal, ...]:
     Shared by :class:`Candidate` and :class:`CandidateSet` so the rule cannot hold on one
     construction path and not the other.
     """
-    settled: dict[RetrieverInvocation, Proposal] = {}
+    by_invocation: dict[RetrieverInvocation, Proposal] = {}
     for proposal in proposals:
-        existing = settled.get(proposal.invocation)
+        existing = by_invocation.get(proposal.invocation)
         if existing is not None and existing != proposal:
             raise ValueError(
                 f"{proposal.invocation.retriever} appears twice for one invocation with different metadata: "
                 f"{existing} then {proposal}. One invocation's view of one pair is single-valued; "
                 "re-proposing under a changed configuration is a new invocation."
             )
-        settled[proposal.invocation] = proposal
-    return tuple(sorted(settled.values(), key=lambda p: p.invocation._order_key))
+        by_invocation[proposal.invocation] = proposal
+    return tuple(sorted(by_invocation.values(), key=lambda p: p.invocation._order_key))
 
 
 @dataclass(frozen=True, order=True)
@@ -270,12 +281,17 @@ class Candidate:
         if self.old.side != OLD or self.new.side != NEW:
             raise ValueError(f"a candidate pairs one old-side and one new-side observation, got {self.old}, {self.new}")
         if not self.proposals:
-            raise ValueError(f"candidate {self.pair} has no retrieval provenance")
-        object.__setattr__(self, "proposals", _settle_proposals(self.proposals))
+            raise ValueError(f"candidate {self.ordinal_pair} has no retrieval provenance")
+        object.__setattr__(self, "proposals", _normalize_proposals(self.proposals))
 
     @property
-    def pair(self) -> tuple[int, int]:
-        """The ordinal pair, for ordering and for reading in a failure message."""
+    def ordinal_pair(self) -> tuple[int, int]:
+        """The two ordinals, for ordering and for reading in a failure message.
+
+        Not ``pair``: ADR 0020 uses "the pairing of two observations" for the candidate
+        itself, so a bare ``pair`` would read as ``(old, new)`` rather than as two
+        integers (ADR 0021 §3 and §4). The observations are ``old`` and ``new``.
+        """
         return (self.old.ordinal, self.new.ordinal)
 
     @property
@@ -359,8 +375,8 @@ class CandidateSet:
     def __iter__(self) -> Iterator[Candidate]:
         return iter(self.candidates())
 
-    def __contains__(self, pair: object) -> bool:
-        return pair in self._proposals
+    def __contains__(self, observation_pair: object) -> bool:
+        return observation_pair in self._proposals
 
 
 @dataclass(frozen=True)
@@ -407,7 +423,7 @@ class Evidence:
             raise ValueError(
                 f"evidence describes one old-side and one new-side observation, got {self.old}, {self.new}"
             )
-        object.__setattr__(self, "signals", _freeze(self.signals))
+        object.__setattr__(self, "signals", _normalize_named_scalars(self.signals))
 
     @classmethod
     def of(cls, old: ObservationRef, new: ObservationRef, **signals: Scalar) -> Evidence:
@@ -552,17 +568,22 @@ class Correspondence:
 
 
 class CorrespondenceSet:
-    """Every correspondence settled for one comparison, with each observation claimed once.
+    """Every correspondence settled for one comparison, each observation in at most one.
+
+    Deliberately not phrased as observations being "claimed": ADR 0020 gives *claim* to a
+    :class:`Proposal` — one retriever invocation's claim that a pair is worth evaluating —
+    and reusing it for assignment's output would put one word on both sides of the
+    boundary the record exists to draw (ADR 0021 §3).
 
     The exclusivity rule is **measured, not assumed**. Over all 27 adjacent version pairs
-    of the committed manifest, ``diff_bill.match_nodes`` claims every node of both trees
-    exactly once: no node appears in two pairs, none is omitted, none is invented. So
+    of the committed manifest, ``diff_bill.match_nodes`` places every node of both trees
+    in exactly one pairing: no node appears in two, none is omitted, none is invented. So
     encoding it here describes what the current assigner already does rather than
     imposing a policy on the refactor that would move it, and a Phase 1 extraction that
     tripped this would have changed assignment.
 
     Reproduce with ``scripts/probe_matching_stages.py``'s corpus walk, or read
-    ``tests/test_matching_contracts.py::test_the_corpus_assigner_claims_each_observation_once``.
+    ``tests/test_matching_contracts.py::test_the_corpus_assigner_uses_each_observation_once``.
 
     This is the per-anchor competition policy only. Global collision resolution is a
     separate question with different correctness criteria, and ADR 0020 defers it
@@ -571,30 +592,30 @@ class CorrespondenceSet:
 
     def __init__(self, correspondences: Iterable[Correspondence] = ()) -> None:
         self._correspondences: list[Correspondence] = []
-        self._claimed: dict[ObservationRef, Correspondence] = {}
+        self._correspondence_by_observation: dict[ObservationRef, Correspondence] = {}
         for correspondence in correspondences:
             self.add(correspondence)
 
     def add(self, correspondence: Correspondence) -> None:
-        """Settle one correspondence, refusing an observation already claimed."""
+        """Settle one correspondence, refusing an observation already in another."""
         for ref in (*correspondence.old, *correspondence.new):
-            claimed_by = self._claimed.get(ref)
-            if claimed_by is not None:
+            existing = self._correspondence_by_observation.get(ref)
+            if existing is not None:
                 raise ValueError(
-                    f"{ref} is already claimed by {claimed_by.shape} correspondence "
-                    f"{claimed_by.old}->{claimed_by.new}; an observation corresponds at most once"
+                    f"{ref} already corresponds, in {existing.shape} correspondence "
+                    f"{existing.old}->{existing.new}; an observation corresponds at most once"
                 )
         for ref in (*correspondence.old, *correspondence.new):
-            self._claimed[ref] = correspondence
+            self._correspondence_by_observation[ref] = correspondence
         self._correspondences.append(correspondence)
 
     def correspondences(self) -> tuple[Correspondence, ...]:
         """Settled correspondences, in the order assignment produced them."""
         return tuple(self._correspondences)
 
-    def claiming(self, ref: ObservationRef) -> Correspondence | None:
-        """The correspondence claiming ``ref``, or ``None`` if nothing does."""
-        return self._claimed.get(ref)
+    def correspondence_for(self, ref: ObservationRef) -> Correspondence | None:
+        """The settled correspondence containing ``ref``, or ``None`` if none does."""
+        return self._correspondence_by_observation.get(ref)
 
     def __len__(self) -> int:
         return len(self._correspondences)

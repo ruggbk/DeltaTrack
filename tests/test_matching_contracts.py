@@ -47,7 +47,7 @@ PATH_GROUP = RetrieverInvocation.of("path_group")
 MOVE_SCAN = RetrieverInvocation.of("move_scan", round=1, threshold=0.6)
 
 
-def link(old_ref: ObservationRef, new_ref: ObservationRef) -> Evidence:
+def evidence_for_link(old_ref: ObservationRef, new_ref: ObservationRef) -> Evidence:
     """An evidence record for one selected link, carrying no signals.
 
     Valid by design: a correspondence must carry one record per link, but which signals
@@ -61,7 +61,7 @@ def documented(old_refs: tuple[ObservationRef, ...], new_refs: tuple[Observation
     return Correspondence(
         old=old_refs,
         new=new_refs,
-        evidence=tuple(link(o, n) for o in old_refs for n in new_refs),
+        evidence=tuple(evidence_for_link(o, n) for o in old_refs for n in new_refs),
     )
 
 
@@ -395,7 +395,7 @@ def test_an_observation_corresponds_at_most_once():
     encoded. Fails if two correspondences may claim one observation, which would let a
     node appear in two changes and its money be reported twice."""
     settled = CorrespondenceSet([documented((old(3),), (new(7),))])
-    with pytest.raises(ValueError, match="already claimed"):
+    with pytest.raises(ValueError, match="already corresponds"):
         settled.add(documented((old(3),), (new(8),)))
 
 
@@ -449,7 +449,7 @@ def test_signal_order_does_not_change_evidence():
 
 
 def test_the_plain_constructor_canonicalises_signals_too():
-    """Evidence's half of the same false green. Fails if ``_freeze`` is only reached
+    """Evidence's half of the same false green. Fails if ``_normalize_named_scalars`` is only reached
     through ``of()``, which would let two records of one signal set compare unequal and
     make a retained evidence set incomparable between runs."""
     a = Evidence(old(3), new(7), signals=(("word_overlap", 0.42), ("header_equal", True)))
@@ -490,7 +490,7 @@ def test_candidate_order_does_not_depend_on_which_retriever_ran_first():
     reverse.propose(old(0), new(5), MOVE_SCAN)
     reverse.propose(old(1), new(2), PATH_GROUP)
 
-    assert [c.pair for c in forward.candidates()] == [(0, 5), (1, 2)]
+    assert [c.ordinal_pair for c in forward.candidates()] == [(0, 5), (1, 2)]
     assert forward.candidates() == reverse.candidates()
 
 
@@ -595,7 +595,7 @@ class TestAssignmentExclusivityOnTheCorpus:
 
         assert_manifest_committed(manifest_version_pairs(), "matching-exclusivity")
 
-    def test_the_corpus_assigner_claims_each_observation_once(self):
+    def test_the_corpus_assigner_uses_each_observation_once(self):
         from deltatrack.bill_tree import normalize_bill
         from deltatrack.diff_bill import match_nodes
         from tests.conftest import manifest_version_pairs
@@ -623,8 +623,12 @@ class TestAssignmentExclusivityOnTheCorpus:
                 )
 
             label = f"{old_path.parent.name} {old_path.stem}->{new_path.stem}"
-            unclaimed_old = [i for i in range(len(old_tree.nodes)) if settled.claiming(ObservationRef(OLD, i)) is None]
-            unclaimed_new = [i for i in range(len(new_tree.nodes)) if settled.claiming(ObservationRef(NEW, i)) is None]
+            unclaimed_old = [
+                i for i in range(len(old_tree.nodes)) if settled.correspondence_for(ObservationRef(OLD, i)) is None
+            ]
+            unclaimed_new = [
+                i for i in range(len(new_tree.nodes)) if settled.correspondence_for(ObservationRef(NEW, i)) is None
+            ]
             assert not unclaimed_old, f"{label}: old observations reached no correspondence: {unclaimed_old[:8]}"
             assert not unclaimed_new, f"{label}: new observations reached no correspondence: {unclaimed_new[:8]}"
             checked += 1
