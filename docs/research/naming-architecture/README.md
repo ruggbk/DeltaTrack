@@ -10,11 +10,13 @@ accompany it, and no ADR has been written. The report deliberately argues agains
 of its own proposals (§7) rather than presenting a settled scheme.
 
 **Status:** audit only. No code, config, or ADR written.
-**Revision 5.** Rev. 4 marked every vocabulary claim as an inference pending normative
-sources. Those sources have now been read (§1.0, §10). The result overturns one of this
-report's own claims, **vindicates two repository choices it had criticised**, and promotes
-a different identifier to the primary defect. Rebrand-resilience evidence (§2) and
-discoverability findings (§3-§4) are otherwise unchanged.
+**Revision 6.** A scoping correction. Rev. 5 read the normative sources (§1.0, §10),
+overturned one of this report's own claims and falsified two of its criticisms — then
+overextended the govinfo result by letting an *acquisition-register* fact govern the
+product, CLI and contract layers. Rev. 6 narrows that to what the evidence supports and
+promotes the corollary to a first-class finding: **authoritative vocabulary does not
+propagate across architectural boundaries** (§1.1.1). Sections changed: §1.1, §1.2, §1.6,
+§1.7, §1.8, §7.5, §9. Everything else stands.
 **Repo state audited:** `spike/pdf-seam-external-validity` @ `df90e6e`.
 
 ---
@@ -83,10 +85,43 @@ document.
 | Deliberately-defined project concepts | The narrower ADR that defined them | — |
 
 The repository already practised the bottom four, unstated. What rev. 5 adds is the top
-two, and the recognition that **the govinfo data-access register is the one this project
-consumes** — which is what resolves §1.2 and §1.6.
+two, and the identification of the **govinfo acquisition register** as the authority for
+the concepts this project *fetches* — which is what resolves §1.2 and §1.6, and only
+those.
 
-### 1.2 "Bill type": three official meanings, and DeltaTrack uses the right one
+#### 1.1.1 Authority does not propagate across architectural boundaries
+
+The corollary matters more than the table, and rev. 5 got it wrong by omission: having
+established that govinfo governs acquisition vocabulary, it let that conclusion travel
+into the product, CLI and contract layers on the strength of the system merely being
+connected to govinfo.
+
+> **Do not allow terminology from one authoritative register to leak into another merely
+> because the system connects them. At a boundary between registers, name each side
+> according to the authority governing that side, and make the translation explicit.**
+
+The repository already draws this boundary architecturally, which is what makes the
+overreach visible. [ADR 0016](../../decisions/0016-product-tooling-surface-split.md)
+separates the acquisition tooling from the product; `compare/` is the product surface and
+has no acquisition responsibility; and the canonical diff contract
+([ADR 0006](../../decisions/0006-canonical-diff-contract.md)) is **pipeline-neutral** — it
+describes a comparison of two documents, which may be local XML or PDF files that govinfo
+never touched. An engine that can run with no network and no govinfo package does not
+automatically inherit govinfo's nouns.
+
+Four live boundaries where a translation is currently implicit:
+
+| Boundary | Left register | Right register |
+|---|---|---|
+| Acquisition ↔ engine domain | govinfo package metadata | product/domain model |
+| Package metadata ↔ document content | govinfo `billType` | Congress XML `bill-type` (§1.2) |
+| Document type ↔ measure category | `<bill>` / `<resolution>` / `<amendment-doc>` | bill / joint resolution / … |
+| govinfo bill version ↔ local ordinal | `billVersion: "ih"` | `version_number: 1` (§1.3) |
+
+Each is a place where one identifier currently spans two meanings, or where a value
+crosses a register with no recorded translation.
+
+### 1.2 "Bill type": three official meanings, and no demonstrated defect
 
 *Class A throughout.*
 
@@ -118,15 +153,23 @@ defines `<item>` as "Parent container for a single legislative measure." It adds
 
 GPO itself marks "measure" as the formal term and "bill number" as the colloquial one.
 
-**Resolution, and a correction in the repository's favour.** Rev. 4 made the canonical
-contract's `bill.type` the motivating problem case. **It is not a defect.** It matches
-govinfo API `billType` exactly, `hjres` included, and govinfo is the register this project
-consumes — the field identifies which govinfo package the data came from, so govinfo's
-vocabulary is the correct one for it.
+**Resolution: the original criticism is falsified, without an endorsement replacing it.**
+Rev. 4 made the canonical contract's `bill.type` the motivating problem case. **The spike
+has not demonstrated that it is a defect.** Its values align with govinfo's `billType`,
+`hjres` included, so it has authoritative precedent and cannot be condemned merely because
+the Congress XML DTD uses `bill-type` for something else.
+
+That is as far as the evidence reaches. Rev. 5 went further and said govinfo "is the
+register the field describes" — **withdrawn**. The canonical contract is pipeline-neutral
+(§1.1.1): it can describe a comparison of two local files with no govinfo package behind
+them, so the field does not inherently name a govinfo artifact. Whether the contract
+*should* ultimately use this term is a domain-vocabulary question owned by
+[ADR 0006](../../decisions/0006-canonical-diff-contract.md), and **ADR 0021 should not
+decide it**.
 
 The collision with the DTD's `bill-type` is real, and it is between two *official*
-vocabularies. DeltaTrack did not create it and is on the right side of it. What the episode
-establishes is the rule, not a bug:
+vocabularies. DeltaTrack did not create it. What the episode establishes is the rule, not a
+bug:
 
 > Where official vocabularies differ by scope, an unqualified identifier does not merely
 > risk ambiguity — it guarantees that some correct reader resolves it wrongly.
@@ -202,7 +245,7 @@ correctly given different words — `change` and `diff` being established *techn
 vocabulary rather than project inventions. Nothing currently states the distinction, which
 is the only gap.
 
-### 1.6 The umbrella: "bill" is correct, in the register this project consumes
+### 1.6 The umbrella: verified for the govinfo acquisition register, and only there
 
 *Class A. This section replaces a rev. 4 claim that was false.*
 
@@ -222,8 +265,8 @@ The substantive authorities agree. CRS R46603 (27 Aug 2025): "In each chamber of
 concurrent resolutions, and resolutions of one house." GPO's own BILLS XML User Guide §1.1,
 "Types of Legislation," lists bills as one of four.
 
-**And yet "bill" is the correct umbrella here**, because the register this project consumes
-says so — unambiguously, and at every level of it:
+**And yet "bill" is unambiguously the umbrella in the govinfo acquisition register**, at
+every level of it:
 
 - govinfo API: `billType: "hjres"`, `collectionName: "Congressional Bills"`
 - bulk data: `/BILLS/118/1/hjres/BILLS-118hjres1ih.xml`
@@ -234,20 +277,35 @@ says so — unambiguously, and at every level of it:
 One official document using both meanings, two pages apart, is the strongest available
 evidence that the register, not the institution, is what has to be named.
 
-**Decision recorded:** this project uses **bill** as the umbrella for all eight measure
-types, matching the govinfo data-access register it fetches from. The dissenting sources
-are GPO's substantive prose and the BILLSUM data model (`@measure-type`) — but BILLSUM is a
-different collection this repository does not consume, so under scoped authority BILLS
-governs.
+**What is established, and what is not.**
 
-**The containment requirement this creates.** Inside the repository `bill` now carries two
-meanings, and **both are authoritative**: the umbrella at product, CLI, contract and fetch
-layers; the specific `<bill>` root at the parsing layer, where it is distinct from
-`<resolution>` and `<amendment-doc>`. The collision point is `normalize_bill` / `BillTree` /
-`BillNode` / `find_bill_body` — code that handles all three root types while using the
-specific word for the umbrella job. The rule that contains it: **keep `bill` as the umbrella
-at govinfo-facing layers; where the code distinguishes document types, the DTD root element
-names govern.**
+> **`bill` is verified as the umbrella term in the govinfo acquisition / data-access
+> register**, covering all eight measure types. That fact is freezable.
+
+It does **not** follow that `bill` is the canonical umbrella for the product domain, the
+public Python API, the CLI, the pipeline-neutral canonical contract, a future package
+namespace, or an MCP interface. Rev. 5 made that leap; §1.1.1 is why it does not hold.
+Those surfaces expose concepts the acquisition register does not govern, and each must be
+evaluated against the authority governing the concept *it* exposes. The candidates include
+`bill`, `measure`, and terms not yet considered; the dissenting sources on the substantive
+side are real (CRS's "four forms of legislative measures"; GPO's own §1.1; the BILLSUM
+model's `@measure-type`, `@measure-number`, `@measure-id`), and they are not answered by
+the acquisition evidence.
+
+**This is not a reason to rename anything now.** It is a reason for ADR 0021 to prohibit
+*accidental* propagation: the term may well end up being `bill` on several of those
+surfaces, but that should be a decision made against each surface's own authority rather
+than an inheritance nobody examined.
+
+**The containment requirement, meanwhile, is live today.** Inside the repository `bill`
+already carries two meanings, and both have authoritative backing: the umbrella in the
+acquisition tooling and the fetch paths; the specific `<bill>` root at the parsing layer,
+distinct from `<resolution>` and `<amendment-doc>`. The collision point is `normalize_bill`
+/ `BillTree` / `BillNode` / `find_bill_body` — code that handles all three root types while
+using the specific word for the general job. The containing rule: **where the code
+distinguishes document types, the DTD root element names govern; where it addresses govinfo
+packages, govinfo's vocabulary governs; and the translation between them should be
+explicit rather than implied by a shared word.**
 
 ### 1.7 An unrelated data-quality finding, recorded because it is actionable
 
@@ -260,12 +318,23 @@ act in the corpus. For `115-hr-1625` (enrolled):
 | Congress DTD `bill-type` | `"olc"` — not `"appropriations"` | B, corpus |
 | The document itself | "Consolidated Appropriations Act, 2018", **823** `appropriations-*` elements | B, corpus |
 
-Both signals appear to track the original bill's character rather than what the legislative
-vehicle became — and shell vehicles are precisely how omnibus appropriations pass. **Neither
-is usable as an appropriations filter.** This independently supports
-[ADR 0018](../../decisions/0018-text-triggers-are-financial-only.md): structure must not be
-inferred from such signals. Out of scope for a naming ADR; recorded so the finding is not
-lost.
+**Neither signal is sufficient on its own to determine whether the legislative text
+DeltaTrack is processing contains appropriations content.** One counterexample is enough to
+establish that, because it shows the signals can disagree with the document in the
+direction that matters here — a false negative on an omnibus appropriations act. It does
+**not** establish that the signals are useless for every filtering or metadata purpose, nor
+how often they are wrong.
+
+A plausible mechanism, consistent with both values but not established by a single case: on
+this document each signal reflects the original measure rather than what the legislative
+vehicle became, and shell vehicles are a known route for omnibus appropriations. Testing
+that would need a sample designed for it — which the committed corpus, being
+appropriations-selected, is not.
+
+This independently supports
+[ADR 0018](../../decisions/0018-text-triggers-are-financial-only.md): content
+classification must not be inferred from such signals. Out of scope for a naming ADR;
+recorded so the finding is not lost.
 
 ### 1.8 Claims corrected across revisions
 
@@ -274,7 +343,10 @@ lost.
 | "The corpus is the authoritative source" | **Withdrawn** (rev. 4) — class-B observation from a purposive sample |
 | Corpus proportions as population facts | **Withdrawn** (rev. 4) |
 | "`bill` is the umbrella in the document-XML surface" | **False** (rev. 5) — `res.dtd` / `<resolution>` disproves it (§1.6) |
-| "`bill.type` collides with GPO's" (as a DeltaTrack defect) | **Reversed** (rev. 5) — correct against govinfo, the consumed register (§1.2) |
+| "`bill.type` collides with GPO's" (as a DeltaTrack defect) | **Falsified** (rev. 5) — authoritative precedent in govinfo; not shown to be a defect (§1.2) |
+| "govinfo is the register the `bill.type` field describes" | **Withdrawn** (rev. 6) — the contract is pipeline-neutral; this over-endorsed after correctly falsifying the criticism (§1.2) |
+| "`bill` is the canonical umbrella for the product/CLI/contract" | **Narrowed** (rev. 6) — verified for the govinfo acquisition register only; other surfaces undecided (§1.6) |
+| "Neither signal is usable as an appropriations filter" | **Narrowed** (rev. 6) — one counterexample shows insufficiency, not uselessness (§1.7) |
 | "`bill-stage` is read nowhere" (as an oversight) | **Reversed** (rev. 5) — staying in one register is the better choice (§1.3) |
 | "GPO's `bill-type` *is* the drafting style" | **Upgraded** (rev. 5) from inference to class-A proof (§1.2) |
 | "`bill-stage` is the authoritative version identifier" | **Withdrawn** (rev. 4); rev. 5 **proves** the withdrawal correct — no source claims primacy |
@@ -557,12 +629,19 @@ name across all surfaces, and a CLI-grammar assertion. Precedent —
 subtraction so a new module is guarded by default, and carries `TestDetectorCanFail` proving
 the detector still fires.
 
-### 7.5 "Do not freeze `bill`" — now resolvable, and resolved
+### 7.5 "Do not freeze `bill`" — partly resolvable, and only partly
 
-Rev. 4 could not settle this. Rev. 5 can: **`bill` is confirmed as the umbrella in the
-govinfo register this project consumes** (§1.6), and that is freezable as a *scoped
-vocabulary decision*. It remains **separate from** any package-name decision, which stays
-open.
+Rev. 4 could not settle this at all. Rev. 5 settled it too broadly. The supportable
+position:
+
+- **Freezable:** `bill` is the umbrella in the **govinfo acquisition / data-access
+  register** (§1.6), which governs the fetch tooling and anything naming a govinfo package.
+- **Not freezable:** the umbrella for the product domain, public Python API, CLI,
+  pipeline-neutral canonical contract, future package namespace, or MCP interface. Those
+  expose concepts the acquisition register does not govern (§1.1.1), and the substantive
+  authorities point at `measure` for at least some of them.
+
+Both remain **separate from** any package-name decision, which stays open.
 
 ### 7.6 Accepted without amendment
 
@@ -592,27 +671,35 @@ probes, deployment names, prose, and the 37 `src/` self-imports.
 
 ## 9. ADR 0021 — scope
 
-`0019-observation-identity.md` is merged on `origin/develop`; `0020-matching-stages.md` is
-open as PR #562; nothing above 0020 exists on any remote branch. Re-check at draft time.
+`0019-observation-identity.md` and `0020-matching-stages.md` are both merged on
+`origin/develop` (PR #562 merged 2026-08-07). Nothing above 0020 exists on any remote
+branch and no open pull request touches `docs/decisions/`, so **0021 is the next free
+number** — re-verified at this revision. Re-check again at draft time.
 `tests/test_adr_index.py` regenerates both the `AGENTS.md` index and the README Records
 table and fails if either disagrees, so a new ADR requires updating both.
 
-### What changed for the ADR in rev. 5
+### What the ADR should freeze, after rev. 6's scoping correction
 
-Two items become freezable that rev. 4 had to leave open, and one motivating example is
-withdrawn:
-
-- **Freezable:** `bill` as the umbrella, scoped to the govinfo register (§1.6, §7.5).
-- **Freezable:** the authority model itself, now proven rather than inferred (§1.1).
-- **Withdrawn as a defect:** `bill.type` — correct against the consumed register (§1.2).
-- **Promoted to primary defect:** `version_number` (§1.3).
+- **Freezable:** the authority model — scoped to a concept **and the representation or
+  interface in which it is expressed**, not ranked by institution (§1.1).
+- **Freezable, and the most consequential result of the research:** *authoritative
+  vocabulary does not propagate across architectural boundaries.* Where data crosses
+  registers, name each side by its own authority and make the translation explicit rather
+  than hiding two meanings behind one identifier (§1.1.1).
+- **Freezable, narrowly:** `bill` is the umbrella in the **govinfo acquisition register**
+  (§1.6). Not the product domain, Python API, CLI, canonical contract, package namespace,
+  or MCP interface — those stay open (§7.5).
+- **Falsified as a defect, without becoming an endorsement:** `bill.type` (§1.2). Whether
+  the contract should keep the term is ADR 0006's question.
+- **Promoted to the clearest current tension:** `version_number` (§1.3).
 
 ### Tensions to acknowledge, not schedule
 
 | Tension | Owner |
 |---|---|
 | `version_number` vs govinfo `billVersion` (§1.3) | ADR 0013 / 0006 |
-| `bill` umbrella vs `<bill>` document type inside the code (§1.6) | 0021 states the containment rule; renames belong elsewhere |
+| `bill` umbrella vs `<bill>` document type inside the code (§1.6) | 0021 states the boundary rule; renames belong elsewhere |
+| Whether the canonical contract's domain vocabulary should be `bill` or `measure` (§1.2, §1.6) | **ADR 0006** — 0021 must not decide it |
 | `source` collision (§3.3) | ADR 0006 and the tooling |
 | `normalize_bill` names one step of a composite (§3.4) | Example only |
 | `resolution` branch has no corpus coverage (§1.4) | Testing, not naming |
@@ -621,17 +708,24 @@ withdrawn:
 
 ### Open questions
 
-1. Will the product be rebranded, and when?
-2. What is the canonical term for single-document presentation? Not `view` (§3.5).
-3. Mixed-representation comparison (`compare v1.pdf v2.xml`) — unsupported; ADR 0010 silent.
-4. Does anything downstream read `generator.name`?
-5. Will the BillTrax fork re-converge?
-6. Who owns `deltatrack.agoradmv.org`, the certificate and the systemd unit?
-7. Should `parsers/committee_report.py` be in the shipped engine at all?
-8. Should the `resolution` document type get corpus coverage (§1.4)?
+1. **What is the umbrella term for the product domain, Python API, CLI, canonical contract
+   and any future namespace?** Reopened, deliberately, by rev. 6. `bill` is verified only
+   for the acquisition register; `measure` has substantive backing; each surface needs
+   evaluating against the authority governing what it exposes (§1.1.1, §1.6).
+2. Will the product be rebranded, and when?
+3. What is the canonical term for single-document presentation? Not `view` (§3.5).
+4. Mixed-representation comparison (`compare v1.pdf v2.xml`) — unsupported; ADR 0010 silent.
+5. Does anything downstream read `generator.name`?
+6. Will the BillTrax fork re-converge?
+7. Who owns `deltatrack.agoradmv.org`, the certificate and the systemd unit?
+8. Should `parsers/committee_report.py` be in the shipped engine at all?
+9. Should the `resolution` document type get corpus coverage (§1.4)?
+10. How often do `isAppropriation` and `bill-type` misclassify, and on what population?
+    Unanswerable from an appropriations-selected corpus (§1.7).
 
-*Closed in rev. 5:* whether `bill` is the right umbrella; whether `label` should be backed by
-an official vocabulary and which; and the class-A gap that was rev. 4's largest.
+*Closed in rev. 5:* whether `bill` is the umbrella **in the govinfo register**; whether
+`label` should be backed by an official vocabulary and which; and the class-A gap that was
+rev. 4's largest. *Question 1 above is what rev. 5 wrongly believed it had also closed.*
 
 ---
 
