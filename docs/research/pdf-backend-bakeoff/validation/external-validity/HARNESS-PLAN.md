@@ -122,11 +122,35 @@ neutral), A24.2 (region bbox comes from the skeleton, which now excludes U+0020)
 | | |
 |---|---|
 | **inputs** | `frames.json`; the PDFs; `adjudicator_prompt.md` |
-| **outputs** | `results/oracle_stimuli.json` (per region: document sha256, page, **bbox in PDF points**, renderer name+version, DPI, **PNG sha256**, blind id) and the rendered PNGs; later `results/oracle_key.json` mapping blind id → region, committed **before** adjudication |
+| **outputs** | two artifacts with deliberately different contents, below |
 
-**Permitted:** render DPI; blind-id scheme. Shuffle order, the 25-item audit draw and the
-R1 10 % repeat draw are **fixed** by A27.7's namespaces `blind-order`, `cframe-audit` and
-`r1-repeat`.
+**`results/oracle_key.json`** — committed **before** adjudication, then **not opened by the
+adjudicator**:
+
+```
+opaque blind id ->
+    canonical stimulus identity        (A28.3, pre-blinding)
+    document_sha256
+    page_number
+    region_ordinal
+    stratum
+    frame                              C | D
+    control / repeat bookkeeping       control_kind, control_variant, r1 base identity
+    every H/X architecture output needed for the later join
+    renderer name + version, DPI, bbox in PDF points, PNG sha256
+```
+
+**The adjudicator-facing blind artifact** carries **only** what the frozen blinding protocol
+permits: the **opaque id**, the **rendered image**, and the **question / codebook**. It must
+never carry architecture output, frame, stratum, document identity, or control status.
+
+**Permitted decisions: NONE that affect an outcome.** Render scale is frozen by A28.4 —
+**300 DPI** primary, **330 DPI** for the R1 repeat, same bbox and source region, raster scale
+the only difference. Selection and ordering are frozen by A27.7 as amended by A28.3: the
+`cframe-audit` and `r1-repeat` draws rank canonical **base** stimulus identities and
+`blind-order` ranks canonical **final instance** identities. **No ranking may consume a blind
+id.** The blind id is derived only after selection is settled and is an adjudicator-facing
+alias only.
 
 **Must NOT:** render from any architecture's text; let a region's H/X content influence
 cropping; reveal control status; write the key after adjudication has begun.
@@ -141,6 +165,9 @@ cropping; reveal control status; write the key after adjudication has begun.
 | control | what fact makes it fail |
 |---|---|
 | re-render determinism | same region renders to a different PNG hash |
+| scale | a primary is not 300 DPI, or an R1 repeat is not 330 DPI, or the repeat's bbox differs from its primary, or either is rescaled afterwards |
+| **negative:** blind-id scheme swapped | any selected item or presentation rank changes (A28.3) |
+| **negative:** blind artifact leakage | a grep of the adjudicator file finds frame, stratum, document id, control status or arm text |
 | bbox ↔ skeleton agreement | a rendered crop omits a neutral line the region claims |
 | **negative:** shuffle the key | adjudications still align to the right regions (would prove the key is not load-bearing, i.e. the join is fake) |
 
@@ -319,60 +346,24 @@ provenance-only — add `page` (from the frozen `reconstruct_hybrid.reconstruct_
 index-for-index `print_lines` ↔ `emitted_lines` assertion must run over every page the
 harness consumes, not just page 1. Not made in this pass.
 
-### STILL OPEN — §4.5 adequacy *(methodological; blocks `decide_architecture` only)*
+### RULED by A28 — §4.5 and the last two determinism holes
 
-See §7.1 below. **This is the one unresolved outcome-affecting ambiguity.**
-
-### 7.1 §4.5 adequacy — two distinct gaps
-
-§4.5, frozen:
-
-| condition | consequence |
+| was | ruling |
 |---|---|
-| ≥ 7 of 8 strata **and** ≥ 800 emitted heading occurrences | supports a generalisation claim |
-| 5–6 strata filled | "extends to the classes actually sampled" |
-| < 5 strata **or** < 300 heading occurrences | **inadequate**; RQ2 not claimed, RQ1 bound only |
+| §4.5 Gap A, whose occurrence count | **A28.1** — `|H_keys ∪ X_keys|` over A27.1 source-position keys; P-head only; `account`/`agency`/`grouping` only; both-arms counts once; no text, no oracle |
+| §4.5 Gap B, non-exhaustive/overlapping rows | **A28.2** — ordered exhaustive state machine, thresholds unchanged; `LIMITED` does **not** fail Rule 3 |
+| blind ids could steer sampling | **A28.3** — canonical pre-blinding identities are ranked; the blind id is a post-selection alias only |
+| render DPI was an implementation choice | **A28.4** — 300 DPI primary, 330 DPI R1 repeat, same bbox |
 
-**Gap A — "emitted heading occurrences", whose count?** H and X can differ, and M9 exists
-precisely because X can lose a document's heading tree entirely.
+### Sweep for remaining delegated choices
 
-| reading | effect |
-|---|---|
-| H's count | an X failure cannot void the study, but adequacy is measured by the incumbent — and if H is the weaker finder the holdout is understated |
-| X's count | **an arm's own failure could declare the holdout inadequate and void the study.** This is the exact hazard §7.2 rule 0 forbids: "no frozen document may be removed from the denominator by its own result" |
-| `min(H, X)` | strictly worse than either: **both** arms' failures shrink it |
-| `max(H, X)` | symmetric, and no single arm's failure can shrink it |
-| union of A27.1 occurrence keys over both arms | symmetric, ≥ `max`, and uses the identity key A27.1 just froze |
-| the adjudicated count | architecture-independent, but **unavailable** — the oracle covers only sampled C-regions, not the whole holdout, so it cannot yield a document-wide count |
+§§4.5, 5.3–5.8, 6, 7 and 8 re-read for any surviving "permitted" or "seeded" phrase that
+hands an outcome-affecting choice to future implementation. **Three hits, none open:**
+`build_frames` permits "JSON layout only"; `build_oracle` permits "NONE that affect an
+outcome"; §8's "bootstrap permitted" is the frozen rule itself (allowed only at non-zero
+events). No further edge cases are manufactured.
 
-**Recommendation: the union of A27.1 occurrence keys over both arms.** §4.5 asks an
-**adequacy** question — does this holdout *contain* enough heading structure to generalise
-from — not an accuracy question. Structure demonstrated by either arm is structure the
-documents possess, so the union is the tightest architecture-symmetric measure of it, and it
-inherits the "no document removed by its own result" principle. It is capped only by a
-**shared** miss, which is honest: if neither arm found the structure, the study has no
-evidence it is there.
-
-**Gap B — the rows are not exhaustive, and they overlap.** `≥ 7 strata` with **300–799**
-occurrences matches **no row**. And `5–6 strata` with `< 300` occurrences matches **both**
-row 2 and row 3, with no precedence given.
-
-**Recommendation: make it exhaustive and ordered**, changing no threshold —
-
-```
-1. if strata < 5 OR occurrences < 300      -> INADEQUATE
-2. elif strata >= 7 AND occurrences >= 800 -> GENERALISABLE
-3. else                                    -> LIMITED ("extends to the classes actually
-                                              sampled", unfilled strata named in the headline)
-```
-
-This routes ≥ 7 strata / 300–799 to `LIMITED`, and resolves the 5–6 / < 300 overlap in favour
-of `INADEQUATE`, which is the conservative reading of an `OR`-joined failure condition.
-
-**What it changes:** Gap A moves the occurrence count and therefore which row fires; Gap B
-decides the outcome for a whole region of the input space that currently has none. Either can
-flip `§4.5 adequacy` in the Rule 3 gate vector, i.e. flip the study to
-`INSUFFICIENT_COMPARATIVE_EVIDENCE`. **Neither is taken here.**
+> **Unresolved outcome-affecting ambiguities: ZERO.**
 
 ### 7.2 `X_CORRECTS` unit — *implementation-only, closed*
 
@@ -385,15 +376,15 @@ check, not an ambiguity.
 
 ## 8. Recommended implementation slice
 
-**None yet.** §4.5 (Gap A and Gap B) is an unresolved outcome-affecting ambiguity, and the
-standing instruction is to stop at one rather than pick to make the harness executable.
+With the register empty, the first slice is:
 
-It blocks only `decide_architecture`, so **once §4.5 is ruled** the recommended first slice
-is unchanged from A26 and now unblocked by A27.1:
+> **`build_frames.py` alone, DEVELOPMENT material only, with invariants I1–I5 and its nine
+> controls.**
 
-> **`build_frames.py` alone, DEVELOPMENT only, with I1–I5 and its nine controls**, plus the
-> additive `run_hybrid.run()` provenance change and its anti-drift gate.
+It consumes only frozen, tested inputs (`run_hybrid` — now additively exposing `page` —
+`run_extended`, `neutral_identity`, `methodology_contracts`), produces the artifact every
+later stage reads, and every one of its controls is constructible synthetically with no
+oracle, no adjudication and no holdout document. Its determinism control is already
+executable via `methodology_contracts.select`.
 
-It consumes only frozen, tested inputs (`run_hybrid`, `run_extended`, `neutral_identity`),
-produces the artifact every later stage reads, and every one of its controls is constructible
-synthetically with no oracle and no holdout.
+Nothing downstream of it may start until `build_frames` and its controls are reviewed.

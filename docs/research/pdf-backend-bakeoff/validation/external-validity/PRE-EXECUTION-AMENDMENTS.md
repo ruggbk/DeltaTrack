@@ -2006,7 +2006,7 @@ no component built.
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["HARNESS-PLAN.md", "probes/x14_anchor_bridge.py"],
- "supersedes_text_in": "PRE-REGISTRATION.md 4.5, 5.5.1, 5.8, 6 (M1 matching), 7.2; PRE-EXECUTION-AMENDMENTS.md A10, A19 (40% clause)",
+ "supersedes_text_in": "PRE-REGISTRATION.md 5.5.1, 5.8, 6 (M1 matching), 7.2; PRE-EXECUTION-AMENDMENTS.md A10, A19 (40% clause)",
  "status": "FROZEN -- rulings recorded before any harness component exists"}
 ```
 
@@ -2137,11 +2137,145 @@ exactly the same items in exactly the same order.**
 
 ### A27.8 — §4.5 adequacy: the gap is recorded, the ruling is NOT taken here
 
+> **Bookkeeping correction.** A27's `supersedes_text_in` originally listed
+> `PRE-REGISTRATION.md 4.5`, which contradicted this very subsection: A27 recorded the §4.5
+> gap and explicitly declined to rule it. §4.5 is removed from A27's supersession list and is
+> superseded by **A28**, which is where the ruling was actually made. A27 is not rewritten to
+> imply otherwise.
+
 §4.5 says "≥ 800 **emitted** heading occurrences" without saying **whose** count when H and X
 differ, and its rows are not exhaustive. **Both are outcome-affecting and neither is decided
 in this amendment** — see the analysis returned with A26/A27, which sets out the competing
 interpretations, what each changes, and a recommendation. `decide_architecture` may not be
 built until §4.5 is ruled.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
+no holdout document opened, no harness component built.
+
+---
+
+## A28 — SUBSTANTIVE. §4.5 adequacy frozen; stimulus identity and renderer scale
+
+```json
+{"id": "A28", "class": "SUBSTANTIVE",
+ "commits": ["PENDING"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["HARNESS-PLAN.md", "probes/methodology_contracts.py",
+                   "probes/x15_methodology_contracts.py", "probes/x14_anchor_bridge.py",
+                   "probes/run_hybrid.py"],
+ "supersedes_text_in": "PRE-REGISTRATION.md 4.5, 5.4 (render scale), 5.6 (R1 scale); PRE-EXECUTION-AMENDMENTS.md A27.7 (blind-id ranking)",
+ "status": "FROZEN"}
+```
+
+Closes the last outcome-affecting ambiguity (§4.5) and two determinism holes A27 left.
+**No harness component is built.** Tested in `x15_methodology_contracts.py`, 19/19.
+
+### A28.1 — the adequacy occurrence count
+
+> **`adequacy_occurrences = |H_keys ∪ X_keys|`**, where each key is the unique **A27.1
+> source-position occurrence key** `(document_sha256, page_number, start_neutral_line_key,
+> occurrence_ordinal_on_that_line)`.
+
+- only **P-head** documents contribute;
+- only the kinds **`account`, `agency`, `grouping`** contribute;
+- one physical occurrence emitted by **both** arms counts **once**;
+- an occurrence emitted by **one** arm counts **once**;
+- **no text similarity** enters identity; **no oracle result** enters the count.
+
+**Why the union.** §4.5 asks an **adequacy** question — does the holdout *contain* enough
+heading structure to generalise from — not an accuracy question. Structure either arm
+demonstrates is structure the documents possess. The union is symmetric, so **an arm's own
+failure can never shrink the denominator and void the study**, which is the hazard §7.2 rule
+0 already forbids ("no frozen document may be removed from the denominator by its own
+result"). It is capped only by a **shared** miss, which is honest.
+
+**Why only three kinds.** The frozen design pilot's "heading occurrences emitted" quantity
+used exactly `account` / `agency` / `grouping`. The later oracle codebook is broader, and
+widening the adequacy denominator to title/division/section would make the holdout look more
+adequate than the frozen quantity it is compared against.
+
+### A28.2 — the §4.5 state machine
+
+Ordered and exhaustive. **No threshold is changed.**
+
+```python
+if strata_filled < 5 or adequacy_occurrences < 300:
+    adequacy = "INADEQUATE"
+elif strata_filled >= 7 and adequacy_occurrences >= 800:
+    adequacy = "GENERALISABLE"
+else:
+    adequacy = "LIMITED"
+```
+
+| state | consequence |
+|---|---|
+| `INADEQUATE` | **Rule 3 fails**; RQ2 is not claimed; RQ1 reports a bound only |
+| `LIMITED` | Rule 3 does **not** fail; the architecture decision may proceed, but the licensed generalisation is only *"extends to the classes actually sampled"*, with unfilled strata named in the headline |
+| `GENERALISABLE` | Rule 3 does not fail and the broader appropriations-document generalisation is licensed |
+
+The frozen table was neither exhaustive nor disjoint: `≥ 7` strata with **300–799**
+occurrences matched **no** row, and `5–6` strata with `< 300` matched **two** with no
+precedence. Evaluating the failure condition first makes the space total and resolves the
+overlap conservatively. **MEASURED**: 10 branch cases plus a 54-point sweep, no pair
+unclassified, all three states reachable.
+
+### A28.3 — canonical PRE-BLINDING stimulus identity
+
+A27.7 ranked three purposes by *stimulus blind id* while the blind-id scheme was still an
+implementation choice — so changing that scheme could have changed the audit sample, the R1
+sample or the presentation order. **Sampling may not depend on blind ids.**
+
+```
+base region      ("region", document_sha256, page_number, region_ordinal)
+control          ("control", control_kind, source_fixture_sha256, page_number,
+                  region_ordinal, control_variant)
+R1 repeat        ("r1-repeat", base_stimulus_identity)
+```
+
+Serialization is canonical (`json.dumps`, `sort_keys`, no whitespace, tuples and lists
+normalised to one form) and tested. Then:
+
+- **`cframe-audit`** ranks canonical **base** identities;
+- **`r1-repeat`** ranks canonical **base** identities;
+- **`blind-order`** ranks canonical **final instance** identities;
+- **no ranking consumes an opaque blind id.**
+
+The blind id is derived **only after all selection is settled**, as a domain-separated hash
+of the canonical final identity. **It is an adjudicator-facing alias and never determines
+membership, repeat selection, audit selection or order.** *Negative control:* replacing the
+blind-id scheme wholesale, with canonical identities held fixed, changes **no** selected item
+and **no** presentation rank — and the alias itself is asserted to have changed, so the
+control is not vacuous.
+
+### A28.4 — renderer scale, frozen
+
+| stimulus | scale |
+|---|---|
+| primary C-frame / D-frame / control | **exactly 300 DPI** |
+| R1 reliability repeat | **exactly 330 DPI** |
+
+Render DPI is **not** an implementation choice. §5.6 requires the R1 duplicate at "a
+different but visually equivalent scale"; **330 = 300 × 1.10**, a mechanical pre-execution
+choice made **higher** rather than lower so the reliability repeat is never *less* legible
+than the original. The repeat uses the **same PDF bbox and same source region** — only the
+raster scale differs.
+
+Controls must fail if a primary stimulus is not 300 DPI, an R1 repeat is not 330 DPI, the
+repeat's bbox or source identity differs from its primary, or a renderer rescales either
+artifact afterwards.
+
+### A28.5 — the anchor bridge is proven BILATERALLY
+
+`x14` now runs the **same** rule on both arms over the same material — H **11/11** and
+**16/16**, X **11/11** and **16/16** anchors placed uniquely, zero unplaceable, and both arms
+asserted to bridge onto the **same** neutral skeleton. `print_lines` ↔ `emitted`
+index-for-index equality is checked on **every** consumed page, not one example. Five
+negative controls prove the bridge **refuses rather than guesses**. **No arm has a private
+matching rule and there is no fallback.**
+
+`run_hybrid.run()` gained an **additive** `page` key (the production `Page` from the frozen
+reconstructor) so H can reach `print_lines` and anchors. Every pre-existing key is unchanged.
 
 **Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
 no holdout document opened, no harness component built.

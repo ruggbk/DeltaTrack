@@ -1,0 +1,665 @@
+{
+ "population": "SYNTHETIC only -- no PDF opened, no architecture run, nothing scored",
+ "adequacy_kinds": [
+  "account",
+  "agency",
+  "grouping"
+ ],
+ "selection_seed": 20260807,
+ "primary_dpi": 300,
+ "r1_repeat_dpi": 330,
+ "tests": [
+  {
+   "test": "4.5 state machine matches the frozen rows on every branch",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "...and all three states are reachable",
+   "expected": [
+    "GENERALISABLE",
+    "INADEQUATE",
+    "LIMITED"
+   ],
+   "observed": [
+    "GENERALISABLE",
+    "INADEQUATE",
+    "LIMITED"
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "no (strata, occurrences) pair is unclassified",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "one physical occurrence emitted by BOTH arms counts once",
+   "expected": 1,
+   "observed": 1,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "an occurrence emitted by ONE arm still counts",
+   "expected": 2,
+   "observed": 2,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "one arm missing an occurrence cannot remove the other arm's key",
+   "expected": 3,
+   "observed": 3,
+   "pass": true,
+   "implication": "an arm's own failure must never shrink the adequacy denominator"
+  },
+  {
+   "test": "two occurrences on ONE neutral line stay distinct",
+   "expected": 2,
+   "observed": 2,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "only account/agency/grouping contribute to adequacy",
+   "expected": 3,
+   "observed": 3,
+   "pass": true,
+   "implication": "title/section/division must not inflate the denominator the frozen quantity is compared against"
+  },
+  {
+   "test": "selection is reproducible",
+   "expected": [
+    [
+     "region",
+     "sha1",
+     1,
+     1
+    ],
+    [
+     "region",
+     "sha1",
+     1,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     3,
+     1
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     1
+    ]
+   ],
+   "observed": [
+    [
+     "region",
+     "sha1",
+     1,
+     1
+    ],
+    [
+     "region",
+     "sha1",
+     1,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     3,
+     1
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     1
+    ]
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "selection does not depend on input listing order",
+   "expected": [
+    [
+     "region",
+     "sha1",
+     1,
+     1
+    ],
+    [
+     "region",
+     "sha1",
+     1,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     3,
+     1
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     1
+    ]
+   ],
+   "observed": [
+    [
+     "region",
+     "sha1",
+     1,
+     1
+    ],
+    [
+     "region",
+     "sha1",
+     1,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     3,
+     1
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     2
+    ],
+    [
+     "region",
+     "sha0",
+     2,
+     1
+    ]
+   ],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "different purposes select differently",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": "domain separation, so one namespace's draw cannot leak into another's"
+  },
+  {
+   "test": "canonical form is stable across tuple/list spelling",
+   "expected": "821b664b1f62c2f97820a841cb1dbbf8d86fbe27251750b992134afdf83ebeb4",
+   "observed": "821b664b1f62c2f97820a841cb1dbbf8d86fbe27251750b992134afdf83ebeb4",
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "changing the blind-ID scheme changes NO selection and NO presentation rank",
+   "expected": {
+    "audit": [
+     [
+      "region",
+      "sha1",
+      3,
+      2
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      2
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      1
+     ]
+    ],
+    "r1": [
+     [
+      "region",
+      "sha0",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      1
+     ]
+    ],
+    "order": [
+     [
+      "region",
+      "sha0",
+      1,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      2
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       1,
+       2
+      ]
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      2
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       1,
+       1
+      ]
+     ],
+     [
+      "region",
+      "sha1",
+      1,
+      2
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      2
+     ],
+     [
+      "region",
+      "sha1",
+      1,
+      0
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       2,
+       0
+      ]
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      3,
+      2
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      3,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      2
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       1,
+       0
+      ]
+     ],
+     [
+      "region",
+      "sha1",
+      1,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      0
+     ]
+    ]
+   },
+   "observed": {
+    "audit": [
+     [
+      "region",
+      "sha1",
+      3,
+      2
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      2
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      1
+     ]
+    ],
+    "r1": [
+     [
+      "region",
+      "sha0",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      1
+     ]
+    ],
+    "order": [
+     [
+      "region",
+      "sha0",
+      1,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      2
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       1,
+       2
+      ]
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      2
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       1,
+       1
+      ]
+     ],
+     [
+      "region",
+      "sha1",
+      1,
+      2
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      2
+     ],
+     [
+      "region",
+      "sha1",
+      1,
+      0
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       2,
+       0
+      ]
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      3,
+      2
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      3,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      3,
+      1
+     ],
+     [
+      "region",
+      "sha0",
+      2,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      0
+     ],
+     [
+      "region",
+      "sha0",
+      1,
+      2
+     ],
+     [
+      "r1-repeat",
+      [
+       "region",
+       "sha0",
+       1,
+       0
+      ]
+     ],
+     [
+      "region",
+      "sha1",
+      1,
+      1
+     ],
+     [
+      "region",
+      "sha1",
+      2,
+      0
+     ]
+    ]
+   },
+   "pass": true,
+   "implication": "sampling ranks canonical pre-blinding identities; the blind id is an alias only"
+  },
+  {
+   "test": "...and the alias itself did change, so the control is not vacuous",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "blind ids are unique across distinct stimuli",
+   "expected": 22,
+   "observed": 22,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "primary stimuli render at exactly 300 dpi",
+   "expected": 300,
+   "observed": 300,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "R1 repeats render at exactly 330 dpi",
+   "expected": 330,
+   "observed": 330,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "the R1 scale is the frozen 300 x 1.10",
+   "expected": 330,
+   "observed": 330,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "primary and repeat scales differ, so R1 is a re-render and not a cache hit",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": ""
+  }
+ ],
+ "failures": []
+}

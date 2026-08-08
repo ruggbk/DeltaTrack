@@ -44,8 +44,7 @@ sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(BAKE / "probes"))
 sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
-import pdfium_hybrid  # noqa: E402
-import reconstruct_hybrid  # noqa: E402
+import run_extended  # noqa: E402
 import run_hybrid  # noqa: E402
 from neutral_identity import build_owner  # noqa: E402
 
@@ -92,77 +91,73 @@ def place_anchor(anchor, print_lines, emitted, neutral, owner):
     return (ordinals[key] // REGION_SIZE, key), None
 
 
+def bridge_arm(arm: str, name: str, per_page: dict, pages: list) -> dict:
+    """Place every anchor of one arm onto its neutral region. Identical rule for H and X."""
+    drift = [
+        pno
+        for pno, (pg, em, _n, _o) in per_page.items()
+        if [ln.text for ln in pg.print_lines] != [e.text() for e in em]
+    ]
+    check(
+        f"{name} [{arm}]: print_lines matches emitted index-for-index on EVERY page",
+        [],
+        drift,
+        "the bridge's index step is only sound while this holds, on every consumed page",
+    )
+    anchors = extract_anchors(pages)
+    placed, reasons, examples = 0, Counter(), []
+    for a_ in anchors:
+        entry = per_page.get(a_.page_number)
+        if entry is None:
+            reasons["PAGE_NOT_IN_SAMPLE"] += 1
+            continue
+        pg, em, neutral, owner = entry
+        result, reason = place_anchor(a_, pg.print_lines, em, neutral, owner)
+        if reason:
+            reasons[reason] += 1
+            continue
+        placed += 1
+        if len(examples) < 2:
+            examples.append(
+                {"kind": a_.kind, "page": a_.page_number, "margin_line": a_.line_number,
+                 "region": result[0], "neutral_line": list(result[1])}
+            )
+    residue = sum(v for k, v in reasons.items() if k != "PAGE_NOT_IN_SAMPLE")
+    check(f"{name} [{arm}]: every anchor on a sampled page places uniquely", 0, residue,
+          "any residue makes anchor discordance non-executable as frozen")
+    print(f"  [{arm}] anchors={len(anchors)} placed={placed} unplaceable={dict(reasons)}")
+    return {"arm": arm, "anchors_total": len(anchors), "placed_uniquely": placed,
+            "unplaceable": dict(reasons), "examples": examples}
+
+
 def main(limit: int = 8) -> int:
     report = []
     for name, path in DOCS:
         if not path.exists():
             continue
         print(f"\n== {name} ==")
-        frozen_pages, _ = pdfium_hybrid.extract(path, limit=limit)
-        gid_pages = run_hybrid.extract_with_gids(path, limit=limit)
-        pages, per_page = [], {}
-        for fp, (pno, chars) in zip(frozen_pages, gid_pages):
-            page_obj, _diag = reconstruct_hybrid.reconstruct_page(fp)
-            emitted = run_hybrid.emitted_lines(pno, chars)
-            neutral = run_hybrid.neutral_skeleton(pno, chars)
-            pages.append(page_obj)
-            per_page[pno] = (page_obj, emitted, neutral, build_owner(neutral))
+        h_pages = run_hybrid.run(path, limit=limit)
+        x_pages, _summary = run_extended.run(path, limit=limit)
 
-        # the index step must be exact, re-asserted locally rather than inherited
-        drift = [
-            pno
-            for pno, (pg, em, _n, _o) in per_page.items()
-            if [ln.text for ln in pg.print_lines] != [e.text() for e in em]
-        ]
-        check(
-            f"{name}: emitted_lines matches Page.print_lines index-for-index",
-            [],
-            drift,
-            "the bridge's index step is only sound while this holds",
-        )
+        h_per = {d["page_number"]: (d["page"], d["emitted"], d["neutral"], build_owner(d["neutral"]))
+                 for d in h_pages}
+        x_per = {d["page_number"]: (d["page"], d["emitted"], d["neutral"], build_owner(d["neutral"]))
+                 for d in x_pages}
 
-        anchors = extract_anchors(pages)
-        placed, reasons = 0, Counter()
-        examples = []
-        for a in anchors:
-            entry = per_page.get(a.page_number)
-            if entry is None:
-                reasons["PAGE_NOT_IN_SAMPLE"] += 1
-                continue
-            pg, em, neutral, owner = entry
-            result, reason = place_anchor(a, pg.print_lines, em, neutral, owner)
-            if reason:
-                reasons[reason] += 1
-                continue
-            placed += 1
-            if len(examples) < 3:
-                examples.append(
-                    {
-                        "kind": a.kind,
-                        "page": a.page_number,
-                        "margin_line": a.line_number,
-                        "region": result[0],
-                        "neutral_line": list(result[1]),
-                    }
-                )
-        rec = {
-            "document": name,
-            "pages": limit,
-            "anchors_total": len(anchors),
-            "placed_uniquely": placed,
-            "unplaceable": dict(reasons),
-            "examples": examples,
-        }
+        # A19: ONE skeleton. If the arms disagreed here the two bridges would not be the
+        # same bridge, and reporting them side by side would be meaningless.
+        skew = [pno for pno in h_per
+                if [(ln.key, sorted(ln.gids)) for ln in h_per[pno][2]]
+                != [(ln.key, sorted(ln.gids)) for ln in x_per[pno][2]]]
+        check(f"{name}: both arms bridge onto the SAME neutral skeleton", [], skew)
+
+        rec = {"document": name, "pages": limit, "arms": [
+            bridge_arm("H", name, h_per, [d["page"] for d in h_pages]),
+            bridge_arm("X", name, x_per, [d["page"] for d in x_pages]),
+        ]}
         report.append(rec)
-        print(f"  anchors={len(anchors)} placed={placed} unplaceable={dict(reasons)}")
-        check(
-            f"{name}: every anchor on a sampled page places uniquely",
-            0,
-            sum(v for k, v in reasons.items() if k != "PAGE_NOT_IN_SAMPLE"),
-            "any residue here makes anchor discordance non-executable as frozen",
-        )
 
-    # ---- negative controls: the bridge must be able to REFUSE, not guess.
+    # ---- negative controls: the bridge must REFUSE, not guess. One rule, both arms.
     class FakeLine:
         def __init__(self, n, t):
             self.line_number, self.text = n, t
@@ -179,34 +174,29 @@ def main(limit: int = 8) -> int:
 
     nl = NeutralLine(page=1, ordinal=0, baseline=0.0, x0=0, y0=0, x1=1, y1=1, gids=frozenset({5}))
     owner = build_owner([nl])
-    check(
-        "negative: a margin number present twice on a page is AMBIGUOUS, not guessed",
-        "AMBIGUOUS_MARGIN_NUMBER_ON_PAGE",
-        place_anchor(
-            FakeLine(7, "X"), [FakeLine(7, "a"), FakeLine(7, "b")], [FakeEmitted({5}), FakeEmitted({5})], [nl], owner
-        )[1],
-    )
-    check(
-        "negative: a margin number that exists on no print line is refused",
-        "NO_PRINT_LINE_WITH_THAT_MARGIN_NUMBER",
-        place_anchor(FakeLine(99, "X"), [FakeLine(7, "a")], [FakeEmitted({5})], [nl], owner)[1],
-    )
-    check(
-        "negative: an emitted line with no neutral ink is refused",
-        "EMITTED_LINE_CARRIES_NO_NEUTRAL_INK",
-        place_anchor(FakeLine(7, "X"), [FakeLine(7, "a")], [FakeEmitted(set())], [nl], owner)[1],
-    )
-    check(
-        "positive: a clean anchor places on its region",
-        (0, (1, 0)),
-        place_anchor(FakeLine(7, "X"), [FakeLine(7, "a")], [FakeEmitted({5})], [nl], owner)[0],
-    )
+    neg = [
+        ("a margin number present twice on a page", "AMBIGUOUS_MARGIN_NUMBER_ON_PAGE",
+         [FakeLine(7, "a"), FakeLine(7, "b")], [FakeEmitted({5}), FakeEmitted({5})]),
+        ("a margin number on no print line", "NO_PRINT_LINE_WITH_THAT_MARGIN_NUMBER",
+         [FakeLine(3, "a")], [FakeEmitted({5})]),
+        ("an emitted line with no neutral ink", "EMITTED_LINE_CARRIES_NO_NEUTRAL_INK",
+         [FakeLine(7, "a")], [FakeEmitted(set())]),
+        ("a first gid the skeleton does not own", "FIRST_GID_NOT_OWNED_BY_ANY_NEUTRAL_LINE",
+         [FakeLine(7, "a")], [FakeEmitted({999})]),
+    ]
+    for label, want, pls, ems in neg:
+        got = place_anchor(FakeLine(7, "X"), pls, ems, [nl], owner)[1]
+        check(f"negative: {label} is refused, not guessed", want, got)
+    check("positive: a clean anchor places on its region", (0, (1, 0)),
+          place_anchor(FakeLine(7, "X"), [FakeLine(7, "a")], [FakeEmitted({5})], [nl], owner)[0])
 
     doc = {
         "population": "DEVELOPMENT + synthetic -- no holdout opened, nothing scored",
-        "chain": "Anchor(page, margin line_number) -> Page.print_lines index -> emitted_lines[i]"
-        " -> ngid -> NeutralLine -> region",
+        "chain": "Anchor(page, margin line_number) -> Page.print_lines index -> emitted[i]"
+                 " -> ngid -> NeutralLine -> region",
+        "bilateral": "the SAME rule is applied to H and X; neither arm has a private matching rule",
         "text_matching_used": False,
+        "fallback_exists": False,
         "region_size_neutral_lines": REGION_SIZE,
         "documents": report,
         "tests": ROWS,

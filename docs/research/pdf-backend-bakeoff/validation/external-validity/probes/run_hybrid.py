@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_raw
+import pdfium_hybrid
 import reconstruct_hybrid
 from contract_hybrid import BASELINE, CP, GEN, SIZE, UPRIGHT, VBOX, X0, X1
 from neutral_identity import SPACE, Cell, EmittedLine, SourceGlyph, cluster, eligible
@@ -232,17 +233,28 @@ def neutral_skeleton(page_number: int, chars_with_gids: list[tuple[int, tuple]])
 
 
 def run(pdf_path: Path, limit: int | None = None) -> list[dict]:
-    """Per page: the neutral skeleton, H's emitted printed lines, and production's Page."""
+    """Per page: the neutral skeleton, H's emitted printed lines, and production's Page.
+
+    ADDITIVE ONLY. `page` is appended so the harness can reach `Page.print_lines` and, through
+    it, production anchors -- the anchor-to-neutral bridge x14 proves. Every pre-existing key
+    is unchanged, and the `Page` is built by the FROZEN `reconstruct_hybrid` from the FROZEN
+    adapter, never from this wrapper's copy of either.
+
+    ANTI-DRIFT: the bridge is only sound while `page.print_lines` and `emitted` correspond
+    index-for-index. `x14` asserts that over EVERY page it consumes, not one example page.
+    """
     out = []
+    frozen_pages, _ = pdfium_hybrid.extract(pdf_path, limit=limit)
+    by_page = {pg.page_number: pg for pg in frozen_pages}
     for pno, chars in extract_with_gids(pdf_path, limit=limit):
-        # production's own Page, for anchors and amounts -- built by the FROZEN module from
-        # the FROZEN adapter, never from this wrapper's copy
+        page_obj, _diag = reconstruct_hybrid.reconstruct_page(by_page[pno])
         out.append(
             {
                 "page_number": pno,
                 "chars": chars,
                 "emitted": emitted_lines(pno, chars),
                 "neutral": neutral_skeleton(pno, chars),
+                "page": page_obj,
             }
         )
     return out
