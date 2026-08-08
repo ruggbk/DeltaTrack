@@ -186,6 +186,30 @@ class RetrieverInvocation:
         return (self.round, self.retriever, repr(self.config))
 
 
+def _settle_proposals(proposals: Iterable[Proposal]) -> tuple[Proposal, ...]:
+    """One proposal per invocation, in canonical ``(round, retriever, config)`` order.
+
+    Idempotent where an invocation repeats with identical metadata; a raise where it
+    repeats with different metadata. Keeping the first would make the recorded rank a
+    function of iteration order, which is exactly the unattributable number the candidate
+    boundary exists to prevent — so the ambiguity is refused rather than resolved.
+
+    Shared by :class:`Candidate` and :class:`CandidateSet` so the rule cannot hold on one
+    construction path and not the other.
+    """
+    settled: dict[RetrieverInvocation, Proposal] = {}
+    for proposal in proposals:
+        existing = settled.get(proposal.invocation)
+        if existing is not None and existing != proposal:
+            raise ValueError(
+                f"{proposal.invocation.retriever} appears twice for one invocation with different metadata: "
+                f"{existing} then {proposal}. One invocation's view of one pair is single-valued; "
+                "re-proposing under a changed configuration is a new invocation."
+            )
+        settled[proposal.invocation] = proposal
+    return tuple(sorted(settled.values(), key=lambda p: p.invocation._order_key))
+
+
 @dataclass(frozen=True, order=True)
 class Proposal:
     """One retriever invocation's claim that a pair is worth evaluating.
@@ -221,6 +245,13 @@ class Candidate:
     evaluation without a recorded retriever invocation is a pair whose recall cannot be
     attributed, which is the observability the candidate boundary exists to buy.
 
+    **One proposal per invocation, enforced here and not only by the builder.** The rule
+    ``CandidateSet`` applies while accumulating holds for a directly constructed candidate
+    too: an invocation repeated with identical metadata collapses to one record, and one
+    repeated with different rank or score is refused. Leaving it to the builder would be
+    the same constructor-path gap that let ``RetrieverInvocation`` and ``Evidence`` carry
+    an uncanonical value — the invariant belongs to the type that states it.
+
     **Proposal order is canonical, not the order the retrievers happened to run in.**
     Ordered by ``(round, retriever, config)``, so two runs that surface one pair from the
     same two invocations in opposite order produce identical candidates, provenance
@@ -240,7 +271,7 @@ class Candidate:
             raise ValueError(f"a candidate pairs one old-side and one new-side observation, got {self.old}, {self.new}")
         if not self.proposals:
             raise ValueError(f"candidate {self.pair} has no retrieval provenance")
-        object.__setattr__(self, "proposals", tuple(sorted(self.proposals, key=lambda p: p.invocation._order_key)))
+        object.__setattr__(self, "proposals", _settle_proposals(self.proposals))
 
     @property
     def pair(self) -> tuple[int, int]:
@@ -348,6 +379,13 @@ class Evidence:
     signals written in another order. Booleans are welcome (header equality, path
     equality); what is not welcome is a name that answers "do these correspond?".
 
+    **Pair orientation is checked here, not only where evidence is consumed.** Evidence
+    describes a candidate pair, and a candidate is one old-side and one new-side
+    observation, so the same invariant holds. ``Correspondence`` also refuses evidence
+    naming a pair it does not relate, but that check cannot speak for a record built and
+    passed around on its own — a reversed record would carry a valid-looking address for
+    a pairing that runs backwards.
+
     **An empty signal set is valid**, and deliberately so. A correspondence must carry
     one evidence record per selected link, but *what* a signal is remains Phase 2 work.
     Requiring a non-empty set would be this slice choosing which signals must exist,
@@ -365,6 +403,10 @@ class Evidence:
     signals: tuple[tuple[str, Scalar], ...] = ()
 
     def __post_init__(self) -> None:
+        if self.old.side != OLD or self.new.side != NEW:
+            raise ValueError(
+                f"evidence describes one old-side and one new-side observation, got {self.old}, {self.new}"
+            )
         object.__setattr__(self, "signals", _freeze(self.signals))
 
     @classmethod
@@ -410,16 +452,26 @@ class Correspondence:
     A missing record is refused, and so is a second record for one link — "the evidence
     that selected it" is singular, and two records leave no way to say which one did.
 
-    ## N:M is refused, deliberately
+    ## The five shapes are the whole constructible set
 
-    A both-sides-plural correspondence is *not* in ADR 0020's required list, and the
-    record defers global collision resolution without choosing an algorithm — which is
-    the assignment work that would produce one. More to the point, its link structure is
-    undefined: nothing says whether N:M means the full cross product, a matching, or
-    something else, so "each link carries the evidence that selected it" has no meaning
-    for it yet. Representing a shape whose links are undefined is not free, so this
-    refuses it rather than inventing a resolution. Lifting the refusal is a one-line
-    change once an assignment stage defines what an N:M link is.
+    Every other cardinality is refused rather than given invented semantics, for one
+    reason in two forms: ADR 0020's list is what the assignment stage has to produce, and
+    a shape outside it has no defined link structure, so "each link carries the evidence
+    that selected it" cannot be stated for it.
+
+    **N:M** — both sides plural. Not required, and the record defers the global collision
+    resolution that would produce one without choosing an algorithm. Nothing says whether
+    an N:M link is the full cross product, a matching, or something else.
+
+    **N:0 and 0:N** — one side plural, the other empty. Not required either, and there is
+    no reading of "these two provisions correspond to nothing *together*" that differs
+    from two separate removals or two separate additions, which the required shapes
+    already express. Refusing them also removes a live mislabelling: ``shape`` read
+    ``(2, 0)`` as ``N:1``, naming a correspondence with no new side after one that has
+    one.
+
+    Lifting either refusal is a one-line change once an assignment stage defines what the
+    shape's links are.
     """
 
     old: tuple[ObservationRef, ...] = ()
@@ -443,6 +495,12 @@ class Correspondence:
                 f"both sides plural ({len(self.old)}:{len(self.new)}). ADR 0020 requires 1:1, 1:0, 0:1, 1:N and "
                 "N:1; it defers global collision resolution and defines no link structure for a many-to-many "
                 "correspondence, so there is no rule yet for which pairs carry evidence."
+            )
+        if (len(self.old) > 1 and not self.new) or (len(self.new) > 1 and not self.old):
+            raise ValueError(
+                f"one side plural, the other empty ({len(self.old)}:{len(self.new)}). ADR 0020 requires 1:1, 1:0, "
+                "0:1, 1:N and N:1; several observations corresponding to nothing together says nothing that "
+                "separate 1:0 or 0:1 correspondences do not already say."
             )
 
         links = {(old_ref, new_ref) for old_ref in self.old for new_ref in self.new}

@@ -112,6 +112,63 @@ def test_a_candidate_cannot_exist_without_retrieval_provenance():
         Candidate(old(3), new(7))
 
 
+def test_the_plain_constructor_collapses_an_identical_repeated_proposal():
+    """The builder's deduplication rule, reached without the builder.
+
+    Fails if ``Candidate.__post_init__`` leaves proposal uniqueness to ``CandidateSet``
+    — the same constructor-path gap that let ``RetrieverInvocation`` and ``Evidence``
+    hold an uncanonical value. A directly built candidate would then carry one retriever
+    in two provenance slots, and anything counting invocations would read one retriever
+    as two.
+    """
+    candidate = Candidate(
+        old(3),
+        new(7),
+        (Proposal(PATH_GROUP, rank=0, score=0.91), Proposal(PATH_GROUP, rank=0, score=0.91)),
+    )
+    assert candidate.proposals == (Proposal(PATH_GROUP, rank=0, score=0.91),)
+    assert candidate.invocations == (PATH_GROUP,)
+
+
+def test_the_plain_constructor_refuses_a_conflicting_repeated_proposal():
+    """The other half: one invocation offering a pair at two different ranks.
+
+    Fails if the constructor silently keeps one of them, which makes the recorded
+    provenance a function of tuple order — the unattributable number the candidate
+    boundary exists to prevent. Refused rather than resolved, exactly as ``CandidateSet``
+    refuses it while accumulating.
+    """
+    with pytest.raises(ValueError, match="different metadata"):
+        Candidate(old(3), new(7), (Proposal(PATH_GROUP, rank=0), Proposal(PATH_GROUP, rank=7)))
+
+
+def test_deduplication_in_the_constructor_keeps_canonical_order():
+    """Uniqueness and ordering are one pass, so collapsing a duplicate must not disturb
+    the ``(round, retriever, config)`` order. Fails if deduplication is bolted on after
+    the sort, or replaces it."""
+    candidate = Candidate(
+        old(3),
+        new(7),
+        (Proposal(MOVE_SCAN), Proposal(PATH_GROUP), Proposal(MOVE_SCAN)),
+    )
+    assert candidate.invocations == (PATH_GROUP, MOVE_SCAN)
+
+
+def test_evidence_describes_an_old_side_and_a_new_side_observation():
+    """Evidence describes a candidate pair, so it carries the candidate's orientation
+    invariant.
+
+    ``Correspondence`` already refuses evidence naming a pair it does not relate, but
+    that cannot speak for a record built and passed around on its own. Fails if the check
+    lives only at the consuming end, where a reversed record carries a valid-looking
+    address for a pairing that runs backwards.
+    """
+    with pytest.raises(ValueError, match="one old-side and one new-side"):
+        Evidence.of(new(3), old(7))
+    with pytest.raises(ValueError, match="one old-side and one new-side"):
+        Evidence(old(3), old(7))
+
+
 def test_a_proposal_carries_the_configuration_that_produced_it():
     """ADR 0020 invariant 2: a recall number without its configuration cannot be compared
     against another run. Fails if the invocation collapses to a bare retriever name."""
@@ -285,6 +342,26 @@ def test_evidence_must_name_a_pair_the_correspondence_relates():
     unreadable — the reader cannot tell which link a signal describes."""
     with pytest.raises(ValueError, match="outside this correspondence"):
         Correspondence(old=(old(3),), new=(new(7),), evidence=(Evidence.of(old(3), new(99)),))
+
+
+@pytest.mark.parametrize(
+    ("label", "old_refs", "new_refs"),
+    [
+        ("N:0", (old(3), old(4)), ()),
+        ("0:N", (), (new(7), new(8))),
+    ],
+)
+def test_a_one_sided_plural_correspondence_is_refused(label, old_refs, new_refs):
+    """ADR 0020 requires 1:1, 1:0, 0:1, 1:N and N:1, and these are none of them.
+
+    Several observations corresponding to nothing *together* says nothing that separate
+    1:0 or 0:1 correspondences do not already say, so the shape gets no invented
+    semantics. Fails if the guard is dropped, which also reinstates a live mislabelling:
+    ``shape`` read ``(2, 0)`` as ``N:1``, naming a correspondence that has no new side
+    after one that has exactly one.
+    """
+    with pytest.raises(ValueError, match="one side plural, the other empty"):
+        Correspondence(old=old_refs, new=new_refs)
 
 
 def test_a_many_to_many_correspondence_is_refused():
