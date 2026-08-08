@@ -64,7 +64,7 @@ ANCHOR_DISCORDANCE = "ANCHOR_DISCORDANCE"
 
 # structural preconditions -- each ABORTS, none is representable in a frame
 UNKNOWN_POPULATION = "UNKNOWN_POPULATION"
-REGION_SIZE_NOT_FROZEN = "REGION_SIZE_NOT_FROZEN"
+DUPLICATE_PAGE_NUMBER = "DUPLICATE_PAGE_NUMBER"
 PAGE_SET_MISMATCH = "PAGE_SET_MISMATCH"
 NEUTRAL_SKELETON_MISMATCH = "NEUTRAL_SKELETON_MISMATCH"
 PRINT_LINES_EMITTED_DRIFT = "PRINT_LINES_EMITTED_DRIFT"
@@ -138,7 +138,7 @@ def enumerate_regions(neutral: list[NeutralLine], region_size: int = REGION_SIZE
 # ------------------------------------------------------------------- anchor placement
 
 
-def place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key, region_size: int = REGION_SIZE):
+def place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key):
     """(region_ordinal, neutral_line_key) for one anchor, or (None, reason).
 
     THE A28.5 BRIDGE, unchanged: margin number -> unique print-line index -> same emitted
@@ -163,10 +163,10 @@ def place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key, region_siz
     key = owner.get(gids[0])
     if key is None:
         return None, FIRST_GID_NOT_OWNED_BY_ANY_NEUTRAL_LINE
-    return (ordinal_by_key[key] // region_size, key), None
+    return (ordinal_by_key[key] // REGION_SIZE, key), None
 
 
-def place_arm_anchors(anchors, print_lines, emitted, neutral, arm: str = "", region_size: int = REGION_SIZE):
+def place_arm_anchors(anchors, print_lines, emitted, neutral, arm: str = ""):
     """region ordinal -> the set of emitted production Anchor VALUES resolved into it.
 
     The whole `Anchor` value is kept. No reduced signature is invented for frames: `Anchor`
@@ -182,7 +182,7 @@ def place_arm_anchors(anchors, print_lines, emitted, neutral, arm: str = "", reg
     ordinal_by_key = {ln.key: ln.ordinal for ln in neutral}
     by_region: dict[int, set] = {}
     for anchor in anchors:
-        placed, reason = place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key, region_size)
+        placed, reason = place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key)
         if reason:
             raise FrameConstructionError(
                 ANCHOR_PLACEMENT_REFUSED,
@@ -213,7 +213,7 @@ class PageInput:
     # representable here would invite later code to ignore them.
 
 
-def build_page_frame(page: PageInput, region_size: int = REGION_SIZE) -> dict:
+def build_page_frame(page: PageInput) -> dict:
     """Neutral lines with their comparative state, and the region grid with C/D evidence."""
     owner = build_owner(page.neutral)
     common = emitted_gids(page.h_emitted) & emitted_gids(page.x_emitted)
@@ -222,7 +222,7 @@ def build_page_frame(page: PageInput, region_size: int = REGION_SIZE) -> dict:
     for line in page.neutral:
         states[line.key] = line_state(page.h_emitted, page.x_emitted, line, owner, common)
 
-    regions = enumerate_regions(page.neutral, region_size)
+    regions = enumerate_regions(page.neutral)
     region_rows = []
     for region in regions:
         h_anchors = page.h_anchors_by_region.get(region.ordinal, set())
@@ -277,7 +277,7 @@ def build_page_frame(page: PageInput, region_size: int = REGION_SIZE) -> dict:
                 "baseline": line.baseline,
                 "bbox": [line.x0, line.y0, line.x1, line.y1],
                 "gids": sorted(line.gids),
-                "region_ordinal": line.ordinal // region_size,
+                "region_ordinal": line.ordinal // REGION_SIZE,
                 # I3 -- BOTH_ABSENT stays in the grid and in the artifact. It is excluded
                 # from the comparative risk set and can never alone qualify a D region.
                 "in_m0_risk_set": st["state"] != "BOTH_ABSENT",
@@ -347,15 +347,21 @@ def select_c_frame(
     return MC.select("cframe-select", identities, max_per_document)
 
 
-def build_document_frame(
-    document_sha256: str, document_id: str, population: str, pages: list[PageInput], region_size: int = REGION_SIZE
+def _build_document_frame_from_inputs(
+    document_sha256: str, document_id: str, population: str, pages: list[PageInput]
 ) -> dict:
-    """The per-document frame object. Frame building only -- no artifact is written here."""
-    # A19 froze the region size. A caller passing anything else would produce a different,
-    # silently valid-looking grid, so it is rejected rather than honoured.
-    if region_size != REGION_SIZE:
-        raise FrameConstructionError(REGION_SIZE_NOT_FROZEN, detail={"region_size": region_size})
-    page_frames = [build_page_frame(p, region_size) for p in pages]
+    """PRIVATE, SYNTHETIC-ONLY pure constructor. Not a result-bearing entrypoint.
+
+    It exists so controls can build inputs no PDF would ever produce -- a page neither arm
+    emitted, a 61-region D census, an anchor set that differs with identical text. It applies
+    NO structural gate, because its whole purpose is to be handed impossible input.
+
+    REAL frame construction must go through `build_document_frame`, which owns the gates.
+    Nothing here takes a region size: A19's 8 is not a parameter on any path that can return
+    a study frame, so the "place anchors on a 7-line grid, then build an 8-line grid" defect
+    is not merely rejected, it is unspellable.
+    """
+    page_frames = [build_page_frame(p) for p in pages]
 
     selected = select_c_frame(document_sha256, population, page_frames)
     chosen = {(ident[2], ident[3]) for ident in selected}  # (page_number, region_ordinal)
@@ -377,7 +383,7 @@ def build_document_frame(
         "document": document_id,
         "document_sha256": document_sha256,
         "population": population,
-        "region_size": region_size,
+        "region_size": REGION_SIZE,
         "pages": page_frames,
         "counts": {
             "pages": len(page_frames),
@@ -418,7 +424,7 @@ def document_scope_anchors(arm_pages: list[dict]) -> list:
     return extract_anchors([d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])])
 
 
-def page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict], region_size: int = REGION_SIZE):
+def _page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict]):
     """Build `PageInput`s from the two runners' returned per-page dicts, or ABORT.
 
     Each arm's production anchors are derived from ITS OWN returned production `Page` objects,
@@ -429,6 +435,16 @@ def page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict], region_size:
     caller to notice: a caller obligation cannot fail, and each of these conditions would
     otherwise produce a frame that is quietly smaller or quietly wrong rather than absent.
     """
+    # --- page numbers must be UNIQUE within each arm, checked BEFORE set equality, which
+    # cannot see a duplicate: H=[1,1,2] and X=[1,2] have equal sets, and the later
+    # page-number dictionary would silently collapse the duplicate. A physical PDF page has
+    # one identity, so duplicate runner records make the document frame ill-defined.
+    for arm, pages_data in (("H", h_pages), ("X", x_pages)):
+        numbers = [d["page_number"] for d in pages_data]
+        if len(numbers) != len(set(numbers)):
+            dupes = sorted({n for n in numbers if numbers.count(n) > 1})
+            raise FrameConstructionError(DUPLICATE_PAGE_NUMBER, arm=arm, detail={"duplicates": dupes})
+
     # --- page sets must match EXACTLY. Intersecting, or skipping the odd page out, would
     # silently shrink the frame and every denominator computed from it.
     h_nums = {d["page_number"] for d in h_pages}
@@ -493,11 +509,45 @@ def page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict], region_size:
                 h_emitted=h["emitted"],
                 x_emitted=x["emitted"],
                 h_anchors_by_region=place_arm_anchors(
-                    h_by_page.get(pno, []), h["page"].print_lines, h["emitted"], neutral, "H", region_size
+                    h_by_page.get(pno, []), h["page"].print_lines, h["emitted"], neutral, "H"
                 ),
                 x_anchors_by_region=place_arm_anchors(
-                    x_by_page_anchors.get(pno, []), x["page"].print_lines, x["emitted"], neutral, "X", region_size
+                    x_by_page_anchors.get(pno, []), x["page"].print_lines, x["emitted"], neutral, "X"
                 ),
             )
         )
     return inputs
+
+
+# ------------------------------------------------------------- THE PUBLIC ENTRYPOINT
+
+
+def build_document_frame(
+    document_sha256: str, document_id: str, population: str, h_pages: list[dict], x_pages: list[dict]
+) -> dict:
+    """THE result-bearing entrypoint. Runner outputs in, document frame out, gates unskippable.
+
+    This is the only public route to a study frame, and it takes the two RUNNERS' outputs --
+    not `PageInput`s -- so there is no argument through which a caller can hand in inputs that
+    skipped validation. Every structural gate runs inside `_page_inputs_from_arms`, which this
+    calls itself:
+
+        duplicate page numbers per arm ... page-set equality ... A28.5 anti-drift on every
+        consumed page and both arms ... one-skeleton equality ... document-scope anchor
+        extraction ... exact placement, refusals fatal
+
+    WHY THE SPLIT EXISTS. The pure constructor must stay callable so controls can build inputs
+    no PDF would produce; but while it was ALSO the public route, a real caller could reach it
+    directly and skip every gate -- and the standing principle is that a caller obligation is
+    not a gate, because it cannot fail. It is now `_build_document_frame_from_inputs`, private
+    and synthetic-only.
+
+    NO REGION SIZE PARAMETER, anywhere on this path. It previously existed on both halves, so
+    a caller could place anchors on a 7-line grid and then build an 8-line grid: the frame
+    looked entirely valid, the region-size guard compared its own default against itself and
+    passed, and the anchor evidence was assigned against a different partition than the one
+    reported. That defect is not rejected here, it is unspellable.
+    """
+    return _build_document_frame_from_inputs(
+        document_sha256, document_id, population, _page_inputs_from_arms(h_pages, x_pages)
+    )

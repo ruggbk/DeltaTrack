@@ -11,6 +11,7 @@ proves nothing, because it cannot distinguish a working rule from a rule that ne
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -103,7 +104,7 @@ def simple_page(page_number, n_lines, chars_per_line=3, start_gid=0):
 
 
 def frame_of(pages, population=BF.P_HEAD, sha="devsha"):
-    return BF.build_document_frame(sha, "synthetic", population, pages)
+    return BF._build_document_frame_from_inputs(sha, "synthetic", population, pages)
 
 
 def regions_of(frame):
@@ -401,6 +402,15 @@ def arm_pair(pages=(1,)):
     return h, x
 
 
+def public_frame(h, x, population=BF.P_HEAD):
+    """Every structural control goes through the PUBLIC result-bearing entrypoint.
+
+    Testing the gate helper directly would only prove the helper aborts; what matters is that
+    no public call capable of returning a study frame can reach one of these states.
+    """
+    return BF.build_document_frame("devsha", "synthetic", population, h, x)
+
+
 def refusal_reason(fn):
     try:
         fn()
@@ -419,18 +429,18 @@ def part_preconditions() -> dict:
     check(
         "H carries a page X lacks -> ABORT",
         BF.PAGE_SET_MISMATCH,
-        refusal_reason(lambda: BF.page_inputs_from_arms(h, x[:1])),
+        refusal_reason(lambda: public_frame(h, x[:1])),
         "dropping or intersecting the page set would silently shrink every denominator",
     )
     check(
         "X carries a page H lacks -> ABORT",
         BF.PAGE_SET_MISMATCH,
-        refusal_reason(lambda: BF.page_inputs_from_arms(h[:1], x)),
+        refusal_reason(lambda: public_frame(h[:1], x)),
     )
     check(
         "matched page sets do NOT abort",
         True,
-        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)) is None,
+        refusal_reason(lambda: public_frame(h, x)) is None,
         "if the clean case also aborted, the two controls above would prove nothing",
     )
 
@@ -451,7 +461,7 @@ def part_preconditions() -> dict:
     check(
         "a one-glyph neutral skeleton difference -> ABORT",
         BF.NEUTRAL_SKELETON_MISMATCH,
-        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)),
+        refusal_reason(lambda: public_frame(h, x)),
         "two skeletons would mean the arms' frames are not the same frame",
     )
 
@@ -461,7 +471,7 @@ def part_preconditions() -> dict:
     check(
         "an emitted line DELETED on one arm -> ABORT",
         BF.PRINT_LINES_EMITTED_DRIFT,
-        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)),
+        refusal_reason(lambda: public_frame(h, x)),
         "the bridge reads emitted[i] for print line i; a deletion shifts every later index",
     )
 
@@ -471,7 +481,7 @@ def part_preconditions() -> dict:
     check(
         "an emitted line's TEXT altered at equal list length -> ABORT",
         BF.PRINT_LINES_EMITTED_DRIFT,
-        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)),
+        refusal_reason(lambda: public_frame(h, x)),
         "equal cardinality is not enough; the texts must correspond index for index",
     )
 
@@ -479,7 +489,7 @@ def part_preconditions() -> dict:
     h, x = arm_pair()
     h[0]["emitted"] = list(h[0]["emitted"])
     h[0]["emitted"][0] = eline_no_ink(SEC_TEXTS[0])
-    h_reason = refusal_reason(lambda: BF.page_inputs_from_arms(h, x))
+    h_reason = refusal_reason(lambda: public_frame(h, x))
     check(
         "an unplaceable anchor in H -> ABORT",
         BF.ANCHOR_PLACEMENT_REFUSED,
@@ -491,7 +501,7 @@ def part_preconditions() -> dict:
     h, x = arm_pair()
     x[0]["emitted"] = list(x[0]["emitted"])
     x[0]["emitted"][0] = eline_foreign_ink(SEC_TEXTS[0])
-    x_reason = refusal_reason(lambda: BF.page_inputs_from_arms(h, x))
+    x_reason = refusal_reason(lambda: public_frame(h, x))
     check(
         "an unplaceable anchor in X (asymmetric, different refusal class) -> ABORT",
         BF.ANCHOR_PLACEMENT_REFUSED,
@@ -514,11 +524,52 @@ def part_preconditions() -> dict:
             refusal_reason(lambda: frame_of([simple_page(1, 8)], population=BF.P_ROBUST)) is None,
         ),
     )
+    # --- unknown population, through the PUBLIC entrypoint too
+    h, x = arm_pair()
     check(
-        "a region size other than the A19-frozen 8 -> ABORT",
-        BF.REGION_SIZE_NOT_FROZEN,
-        refusal_reason(lambda: BF.build_document_frame("s", "d", BF.P_HEAD, [simple_page(1, 8)], region_size=7)),
-        "a different grid would look entirely valid while partitioning the page differently",
+        "an UNRECOGNISED population reaching the PUBLIC entrypoint -> ABORT",
+        BF.UNKNOWN_POPULATION,
+        refusal_reason(lambda: public_frame(h, x, population="nonsense")),
+    )
+
+    # --- duplicate page numbers, per arm. Set equality cannot see these: H=[1,1,2] and
+    #     X=[1,2] have equal sets and the page dictionary would collapse the duplicate.
+    h, x = arm_pair((1, 2))
+    check(
+        "a duplicate page record in H -> ABORT",
+        BF.DUPLICATE_PAGE_NUMBER,
+        refusal_reason(lambda: public_frame(h + [h[0]], x)),
+        "set equality is blind to duplicates, and the later page map silently collapses them",
+    )
+    h, x = arm_pair((1, 2))
+    check(
+        "a duplicate page record in X -> ABORT",
+        BF.DUPLICATE_PAGE_NUMBER,
+        refusal_reason(lambda: public_frame(h, x + [x[0]])),
+    )
+
+    # --- THE 7-vs-8 HOLE: anchors placed on one grid, regions built on another. It is not
+    #     rejected, it is UNSPELLABLE -- no result-bearing signature accepts a region size.
+    public_params = sorted(inspect.signature(BF.build_document_frame).parameters)
+    inputs_params = sorted(inspect.signature(BF._page_inputs_from_arms).parameters)
+    ctor_params = sorted(inspect.signature(BF._build_document_frame_from_inputs).parameters)
+    check(
+        "no result-bearing signature accepts a region size",
+        (False, False, False),
+        ("region_size" in public_params, "region_size" in inputs_params, "region_size" in ctor_params),
+        "a region_size on any of these lets placement and the grid disagree while both look valid",
+    )
+    check(
+        "the public entrypoint takes RUNNER OUTPUTS, not PageInputs, so gates cannot be skipped",
+        ["document_id", "document_sha256", "h_pages", "population", "x_pages"],
+        public_params,
+    )
+    h, x = arm_pair((1, 2))
+    built = public_frame(h, x)
+    check(
+        "...and the public path always yields the frozen 8-line grid",
+        (8, True),
+        (built["region_size"], all(r["line_count"] <= 8 for pf in built["pages"] for r in pf["regions"])),
     )
 
     # --- WHY per-page extraction is forbidden, proven on a constructed page collection.
@@ -579,8 +630,7 @@ def part_development() -> dict:
 
         # Any structural precondition failure RAISES here; reaching the next line is itself
         # the assertion that page sets, skeletons, anti-drift and placement were all clean.
-        inputs = BF.page_inputs_from_arms(h_pages, x_pages)
-        frame = BF.build_document_frame(sha256_of(path), name, BF.P_HEAD, inputs)
+        frame = BF.build_document_frame(sha256_of(path), name, BF.P_HEAD, h_pages, x_pages)
 
         for arm, arm_pages in (("H", h_pages), ("X", x_pages)):
             ordered = [d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])]
@@ -703,11 +753,16 @@ def main() -> int:
             "DEVELOPMENT figures are diagnostics that exercise the code paths. They are not "
             "study results and no metric is scored from them."
         ),
+        "public_entrypoint": "build_frames.build_document_frame(sha, id, population, h_pages, x_pages)",
+        "private_synthetic_constructor": "build_frames._build_document_frame_from_inputs(...)",
+        "region_size_is_not_a_parameter_on_any_result_bearing_path": True,
         "structural_preconditions_fail_closed": [
+            BF.DUPLICATE_PAGE_NUMBER,
             BF.PAGE_SET_MISMATCH,
             BF.NEUTRAL_SKELETON_MISMATCH,
             BF.PRINT_LINES_EMITTED_DRIFT,
             BF.ANCHOR_PLACEMENT_REFUSED,
+            BF.UNKNOWN_POPULATION,
         ],
         "synthetic_precondition_evidence": precond,
         "synthetic_d_evidence": d_evidence,

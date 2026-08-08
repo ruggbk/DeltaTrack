@@ -2586,18 +2586,45 @@ every harness-consumed page is now literally true.
 frame and no later code can ignore one. **No caller obligation can silently produce a reduced
 frame.**
 
-Two further silent-reduction paths were found by auditing for the same defect class and
-closed. An **unrecognised population string** previously read as "not P-head" and drew **zero**
-C-frame regions while still producing a valid-looking frame; the population set is now closed
-and validated (`UNKNOWN_POPULATION`). A **region size other than the A19-frozen 8** was
-honoured rather than rejected, which would have partitioned every page differently while
-looking entirely valid (`REGION_SIZE_NOT_FROZEN`).
+A further silent-reduction path was closed by auditing for the same defect class: an
+**unrecognised population string** read as "not P-head" and drew **zero** C-frame regions while
+still producing a valid-looking frame. The population set is now closed and validated
+(`UNKNOWN_POPULATION`).
 
-**One seam remains, by design.** `build_document_frame` accepts hand-constructed `PageInput`
-objects and therefore bypasses the four structural preconditions, which live in
-`page_inputs_from_arms`. That separation is required — the frame-building logic has to be
-callable directly so synthetic controls can construct inputs no PDF would produce — and every
-real path goes through `page_inputs_from_arms`. It is recorded here rather than left implicit.
+### The public entrypoint is fail-closed; the pure constructor is a private testing seam
+
+An earlier cut recorded that `build_document_frame` accepted hand-constructed `PageInput`
+objects and therefore bypassed the structural gates, and treated that as an acceptable seam
+because "every real path goes through `page_inputs_from_arms`". **That is a caller obligation,
+and a caller obligation is not a gate.** It also had a concrete exploit: both halves took a
+`region_size`, so a caller could place anchors on a **7**-line grid and then build an **8**-line
+grid. The frame looked entirely valid, the region-size guard compared its own default against
+itself and passed, and the anchor evidence was silently assigned against a different partition
+than the one reported.
+
+The API is now split:
+
+```
+PUBLIC / REAL     build_document_frame(sha, id, population, h_pages, x_pages)
+                    -> duplicate page numbers -> page-set equality -> A28.5 anti-drift
+                    -> one-skeleton equality -> document-scope extraction -> exact placement
+                    -> pure constructor -> frame
+
+PRIVATE / SYNTHETIC  _build_document_frame_from_inputs(sha, id, population, [PageInput, ...])
+```
+
+The public entrypoint takes **runner outputs, not `PageInput`s**, so there is no argument
+through which validation can be skipped. **No result-bearing signature accepts a region size**
+— not the entrypoint, not `_page_inputs_from_arms`, not the constructor — so the 7-vs-8 defect
+is not rejected, it is **unspellable**. A19's 8 is a module constant on every path that can
+return a study frame. `enumerate_regions` keeps its argument for isolated testing only, and no
+result-bearing route passes anything but the frozen value.
+
+**Page numbers must also be unique within each arm** (`DUPLICATE_PAGE_NUMBER`), checked before
+set equality — which cannot see a duplicate, since `H=[1,1,2]` and `X=[1,2]` have equal sets
+and the later page map would silently collapse it. A physical PDF page has one identity, so
+duplicate runner records make the document frame ill-defined. This completes the page-set
+invariant rather than adding a new rule.
 
 Each repair carries injected negative controls: page-set mismatch in both directions, a
 one-glyph skeleton difference, an emitted-line deletion, a same-length text drift, and an

@@ -9,11 +9,16 @@
  "selection_seed": 20260807,
  "anchor_equality": "the WHOLE emitted production Anchor value (page, line, kind, text, division); no reduced signature is invented for frames",
  "development_note": "DEVELOPMENT figures are diagnostics that exercise the code paths. They are not study results and no metric is scored from them.",
+ "public_entrypoint": "build_frames.build_document_frame(sha, id, population, h_pages, x_pages)",
+ "private_synthetic_constructor": "build_frames._build_document_frame_from_inputs(...)",
+ "region_size_is_not_a_parameter_on_any_result_bearing_path": true,
  "structural_preconditions_fail_closed": [
+  "DUPLICATE_PAGE_NUMBER",
   "PAGE_SET_MISMATCH",
   "NEUTRAL_SKELETON_MISMATCH",
   "PRINT_LINES_EMITTED_DRIFT",
-  "ANCHOR_PLACEMENT_REFUSED"
+  "ANCHOR_PLACEMENT_REFUSED",
+  "UNKNOWN_POPULATION"
  ],
  "synthetic_precondition_evidence": {
   "synthetic_scope_document": [
@@ -1237,11 +1242,72 @@
    "fails_when": ""
   },
   {
-   "test": "a region size other than the A19-frozen 8 -> ABORT",
-   "expected": "REGION_SIZE_NOT_FROZEN",
-   "observed": "REGION_SIZE_NOT_FROZEN",
+   "test": "an UNRECOGNISED population reaching the PUBLIC entrypoint -> ABORT",
+   "expected": "UNKNOWN_POPULATION",
+   "observed": "UNKNOWN_POPULATION",
    "pass": true,
-   "fails_when": "a different grid would look entirely valid while partitioning the page differently"
+   "fails_when": ""
+  },
+  {
+   "test": "a duplicate page record in H -> ABORT",
+   "expected": "DUPLICATE_PAGE_NUMBER",
+   "observed": "DUPLICATE_PAGE_NUMBER",
+   "pass": true,
+   "fails_when": "set equality is blind to duplicates, and the later page map silently collapses them"
+  },
+  {
+   "test": "a duplicate page record in X -> ABORT",
+   "expected": "DUPLICATE_PAGE_NUMBER",
+   "observed": "DUPLICATE_PAGE_NUMBER",
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "no result-bearing signature accepts a region size",
+   "expected": [
+    false,
+    false,
+    false
+   ],
+   "observed": [
+    false,
+    false,
+    false
+   ],
+   "pass": true,
+   "fails_when": "a region_size on any of these lets placement and the grid disagree while both look valid"
+  },
+  {
+   "test": "the public entrypoint takes RUNNER OUTPUTS, not PageInputs, so gates cannot be skipped",
+   "expected": [
+    "document_id",
+    "document_sha256",
+    "h_pages",
+    "population",
+    "x_pages"
+   ],
+   "observed": [
+    "document_id",
+    "document_sha256",
+    "h_pages",
+    "population",
+    "x_pages"
+   ],
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "...and the public path always yields the frozen 8-line grid",
+   "expected": [
+    8,
+    true
+   ],
+   "observed": [
+    8,
+    true
+   ],
+   "pass": true,
+   "fails_when": ""
   },
   {
    "test": "per-page extraction produces a DIFFERENT anchor census than document-scope",
