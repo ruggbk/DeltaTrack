@@ -1825,7 +1825,7 @@ opened, no oracle exists, no decision rule has been evaluated: M0a 35/141 and 36
 
 ```json
 {"id": "A25", "class": "SUBSTANTIVE",
- "commits": ["070098e", "46b343a"],
+ "commits": ["070098e", "46b343a", "4db8cc8"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/x2_verify.py", "probes/x04_freeze_check.py",
@@ -1859,8 +1859,9 @@ So the counterfactual re-admits that **decision**, not the glyph.
 
 | | |
 |---|---|
-| **boundary identity** | `(page_number, sci_before, sci_after)`, read from PDFium's text-page character stream — never geometry, string matching, line ordinals, or X output |
-| **neighbour rule** | nearest preceding and following characters that are **not generated** and **not CR/LF**. A content-stream U+0020 on either side is recorded but classified untestable, since X-2 drops every U+0020 and those two characters can never be adjacent in X |
+| **boundary identity** | `(page_number, sci_before, sci_after)`, read from a RAW PDFium text-page stream — never geometry, string matching, line ordinals, or X output |
+| **raw stream** | `raw_source_stream` calls exactly three PDFium entry points — `FPDFText_CountChars`, `FPDFText_GetUnicode`, `FPDFText_IsGenerated` — and nothing else. `sci` is the text-page index itself, so no position can be lost or renumbered |
+| **neighbour rule** | `select_neighbours` is **pure** and takes only `(sci, codepoint, generated)` triples: nearest preceding and following characters that are **not generated** and **not raw CR/LF**. It has no parameter through which geometry could reach it. A content-stream U+0020 on either side is counted and classified untestable, since X-2 drops every U+0020 |
 | **X** | ordinary X — same contract, clustering, ordering, chrome, margin handling, reconstruction |
 | **X′** | ordinary X **+ the generated-boundary map**; the only difference is the word-boundary decision |
 | **X2-b PASS** | `X.print_lines == X'.print_lines`, byte-for-byte, page-for-page, line-for-line |
@@ -1904,8 +1905,14 @@ X   = 'MAY21, 2015'
 X'  = 'MAY 21, 2015'      -> X2-b FAIL
 ```
 
-Separate callables, no global monkeypatch; the boundary map, extraction, clustering and the
-testable denominator are all unchanged, so the sabotage is provably isolated to ordinary X.
+Separate callables, no global monkeypatch. The fault is **page-qualified**: `sci` is
+page-local, and 2 other pages carry the same index pair and are measured to be untouched.
+Isolation is carried by eight recorded checks rather than by the claim — exactly one True
+decision **site** flipped (sites, not invocations, since a call counter grows with the number
+of reconstruction passes and says nothing about scope); the fault installed for the target
+page only; the target is X2-b-testable; the map still holds that page-qualified boundary;
+X differs from X′; **sabotaged X′ == unsabotaged ordinary X**; the sabotage did change
+ordinary X; and the denominator and boundary map are unchanged.
 
 ### Gate hygiene
 
@@ -1918,6 +1925,24 @@ different things by mode. A24.1's all-source comparison survives as
 `X2b_testable_boundaries_total` must be a positive int and `X2b_gate_is_vacuous_SEE_A25`
 must be `False`, checked independently of the gate boolean, alongside artifact provenance
 and live execution. Non-vacuity is never inferred from a PASS.
+
+### Implementation defects found in review, repaired without redesign (`4db8cc8`)
+
+The first counterfactual built its map from `run_hybrid.extract_with_gids`, a **filtered**
+wrapper: it omits a non-generated character when `GetCharBox`, `GetMatrix` or
+`GetCharOrigin` fails, and rewrites every non-generated `cp < 0x20` to U+FFFD. Either can
+move which character is "nearest" to a generated space, so the frozen "never geometry" rule
+was violated in practice. Replaced by the raw stream and pure selector above.
+
+**The census did not change**, and that is reported rather than dressed up as a fix that
+mattered: 1347/1347/1346 and 214/214/213, **1559 testable, PASS**, identical before and
+after. **MEASURED** exposure: on this material the wrapper omits **0** non-generated
+characters but rewrites the codepoint of **53** and **45** of them, and a non-generated raw
+CR/LF rewritten to U+FFFD would no longer be skipped as a neighbour. The defect was real in
+principle; no boundary's neighbour selection actually changed here.
+
+The sabotage was also not page-specific — `sci` is page-local — and is now page-qualified,
+as recorded above.
 
 **Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
 no holdout document opened.
@@ -1972,6 +1997,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `277a0e5` | `neutral_identity.py`, `run_hybrid.py`, `reconstruct_extended_corrected.py`, `pdfium_extended_corrected.py`, `x2_verify.py`, `x04_freeze_check.py`, `x08_neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | A24 resolved: X2-b gate scope; ink identity vs provenance (A24.1/A24.2) |
 | `070098e` | `x2_verify.py`, `x04_freeze_check.py`, `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | A24 record cleanup + finite-geometry enforcement (A24); X2-b vacuity found (A25) |
 | `46b343a` | `x2_verify.py`, `x04_freeze_check.py`, `reconstruct_extended_corrected.py` | A25 resolved: X2-b boundary-decision counterfactual |
+| `4db8cc8` | `x2_verify.py` | A25 defects: raw boundary stream; page-qualified sabotage |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
