@@ -82,6 +82,46 @@ def blind_id(final_stimulus_identity) -> str:
     return hashlib.sha256(f"blind-id|{SELECTION_SEED}|{canonical(final_stimulus_identity)}".encode()).hexdigest()[:16]
 
 
+class BlindIdCollision(Exception):
+    """A30.5 -- two distinct realized stimuli were assigned the same adjudicator-facing id."""
+
+
+class DuplicateStimulusIdentity(Exception):
+    """A30.5 -- the realized stimulus set contains the same canonical identity twice."""
+
+
+def assert_realized_blind_ids_unique(final_identities) -> dict:
+    """A30.5 -- blind ids must be unique over the COMPLETE REALIZED stimulus set.
+
+    Called before any oracle artifact is committed and before adjudication begins; returns
+    `blind id -> canonical identity` when clean and RAISES otherwise.
+
+    WHY A SYNTHETIC UNIQUENESS CHECK WAS NOT ENOUGH. x15 shows the scheme separates a
+    handful of constructed identities. That is a property of those identities, not a proof
+    about the set the study will actually build, which is not known until selection,
+    controls and repeats have all been resolved. The invariant has to be asserted on the
+    realized set or it is not asserted at all.
+
+    WHY A COLLISION IS A BUILD FAILURE AND NOTHING ELSE. Overwriting loses a stimulus;
+    merging fuses two adjudications; last-write-wins silently picks one. Salting or
+    re-rolling the alias after seeing the stimulus set would let the set choose the scheme,
+    which is exactly the influence A28.3 removed when it stopped blind ids from steering
+    sampling. So this refuses deterministically and requires review.
+    """
+    mapping: dict[str, str] = {}
+    seen: set[str] = set()
+    for ident in final_identities:
+        form = canonical(ident)
+        if form in seen:
+            raise DuplicateStimulusIdentity(f"identity appears twice in the realized set: {form}")
+        seen.add(form)
+        bid = blind_id(ident)
+        if bid in mapping:
+            raise BlindIdCollision(f"blind id {bid} claimed by both {mapping[bid]} and {form}")
+        mapping[bid] = form
+    return mapping
+
+
 # ------------------------------------------------------------- A28.4 renderer scale
 
 PRIMARY_DPI = 300
@@ -95,6 +135,9 @@ def required_dpi(is_r1_repeat: bool) -> int:
 # --------------------------------------------------- A28.1 / A28.2 section 4.5 adequacy
 
 ADEQUACY_KINDS = frozenset({"account", "agency", "grouping"})
+# A28.1 restricts adequacy to the P-head population. A30.4 makes that restriction
+# EXECUTABLE here rather than an obligation on callers -- see `filter_keys`.
+P_HEAD = "P-head"
 
 
 def adequacy_occurrences(h_keys, x_keys) -> int:
@@ -104,21 +147,36 @@ def adequacy_occurrences(h_keys, x_keys) -> int:
     occurrence once even when both arms emit it, because the key is a source position rather
     than an arm's output. No text similarity and no oracle result enters this.
 
-    Callers must pass keys already restricted to P-head documents and to the account /
-    agency / grouping kinds -- `filter_keys` does that and is tested.
+    Callers pass keys already restricted by `filter_keys`, which since A30.4 applies BOTH
+    the P-head population restriction and the account / agency / grouping kind restriction
+    itself rather than trusting the caller to have done it.
+
+    Each key is an A30.1 occurrence identity, whose fourth component is the absolute
+    `start_ngid` -- so two occurrences beginning on one physical line stay distinct, and a
+    missing earlier occurrence cannot renumber a later one.
     """
     return len(set(h_keys) | set(x_keys))
 
 
-def filter_keys(keyed_kinds) -> set:
-    """Keep only account/agency/grouping occurrences, per A28.1.
+def filter_keys(keyed) -> set:
+    """Keep only P-head account/agency/grouping occurrences (A28.1, executable by A30.4).
 
-    The design pilot's "heading occurrences emitted" quantity used exactly those three
+    Input is `(key, kind, population)`.
+
+    KIND. The design pilot's "heading occurrences emitted" quantity used exactly those three
     classes; the later oracle codebook is broader, and widening the adequacy denominator to
     title/division/section would silently make the holdout look more adequate than the
     frozen quantity it is compared against.
+
+    POPULATION. A28.1 restricts adequacy to P-head, but until A30.4 this function filtered
+    on kind alone and its docstring made the population restriction an obligation on the
+    CALLER. A caller obligation is not a gate: it cannot fail, and nothing in the harness
+    would have reported a P-robust document silently inflating the adequacy count -- the
+    number would simply have been larger, and larger reads as *more* adequate. Applying both
+    restrictions here makes the frozen clause falsifiable, and x15 proves it by adding
+    arbitrarily many P-robust adequacy-kind keys and requiring the count not to move.
     """
-    return {key for key, kind in keyed_kinds if kind in ADEQUACY_KINDS}
+    return {key for key, kind, population in keyed if population == P_HEAD and kind in ADEQUACY_KINDS}
 
 
 def adequacy(strata_filled: int, occurrences: int) -> str:

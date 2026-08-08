@@ -74,6 +74,27 @@
    "implication": "title/section/division must not inflate the denominator the frozen quantity is compared against"
   },
   {
+   "test": "adding 120 P-robust account/agency/grouping keys does not change adequacy_occurrences",
+   "expected": 3,
+   "observed": 3,
+   "pass": true,
+   "implication": "the frozen P-head clause is now a gate rather than a caller obligation"
+  },
+  {
+   "test": "...and the intruders really were adequacy-KIND keys, so the control is not vacuous",
+   "expected": 120,
+   "observed": 120,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "a P-robust key is excluded even when it is the ONLY input",
+   "expected": 0,
+   "observed": 0,
+   "pass": true,
+   "implication": ""
+  },
+  {
    "test": "selection is reproducible",
    "expected": [
     [
@@ -627,6 +648,34 @@
   },
   {
    "test": "blind ids are unique across distinct stimuli",
+   "expected": 22,
+   "observed": 22,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "the realized-set check passes on a clean stimulus set",
+   "expected": 22,
+   "observed": 22,
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "an injected blind-ID collision aborts the build",
+   "expected": "BlindIdCollision",
+   "observed": "BlindIdCollision",
+   "pass": true,
+   "implication": "no overwrite, merge, last-write-wins, salt or re-roll is permitted"
+  },
+  {
+   "test": "a duplicated stimulus identity aborts the build",
+   "expected": "DuplicateStimulusIdentity",
+   "observed": "DuplicateStimulusIdentity",
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "...and the collision injection did not leak past its scope",
    "expected": 22,
    "observed": 22,
    "pass": true,

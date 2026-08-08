@@ -7,6 +7,8 @@ NOT CONFIRMATORY. Synthetic only. No PDF is opened, no architecture is run, noth
                  blind ids
     A28.4        frozen renderer scale, 300 dpi primary / 330 dpi R1 repeat
     A27.7        domain-separated deterministic ranking
+    A30.4        the P-head adequacy restriction, executable rather than a caller obligation
+    A30.5        blind-ID uniqueness over the REALIZED stimulus set, with collision injection
 """
 
 from __future__ import annotations
@@ -34,9 +36,14 @@ def check(name, expected, observed, implication="") -> None:
         FAILED.append(name)
 
 
-def key(doc, page, line, ordinal):
-    """An A27.1 source-position occurrence key."""
-    return (doc, page, (page, line), ordinal)
+def key(doc, page, line, start_ngid):
+    """An A27.1 source-position occurrence key, as amended by A30.1.
+
+    The fourth component is the ABSOLUTE `start_ngid`, never an ordinal among the anchors an
+    arm emitted. `x16_occurrence_identity.py` proves the derivation through the production
+    path; here it only has to be an opaque distinct value.
+    """
+    return (doc, page, (page, line), start_ngid)
 
 
 def part_adequacy() -> None:
@@ -77,25 +84,54 @@ def part_adequacy() -> None:
         MC.adequacy_occurrences([a, b, c], []),
         "an arm's own failure must never shrink the adequacy denominator",
     )
+    # two occurrences on ONE neutral line: the real measured pair from 114-hr-2029 p66:12,
+    # a `section` at ngid 617 and its inline `subsection` at ngid 627
     check(
         "two occurrences on ONE neutral line stay distinct",
         2,
-        MC.adequacy_occurrences([key("d", 1, 3, 0), key("d", 1, 3, 1)], []),
+        MC.adequacy_occurrences([key("d", 1, 3, 617), key("d", 1, 3, 627)], []),
     )
-    # --- kind restriction
+    # --- kind AND population restriction (A30.4)
     keyed = [
-        (key("d", 1, 1, 0), "account"),
-        (key("d", 1, 2, 0), "agency"),
-        (key("d", 1, 3, 0), "grouping"),
-        (key("d", 1, 4, 0), "title"),
-        (key("d", 1, 5, 0), "section"),
-        (key("d", 1, 6, 0), "subsection"),
+        (key("d", 1, 1, 10), "account", "P-head"),
+        (key("d", 1, 2, 20), "agency", "P-head"),
+        (key("d", 1, 3, 30), "grouping", "P-head"),
+        (key("d", 1, 4, 40), "title", "P-head"),
+        (key("d", 1, 5, 50), "section", "P-head"),
+        (key("d", 1, 6, 60), "subsection", "P-head"),
     ]
     check(
         "only account/agency/grouping contribute to adequacy",
         3,
         len(MC.filter_keys(keyed)),
         "title/section/division must not inflate the denominator the frozen quantity is compared against",
+    )
+
+    # --- A30.4 NEGATIVE CONTROL: P-robust adequacy-kind keys must not move the count.
+    # Before A30.4 `filter_keys` filtered on kind alone, so every one of these would have
+    # been counted and the denominator would have grown silently.
+    baseline_keys = MC.filter_keys(keyed)
+    baseline = MC.adequacy_occurrences(baseline_keys, [])
+    intruders = [
+        (key("robust", 9, i, 700 + i), kind, "P-robust")
+        for i, kind in enumerate(["account", "agency", "grouping"] * 40)
+    ]
+    polluted = MC.filter_keys(keyed + intruders)
+    check(
+        "adding 120 P-robust account/agency/grouping keys does not change adequacy_occurrences",
+        baseline,
+        MC.adequacy_occurrences(polluted, []),
+        "the frozen P-head clause is now a gate rather than a caller obligation",
+    )
+    check(
+        "...and the intruders really were adequacy-KIND keys, so the control is not vacuous",
+        120,
+        len({k for k, kind, _pop in intruders if kind in MC.ADEQUACY_KINDS}),
+    )
+    check(
+        "a P-robust key is excluded even when it is the ONLY input",
+        0,
+        len(MC.filter_keys([(key("robust", 9, 1, 5), "account", "P-robust")])),
     )
 
 
@@ -152,6 +188,45 @@ def part_determinism() -> None:
         real_blind(regions[0]) != ("SCHEME2-" + real_blind(regions[0])[::-1]),
     )
     check("blind ids are unique across distinct stimuli", len(finals), len({real_blind(f) for f in finals}))
+
+    # --- A30.5: uniqueness over the REALIZED set, and a collision must ABORT the build.
+    check(
+        "the realized-set check passes on a clean stimulus set",
+        len(finals),
+        len(MC.assert_realized_blind_ids_unique(finals)),
+    )
+
+    def raised(fn):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001 - the class IS the assertion
+            return type(exc).__name__
+        return None
+
+    # COLLISION INJECTION. Without this the check has never once produced a positive
+    # result, so a green run could not distinguish "no collision" from "cannot detect one".
+    collided = MC.blind_id
+    try:
+        MC.blind_id = lambda ident: "CONSTANT"
+        outcome = raised(lambda: MC.assert_realized_blind_ids_unique(finals))
+    finally:
+        MC.blind_id = collided
+    check(
+        "an injected blind-ID collision aborts the build",
+        "BlindIdCollision",
+        outcome,
+        "no overwrite, merge, last-write-wins, salt or re-roll is permitted",
+    )
+    check(
+        "a duplicated stimulus identity aborts the build",
+        "DuplicateStimulusIdentity",
+        raised(lambda: MC.assert_realized_blind_ids_unique([finals[0], finals[0]])),
+    )
+    check(
+        "...and the collision injection did not leak past its scope",
+        len(finals),
+        len(MC.assert_realized_blind_ids_unique(finals)),
+    )
 
 
 def part_dpi() -> None:

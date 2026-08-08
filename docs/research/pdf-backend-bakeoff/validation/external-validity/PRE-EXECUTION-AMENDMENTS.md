@@ -2307,6 +2307,178 @@ including what was undone. Deleting the entry — or rewriting history to remove
 would leave the branch looking as though the episode never occurred, which is the opposite of
 the provenance this study relies on.
 
+**One finding from the withdrawn work is recorded here and nowhere else, because it is real
+and it would otherwise be lost with the revert:** the non-zero-event bootstrap resampled
+differently depending on the order its caller listed documents in, and canonical sorting fixed
+it. That is a genuine reproducibility defect in a §8 quantity. It **does not gate
+`build_frames.py`** — nothing upstream of `score_metrics` consumes a bootstrap — but it **must
+be resolved under a future amendment before `score_metrics.py` is implemented.** A30 does not
+carry it, and does not expand into §8.
+
+---
+
+## A30 — SUBSTANTIVE. The occurrence identity is an absolute source position
+
+```json
+{"id": "A30", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["HARNESS-PLAN.md", "probes/anchor_provenance.py",
+                   "probes/x16_occurrence_identity.py",
+                   "probes/methodology_contracts.py",
+                   "probes/x15_methodology_contracts.py"],
+ "supersedes_text_in": "A27.1 (the matching key's fourth component)",
+ "status": "PROPOSED -- built on an isolated branch from 6e4285c, not integrated into PR #560"}
+```
+
+A27.1 froze the M1–M4 matching key as a source position and named its fourth component
+`occurrence_ordinal_on_that_line`. That component was **never derived**. `Anchor` carries
+`page_number, line_number, kind, text, division` and no within-line position, and the `x14`
+bridge terminates at `(region_ordinal, neutral_line_key)`. `x15`'s "two occurrences on one
+neutral line stay distinct" control supplied the ordinals to itself, so it proved the
+representation could *hold* two values, not that production could *derive* the right ones.
+
+### A30.1 — the fourth component becomes `start_ngid`
+
+```
+(document_sha256, page_number, start_neutral_line_key, start_ngid)
+```
+
+`start_ngid` is the A24.2 neutral ink identity of the **first neutral-ink source character of
+the recognized occurrence**.
+
+**Why an ordinal could not survive.** `pdf_anchors._anchors_from_page` emits a `section` and an
+inline `subsection` at the **same `(page, line_number)`** — the production comment calls this a
+deliberate physical collision and says the ordering is load-bearing. An ordinal among the
+anchors *an arm emitted* renumbers the later occurrence whenever the earlier one is missing:
+
+```
+H: A, B   ->  B is ordinal 1
+X:    B   ->  B is ordinal 0        the same physical occurrence, two keys
+```
+
+`start_ngid` cannot do that: it names a physical mark, and A24.2 makes that the one identity
+both arms give the same number. A U+0020 carries no `ngid`, so the arms may disagree about
+spacing freely without moving it.
+
+**Frozen:** `key_H(B) == key_X(B)` must hold in **both** the A+B / B-only and the B-only /
+A+B adversarial cases.
+
+**`ngid` is an identity, not a reading-order key.** It is used only for equality; nothing
+orders occurrences by it. Measured on DEVELOPMENT material, ngid order agrees with printed
+order on **33,592 of 33,602** emitted lines, the residue being single adjacent transpositions
+in PDFium's text-page order. Ordering by `ngid` would inherit that residue for no benefit.
+
+### A30.2 — the provenance derivation, and the fidelity contract
+
+```
+recognized Anchor occurrence
+  -> merged-line occurrence start offset
+  -> Page.merge_ranges
+  -> originating print line + offset
+  -> emitted[print_line].cells
+  -> first neutral-ink Cell at/after the occurrence start
+  -> Cell.ngid
+  -> owning NeutralLine
+```
+
+The offsets are coordinates in **the arm's own emitted text** and legitimately differ between
+H and X. They are inputs to the derivation, never the identity: only the resolved `start_ngid`
+is compared across arms.
+
+**Instrumented study-locally, not by changing production.** Production `Anchor` gains no
+study-only field and **no recognition behaviour changes**. `anchor_provenance` transcribes
+only the small per-page pass, which is the one that needs an exact within-line match position;
+the size path is **called, not copied**, and its occurrences are located positionally (an
+account/grouping/agency/major anchor is emitted from `line.text.strip()`, so its first ink
+character is its line's first non-space).
+
+**The fidelity assertion is the whole warrant for the copy:**
+`strip_to_production(instrumented) == extract_anchors(pages)` — order, page, line, kind, text
+and division, **element for element, on every DEVELOPMENT page consumed**. When confirmatory
+execution is authorized, that assertion **must also cover every consumed confirmatory page**.
+Drift fails the probe; it is never reported as a rate.
+
+**Every failure returns `UNMATCHED` with an explicit reason. Nothing guesses:**
+`PAGE_HAS_NO_PRINT_LINE_PROVENANCE`, `PRINT_LINE_INDEX_UNRESOLVED`,
+`MERGE_RECONSTRUCTION_MISMATCH`, `OFFSET_PAST_END_OF_LINE`,
+`CELLS_NOT_ALIGNED_WITH_PRINT_TEXT`, `NO_NEUTRAL_INK_AT_OR_AFTER_START`,
+`START_NGID_NOT_OWNED_BY_NEUTRAL_LINE`, `NO_NEUTRAL_INK_ON_LINE`,
+`AMBIGUOUS_SOURCE_POSITION`.
+
+**No text similarity, anchor-kind matching, or emitted-occurrence ordinal appears anywhere in
+the cross-arm identity join.**
+
+### A30.3 — the oracle's occurrence position is geometric
+
+For every adjudicated heading occurrence the oracle records **`start_physical_line`** and
+**`start_x_px`** — the integer horizontal coordinate of the **left edge of the first printed
+character** of that occurrence in the rendered stimulus. This is an **identity annotation
+only**: heading text, role and immediate parent remain independently adjudicated exactly as
+before.
+
+`build_oracle` converts it deterministically to page PDF coordinates from the **committed
+region bbox**, the **rendered image width** and the **frozen DPI**. No architecture output
+participates. For the reported physical neutral line:
+
+1. project every neutral ink glyph's physical `x0` into the same coordinate system;
+2. choose the glyph whose `x0` is at **minimum absolute distance** from the adjudicated start;
+3. **no candidate → refuse**;
+4. **exact tie → refuse**;
+5. the selected glyph's `ngid` is the oracle occurrence's `start_ngid`.
+
+**No distance tolerance is introduced.** A tolerance would silently accept a wrong glyph and
+there is no principled width to choose. A tie is not broken by `ngid`, kind, occurrence order,
+or text — each is a rejected shortcut, and a tie means the stimulus genuinely does not
+determine the answer.
+
+**The neutral skeleton supplies IDENTITY only.** It never supplies heading truth.
+
+**Qualification inheritance.** This occurrence-position join reads the neutral skeleton, so it
+inherits the already-frozen **`PDFIUM-CONDITIONED FRAME`** qualification when the cross-engine
+neutral-frame control fails. It does **not** change the oracle's heading text/role/parent truth
+source.
+
+**R1.** The 330-DPI repeat records its **own** `start_x_px` and is resolved to `start_ngid`
+**independently**; the repeat may not reuse the primary's coordinate or its resolved identity.
+`R1_start_identity_agreement` is reported for repeated items. **A30 adds no
+architecture-selection threshold from this field** — it is a reliability observation and
+control, and the existing oracle reliability rules are otherwise unchanged.
+
+### A30.4 — the P-head adequacy restriction becomes executable
+
+`methodology_contracts.filter_keys()` filtered on **kind alone** and made the P-head
+restriction an obligation on callers. A caller obligation is not a gate: it cannot fail, and a
+P-robust document silently inflating the adequacy count would simply have produced a larger
+number — and larger reads as *more* adequate.
+
+Its input is now `(key, kind, population)`, retained only when
+`population == "P-head" and kind in {account, agency, grouping}`.
+
+**Negative control:** adding arbitrarily many P-robust account/agency/grouping keys must leave
+`adequacy_occurrences` **unchanged**. All existing A28 adequacy controls are retained. **The
+§4.5 ruling itself is unchanged** — this makes the frozen clause falsifiable.
+
+### A30.5 — blind IDs must be unique over the REALIZED stimulus set
+
+> Before any oracle artifact is committed or adjudication begins, blind IDs must be unique
+> across the **complete realized** stimulus set.
+
+Artifact construction **aborts** on a collision. **No overwrite, merge, last-write-wins, or
+automatic salt/re-roll is permitted** — salting after seeing the stimulus set would let the set
+choose the alias scheme, which is exactly the influence A28.3 removed when it stopped blind ids
+from steering sampling. A collision is a **deterministic build failure requiring review**.
+
+x15's prior uniqueness check was a property of a handful of constructed identities, not a proof
+about the set the study will build. A **synthetic collision injection** now proves the check can
+fail.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring, no
+holdout document opened, and no downstream harness component built — `build_frames`,
+`build_oracle`, `score_metrics`, `decide_architecture` and `adjudicator_prompt.md` are all
+untouched.
+
 **A29 is spent. The next free amendment number is A30.**
 
 **What the reverted work found, so the next author does not have to rediscover it.** The

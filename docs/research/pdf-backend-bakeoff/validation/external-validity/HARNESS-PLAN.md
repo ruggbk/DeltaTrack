@@ -8,9 +8,11 @@ choice, the ambiguity is surfaced in §7 rather than resolved.
 Frozen inputs this plan assumes, all approved: A19 (neutral skeleton, 8-line regions,
 withdrawn C-frame enrichment), A20 (M6 deferred, RQ2 narrowed), A21–A24 (`sci` vs `ngid`,
 Model G, text vs segmentation discordance, M0 risk set), A25 (X2-b boundary counterfactual),
-A5 + A10 (Rule 1 and the adjudication budget), and **A27** (matching key, C-frame
+A5 + A10 (Rule 1 and the adjudication budget), **A27** (matching key, C-frame
 reservation removed, region-based D-frame budget, Rule 0 outcomes, §8 owner, Rule 3 gate
-vector, frozen determinism).
+vector, frozen determinism), and **A30** (the occurrence key's fourth component is the
+absolute `start_ngid`; the oracle's occurrence position is geometric; P-head adequacy and
+realized blind-ID uniqueness are executable).
 
 **Every frozen methodology section has an owner** — §4.5 `decide_architecture` (BLOCKED,
 §7.1); §5.3–5.4 `build_oracle`; §5.5.1 + §5.8 `build_frames` (frames) and
@@ -101,9 +103,16 @@ control, or any question about amount→account attribution (M6 is deferred; ask
 collect data the study may not use and could bias heading answers).
 
 **Asked for:** heading occurrences present, their exact printed text, their immediate parent,
-a coarse leaf/container role, and — per A27.1 — **enough source position to name the
-occurrence key**: which physical line of the region the occurrence starts on, and its order
-on that line. Nothing else.
+a coarse leaf/container role, and — per **A30.3** — **enough source position to name the
+occurrence key**: `start_physical_line`, and `start_x_px`, the integer horizontal coordinate
+of the **left edge of the first printed character** of that occurrence in the rendered
+stimulus. Nothing else.
+
+`start_x_px` is an **identity annotation only** — text, role and parent stay independently
+adjudicated. It replaces A27.1's "order on that line", which could not be derived: an ordinal
+renumbers a later occurrence whenever an earlier one on the same line is missing, and
+production emits a `section` and an inline `subsection` at the same `(page, line)`. The R1
+repeat records its **own** `start_x_px` and is resolved independently.
 
 | control | what fact makes it fail |
 |---|---|
@@ -161,6 +170,16 @@ cropping; reveal control status; write the key after adjudication has begun.
 - **I7** every stimulus carries its PNG sha256, so a later re-render is *detected*.
 - **I8** `oracle_key.json` is committed strictly before `oracle_adjudicated.json` exists
   (F6 already checks this ordering by git).
+- **I14** (A30.5) **blind ids are unique over the COMPLETE REALIZED stimulus set**, asserted
+  before any oracle artifact is committed and before adjudication begins. A collision is a
+  deterministic **build failure requiring review** — never an overwrite, a merge, a
+  last-write-wins, or an automatic salt/re-roll. Salting after seeing the stimulus set would
+  let the set choose the alias scheme, the influence A28.3 removed.
+- **I15** (A30.3) the adjudicated `start_x_px` is converted to page PDF coordinates from the
+  **committed region bbox, the rendered image width and the frozen DPI only**, then resolved
+  to the nearest neutral ink glyph on the reported physical line — **no tolerance**, and an
+  exact tie or an absent candidate yields `UNMATCHED`. The skeleton supplies **identity
+  only**, never heading truth.
 
 | control | what fact makes it fail |
 |---|---|
@@ -170,6 +189,9 @@ cropping; reveal control status; write the key after adjudication has begun.
 | **negative:** blind artifact leakage | a grep of the adjudicator file finds frame, stratum, document id, control status or arm text |
 | bbox ↔ skeleton agreement | a rendered crop omits a neutral line the region claims |
 | **negative:** shuffle the key | adjudications still align to the right regions (would prove the key is not load-bearing, i.e. the join is fake) |
+| **negative:** injected blind-ID collision | the build completes instead of aborting (I14) |
+| **negative:** exact geometric tie for `start_x_px` | a glyph is chosen instead of `UNMATCHED` (I15) |
+| R1 start identity | a repeat reuses the primary's coordinate or resolved identity rather than resolving its own |
 
 ---
 
@@ -312,7 +334,7 @@ a pre-committed sentence, and must refuse to emit any comparative-accuracy claim
 
 | was | ruling |
 |---|---|
-| 7.1 M1–M4 matching key | **A27.1** — source-position key `(doc, page, start_neutral_line_key, occurrence_ordinal_on_line)`; no text similarity, no order-within-region; unmappable → `UNMATCHED` |
+| 7.1 M1–M4 matching key | **A27.1** — source-position key; no text similarity, no order-within-region; unmappable → `UNMATCHED`. **Its fourth component is SUPERSEDED by A30.1** — see below |
 | 7.2 40 % amount reservation | **A27.2** — REMOVED; plain uniform C-frame, ≤ 8 regions/document |
 | 7.3 60 items vs 120 regions | **A27.3** — the item is a **region**; full census enumerated first; ≤ 60 → adjudicate all, Rule 1 evaluable; > 60 → `INSUFFICIENT_COMPARATIVE_EVIDENCE`, sample descriptive only |
 
@@ -354,6 +376,34 @@ harness consumes, not just page 1. Not made in this pass.
 | §4.5 Gap B, non-exhaustive/overlapping rows | **A28.2** — ordered exhaustive state machine, thresholds unchanged; `LIMITED` does **not** fail Rule 3 |
 | blind ids could steer sampling | **A28.3** — canonical pre-blinding identities are ranked; the blind id is a post-selection alias only |
 | render DPI was an implementation choice | **A28.4** — 300 DPI primary, 330 DPI R1 repeat, same bbox |
+
+### RULED by A30 — the occurrence identity, proven derivable
+
+| was | ruling |
+|---|---|
+| A27.1's `occurrence_ordinal_on_that_line` was never derived | **A30.1** — the fourth component is the absolute **`start_ngid`**, the A24.2 ink identity of the occurrence's first neutral-ink character. Used for **equality only**; nothing orders occurrences by it |
+| could production supply it? | **A30.2** — yes. `Anchor` → merged-line start offset → `Page.merge_ranges` → print line + offset → `emitted[...].cells` → first cell carrying an `ngid`. Instrumented **study-locally**; production recognition unchanged; nine explicit refusal classes, all → `UNMATCHED` |
+| how does the oracle name the same occurrence? | **A30.3** — geometrically: `start_physical_line` + `start_x_px`, converted from the committed bbox / image width / frozen DPI, resolved to the nearest neutral ink glyph with **no tolerance**; tie or no candidate → `UNMATCHED` |
+| §4.5 P-head was a caller obligation | **A30.4** — `filter_keys` now takes `(key, kind, population)` and applies both restrictions itself |
+| blind-ID uniqueness was only synthetic | **A30.5** — asserted over the **realized** set; a collision aborts the build |
+
+**Proven, not argued** (`x16_occurrence_identity.py`, `results/x16_occurrence_identity.json`):
+
+```
+instrumented mirror == production extract_anchors    every DEVELOPMENT page consumed
+same-line collisions                                 7 lines, ALL section+subsection, H == X
+cross-arm occurrence identity                        1249 shared, 1249 agree, 0 disagree
+   of which the arms' TEXT disagreed                 30, identity agreed on all 30
+refusals on development material                     none
+key_H(B) == key_X(B) with A missing                  holds, and holds in the mirror
+the REJECTED arm-local ordinal                       renumbers B 1 -> 0, so the control can fail
+```
+
+The `start_ngid` residue is stated rather than rounded off: ngid order agrees with printed
+order on **33,592 of 33,602** emitted lines, the exceptions being single adjacent
+transpositions in PDFium's text-page order. This is why A30.1 forbids *ordering* by `ngid`
+and uses it for equality only; on the collisions themselves, ngid order matched printed
+order **14/14**.
 
 ### Sweep for remaining delegated choices
 
