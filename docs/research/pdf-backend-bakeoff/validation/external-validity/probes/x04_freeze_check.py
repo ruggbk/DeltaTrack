@@ -654,7 +654,11 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
     if X2_EVIDENCE.exists():
         try:
             ev = json.loads(X2_EVIDENCE.read_text())
-            a, b = ev.get("X2a_no_u0020"), ev.get("X2b_rule_recovers_engine_spaces")
+            # SELF-DESCRIBING KEYS. `X2b_rule_recovers_engine_spaces` was generic enough that
+            # its meaning depended on which reading of X2-b was current, which is exactly the
+            # drift A24.1 had to resolve. G2 now reads the explicit gate field, so a future
+            # reviewer never needs amendment history to know what the boolean means.
+            a, b = ev.get("X2a_no_u0020"), ev.get("X2b_gate_generated_only")
             pop = ev.get("population", "")
             fixtures = ev.get("fixtures", [])
             problems = []

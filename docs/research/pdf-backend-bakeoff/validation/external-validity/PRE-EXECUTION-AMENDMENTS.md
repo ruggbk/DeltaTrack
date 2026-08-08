@@ -1570,9 +1570,28 @@ EXECUTION FORBIDDEN**.
  "status": "RESOLVED -- both rulings implemented and measured"}
 ```
 
-**The ruling, recorded before the evidence that motivated it.** The frozen prose PERMITTED
-both readings in each case; neither alternative was unreasonable, and implementation is what
-exposed the ambiguity. That is why both are recorded as amendments rather than as defects.
+**When the ruling was made, stated accurately.** An earlier draft of this section said the
+ruling was "recorded before the evidence that motivated it". **That is withdrawn — it was
+false.** The actual order was:
+
+```
+db3c0d2   DEVELOPMENT implementation exposes A24.1 / A24.2; ambiguity recorded OPEN
+          external review rules: generated-only X2-b; provenance != neutral identity
+277a0e5   the ruling is implemented
+207e244   ledger declaration closed
+```
+
+> **The ruling was made AFTER development evidence exposed the ambiguity, but BEFORE any
+> confirmatory H/X output existed and before execution was authorized.**
+
+That is the methodologically load-bearing statement, and it is the true one. Development
+evidence **did** inform the amendment — the measured numbers below are exactly what made the
+two readings visible — and no confirmatory evidence existed to inform it, because no holdout
+document has ever been opened by either architecture.
+
+The frozen prose PERMITTED both readings in each case; neither alternative was unreasonable,
+and implementation is what exposed the ambiguity. That is why both are recorded as amendments
+rather than as defects.
 
 ### A24.1 — CLARIFICATION. "the engine's spaces" means PDFium-*generated* U+0020
 
@@ -1676,8 +1695,14 @@ codepoint from PyMuPDF's own trace. Without that it would have compared two diff
 #### The `H. R. 2029` disagreement is preserved, not normalised
 
 Frozen as a regression fixture: H projects `H. R. 2029`, X projects `H.R.2029`. That is
-**TEXT discordance and NOT segmentation discordance**, it enters the D-frame, and it reaches
-M3 as `X_REGRESSES`. **The eligibility gate does not decide correctness — the oracle does.**
+**TEXT discordance and NOT segmentation discordance**, and it enters the D-frame.
+
+**What the fixture proves:** the spacing disagreement survives contract validation and
+reaches M3, and *given a synthetic oracle of* `H. R. 2029`, the scoring path classifies it as
+`X_REGRESSES`. **What it does not prove:** that H's form is correct on the real document. The
+oracle in the fixture is chosen to exercise the pipeline, not to adjudicate. Whether
+`H. R. 2029` or `H.R.2029` is right on `114-hr-2029/4` is for the independent oracle, which
+does not exist yet. **The eligibility gate does not decide correctness — the oracle does.**
 
 #### G2 now executes rather than trusts
 
@@ -1689,12 +1714,21 @@ read `X2a=True X2b=True` — precisely the failure mode the live check exists to
 **Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
 no holdout document opened.
 
-Building the arms exposed two places where the frozen protocol does not determine the
-executable behaviour, and in both the candidate readings give **different outcomes on real
-development material**. Per the standing instruction to stop at an ambiguity rather than
-code through it, neither is resolved here.
+---
 
-### A24.1 — "the engine's spaces" in X2-b *(blocking; decides whether X is scorable)*
+> # ⛔ SUPERSEDED HISTORICAL RECORD — NOT OPERATIVE
+>
+> **Everything from here to the "end of superseded record" marker below describes the state
+> BEFORE the ruling above.** It is retained because it is the evidence that motivated the
+> ruling, and deleting it would erase why the amendment exists. **It is not the protocol.**
+>
+> Where this block says A24.1 or A24.2 is *open*, *blocking*, *unresolved*, or that *a ruling
+> is required*, read those as statements of the historical state at commit `db3c0d2`. Both
+> are **RESOLVED**; the operative text is the A24.1 / A24.2 ruling sections above.
+>
+> Nothing in this block may be cited as current normative protocol.
+
+### *(historical)* A24.1 — "the engine's spaces" in X2-b *(was blocking)*
 
 X-2 freezes two assertions. X2-a is unambiguous and **passes**. X2-b says *"re-admitting the
 engine's spaces changes no reconstructed line"*, and **"the engine's spaces" has two
@@ -1727,7 +1761,7 @@ scored at all. `x2_verify` reports **both** readings and sets the headline field
 (c) keep the strict reading with a stated tolerance — but a tolerance is a scoring-rule
 change and cannot be introduced by the implementation.
 
-### A24.2 — geometric eligibility admits every content-stream space *(blocking)*
+### *(historical)* A24.2 — geometric eligibility admits every content-stream space *(was blocking)*
 
 A19/A21 froze eligibility as **geometric**, specifically to avoid a codepoint filter, and
 A21 measured it in **one direction only**: "the number excluded *only* by a codepoint rule
@@ -1778,6 +1812,68 @@ silently given the two arms different adjudication units.
 **DEVELOPMENT observations, which are explicitly not results** — no holdout document is
 opened, no oracle exists, no decision rule has been evaluated: M0a 35/141 and 36/148;
 **M0b 0 on both**, consistent with §3.3 holding line clustering identical across the arms.
+
+**Population impact: none.** No membership change, no scoring, no holdout document opened.
+
+> # ⛔ END OF SUPERSEDED HISTORICAL RECORD
+>
+> Operative text resumes here. The A24 rulings above are the protocol.
+
+---
+
+## A25 — BLOCKING. The X2-b gate is vacuous as executed
+
+```json
+{"id": "A25", "class": "SUBSTANTIVE",
+ "commits": ["PENDING"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/x2_verify.py", "probes/x04_freeze_check.py",
+                   "probes/neutral_identity.py", "probes/x08_neutral_identity.py",
+                   "probes/x10_reconstruction_signature.py"],
+ "status": "OPEN -- a ruling is required before G2 may open"}
+```
+
+**Found by building the negative control the review asked for.** A24.1 froze X2-b's scope as
+PDFium-*generated* U+0020. Building a genuine behavioural FAIL control for that predicate
+established that **the predicate cannot fail at all**, for a reason unrelated to X's rule.
+
+**MEASURED** (`x2_verify --self-test`, `114-hr-2029/4`, 4 pages):
+
+| | `readmit="none"` | `readmit="generated"` |
+|---|---|---|
+| U+0020 in the contract | 0 | **565** |
+| glyphs reaching reconstruction | 3914 | **3914** |
+| U+0020 reaching reconstruction | 0 | **0** |
+
+**The mechanism.** PDFium hands generated characters the identity matrix, so every generated
+space reports `font_size` exactly **1.0**. `reconstruct_extended_corrected.cluster_lines`
+keeps `size > _SIZE_FLOOR` with `_SIZE_FLOOR = 1.0`, and `1.0 > 1.0` is false. All 565
+re-admitted spaces are dropped **before a single boundary is considered**. Both sides of the
+assertion therefore reconstruct an identical glyph set, and X2-b **compares a page against
+itself**.
+
+**Confirmed from the rule side too.** A sabotage that suppresses one generated-space boundary
+inside `wants_space` fires in **both** arms — because both arms traverse the same glyphs — so
+no injected fault can make the gate fail. That is the same vacuity seen from the other end.
+
+**What this does and does not impugn.** It does **not** show X depends on PDFium's generated
+spaces; it shows the gate **has never tested** whether it does. The substantive A24.1 ruling
+is untouched — generated-only remains the right scope. What is broken is the executable
+predicate, which currently certifies a property it cannot observe. This is the same class of
+defect as the pre-A24 G2, which was green on an artifact asserting its own success.
+
+**Not repaired here.** Making the gate non-vacuous means changing what reaches the
+reconstruction — the obvious candidates are exempting re-admitted generated spaces from the
+size floor (mirroring H, whose `reconstruct_hybrid.cluster_lines` already exempts generated
+characters explicitly), or giving X's contract a generated flag it currently lacks. Both
+change what X2-b measures, which is a **ruling**, not an edit. A first attempt to explore the
+size-floor route did not achieve live re-admission either, so no candidate fix is yet
+supported by evidence and none is recommended here.
+
+**Fails safe in the meantime.** `x2_verify` exits non-zero while the vacuity holds, and its
+artifact records `X2b_gate_is_vacuous_SEE_A25: true`, so **G2 cannot open** on a claim the
+gate cannot support. `--self-test` asserts the precondition and fails until it is resolved.
 
 **Population impact: none.** No membership change, no scoring, no holdout document opened.
 

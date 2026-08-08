@@ -860,6 +860,15 @@ def part11_hr_fixture() -> dict:
 
     This fixture exists so that ruling cannot silently rot: the disagreement must stay
     visible as comparative TEXT discordance and must remain scorable by M3.
+
+    WHAT IT PROVES, exactly: the spacing disagreement survives contract validation and
+    reaches M3, and GIVEN A SYNTHETIC ORACLE OF `H. R. 2029` the scoring path classifies it
+    as `X_REGRESSES`.
+
+    WHAT IT DOES NOT PROVE: that H's form is the correct one on the real document. The oracle
+    here is a fixture chosen to exercise the pipeline, not an adjudication. Whether
+    `H. R. 2029` or `H.R.2029` is right on `114-hr-2029/4` is a question for the independent
+    oracle, which does not exist yet. This is a PIPELINE test, not a correctness finding.
     """
     # 'H','.','R','.','2','0','2','9' are ink; the two spaces are content-stream.
     glyphs = [SourceGlyph(i, 500.0, 72.0 + 12 * i, 500.0, 80.0 + 12 * i, 512.0) for i in range(8)]

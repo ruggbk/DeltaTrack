@@ -11,11 +11,33 @@
     test               this file is the test; `--self-test` proves X2-a can FAIL
     evidence           `results/x2_contract_assertions.json`
 
-UNRESOLVED, AND NOT RESOLVED HERE. "the engine's spaces" is ambiguous between spaces PDFium
-INVENTED and every U+0020 the contract drops, and MEASURED the two readings disagree:
-generated-only PASSES on both development documents, all-U+0020 FAILS on `114-hr-2029/4`.
-Both are run and reported; the headline field carries the stricter reading so G2 cannot open
-on an interpretation chosen by this file. See amendment A24.
+WHAT X2-b FALSIFIES, stated exactly:
+
+    If PDFium-generated spaces are removed, X's geometric reconstruction must still recover
+    the same printed-line text those generated spaces would have supplied.
+
+    PASS -> the generated PDFium spaces are NOT NECESSARY to reproduce those boundaries.
+    FAIL -> X is still dependent on a PDFium-generated boundary decision.
+
+A PASS is deliberately narrow. It does NOT mean X is generally correct, does NOT mean X
+reproduces all source spacing, and does NOT mean X matches H. Those are comparative and
+oracle questions and this file cannot answer any of them.
+
+SCOPE, per A24.1. "the engine's spaces" means PDFium-GENERATED U+0020
+(`FPDFText_IsGenerated == true`). The frozen prose admitted two readings; generated-only is
+now operative and the all-source-spaces comparison is retained as a DEVELOPMENT DIAGNOSTIC
+only -- it can differ without closing G2 and without voiding X, because a content-stream
+space was supplied by the PDF rather than invented by PDFium, and requiring X to reproduce
+it would make this a partial H/X equivalence gate.
+
+BLOCKING DEFECT IN THIS GATE, found by its own negative control and NOT repaired here.
+Re-admitting generated spaces currently changes NOTHING that reaches the reconstruction:
+they report `font_size` exactly 1.0 (PDFium gives generated characters the identity matrix)
+and `cluster_lines` keeps `size > _SIZE_FLOOR` with `_SIZE_FLOOR = 1.0`, so all 565 of them
+are dropped first. Both sides then reconstruct an identical glyph set -- 3914 glyphs either
+way -- so X2-b as executed compares a page against itself and CANNOT FAIL. `--self-test`
+asserts this and fails until it is resolved. See amendment A25; making the gate non-vacuous
+changes what it measures, which is a ruling rather than an edit.
 
 WHY THIS RUNS THE ARM TWICE RATHER THAN ASSERTING. §5's own words: a failure here means the
 rule is not doing the work and the run is void for X. That is a claim about BEHAVIOUR, so
@@ -111,23 +133,161 @@ def x2b(path: Path, limit: int, readmit: str) -> tuple[bool, int, list[str]]:
     return not diffs, total, diffs[:10]
 
 
+def generated_space_boundaries(path: Path, limit: int) -> list[tuple[int, int]]:
+    """(sci_before, sci_after) for every PDFium-GENERATED space between two real glyphs.
+
+    These are exactly the boundaries X2-b is about: places where PDFium INVENTED a word
+    space, so X's geometric rule must recover the boundary on its own.
+    """
+    import run_hybrid
+    from contract_hybrid import CP, GEN
+
+    out = []
+    for _pno, chars in run_hybrid.extract_with_gids(path, limit=limit):
+        for i in range(1, len(chars) - 1):
+            _gid, c = chars[i]
+            if not (c[GEN] and c[CP] == 32):
+                continue
+            pg, pc = chars[i - 1]
+            ng, nc = chars[i + 1]
+            if pc[GEN] or nc[GEN] or pc[CP] in (32, 13, 10) or nc[CP] in (32, 13, 10):
+                continue
+            out.append((pg, ng))
+    return out
+
+
+def readmission_reaches_reconstruction(path: Path, limit: int) -> tuple[bool, dict]:
+    """Does re-admitting generated spaces change what the reconstruction actually sees?
+
+    THE PRECONDITION FOR X2-b MEANING ANYTHING. X2-b compares the reconstruction with and
+    without PDFium-generated U+0020. If those spaces never reach the reconstruction, the two
+    sides are the same input and the assertion compares a page against itself -- it passes
+    for a reason that has nothing to do with whether X's rule recovers boundaries.
+
+    MEASURED, and it currently FAILS: every generated space reports `font_size` exactly
+    1.0, because PDFium hands generated characters the identity matrix, while
+    `reconstruct_extended_corrected.cluster_lines` keeps `size > _SIZE_FLOOR` with
+    `_SIZE_FLOOR = 1.0`. `1.0 > 1.0` is false, so all of them are dropped before a single
+    boundary is considered.
+    """
+    stats = {}
+    for mode in ("none", "generated"):
+        pages, _ = pdfium_extended_corrected.extract(path, limit=limit, readmit=mode)
+        kept = spaces_kept = 0
+        for pg in pages:
+            for row in reconstruct_extended_corrected.cluster_lines(pg):
+                kept += len(row)
+                spaces_kept += sum(1 for g in row if g[pdfium_extended_corrected.CP] == 32)
+        stats[mode] = {
+            "glyphs_in_contract": sum(len(pg.glyphs) for pg in pages),
+            "u0020_in_contract": sum(1 for pg in pages for g in pg.glyphs if g[pdfium_extended_corrected.CP] == 32),
+            "glyphs_reaching_reconstruction": kept,
+            "u0020_reaching_reconstruction": spaces_kept,
+        }
+    reaches = stats["generated"]["glyphs_reaching_reconstruction"] != stats["none"]["glyphs_reaching_reconstruction"]
+    return reaches, stats
+
+
+def x2b_can_fail(path: Path, limit: int) -> tuple[bool, str]:
+    """NEGATIVE CONTROL for the authoritative X2-b predicate itself.
+
+    The distinction this exists to close: "G2 notices x2_verify exited 1" is NOT the same
+    claim as "X2-b detects dependence on a PDFium-generated space". Only the second is the
+    property X2-b gates, and until this control existed nothing established it.
+
+    THE SABOTAGE TRAVELS THE REAL PATH. It does not mock `x2b`, does not force an exit code
+    and does not touch confirmatory inputs. It wraps the actual geometric spacing decision
+    -- `reconstruct_extended_corrected.wants_space` -- so that ONE boundary which a
+    PDFium-generated space also supplies is suppressed. Everything downstream is the
+    production path: extraction, the rule, reconstruction, re-admission, and the
+    line-by-line comparison.
+
+        without generated spaces   the boundary is gone -> reconstructed text differs
+        with them re-admitted      the generated glyph supplies it -> boundary restored
+        X2b_generated_only         FAIL
+
+    That asymmetry is precisely "X still depends on a PDFium-generated boundary decision",
+    which is the condition X2-b exists to reject.
+
+    The wrapper is installed by this function, used, and removed. There is NO configuration
+    surface on the production module: default scoring behaviour is unreachable from here and
+    the sabotage cannot be switched on by anything but this test.
+    """
+    real = reconstruct_extended_corrected.wants_space
+    candidates = generated_space_boundaries(path, limit)
+    try:
+        for pg, ng in candidates[:40]:
+
+            def sabotaged(prev, cur, _pg=pg, _ng=ng):
+                if prev[pdfium_extended_corrected.SCI] == _pg and cur[pdfium_extended_corrected.SCI] == _ng:
+                    return False  # DEVELOPMENT-only fault: pretend the rule missed this one
+                return real(prev, cur)
+
+            reconstruct_extended_corrected.wants_space = sabotaged
+            ok, _total, diffs = x2b(path, limit, "generated")
+            if not ok:
+                return False, f"suppressed the boundary between source chars {pg} and {ng}: {diffs[0]}"
+    finally:
+        reconstruct_extended_corrected.wants_space = real
+    return True, "no single suppressed generated-space boundary changed a reconstructed line"
+
+
 def self_test() -> int:
-    """Both assertions must FAIL on the uncorrected adapter. Prove the gate can fire."""
+    """Prove BOTH assertions can fail, through their real semantic paths."""
+    ok = True
+    path = FIXTURES[0]
+
+    # --- X2-a can fail: the UNCORRECTED adapter emits U+0020 by the thousand.
     import pdfium_extended
     from contract_extended import CP as OLD_CP
 
-    path = FIXTURES[0]
     pages, _ = pdfium_extended.extract(path, limit=4)
     n32 = sum(1 for pg in pages for g in pg.glyphs if g[OLD_CP] == 32)
     a_fails = n32 > 0
+    ok &= a_fails
     print(f"[{'PASS' if a_fails else 'FAIL'}] X2-a FAILS on the uncorrected adapter: {n32} U+0020 glyphs")
 
-    # X2-b on the corrected adapter, but with the spaces re-admitted on BOTH sides, is a
-    # tautology; the meaningful negative control is that the uncorrected contract carries
-    # engine spaces at all, which is what makes its boundaries not independently derived.
-    ok, total, diffs = x2b(path, 4, "generated")
-    print(f"[{'PASS' if ok else 'FAIL'}] X2-b holds on the corrected adapter: {total} lines, {len(diffs)} differing")
-    return 0 if (a_fails and ok) else 1
+    # --- X2-b holds on the real corrected arm.
+    held, total, diffs = x2b(path, 4, "generated")
+    ok &= held
+    print(f"[{'PASS' if held else 'FAIL'}] X2-b gate HOLDS unsabotaged: {total} lines, {len(diffs)} differing")
+
+    # --- PRECONDITION: the re-admitted spaces must actually reach the reconstruction.
+    reaches, stats = readmission_reaches_reconstruction(path, 4)
+    ok &= reaches
+    print(
+        f"[{'PASS' if reaches else 'FAIL'}] re-admitted generated spaces REACH the reconstruction\n"
+        f"        none:      {stats['none']['u0020_in_contract']:4} U+0020 in contract, "
+        f"{stats['none']['glyphs_reaching_reconstruction']} glyphs reach reconstruction\n"
+        f"        generated: {stats['generated']['u0020_in_contract']:4} U+0020 in contract, "
+        f"{stats['generated']['glyphs_reaching_reconstruction']} glyphs reach reconstruction, "
+        f"{stats['generated']['u0020_reaching_reconstruction']} of them spaces"
+    )
+    if not reaches:
+        print(
+            "        => X2-b IS VACUOUS: both sides reconstruct the identical glyph set, so the\n"
+            "           assertion compares a page against itself. Generated spaces report\n"
+            "           font_size exactly 1.0 (PDFium hands them the identity matrix) and\n"
+            "           cluster_lines keeps `size > _SIZE_FLOOR` with _SIZE_FLOOR = 1.0.\n"
+            "           BLOCKING -- see amendment A25. Not repaired here: making the gate\n"
+            "           non-vacuous changes what it measures, which is a ruling, not an edit."
+        )
+
+    # --- X2-b can fail, through the rule itself. Only meaningful once the precondition holds.
+    n_bounds = len(generated_space_boundaries(path, 4))
+    failed, detail = x2b_can_fail(path, 4)
+    can_fail = not failed
+    ok &= can_fail
+    print(
+        f"[{'PASS' if can_fail else 'FAIL'}] X2-b gate FAILS when the rule stops recovering a "
+        f"generated-space boundary\n        {n_bounds} such boundaries on 4 pages; {detail}"
+    )
+    if not can_fail:
+        print(
+            "        => the sabotage fires in BOTH arms, because both arms reconstruct the\n"
+            "           same glyph set. That is the vacuity above, seen from the rule side."
+        )
+    return 0 if ok else 1
 
 
 def main() -> int:
@@ -189,8 +349,7 @@ def main() -> int:
         "X2a_no_u0020": all_a,
         "X2b_gate_generated_only": all_gen,
         "X2b_diagnostic_all_source_spaces": all_all,
-        # Retained ONLY because x04's G2 reads this key. It now carries the GATE, per A24.1.
-        "X2b_rule_recovers_engine_spaces": all_gen,
+        "X2b_gate_is_vacuous_SEE_A25": not readmission_reaches_reconstruction(FIXTURES[0], PAGE_LIMIT)[0],
         "fixtures": results,
         "adapter_blob": blob_sha(EV / "probes" / "pdfium_extended_corrected.py"),
         "reconstructor_blob": blob_sha(EV / "probes" / "reconstruct_extended_corrected.py"),
@@ -209,8 +368,16 @@ def main() -> int:
             "  it records that X can genuinely disagree with content-stream spacing, which is a\n"
             "  comparative finding for the oracle to adjudicate, not a contract violation."
         )
+    vacuous = not readmission_reaches_reconstruction(FIXTURES[0], PAGE_LIMIT)[0]
+    if vacuous:
+        print(
+            "\n  BLOCKING (A25): the X2-b gate is VACUOUS -- re-admitting generated spaces changes\n"
+            "  nothing that reaches the reconstruction, so the assertion compares a page against\n"
+            "  itself and cannot fail. Exiting non-zero so G2 cannot open on an unsupported claim.\n"
+            "  Run --self-test for the measurement."
+        )
     print(f"wrote {OUT}")
-    return 0 if (all_a and all_gen) else 1
+    return 0 if (all_a and all_gen and not vacuous) else 1
 
 
 if __name__ == "__main__":

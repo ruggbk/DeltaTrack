@@ -293,6 +293,42 @@ def part6_eligibility() -> None:
         "the exclusion is exactly U+0020, not a size threshold",
     )
 
+    # The FROZEN invariant is "present, finite, positive-area, upright, codepoint != U+0020".
+    # `finite` needs its own controls: NaN defeats a positive-area test silently, because
+    # every comparison with NaN is False, and an infinite coordinate would pass the test and
+    # then poison the median ink height that sets the page's clustering tolerance.
+    nan, inf = float("nan"), float("inf")
+    matrix = [
+        ("normal ink", (10, 10, 20, 20), A, True),
+        ("U+0020, ordinary finite positive box", (10, 10, 20, 20), 32, False),
+        ("x0 NaN", (nan, 10, 20, 20), A, False),
+        ("x1 NaN", (10, 10, nan, 20), A, False),
+        ("y0 NaN", (10, nan, 20, 20), A, False),
+        ("y1 NaN", (10, 10, 20, nan), A, False),
+        ("x0 +inf", (inf, 10, 20, 20), A, False),
+        ("x1 +inf", (10, 10, inf, 20), A, False),
+        ("y0 -inf", (10, -inf, 20, 20), A, False),
+        ("y1 -inf", (10, 10, 20, -inf), A, False),
+        ("zero width", (10, 10, 10, 20), A, False),
+        ("zero height", (10, 10, 20, 10), A, False),
+        ("negative width", (20, 10, 10, 20), A, False),
+        ("negative height", (10, 20, 20, 10), A, False),
+    ]
+    bad = []
+    seen = set()
+    for label, box, cp, want in matrix:
+        got = eligible(5, box, True, cp)
+        seen.add(got)
+        if got != want:
+            bad.append(f"{label}: expected {want} observed {got}")
+    check("adversarial geometry matrix matches the frozen invariant exactly", [], bad)
+    check(
+        "...and the predicate returns BOTH answers across it",
+        [False, True],
+        sorted(seen),
+        "a matrix that only ever returns False would pass while proving nothing",
+    )
+
 
 def part7_development(limit: int = 12) -> list[dict]:
     """Eligibility measured on DEVELOPMENT documents, hybrid only.

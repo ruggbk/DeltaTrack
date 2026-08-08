@@ -9,7 +9,7 @@
  "X2a_no_u0020": true,
  "X2b_gate_generated_only": true,
  "X2b_diagnostic_all_source_spaces": false,
- "X2b_rule_recovers_engine_spaces": true,
+ "X2b_gate_is_vacuous_SEE_A25": true,
  "fixtures": [
   {
    "path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
@@ -44,5 +44,5 @@
  ],
  "adapter_blob": "ed3dcd909b0db5bb46223e826e72c7646f73208d",
  "reconstructor_blob": "ed6ea3db3d4992693088a40723aab99ff80e75cd",
- "verifier_blob": "d0f198cc1a1d3be33a7891b1b204d4886e8fcf20"
+ "verifier_blob": "9b2b6f9d60b992ca52d20c0d85f230e042995902"
 }

@@ -51,6 +51,7 @@ segmentation difference fabricating a boundary error.
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -111,7 +112,13 @@ def eligible(gid: int | None, box: tuple | None, upright: bool, codepoint: int |
     if gid is None or box is None or codepoint == SPACE:
         return False
     x0, y0, x1, y1 = box
-    if any(v is None for v in (x0, y0, x1, y1)):
+    # FINITE is checked explicitly, not assumed. The invariant has always said "valid,
+    # FINITE and positive-area", but the code only rejected None -- and NaN defeats a
+    # positive-area test silently, because every comparison with NaN is False, while an
+    # infinite coordinate would pass `(x1 - x0) > 0` and then poison the median ink height
+    # that sets the clustering tolerance for the whole page. `math.isfinite` rejects NaN,
+    # +inf and -inf together, and it must run BEFORE any arithmetic is trusted.
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (x0, y0, x1, y1)):
         return False
     return upright and (x1 - x0) > 0 and (y1 - y0) > 0
 

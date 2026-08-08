@@ -292,6 +292,26 @@
    "observed": true,
    "pass": true,
    "implication": "the exclusion is exactly U+0020, not a size threshold"
+  },
+  {
+   "test": "adversarial geometry matrix matches the frozen invariant exactly",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": ""
+  },
+  {
+   "test": "...and the predicate returns BOTH answers across it",
+   "expected": [
+    false,
+    true
+   ],
+   "observed": [
+    false,
+    true
+   ],
+   "pass": true,
+   "implication": "a matrix that only ever returns False would pass while proving nothing"
   }
  ],
  "failures": [],
