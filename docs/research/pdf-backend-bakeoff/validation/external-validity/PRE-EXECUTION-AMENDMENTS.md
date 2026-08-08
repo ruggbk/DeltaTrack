@@ -2486,7 +2486,7 @@ untouched.
 
 ```json
 {"id": "A31", "class": "SUBSTANTIVE",
- "commits": ["d316dfb"],
+ "commits": ["d316dfb", "97a1deb"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["HARNESS-PLAN.md", "probes/build_frames.py", "probes/x17_build_frames.py"],
