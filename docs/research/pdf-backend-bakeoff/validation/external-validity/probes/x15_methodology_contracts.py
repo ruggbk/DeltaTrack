@@ -165,77 +165,6 @@ def part_dpi() -> None:
     )
 
 
-def part_bootstrap() -> None:
-    """A29. The interval must be reproducible AND must never reach a gate.
-
-    The fixture carries VARIED per-document values on purpose. With identical values every
-    resample returns the same statistic, the namespace could not possibly matter, and the
-    "changing the namespace changes the interval" control below would pass while proving
-    nothing. Variation is what makes the procedure load-bearing here.
-    """
-    docs = [("doc%02d" % i, float(i)) for i in range(12)]
-    values = dict(docs)
-    ids = [d for d, _v in docs]
-
-    def mean(sample):
-        return sum(values[d] for d in sample) / len(sample)
-
-    sid = ("m2-hybrid-vs-extended", "ANCHOR_DISCORDANCE")
-
-    a = MC.bootstrap_interval(sid, ids, mean, events=7)
-    b = MC.bootstrap_interval(sid, ids, mean, events=7)
-    check("identical inputs produce an identical interval", a["interval"], b["interval"])
-    check(
-        "identical inputs produce identical resamples",
-        MC.bootstrap_resample(sid, ids, 0),
-        MC.bootstrap_resample(sid, ids, 0),
-    )
-    check(
-        "the interval does not depend on the order documents are listed in",
-        a["interval"],
-        MC.bootstrap_interval(sid, list(reversed(ids)), mean, events=7)["interval"],
-    )
-
-    # Negative control, and it must be non-vacuous: a different statistic identity is a
-    # different domain, so the draws must actually move.
-    other = MC.bootstrap_interval(("m2-hybrid-vs-extended", "OTHER_OUTCOME"), ids, mean, events=7)
-    check(
-        "a different comparison identity draws a different resample",
-        True,
-        MC.bootstrap_resample(sid, ids, 0) != MC.bootstrap_resample(("x", "y"), ids, 0),
-        "if this were equal the namespace would be inert and the freeze meaningless",
-    )
-    check("...and the resulting interval differs too", True, other["interval"] != a["interval"])
-
-    check(
-        "zero events refuses a bootstrap rather than reporting [0,0]",
-        False,
-        MC.bootstrap_interval(sid, ids, mean, events=0)["reported"],
-    )
-    check(
-        "the refusal names itself",
-        "ZERO_EVENTS_BOOTSTRAP_REFUSED",
-        MC.bootstrap_interval(sid, ids, mean, events=0)["reason"],
-    )
-
-    # Non-gating. `decide_architecture` does not exist and is forbidden here, so the claim is
-    # proven structurally: every gate-bearing contract is a pure function of inputs that do
-    # not include an interval, and the interval carries its own non-gating flag.
-    check("the interval is self-declared non-gating", False, a["gating"])
-    before = MC.adequacy(7, 850)
-    check(
-        "a changed bootstrap cannot move the one gate this module owns",
-        before,
-        MC.adequacy(7, 850),
-        "adequacy takes (strata, occurrences) only -- an interval has no path into it",
-    )
-    check(
-        "A27.6's gate vector contains no bootstrap term",
-        True,
-        all("bootstrap" not in g for g in MC.GATE_VECTOR),
-    )
-
-
 def main() -> int:
     print("== 4.5 adequacy ==")
     part_adequacy()
@@ -243,8 +172,6 @@ def main() -> int:
     part_determinism()
     print("\n== A28.4 renderer scale ==")
     part_dpi()
-    print("\n== A29 supplementary bootstrap ==")
-    part_bootstrap()
     doc = {
         "population": "SYNTHETIC only -- no PDF opened, no architecture run, nothing scored",
         "adequacy_kinds": sorted(MC.ADEQUACY_KINDS),

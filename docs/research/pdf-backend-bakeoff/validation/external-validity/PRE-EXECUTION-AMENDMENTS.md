@@ -2282,7 +2282,7 @@ no holdout document opened, no harness component built.
 
 ---
 
-## A29 — SUBSTANTIVE. The supplementary bootstrap is reproducible, and it is not evidence
+## A29 — WITHDRAWN. Bootstrap reproducibility, recorded and reverted unexecuted
 
 ```json
 {"id": "A29", "class": "SUBSTANTIVE",
@@ -2291,58 +2291,34 @@ no holdout document opened, no harness component built.
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["HARNESS-PLAN.md", "probes/methodology_contracts.py",
                    "probes/x15_methodology_contracts.py"],
- "supersedes_text_in": "HARNESS-PLAN.md 8 (\"bootstrap permitted\")",
- "status": "FROZEN"}
+ "supersedes_text_in": "none -- withdrawn before it superseded anything",
+ "status": "WITHDRAWN -- content reverted; the number is spent and is not reused"}
 ```
 
-A28's closing sweep recorded three surviving "permitted" phrases and ruled none of them an
-open outcome-affecting ambiguity. That ruling stands. But the third — §8's non-zero-event
-bootstrap — left the **resample count and the draw procedure** unfrozen, so two honest runs
-of the same committed inputs could print different intervals. That is a **reproducibility**
-gap, not an outcome gap, and this record closes it without touching the statistical method.
+A29 froze the non-zero-event bootstrap procedurally (10,000 resamples, document unit,
+hash-derived draws) and restated it as non-gating. It was **reverted before review** for
+process reasons, not because a ruling in it was found wrong: the work belongs to the session
+that owns this branch's harness contracts, and two sessions writing the same amendment number
+is the failure this ledger exists to prevent.
 
-**`affects_scoring_rule` is `false` on purpose.** Nothing here changes what is measured or
-how anything is decided.
+**This record is deliberately not deleted.** `134a115` touched protected files and remains in
+history, so F9 requires it to stay declared; and the ledger's job is to record what happened,
+including what was undone. Deleting the entry — or rewriting history to remove the commit —
+would leave the branch looking as though the episode never occurred, which is the opposite of
+the provenance this study relies on.
 
-### A29.1 — the bootstrap is frozen procedurally, not merely seeded
+**A29 is spent. The next free amendment number is A30.**
 
-> **10,000 resamples. Resampling unit = document, with replacement** (the unit A27.5 already
-> fixed). Draw `d` of replicate `r` takes the document at index
-> `sha256("bootstrap-document|20260807|<canonical statistic id>|<r>|<d>")[:8] mod n` from the
-> **canonically sorted** document list.
-
-Hash-derived rather than PRNG-drawn. Saying "seed the RNG" would freeze the interval only for
-one library's generator and one consumption order; this depends on nothing but committed
-identity and two ordinals, so any implementation in any language reproduces the same
-resample. The namespace joins A27.7's frozen seed family rooted at `20260807`.
-
-**The canonical sort is load-bearing, and a control found that the hard way.** The draw is an
-index, so without sorting, the caller's listing order silently selects different documents —
-the exact input-order dependence this ruling forbids. `x15`'s ordering control failed on the
-first implementation and passes on the fixed one.
-
-### A29.2 — the interval is reporting, never evidence
-
-> **The non-zero-event bootstrap interval is supplementary reporting only. It is not an input
-> to Rule 0, Rule 1, Rule 2, Rule 3, any adequacy gate, or any architecture-selection
-> outcome.**
-
-Freezing reproducibility must not quietly promote the number into decision evidence. The
-primary inference is unchanged and remains A27.5's exact one-sided 95 % Clopper–Pearson bound
-on the document unit. Zero-event behaviour is unchanged: the bootstrap is **refused**, not
-reported as a degenerate `[0.0, 0.0]`.
-
-To make "not a gate input" checkable rather than promised, A27.6's gate vector is now written
-down in `methodology_contracts.GATE_VECTOR` and a control asserts no member of it is a
-bootstrap term.
-
-**Executable owner:** `methodology_contracts.bootstrap_interval` / `bootstrap_resample` /
-`bootstrap_draw_index`. **Controls:** `x15_methodology_contracts.py` — reproducibility,
-order-independence, a non-vacuous namespace-change control on a varied fixture where the
-procedure is load-bearing, zero-event refusal, and non-gating.
+**What the reverted work found, so the next author does not have to rediscover it.** The
+first implementation drew documents by index into the caller's list, so the caller's listing
+order silently selected different documents and two runs over the same set could print
+different intervals — the exact input-order dependence such a ruling exists to remove. A
+canonical sort before drawing fixes it. `x15`'s ordering control failed on the defect and
+passed on the fix; any replacement should carry that control.
 
 **Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
-no holdout document opened, no harness component built.
+no holdout document opened, no harness component built. Freeze integrity unaffected: the
+content is byte-identical to the state before `134a115`.
 
 ---
 
