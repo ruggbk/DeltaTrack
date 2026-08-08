@@ -1821,61 +1821,106 @@ opened, no oracle exists, no decision rule has been evaluated: M0a 35/141 and 36
 
 ---
 
-## A25 — BLOCKING. The X2-b gate is vacuous as executed
+## A25 — SUBSTANTIVE. X2-b's operationalization, repaired. **RESOLVED**
 
 ```json
 {"id": "A25", "class": "SUBSTANTIVE",
- "commits": ["070098e"],
+ "commits": ["070098e", "46b343a"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/x2_verify.py", "probes/x04_freeze_check.py",
+                   "probes/reconstruct_extended_corrected.py",
                    "probes/neutral_identity.py", "probes/x08_neutral_identity.py",
                    "probes/x10_reconstruction_signature.py"],
- "status": "OPEN -- a ruling is required before G2 may open"}
+ "supersedes_text_in": "PRE-EXECUTION-AMENDMENTS.md A24.1 (X2-b operationalization only)",
+ "status": "RESOLVED -- non-vacuous counterfactual frozen and measured"}
 ```
 
-**Found by building the negative control the review asked for.** A24.1 froze X2-b's scope as
-PDFium-*generated* U+0020. Building a genuine behavioural FAIL control for that predicate
-established that **the predicate cannot fail at all**, for a reason unrelated to X's rule.
+**A24.1's estimand is unchanged.** X2-b is still exactly "independence from PDFium-generated
+boundary decisions". What was wrong was the *executable representation*, not the scope.
 
-**MEASURED** (`x2_verify --self-test`, `114-hr-2029/4`, 4 pages):
+### The defect
 
-| | `readmit="none"` | `readmit="generated"` |
+The first implementation re-admitted PDFium-generated U+0020 **as glyphs**. Those characters
+report `font_size` exactly **1.0** — PDFium hands generated characters the identity matrix —
+and X's `cluster_lines` keeps `size > _SIZE_FLOOR` with `_SIZE_FLOOR = 1.0`. Every one was
+removed by X's pre-existing size filter *before reconstruction*, so both sides of the
+assertion reconstructed an identical glyph set (**3914 glyphs either way**) and the gate
+**compared a page against itself**. It could not fail, and a sabotage injected into
+`wants_space` fired in both arms, confirming it from the rule side.
+
+### The repair, at the layer the evidence lives at
+
+A generated space is **not an ink glyph**. It carries exactly one fact:
+
+> there is a word boundary between source character *i* and source character *j*
+
+So the counterfactual re-admits that **decision**, not the glyph.
+
+| | |
+|---|---|
+| **boundary identity** | `(page_number, sci_before, sci_after)`, read from PDFium's text-page character stream — never geometry, string matching, line ordinals, or X output |
+| **neighbour rule** | nearest preceding and following characters that are **not generated** and **not CR/LF**. A content-stream U+0020 on either side is recorded but classified untestable, since X-2 drops every U+0020 and those two characters can never be adjacent in X |
+| **X** | ordinary X — same contract, clustering, ordering, chrome, margin handling, reconstruction |
+| **X′** | ordinary X **+ the generated-boundary map**; the only difference is the word-boundary decision |
+| **X2-b PASS** | `X.print_lines == X'.print_lines`, byte-for-byte, page-for-page, line-for-line |
+
+**X′ never receives a generated glyph.** Nothing is inserted into X's contract, nothing is
+clustered, no generated geometry or font size is consulted, and no generated space receives
+a neutral gid. X's scoring behaviour is untouched: the only production change is an optional
+`decider` parameter defaulting to `wants_space`.
+
+**Cross-line pairs are deliberately NOT testable.** X2-b asks whether X recovers a *word*
+boundary; when X assigns the two characters to different reconstructed lines there is no
+within-line boundary for X to have made. That disagreement is line-reconstruction behaviour,
+which A22/A23 already route to M0b and the D-frame. Inventing a word space across an X line
+break would make X2-b answer a segmentation question it was never scoped to.
+
+### MEASURED on DEVELOPMENT (8 pages each)
+
+| | `114-hr-2029/4` | `118-s-4795/1` |
 |---|---|---|
-| U+0020 in the contract | 0 | **565** |
-| glyphs reaching reconstruction | 3914 | **3914** |
-| U+0020 reaching reconstruction | 0 | **0** |
+| generated U+0020 | 1347 | 214 |
+| candidate boundary pairs | 1347 | 214 |
+| both neighbours survive X's contract | 1347 | 214 |
+| same X reconstructed line | 1346 | 213 |
+| different X lines (untestable) | 1 | 1 |
+| **X2-b-testable** | **1346** | **213** |
+| ordinary `wants_space` recovered | **1346** | **213** |
+| missed | **0** | **0** |
+| X vs X′ differing printed lines | **0** | **0** |
 
-**The mechanism.** PDFium hands generated characters the identity matrix, so every generated
-space reports `font_size` exactly **1.0**. `reconstruct_extended_corrected.cluster_lines`
-keeps `size > _SIZE_FLOOR` with `_SIZE_FLOOR = 1.0`, and `1.0 > 1.0` is false. All 565
-re-admitted spaces are dropped **before a single boundary is considered**. Both sides of the
-assertion therefore reconstruct an identical glyph set, and X2-b **compares a page against
-itself**.
+**X2-b PASS on 1559 testable boundaries.** X does independently recover every PDFium-generated
+boundary decision on this material — now an evidenced result rather than an artefact of a
+comparison that could not fail.
 
-**Confirmed from the rule side too.** A sabotage that suppresses one generated-space boundary
-inside `wants_space` fires in **both** arms — because both arms traverse the same glyphs — so
-no injected fault can make the gate fail. That is the same vacuity seen from the other end.
+### The negative control, behavioural and isolated
 
-**What this does and does not impugn.** It does **not** show X depends on PDFium's generated
-spaces; it shows the gate **has never tested** whether it does. The substantive A24.1 ruling
-is untouched — generated-only remains the right scope. What is broken is the executable
-predicate, which currently certifies a property it cannot observe. This is the same class of
-defect as the pre-A24 G2, which was green on an artifact asserting its own success.
+Suppressing **one** ordinary geometric decision — source chars `211 → 213` on page 1 — while
+X′ keeps the boundary because the **map** supplies it:
 
-**Not repaired here.** Making the gate non-vacuous means changing what reaches the
-reconstruction — the obvious candidates are exempting re-admitted generated spaces from the
-size floor (mirroring H, whose `reconstruct_hybrid.cluster_lines` already exempts generated
-characters explicitly), or giving X's contract a generated flag it currently lacks. Both
-change what X2-b measures, which is a **ruling**, not an edit. A first attempt to explore the
-size-floor route did not achieve live re-admission either, so no candidate fix is yet
-supported by evidence and none is recommended here.
+```
+X   = 'MAY21, 2015'
+X'  = 'MAY 21, 2015'      -> X2-b FAIL
+```
 
-**Fails safe in the meantime.** `x2_verify` exits non-zero while the vacuity holds, and its
-artifact records `X2b_gate_is_vacuous_SEE_A25: true`, so **G2 cannot open** on a claim the
-gate cannot support. `--self-test` asserts the precondition and fails until it is resolved.
+Separate callables, no global monkeypatch; the boundary map, extraction, clustering and the
+testable denominator are all unchanged, so the sabotage is provably isolated to ordinary X.
 
-**Population impact: none.** No membership change, no scoring, no holdout document opened.
+### Gate hygiene
+
+The superseded glyph-readmission path is **removed** — no generic `x2b()` silently means
+different things by mode. A24.1's all-source comparison survives as
+`all_source_space_diagnostic`, explicitly **non-authoritative**; it still differs on
+`114-hr-2029/4` at the `H. R. 2029` line and neither closes G2 nor voids X.
+
+**G2 requires the denominator as evidence, not inference:**
+`X2b_testable_boundaries_total` must be a positive int and `X2b_gate_is_vacuous_SEE_A25`
+must be `False`, checked independently of the gate boolean, alongside artifact provenance
+and live execution. Non-vacuity is never inferred from a PASS.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
+no holdout document opened.
 
 ---
 
@@ -1925,7 +1970,8 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `2f548f0` | `neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x11_provenance_chain.py` | grouping ≠ coverage; M0 risk set (A23) |
 | `db3c0d2` | `run_hybrid.py`, `pdfium_extended_corrected.py`, `reconstruct_extended_corrected.py`, `run_extended.py`, `x2_verify.py`, `x11_provenance_chain.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | H/X arms; two frozen-text ambiguities (A24) |
 | `277a0e5` | `neutral_identity.py`, `run_hybrid.py`, `reconstruct_extended_corrected.py`, `pdfium_extended_corrected.py`, `x2_verify.py`, `x04_freeze_check.py`, `x08_neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | A24 resolved: X2-b gate scope; ink identity vs provenance (A24.1/A24.2) |
-| `070098e` | `x2_verify.py`, `x04_freeze_check.py`, `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | A24 record cleanup + finite-geometry enforcement (A24); X2-b vacuity (A25) |
+| `070098e` | `x2_verify.py`, `x04_freeze_check.py`, `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | A24 record cleanup + finite-geometry enforcement (A24); X2-b vacuity found (A25) |
+| `46b343a` | `x2_verify.py`, `x04_freeze_check.py`, `reconstruct_extended_corrected.py` | A25 resolved: X2-b boundary-decision counterfactual |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
