@@ -1825,7 +1825,7 @@ opened, no oracle exists, no decision rule has been evaluated: M0a 35/141 and 36
 
 ```json
 {"id": "A25", "class": "SUBSTANTIVE",
- "commits": ["PENDING"],
+ "commits": ["070098e"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/x2_verify.py", "probes/x04_freeze_check.py",
@@ -1925,6 +1925,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `2f548f0` | `neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x11_provenance_chain.py` | grouping ≠ coverage; M0 risk set (A23) |
 | `db3c0d2` | `run_hybrid.py`, `pdfium_extended_corrected.py`, `reconstruct_extended_corrected.py`, `run_extended.py`, `x2_verify.py`, `x11_provenance_chain.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | H/X arms; two frozen-text ambiguities (A24) |
 | `277a0e5` | `neutral_identity.py`, `run_hybrid.py`, `reconstruct_extended_corrected.py`, `pdfium_extended_corrected.py`, `x2_verify.py`, `x04_freeze_check.py`, `x08_neutral_identity.py`, `x09_skeleton_cross_engine.py`, `x10_reconstruction_signature.py`, `x12_skeleton_eligibility.py`, `x13_x_arm.py` | A24 resolved: X2-b gate scope; ink identity vs provenance (A24.1/A24.2) |
+| `070098e` | `x2_verify.py`, `x04_freeze_check.py`, `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | A24 record cleanup + finite-geometry enforcement (A24); X2-b vacuity (A25) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
