@@ -55,7 +55,7 @@ We will treat naming as an architectural interface, governed by one principle:
 > **Do not make an agent or human learn a DeltaTrack dialect before they can reason about
 > DeltaTrack.** Where an authoritative vocabulary already exists for a concept, speak it.
 
-### 1. Terminology authority, in order of precedence
+### 1. Terminology authority by concept type
 
 1. **Legislative and domain concepts** take the terminology of the authoritative
    institutional source that governs *that* concept and boundary — Congress, GPO/govinfo,
@@ -82,8 +82,8 @@ package namespaces, MCP interfaces, or any other product-facing or composition b
 taken from the DTDs, from CRS, or from any future source.
 
 Where a value crosses registers, the translation is explicit rather than implied by a
-shared word. Two identifiers spanning two meanings is not a naming blemish; it is an
-undocumented boundary.
+shared word. A shared identifier spanning two meanings is not merely a naming blemish; it
+is evidence of an undocumented boundary.
 
 ### 3. Naming conventions
 
@@ -134,7 +134,9 @@ Two review tests:
 
 > Is this the term they would naturally search for when looking for this concept?
 
-A mismatch is evidence that the name or the responsibility boundary is wrong.
+A mismatch is evidence that the name or responsibility boundary may need investigation;
+authoritative domain or technical usage remains controlling where it applies. An outsider's
+expectation can itself be wrong, or be drawn from a different register.
 
 Generic buckets (`core`, `helpers`, `utils`, `common`, `services`) may group internal
 implementation but must not become public architectural boundaries merely for convenience.
