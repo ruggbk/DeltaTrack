@@ -93,27 +93,85 @@ def x2a(pages) -> tuple[bool, int]:
     return n == 0, n
 
 
+RAW_CR, RAW_LF, RAW_SPACE = 13, 10, 32
+
+
+def raw_source_stream(path: Path, limit: int) -> list[tuple[int, list[tuple[int, int, bool]]]]:
+    """The MINIMAL raw PDFium text-page stream: `(page, [(sci, codepoint, generated)])`.
+
+    A25 freezes boundary identity as coming from PDFium's text-page character stream, "never
+    geometry". The first implementation read `run_hybrid.extract_with_gids`, which does not
+    satisfy that: it OMITS a non-generated character whenever `GetCharBox`, `GetMatrix` or
+    `GetCharOrigin` fails, and it REWRITES every non-generated `cp < 0x20` to U+FFFD before
+    the verifier sees it. Either one can change which source character is "nearest" to a
+    generated space, so geometry and normalisation were silently able to move the boundary.
+
+    This function calls exactly three PDFium entry points -- `FPDFText_CountChars`,
+    `FPDFText_GetUnicode`, `FPDFText_IsGenerated` -- and nothing else. No bbox, no origin,
+    no matrix, no font size, no H or X extraction, no clustering. `sci` is the text-page
+    index itself, so no position can be lost or renumbered.
+    """
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_raw
+
+    doc = pdfium.PdfDocument(str(path))
+    pages: list[tuple[int, list[tuple[int, int, bool]]]] = []
+    try:
+        n_pages = len(doc) if limit is None else min(limit, len(doc))
+        for p_i in range(n_pages):
+            page_obj = doc[p_i]
+            textpage = page_obj.get_textpage()
+            try:
+                raw = textpage.raw
+                n = pdfium_raw.FPDFText_CountChars(raw)
+                chars = [
+                    (
+                        i,
+                        pdfium_raw.FPDFText_GetUnicode(raw, i),
+                        pdfium_raw.FPDFText_IsGenerated(raw, i) == 1,
+                    )
+                    for i in range(max(n, 0))
+                ]
+            finally:
+                textpage.close()
+                page_obj.close()
+            pages.append((p_i + 1, chars))
+    finally:
+        doc.close()
+    return pages
+
+
+def select_neighbours(chars: list[tuple[int, int, bool]], i: int) -> tuple[int | None, int | None]:
+    """Nearest non-generated, non-CR/LF source characters bounding position `i`.
+
+    PURE, and deliberately geometry-free: its only inputs are `(sci, codepoint, generated)`
+    triples. There is no parameter through which a bbox, an origin or a downstream filter
+    could reach it, so a real source character cannot disappear from neighbour selection
+    merely because H or X would later reject it for want of geometry.
+
+    Returns `(sci_before, sci_after)`, either of which may be None at a stream edge.
+    """
+    j = i - 1
+    while j >= 0 and (chars[j][2] or chars[j][1] in (RAW_CR, RAW_LF)):
+        j -= 1
+    k = i + 1
+    while k < len(chars) and (chars[k][2] or chars[k][1] in (RAW_CR, RAW_LF)):
+        k += 1
+    return (chars[j][0] if j >= 0 else None, chars[k][0] if k < len(chars) else None)
+
+
 def generated_boundary_map(path: Path, limit: int) -> tuple[dict, dict]:
     """PDFium's GENERATED word-boundary decisions, keyed by stable source provenance.
 
-    A PDFium-generated U+0020 is NOT an ink glyph. What it carries is exactly one fact:
+    A PDFium-generated U+0020 is NOT an ink glyph. It carries exactly one fact:
 
         there is a word boundary between source character i and source character j
 
-    So the boundary is identified as `(page_number, sci_before, sci_after)`, read from
-    PDFium's own text-page character stream -- never from geometry, string matching,
-    reconstructed line ordinals, or any X output.
-
-    NEIGHBOUR RULE, derived rather than assumed. PDFium's stream carries generated
-    newlines, runs of generated characters, control entries and content-stream spaces, so
-    "index +/- 1" is not the intended boundary. The rule is: the nearest preceding and
-    nearest following characters that are NOT generated and NOT CR/LF. If either side is a
-    content-stream U+0020, the pair is recorded but classified untestable -- X-2 drops every
-    U+0020, so those two characters can never be adjacent in X.
+    Identity is `(page_number, sci_before, sci_after)`, read from the RAW text-page stream --
+    never from geometry, string matching, reconstructed line ordinals, or any X output.
+    A content-stream U+0020 on either side is counted and excluded: X-2 drops every U+0020,
+    so those two characters can never be adjacent in X.
     """
-    import run_hybrid
-    from contract_hybrid import CP, GEN
-
     bmap: dict[tuple[int, int, int], bool] = {}
     census = {
         "generated_u0020_total": 0,
@@ -122,28 +180,26 @@ def generated_boundary_map(path: Path, limit: int) -> tuple[dict, dict]:
         "neighbour_is_content_stream_space": 0,
         "candidate_pairs": 0,
     }
-    for pno, chars in run_hybrid.extract_with_gids(path, limit=limit):
-        for i, (_gid, c) in enumerate(chars):
-            if not (c[GEN] and c[CP] == 32):
+    by_page = {}
+    for pno, chars in raw_source_stream(path, limit):
+        by_page[pno] = chars
+        index = {sci: pos for pos, (sci, _cp, _g) in enumerate(chars)}
+        for pos, (_sci, cp, gen) in enumerate(chars):
+            if not (gen and cp == RAW_SPACE):
                 continue
             census["generated_u0020_total"] += 1
-            j = i - 1
-            while j >= 0 and (chars[j][1][GEN] or chars[j][1][CP] in (10, 13)):
-                j -= 1
-            k = i + 1
-            while k < len(chars) and (chars[k][1][GEN] or chars[k][1][CP] in (10, 13)):
-                k += 1
-            if j < 0:
+            before, after = select_neighbours(chars, pos)
+            if before is None:
                 census["no_real_neighbour_before"] += 1
                 continue
-            if k >= len(chars):
+            if after is None:
                 census["no_real_neighbour_after"] += 1
                 continue
-            if chars[j][1][CP] == 32 or chars[k][1][CP] == 32:
+            if chars[index[before]][1] == RAW_SPACE or chars[index[after]][1] == RAW_SPACE:
                 census["neighbour_is_content_stream_space"] += 1
                 continue
             census["candidate_pairs"] += 1
-            bmap[(pno, chars[j][0], chars[k][0])] = True
+            bmap[(pno, before, after)] = True
     return bmap, census
 
 
@@ -226,7 +282,7 @@ def counterfactual_decider(page_number: int, bmap: dict, base):
     return decide
 
 
-def x2b_generated_boundary_counterfactual(path: Path, limit: int, base=None, bmap=None):
+def x2b_generated_boundary_counterfactual(path: Path, limit: int, base_for_page=None, bmap=None):
     """AUTHORITATIVE X2-b. Supplying PDFium's generated boundary decisions in addition to
     X's ordinary geometric decisions must change no reconstructed printed line.
 
@@ -234,11 +290,11 @@ def x2b_generated_boundary_counterfactual(path: Path, limit: int, base=None, bma
         X'      ordinary X + the PDFium generated-boundary map
         PASS    X.print_lines == X'.print_lines, byte-for-byte, page-for-page, line-for-line
     """
-    base = base or reconstruct_extended_corrected.wants_space
+    base_for_page = base_for_page or (lambda _p: reconstruct_extended_corrected.wants_space)
     if bmap is None:
         bmap, _ = generated_boundary_map(path, limit)
-    x = reconstruct_with(path, limit, lambda _p: base)
-    xp = reconstruct_with(path, limit, lambda p: counterfactual_decider(p, bmap, base))
+    x = reconstruct_with(path, limit, base_for_page)
+    xp = reconstruct_with(path, limit, lambda p: counterfactual_decider(p, bmap, base_for_page(p)))
     diffs = []
     for (pno, a), (_pno2, b) in zip(x, xp):
         if len(a) != len(b):
@@ -283,6 +339,7 @@ def self_test() -> int:
     ok = True
     path, limit = FIXTURES[0], 4
     real = reconstruct_extended_corrected.wants_space
+    SCI_ = pdfium_extended_corrected.SCI
 
     # --- X2-a can FAIL: the UNCORRECTED adapter emits U+0020 by the thousand.
     import pdfium_extended
@@ -293,10 +350,32 @@ def self_test() -> int:
     ok &= n32 > 0
     print(f"[{'PASS' if n32 > 0 else 'FAIL'}] X2-a FAIL control: uncorrected adapter emits {n32} U+0020")
 
+    # --- the raw neighbour selector is geometry-free, on a synthetic stream.
+    #     Position 3 is a generated space. Position 2 is a NON-generated character that H/X
+    #     would drop for want of geometry, and position 1 a non-generated raw CR. The
+    #     selector must still choose position 2, because it cannot see geometry at all.
+    synth = [
+        (0, ord("A"), False),
+        (1, RAW_CR, False),  # raw control, NOT generated -- the wrapper rewrote these
+        (2, ord("B"), False),  # would be dropped by H/X if it had no box
+        (3, RAW_SPACE, True),  # the generated boundary
+        (4, ord("C"), False),
+    ]
+    before, after = select_neighbours(synth, 3)
+    geometry_free = before == 2 and after == 4
+    ok &= geometry_free
+    print(
+        f"[{'PASS' if geometry_free else 'FAIL'}] raw selector is geometry-free: chose "
+        f"({before}, {after}), expected (2, 4) -- a real source char cannot vanish for "
+        f"lacking geometry, and a raw CR is skipped"
+    )
+    edge = select_neighbours([(0, RAW_SPACE, True), (1, ord("A"), False)], 0) == (None, 1)
+    ok &= edge
+    print(f"[{'PASS' if edge else 'FAIL'}] raw selector reports a stream edge as None rather than wrapping")
+
     bmap, census = generated_boundary_map(path, limit)
     testable, stats = classify_boundaries(path, limit, bmap)
 
-    # --- the denominator must be non-zero, or the gate means nothing.
     ok &= len(testable) > 0
     print(
         f"[{'PASS' if testable else 'FAIL'}] X2-b denominator control: "
@@ -305,25 +384,22 @@ def self_test() -> int:
     )
 
     # --- X2-b can PASS, on the real arm.
-    passed, total, diffs = x2b_generated_boundary_counterfactual(path, limit, real, bmap)
+    passed, total, diffs = x2b_generated_boundary_counterfactual(path, limit, None, bmap)
     ok &= passed
     print(f"[{'PASS' if passed else 'FAIL'}] X2-b PASS control: X == X' on {total} printed lines")
+    baseline_x = reconstruct_with(path, limit, lambda _p: real)
 
-    # --- X2-b can FAIL. Suppress ONE ordinary geometric decision that the PDFium map also
-    #     supplies. X' keeps the boundary because the MAP supplies it, so the sabotage is
-    #     isolated to ordinary X: separate callables, no global monkeypatch.
-    SCI_ = pdfium_extended_corrected.SCI
+    # --- X2-b can FAIL. Suppress exactly ONE ordinary geometric decision, PAGE-QUALIFIED.
+    #     `sci` is page-local, so a pair keyed only on (before, after) would also fire on any
+    #     other page carrying those indices. The fault is therefore installed only for the
+    #     target page and asserted to have changed exactly one True decision.
     target = None
+    pages_x, _ = pdfium_extended_corrected.extract(path, limit=limit)
+    by_page = {pg.page_number: {g[SCI_]: g for g in pg.glyphs} for pg in pages_x}
     for pno, sb, sa in testable:
-        pages_x, _ = pdfium_extended_corrected.extract(path, limit=limit)
-        for pg in pages_x:
-            if pg.page_number != pno:
-                continue
-            by = {g[SCI_]: g for g in pg.glyphs}
-            if sb in by and sa in by and real(by[sb], by[sa]):
-                target = (pno, sb, sa)
-                break
-        if target:
+        by = by_page.get(pno, {})
+        if sb in by and sa in by and real(by[sb], by[sa]):
+            target = (pno, sb, sa)
             break
 
     if target is None:
@@ -331,22 +407,58 @@ def self_test() -> int:
         ok = False
     else:
         tp, tb_, ta_ = target
+        # DISTINCT decision SITES flipped, not invocations: each reconstruction pass
+        # re-evaluates the page, so a call counter would grow with the number of passes and
+        # say nothing about scope. `pages_seen` records every page the fault was installed
+        # for, so page-qualification is asserted rather than assumed.
+        flipped_sites: set[tuple[int, int, int]] = set()
+        pages_seen: set[int] = set()
 
-        def sabotaged(prev, cur):
-            if prev[SCI_] == tb_ and cur[SCI_] == ta_:
-                return False  # DEVELOPMENT-only fault, ordinary X only
-            return real(prev, cur)
+        def base_for_page(page_number):
+            if page_number != tp:
+                return real
+            pages_seen.add(page_number)
 
-        sab_passed, _t, sab_diffs = x2b_generated_boundary_counterfactual(path, limit, sabotaged, bmap)
-        ok &= not sab_passed
-        print(
-            f"[{'PASS' if not sab_passed else 'FAIL'}] X2-b FAIL control: suppressing the boundary "
-            f"between source chars {tb_} and {ta_} on p{tp} makes X != X'\n"
-            f"        {(sab_diffs[0] if sab_diffs else 'no differing line')}"
+            def sabotaged(prev, cur):
+                if prev[SCI_] == tb_ and cur[SCI_] == ta_:
+                    if real(prev, cur):
+                        flipped_sites.add((page_number, prev[SCI_], cur[SCI_]))
+                    return False
+                return real(prev, cur)
+
+            return sabotaged
+
+        # how many OTHER pages carry the same index pair? proves page-qualification matters
+        collisions = sum(
+            1 for pno, by in by_page.items() if pno != tp and tb_ in by and ta_ in by
         )
+        sab_passed, _t, sab_diffs = x2b_generated_boundary_counterfactual(path, limit, base_for_page, bmap)
+        sab_x = reconstruct_with(path, limit, base_for_page)
+        sab_xp = reconstruct_with(path, limit, lambda p: counterfactual_decider(p, bmap, base_for_page(p)))
 
-    # --- zero-testable-boundary control: an empty map must not silently look like a PASS.
-    empty_pass, _t, _d = x2b_generated_boundary_counterfactual(path, limit, real, {})
+        checks = {
+            "exactly one True decision SITE flipped": flipped_sites == {(tp, tb_, ta_)},
+            "the fault was installed for the target page only": pages_seen == {tp},
+            "target is X2-b-testable": target in testable,
+            "PDFium map still holds the page-qualified boundary": bmap.get((tp, tb_, ta_)) is True,
+            "X differs from X'": not sab_passed,
+            "sabotaged X' == unsabotaged ordinary X": sab_xp == baseline_x,
+            "sabotage changed ordinary X": sab_x != baseline_x,
+            "denominator unchanged": classify_boundaries(path, limit, bmap)[1]["testable"] == stats["testable"],
+            "boundary map unchanged": generated_boundary_map(path, limit)[0] == bmap,
+        }
+        bad = [k for k, v in checks.items() if not v]
+        ok &= not bad
+        print(
+            f"[{'PASS' if not bad else 'FAIL'}] X2-b FAIL control, page-qualified: p{tp} "
+            f"sci {tb_}->{ta_} ({collisions} other page(s) carry the same index pair and are "
+            f"NOT sabotaged)\n        {(sab_diffs[0] if sab_diffs else 'no differing line')}"
+        )
+        for k, v in checks.items():
+            print(f"          {'ok ' if v else 'BAD'}  {k}")
+
+    # --- zero-testable-boundary control.
+    empty_pass, _t, _d = x2b_generated_boundary_counterfactual(path, limit, None, {})
     empty_testable, _st = classify_boundaries(path, limit, {})
     zero_ok = empty_pass and not empty_testable
     ok &= zero_ok
