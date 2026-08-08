@@ -2286,7 +2286,7 @@ no holdout document opened, no harness component built.
 
 ```json
 {"id": "A29", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["134a115"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["HARNESS-PLAN.md", "probes/methodology_contracts.py",
