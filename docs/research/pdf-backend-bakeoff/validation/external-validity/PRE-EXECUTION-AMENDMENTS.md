@@ -2482,6 +2482,75 @@ untouched.
 
 ---
 
+## A31 — SUBSTANTIVE. `build_frames` implements the already-frozen frame rules
+
+```json
+{"id": "A31", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["HARNESS-PLAN.md", "probes/build_frames.py", "probes/x17_build_frames.py"],
+ "supersedes_text_in": "none -- it implements A19/A22/A23/A27 exactly as already frozen",
+ "status": "PROPOSED -- DEVELOPMENT slice, built on the isolated A30 branch"}
+```
+
+**Why SUBSTANTIVE, and why `affects_scoring_rule` is nevertheless `false`.** These are two
+different questions and the ledger keeps them apart deliberately.
+
+`build_frames` decides **frame membership**, and frame membership decides which regions are
+ever adjudicated and which lines ever enter a denominator. A wrong implementation therefore
+**can move a realized score** — which is exactly why it may not be filed as TOOLING, whose
+contract is that the code cannot. (F9 enforces this mechanically: a TOOLING amendment
+carrying `affects_scoring_rule: true` is rejected, and a file may not be declared under both
+a TOOLING and a SUBSTANTIVE amendment.)
+
+But **A31 introduces no new methodological rule.** Region size, alignment, page-bounding, the
+trailing-window rule, the C-frame draw and its seed, the three D-frame predicates and the
+comparative risk set were all frozen by A19/A22/A23/A27 before this component existed. A31
+writes them down executably; it does not decide anything they left open. Hence
+`affects_scoring_rule: false` — there is no scoring *rule* here that a reviewer must
+re-approve, only an implementation of rules already approved.
+
+Fidelity therefore comes from two places, neither of which is this component's own opinion:
+the frozen contracts it calls (`neutral_identity`, `methodology_contracts`, the A28.5 bridge),
+and the executable positive **and negative** controls in `x17_build_frames.py`.
+
+### What was implemented
+
+Invariants **I1–I5** exactly, plus A19's trailing rule stated explicitly: a final page
+fragment of 1–7 neutral lines is **retained as one short trailing region**. Dropping it would
+make the last lines of every page unsamplable — a coverage hole aligned with page structure,
+not a rounding detail.
+
+**The D-frame is a COMPLETE census.** The A10/A27.3 60-region budget is **not** applied here
+and no sampling or truncation occurs; a synthetic 61-region census is emitted in full. The
+budget belongs to `decide_architecture`, and applying it early would destroy the very count
+that decides whether Rule 1 may be evaluated at all.
+
+**Anchor equality uses the whole emitted production `Anchor` value** — page, line, kind, text
+and division. `Anchor` is a frozen dataclass, so set comparison already decides on the entire
+value and **no reduced signature was invented for frames**. This was the one place the plan
+warned an implementer might silently choose a projection; no choice was required.
+
+**No new instrumentation was added to either runner.** Each arm's production anchors are
+derived by calling `extract_anchors` on the `Page` that arm already returns, exactly as `x14`
+does, and `x17` asserts `build_frames`' placement reproduces `x14`'s anchor for anchor on
+every development page.
+
+### Controls
+
+Twelve required controls plus five more, **35/35 passing**. The four D-frame predicates are
+established by **injected faults** (a one-arm text change, a one-arm merge, an anchor-set
+difference, and a jointly-dropped body line), each paired with an un-injected baseline that
+must be clean — a control that only reads back a boolean the code just computed cannot tell a
+working rule from one that never fires.
+
+**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
+no holdout document opened, no canonical `results/frames.json` created, and no oracle, prompt,
+metrics or decision code written.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json

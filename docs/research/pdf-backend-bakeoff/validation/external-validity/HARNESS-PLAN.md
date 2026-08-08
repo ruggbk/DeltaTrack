@@ -1,9 +1,9 @@
 # Downstream harness — contract and dependency plan
 
-**Status: PLAN ONLY. None of the five components is built.** Nothing here is frozen
-protocol; it is a mapping of already-frozen rules onto executable contracts, submitted for
-review before implementation. Where the frozen rules do not determine an outcome-affecting
-choice, the ambiguity is surfaced in §7 rather than resolved.
+**Status: `build_frames.py` is BUILT (A31, DEVELOPMENT slice). The other four components are
+PLAN ONLY.** Nothing here is frozen protocol; it is a mapping of already-frozen rules onto
+executable contracts. Where the frozen rules do not determine an outcome-affecting choice, the
+ambiguity is surfaced in §7 rather than resolved.
 
 Frozen inputs this plan assumes, all approved: A19 (neutral skeleton, 8-line regions,
 withdrawn C-frame enrichment), A20 (M6 deferred, RQ2 narrowed), A21–A24 (`sci` vs `ngid`,
@@ -43,7 +43,14 @@ never re-derives an earlier stage's decisions.
 
 ---
 
-## 2. `build_frames.py`
+## 2. `build_frames.py` — **BUILT (A31)**
+
+Implemented and tested on SYNTHETIC + DEVELOPMENT material only; evidence in
+`results/x17_build_frames.json`, **35/35 controls passing**. No canonical `results/frames.json`
+exists. The D-frame is emitted as a **complete census** — the A10/A27.3 budget is not applied
+here. Anchor equality uses the **whole emitted production `Anchor` value**; no reduced
+signature was invented. No runner instrumentation was added: each arm's anchors come from the
+`Page` it already returns, exactly as `x14` does.
 
 **Implements:** §5.8 (two frames, never pooled), A19 (neutral skeleton, 8-line regions,
 enrichment withdrawn), A22/A23 (D-frame = union of text / segmentation / anchor discordance),
@@ -433,15 +440,18 @@ check, not an ambiguity.
 
 ## 8. Recommended implementation slice
 
-With the register empty, the first slice is:
+**DONE (A31).** `build_frames.py` was the first slice — DEVELOPMENT material only, invariants
+I1–I5, the nine planned controls plus three the review added (short trailing region kept,
+region grid resets at every page boundary, a 61-region D census is not truncated) and five
+more. It consumes only frozen, tested inputs (`run_hybrid` / `run_extended` — both already
+exposing `page` — `neutral_identity`, `methodology_contracts`, and `extract_anchors` on each
+arm's own returned `Page`).
 
-> **`build_frames.py` alone, DEVELOPMENT material only, with invariants I1–I5 and its nine
-> controls.**
+**The next slice is NOT the oracle layer.** Before `adjudicator_prompt.md` or
+`build_oracle.py`, A30.3's geometric annotation needs a DEVELOPMENT discriminability study:
+real neutral-glyph `x0` separation at 300 DPI, pixel quantization, how ±1/±2/… px of
+annotation error maps under the nearest-glyph / no-tolerance resolver, the frequency of
+ambiguous or wrong resolution, and the same at 330 DPI for R1. That study must establish the
+annotation is practically discriminable **before** human or AI adjudication begins.
 
-It consumes only frozen, tested inputs (`run_hybrid` — now additively exposing `page` —
-`run_extended`, `neutral_identity`, `methodology_contracts`), produces the artifact every
-later stage reads, and every one of its controls is constructible synthetically with no
-oracle, no adjudication and no holdout document. Its determinism control is already
-executable via `methodology_contracts.select`.
-
-Nothing downstream of it may start until `build_frames` and its controls are reviewed.
+Nothing downstream may start until `build_frames` and its controls are reviewed.
