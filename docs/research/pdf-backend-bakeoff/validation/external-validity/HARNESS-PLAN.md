@@ -14,8 +14,8 @@ vector, frozen determinism), and **A30** (the occurrence key's fourth component 
 absolute `start_ngid`; the oracle's occurrence position is geometric; P-head adequacy and
 realized blind-ID uniqueness are executable).
 
-**Every frozen methodology section has an owner** — §4.5 `decide_architecture` (BLOCKED,
-§7.1); §5.3–5.4 `build_oracle`; §5.5.1 + §5.8 `build_frames` (frames) and
+**Every frozen methodology section has an owner** — §4.5 `decide_architecture` (**resolved by
+A28.1/A28.2, executable since A30.4**); §5.3–5.4 `build_oracle`; §5.5.1 + §5.8 `build_frames` (frames) and
 `decide_architecture` (budget); §5.6 `adjudicator_prompt` + `build_oracle`; §5.7
 `build_oracle`; §6 `score_metrics`; §7 `decide_architecture`; §8 `score_metrics`.
 
@@ -350,23 +350,30 @@ Anchor(page_number, line_number)   <- line_number is the GPO PRINTED margin numb
   -> owning NeutralLine -> region ordinal
 ```
 
-| document | anchors | placed uniquely | unplaceable |
+The bridge is **BILATERAL** (A28.5): the *same* refusing rule runs on both arms over the same
+material, and both are asserted to bridge onto the *same* neutral skeleton.
+
+| document | H placed / anchors | X placed / anchors | unplaceable |
 |---|---:|---:|---|
-| `114-hr-2029/4` | 11 | **11** | none |
-| `118-s-4795/1` | 16 | **16** | none |
+| `114-hr-2029/4` | **11 / 11** | **11 / 11** | none |
+| `118-s-4795/1` | **16 / 16** | **16 / 16** | none |
 
 No heading text is consulted at any step. Four negative controls prove the bridge **refuses
 rather than guesses**: a margin number appearing twice on a page → `AMBIGUOUS_MARGIN_NUMBER_ON_PAGE`;
 a margin number on no print line → `NO_PRINT_LINE_WITH_THAT_MARGIN_NUMBER`; an emitted line
 carrying no neutral ink → `EMITTED_LINE_CARRIES_NO_NEUTRAL_INK`; and a clean anchor places.
 
-**Smallest instrumentation still needed for `build_frames`:** `run_hybrid.run()` returns
-`{page_number, chars, emitted, neutral}` and does **not** expose the production `Page`, so it
-cannot supply `print_lines` or the anchor set. The proposed change is additive and
-provenance-only — add `page` (from the frozen `reconstruct_hybrid.reconstruct_page`) and
-`anchors` to that dict, changing no existing key. **Anti-drift gate:** `x14`'s
-index-for-index `print_lines` ↔ `emitted_lines` assertion must run over every page the
-harness consumes, not just page 1. Not made in this pass.
+**No further instrumentation is required for `build_frames`.** `run_hybrid.run()` already
+exposes `page` additively (A28.5), and `run_extended.run()` returns the same key, so each arm
+hands back its own production `Page` objects carrying `print_lines` and `merge_ranges`.
+`build_frames` derives each arm's production anchors by calling `extract_anchors` on those
+returned `Page` objects — **exactly as `x14` does** — so no `anchors` key is added to the
+runner dict and no arm has a private path. The earlier proposal to add one is **withdrawn as
+unnecessary**, not deferred.
+
+**Anti-drift gate, still binding:** the index-for-index `print_lines` ↔ `emitted` assertion
+must run over **every page the harness consumes**, not one example. `x14` and `x17` both
+enforce it.
 
 ### RULED by A28 — §4.5 and the last two determinism holes
 

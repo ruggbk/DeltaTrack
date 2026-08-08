@@ -2305,7 +2305,8 @@ is the failure this ledger exists to prevent.
 history, so F9 requires it to stay declared; and the ledger's job is to record what happened,
 including what was undone. Deleting the entry — or rewriting history to remove the commit —
 would leave the branch looking as though the episode never occurred, which is the opposite of
-the provenance this study relies on.
+the provenance this study relies on. **Freeze integrity is unaffected:** after `18ef71d` the
+content is byte-identical to the state before `134a115`.
 
 **One finding from the withdrawn work is recorded here and nowhere else, because it is real
 and it would otherwise be lost with the revert:** the non-zero-event bootstrap resampled
@@ -2329,7 +2330,7 @@ carry it, and does not expand into §8.
                    "probes/methodology_contracts.py",
                    "probes/x15_methodology_contracts.py"],
  "supersedes_text_in": "A27.1 (the matching key's fourth component)",
- "status": "PROPOSED -- built on an isolated branch from 6e4285c, not integrated into PR #560"}
+ "status": "FROZEN -- approved by external review; isolated branch pending integration into PR #560"}
 ```
 
 A27.1 froze the M1–M4 matching key as a source position and named its fourth component
@@ -2478,19 +2479,6 @@ fail.
 holdout document opened, and no downstream harness component built — `build_frames`,
 `build_oracle`, `score_metrics`, `decide_architecture` and `adjudicator_prompt.md` are all
 untouched.
-
-**A29 is spent. The next free amendment number is A30.**
-
-**What the reverted work found, so the next author does not have to rediscover it.** The
-first implementation drew documents by index into the caller's list, so the caller's listing
-order silently selected different documents and two runs over the same set could print
-different intervals — the exact input-order dependence such a ruling exists to remove. A
-canonical sort before drawing fixes it. `x15`'s ordering control failed on the defect and
-passed on the fix; any replacement should carry that control.
-
-**Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
-no holdout document opened, no harness component built. Freeze integrity unaffected: the
-content is byte-identical to the state before `134a115`.
 
 ---
 
