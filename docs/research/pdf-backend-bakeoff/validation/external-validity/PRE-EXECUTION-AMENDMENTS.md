@@ -2545,6 +2545,53 @@ difference, and a jointly-dropped body line), each paired with an un-injected ba
 must be clean — a control that only reads back a boolean the code just computed cannot tell a
 working rule from one that never fires.
 
+### Repair, after review of the first implementation
+
+Three defects were found in review and corrected in place under A31. None changes a
+methodological rule; all three were the implementation failing to honour rules already frozen.
+
+**1. Anchor extraction is DOCUMENT-SCOPED, exactly as production and `x14` do it.** The first
+implementation called `extract_anchors([page])` once per page. `extract_anchors` is
+document-scoped by construction — `derive_size_bands` and `_coverage` are computed over the
+supplied collection, the account/agency/major passes run over the **flattened** pages, and
+`_assign_divisions` needs document order. Per-page calls therefore re-derive the size bands
+from a single page's glyphs, cut every cross-page agency/major run at the page seam, and lose
+division context. The census is now extracted **once per arm over the whole consumed page
+set**, in page order, and only then grouped by page for placement.
+
+This is not a theoretical difference. A constructed two-page collection where page 2 carries
+an account heading but no body-size prose yields **one `account` anchor** under document scope
+and **none** under per-page extraction, because page 2 alone has no derivable size band. The
+control asserts the two procedures disagree, so it cannot pass by coincidence.
+
+**2. An anchor-placement refusal ABORTS frame construction.** It is not an absent anchor, not
+`ANCHOR_DISCORDANCE`, not a regional indeterminate, and not
+`INSUFFICIENT_COMPARATIVE_EVIDENCE`. Dropping a refused anchor and comparing the surviving
+sets silently converts *"the frozen bridge cannot name this document's anchor census"* into
+*"the arms emitted different anchors"* — a harness artifact wearing the costume of an
+observation. `x14`'s contract already said any non-zero placement residue makes anchor
+discordance non-executable as frozen; `build_frames` now enforces it, raising
+`FrameConstructionError` carrying arm, page, the `Anchor` value and the refusal reason.
+
+**3. Every structural precondition fails closed inside `build_frames`.** Previously the page
+sets were intersected and skeleton skew was *returned* for a caller to notice. **A caller
+obligation is not a gate: it cannot fail.** Now `PAGE_SET_MISMATCH`,
+`NEUTRAL_SKELETON_MISMATCH` and `PRINT_LINES_EMITTED_DRIFT` each abort, the last checked for
+**both arms on every consumed page before any anchor index is used** — because the bridge
+reads `emitted[i]` for the i-th print line, and drifted lists would place every anchor on the
+page onto the wrong neutral line. HARNESS-PLAN's claim that the anti-drift gate runs over
+every harness-consumed page is now literally true.
+
+`PageInput` deliberately has **no refusal field**, so a refusal is not representable in a
+frame and no later code can ignore one. **No caller obligation can silently produce a reduced
+frame.**
+
+Each repair carries injected negative controls: page-set mismatch in both directions, a
+one-glyph skeleton difference, an emitted-line deletion, a same-length text drift, and an
+unplaceable anchor in **each** arm via a different refusal class — each also asserting the
+refusal is **not** reported as `ANCHOR_DISCORDANCE` — plus a clean case that must **not**
+abort, so the aborts prove something.
+
 **Population impact: none.** Post-selection, pre-execution. No membership change, no scoring,
 no holdout document opened, no canonical `results/frames.json` created, and no oracle, prompt,
 metrics or decision code written.

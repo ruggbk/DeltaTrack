@@ -28,7 +28,6 @@ M0 RATES ARE NOT SCORED HERE. The per-line comparative quantities are preserved 
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass, field
 
 import methodology_contracts as MC
@@ -57,6 +56,34 @@ FIRST_GID_NOT_OWNED_BY_ANY_NEUTRAL_LINE = "FIRST_GID_NOT_OWNED_BY_ANY_NEUTRAL_LI
 TEXT_DISCORDANCE = "TEXT_DISCORDANCE"
 SEGMENTATION_DISCORDANCE = "SEGMENTATION_DISCORDANCE"
 ANCHOR_DISCORDANCE = "ANCHOR_DISCORDANCE"
+
+# structural preconditions -- each ABORTS, none is representable in a frame
+PAGE_SET_MISMATCH = "PAGE_SET_MISMATCH"
+NEUTRAL_SKELETON_MISMATCH = "NEUTRAL_SKELETON_MISMATCH"
+PRINT_LINES_EMITTED_DRIFT = "PRINT_LINES_EMITTED_DRIFT"
+ANCHOR_PLACEMENT_REFUSED = "ANCHOR_PLACEMENT_REFUSED"
+
+
+class FrameConstructionError(Exception):
+    """Frame construction is NOT EXECUTABLE on this input. Deterministic, never a value.
+
+    Every condition below is one the frozen rules leave no way to represent inside a frame,
+    so the only faithful response is to refuse to build one.
+
+    THE ANCHOR-REFUSAL CASE IS THE ONE THAT LOOKS SURVIVABLE AND IS NOT. Dropping an anchor
+    the bridge could not place and comparing the surviving sets silently converts "this
+    document's anchor census is not knowable by the frozen rule" into "the arms emitted
+    different anchors" -- an ANCHOR_DISCORDANCE that is an artifact of the harness, not an
+    observation about the architectures. x14 already fixed the contract: any non-zero
+    placement residue makes anchor discordance non-executable as frozen.
+    """
+
+    def __init__(self, reason: str, arm: str = "", page_number=None, detail=None):
+        self.reason = reason
+        self.arm = arm
+        self.page_number = page_number
+        self.detail = detail
+        super().__init__(f"{reason} [arm={arm or '-'} page={page_number}] {detail!r}")
 
 
 # --------------------------------------------------------------------------- regions
@@ -132,25 +159,32 @@ def place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key, region_siz
     return (ordinal_by_key[key] // region_size, key), None
 
 
-def place_arm_anchors(anchors, print_lines, emitted, neutral, region_size: int = REGION_SIZE):
+def place_arm_anchors(anchors, print_lines, emitted, neutral, arm: str = "", region_size: int = REGION_SIZE):
     """region ordinal -> the set of emitted production Anchor VALUES resolved into it.
 
     The whole `Anchor` value is kept. No reduced signature is invented for frames: `Anchor`
     is a frozen dataclass, so set membership already compares page, line, kind, text and
     division, and choosing a subset would be this component inventing a matching rule the
     protocol never froze.
+
+    ANY refusal ABORTS. The alternative -- dropping the anchor and comparing what is left --
+    turns "the frozen bridge cannot name this document's anchor census" into an apparent
+    ANCHOR_DISCORDANCE, which is a harness artifact wearing the costume of an observation.
     """
     owner = build_owner(neutral)
     ordinal_by_key = {ln.key: ln.ordinal for ln in neutral}
     by_region: dict[int, set] = {}
-    refusals = Counter()
     for anchor in anchors:
         placed, reason = place_anchor(anchor, print_lines, emitted, owner, ordinal_by_key, region_size)
         if reason:
-            refusals[reason] += 1
-            continue
+            raise FrameConstructionError(
+                ANCHOR_PLACEMENT_REFUSED,
+                arm=arm,
+                page_number=anchor.page_number,
+                detail={"anchor": anchor_repr(anchor), "refusal": reason},
+            )
         by_region.setdefault(placed[0], set()).add(anchor)
-    return by_region, refusals
+    return by_region
 
 
 # ------------------------------------------------------------------------ page frames
@@ -167,7 +201,9 @@ class PageInput:
     x_emitted: list
     h_anchors_by_region: dict = field(default_factory=dict)
     x_anchors_by_region: dict = field(default_factory=dict)
-    anchor_refusals: Counter = field(default_factory=Counter)
+    # There is deliberately NO refusal field. A placement refusal aborts construction, so a
+    # PageInput that exists is one whose entire anchor census placed exactly; making refusals
+    # representable here would invite later code to ignore them.
 
 
 def build_page_frame(page: PageInput, region_size: int = REGION_SIZE) -> dict:
@@ -256,7 +292,7 @@ def build_page_frame(page: PageInput, region_size: int = REGION_SIZE) -> dict:
         "page_number": page.page_number,
         "neutral_lines": line_rows,
         "regions": region_rows,
-        "anchor_refusals": dict(page.anchor_refusals),
+        # no refusal key: an unplaceable anchor aborts before any frame is built
     }
 
 
@@ -322,9 +358,6 @@ def build_document_frame(
     ]
     all_regions = [r for pf in page_frames for r in pf["regions"]]
     all_lines = [ln for pf in page_frames for ln in pf["neutral_lines"]]
-    refusals = Counter()
-    for pf in page_frames:
-        refusals.update(pf["anchor_refusals"])
 
     return {
         "document": document_id,
@@ -348,52 +381,109 @@ def build_document_frame(
         # the COMPLETE census, never sampled and never truncated to the A10 budget
         "d_frame_census": d_census,
         "d_frame_truncated": False,
-        "anchor_refusals": dict(refusals),
+        # not a count: an unplaceable anchor aborts, so a frame that exists had none
+        "anchor_placement_refusals_are_fatal": True,
     }
 
 
 # ------------------------------------------------------- extraction from a real document
 
 
-def page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict], region_size: int = REGION_SIZE):
-    """Build `PageInput`s from the two runners' returned per-page dicts.
+def document_scope_anchors(arm_pages: list[dict]) -> list:
+    """Every production anchor for ONE arm, extracted ONCE over the whole consumed page set.
 
-    Each arm's production anchors are derived from ITS OWN returned production `Page`, exactly
-    as `x14` does -- no runner needs an `anchors` key, and neither arm has a private path.
+    `extract_anchors` is DOCUMENT-SCOPED, and calling it per page silently changes what it
+    finds: `derive_size_bands` and `_coverage` are computed over the supplied collection, the
+    account/agency/major passes run over the FLATTENED pages, and `_assign_divisions` needs
+    document-order context. Per-page calls therefore re-derive the size bands from one page's
+    glyphs, cut every cross-page agency/major run at the page seam, and lose division labels.
 
-    Returns (page_inputs, skeleton_skew_pages). A19 requires ONE skeleton: if the arms
-    disagreed the two frames would not be the same frame, so the caller must treat any skew
-    as fatal rather than averaging over it.
+    The pages are ordered by page number first, because document order is itself an input to
+    the division and major passes.
     """
+    return extract_anchors([d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])])
+
+
+def page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict], region_size: int = REGION_SIZE):
+    """Build `PageInput`s from the two runners' returned per-page dicts, or ABORT.
+
+    Each arm's production anchors are derived from ITS OWN returned production `Page` objects,
+    exactly as `x14` does -- no runner needs an `anchors` key, and neither arm has a private
+    path.
+
+    EVERY STRUCTURAL PRECONDITION FAILS CLOSED HERE. None of them is returned as a value for a
+    caller to notice: a caller obligation cannot fail, and each of these conditions would
+    otherwise produce a frame that is quietly smaller or quietly wrong rather than absent.
+    """
+    # --- page sets must match EXACTLY. Intersecting, or skipping the odd page out, would
+    # silently shrink the frame and every denominator computed from it.
+    h_nums = {d["page_number"] for d in h_pages}
+    x_nums = {d["page_number"] for d in x_pages}
+    if h_nums != x_nums:
+        raise FrameConstructionError(
+            PAGE_SET_MISMATCH, detail={"only_in_H": sorted(h_nums - x_nums), "only_in_X": sorted(x_nums - h_nums)}
+        )
+
+    # --- A28.5 anti-drift, on EVERY consumed page and for EACH arm, BEFORE any anchor index
+    # is used. The bridge's index step reads emitted[i] for the i-th print line; if those two
+    # lists have drifted, every anchor on the page places onto the wrong neutral line and the
+    # frame is built from shifted indices with nothing to show for it.
+    for arm, pages_data in (("H", h_pages), ("X", x_pages)):
+        for d in pages_data:
+            printed = [ln.text for ln in d["page"].print_lines]
+            emitted_text = [e.text() for e in d["emitted"]]
+            if printed != emitted_text:
+                first = next(
+                    (i for i, (a, b) in enumerate(zip(printed, emitted_text)) if a != b),
+                    min(len(printed), len(emitted_text)),
+                )
+                raise FrameConstructionError(
+                    PRINT_LINES_EMITTED_DRIFT,
+                    arm=arm,
+                    page_number=d["page_number"],
+                    detail={"print_lines": len(printed), "emitted": len(emitted_text), "first_divergence": first},
+                )
+
+    # --- A19 requires ONE skeleton. If the arms disagreed, the two frames would not be the
+    # same frame and reporting them side by side would be meaningless.
     x_by_page = {d["page_number"]: d for d in x_pages}
-    inputs, skew = [], []
     for h in h_pages:
+        x = x_by_page[h["page_number"]]
+        h_sk = [(ln.key, sorted(ln.gids)) for ln in h["neutral"]]
+        x_sk = [(ln.key, sorted(ln.gids)) for ln in x["neutral"]]
+        if h_sk != x_sk:
+            raise FrameConstructionError(
+                NEUTRAL_SKELETON_MISMATCH,
+                page_number=h["page_number"],
+                detail={"H_lines": len(h_sk), "X_lines": len(x_sk)},
+            )
+
+    # --- DOCUMENT-SCOPED extraction, once per arm, then grouped by page for placement.
+    h_anchors, x_anchors = document_scope_anchors(h_pages), document_scope_anchors(x_pages)
+    h_by_page: dict[int, list] = {}
+    x_by_page_anchors: dict[int, list] = {}
+    for anchor in h_anchors:
+        h_by_page.setdefault(anchor.page_number, []).append(anchor)
+    for anchor in x_anchors:
+        x_by_page_anchors.setdefault(anchor.page_number, []).append(anchor)
+
+    inputs = []
+    for h in sorted(h_pages, key=lambda d: d["page_number"]):
         pno = h["page_number"]
-        x = x_by_page.get(pno)
-        if x is None:
-            continue
-        if [(ln.key, sorted(ln.gids)) for ln in h["neutral"]] != [(ln.key, sorted(ln.gids)) for ln in x["neutral"]]:
-            skew.append(pno)
-            continue
+        x = x_by_page[pno]
         neutral = h["neutral"]
-        h_by_region, h_ref = place_arm_anchors(
-            extract_anchors([h["page"]]), h["page"].print_lines, h["emitted"], neutral, region_size
-        )
-        x_by_region, x_ref = place_arm_anchors(
-            extract_anchors([x["page"]]), x["page"].print_lines, x["emitted"], neutral, region_size
-        )
-        refusals = Counter()
-        refusals.update(h_ref)
-        refusals.update(x_ref)
         inputs.append(
             PageInput(
                 page_number=pno,
                 neutral=neutral,
                 h_emitted=h["emitted"],
                 x_emitted=x["emitted"],
-                h_anchors_by_region=h_by_region,
-                x_anchors_by_region=x_by_region,
-                anchor_refusals=refusals,
+                h_anchors_by_region=place_arm_anchors(
+                    h_by_page.get(pno, []), h["page"].print_lines, h["emitted"], neutral, "H", region_size
+                ),
+                x_anchors_by_region=place_arm_anchors(
+                    x_by_page_anchors.get(pno, []), x["page"].print_lines, x["emitted"], neutral, "X", region_size
+                ),
             )
         )
-    return inputs, skew
+    return inputs

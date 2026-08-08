@@ -32,6 +32,7 @@ import x14_anchor_bridge as X14  # noqa: E402
 from neutral_identity import Cell, EmittedLine, NeutralLine, build_owner  # noqa: E402
 
 from deltatrack.parsers.pdf_anchors import Anchor, extract_anchors  # noqa: E402
+from deltatrack.parsers.pdf_text import Line, Page  # noqa: E402
 
 OUT = EV / "results" / "x17_build_frames.json"
 ROWS: list[dict] = []
@@ -368,9 +369,182 @@ def sha256_of(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def fake_arm_page(page_number, texts, gid_base=0, glyph_size=None):
+    """A runner-shaped page dict whose print_lines, emitted cells and neutral skeleton agree.
+
+    Built so the anti-drift precondition passes by construction; each control below then
+    breaks exactly ONE thing, so a refusal can only be attributed to the injected fault.
+    """
+    lines = tuple(Line(i + 1, t, glyph_size) for i, t in enumerate(texts))
+    page = Page(page_number, lines, lines, tuple((i, i + 1) for i in range(len(texts))))
+    emitted, neutral, gid = [], [], gid_base
+    for i, t in enumerate(texts):
+        cells, gids = [], []
+        for ch in t:
+            if ch == " ":
+                cells.append(Cell(ngid=None, char=" "))
+            else:
+                cells.append(Cell(ngid=gid, char=ch))
+                gids.append(gid)
+                gid += 1
+        emitted.append(EmittedLine(cells=cells))
+        neutral.append(nline(page_number, i, gids))
+    return {"page_number": page_number, "page": page, "emitted": emitted, "neutral": neutral}
+
+
+SEC_TEXTS = ["SEC. 1. The Secretary shall act.", "Second body line of the section."]
+
+
+def arm_pair(pages=(1,)):
+    h = [fake_arm_page(p, SEC_TEXTS, gid_base=p * 1000) for p in pages]
+    x = [fake_arm_page(p, SEC_TEXTS, gid_base=p * 1000) for p in pages]
+    return h, x
+
+
+def refusal_reason(fn):
+    try:
+        fn()
+    except BF.FrameConstructionError as exc:
+        return exc.reason
+    except Exception as exc:  # noqa: BLE001 - any other exception is itself a failure
+        return f"OTHER:{type(exc).__name__}"
+    return None
+
+
+def part_preconditions() -> dict:
+    print("\n== structural preconditions FAIL CLOSED (no caller obligation) ==")
+
+    # --- page-set equality, both directions
+    h, x = arm_pair((1, 2))
+    check(
+        "H carries a page X lacks -> ABORT",
+        BF.PAGE_SET_MISMATCH,
+        refusal_reason(lambda: BF.page_inputs_from_arms(h, x[:1])),
+        "dropping or intersecting the page set would silently shrink every denominator",
+    )
+    check(
+        "X carries a page H lacks -> ABORT",
+        BF.PAGE_SET_MISMATCH,
+        refusal_reason(lambda: BF.page_inputs_from_arms(h[:1], x)),
+    )
+    check(
+        "matched page sets do NOT abort",
+        True,
+        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)) is None,
+        "if the clean case also aborted, the two controls above would prove nothing",
+    )
+
+    # --- neutral skeleton equality
+    h, x = arm_pair()
+    x[0]["neutral"] = list(x[0]["neutral"])
+    bad = x[0]["neutral"][0]
+    x[0]["neutral"][0] = NeutralLine(
+        page=bad.page,
+        ordinal=bad.ordinal,
+        baseline=bad.baseline,
+        x0=bad.x0,
+        y0=bad.y0,
+        x1=bad.x1,
+        y1=bad.y1,
+        gids=frozenset(list(bad.gids)[:-1]),
+    )
+    check(
+        "a one-glyph neutral skeleton difference -> ABORT",
+        BF.NEUTRAL_SKELETON_MISMATCH,
+        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)),
+        "two skeletons would mean the arms' frames are not the same frame",
+    )
+
+    # --- A28.5 anti-drift: deletion, and same-length text drift
+    h, x = arm_pair()
+    x[0]["emitted"] = x[0]["emitted"][:-1]
+    check(
+        "an emitted line DELETED on one arm -> ABORT",
+        BF.PRINT_LINES_EMITTED_DRIFT,
+        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)),
+        "the bridge reads emitted[i] for print line i; a deletion shifts every later index",
+    )
+
+    h, x = arm_pair()
+    x[0]["emitted"] = list(x[0]["emitted"])
+    x[0]["emitted"][0] = eline([(g, "Z") for g in sorted(x[0]["neutral"][0].gids)])
+    check(
+        "an emitted line's TEXT altered at equal list length -> ABORT",
+        BF.PRINT_LINES_EMITTED_DRIFT,
+        refusal_reason(lambda: BF.page_inputs_from_arms(h, x)),
+        "equal cardinality is not enough; the texts must correspond index for index",
+    )
+
+    # --- anchor placement refusals abort, in EITHER arm, and are NOT anchor discordance
+    h, x = arm_pair()
+    h[0]["emitted"] = list(h[0]["emitted"])
+    h[0]["emitted"][0] = eline_no_ink(SEC_TEXTS[0])
+    h_reason = refusal_reason(lambda: BF.page_inputs_from_arms(h, x))
+    check(
+        "an unplaceable anchor in H -> ABORT",
+        BF.ANCHOR_PLACEMENT_REFUSED,
+        h_reason,
+        "dropping it and comparing the rest would fabricate an ANCHOR_DISCORDANCE",
+    )
+    check("...and the refusal is NOT interpreted as ANCHOR_DISCORDANCE", True, h_reason != BF.ANCHOR_DISCORDANCE)
+
+    h, x = arm_pair()
+    x[0]["emitted"] = list(x[0]["emitted"])
+    x[0]["emitted"][0] = eline_foreign_ink(SEC_TEXTS[0])
+    x_reason = refusal_reason(lambda: BF.page_inputs_from_arms(h, x))
+    check(
+        "an unplaceable anchor in X (asymmetric, different refusal class) -> ABORT",
+        BF.ANCHOR_PLACEMENT_REFUSED,
+        x_reason,
+    )
+    check("...and it too is NOT interpreted as ANCHOR_DISCORDANCE", True, x_reason != BF.ANCHOR_DISCORDANCE)
+
+    # --- WHY per-page extraction is forbidden, proven on a constructed page collection.
+    body = ["The Secretary shall carry out the program.", "Amounts are available until expended."]
+    p1 = fake_arm_page(1, body, gid_base=0, glyph_size=10.0)
+    p2 = fake_arm_page(2, ["OPERATIONS AND SUPPORT"], gid_base=500, glyph_size=8.0)
+    doc_scope = extract_anchors([p1["page"], p2["page"]])
+    per_page = extract_anchors([p1["page"]]) + extract_anchors([p2["page"]])
+    check(
+        "per-page extraction produces a DIFFERENT anchor census than document-scope",
+        True,
+        doc_scope != per_page,
+        "if these agreed, the scope control could not detect the defect it exists to catch",
+    )
+    check(
+        "...specifically, document scope finds the account heading and per-page finds nothing",
+        (["account"], []),
+        ([a.kind for a in doc_scope], [a.kind for a in per_page]),
+        "size bands are derived over the SUPPLIED collection: page 2 alone carries no "
+        "body-size prose, so no band exists and the account level vanishes",
+    )
+    return {
+        "synthetic_scope_document": [BF.anchor_repr(a) for a in doc_scope],
+        "synthetic_scope_per_page": [BF.anchor_repr(a) for a in per_page],
+    }
+
+
+def eline_no_ink(text):
+    """Same characters, no neutral ink -> EMITTED_LINE_CARRIES_NO_NEUTRAL_INK."""
+    return EmittedLine(cells=[Cell(ngid=None, char=ch) for ch in text])
+
+
+def eline_foreign_ink(text):
+    """Same characters, ink the skeleton does not own -> FIRST_GID_NOT_OWNED_BY_ANY_NEUTRAL_LINE."""
+    return EmittedLine(cells=[Cell(ngid=900000 + i, char=ch) for i, ch in enumerate(text)])
+
+
+def kind_counts(anchors):
+    c = {}
+    for a in anchors:
+        c[a.kind] = c.get(a.kind, 0) + 1
+    return c
+
+
 def part_development() -> dict:
     print("\n== DEVELOPMENT frames (diagnostics only, never study results) ==")
-    rows, skew_all, refusal_all, bridge_mismatch = [], [], {}, []
+    rows, scope_rows = [], []
+    census_mismatch, placement_mismatch = [], []
 
     for name, path in DOCS:
         for member in HOLDOUT_GUARD:
@@ -380,24 +554,55 @@ def part_development() -> dict:
             continue
         h_pages = run_hybrid.run(path, limit=PAGE_LIMIT)
         x_pages, _s = run_extended.run(path, limit=PAGE_LIMIT)
-        inputs, skew = BF.page_inputs_from_arms(h_pages, x_pages)
-        if skew:
-            skew_all.append({"document": name, "pages": skew})
 
-        # cross-check: build_frames' placement rule must equal x14's, anchor for anchor
-        for d in h_pages:
-            page, emitted, neutral = d["page"], d["emitted"], d["neutral"]
-            owner = build_owner(neutral)
-            ordinal_by_key = {ln.key: ln.ordinal for ln in neutral}
-            for a in extract_anchors([page]):
-                mine = BF.place_anchor(a, page.print_lines, emitted, owner, ordinal_by_key)
-                theirs = X14.place_anchor(a, page.print_lines, emitted, neutral, owner)
-                if mine != theirs:
-                    bridge_mismatch.append({"document": name, "anchor": str(a)})
-
+        # Any structural precondition failure RAISES here; reaching the next line is itself
+        # the assertion that page sets, skeletons, anti-drift and placement were all clean.
+        inputs = BF.page_inputs_from_arms(h_pages, x_pages)
         frame = BF.build_document_frame(sha256_of(path), name, BF.P_HEAD, inputs)
+
+        for arm, arm_pages in (("H", h_pages), ("X", x_pages)):
+            ordered = [d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])]
+            doc_scope = BF.document_scope_anchors(arm_pages)
+
+            # (a) CENSUS fidelity -- what build_frames consumed IS the document-scope census,
+            #     and every one of those anchors reached the frame.
+            if doc_scope != extract_anchors(ordered):
+                census_mismatch.append({"document": name, "arm": arm, "why": "not document-scoped"})
+            in_frame = sorted(
+                tuple(a) for pf in frame["pages"] for r in pf["regions"] for a in r["anchor_evidence"][arm]
+            )
+            if in_frame != sorted(BF.anchor_repr(a) for a in doc_scope):
+                census_mismatch.append({"document": name, "arm": arm, "why": "frame census != extracted census"})
+
+            # (b) PLACEMENT fidelity -- distinct from (a): the bridge must equal x14's for
+            #     every anchor in the DOCUMENT-SCOPE census, not a per-page one.
+            by_page = {d["page_number"]: d for d in arm_pages}
+            for a in doc_scope:
+                d = by_page[a.page_number]
+                owner = build_owner(d["neutral"])
+                ordinal_by_key = {ln.key: ln.ordinal for ln in d["neutral"]}
+                mine = BF.place_anchor(a, d["page"].print_lines, d["emitted"], owner, ordinal_by_key)
+                theirs = X14.place_anchor(a, d["page"].print_lines, d["emitted"], d["neutral"], owner)
+                if mine != theirs:
+                    placement_mismatch.append({"document": name, "arm": arm, "anchor": str(a)})
+
+            # (c) the SCOPE BUG measured: what per-page extraction would have produced
+            per_page = []
+            for page in ordered:
+                per_page.extend(extract_anchors([page]))
+            scope_rows.append(
+                {
+                    "document": name,
+                    "arm": arm,
+                    "document_scope": len(doc_scope),
+                    "per_page_would_have_been": len(per_page),
+                    "document_scope_kinds": kind_counts(doc_scope),
+                    "per_page_kinds": kind_counts(per_page),
+                    "identical": doc_scope == per_page,
+                }
+            )
+
         c = frame["counts"]
-        refusal_all.update(frame["anchor_refusals"])
         print(
             f"  {name}: lines={c['neutral_lines']} regions={c['regions']} "
             f"C={c['c_frame_selected']} D={c['d_frame_census']} "
@@ -406,29 +611,38 @@ def part_development() -> dict:
         )
         rows.append({"document": name, "document_sha256": frame["document_sha256"], **c})
 
+    for r in scope_rows:
+        print(
+            f"    scope[{r['arm']}] {r['document']}: document={r['document_scope']} "
+            f"per-page-would-have-been={r['per_page_would_have_been']} identical={r['identical']}"
+        )
+
     check(
-        "A19: the arms bridge onto ONE neutral skeleton on every development page",
+        "H anchor census is document-scoped and reaches the frame intact",
         [],
-        skew_all,
-        "differing skeletons would mean the two arms' frames are not the same frame",
+        [m for m in census_mismatch if m["arm"] == "H"],
+        "a per-page census would re-derive size bands per page and cut cross-page runs",
     )
     check(
-        "build_frames' anchor placement reproduces x14's, anchor for anchor",
+        "X anchor census is document-scoped and reaches the frame intact",
         [],
-        bridge_mismatch,
+        [m for m in census_mismatch if m["arm"] == "X"],
+    )
+    check(
+        "H placement reproduces x14's over the DOCUMENT-SCOPE census",
+        [],
+        [m for m in placement_mismatch if m["arm"] == "H"],
         "a divergence would mean the frames use a bridge the study never approved",
     )
     check(
-        "no anchor placement refusal on development material",
-        {},
-        refusal_all,
-        "a refusal is recorded, never guessed past -- but any residue needs explaining",
+        "X placement reproduces x14's over the DOCUMENT-SCOPE census",
+        [],
+        [m for m in placement_mismatch if m["arm"] == "X"],
     )
     check(
         "every development document retained at least one short trailing region",
         [],
         [r["document"] for r in rows if r["short_trailing_regions"] == 0],
-        "a page tail of 1-7 neutral lines must survive as its own region",
     )
     check(
         "no development document exceeded the 8-region C-frame cap",
@@ -437,9 +651,9 @@ def part_development() -> dict:
     )
     return {
         "documents": rows,
-        "skeleton_skew": skew_all,
-        "anchor_refusals": refusal_all,
-        "bridge_mismatch": bridge_mismatch,
+        "anchor_scope_comparison": scope_rows,
+        "census_mismatch": census_mismatch,
+        "placement_mismatch": placement_mismatch,
     }
 
 
@@ -447,6 +661,7 @@ def main() -> int:
     part_regions()
     d_evidence = part_d_frame()
     c_evidence = part_c_frame()
+    precond = part_preconditions()
     dev = part_development()
 
     doc = {
@@ -466,6 +681,13 @@ def main() -> int:
             "DEVELOPMENT figures are diagnostics that exercise the code paths. They are not "
             "study results and no metric is scored from them."
         ),
+        "structural_preconditions_fail_closed": [
+            BF.PAGE_SET_MISMATCH,
+            BF.NEUTRAL_SKELETON_MISMATCH,
+            BF.PRINT_LINES_EMITTED_DRIFT,
+            BF.ANCHOR_PLACEMENT_REFUSED,
+        ],
+        "synthetic_precondition_evidence": precond,
         "synthetic_d_evidence": d_evidence,
         "synthetic_c_evidence": c_evidence,
         "development": dev,
