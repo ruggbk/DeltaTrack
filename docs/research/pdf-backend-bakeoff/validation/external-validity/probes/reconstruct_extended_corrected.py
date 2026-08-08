@@ -104,18 +104,26 @@ def wants_space(prev, cur) -> bool:
 # ------------------------------------------------------------------- reconstruction
 
 
-def _cells(cluster: list) -> list[tuple[int | None, str]]:
-    """One printed line as an ordered (gid, char) stream.
+def _cells(cluster: list, decider=None) -> list[Cell]:
+    """One printed line as an ordered `Cell` stream.
 
     Ordering is by PEN ORIGIN, not by ink left edge: on tight settings the two agree, they
     diverge on unusual side bearings, and the pen order is the one the rule's arithmetic
-    assumes. Every space here is INSERTED by the rule, so it carries `gid=None`.
+    assumes. Every space here is INSERTED by the rule, so it carries `ngid=None`.
+
+    `decider` is the WORD-BOUNDARY DECISION FUNCTION. It defaults to `wants_space`, so
+    ordinary X is byte-for-byte what it was; nothing about the scoring path changes. The
+    parameter exists so `x2_verify` can build the A25 counterfactual X-prime -- ordinary X
+    plus PDFium's generated-boundary decisions -- WITHOUT injecting generated characters
+    into X's contract, which is the object X's architecture deliberately excludes. The
+    boundary layer is the only place the counterfactual differs.
     """
+    want = decider or wants_space
     items = sorted(cluster, key=lambda g: g[ORIGIN_X])
     out: list[Cell] = []
     prev = None
     for g in items:
-        if prev is not None and wants_space(prev, g):
+        if prev is not None and want(prev, g):
             # X INVENTED this space: no provenance and no neutral identity.
             out.append(Cell(ngid=None, char=" ", sci=None))
         # X's contract carries no U+0020 at all, so every glyph here is neutral ink and
@@ -136,8 +144,8 @@ def _cells(cluster: list) -> list[tuple[int | None, str]]:
     return collapsed
 
 
-def _line_text(cluster: list) -> str:
-    return "".join(c.char for c in _cells(cluster))
+def _line_text(cluster: list, decider=None) -> str:
+    return "".join(c.char for c in _cells(cluster, decider))
 
 
 def cluster_lines(page) -> list[list]:
@@ -182,7 +190,7 @@ def is_chrome(text: str, row: list, body_size: float) -> bool:
     return bool(body_size) and row_size < _CHROME_SIZE_RATIO * body_size
 
 
-def reconstruct_page(page) -> tuple[Page, list[EmittedLine], dict]:
+def reconstruct_page(page, decider=None) -> tuple[Page, list[EmittedLine], dict]:
     """Production's `Page` AND the provenance-carrying emitted printed lines, together.
 
     Both come from ONE pass, so the emitted lines cannot drift from the Page that anchors
@@ -200,7 +208,7 @@ def reconstruct_page(page) -> tuple[Page, list[EmittedLine], dict]:
     for row in rows:
         ordered = sorted(row, key=lambda g: g[ORIGIN_X])
         n_no_adv += sum(1 for g in ordered if g[ADVANCE] is None)
-        cells = _cells(ordered)
+        cells = _cells(ordered, decider)
         text = "".join(c.char for c in cells)
         if is_chrome(text, ordered, body_size):
             n_chrome += 1
@@ -224,7 +232,7 @@ def reconstruct_page(page) -> tuple[Page, list[EmittedLine], dict]:
         if not printed:
             continue
         sizes = [g[SIZE] for g in printed]
-        fwr = _first_word_right(content_glyphs)
+        fwr = _first_word_right(content_glyphs, decider)
         if fwr is None:
             continue
         geom = LineGeom(printed[0][X0], max(g[X1] for g in printed), fwr)
@@ -252,8 +260,9 @@ def reconstruct_page(page) -> tuple[Page, list[EmittedLine], dict]:
     return Page(page.page_number, tuple(merged), tuple(print_lines), tuple(ranges)), emitted, diag
 
 
-def _first_word_right(content_glyphs: list) -> float | None:
+def _first_word_right(content_glyphs: list, decider=None) -> float | None:
     """Right x-edge of the first word. Same two-test shape as the frozen module, new rule."""
+    want = decider or wants_space
     first_word_right: float | None = None
     prev = None
     for g in content_glyphs:
@@ -261,7 +270,7 @@ def _first_word_right(content_glyphs: list) -> float | None:
             if first_word_right is None:
                 continue
             break
-        if prev is not None and wants_space(prev, g):
+        if prev is not None and want(prev, g):
             break
         first_word_right = g[X1]
         prev = g

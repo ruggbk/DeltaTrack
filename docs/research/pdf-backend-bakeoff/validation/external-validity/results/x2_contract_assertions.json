@@ -2,14 +2,15 @@
  "population": "DEVELOPMENT",
  "assertions": {
   "X2a": "no glyph with codepoint 32 exists in the contract, on any page",
-  "X2b": "re-admitting the engine's spaces changes no reconstructed printed line"
+  "X2b": "on all X2-b-testable PDFium-generated boundaries, supplying PDFium's generated boundary decisions in addition to X's ordinary geometric decisions must change no reconstructed printed line"
  },
- "method": "X2-b RE-RUNS the arm and compares every reconstructed printed line in order; it is not an assertion about the code",
- "RULING": "A24.1 froze 'the engine's spaces' as PDFium-GENERATED U+0020 (FPDFText_IsGenerated == true). X2-b exists to prove the extended rule is not secretly consuming PDFium's own inserted boundary decisions -- the phase-3 D2 finding -- while X2-a separately guarantees no U+0020 crosses the seam. Requiring every CONTENT-STREAM space to be reproduced would turn X2-b into a partial H/X equivalence gate, making a genuine architecture disagreement void X before the independent oracle could say which arm is right.",
+ "method": "A25: the counterfactual re-admits the BOUNDARY DECISION, not the generated glyph. X' uses X's own contract, surviving ink glyphs, clustering, ordering, chrome and margin handling and downstream reconstruction; only the word-boundary decision differs. No generated character ever enters X's contract.",
  "X2a_no_u0020": true,
  "X2b_gate_generated_only": true,
+ "X2b_testable_boundaries_total": 1559,
+ "X2b_gate_is_vacuous_SEE_A25": false,
  "X2b_diagnostic_all_source_spaces": false,
- "X2b_gate_is_vacuous_SEE_A25": true,
+ "diagnostic_is_authoritative": false,
  "fixtures": [
   {
    "path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
@@ -19,11 +20,58 @@
    "u0020_dropped": 1576,
    "X2a_codepoint_32_glyphs": 0,
    "X2a_pass": true,
-   "X2b_reconstructed_lines_compared": 191,
-   "X2b_generated_only_pass": true,
-   "X2b_generated_only_differing_lines": [],
-   "X2b_all_u0020_pass": false,
-   "X2b_all_u0020_differing_lines": [
+   "boundary_census": {
+    "generated_u0020_total": 1347,
+    "no_real_neighbour_before": 0,
+    "no_real_neighbour_after": 0,
+    "neighbour_is_content_stream_space": 0,
+    "candidate_pairs": 1347
+   },
+   "boundary_classification": {
+    "both_survive_x_contract": 1347,
+    "not_in_x_contract": 0,
+    "same_x_line": 1346,
+    "different_x_lines": 1,
+    "not_adjacent_in_pen_order": 0,
+    "testable": 1346
+   },
+   "X2b_testable_boundaries": 1346,
+   "X2b_boundary_level_recovered_by_X": 1346,
+   "X2b_boundary_level_missed_by_X": 0,
+   "X2b_examples": [
+    {
+     "page": 1,
+     "sci_before": 211,
+     "char_before": "Y",
+     "sci_after": 213,
+     "char_after": "2",
+     "ordinary_wants_space": true,
+     "pdfium_generated_boundary": true
+    },
+    {
+     "page": 1,
+     "sci_before": 42,
+     "char_before": "T",
+     "sci_after": 44,
+     "char_after": "S",
+     "ordinary_wants_space": true,
+     "pdfium_generated_boundary": true
+    },
+    {
+     "page": 1,
+     "sci_before": 27,
+     "char_before": "H",
+     "sci_after": 29,
+     "char_after": "C",
+     "ordinary_wants_space": true,
+     "pdfium_generated_boundary": true
+    }
+   ],
+   "X2b_printed_lines_compared": 191,
+   "X2b_gate_pass": true,
+   "X2b_differing_lines": [],
+   "X2b_diagnostic_all_source_spaces_pass": false,
+   "X2b_diagnostic_all_source_differing_lines": [
     "p1 line 4: 'H.R. 2029' != 'H. R. 2029'"
    ]
   },
@@ -35,14 +83,61 @@
    "u0020_dropped": 1612,
    "X2a_codepoint_32_glyphs": 0,
    "X2a_pass": true,
-   "X2b_reconstructed_lines_compared": 191,
-   "X2b_generated_only_pass": true,
-   "X2b_generated_only_differing_lines": [],
-   "X2b_all_u0020_pass": true,
-   "X2b_all_u0020_differing_lines": []
+   "boundary_census": {
+    "generated_u0020_total": 214,
+    "no_real_neighbour_before": 0,
+    "no_real_neighbour_after": 0,
+    "neighbour_is_content_stream_space": 0,
+    "candidate_pairs": 214
+   },
+   "boundary_classification": {
+    "both_survive_x_contract": 214,
+    "not_in_x_contract": 0,
+    "same_x_line": 213,
+    "different_x_lines": 1,
+    "not_adjacent_in_pen_order": 0,
+    "testable": 213
+   },
+   "X2b_testable_boundaries": 213,
+   "X2b_boundary_level_recovered_by_X": 213,
+   "X2b_boundary_level_missed_by_X": 0,
+   "X2b_examples": [
+    {
+     "page": 1,
+     "sci_before": 930,
+     "char_before": "6",
+     "sci_after": 932,
+     "char_after": "l",
+     "ordinary_wants_space": true,
+     "pdfium_generated_boundary": true
+    },
+    {
+     "page": 1,
+     "sci_before": 756,
+     "char_before": "3",
+     "sci_after": 758,
+     "char_after": "T",
+     "ordinary_wants_space": true,
+     "pdfium_generated_boundary": true
+    },
+    {
+     "page": 1,
+     "sci_before": 990,
+     "char_before": "7",
+     "sci_after": 992,
+     "char_after": "2",
+     "ordinary_wants_space": true,
+     "pdfium_generated_boundary": true
+    }
+   ],
+   "X2b_printed_lines_compared": 191,
+   "X2b_gate_pass": true,
+   "X2b_differing_lines": [],
+   "X2b_diagnostic_all_source_spaces_pass": true,
+   "X2b_diagnostic_all_source_differing_lines": []
   }
  ],
  "adapter_blob": "ed3dcd909b0db5bb46223e826e72c7646f73208d",
- "reconstructor_blob": "ed6ea3db3d4992693088a40723aab99ff80e75cd",
- "verifier_blob": "9b2b6f9d60b992ca52d20c0d85f230e042995902"
+ "reconstructor_blob": "62a5b52a5479e066531f323ea8689329613135c4",
+ "verifier_blob": "ccb191ccb15d7e455d63ff5bd3ede2274d6cefcf"
 }

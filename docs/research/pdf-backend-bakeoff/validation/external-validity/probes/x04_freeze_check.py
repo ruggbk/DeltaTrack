@@ -662,6 +662,15 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
             pop = ev.get("population", "")
             fixtures = ev.get("fixtures", [])
             problems = []
+            # A25: the DENOMINATOR is part of the gate. X2-b's first implementation passed
+            # on zero effective comparisons, so a PASS alone cannot establish non-vacuity --
+            # it must be evidenced. Both the testable count and the vacuity flag are checked
+            # here, independently of the boolean.
+            n_testable = ev.get("X2b_testable_boundaries_total")
+            if not isinstance(n_testable, int) or n_testable <= 0:
+                problems.append(f"X2b_testable_boundaries_total is {n_testable!r}, must be a positive int")
+            if ev.get("X2b_gate_is_vacuous_SEE_A25") is not False:
+                problems.append("X2b_gate_is_vacuous_SEE_A25 is not False")
             member_paths = {f["path"] for m in members for f in m["files"]}
             for fx in fixtures:
                 fp = REPO / str(fx.get("path", ""))
