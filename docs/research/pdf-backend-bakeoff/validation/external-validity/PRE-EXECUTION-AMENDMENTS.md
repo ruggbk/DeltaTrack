@@ -1953,7 +1953,7 @@ no holdout document opened.
 
 ```json
 {"id": "A26", "class": "TOOLING",
- "commits": ["PENDING"],
+ "commits": ["af10155"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["HARNESS-PLAN.md"],
@@ -2040,6 +2040,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `070098e` | `x2_verify.py`, `x04_freeze_check.py`, `neutral_identity.py`, `x08_neutral_identity.py`, `x10_reconstruction_signature.py` | A24 record cleanup + finite-geometry enforcement (A24); X2-b vacuity found (A25) |
 | `46b343a` | `x2_verify.py`, `x04_freeze_check.py`, `reconstruct_extended_corrected.py` | A25 resolved: X2-b boundary-decision counterfactual |
 | `4db8cc8` | `x2_verify.py` | A25 defects: raw boundary stream; page-qualified sabotage |
+| `af10155` | `HARNESS-PLAN.md` | downstream-harness contract/dependency plan (A26, TOOLING) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
