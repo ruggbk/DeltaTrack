@@ -2321,7 +2321,7 @@ carry it, and does not expand into §8.
 
 ```json
 {"id": "A30", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["23af18e"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["HARNESS-PLAN.md", "probes/anchor_provenance.py",
