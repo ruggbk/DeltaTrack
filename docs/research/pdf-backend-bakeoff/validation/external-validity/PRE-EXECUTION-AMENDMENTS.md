@@ -2158,7 +2158,7 @@ no holdout document opened, no harness component built.
 
 ```json
 {"id": "A28", "class": "SUBSTANTIVE",
- "commits": ["PENDING"],
+ "commits": ["0cf7daf"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["HARNESS-PLAN.md", "probes/methodology_contracts.py",
@@ -2333,6 +2333,7 @@ thematic amendments keep the *reasoning* while this keeps the *bookkeeping*.
 | `4db8cc8` | `x2_verify.py` | A25 defects: raw boundary stream; page-qualified sabotage |
 | `af10155` | `HARNESS-PLAN.md` | harness plan created; reasoning A26, **accounting A27** |
 | `2938312` | `HARNESS-PLAN.md`, `probes/x14_anchor_bridge.py` | harness contract rulings + anchor bridge proof (A27) |
+| `0cf7daf` | `HARNESS-PLAN.md`, `probes/methodology_contracts.py`, `probes/x15_methodology_contracts.py`, `probes/x14_anchor_bridge.py`, `probes/run_hybrid.py` | 4.5 frozen; stimulus identity; render scale; bilateral bridge (A28) |
 
 The last three are declared **by A22's own JSON block**, not by this one, so the record that
 carries the reasoning also carries the bookkeeping for the commits it produced. They are
