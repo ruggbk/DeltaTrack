@@ -16,8 +16,8 @@ level in Defense-class bills — is indistinguishable from an account. The level
 terrain and the deterministic-geometry signal that *does* work are recorded in
 [0012](0012-pdf-heading-levels.md); this record does not restate them.
 
-**A mechanical money rollup is not meaningful, and a semantic one needs work #54
-does not contain.** A read-only prototype summed
+**A mechanical money rollup is not meaningful; a semantic rollup is separate work,
+tracked in #147.** A read-only prototype summed
 per-account amounts up the tree and overcounted the committee report's
 `Total, title I, Department of Commerce` by 32–44%. Isolating the true
 appropriation base from subtotals, reservations, and transfers needs

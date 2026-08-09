@@ -85,9 +85,10 @@ Alternatives:
   also by the SAA/CAO install-gate reality above — is a separate open question to be
   decided on its own, tracked in
   [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112).
-- The server-rendered web channel is not invalidated as a way to serve the UI or to
-  work with already-public bills, but it **cannot be the path for user-supplied
-  drafts.** The sensitive-input path has to run client-side.
+- The server-rendered web channel is not invalidated as a way to serve the UI, or to
+  work with already-public bills where no user-provided content is transmitted. But a
+  hosted path that ingests uploaded bills **is noncompliant with this rule**, whoever
+  operates it. The sensitive-input path has to run client-side.
 - This is why the client-side PDF.js extraction result ([0003](0003-pdfjs-client-side-viability.md))
   matters beyond convenience: it is what makes a browser channel able to honor this rule
   for the hardest input.
@@ -97,12 +98,3 @@ Alternatives:
 - Telemetry, crash reporting, or "send us the file that failed" diagnostics that would
   carry bill content off-device are foreclosed by this rule. Diagnostics must be local
   or content-free.
-- **The shipped hosted channel is a known exception, not a revision of this rule.** The
-  upload page at deltatrack.agoradmv.org ([docs/web-compare.md](../web-compare.md))
-  takes PDF or XML uploads and diffs them server-side, so it does not meet this rule.
-  It is a deliberate transitional state while a compliant channel (browser extension or
-  similarly light local install) is built: the rule stands and the deployment is out of
-  compliance, knowingly. The page carries a notice telling users their files are
-  processed on the project's server and asking them not to upload drafts or other
-  non-public bill text, pointing them to a local run instead. Retiring the exception is
-  tracked in [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112).
