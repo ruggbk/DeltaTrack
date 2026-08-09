@@ -3175,12 +3175,13 @@ conditions; H 541/541 and C 4/4 at both scales; 1164/1164 DEVELOPMENT regions re
 
 ```json
 {"id": "A35", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["acc7c6a", "4ba99da"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": [],
+ "files_touched": ["probes/adjudicator_prompt.md", "probes/build_oracle.py",
+                   "probes/x21_build_oracle.py"],
  "supersedes_text_in": "none",
- "status": "CONTRACT -- obligations fixed before either component exists"}
+ "status": "IMPLEMENTED -- one STOP open for review (REGION_IN_BOTH_FRAMES)"}
 ```
 
 **Why SUBSTANTIVE despite `affects_scoring_rule: false`.** `adjudicator_prompt.md` and
@@ -3280,6 +3281,34 @@ really changes · 18 no M6/amount-attribution question is asked · 19 the A33.5 
 instruction is present · 20 realized blind-id uniqueness is checked after every instance,
 controls and R1 repeats included.
 
+### A35.5 — STOP, open for review: `REGION_IN_BOTH_FRAMES`
+
+**A region can be in the C-frame and the D-frame, and the frozen sources do not say what
+happens then.** `build_oracle` **refuses**; it does not choose.
+
+Measured on the same DEVELOPMENT frames `x17` committed — region counts **238 / 239 / 267**
+match `x17` exactly — **17 of 24 C-frame regions (71 %) are also D-frame regions**; on `x21`'s
+20-page demonstration window it is **18 of 24**. The mechanism is structural, not incidental:
+the C draw ranks **every** region of a P-head document while ~70 % of regions carry text
+discordance, and **A27.2 forbids replacing a drawn region after inspecting its content**, so it
+cannot be designed away in the draw either.
+
+| undetermined | why it is outcome-affecting |
+|---|---|
+| one stimulus or two? | A28.3's base identity is `("region", doc_sha, page, ordinal)` with **no frame component**, so two instances of one region are **unrepresentable** — A30.5 sees a duplicate identity and aborts. Adding a frame component would be new methodology |
+| which adjudication route? | §5.5.1 sends C-frame to **AI** adjudication and D-frame to **human** adjudication item by item. An overlapping region has two routes and no rule to pick one |
+| which denominators? | §5.8's "never pooled" governs **metrics**, not set membership, so it does not settle whether the region counts in RQ1, RQ2 or both |
+
+Choosing here would silently decide **who adjudicates 71 % of the C-frame** and which
+denominators move. `x21` records the stop with its instances; the ruling belongs to review.
+
+Note this contradicts HARNESS-PLAN §7's "**Unresolved outcome-affecting ambiguities: ZERO**".
+That sweep looked for surviving *"permitted"* and *"seeded"* phrases — a choice a source hands
+to implementation explicitly. This ambiguity is of a different kind: it arises from the
+**interaction** of two independently frozen rules, neither of which delegates anything, so a
+phrase-level sweep could not have found it. §7's claim is not rewritten here; it is corrected
+forward, as A34 corrected A33.
+
 ### Population and boundary
 
 DEVELOPMENT + SYNTHETIC only. **No holdout document is opened**, an explicit guard enforces it,
@@ -3287,6 +3316,9 @@ nothing is adjudicated or scored, and none of `results/frames.json`, `results/or
 `results/oracle_adjudicated.json`, `results/metrics.json`, `results/scores.json` or
 `EXECUTION-START.json` is created. `score_metrics.py` and `decide_architecture.py` are **not**
 started.
+
+**Realized:** `x21` 55/55 controls pass, **1 stop condition**. DEVELOPMENT: 3 documents, 193
+stimuli, 193 images rendered, 17 R1 repeats.
 
 ---
 
