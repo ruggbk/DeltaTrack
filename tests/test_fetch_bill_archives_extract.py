@@ -82,10 +82,19 @@ def write_oversized_archive(source: Path, name: str, declared_sizes: list[int]) 
     return path
 
 
-# The member timestamp every fixture archive here is stamped with (#480). Any fixed
-# value would do; the DOS epoch is the floor ZIP can represent and reads as obviously
-# synthetic rather than as a plausible "now".
+# The timestamp ``archive_bytes`` stamps its member with (#480). It governs that one
+# helper, NOT the other ZIP builders above -- those keep the wall clock, because nothing
+# compares their bytes and a fixed stamp there would buy nothing. Any fixed value would
+# do; the DOS epoch is the floor ZIP can represent and reads as obviously synthetic
+# rather than as a plausible "now".
 FIXED_ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+
+# The mode ``writestr`` puts on a normal file when it builds the ``ZipInfo`` itself.
+# Supplying our own ``ZipInfo`` opts out of those defaults, so this is set back
+# explicitly rather than left to ``_open_to_write``, which happens to back-fill a zero
+# ``external_attr`` with the same value. Relying on that back-fill would make the
+# fixture's member mode a side effect of an implementation detail two call levels down.
+NORMAL_FILE_EXTERNAL_ATTR = 0o600 << 16
 
 
 def archive_bytes(name: str = "119-hr") -> bytes:
@@ -97,9 +106,11 @@ def archive_bytes(name: str = "119-hr") -> bytes:
     Passing an explicit ``ZipInfo`` is what buys it -- ``writestr`` given a bare
     arcname stamps the member with the wall clock instead (#480).
     """
+    info = zipfile.ZipInfo(f"{name}-1.xml", FIXED_ZIP_DATE_TIME)
+    info.external_attr = NORMAL_FILE_EXTERNAL_ATTR
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr(zipfile.ZipInfo(f"{name}-1.xml", FIXED_ZIP_DATE_TIME), b"<billStatus/>")
+        zf.writestr(info, b"<billStatus/>")
     return buf.getvalue()
 
 
@@ -121,11 +132,13 @@ class TestArchiveBytesIsDeterministic:
     def test_output_does_not_depend_on_the_wall_clock(self, monkeypatch):
         def at(clock, build):
             with monkeypatch.context() as m:
-                # A no-op on 3.12, where `writestr` reads `time.localtime` unconditionally.
-                # From 3.13 it resolves the stamp through `ZipInfo._for_archive`, which
-                # prefers SOURCE_DATE_EPOCH via `time.gmtime` -- so with that variable set
-                # in the environment the control below would see one timestamp under both
-                # clocks and fail, reporting a broken gate rather than a set env var.
+                # A no-op through 3.13, where `writestr` reads `time.localtime`
+                # unconditionally. From 3.14 it resolves the stamp through
+                # `ZipInfo._for_archive`, which prefers SOURCE_DATE_EPOCH via
+                # `time.gmtime` -- so with that variable set in the environment the
+                # control below would see one timestamp under both clocks and fail,
+                # reporting a broken gate rather than a set env var. Version boundary
+                # checked against real 3.13.15 and 3.14.6 interpreters, not inferred.
                 m.delenv("SOURCE_DATE_EPOCH", raising=False)
                 m.setattr(time, "localtime", lambda *a, **k: time.struct_time(clock))
                 return build()
@@ -150,6 +163,26 @@ class TestArchiveBytesIsDeterministic:
         assert at(early, stamped_by_the_wall_clock) != at(late, stamped_by_the_wall_clock)
 
         assert at(early, archive_bytes) == at(late, archive_bytes)
+
+    def test_only_the_timestamp_differs_from_the_old_fixture(self, monkeypatch):
+        # Supplying an explicit ``ZipInfo`` opts out of every default ``writestr`` would
+        # have filled in, not just the timestamp -- compression, flags, and the member's
+        # mode among them. Pinning the OLD construction to the same timestamp isolates
+        # that: with the clock held equal, any surviving difference is metadata the
+        # repair moved by accident rather than the clock it moved on purpose.
+        #
+        # Compared over raw bytes rather than an enumerated field list, because the
+        # field nobody thought to enumerate is exactly the one that would slip through.
+        def old_construction() -> bytes:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                zf.writestr("119-hr-1.xml", b"<billStatus/>")
+            return buf.getvalue()
+
+        monkeypatch.delenv("SOURCE_DATE_EPOCH", raising=False)
+        monkeypatch.setattr(time, "localtime", lambda *a, **k: time.struct_time(FIXED_ZIP_DATE_TIME + (0, 1, 0)))
+
+        assert old_construction() == archive_bytes()
 
     def test_the_fixed_timestamp_did_not_cost_the_archive(self):
         # A helper that returned a constant would satisfy the test above perfectly, so
