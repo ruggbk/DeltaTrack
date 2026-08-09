@@ -185,20 +185,30 @@ class TestDetectorCanFail:
         source = f"import re\nX = re.compile({pattern})\n"
         assert find_appropriations_vocabulary(source), f"gate missed {pattern}"
 
-    def test_flags_a_trigger_hidden_in_a_new_helper_module(self, tmp_path: Path):
+    def test_flags_a_trigger_hidden_in_a_new_helper_module(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Coverage, not just matching: a NEW module must not escape the scan.
 
-        Verified through the same discovery function the gate uses, so this fails if
-        `structural_modules` is ever narrowed back to a fixed list.
+        Discovery is proven DYNAMIC -- a module appearing beneath the configured source
+        root joins the scan on its own, so narrowing `structural_modules` back to a fixed
+        roster fails here. An isolated source root keeps that proof from mutating the
+        shared checkout under xdist. `test_scanned_surface_is_not_empty` separately
+        proves the production `SRC` reaches the real engine surface.
+
+        History: #571 moved this probe out of `src/` after a cross-worker
+        enumerate -> unlink -> read race.
         """
-        helper = SRC / "parsers" / "_gate_probe_tmp.py"
-        assert not helper.exists(), "probe path already in use"
+        helper = tmp_path / "deltatrack" / "parsers" / "_gate_probe_tmp.py"
+        helper.parent.mkdir(parents=True)
         helper.write_text('import re\nRULE = re.compile(r"^For necessary expenses of")\n')
-        try:
-            assert helper.resolve() in {p.resolve() for p in structural_modules()}
-            assert find_appropriations_vocabulary(helper.read_text())
-        finally:
-            helper.unlink()
+
+        # Nested one level below the root so the assertion also covers rglob's recursion,
+        # which is what a new module in a new sub-package would rely on.
+        monkeypatch.setattr(f"{__name__}.SRC", tmp_path / "deltatrack")
+
+        assert helper.resolve() in {p.resolve() for p in structural_modules()}, (
+            "a new module beneath the configured source root did not join the scan -- discovery is no longer dynamic"
+        )
+        assert find_appropriations_vocabulary(helper.read_text())
 
 
 def test_detector_ignores_prose_about_the_rule():

@@ -91,6 +91,12 @@ def test_required_test_context_is_an_aggregator_over_the_matrix() -> None:
     a skipped matrix leg skips the aggregator too (no verdict at all), and without
     the explicit result comparison a skipped or cancelled leg counts as a pass,
     making the aggregator a rubber stamp.
+
+    Reading the result, comparing against `success`, and exiting non-zero are pinned as
+    one CONNECTED contract rather than three independent facts -- see the comment at the
+    assertions below. That contract is load-bearing for `fail-fast: false`: the matrix may
+    now run every leg to completion, and it stays non-permissive only because this
+    aggregator still fails whenever any leg is not `success`.
     """
     jobs = _workflow()["jobs"]
     aggregator = jobs.get("test")
@@ -109,10 +115,76 @@ def test_required_test_context_is_an_aggregator_over_the_matrix() -> None:
         "the 'test' aggregator must run even when the matrix fails or is skipped, "
         "or a skipped leg leaves the required check with no verdict"
     )
-    assert any(f"needs.{needs[0]}.result" in str(step) for step in aggregator.get("steps", [])), (
-        "the 'test' aggregator must compare needs.*.result explicitly: a skipped "
-        "dependency reports 'skipped', not 'success', and without the comparison "
-        "the aggregator is a rubber stamp"
+    # Merely MENTIONING the result is not enough. `run: echo "${{ needs.test-suite.result
+    # }}"` contains the string and enforces nothing, so the required context would have
+    # become a rubber stamp with this test still green. Neither is it enough to find the
+    # result, a `!= "success"` and an `exit 1` INDEPENDENTLY -- this passes all three and
+    # always exits 0, because the comparison is not reading the result it just bound:
+    #
+    #     env: {MATRIX_RESULT: "${{ needs.test-suite.result }}"}
+    #     run: if [ "success" != "success" ]; then exit 1; fi; echo "$MATRIX_RESULT"
+    #
+    # So pin the parts as one connected contract: the operand carrying the matrix result
+    # is the operand compared against `success`, and the mismatch branch exits non-zero.
+    result_expr = f"needs.{needs[0]}.result"
+    carriers = []
+    gating = []
+    for step in aggregator.get("steps", []):
+        bound = [name for name, value in (step.get("env", {}) or {}).items() if result_expr in str(value)]
+        run = str(step.get("run", ""))
+        if not bound and result_expr not in run:
+            continue
+        gating.append(step)
+        # However the result reaches the script: a shell variable bound to it in `env`,
+        # or the expression interpolated straight into the run block.
+        carriers += [rf'"?\$\{{?{re.escape(name)}\}}?"?' for name in bound]
+        if result_expr in run:
+            carriers.append(r'"?\$\{\{\s*' + re.escape(result_expr) + r'\s*\}\}"?')
+    assert gating, (
+        f"no step in the 'test' aggregator reads {result_expr}: a skipped or failed leg "
+        "reports 'skipped'/'failure', not 'success', and an aggregator that never reads "
+        "the result passes regardless"
+    )
+    script = " ".join(str(step.get("run", "")) for step in gating)
+    normalised = " ".join(script.split())
+    # Collapse every operand that CARRIES the matrix result to one token, so the assertion
+    # below is about this value being compared -- not about a `!= "success"` that merely
+    # shares a script with a reference to the result.
+    probe = normalised
+    for pattern in carriers:
+        probe = re.sub(pattern, "<RESULT>", probe)
+    compared = re.search(r'<RESULT> *!= *"?success"?', probe) or re.search(r'"?success"? *!= *<RESULT>', probe)
+    assert compared, (
+        "the 'test' aggregator must compare THE MATRIX RESULT against 'success'. It reads "
+        f"{result_expr}, but no `!=` puts that value on one side and 'success' on the "
+        "other, so whatever the comparison gates on, it is not the matrix outcome -- and "
+        "every leg result (failure, cancelled, skipped) satisfies the required check."
+    )
+    assert "exit 1" in normalised, (
+        "the 'test' aggregator's non-success branch must exit non-zero. Without it the "
+        "comparison is decorative and the required check reports success anyway."
+    )
+
+
+def test_ci_matrix_does_not_cancel_sibling_legs() -> None:
+    """One leg's failure must not erase the other leg's verdict.
+
+    The matrix legs test different supported interpreter surfaces -- the newest 3.12 patch
+    and the declared floor -- so their verdicts are not interchangeable. Under the default
+    ``fail-fast: true`` a failure in either one cancels the other mid-run, and the cancelled
+    leg reports nothing: a genuine floor-only regression can hide behind an unrelated flake
+    on the newest patch, and the reviewer sees three red checks from one cause.
+
+    This is the same rule ``test_ci_does_not_cancel_in_progress_runs`` enforces one level up,
+    for the same reason: never destroy a verdict. It does **not** make CI permissive. A
+    failed leg still fails, and ``test_required_test_context_is_an_aggregator_over_the_matrix``
+    separately pins the aggregator that demands success from every leg.
+    """
+    strategy = _workflow()["jobs"]["test-suite"].get("strategy", {})
+    assert strategy.get("fail-fast") is False, (
+        "ci.yml's matrix does not set `fail-fast: false`, so one leg's failure cancels the "
+        "other before it reports. The cancelled leg's verdict is lost, which is how a "
+        "floor-only regression hides behind an unrelated failure on the newest patch."
     )
 
 
