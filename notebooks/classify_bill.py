@@ -1,0 +1,134 @@
+import re
+
+# Node-opening patterns
+RESTRICT = re.compile(r"^\s*None of the funds", re.IGNORECASE)
+TRANSFER = re.compile(r"^\s*Of (?:the )?amounts", re.IGNORECASE)
+APPROP = re.compile(r"^\s*For\b", re.IGNORECASE | re.DOTALL)
+RESCISSION = re.compile(r"is hereby rescinded", re.IGNORECASE)
+DIRECTIVE = re.compile(r"^\s*The\s+\w[\w\s]+(?:shall|may not)\b", re.IGNORECASE)
+REPROGRAM = re.compile(r"^\s*no project may be (?:increased|decreased)", re.IGNORECASE)
+DELAYED_APPROP = re.compile(r"^\s*\$[\d,]+.{0,50}\bshall become available\b", re.IGNORECASE | re.DOTALL)
+APPROP_ALT = re.compile(r"there (?:is|are) appropriated", re.IGNORECASE)
+FEE = re.compile(r"fee in the amount of\s+\$|impose a fee|\bpays a fee of\s+\$|\ba fee of\s+\$", re.IGNORECASE)
+
+# Sub-clause patterns
+PROVIDED_RE = re.compile(r"\bProvided(?:\s+further)?,?\s+That\b", re.IGNORECASE)
+EARMARK = re.compile(r"of the amount.{0,50}under this heading.{0,100}specified in the table", re.IGNORECASE | re.DOTALL)
+AVAILABILITY = re.compile(r"of the amount.{0,100}shall remain available until", re.IGNORECASE | re.DOTALL)
+SUB_ALLOC = re.compile(r"^\s*,?\s*\$[\d,]+\s+shall\s+be\s+(?:for|available)", re.IGNORECASE)
+CAP = re.compile(r"not (?:more than|to exceed)\s+\$[\d,]+", re.IGNORECASE)
+OF_WHICH_AVAIL = re.compile(r"^\s*of which.{0,80}\bshall remain available\b", re.IGNORECASE | re.DOTALL)
+OF_WHICH_ALLOC = re.compile(r"^\s*of which\b", re.IGNORECASE)
+
+# Splitting / extraction helpers
+OF_WHICH_RE = re.compile(r",?\s*\bof which\b", re.IGNORECASE)
+IN_ADDITION_RE = re.compile(r";\s*and,?\s*in addition,", re.IGNORECASE)
+CAP_AMOUNT_RE = re.compile(r"not (?:more than|to exceed)\s+\$[\d,]+(?:\.\d+)?", re.IGNORECASE)
+DOLLAR = re.compile(r"\$([\d,]+(?:\.\d+)?)")
+
+PRIMARY_LABELS = {"appropriation", "transfer", "rescission", "fee"}
+
+
+def classify_text(text):
+    if not text:
+        return None
+    if RESTRICT.match(text):
+        return "restriction"
+    if TRANSFER.match(text):
+        return "transfer"
+    if APPROP.match(text):
+        return "rescission" if RESCISSION.search(text) else "appropriation"
+    if RESCISSION.search(text):
+        return "rescission"
+    if DIRECTIVE.match(text):
+        return "directive"
+    if REPROGRAM.match(text):
+        return "cap"
+    if DELAYED_APPROP.match(text):
+        return "appropriation"
+    if APPROP_ALT.search(text):
+        return "rescission" if RESCISSION.search(text) else "appropriation"
+    if FEE.search(text):
+        return "fee"
+    if EARMARK.search(text):
+        return "earmark"
+    if AVAILABILITY.search(text):
+        return "availability"
+    if SUB_ALLOC.match(text):
+        return "sub_allocation"
+    if OF_WHICH_AVAIL.match(text):
+        return "availability"
+    if OF_WHICH_ALLOC.match(text):
+        return "sub_allocation"
+    if CAP.search(text):
+        return "cap"
+    return "unknown"
+
+
+def primary_amount(text):
+    if not text:
+        return None
+    pre_provided = text.split("Provided")[0]
+    m = DOLLAR.search(pre_provided)
+    return float(m.group(1).replace(",", "")) if m else None
+
+
+def split_clauses(text):
+    """Split on Provided That → ; and in addition → of which, in that order."""
+    if not text:
+        return []
+    results = []
+    for i, provided_part in enumerate(PROVIDED_RE.split(text)):
+        level = "primary" if i == 0 else "sub"
+        for j, addition_part in enumerate(IN_ADDITION_RE.split(provided_part)):
+            of_which_parts = OF_WHICH_RE.split(addition_part)
+            for k, clause in enumerate(of_which_parts):
+                sub_level = level if (j == 0 and k == 0) else "sub"
+                prefix = "of which " if k > 0 else ""
+                results.append((prefix + clause.strip(), sub_level))
+    return results
+
+
+def non_cap_amounts(text):
+    """Dollar amounts not preceded by cap language."""
+    return DOLLAR.findall(CAP_AMOUNT_RE.sub("", text))
+
+
+def build_financial_df(tree):
+    import pandas as pd
+
+    dollar_nodes = [n for n in tree.nodes if DOLLAR.search(n.body_text or "")]
+    rows = []
+    for n in dollar_nodes:
+        account = " > ".join(n.display_path[-2:]) if n.display_path else ""
+        node_label = classify_text(n.body_text)
+        for clause_text, level in split_clauses(n.body_text):
+            if not DOLLAR.search(clause_text):
+                continue
+            clean = non_cap_amounts(clause_text)
+            m = DOLLAR.search(CAP_AMOUNT_RE.sub("", clause_text)) or DOLLAR.search(clause_text)
+            amount = float(m.group(1).replace(",", "")) if m else None
+            rows.append(
+                {
+                    "account": account,
+                    "level": level,
+                    "type": node_label if level == "primary" else classify_text(clause_text),
+                    "amount": amount,
+                    "needs_review": len(clean) > 1,
+                    "preview": clause_text[:150],
+                    "body_text": n.body_text or "",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def check_coverage(df, tree):
+    """Return set of body_texts absent from df. Prints a one-line summary."""
+    dollar_node_texts = {n.body_text for n in tree.nodes if DOLLAR.search(n.body_text or "")}
+    df_texts = set(df["body_text"]) if not df.empty else set()
+    dropped = dollar_node_texts - df_texts
+    if dropped:
+        print(f"⚠  {len(dropped)} dollar-amount nodes missing from financial table")
+    else:
+        print(f"✓  All {len(dollar_node_texts)} dollar-amount nodes represented ({len(df)} rows)")
+    return dropped
