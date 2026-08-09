@@ -2643,13 +2643,13 @@ metrics or decision code written.
 
 ```json
 {"id": "A32", "class": "SUBSTANTIVE",
- "commits": ["b78a9df"],
+ "commits": ["b78a9df", "77a7b95"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x18_start_x_discriminability.py",
                    "probes/x19_raster_edge_diagnostic.py"],
  "supersedes_text_in": "none -- A32 does NOT supersede A30.3",
- "status": "MEASURED -- contract frozen at 38fcfc6 before the measurement ran; awaiting review"}
+ "status": "FROZEN -- reviewed; A30.3 stands unchanged"}
 ```
 
 **This block is committed BEFORE the measurement runs.** Every quantity below is defined here
@@ -2779,6 +2779,25 @@ geometric start; same-line collision identities collapsing under the resolver; o
 requiring text/kind/order to disambiguate. A30.3 is **not** patched in the same pass. A finding
 confined to the all-glyph stress census **G** is flagged separately and not generalised to
 heading starts.
+
+### Reviewed: A30.3 stands unchanged, and one denominator correction
+
+External review **approved A32 and left A30.3 unchanged** — `start_ngid`, nearest-x, the
+no-tolerance rule and the tie/refusal semantics are not reopened.
+
+One bookkeeping defect was found and corrected under this amendment (no new number). `x19`
+asserted `measured=True` on a row **before** the per-scale `measure()` calls ran, so the
+struck-through target — which `measure()` correctly returned as
+`NON_GLYPH_VECTOR_INK_IN_BAND` — still counted in the denominator: the summary read
+`n_measured = 16` where only **15** targets had a valid raster-edge measurement. It now reports
+`n_attempted = 16`, `n_cleanly_measured = 15`, `n_excluded_non_glyph_vector_ink = 1`, with the
+flag derived from the results rather than asserted ahead of them.
+
+**The correction changed no geometry result and no review ruling.** The offset arrays were never
+contaminated, because the excluded row carries no `visible_edge_offset_px` at either scale —
+which a new negative control now *proves* rather than assumes, alongside controls that a
+vector-ink exclusion cannot enter the measured denominator and that
+`cleanly_measured + excluded == attempted`. `x18` was not touched.
 
 ### `ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN`
 
