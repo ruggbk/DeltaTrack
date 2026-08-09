@@ -87,7 +87,7 @@ A comment describes the code as it is **now**. History and rejected alternatives
 
 ## Architecture decisions
 
-Every accepted ADR, title as written. The titles are claims, so this list is the decision set itself, not a table of contents: reading it tells you what has been settled without opening anything. Open the file for the argument, the alternatives and the consequences. `tests/test_adr_index.py` regenerates this from `docs/decisions/` and fails if the two disagree, so do not hand-edit an entry; change the ADR's heading and re-run. Adding a record means adding a line here (#481).
+Every **accepted** ADR, title as written. The titles are claims, so this list is the decision set itself, not a table of contents: reading it tells you what has been settled without opening anything. Open the file for the argument, the alternatives and the consequences. `tests/test_adr_index.py` selects by `Status` and regenerates this from `docs/decisions/`, failing if the two disagree, so do not hand-edit an entry; change the ADR's heading and re-run. Adding a record means adding a line here (#481). Records that are proposed, superseded, deprecated or rejected are deliberately absent: they are listed with their status in [docs/decisions/README.md](docs/decisions/README.md), which is where history stays reachable without being presented as architecture in force.
 
 - [1. Diff a structured model of the bill, not document text](docs/decisions/0001-structured-money-diff.md)
 - [2. Use pypdfium2 (PDFium) as the single PDF text engine](docs/decisions/0002-pdfium-single-engine.md)
