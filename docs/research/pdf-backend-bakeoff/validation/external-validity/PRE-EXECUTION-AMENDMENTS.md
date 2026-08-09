@@ -3085,7 +3085,7 @@ and no-tolerance rule unchanged.
 
 ```json
 {"id": "A34", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["f3fd700"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["HARNESS-PLAN.md", "probes/oracle_geometry.py",
