@@ -2643,12 +2643,13 @@ metrics or decision code written.
 
 ```json
 {"id": "A32", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["b78a9df"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": ["probes/x18_start_x_discriminability.py"],
+ "files_touched": ["probes/x18_start_x_discriminability.py",
+                   "probes/x19_raster_edge_diagnostic.py"],
  "supersedes_text_in": "none -- A32 does NOT supersede A30.3",
- "status": "CONTRACT COMMITTED -- metrics frozen before the DEVELOPMENT measurement was run"}
+ "status": "MEASURED -- contract frozen at 38fcfc6 before the measurement ran; awaiting review"}
 ```
 
 **This block is committed BEFORE the measurement runs.** Every quantity below is defined here
@@ -2778,6 +2779,32 @@ geometric start; same-line collision identities collapsing under the resolver; o
 requiring text/kind/order to disambiguate. A30.3 is **not** patched in the same pass. A finding
 confined to the all-glyph stress census **G** is flagged separately and not generalised to
 heading starts.
+
+### `ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN`
+
+Asked explicitly, and answered from the frozen text rather than manufactured. **The eventual
+region bbox / crop operationalization is NOT uniquely determined.** What is frozen:
+
+| where | text |
+|---|---|
+| §5.3 | "The unit is a printed-page REGION: a bounding box in PDF points spanning 6–10 printed lines" (A19 makes it 8 neutral lines) |
+| §5.7 | the record carries "bbox in PDF points, renderer name and version, DPI, and the SHA-256 of the rendered PNG" |
+| A22 I2 | "Oracle rendering uses the region bbox in PDF points. No arm's text may reach the renderer" |
+| A24.2 | a neutral line's x-extent "feeds region geometry and the oracle's rendered bbox" |
+| A28.4 | 300 / 330 DPI, "the same PDF bbox and same source region" |
+
+Each of these says the bbox **is used**, **is recorded**, and **depends on** the skeleton. None
+states **how it is computed** from the region's 8 neutral lines: whether the horizontal extent
+is the union of line ink extents, the full page width, or the justified column; whether any
+padding is added, horizontally or vertically, to admit ascenders and descenders the neutral
+line box excludes; and what pixel-origin convention maps `bbox_x0` to column 0. The
+HARNESS-PLAN control "a rendered crop omits a neutral line the region claims" constrains the
+bbox to *cover* its lines but does not determine its extents.
+
+**This does not weaken the A32 result**, whose quantities are translation-invariant by
+construction, and the A30.3 inversion is exact for *any* crop provided the committed bbox is
+the one rendered. **It does mean `build_oracle.py` remains unauthorized** until the crop rule
+is reviewed. It is not resolved here.
 
 **Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
 no scoring, no holdout document opened, no oracle/frame artifact created, and A30.3 unchanged.
