@@ -46,7 +46,7 @@ never re-derives an earlier stage's decisions.
 ## 2. `build_frames.py` — **BUILT (A31)**
 
 Implemented and tested on SYNTHETIC + DEVELOPMENT material only; evidence in
-`results/x17_build_frames.json`, **35/35 controls passing**. No canonical `results/frames.json`
+`results/x17_build_frames.json`, **56/56 controls passing**. No canonical `results/frames.json`
 exists. The D-frame is emitted as a **complete census** — the A10/A27.3 budget is not applied
 here. Anchor equality uses the **whole emitted production `Anchor` value**; no reduced
 signature was invented. No runner instrumentation was added: each arm's anchors come from the

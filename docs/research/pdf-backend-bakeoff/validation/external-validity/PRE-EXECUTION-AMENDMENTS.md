@@ -2491,7 +2491,7 @@ untouched.
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["HARNESS-PLAN.md", "probes/build_frames.py", "probes/x17_build_frames.py"],
  "supersedes_text_in": "none -- it implements A19/A22/A23/A27 exactly as already frozen",
- "status": "PROPOSED -- DEVELOPMENT slice, built on the isolated A30 branch"}
+ "status": "FROZEN -- approved by external review; isolated branch pending integration into PR #560"}
 ```
 
 **Why SUBSTANTIVE, and why `affects_scoring_rule` is nevertheless `false`.** These are two
@@ -2539,7 +2539,8 @@ every development page.
 
 ### Controls
 
-Twelve required controls plus five more, **35/35 passing**. The four D-frame predicates are
+Twelve required controls plus the later repair and API-split controls, **56/56 passing**. The
+four D-frame predicates are
 established by **injected faults** (a one-arm text change, a one-arm merge, an anchor-set
 difference, and a jointly-dropped body line), each paired with an un-injected baseline that
 must be clean — a control that only reads back a boolean the code just computed cannot tell a
