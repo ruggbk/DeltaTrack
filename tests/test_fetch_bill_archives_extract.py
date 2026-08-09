@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import struct
+import time
 import zipfile
 from pathlib import Path
 
@@ -81,12 +82,77 @@ def write_oversized_archive(source: Path, name: str, declared_sizes: list[int]) 
     return path
 
 
+# The member timestamp every fixture archive here is stamped with (#480). Any fixed
+# value would do; the DOS epoch is the floor ZIP can represent and reads as obviously
+# synthetic rather than as a plausible "now".
+FIXED_ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+
+
 def archive_bytes(name: str = "119-hr") -> bytes:
-    """One well-formed BILLSTATUS archive ZIP, as bytes."""
+    """One well-formed BILLSTATUS archive ZIP, as bytes.
+
+    A pure function of ``name``: same argument, same bytes, whenever it is called.
+    That is what makes it usable on both sides of a byte-equality assertion, which
+    ``TestArchiveBytesIsDeterministic`` pins and the cached-archive test relies on.
+    Passing an explicit ``ZipInfo`` is what buys it -- ``writestr`` given a bare
+    arcname stamps the member with the wall clock instead (#480).
+    """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr(f"{name}-1.xml", b"<billStatus/>")
+        zf.writestr(zipfile.ZipInfo(f"{name}-1.xml", FIXED_ZIP_DATE_TIME), b"<billStatus/>")
     return buf.getvalue()
+
+
+class TestArchiveBytesIsDeterministic:
+    """The fixture's own contract, because a test below leans on it (#480).
+
+    ``test_a_cached_archive_clears_a_stale_marker`` proves the cached archive was not
+    rewritten, by comparing the file on disk against a freshly generated one. That
+    comparison only means "unchanged" if identical content implies identical bytes.
+    It did not: ``writestr`` given a bare arcname stamps the member with
+    ``time.localtime()``, which the DOS timestamp field carries at two-second
+    granularity -- so the assertion held only while both generations landed in the
+    same tick, and failed on a loaded run. The failure surfaced as a cache-coherence
+    bug in ``download_archives``, which is the expensive part: the two byte strings
+    print identically in the truncated repr, so nothing about the output points at
+    the fixture.
+    """
+
+    def test_output_does_not_depend_on_the_wall_clock(self, monkeypatch):
+        def at(clock, build):
+            with monkeypatch.context() as m:
+                m.setattr(time, "localtime", lambda *a, **k: time.struct_time(clock))
+                return build()
+
+        early = (1999, 12, 31, 23, 59, 58, 4, 365, 0)
+        late = (2044, 7, 4, 12, 30, 20, 0, 186, 0)
+
+        # The clock is moved rather than waited on, because generating twice in quick
+        # succession passes against the broken helper too -- both calls share a tick,
+        # so that check could never fail and would certify nothing.
+        #
+        # This control does double duty. It is the defect held next to the fix, and it
+        # is the only thing proving the patch above actually reaches zipfile: if the
+        # clock were not really moving, the assertion below would pass however the
+        # helper were written.
+        def stamped_by_the_wall_clock() -> bytes:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                zf.writestr("119-hr-1.xml", b"<billStatus/>")
+            return buf.getvalue()
+
+        assert at(early, stamped_by_the_wall_clock) != at(late, stamped_by_the_wall_clock)
+
+        assert at(early, archive_bytes) == at(late, archive_bytes)
+
+    def test_the_fixed_timestamp_did_not_cost_the_archive(self):
+        # A helper that returned a constant would satisfy the test above perfectly, so
+        # the output still has to be a real archive -- otherwise the determinism gate
+        # could be met by breaking every test that consumes the fixture.
+        with zipfile.ZipFile(io.BytesIO(archive_bytes())) as zf:
+            assert zf.namelist() == ["119-hr-1.xml"]
+            assert zf.read("119-hr-1.xml") == b"<billStatus/>"
+            assert zf.infolist()[0].date_time == FIXED_ZIP_DATE_TIME
 
 
 class TestDownloadArchivesCacheCoherence:
