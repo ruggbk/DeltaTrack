@@ -1,4 +1,4 @@
-# 20. Separate candidate generation, identity evidence, correspondence assignment and change classification
+# 20. Separate retrieval, correspondence evidence, correspondence assignment and change classification
 
 - Status: Accepted
 - Date: 2026-08-07
@@ -9,7 +9,7 @@ Comparing two versions of a bill means answering four different questions:
 
 ```text
 Which nodes are plausible counterparts?          (retrieval)
-How much evidence supports each pairing?         (identity evidence)
+How much evidence supports each pairing?         (correspondence evidence)
 Which pairings should actually be selected?      (assignment)
 Given those, what changed?                       (classification)
 ```
@@ -31,8 +31,8 @@ over one word-overlap ratio, consumed by:
 | `formatters/_text.word_diff` | should the reader see an inline word-diff or two stacked paragraphs |
 
 Those are retrieval, assignment, classification and presentation, decided by one function.
-The last row is the sharpest: the rendering layer recomputes an identity score against the
-differ's own cutoff. They agree today because they read the same text, so this is a coupling
+The last row is the sharpest: the rendering layer recomputes the same overlap score against
+the differ's own cutoff. They agree today because they read the same text, so this is a coupling
 rather than a live defect — but it means changing what "the same provision" means also
 changes what a reader sees, in the same edit, with no way to test the two apart.
 
@@ -67,18 +67,24 @@ shape occurs, not how often it is genuine.
 
 ## Decision
 
+**Scope.** This record governs the internal stages and intermediate contracts used to
+establish cross-version correspondence and classify changes. It does not establish
+terminology for acquisition, canonical-contract, CLI, MCP or other product-facing
+boundaries, which name their concepts against the authority governing their own boundary
+([ADR 0021](0021-naming-authority-and-boundaries.md)).
+
 Four named stages, each owning one responsibility, with explicit intermediate values.
 
 ```text
 observations (ADR 0019 identity)
       ↓
-  RETRIEVAL         → CandidateSet    which pairings are worth evaluating.
-      ↓                               May be bounded. Owns retrieval policy.
-  IDENTITY EVIDENCE → Evidence        what supports each pairing. Decides nothing.
+  RETRIEVAL               → CandidateSet            which pairings are worth evaluating.
+      ↓                                             May be bounded. Owns retrieval policy.
+  CORRESPONDENCE EVIDENCE → CorrespondenceEvidence  what supports each pairing. Decides nothing.
       ↓
-  ASSIGNMENT        → Correspondence  which pairings are selected.
-      ↓                               Owns correspondence policy.
-  CLASSIFICATION    → Changes         what changed, given the correspondence
+  ASSIGNMENT              → Correspondence          which pairings are selected.
+      ↓                                             Owns assignment policy.
+  CLASSIFICATION          → Changes                 what changed, given the correspondence
       ↓
   canonical diff JSON (ADR 0006, unchanged)
 ```
@@ -92,22 +98,23 @@ The line the whole record turns on:
 **1. Retrieval** decides which pairings enter the candidate set. It may consult structure,
 text or anything else, may be composed from several retrievers, and **may use its own scores,
 bounds, filters, top-K and cutoffs**. Its controls must be explicit and recorded. It may not
-consume the identity evidence computed for the candidates it is emitting, may not declare
-that two observations correspond, and may not run again after classification.
+consume the correspondence evidence computed for the candidates it is emitting, may not
+declare that two observations correspond, and may not run again after classification.
 
-**2. Identity evidence** describes a candidate pairing as named signals. It may carry
+**2. Correspondence evidence** describes a candidate pairing as named signals. It may carry
 booleans — header equality, path equality — but no correspondence verdict, and it applies no
-assignment rule. Evidence is retained for the candidates that reach assignment, so ranking is
-measurable after the fact.
+assignment rule. `CorrespondenceEvidence` is retained for the candidates that reach
+assignment, so ranking is measurable after the fact.
 
-**3. Assignment** converts candidates plus evidence into a `Correspondence`. **Every threshold
-or rule that decides whether a candidate becomes a correspondence lives here**, along with the
-competition policy among candidates. Its output is a first-class type, not a tuple.
+**3. Assignment** converts candidates and their correspondence evidence into a
+`Correspondence`. **Every threshold or rule that decides whether a candidate becomes a
+correspondence lives here**, along with the competition policy among candidates. Its output
+is a first-class type, not a tuple.
 
 **4. Classification** consumes the settled correspondence and decides what changed. It may
 compare the corresponding texts directly — exact equality, a word-level diff, whether a path
 or label moved — and may read evidence in order to present it. It may not apply a threshold
-to identity evidence, and may not change which observations correspond.
+to correspondence evidence, and may not change which observations correspond.
 
 Both a retrieval bound and an assignment threshold are numbers, and the difference is what
 they do: the bound excludes a pairing from consideration and says nothing about whether the
@@ -123,8 +130,8 @@ it prunes, which is what the candidate boundary exists to prevent.
 > retains its own provenance and retrieval metadata.
 
 **Candidate** — the pairing of two observations, identified per
-[ADR 0019](0019-observation-identity.md). Its identity is that pair and nothing else. One
-pair, one candidate, however many retrievers found it.
+[ADR 0019](0019-observation-identity.md). A candidate is keyed only by that observation pair:
+one pair, one candidate, however many retrievers found it.
 
 **Proposal** — one retriever invocation's claim that the pair is worth evaluating.
 Identifies the retriever, the round where more than one exists, and optionally *that
@@ -148,9 +155,9 @@ Four rules follow, and none is optional:
   provenance; a proposal with null rank and score is fully valid. Requiring a score pushes
   retrievers into inventing one, and an invented score is worse than an absent field because
   it looks comparable.
-- **A retrieval score is not identity evidence.** It exists for observability and for recall
-  and ranking analysis. If one turns out to be informative about identity, the way to use it
-  is as a named evidence signal, where it can be measured.
+- **A retrieval score is not correspondence evidence.** It exists for observability and for
+  recall and ranking analysis. If one turns out to be informative about correspondence, the
+  way to use it is as a named evidence signal, where it can be measured.
 - **Proposals are provenance, not votes.** A pair surfaced by three retrievers reaches
   evidence and assignment exactly once, and assignment must not read retriever agreement as
   evidence of correspondence. That inference may well be true; if research establishes it, it
@@ -159,7 +166,7 @@ Four rules follow, and none is optional:
 
 **Multi-round retrieval is permitted.** Retrieval may run in multiple rounds before
 classification. A later round may use 'Correspondence' settled by an earlier round, but
-retrieval may not use the identity 'Evidence' for the candidates it is deciding whether
+retrieval may not use the correspondence evidence for the candidates it is deciding whether
 to emit. 
 
 ### Correspondence
@@ -173,22 +180,26 @@ changes is that the *type* stops being the reason a real legislative shape canno
 expressed, so consolidation has a production shape to be measured against and a later
 algorithm change is not also a type migration through every consumer.
 
-**Per-anchor assignment and global collision resolution are distinct** questions with
+**Local assignment and global collision resolution are distinct** questions with
 different correctness criteria, and must be separable within the assignment stage. Global
 collision resolution is **deferred**: this record neither requires it to be implemented nor
 chooses an algorithm for it.
 
-### Financial interpretation
+### Money extraction
 
 Money extraction is a function of the **corresponding text pair, not of the change type**,
 and this is already true in the code: `bill_diff_to_dict` computes it for every change
-whatever its `change_type`. So financial interpretation consumes the correspondence, in
-parallel with classification rather than downstream of it, and **may not participate in
-deciding identity**. [#368](https://github.com/AgoraDMV/DeltaTrack/issues/368) traces the
+whatever its `change_type`. So money extraction consumes the correspondence, in parallel
+with classification rather than downstream of it, and **may not participate in deciding
+correspondence**. [#368](https://github.com/AgoraDMV/DeltaTrack/issues/368) traces the
 failure mode this rule guards: when correspondence is wrong, money still reports correctly on
-the text pair it receives, so the defect originates in correspondence rather than in financial
-interpretation. Placing money after classification would imply the change type is an input to
-it, which is false.
+the text pair it receives, so the defect originates in correspondence rather than in money
+extraction. Placing money after classification would imply the change type is an input to it,
+which is false.
+
+This section is about extracting amounts from the corresponding texts, which is what the
+engine does today. Reading what a dollar change *means* is the separate, later layer that
+[ADR 0018](0018-text-triggers-are-financial-only.md) calls interpretation.
 
 ### What this record does not decide
 
@@ -216,11 +227,11 @@ the contents of one stage change.
 ### Alternatives rejected
 
 - **Keep the stages fused and tune the thresholds.** Tuning does not touch the coupling: one
-  number still decides identity, classification and render form together, so a change to it is
-  untestable in isolation whatever its value. It is also not established that a better cutoff
-  exists — the provision-matching research finds heavily rewritten true counterparts and
-  genuine false matches poorly separated by a single fixed overlap measure. The separation
-  this record makes holds whichever measure later wins.
+  number still decides correspondence, classification and render form together, so a change
+  to it is untestable in isolation whatever its value. It is also not established that a
+  better cutoff exists — the provision-matching research finds heavily rewritten true
+  counterparts and genuine false matches poorly separated by a single fixed overlap measure.
+  The separation this record makes holds whichever measure later wins.
 - **Add tracing instead of materialising a `CandidateSet`.** The closest alternative.
   Instrumentation would let ranking be measured over the pairs that *are* scored, but it
   cannot supply the denominator: pairs the path grouping never forms produce no event to
@@ -233,9 +244,9 @@ the contents of one stage change.
   `similarity.py` was extracted to avoid.
 - **Let classification re-consult similarity.** Rejected with a carve-out: classification
   legitimately asks *how much* the corresponding texts differ, which is what
-  `move.body_unchanged` records and needs no score. What it may not do is threshold an
-  identity score, which `diff_bill.diff_bills` and `diff_pdf._hunk_for_paired_blocks` both do
-  today.
+  `move.body_unchanged` records and needs no score. What it may not do is threshold a
+  correspondence score, which `diff_bill.diff_bills` and `diff_pdf._hunk_for_paired_blocks`
+  both do today.
 - **Keep `Correspondence` pair-shaped, and revisit if consolidation proves common.** Cost
   asymmetry: capability costs a type permitting N sides, while not having it turns any later
   change into a migration through every consumer of the matcher's output.
@@ -247,12 +258,12 @@ the contents of one stage change.
 
 - **Four research targets become measurable against the production engine**, three of which
   are currently impossible: candidate recall (needs the candidate set), ranking quality (needs
-  retained evidence), per-anchor assignment correctness, and final diff correctness. Global
+  retained evidence), local assignment correctness, and final diff correctness. Global
   collision correctness becomes measurable *if* it is ever implemented.
 
 - **A behaviour change to one stage stops being a behaviour change to the others.** Swapping
-  the identity measure no longer edits what the renderer shows, because the renderer's
-  legibility cutoff stops being the differ's identity cutoff.
+  the correspondence measure no longer edits what the renderer shows, because the renderer's
+  legibility cutoff stops being the differ's correspondence cutoff.
 
 - **#368's failure mode becomes addressable at its cause.** Whether a heavily edited section
   is one provision or two is an assignment question; how its money is paired is a consequence.
@@ -316,11 +327,12 @@ are implementation preferences and belong in the tracker.
 3. Duplicate proposals change neither candidate multiplicity nor assignment weight.
 4. Retrieval may bound consideration; it does not declare correspondence, and does not consume
    the evidence computed for the candidates it emits.
-5. Identity evidence carries no correspondence verdict.
+5. `CorrespondenceEvidence` records signals relevant to assignment; it carries no
+   correspondence verdict.
 6. Every threshold or rule deciding correspondence lives in assignment — and a retrieval
    bound or a rendering legibility cutoff must not be mistaken for one.
 7. Classification may read evidence but cannot alter settled correspondence.
-8. Evidence for candidates reaching assignment stays retained and inspectable.
+8. Correspondence evidence for candidates reaching assignment stays retained and inspectable.
 9. `Correspondence` represents 1:1, 1:0, 0:1, 1:N and N:1 without loss.
 10. A non-binary canonical projection never duplicates a side's amounts.
 11. Each stage is deterministic in isolation ([ADR 0008](0008-deterministic-engine.md)).
