@@ -121,6 +121,12 @@ class TestArchiveBytesIsDeterministic:
     def test_output_does_not_depend_on_the_wall_clock(self, monkeypatch):
         def at(clock, build):
             with monkeypatch.context() as m:
+                # A no-op on 3.12, where `writestr` reads `time.localtime` unconditionally.
+                # From 3.13 it resolves the stamp through `ZipInfo._for_archive`, which
+                # prefers SOURCE_DATE_EPOCH via `time.gmtime` -- so with that variable set
+                # in the environment the control below would see one timestamp under both
+                # clocks and fail, reporting a broken gate rather than a set env var.
+                m.delenv("SOURCE_DATE_EPOCH", raising=False)
                 m.setattr(time, "localtime", lambda *a, **k: time.struct_time(clock))
                 return build()
 
