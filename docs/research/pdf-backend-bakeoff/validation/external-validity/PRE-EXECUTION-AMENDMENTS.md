@@ -3081,6 +3081,84 @@ and no-tolerance rule unchanged.
 
 ---
 
+## A34 — SUBSTANTIVE. The MuPDF device-rectangle epsilon
+
+```json
+{"id": "A34", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["HARNESS-PLAN.md", "probes/oracle_geometry.py",
+                   "probes/x20_oracle_crop_coordinates.py"],
+ "supersedes_text_in": "A33 renderer/device-rectangle formula ONLY, wherever the epsilon-free expression is normative",
+ "status": "MEASURED -- awaiting review"}
+```
+
+`affects_scoring_rule` is **true**: the constant can move `device_x0` by a whole pixel and so
+change the PDF coordinate handed to the nearest-ngid resolver.
+
+### Why this is a correction, not a new decision
+
+The exact renderer mapping was **deliberately an empirical output of A33**, not something A33
+asserted a priori. The epsilon was discovered while resolving A33's own DEVELOPMENT width
+discrepancy (`118-hr-8752` p52 r2). **No confirmatory output exists**, membership is unchanged,
+and A25/A30/A31/A32 conclusions are untouched. A34 makes the **written contract agree with the
+renderer behaviour A33 already implemented in code** — the implementation and the prose had
+drifted apart, and that contradiction is what is being closed. It is **not a tolerance** in the
+nearest-ngid resolver, which never consults it.
+
+**A33's historical text is not rewritten.** A33 did state the epsilon-free formula; A34 corrects
+it forward.
+
+### The canonical transform after A34
+
+```
+s         = DPI / 72
+eps       = 0.001 px          # measured MuPDF (fz_round_rect) device-rectangle constant
+device_x0 = floor(bbox_x0 * s + eps)
+pdf_x     = (device_x0 + start_x_px) / s
+```
+
+Width **validation** uses the symmetric right-edge form actually implemented by
+`expected_image_width`:
+
+```
+width = ceil(bbox_x1 * s - eps) - floor(bbox_x0 * s + eps)
+```
+
+### The falsification A33 lacked
+
+Coordinates are derived **mathematically** from a target device coordinate (`x0 = (n − δ)/s`,
+`x1 = (m + δ)/s`), not found by searching until something passed, and the boundary is
+**bracketed** either side. Measured against the pinned **PyMuPDF 1.28.2 / MuPDF 1.28.2**:
+
+| δ (px) | `x0·s` | MuPDF `pix.x` | zero-ε prediction | ε-aware prediction |
+|---:|---|---:|---:|---:|
+| 0.0005 | 499.9995 | **500** | 499 ✗ | **500** ✓ |
+| 0.0010 | 499.9990 | **500** | 499 ✗ | **500** ✓ |
+| 0.0011 | 499.9989 | **499** | 499 ✓ | 499 ✓ |
+| 0.0020 | 499.9980 | **499** | 499 ✓ | 499 ✓ |
+
+Identical at **300 and 330 DPI**, and the same threshold holds on the **right edge** used by
+`expected_image_width`. Inside the band the two predictions genuinely differ — asserted, so the
+case is discriminating rather than merely favourable.
+
+**The load-bearing negative control:** with `MUPDF_ROUND_EPS = 0`, both the origin control and
+the width derivation **stop matching the renderer on every in-band case**, and a further check
+confirms the injection does not leak. Had that not fired, the constant would have been
+unfounded and `device_origin_px` reverted.
+
+### Preserved unchanged
+
+Nearest neutral glyph `x0`; **no tolerance**; exact tie → `UNMATCHED`; no candidate →
+`UNMATCHED`; the selected `ngid` is the occurrence identity; the minimal-union crop with **zero
+padding**; every fail-closed bbox refusal; and `NONZERO_PAGE_ROTATION` **abort-never-skip**.
+
+**Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
+no scoring, no holdout document opened, no oracle artifact created.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json

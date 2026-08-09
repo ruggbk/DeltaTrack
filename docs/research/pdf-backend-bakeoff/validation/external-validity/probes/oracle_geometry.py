@@ -7,7 +7,10 @@ Pure encodings of the A33 rulings, written executably so they can be tested befo
     A33.1  the region bbox is the MINIMAL union of COMMITTED neutral-line bboxes, zero padding
     A33.2  the committed frame is authoritative -- geometry is never re-derived from the PDF
     A33.3  the pixel<->PDF transform is the renderer's actual mapping, measured not assumed
-    A33.4  a rotated page is refused unless a proven deterministic transform exists
+    A33.4  a rotated page is REFUSED -- ratified, and it aborts rather than skipping
+    A34    the device-rectangle epsilon: MuPDF rounds out only past 0.001 px, at BOTH edges.
+           A33 originally spelled the transform epsilon-free; A34 corrects that forward, and
+           `x20` falsifies the constant against the renderer with the boundary bracketed.
 
 WHY THE TRANSFORM IS NOT WHAT A30.3 SKETCHED. A30.3 described the inversion as a linear map
 across the bbox:

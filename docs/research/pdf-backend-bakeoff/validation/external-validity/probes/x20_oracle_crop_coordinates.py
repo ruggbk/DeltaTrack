@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import statistics
 import sys
 from pathlib import Path
@@ -269,7 +270,7 @@ def part_mapping() -> dict:
                 )
     doc.close()
     check(
-        "image column 0 is floor(bbox_x0 * DPI/72), on EVERY fractional phase and both scales",
+        "image column 0 is floor(bbox_x0 * DPI/72 + eps), on EVERY fractional phase and both scales",
         (len(origin_ok), True),
         (sum(origin_ok), all(origin_ok)),
         "A30.3 sketched column 0 == bbox_x0; if that were right this control would fail",
@@ -278,11 +279,154 @@ def part_mapping() -> dict:
     n_mismatch = sum(1 for r in rows if abs((r["x1"] - r["x0"]) * OG.scale(r["dpi"]) - r["pix_width"]) > 0.5)
     return {
         "n_cases": len(rows),
-        "origin_rule": "pix.x == floor(bbox_x0 * DPI/72)",
-        "width_rule": "pix.width == ceil(bbox_x1*s) - floor(bbox_x0*s)",
+        "origin_rule": "pix.x == floor(bbox_x0 * DPI/72 + MUPDF_ROUND_EPS)  [A34]",
+        "width_rule": "pix.width == ceil(bbox_x1*s - eps) - floor(bbox_x0*s + eps)  [A34]",
         "n_cases_where_width_differs_from_bbox_width_times_scale": n_mismatch,
         "metadata_needed_beyond_bbox_and_dpi": None,
         "cases": rows[:12],
+    }
+
+
+def part_epsilon() -> dict:
+    """A34 -- prove MuPDF's 0.001 px device-rectangle epsilon is REAL and LOAD-BEARING.
+
+    The constant can move `device_x0` by a whole pixel and therefore the PDF coordinate handed
+    to the nearest-ngid resolver, so it may not be frozen from prose. Coordinates are derived
+    MATHEMATICALLY from a target device coordinate -- `x0 = (n - delta)/s` -- not found by
+    searching until something passed, and the boundary is BRACKETED either side.
+    """
+    print("\n== A34 epsilon: the renderer's device-rectangle rounding, falsified ==")
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=792)
+    n = 500
+    inside, outside = (0.0005, 0.001), (0.0011, 0.002)
+    origin_rows, width_rows = [], []
+    eps_only, both_agree = [], []
+
+    for dpi in (PRIMARY_DPI, R1_DPI):
+        s = OG.scale(dpi)
+        # --- LEFT EDGE / device origin
+        for delta in inside + outside:
+            x0 = (n - delta) / s
+            pix = page.get_pixmap(
+                matrix=pymupdf.Matrix(s, s), clip=pymupdf.Rect(x0, 100.0, x0 + 20.0, 120.0), alpha=True
+            )
+            plain = math.floor(x0 * s)
+            withe = math.floor(x0 * s + OG.MUPDF_ROUND_EPS)
+            row = {
+                "dpi": dpi,
+                "target_device_x": n,
+                "delta_px": delta,
+                "bbox_x0": x0,
+                "x0_times_s": x0 * s,
+                "mupdf_pix_x": pix.x,
+                "zero_epsilon_prediction": plain,
+                "epsilon_aware_prediction": withe,
+                "inside_epsilon_band": delta in inside,
+            }
+            origin_rows.append(row)
+            (eps_only if delta in inside else both_agree).append(row)
+
+        # --- RIGHT EDGE, the operation `expected_image_width` performs
+        m = 600
+        x0_exact = n / s
+        for delta in inside + outside:
+            x1 = (m + delta) / s
+            pix = page.get_pixmap(
+                matrix=pymupdf.Matrix(s, s), clip=pymupdf.Rect(x0_exact, 100.0, x1, 120.0), alpha=True
+            )
+            right = pix.x + pix.width
+            width_rows.append(
+                {
+                    "dpi": dpi,
+                    "target_device_x1": m,
+                    "delta_px": delta,
+                    "bbox_x1": x1,
+                    "x1_times_s": x1 * s,
+                    "mupdf_right_edge": right,
+                    "bbox_x0": x0_exact,
+                    "mupdf_width": pix.width,
+                    "zero_epsilon_prediction": math.ceil(x1 * s),
+                    "epsilon_aware_prediction": math.ceil(x1 * s - OG.MUPDF_ROUND_EPS),
+                    "inside_epsilon_band": delta in inside,
+                }
+            )
+    doc.close()
+
+    check(
+        "INSIDE the epsilon band the renderer matches the EPSILON-AWARE origin, not floor",
+        (len(eps_only), 0),
+        (
+            sum(1 for r in eps_only if r["mupdf_pix_x"] == r["epsilon_aware_prediction"]),
+            sum(1 for r in eps_only if r["mupdf_pix_x"] == r["zero_epsilon_prediction"]),
+        ),
+        "if the renderer agreed with plain floor here, MUPDF_ROUND_EPS would be unfounded "
+        "and device_origin_px must be reverted",
+    )
+    check(
+        "...and the two predictions genuinely DIFFER there, so the case is discriminating",
+        len(eps_only),
+        sum(1 for r in eps_only if r["epsilon_aware_prediction"] != r["zero_epsilon_prediction"]),
+    )
+    check(
+        "OUTSIDE the band both predictions agree and match the renderer (boundary bracketed)",
+        (len(both_agree), len(both_agree)),
+        (
+            sum(1 for r in both_agree if r["mupdf_pix_x"] == r["epsilon_aware_prediction"]),
+            sum(1 for r in both_agree if r["mupdf_pix_x"] == r["zero_epsilon_prediction"]),
+        ),
+        "without the outside bracket this would show one favourable coordinate, not a threshold",
+    )
+
+    w_in = [r for r in width_rows if r["inside_epsilon_band"]]
+    w_out = [r for r in width_rows if not r["inside_epsilon_band"]]
+    check(
+        "RIGHT edge: inside the band the renderer matches the epsilon-aware ceil, not ceil",
+        (len(w_in), 0),
+        (
+            sum(1 for r in w_in if r["mupdf_right_edge"] == r["epsilon_aware_prediction"]),
+            sum(1 for r in w_in if r["mupdf_right_edge"] == r["zero_epsilon_prediction"]),
+        ),
+        "the code claims the epsilon applies symmetrically; this is that claim's evidence",
+    )
+    check(
+        "RIGHT edge: outside the band both agree, bracketing the threshold",
+        (len(w_out), len(w_out)),
+        (
+            sum(1 for r in w_out if r["mupdf_right_edge"] == r["epsilon_aware_prediction"]),
+            sum(1 for r in w_out if r["mupdf_right_edge"] == r["zero_epsilon_prediction"]),
+        ),
+    )
+
+    # THE NEGATIVE CONTROL the ruling requires: zero the constant and the boundary cases must
+    # stop matching. Executed, not argued.
+    real_eps = OG.MUPDF_ROUND_EPS
+    try:
+        OG.MUPDF_ROUND_EPS = 0.0
+        broken = [r for r in eps_only if OG.device_origin_px(r["bbox_x0"], r["dpi"]) == r["mupdf_pix_x"]]
+        broken_w = [
+            r for r in w_in if OG.expected_image_width(r["bbox_x0"], r["bbox_x1"], r["dpi"]) == r["mupdf_width"]
+        ]
+    finally:
+        OG.MUPDF_ROUND_EPS = real_eps
+    check(
+        "with MUPDF_ROUND_EPS = 0 the origin boundary control FAILS on every band case",
+        0,
+        len(broken),
+        "if it still matched, the constant would not be load-bearing and should be dropped",
+    )
+    check(
+        "with MUPDF_ROUND_EPS = 0 the WIDTH derivation also stops matching in the band",
+        0,
+        len(broken_w),
+        "this is the symmetry claim's negative control, not an argument from the code comment",
+    )
+    check("...and the epsilon is restored afterwards, so the injection did not leak", 0.001, OG.MUPDF_ROUND_EPS)
+    return {
+        "epsilon_px": OG.MUPDF_ROUND_EPS,
+        "origin_boundary": origin_rows,
+        "right_edge_boundary": width_rows,
+        "zero_epsilon_origin_matches": len(broken),
     }
 
 
@@ -481,7 +625,9 @@ def part_rotation() -> dict:
     check("14b. ...and rotation 0 is not refused", None, raised(lambda: OG.check_rotation(0)))
     return {
         "synthetic": findings,
-        "ruling": "PROPOSED fail-closed NONZERO_PAGE_ROTATION -- the clip carries exactly, "
+        "ruling": "RATIFIED fail-closed NONZERO_PAGE_ROTATION -- ABORTS oracle construction and "
+                  "may never skip a page/region, drop a stimulus or reduce a denominator. "
+                  "The clip carries exactly, "
         "but at 90/270 the image x axis is the PDF y axis and at 180 it is "
         "mirrored, so start_x_px stops corresponding to a neutral glyph x0",
     }
@@ -686,20 +832,27 @@ def part_development() -> dict:
 def main() -> int:
     bbox = part_bbox()
     mapping = part_mapping()
+    epsilon = part_epsilon()
     roundtrip = part_roundtrip()
     rotation = part_rotation()
     dev = part_development()
     doc = {
         "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened, nothing scored",
-        "contract": "A33, committed before this probe existed",
+        "contract": "A33 (crop + transform), corrected forward by A34 (renderer epsilon)",
         "renderer": "MuPDF (pymupdf)",
         "renderer_version": str(pymupdf.version),
         "region_bbox_rule": "minimal axis-aligned union of COMMITTED neutral-line bboxes, zero padding",
-        "frozen_inversion": "pdf_x = (floor(bbox_x0 * DPI/72) + start_x_px) / (DPI/72)",
+        "mupdf_round_eps_px": OG.MUPDF_ROUND_EPS,
+        "frozen_inversion": (
+            "s = DPI/72; eps = 0.001 px; device_x0 = floor(bbox_x0*s + eps); pdf_x = (device_x0 + start_x_px) / s"
+        ),
+        "frozen_width_validation": "ceil(bbox_x1*s - eps) - floor(bbox_x0*s + eps)",
+        "a33_stated_was": "device_x0 = floor(bbox_x0 * DPI/72)  -- epsilon-free, corrected by A34",
         "a30_3_sketch_was": "pdf_x = bbox_x0 + (start_x_px / image_width) * (bbox_x1 - bbox_x0)",
         "metadata_insufficient": False,
         "bbox": bbox,
         "mupdf_mapping": mapping,
+        "epsilon_boundary": epsilon,
         "roundtrip": roundtrip,
         "rotation": rotation,
         "development": dev,

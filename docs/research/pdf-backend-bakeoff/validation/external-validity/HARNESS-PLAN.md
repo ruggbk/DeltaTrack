@@ -186,8 +186,17 @@ cropping; reveal control status; write the key after adjudication has begun.
   converted to page PDF coordinates by the **measured MuPDF transform**:
 
   ```
-  s = DPI / 72;  device_x0 = floor(bbox_x0 * s);  pdf_x = (device_x0 + start_x_px) / s
+  s = DPI / 72
+  ε = 0.001 px            # measured MuPDF (fz_round_rect) device-rectangle constant, A34
+  device_x0 = floor(bbox_x0 * s + ε)
+  pdf_x     = (device_x0 + start_x_px) / s
   ```
+
+  **A34 corrects A33's epsilon-free spelling.** Without `ε`, `device_x0` is a whole pixel low
+  whenever `bbox_x0 * s` lands within 0.001 px below an integer — measured directly against
+  MuPDF at both scales, with the boundary bracketed either side. Width validation uses the
+  symmetric form `ceil(bbox_x1*s − ε) − floor(bbox_x0*s + ε)`. `ε` is a **renderer constant,
+  not a tolerance**: the nearest-x resolver never consults it.
 
   **`image_width` is not the scale and is not required by the inversion** — A30.3's original
   "bbox + image width + DPI" wording described a linear map across the bbox, which `x20`
@@ -413,7 +422,7 @@ enforce it.
 |---|---|
 | A27.1's `occurrence_ordinal_on_that_line` was never derived | **A30.1** — the fourth component is the absolute **`start_ngid`**, the A24.2 ink identity of the occurrence's first neutral-ink character. Used for **equality only**; nothing orders occurrences by it |
 | could production supply it? | **A30.2** — yes. `Anchor` → merged-line start offset → `Page.merge_ranges` → print line + offset → `emitted[...].cells` → first cell carrying an `ngid`. Instrumented **study-locally**; production recognition unchanged; nine explicit refusal classes, all → `UNMATCHED` |
-| how does the oracle name the same occurrence? | **A30.3** — geometrically: `start_physical_line` + `start_x_px`, resolved to the nearest neutral ink glyph with **no tolerance**; tie or no candidate → `UNMATCHED`. **A33 supersedes the conversion clause only**: `pdf_x = (floor(bbox_x0·DPI/72) + start_x_px) / (DPI/72)`, not a linear map across the bbox |
+| how does the oracle name the same occurrence? | **A30.3** — geometrically: `start_physical_line` + `start_x_px`, resolved to the nearest neutral ink glyph with **no tolerance**; tie or no candidate → `UNMATCHED`. **A33 supersedes the conversion clause only**, as corrected by **A34**: `pdf_x = (floor(bbox_x0·DPI/72 + 0.001) + start_x_px) / (DPI/72)`, not a linear map across the bbox |
 | §4.5 P-head was a caller obligation | **A30.4** — `filter_keys` now takes `(key, kind, population)` and applies both restrictions itself |
 | blind-ID uniqueness was only synthetic | **A30.5** — asserted over the **realized** set; a collision aborts the build |
 
