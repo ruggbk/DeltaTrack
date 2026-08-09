@@ -3171,6 +3171,125 @@ conditions; H 541/541 and C 4/4 at both scales; 1164/1164 DEVELOPMENT regions re
 
 ---
 
+## A35 — SUBSTANTIVE. `adjudicator_prompt` + `build_oracle` implement already-frozen oracle rules
+
+```json
+{"id": "A35", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": [],
+ "supersedes_text_in": "none",
+ "status": "CONTRACT -- obligations fixed before either component exists"}
+```
+
+**Why SUBSTANTIVE despite `affects_scoring_rule: false`.** `adjudicator_prompt.md` and
+`build_oracle.py` are **result-bearing methodology surface**: a wrong implementation could alter
+a label, a stimulus or a join, and therefore a realized score. They cannot be filed as TOOLING.
+`affects_scoring_rule` is nonetheless **false** because A35 introduces **no new rule** — it
+implements what PRE-REGISTRATION §5.3–5.8, HARNESS-PLAN §3–§4 and A19–A34 already froze.
+
+**A35 may introduce no methodology.** Where the frozen sources do not determine an
+outcome-affecting choice, the obligation is to **STOP and report**, never to settle it in code.
+
+### A35.1 — implementation obligations, `adjudicator_prompt.md`
+
+The prompt asks for exactly six things and nothing else: heading occurrences present, exact
+printed text, immediate parent, role from the **§5.3 codebook**, `start_physical_line`, and
+integer `start_x_px`. `start_x_px` carries the **A33.5** instruction verbatim — the left edge of
+the first character's **own visible ink**, ignoring strike-through, underline, border or rule,
+and never a text-box or bounding-box edge — and is declared an **identity annotation only**,
+with text, parent and role independently adjudicated.
+
+It must not reveal or mention `H`, `X`, hybrid, extended glyph, architecture, frame `C`/`D`,
+stratum, control status, repeat status, document identity, architecture-produced text, or
+amount/account attribution, and must not indicate which answer would favour either
+architecture. **M6 remains deferred and is not asked.**
+
+**The role codebook stays the fine §5.3 one** — `account`/`agency`/`grouping`/`title`/
+`division`/`section`/`other`. HARNESS-PLAN §3's "coarse leaf/container role" describes **M5's
+scoring map**, not what the adjudicator records; §5.3 is the specific normative statement about
+what is recorded, and asking only leaf-vs-container would discard information §5.3 requires and
+could not be recovered later. *Forward finding, not resolved here:* the **leaf-vs-container
+coarsening map itself is defined nowhere** in the frozen sources. It is `score_metrics`'
+obligation and must be ruled before M5 is computed. A35 does not choose it and does not need it.
+
+**Leakage is gated executably, not by inspection.** A grep-based control runs over the realized
+adjudicator-facing artifact, and a **negative control injects forbidden text and requires the
+gate to fail**.
+
+### A35.2 — `start_physical_line` is region-relative, and this is an encoding, not a rule
+
+The adjudicator sees a cropped region, so it cannot report a page-level neutral-line ordinal.
+`start_physical_line` is therefore the **1-based index of the printed line within the rendered
+stimulus, counted top to bottom**, which `build_oracle` maps to the region's committed neutral
+line at that position.
+
+**This is determined up to isomorphism and so is not a new methodology choice.** A region is 8
+**consecutive** neutral lines by ordinal; the crop is the minimal union of exactly those lines'
+bboxes; ordinals run top to bottom; and every ink line on a page **is** a neutral line, since
+the skeleton clusters all ink glyphs. So no foreign line can fall vertically between the
+region's own lines, and visible printed lines stand in **bijection** with committed region
+lines. A30.3's rule names the physical line as a *referent*; any encoding naming the same line
+yields the identical nearest-glyph outcome. The bijection is recorded in the private key so a
+reviewer can check it, and an out-of-range index **refuses** rather than resolving to a guess.
+
+Explicitly **not** chosen: the page's printed margin line number. §5.4 lists it as something
+visible, not as an answer format, and qualifies it "where the page has them" — so it cannot be
+the required format without leaving pages unanswerable.
+
+### A35.3 — implementation obligations, `build_oracle.py`
+
+Consumes frames, the PDFs and `adjudicator_prompt.md`; emits two artifacts of deliberately
+different content. The **private key** carries blind id → canonical pre-blinding identity,
+`document_sha256`, page, region ordinal, stratum, frame, control/repeat bookkeeping, the H/X
+output needed for the later join, renderer name and version, DPI, committed bbox in PDF points,
+and PNG sha256. The **adjudicator-facing artifact** carries **only** the blind id, the rendered
+image and the question/codebook.
+
+Frozen behaviour implemented, not redesigned: 300 DPI primary and 330 DPI R1 (A28.4), identical
+committed bbox and source region with **raster scale the only difference**; R1 records its own
+`start_x_px` and resolves independently; selection settled from canonical pre-blinding
+identities (A28.3) with blind ids derived only afterwards and **never** consumed by sampling or
+presentation ranking; realized blind-id uniqueness asserted over the **complete** set including
+controls and repeats, a collision being a deterministic **build abort** with no salt, re-roll,
+overwrite, merge or last-write-wins (A30.5).
+
+Geometry comes from `oracle_geometry.py` — never a competing copy — using the A34 transform
+`s = DPI/72`, `eps = 0.001`, `device_x0 = floor(bbox_x0*s + eps)`,
+`pdf_x = (device_x0 + start_x_px)/s`, width `ceil(bbox_x1*s - eps) - floor(bbox_x0*s + eps)`.
+The crop is the committed frame's minimal union with zero padding: **no** fresh PDF clustering,
+arm-text-derived crop, column or full-page expansion, padding, or clip/intersection repair.
+`MISSING_LINE_BBOX`, `NON_FINITE_LINE_BBOX`, `NON_POSITIVE_LINE_BBOX`,
+`REGION_BBOX_OUTSIDE_PAGE` and `NONZERO_PAGE_ROTATION` **abort construction** — a refusal may
+never drop a stimulus or reduce a denominator.
+
+### A35.4 — controls fixed before the components exist
+
+Twenty, each stating the fact that would make it fail, and **no control may compare a helper
+with itself where independent mutation is possible**: 1 re-render determinism · 2 300/330 share
+one bbox · 3 R1 differs only by raster scale · 4 the renderer consumes PDF geometry, not H/X
+text · 5 mutating H/X text cannot change the PNG · 6 blind-id scheme changes select nothing
+different · 7 …and change no presentation rank · 8 an injected blind-id collision aborts · 9 the
+adjudicator artifact leaks no architecture/frame/stratum/document/control field · 10 **injected**
+forbidden leakage makes the gate fail · 11 the private key carries the downstream join · 12 a
+shuffled key breaks the join, proving it load-bearing · 13 the crop equals committed frame
+geometry exactly · 14 an outside-page bbox aborts · 15 a non-positive line bbox aborts · 16
+nonzero rotation aborts and cannot become a skip · 17 the PNG hash moves when the stimulus
+really changes · 18 no M6/amount-attribution question is asked · 19 the A33.5 visible-character
+instruction is present · 20 realized blind-id uniqueness is checked after every instance,
+controls and R1 repeats included.
+
+### Population and boundary
+
+DEVELOPMENT + SYNTHETIC only. **No holdout document is opened**, an explicit guard enforces it,
+nothing is adjudicated or scored, and none of `results/frames.json`, `results/oracle_key.json`,
+`results/oracle_adjudicated.json`, `results/metrics.json`, `results/scores.json` or
+`EXECUTION-START.json` is created. `score_metrics.py` and `decide_architecture.py` are **not**
+started.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
