@@ -2834,12 +2834,13 @@ no scoring, no holdout document opened, no oracle/frame artifact created, and A3
 
 ```json
 {"id": "A33", "class": "SUBSTANTIVE",
- "commits": ["3a07740"],
+ "commits": ["3a07740", "c794b89"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
- "files_touched": ["probes/oracle_geometry.py", "probes/x20_oracle_crop_coordinates.py"],
+ "files_touched": ["HARNESS-PLAN.md", "probes/oracle_geometry.py",
+                   "probes/x20_oracle_crop_coordinates.py"],
  "supersedes_text_in": "A30.3 PIXEL->PDF CONVERSION CLAUSE ONLY; closes ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN (A32)",
- "status": "MEASURED -- contract frozen at 397e65c before the probe ran; awaiting review"}
+ "status": "FROZEN -- reviewed; crop and pixel-coordinate contract approved"}
 ```
 
 **This block is committed BEFORE `x20` exists.** `affects_scoring_rule` is **true**, unlike A32:
@@ -3025,6 +3026,54 @@ and the renderer then matches the forward map with delta **0**); and `expected_i
 applied `math.ceil` to a float where `x1*s` is mathematically an integer. The latter carries a
 documented float guard and is a **validation helper only** — `pixel_to_pdf_x` does not consume
 width, so nothing in the inversion depends on it.
+
+### Completion repairs, reviewed and folded in
+
+**End-to-end recovery**, through the **actual** A30 resolver rather than an arithmetic proxy —
+`known x0 → pdf_x_to_pixel → pixel_to_pdf_x → resolve_oracle_start_ngid`:
+
+| | 300 DPI | 330 DPI |
+|---|---|---|
+| **H** (A30 starts) | **541 / 541** | **541 / 541** |
+| **C** (collision starts) | **4 / 4** | **4 / 4** |
+
+A non-vacuity control guards those denominators and earned its place: at the original 12-page
+window **C was empty (0/0)** and its recovery claim was vacuous. The window is 95 pages so the
+known same-line collisions are actually exercised.
+
+The wrong-transform control now moves the **identity**, not merely the arithmetic: a
+deterministic search finds **48** configurations where the linear-across-bbox convention
+resolves to a **different ngid**. An earlier grid found none because it placed the competitor at
+the far edge, where the drift shrinks.
+
+**Fail-closed additions.** `NON_POSITIVE_LINE_BBOX` — each committed line must be positive-area
+in its own right, since a union check alone passes whenever the siblings rescue it. A
+consequence is recorded rather than hidden: `NON_POSITIVE_REGION_BBOX` is now **unreachable
+through `region_bbox`** and is retained only as a documented backstop, with its control
+asserting the reason the code actually returns. `REGION_BBOX_OUTSIDE_PAGE` —
+`validate_region_bbox_for_page()` refuses on any side, with **no** clip, intersection, padding
+or repair.
+
+**`NONZERO_PAGE_ROTATION` ratified.** `rotation == 0` permitted; anything else **aborts oracle
+construction**. It may **never** skip the page, skip the region, drop the stimulus or reduce a
+denominator — each would convert an unrepresentable condition into a quietly smaller study,
+invisible precisely because the affected pages stop being counted.
+
+**Render denominators are explicit:** all **1164 / 1164** DEVELOPMENT regions rendered, so
+"0 empty renders" is 0/1164 and cannot be misread as a sample. 282 short trailing, 0 invalid,
+0 out-of-page, 0 determinism failures, 0 width failures, rotation census `{0: 285}`, and no
+committed line clipped by the zero-padding union.
+
+**One further renderer fact**, measured while chasing a single width mismatch
+(`118-hr-8752` p52 r2: `x1*s = 2025.0004`, predicted 2026, actual 2025): MuPDF rounds a device
+rectangle out only once it exceeds an integer by **more than 0.001 px** — `fz_round_rect`'s
+epsilon, found by sweeping the overhang rather than assumed, and applied symmetrically. This
+mattered beyond the width helper: the same epsilon belongs in `device_origin_px`, where its
+absence is a **latent off-by-one** whenever `bbox_x0*s` sits just below an integer — a case no
+synthetic phase grid and no development region happened to hit. It is a **renderer constant,
+not a tolerance**; the nearest-x resolver never consults it.
+
+`x20`: **37/37, 0 stop conditions.**
 
 **Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
 no scoring, no holdout document opened, no oracle artifact created, and A30.3's resolver, ties
