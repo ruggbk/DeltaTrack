@@ -27,8 +27,8 @@ from deltatrack.matching import (
     Candidate,
     CandidateSet,
     Correspondence,
+    CorrespondenceEvidence,
     CorrespondenceSet,
-    Evidence,
     ObservationRef,
     Proposal,
     RetrieverInvocation,
@@ -47,13 +47,13 @@ PATH_GROUP = RetrieverInvocation.of("path_group")
 MOVE_SCAN = RetrieverInvocation.of("move_scan", round=1, threshold=0.6)
 
 
-def evidence_for_link(old_ref: ObservationRef, new_ref: ObservationRef) -> Evidence:
+def evidence_for_link(old_ref: ObservationRef, new_ref: ObservationRef) -> CorrespondenceEvidence:
     """An evidence record for one selected link, carrying no signals.
 
     Valid by design: a correspondence must carry one record per link, but which signals
-    exist is Phase 2 policy this slice does not choose. See `Evidence`.
+    exist is Phase 2 policy this slice does not choose. See `CorrespondenceEvidence`.
     """
-    return Evidence.of(old_ref, new_ref)
+    return CorrespondenceEvidence.of(old_ref, new_ref)
 
 
 def documented(old_refs: tuple[ObservationRef, ...], new_refs: tuple[ObservationRef, ...]) -> Correspondence:
@@ -92,9 +92,9 @@ def test_two_retrievers_on_one_pair_keep_both_proposals():
 
 
 def test_a_candidate_is_identified_by_its_pair_alone():
-    """ADR 0020: "its identity is that pair and nothing else". Fails if ``proposals``
-    joins the comparison, which would make two records of one pair unequal and let a
-    downstream set hold both."""
+    """ADR 0020: "a candidate is keyed only by that observation pair". Fails if
+    ``proposals`` joins the comparison, which would make two records of one pair unequal
+    and let a downstream set hold both."""
     a = Candidate(old(3), new(7), (Proposal(PATH_GROUP),))
     b = Candidate(old(3), new(7), (Proposal(MOVE_SCAN, rank=4, score=0.62),))
     assert a == b
@@ -116,7 +116,7 @@ def test_the_plain_constructor_collapses_an_identical_repeated_proposal():
     """The builder's deduplication rule, reached without the builder.
 
     Fails if ``Candidate.__post_init__`` leaves proposal uniqueness to ``CandidateSet``
-    — the same constructor-path gap that let ``RetrieverInvocation`` and ``Evidence``
+    — the same constructor-path gap that let ``RetrieverInvocation`` and ``CorrespondenceEvidence``
     hold an uncanonical value. A directly built candidate would then carry one retriever
     in two provenance slots, and anything counting invocations would read one retriever
     as two.
@@ -155,7 +155,7 @@ def test_deduplication_in_the_constructor_keeps_canonical_order():
 
 
 def test_evidence_describes_an_old_side_and_a_new_side_observation():
-    """Evidence describes a candidate pair, so it carries the candidate's orientation
+    """CorrespondenceEvidence describes a candidate pair, so it carries the candidate's orientation
     invariant.
 
     ``Correspondence`` already refuses evidence naming a pair it does not relate, but
@@ -164,9 +164,9 @@ def test_evidence_describes_an_old_side_and_a_new_side_observation():
     address for a pairing that runs backwards.
     """
     with pytest.raises(ValueError, match="one old-side and one new-side"):
-        Evidence.of(new(3), old(7))
+        CorrespondenceEvidence.of(new(3), old(7))
     with pytest.raises(ValueError, match="one old-side and one new-side"):
-        Evidence(old(3), old(7))
+        CorrespondenceEvidence(old(3), old(7))
 
 
 def test_a_proposal_carries_the_configuration_that_produced_it():
@@ -240,9 +240,9 @@ def test_evidence_carries_signals_and_no_verdict():
     verdict arrives in: ``is_match``, ``corresponds``, ``confidence``, ``above_threshold``.
     Signals grow inside ``signals``, so legitimate growth never trips this — adding a
     field does, which is the point."""
-    assert {f.name for f in fields(Evidence)} == {"old", "new", "signals"}
+    assert {f.name for f in fields(CorrespondenceEvidence)} == {"old", "new", "signals"}
 
-    evidence = Evidence.of(old(3), new(7), header_equal=True, word_overlap=0.42)
+    evidence = CorrespondenceEvidence.of(old(3), new(7), header_equal=True, word_overlap=0.42)
     assert evidence.names == ("header_equal", "word_overlap")
     assert evidence.get("header_equal") is True
     assert evidence.get("path_equal") is None
@@ -252,7 +252,7 @@ def test_evidence_is_immutable():
     """ADR 0020 invariant 8: evidence stays retained and inspectable. Fails if a later
     stage can rewrite what it was handed, which would make a retained record describe
     something other than what assignment saw."""
-    evidence = Evidence.of(old(3), new(7), header_equal=True)
+    evidence = CorrespondenceEvidence.of(old(3), new(7), header_equal=True)
     with pytest.raises(FrozenInstanceError):
         evidence.signals = ()
 
@@ -297,8 +297,8 @@ def test_a_correspondence_relates_at_least_one_observation():
     [
         ("1:1 with none at all", (old(3),), (new(7),), ()),
         ("1:N with none at all", (old(3),), (new(7), new(8)), ()),
-        ("1:N with one link documented", (old(3),), (new(7), new(8)), (Evidence.of(old(3), new(7)),)),
-        ("N:1 with one link documented", (old(3), old(4)), (new(7),), (Evidence.of(old(3), new(7)),)),
+        ("1:N with one link documented", (old(3),), (new(7), new(8)), (CorrespondenceEvidence.of(old(3), new(7)),)),
+        ("N:1 with one link documented", (old(3), old(4)), (new(7),), (CorrespondenceEvidence.of(old(3), new(7)),)),
     ],
 )
 def test_a_selected_link_without_evidence_is_refused(label, old_refs, new_refs, evidence):
@@ -333,7 +333,10 @@ def test_one_link_may_not_carry_two_evidence_records():
         Correspondence(
             old=(old(3),),
             new=(new(7),),
-            evidence=(Evidence.of(old(3), new(7), header_equal=True), Evidence.of(old(3), new(7), header_equal=False)),
+            evidence=(
+                CorrespondenceEvidence.of(old(3), new(7), header_equal=True),
+                CorrespondenceEvidence.of(old(3), new(7), header_equal=False),
+            ),
         )
 
 
@@ -341,7 +344,7 @@ def test_evidence_must_name_a_pair_the_correspondence_relates():
     """Fails if unrelated evidence can be attached, which makes the retained record
     unreadable — the reader cannot tell which link a signal describes."""
     with pytest.raises(ValueError, match="outside this correspondence"):
-        Correspondence(old=(old(3),), new=(new(7),), evidence=(Evidence.of(old(3), new(99)),))
+        Correspondence(old=(old(3),), new=(new(7),), evidence=(CorrespondenceEvidence.of(old(3), new(99)),))
 
 
 @pytest.mark.parametrize(
@@ -378,7 +381,7 @@ def test_a_many_to_many_correspondence_is_refused():
         Correspondence(
             old=(old(3), old(4)),
             new=(new(7), new(8)),
-            evidence=tuple(Evidence.of(o, n) for o in (old(3), old(4)) for n in (new(7), new(8))),
+            evidence=tuple(CorrespondenceEvidence.of(o, n) for o in (old(3), old(4)) for n in (new(7), new(8))),
         )
 
 
@@ -387,11 +390,11 @@ def test_a_side_may_not_repeat_an_observation():
     later canonical projection count one side's amounts twice — the double-count ADR 0001
     forbids and ADR 0020 invariant 10 restates."""
     with pytest.raises(ValueError, match="repeats an observation"):
-        Correspondence(old=(old(3),), new=(new(7), new(7)), evidence=(Evidence.of(old(3), new(7)),))
+        Correspondence(old=(old(3),), new=(new(7), new(7)), evidence=(CorrespondenceEvidence.of(old(3), new(7)),))
 
 
 def test_an_observation_corresponds_at_most_once():
-    """The per-anchor competition policy, measured on the corpus below before being
+    """Local assignment's exclusivity rule, measured on the corpus below before being
     encoded. Fails if two correspondences may claim one observation, which would let a
     node appear in two changes and its money be reported twice."""
     settled = CorrespondenceSet([documented((old(3),), (new(7),))])
@@ -445,26 +448,26 @@ def test_the_deduplication_survives_a_plain_constructed_invocation():
 def test_signal_order_does_not_change_evidence():
     """Same rule for evidence: two stages computing the same signals in different orders
     must produce one value, or a retained record cannot be compared between runs."""
-    assert Evidence.of(old(3), new(7), b=2, a=1) == Evidence.of(old(3), new(7), a=1, b=2)
+    assert CorrespondenceEvidence.of(old(3), new(7), b=2, a=1) == CorrespondenceEvidence.of(old(3), new(7), a=1, b=2)
 
 
 def test_the_plain_constructor_canonicalises_signals_too():
-    """Evidence's half of the same false green. Fails if ``_normalize_named_scalars`` is only reached
+    """CorrespondenceEvidence's half of the same false green. Fails if ``_normalize_named_scalars`` is only reached
     through ``of()``, which would let two records of one signal set compare unequal and
     make a retained evidence set incomparable between runs."""
-    a = Evidence(old(3), new(7), signals=(("word_overlap", 0.42), ("header_equal", True)))
-    b = Evidence(old(3), new(7), signals=(("header_equal", True), ("word_overlap", 0.42)))
+    a = CorrespondenceEvidence(old(3), new(7), signals=(("word_overlap", 0.42), ("header_equal", True)))
+    b = CorrespondenceEvidence(old(3), new(7), signals=(("header_equal", True), ("word_overlap", 0.42)))
     assert a == b
     assert hash(a) == hash(b)
     assert a.names == ("header_equal", "word_overlap")
-    assert a == Evidence.of(old(3), new(7), word_overlap=0.42, header_equal=True)
+    assert a == CorrespondenceEvidence.of(old(3), new(7), word_overlap=0.42, header_equal=True)
 
 
 @pytest.mark.parametrize(
     ("label", "build"),
     [
         ("invocation config", lambda: RetrieverInvocation("r", config=(("k", 1), ("k", 2)))),
-        ("evidence signals", lambda: Evidence(old(3), new(7), signals=(("k", 1), ("k", 2)))),
+        ("evidence signals", lambda: CorrespondenceEvidence(old(3), new(7), signals=(("k", 1), ("k", 2)))),
     ],
 )
 def test_a_repeated_name_is_rejected_by_the_plain_constructor(label, build):
@@ -618,7 +621,7 @@ class TestAssignmentExclusivityOnTheCorpus:
                     Correspondence(
                         old=old_refs,
                         new=new_refs,
-                        evidence=tuple(Evidence.of(o, n) for o in old_refs for n in new_refs),
+                        evidence=tuple(CorrespondenceEvidence.of(o, n) for o in old_refs for n in new_refs),
                     )
                 )
 

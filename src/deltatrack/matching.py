@@ -1,6 +1,6 @@
 """Data contracts for the four matching stages (ADR 0020).
 
-ADR 0020 splits one fused decision into retrieval, identity evidence, assignment and
+ADR 0020 splits one fused decision into retrieval, correspondence evidence, assignment and
 classification. This module holds the values that pass between them, and nothing else:
 no retriever, no measure, no threshold, no orchestration. It is the vocabulary the
 stages will be written against, introduced ahead of them so that moving behaviour is a
@@ -56,14 +56,14 @@ generalises to PDF where ``element_id`` does not.
   score is worse than an absent field because it looks comparable.
 - **Proposals are provenance, not votes.** Duplicate proposals change neither candidate
   multiplicity nor assignment weight.
-- **Evidence carries no correspondence verdict**, and no assignment policy.
+- **CorrespondenceEvidence carries no correspondence verdict**, and no assignment policy.
 - **Correspondence is first-class and not pair-shaped**, so a consolidation has a
   production shape to be measured against — and **every selected link carries the
   evidence that selected it**, exactly one record per link.
 
 ## Canonical form is an invariant of the type, not of one constructor
 
-``RetrieverInvocation.config`` and ``Evidence.signals`` are name-sorted, and
+``RetrieverInvocation.config`` and ``CorrespondenceEvidence.signals`` are name-sorted, and
 ``Candidate.proposals`` is ordered by ``(round, retriever, config)``, in
 ``__post_init__`` rather than in the ``of()`` helpers. A normalisation that only the
 convenience constructor applies is not a normalisation: the ordinary dataclass
@@ -229,9 +229,10 @@ class Proposal:
     retriever emits membership and provenance and nothing else; ADR 0020 rejects a
     required score on the ground that an invented one looks comparable when it is not.
 
-    A retrieval score is not identity evidence. It exists for observability and for
-    recall and ranking analysis. If one turns out to be informative about identity, the
-    way to use it is as a named :class:`Evidence` signal, where it can be measured.
+    A retrieval score is not correspondence evidence. It exists for observability and
+    for recall and ranking analysis. If one turns out to be informative about
+    correspondence, the way to use it is as a named :class:`CorrespondenceEvidence`
+    signal, where it can be measured.
     """
 
     invocation: RetrieverInvocation
@@ -247,10 +248,10 @@ class Proposal:
 class Candidate:
     """One observation pair worth evaluating, with the provenance that surfaced it.
 
-    Its identity is the pair and nothing else, so equality and hashing read ``old`` and
-    ``new`` only — two candidates for the same pair are the same candidate whatever
-    proposed them. ``proposals`` is provenance carried alongside, which is why it is
-    excluded from comparison rather than folded into it.
+    A candidate is keyed only by the observation pair, so equality and hashing read
+    ``old`` and ``new`` only — two candidates for the same pair are the same candidate
+    whatever proposed them. ``proposals`` is provenance carried alongside, which is why
+    it is excluded from comparison rather than folded into it.
 
     A candidate cannot exist without at least one proposal. A pair that reached
     evaluation without a recorded retriever invocation is a pair whose recall cannot be
@@ -260,8 +261,9 @@ class Candidate:
     ``CandidateSet`` applies while accumulating holds for a directly constructed candidate
     too: an invocation repeated with identical metadata collapses to one record, and one
     repeated with different rank or score is refused. Leaving it to the builder would be
-    the same constructor-path gap that let ``RetrieverInvocation`` and ``Evidence`` carry
-    an uncanonical value — the invariant belongs to the type that states it.
+    the same constructor-path gap that let ``RetrieverInvocation`` and
+    ``CorrespondenceEvidence`` carry an uncanonical value — the invariant belongs to the
+    type that states it.
 
     **Proposal order is canonical, not the order the retrievers happened to run in.**
     Ordered by ``(round, retriever, config)``, so two runs that surface one pair from the
@@ -380,14 +382,14 @@ class CandidateSet:
 
 
 @dataclass(frozen=True)
-class Evidence:
-    """Named identity signals for one candidate pair. Decides nothing.
+class CorrespondenceEvidence:
+    """Named correspondence signals for one candidate pair. Decides nothing.
 
-    Evidence describes; assignment decides. There is deliberately no verdict field, no
-    confidence, and no threshold: ADR 0020 rejects a policy-bearing evidence object on
-    the ground that one score already serves several policies, so an object carrying its
-    own would either pick one — wrong — or grow one per consumer, which is the present
-    coupling with more indirection.
+    CorrespondenceEvidence describes; assignment decides. There is deliberately no
+    verdict field, no confidence, and no threshold: ADR 0020 rejects a policy-bearing
+    evidence object on the ground that one score already serves several policies, so an
+    object carrying its own would either pick one — wrong — or grow one per consumer,
+    which is the present coupling with more indirection.
 
     ``signals`` is a name-sorted tuple of scalars, so an evidence value is hashable and
     order-independent. The sort happens in ``__post_init__``, not only in ``of()``, so
@@ -395,12 +397,12 @@ class Evidence:
     signals written in another order. Booleans are welcome (header equality, path
     equality); what is not welcome is a name that answers "do these correspond?".
 
-    **Pair orientation is checked here, not only where evidence is consumed.** Evidence
-    describes a candidate pair, and a candidate is one old-side and one new-side
-    observation, so the same invariant holds. ``Correspondence`` also refuses evidence
-    naming a pair it does not relate, but that check cannot speak for a record built and
-    passed around on its own — a reversed record would carry a valid-looking address for
-    a pairing that runs backwards.
+    **Pair orientation is checked here, not only where evidence is consumed.**
+    CorrespondenceEvidence describes a candidate pair, and a candidate is one old-side
+    and one new-side observation, so the same invariant holds. ``Correspondence`` also
+    refuses evidence naming a pair it does not relate, but that check cannot speak for a
+    record built and passed around on its own — a reversed record would carry a
+    valid-looking address for a pairing that runs backwards.
 
     **An empty signal set is valid**, and deliberately so. A correspondence must carry
     one evidence record per selected link, but *what* a signal is remains Phase 2 work.
@@ -426,8 +428,8 @@ class Evidence:
         object.__setattr__(self, "signals", _normalize_named_scalars(self.signals))
 
     @classmethod
-    def of(cls, old: ObservationRef, new: ObservationRef, **signals: Scalar) -> Evidence:
-        """Build evidence from named signals: ``Evidence.of(o, n, header_equal=True)``."""
+    def of(cls, old: ObservationRef, new: ObservationRef, **signals: Scalar) -> CorrespondenceEvidence:
+        """Build evidence from named signals: ``CorrespondenceEvidence.of(o, n, header_equal=True)``."""
         return cls(old=old, new=new, signals=tuple(signals.items()))
 
     @property
@@ -492,7 +494,7 @@ class Correspondence:
 
     old: tuple[ObservationRef, ...] = ()
     new: tuple[ObservationRef, ...] = ()
-    evidence: tuple[Evidence, ...] = ()
+    evidence: tuple[CorrespondenceEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.old and not self.new:
@@ -585,9 +587,9 @@ class CorrespondenceSet:
     Reproduce with ``scripts/probe_matching_stages.py``'s corpus walk, or read
     ``tests/test_matching_contracts.py::test_the_corpus_assigner_uses_each_observation_once``.
 
-    This is the per-anchor competition policy only. Global collision resolution is a
-    separate question with different correctness criteria, and ADR 0020 defers it
-    without choosing an algorithm; nothing here anticipates one.
+    This is local assignment only. Global collision resolution is a separate question
+    with different correctness criteria, and ADR 0020 defers it without choosing an
+    algorithm; nothing here anticipates one.
     """
 
     def __init__(self, correspondences: Iterable[Correspondence] = ()) -> None:
