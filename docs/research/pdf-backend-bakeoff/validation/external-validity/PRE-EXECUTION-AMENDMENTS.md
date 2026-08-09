@@ -2316,6 +2316,11 @@ it. That is a genuine reproducibility defect in a §8 quantity. It **does not ga
 be resolved under a future amendment before `score_metrics.py` is implemented.** A30 does not
 carry it, and does not expand into §8.
 
+> **That obligation is DISCHARGED by
+> [A37](#a37--substantive-freeze-the-supplementary-non-zero-document-bootstrap).** A29's status
+> is unchanged — it remains **WITHDRAWN**, and A37 adopts the valid finding forward under a
+> fresh number rather than resurrecting this one. **A29 was not wrong.**
+
 ---
 
 ## A30 — SUBSTANTIVE. The occurrence identity is an absolute source position
@@ -3510,12 +3515,13 @@ block changed no existing contract.
 
 ```json
 {"id": "A37", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["26fda38", "f2d16d0"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": [],
+ "files_touched": ["probes/methodology_contracts.py", "probes/x15_methodology_contracts.py",
+                   "probes/x21_build_oracle.py"],
  "supersedes_text_in": "none -- A27.5 and PRE-REGISTRATION 8.3 are unchanged; this freezes the reproducibility of a quantity they already permit",
- "status": "RULED -- committed before the implementation it governs"}
+ "status": "IMPLEMENTED -- x15 51/51, 0 failures; awaiting review"}
 ```
 
 **`affects_scoring_rule` is false, and that is a substantive claim rather than a convenience.**
@@ -3636,6 +3642,24 @@ SYNTHETIC only. No holdout document opened, nothing adjudicated or scored, no co
 scoring artifact, no execution marker. `score_metrics.py` and `decide_architecture.py` remain
 **unstarted** — this is a pure contract in `probes/methodology_contracts.py` with its controls
 in `probes/x15_methodology_contracts.py`, the existing owner.
+
+### Realized
+
+`x15` **51/51, 0 failures** (was 26/26). Fixture: 9 documents, 3 events → interval
+`[0.0, 0.667]` at indices `[249, 9749]`. **200 of 200** sampled replicates repeat at least one
+document, so replacement is proven rather than assumed. Zero-event branch at N=14 returns
+**0.19263617565013536**, which independently corroborates the closed form against §8.3's stated
+"≈ 19 % at N ≈ 14" and §8.1's measured 0.1926.
+
+**Incidental artifact-reproducibility fix, found by the regression run.** `x21`'s committed
+artifact was **not byte-reproducible**: two controls serialized raw Python **sets** into
+`expected`/`observed`, and set repr order varies with per-process string-hash randomisation, so
+identical inputs produced a diff on every run. Contents and pass state were always identical,
+but the churn would pollute the ledger and it contradicts the reproducibility A37 exists to
+establish. Both now compare sorted lists. **Proven** by running each probe twice and diffing:
+`x15` and `x21` artifacts are byte-identical across runs. No control's meaning changed and
+`x21` remains **93/93**; `probes/x21_build_oracle.py` is declared above because this commit
+touched it.
 
 ---
 
