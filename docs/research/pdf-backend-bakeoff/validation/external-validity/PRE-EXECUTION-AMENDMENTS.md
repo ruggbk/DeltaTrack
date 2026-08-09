@@ -3085,13 +3085,13 @@ and no-tolerance rule unchanged.
 
 ```json
 {"id": "A34", "class": "SUBSTANTIVE",
- "commits": ["f3fd700"],
+ "commits": ["f3fd700", "4767930"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["HARNESS-PLAN.md", "probes/oracle_geometry.py",
                    "probes/x20_oracle_crop_coordinates.py"],
  "supersedes_text_in": "A33 renderer/device-rectangle formula ONLY, wherever the epsilon-free expression is normative",
- "status": "MEASURED -- awaiting review"}
+ "status": "FROZEN -- reviewed; MuPDF device-rectangle epsilon correction approved"}
 ```
 
 `affects_scoring_rule` is **true**: the constant can move `device_x0` by a whole pixel and so
@@ -3156,6 +3156,18 @@ padding**; every fail-closed bbox refusal; and `NONZERO_PAGE_ROTATION` **abort-n
 
 **Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
 no scoring, no holdout document opened, no oracle artifact created.
+
+### Reviewed: approved, with one clerical repair (`4767930`)
+
+External review **approved A34 substantively**. One stale evidence label survived the
+consistency sweep: the `x20` width check was still described as `ceil(x1*s) - floor(x0*s)`,
+epsilon-free, contradicting the rule the check evaluates via `expected_image_width`. The label
+now states `ceil(x1*s - eps) - floor(x0*s + eps)` and the artifact was regenerated so the
+committed test description agrees with the committed source. **No implementation and no
+measurement changed** — the regenerated artifact differs by exactly that one line, every
+measured value byte-identical on re-measurement against the same pinned renderer, so the
+reproduction is evidence rather than an assumption. Re-measured: `x20` 45/45, 0 stop
+conditions; H 541/541 and C 4/4 at both scales; 1164/1164 DEVELOPMENT regions rendered.
 
 ---
 
