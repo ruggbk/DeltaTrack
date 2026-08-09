@@ -7,7 +7,8 @@
   "ocr_used": false,
   "segmentation_heuristic_used": false,
   "window_pt": 3.0,
-  "n_measured": 16,
+  "n_attempted": 16,
+  "n_cleanly_measured": 15,
   "n_excluded_neighbour_ink": {
    "H": 0,
    "C": 0
@@ -74,7 +75,6 @@
    "ngid": 404,
    "kind": "subsection",
    "m_pt": 1.337005615234375,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -110,7 +110,8 @@
     "delta_pt": -1.2320098876953125,
     "delta_px_300": -5.133374532063802,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -118,7 +119,6 @@
    "ngid": 424,
    "kind": "subsection",
    "m_pt": 1.7430038452148438,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -154,7 +154,8 @@
     "delta_pt": -1.2319793701171875,
     "delta_px_300": -5.133247375488281,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -162,7 +163,6 @@
    "ngid": 942,
    "kind": "account",
    "m_pt": 1.8130035400390625,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -198,7 +198,8 @@
     "delta_pt": -0.89599609375,
     "delta_px_300": -3.7333170572916665,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -206,7 +207,6 @@
    "ngid": 203,
    "kind": "account",
    "m_pt": 1.8130035400390625,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -242,7 +242,8 @@
     "delta_pt": -0.89599609375,
     "delta_px_300": -3.7333170572916665,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -250,7 +251,6 @@
    "ngid": 647,
    "kind": "account",
    "m_pt": 1.8130035400390625,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -282,7 +282,8 @@
     "delta_pt": -0.89599609375,
     "delta_px_300": -3.7333170572916665,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -290,7 +291,6 @@
    "ngid": 776,
    "kind": "account",
    "m_pt": 1.8130035400390625,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -322,7 +322,8 @@
     "delta_pt": -0.89599609375,
     "delta_px_300": -3.7333170572916665,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -330,7 +331,6 @@
    "ngid": 832,
    "kind": "account",
    "m_pt": 1.8130035400390625,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -362,7 +362,8 @@
     "delta_pt": -0.8960113525390625,
     "delta_px_300": -3.7333806355794272,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "119-hr-1/1",
@@ -370,7 +371,6 @@
    "ngid": 529,
    "kind": "account",
    "m_pt": 1.8130035400390625,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -402,7 +402,8 @@
     "delta_pt": -0.89599609375,
     "delta_px_300": -3.7333170572916665,
     "found": true
-   }
+   },
+   "measured": true
   }
  ],
  "C": [
@@ -412,7 +413,6 @@
    "ngid": 1262,
    "kind": "subsection",
    "m_pt": 1.9739990234375,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -448,7 +448,8 @@
     "delta_pt": -1.0360565185546875,
     "delta_px_300": -4.316902160644531,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "118-hr-4366/1",
@@ -456,7 +457,6 @@
    "ngid": 1256,
    "kind": "subsection",
    "m_pt": 2.1909942626953125,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -492,7 +492,8 @@
     "delta_pt": -1.2319793701171875,
     "delta_px_300": -5.133247375488281,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "114-hr-2029/4",
@@ -500,7 +501,6 @@
    "ngid": 627,
    "kind": "subsection",
    "m_pt": 2.1910018920898438,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "measured": false,
@@ -524,7 +524,9 @@
     "delta_pt": -1.23199462890625,
     "delta_px_300": -5.133310953776042,
     "found": true
-   }
+   },
+   "measured": false,
+   "why_not_measured": "NON_GLYPH_VECTOR_INK_IN_BAND"
   },
   {
    "document": "115-hr-5895/1",
@@ -532,7 +534,6 @@
    "ngid": 1105,
    "kind": "subsection",
    "m_pt": 2.1910018920898438,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -568,7 +569,8 @@
     "delta_pt": -1.2319488525390625,
     "delta_px_300": -5.133120218912761,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "115-hr-5895/1",
@@ -576,7 +578,6 @@
    "ngid": 159,
    "kind": "subsection",
    "m_pt": 2.1910018920898438,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -608,7 +609,8 @@
     "delta_pt": -1.2319488525390625,
     "delta_px_300": -5.133120218912761,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "118-hr-8752/1",
@@ -616,7 +618,6 @@
    "ngid": 190,
    "kind": "subsection",
    "m_pt": 2.1910018920898438,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -648,7 +649,8 @@
     "delta_pt": -1.2319488525390625,
     "delta_px_300": -5.133120218912761,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "118-hr-4366/1",
@@ -656,7 +658,6 @@
    "ngid": 639,
    "kind": "subsection",
    "m_pt": 2.1910018920898438,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -688,7 +689,8 @@
     "delta_pt": -1.2319488525390625,
     "delta_px_300": -5.133120218912761,
     "found": true
-   }
+   },
+   "measured": true
   },
   {
    "document": "114-hr-2029/4",
@@ -696,7 +698,6 @@
    "ngid": 1252,
    "kind": "section",
    "m_pt": 3.7351531982421875,
-   "measured": true,
    "dpi_300": {
     "dpi": 300,
     "crop_px": [
@@ -728,10 +729,38 @@
     "delta_pt": -0.33599853515625,
     "delta_px_300": -1.399993896484375,
     "found": true
-   }
+   },
+   "measured": true
   }
  ],
  "tests": [
+  {
+   "test": "a vector-ink exclusion is NOT counted in the measured denominator",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the outer row once said measured=True before measure() ran, inflating n_measured by one"
+  },
+  {
+   "test": "...and contributes NO value to either offset distribution",
+   "expected": [
+    0,
+    0
+   ],
+   "observed": [
+    0,
+    0
+   ],
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "the denominator is exact: cleanly measured + excluded == attempted",
+   "expected": 16,
+   "observed": 16,
+   "pass": true,
+   "fails_when": ""
+  },
   {
    "test": "every rendered crop contained ink, so the PDF->MuPDF coordinate mapping is right",
    "expected": 0,

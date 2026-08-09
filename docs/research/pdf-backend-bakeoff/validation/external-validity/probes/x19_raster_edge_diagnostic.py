@@ -206,7 +206,6 @@ def main() -> int:
                 "ngid": t["ngid"],
                 "kind": t.get("kind"),
                 "m_pt": t["m_pt"],
-                "measured": True,
             }
             keep = i < N_IMAGES
             for dpi, tag in ((PRIMARY_DPI, "300"), (R1_DPI, "330")):
@@ -216,17 +215,27 @@ def main() -> int:
                 if m.get("error") == "EMPTY_CROP":
                     empty += 1
             row["mupdf_glyph_bbox_delta"] = mupdf_glyph_bbox_delta(t)
+            # `measure()` is the AUTHORITY on whether a raster edge was obtained. An earlier
+            # cut set measured=True on this row BEFORE those calls ran, so a target measure()
+            # had excluded still counted in the denominator -- 16 reported where 15 were
+            # measurable. The flag is now derived from the per-scale results, never asserted
+            # ahead of them.
+            reasons = sorted({row[k].get("why_not_measured") for k in ("dpi_300", "dpi_330")} - {None})
+            row["measured"] = not reasons
+            if reasons:
+                row["why_not_measured"] = reasons[0]
             results[pop].append(row)
 
-    measured = [r for p in results.values() for r in p if r.get("measured") and "dpi_300" in r]
+    all_rows = [r for p in results.values() for r in p]
+    cleanly = [r for r in all_rows if r.get("measured") and "dpi_300" in r]
     offsets300 = [
         r["dpi_300"]["visible_edge_offset_px"]
-        for r in measured
+        for r in cleanly
         if r["dpi_300"].get("visible_edge_offset_px") is not None
     ]
     offsets330 = [
         r["dpi_330"]["visible_edge_offset_px"]
-        for r in measured
+        for r in cleanly
         if r["dpi_330"].get("visible_edge_offset_px") is not None
     ]
     vector_excluded = [
@@ -236,9 +245,37 @@ def main() -> int:
             "ngid": r["ngid"],
             "n_vector_paths_in_band": r["dpi_300"].get("n_vector_paths_in_band"),
         }
-        for r in measured
-        if r["dpi_300"].get("why_not_measured") == "NON_GLYPH_VECTOR_INK_IN_BAND"
+        for r in all_rows
+        if r.get("why_not_measured") == "NON_GLYPH_VECTOR_INK_IN_BAND"
     ]
+
+    # NEGATIVE CONTROL for the denominator defect itself: an excluded target may neither be
+    # counted as measured nor contribute an offset. Asserted on the rows, not on a helper
+    # comparing itself.
+    check(
+        "a vector-ink exclusion is NOT counted in the measured denominator",
+        [],
+        [r["ngid"] for r in cleanly if r.get("why_not_measured") == "NON_GLYPH_VECTOR_INK_IN_BAND"],
+        "the outer row once said measured=True before measure() ran, inflating n_measured by one",
+    )
+    check(
+        "...and contributes NO value to either offset distribution",
+        (0, 0),
+        tuple(
+            sum(
+                1
+                for r in all_rows
+                if r.get("why_not_measured") == "NON_GLYPH_VECTOR_INK_IN_BAND"
+                and r[k].get("visible_edge_offset_px") is not None
+            )
+            for k in ("dpi_300", "dpi_330")
+        ),
+    )
+    check(
+        "the denominator is exact: cleanly measured + excluded == attempted",
+        len(all_rows),
+        len(cleanly) + len([r for r in all_rows if not r.get("measured")]),
+    )
 
     check(
         "every rendered crop contained ink, so the PDF->MuPDF coordinate mapping is right",
@@ -250,7 +287,7 @@ def main() -> int:
     check(
         "at least one worst-case target admitted a clean, unsegmented measurement",
         True,
-        len(measured) > 0,
+        len(cleanly) > 0,
         "if all were excluded, this diagnostic would report nothing and must say so",
     )
 
@@ -261,7 +298,8 @@ def main() -> int:
         "ocr_used": False,
         "segmentation_heuristic_used": False,
         "window_pt": WINDOW_PT,
-        "n_measured": len(measured),
+        "n_attempted": len(all_rows),
+        "n_cleanly_measured": len(cleanly),
         "n_excluded_neighbour_ink": excluded,
         "n_excluded_non_glyph_vector_ink": len(vector_excluded),
         "excluded_non_glyph_vector_ink": vector_excluded,
