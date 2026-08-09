@@ -2830,6 +2830,127 @@ no scoring, no holdout document opened, no oracle/frame artifact created, and A3
 
 ---
 
+## A33 — SUBSTANTIVE. Region crop and pixel-coordinate operationalization
+
+```json
+{"id": "A33", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/oracle_geometry.py", "probes/x20_oracle_crop_coordinates.py"],
+ "supersedes_text_in": "closes ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN (A32)",
+ "status": "CONTRACT COMMITTED -- rules frozen before the DEVELOPMENT probe was run"}
+```
+
+**This block is committed BEFORE `x20` exists.** `affects_scoring_rule` is **true**, unlike A32:
+the exact pixels shown to the adjudicator and the pixel→PDF inversion can move an oracle label
+and therefore a realized score. It is not TOOLING and is not filed as one.
+
+### A33.1 — the region bbox is the minimal union of committed line bboxes, zero padding
+
+For region `R` whose committed frame carries neutral lines `L`:
+
+```
+bbox_x0 = min(L.bbox.x0)      bbox_y0 = min(L.bbox.y0)
+bbox_x1 = max(L.bbox.x1)      bbox_y1 = max(L.bbox.y1)
+```
+
+**Zero padding.** A `NeutralLine` bbox is already the min/max over every eligible source-glyph
+box assigned to that physical line, so padding would add a new free parameter, could expose
+neighbouring content outside the frozen region, and would displace the unique least-expansive
+rectangle that implements the existing "region bbox from neutral geometry" rule. Short trailing
+regions use the identical rule over their 1–7 lines.
+
+**Forbidden:** re-deriving neutral geometry from the PDF; expanding to page width or a text
+column; horizontal or vertical padding; and any use of H text, X text, anchor content or
+adjudicated content.
+
+**ABORT** if a committed line bbox is missing, non-finite, or non-positive, or if the committed
+region cannot be rendered without the renderer clipping part of it. The geometry is **not**
+repaired by adding padding.
+
+### A33.2 — the committed frame is authoritative
+
+```
+oracle region geometry == deterministic function of frames.json geometry
+```
+
+No fresh neutral clustering and no new source-glyph census may determine the realized crop.
+**The PDF supplies pixels; the frame supplies which rectangle to render.**
+
+### A33.3 — the pixel↔PDF transform is a measured renderer fact, not a guess
+
+Image column 0 is **not assumed** to correspond exactly to `bbox_x0`. `x20` establishes
+empirically, from MuPDF's own returned pixmap metadata, what PDF coordinate column boundary 0
+represents, how the right edge is rounded, what width MuPDF returns, and whether the mapping is
+exactly derivable from `bbox + DPI`. Synthetic PDFs with known marks are exercised across many
+fractional device-pixel phases of `bbox_x0`, at widths that do and do not land on integral pixel
+widths, with marks at `bbox_x0`, at known interior coordinates, and near `bbox_x1`, **at 300 and
+330 DPI independently**. The R1 repeat uses its own raster transform and its own `start_x_px`.
+
+**The mapping is chosen because the renderer does it, never because it flatters `x18`.**
+
+**Required roundtrip:** `PDF x → render → expected integer start_x_px → frozen inverse → PDF x
+estimate → nearest-x resolver` must recover the intended source position across the whole
+tested fractional-origin grid, with a **deliberately wrong origin convention** demonstrated to
+break it.
+
+**If exact inversion needs renderer state not deterministically derivable from `bbox + image
+dimensions + DPI`, `x20` STOPS and reports
+`A30_3_RENDER_TRANSFORM_METADATA_INSUFFICIENT`**, naming the missing value. A pixmap origin or
+renderer matrix is **not** silently added to the oracle key. If the device rectangle *is*
+mechanically derivable, the derivation is encoded and tested rather than a free field added.
+
+### A33.4 — page rotation
+
+The coordinate contract is inspected on **synthetic** pages at **0°, 90°, 180°, 270°**, and a
+rotation census is reported for the DEVELOPMENT pages consumed. The rule:
+
+> a rotated page either has a proven deterministic PDF→rendered-image coordinate transform, or
+> frame/oracle construction **refuses** it.
+
+No approximate transform is improvised. If exact support is proven synthetically it is recorded;
+otherwise a fail-closed `NONZERO_PAGE_ROTATION` rule is **proposed for review**, not adopted
+unilaterally. No confirmatory page is inspected to choose this rule.
+
+### A33.5 — what `start_x_px` points at
+
+A30.3's resolver is unchanged. The eventual adjudicator instruction is clarified to:
+
+> `start_x_px` marks the left edge of the **first character's own visible ink**. Ignore a
+> strike-through, underline, border, rule or other non-character mark crossing the character.
+> Do not use a text-box or bounding-box edge.
+
+This says what the adjudicator points at; it introduces no geometric rule. The `x19`
+struck-through case is **retained as the DEVELOPMENT negative-control example** of why the
+distinction matters. Struck-through headings are **not** excluded from future adjudication —
+that exclusion applied only to `x19`'s automated occupancy measurement.
+
+### Controls (all frozen here, before measurement)
+
+1 bbox is exactly the min/max union of committed line bboxes · 2 input line order cannot change
+it · 3 H/X text cannot change it · 4 anchor content cannot change it · 5 no padding is added ·
+6 every region line bbox is contained by its region bbox · 7 a neighbouring line outside the
+region does not expand the crop · 8 a short trailing region follows the same rule · 9
+invalid/non-finite committed geometry aborts · 10 300 and 330 render the SAME PDF bbox · 11
+re-render of the same bbox/renderer/DPI reproduces the PNG hash · 12 pixel→PDF→nearest-ngid
+roundtrip succeeds across fractional origins · 13 a deliberately wrong pixel-origin convention
+makes control 12 FAIL · 14 rotated-page handling is exact or explicitly refusing.
+
+Each states what fact would make it fail, and **no control may compare a helper with itself**.
+
+### DEVELOPMENT diagnostics (not pass thresholds)
+
+Region count, short-trailing count, bbox width/height distribution, invalid-bbox count,
+out-of-page bbox count, empty-render count, render-determinism failures, page-rotation census,
+pixel-inversion failures. **If the zero-padding union clips committed neutral content, `x20`
+STOPS and returns the cases — padding is not tuned after observing them.**
+
+**Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
+no scoring, no holdout document opened, no oracle artifact created, and A30.3 unchanged.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
