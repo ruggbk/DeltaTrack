@@ -18,7 +18,7 @@ carried three frictions:
    diff works on any bill type, not only appropriations.
 
 GPO's govinfo bulk data is the alternative: static files served from
-`govinfo.gov/bulkdata`, no key, no rate limit, covering the 113th Congress forward.
+`govinfo.gov/bulkdata`, keyless, covering the 113th Congress forward.
 
 ## Decision
 
@@ -30,24 +30,32 @@ coverage floor.
 govinfo exposes bill **text** and bill **metadata** as two separate bulk feeds, and
 the design uses each for a different job:
 
-- **Text for diff** comes from the **BILLS** feed, one XML file per version at
-  `bulkdata/BILLS/{congress}/{session}/{type}/BILLS-{congress}{type}{number}{ver}.xml`.
-  A parity check comparing byte, canonical-XML and parsed-tree equality found this
-  **byte-for-byte identical** to the Congress.gov "Formatted XML" the pipeline
-  previously downloaded, across all twelve fixtures checked. It is the same legacy
-  `bill.dtd` format the parser already reads, so no source-specific parsing exists.
+- **Text for diff** comes from GPO's **BILLS** collection, by two routes onto the same
+  documents: bulk ingestion reads the BILLS bulk-data feed
+  (`bulkdata/BILLS/{congress}/{session}/{type}/BILLS-{congress}-{session}-{type}.zip`),
+  and per-bill acquisition fetches the same BILLS packages through the package-content
+  path below. A parity check comparing byte, canonical-XML and parsed-tree equality
+  found this **byte-for-byte identical** to the Congress.gov "Formatted XML" the
+  pipeline previously downloaded, across all twelve fixtures checked. It is the same
+  legacy `bill.dtd` format the parser already reads, so no source-specific parsing
+  exists.
 - **PDFs** come from the **package-content** path, addressed by the same package id
   and equally keyless:
-  `https://www.govinfo.gov/content/pkg/{packageId}/pdf/{packageId}.pdf`. The govinfo
-  PDFs for `BILLS-118hr4366eh` and `BILLS-118hr4366enr` are byte-for-byte identical
-  (matching SHA-256) to the Congress.gov copies, so nothing downstream depends on
-  which source served the file.
+  `https://www.govinfo.gov/content/pkg/{packageId}/pdf/{packageId}.pdf`. That path
+  serves each package's XML rendition too, which is the route per-bill acquisition
+  takes above; it needs no session in the URL, where the bulk-data path does. The
+  govinfo PDFs for `BILLS-118hr4366eh` and `BILLS-118hr4366enr` are byte-for-byte
+  identical (matching SHA-256) to the Congress.gov copies, so nothing downstream
+  depends on which source served the file.
 - **Metadata for discovery** comes from the separate **BILLSTATUS** feed
   (`bulkdata/BILLSTATUS/{congress}/{type}/BILLSTATUS-{congress}{type}{number}.xml`),
   which carries title, subjects, committee / subcommittee codes, and the version
   dates that order a bill's versions. It does not contain bill text, and the BILLS
   feed does not carry this metadata, so the two are fetched independently.
-- **Discovery by bill number** is a direct BILLS URL, no index, works for any bill.
+- **Lookup by bill number needs no local index.** The per-bill path reads that bill's
+  BILLSTATUS, takes the BILLS package ids from the text versions it declares, and
+  retrieves the corresponding package renditions. Bills below the coverage floor use
+  the API fallback.
 - **Discovery by title** uses a local index built from the BILLSTATUS feed (one
   per-bill-type ZIP, roughly 14 MB for the ~5,600 Senate bills of a Congress), not a
   live paged API.
@@ -76,12 +84,16 @@ Alternatives:
 
 ## Consequences
 
-- **No API key and no rate limit on the default path**, for XML and PDF alike. This
-  removes a friction point for an install-constrained audience and makes the test
-  corpus reproducible from a clean clone without credentials. A `CONGRESS_API_KEY` is
-  needed only for the API fallback, or for a year-range bulk download, whose
-  appropriations *discovery* still uses the committee endpoint even though its text
-  comes from govinfo.
+- **No Congress.gov API key or API-quota dependency on the default path.** XML and PDF
+  acquisition both use keyless govinfo endpoints, so neither inherits Congress.gov key
+  management nor the `DEMO_KEY` cap of 30 requests/hour. govinfo publishes no quota for
+  these endpoints and none was observed in use, which is weaker than a guarantee that
+  it never throttles; what this decision removes is the dependency on a *metered,
+  credentialed* API, not the possibility of server-side limits. The effect is one less
+  friction point for an install-constrained audience, and a test corpus reproducible
+  from a clean clone without credentials. A `CONGRESS_API_KEY` is needed only for the
+  API fallback, or for a year-range bulk download, whose appropriations *discovery*
+  still uses the committee endpoint even though its text comes from govinfo.
 - **Discovery and text retrieval are separable**, which is what lets that split
   exist: either can change source without the other having to follow.
 - **Coverage floor is the 113th Congress**, where govinfo bulk BILLS begins. A
