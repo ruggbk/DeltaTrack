@@ -31,6 +31,7 @@ sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(BAKE / "probes"))
 sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
+import anchor_provenance as AP  # noqa: E402
 import build_frames as BF  # noqa: E402
 import oracle_geometry as OG  # noqa: E402
 import run_extended  # noqa: E402
@@ -47,7 +48,12 @@ DOCS = [
     ("118-hr-8752/1", REPO / "tests/corpus/118-hr-8752/1_reported-in-house.pdf"),
     ("119-hr-1/1", REPO / "tests/corpus/119-hr-1/1_reported-in-house.pdf"),
 ]
-PAGE_LIMIT = 12
+# 95, not 12: the known same-line collisions sit at 114-hr-2029 p66/p136 and 118-hr-8752 p92,
+# so a 12-page window left population C EMPTY and its recovery claim vacuous -- which the
+# non-vacuity control below caught. Widening the window is required by the contract (C must be
+# exercised), not a selection of favourable data: every metric is fixed and every region in
+# range is measured.
+PAGE_LIMIT = 95
 HOLDOUT_GUARD = {
     "116-hr-7611",
     "115-hr-5961",
@@ -169,16 +175,64 @@ def part_bbox() -> dict:
     missing = synth_page_frame([lines[0]])
     missing["neutral_lines"][0].pop("bbox")
     check("9b. a missing line bbox ABORTS", OG.MISSING_LINE_BBOX, raised(lambda: OG.region_bbox(missing, 0)))
+    # 9c -- a degenerate SOLE line now trips the per-line check first, which is stricter and
+    # correct. NON_POSITIVE_REGION_BBOX is therefore UNREACHABLE through `region_bbox`: a union
+    # of positive-area lines is always positive. It is retained as a defensive backstop for any
+    # future caller that constructs a bbox another way, and this control asserts the reason the
+    # code ACTUALLY returns rather than one that can no longer fire.
     degenerate = synth_page_frame([[100.0, 700.0, 100.0, 712.0]])
     check(
-        "9c. a non-positive region bbox ABORTS",
-        OG.NON_POSITIVE_REGION_BBOX,
+        "9c. a degenerate sole line ABORTS via the stricter per-line check",
+        OG.NON_POSITIVE_LINE_BBOX,
         raised(lambda: OG.region_bbox(degenerate, 0)),
+        "the region-union guard alone would not have caught a single degenerate line",
     )
     check(
         "9d. ...while the clean frame does NOT abort, so 9a-9c prove something",
         None,
         raised(lambda: OG.region_bbox(synth_page_frame(lines), 0)),
+    )
+
+    # 9e -- an INDIVIDUAL degenerate line must abort even when its siblings make the union
+    # positive. Checking only the union would let the defective committed geometry through
+    # unseen, because the region would still render.
+    eight = [[100.0 + i, 700.0 - 14 * i, 500.0, 712.0 - 14 * i] for i in range(8)]
+    check(
+        "9e. one degenerate line among eight valid ones ABORTS (union alone would pass)",
+        OG.NON_POSITIVE_LINE_BBOX,
+        raised(lambda: OG.region_bbox(synth_page_frame([[300.0, 650.0, 300.0, 662.0], *eight[1:]]), 0)),
+        "a union-only check passes here, so the bad line would be rendered and never reported",
+    )
+    check(
+        "9f. ...and a zero-HEIGHT line aborts the same way",
+        OG.NON_POSITIVE_LINE_BBOX,
+        raised(lambda: OG.region_bbox(synth_page_frame([[300.0, 650.0, 400.0, 650.0], *eight[1:]]), 0)),
+    )
+    check(
+        "9g. ...while the eight valid lines alone do NOT abort",
+        None,
+        raised(lambda: OG.region_bbox(synth_page_frame(eight), 0)),
+    )
+
+    # A33.1 page-bound refusal: no clipping, no intersection, no repair. Each side separately.
+    pw, phh = 612.0, 792.0
+    sides = {
+        "left": (-0.5, 10.0, 100.0, 20.0),
+        "bottom": (10.0, -0.5, 100.0, 20.0),
+        "right": (10.0, 10.0, pw + 0.5, 20.0),
+        "top": (10.0, 10.0, 100.0, phh + 0.5),
+    }
+    for side, bb in sides.items():
+        check(
+            f"a region bbox past the {side} page edge is REFUSED, not clipped",
+            OG.REGION_BBOX_OUTSIDE_PAGE,
+            raised(lambda bb=bb: OG.validate_region_bbox_for_page(bb, pw, phh)),
+            "clipping to the page would hand the adjudicator a stimulus that is not the region the frame committed to",
+        )
+    check(
+        "...while a bbox inside the page passes, so the four refusals prove something",
+        None,
+        raised(lambda: OG.validate_region_bbox_for_page((10.0, 10.0, 100.0, 20.0), pw, phh)),
     )
     return {"synthetic_bbox": list(bbox)}
 
@@ -316,8 +370,62 @@ def part_roundtrip() -> dict:
         (sum(agree), all(agree)),
         "a larger gap would mean the device origin rule is wrong, not merely antialiased",
     )
+    # (c) THE RESOLVER ITSELF IS LOAD-BEARING. Arithmetic error only matters if it can cross a
+    #     nearest-x decision boundary and change the identity. Searched deterministically over
+    #     a grid rather than hand-picked, so the case is found, not constructed to order.
+    crossings = []
+    for dpi in (PRIMARY_DPI, R1_DPI):
+        px_pt = 72.0 / dpi
+        for width in (200.0, 320.0, 460.0):
+            for ph in (0.0, 0.11, 0.23, 0.37, 0.5, 0.61, 0.79, 0.93):
+                bx0 = 100.0 + ph
+                bx1 = bx0 + width
+                img = OG.expected_image_width(bx0, bx1, dpi)
+                # Locate the column where the two transforms disagree MOST rather than guessing
+                # a position: the disagreement is linear in the column, so its extreme sits at
+                # one end, but WHICH end depends on the rounding phase.
+                best_col, best_err = None, 0.0
+                for col in (0, img // 4, img // 2, (3 * img) // 4, max(img - 1, 0)):
+                    true_x = OG.pixel_to_pdf_x(col, bx0, dpi)
+                    err = (bx0 + (col / img) * (bx1 - bx0)) - true_x
+                    if abs(err) > abs(best_err):
+                        best_col, best_err = col, err
+                if best_col is None or abs(best_err) < 1e-9:
+                    continue
+                true_x = OG.pixel_to_pdf_x(best_col, bx0, dpi)
+                # Place the competitor so the true start sits inside its own cell while the
+                # wrong transform's drift carries the estimate across the midpoint.
+                sep = abs(best_err) * 1.6
+                comp = true_x + sep if best_err > 0 else true_x - sep
+                cands = [(1, true_x), (2, comp)]
+                right = AP.resolve_oracle_start_ngid(cands, true_x)
+                wrong = AP.resolve_oracle_start_ngid(cands, bx0 + (best_col / img) * (bx1 - bx0))
+                if right[0] == 1 and wrong[0] != 1:
+                    crossings.append(
+                        {
+                            "dpi": dpi,
+                            "bbox_width": width,
+                            "phase": ph,
+                            "col": best_col,
+                            "drift_pt": best_err,
+                            "drift_px": best_err / px_pt,
+                            "separation_pt": sep,
+                            "correct_transform_ngid": right[0],
+                            "wrong_transform_ngid": wrong[0],
+                            "wrong_refusal": wrong[1],
+                        }
+                    )
+    check(
+        "the wrong transform can cross a nearest-x boundary and change the IDENTITY",
+        True,
+        len(crossings) > 0,
+        "without this the wrong-transform control only shows arithmetic drift, never that the "
+        "resolver would return a different ngid",
+    )
     worst = max((abs(r["sketch_err_pt"]) for r in rows), default=0.0)
     return {
+        "n_identity_crossings_under_wrong_transform": len(crossings),
+        "identity_crossing_examples": crossings[:5],
         "n_arithmetic_cases": len(rows),
         "frozen_inverse_ok": sum(exact),
         "sketch_ok": sum(sketch_ok),
@@ -383,10 +491,15 @@ def part_rotation() -> dict:
 
 
 def part_development() -> dict:
-    print("\n== DEVELOPMENT crop diagnostics (not pass thresholds) ==")
+    """DEVELOPMENT diagnostics, and the END-TO-END resolver recovery the contract required."""
+    print("\n== DEVELOPMENT crop diagnostics + end-to-end resolver recovery ==")
+    from x18_start_x_discriminability import glyph_map  # one implementation, not a copy
+
     widths, heights, rows = [], [], []
-    n_regions = n_short = n_invalid = n_outside = n_empty = n_determinism = n_inversion_fail = 0
+    n_regions = n_rendered = n_short = n_invalid = n_outside = n_empty = n_determinism = n_width_fail = 0
     rotations, clipped = {}, []
+    recov = {("H", 300): [0, 0], ("H", 330): [0, 0], ("C", 300): [0, 0], ("C", 330): [0, 0]}
+    recovery_failures = []
 
     for name, path in DOCS:
         for member in HOLDOUT_GUARD:
@@ -397,11 +510,34 @@ def part_development() -> dict:
         h_pages = run_hybrid.run(path, limit=PAGE_LIMIT)
         x_pages, _s = run_extended.run(path, limit=PAGE_LIMIT)
         frame = BF.build_document_frame("devsha", name, BF.P_HEAD, h_pages, x_pages)
+
+        # A30 starts on exactly these pages, from the A30 machinery -- never from heading text
+        ordered = [d["page"] for d in sorted(h_pages, key=lambda d: d["page_number"])]
+        occurrences, _ref = AP.instrumented_extract_anchors(ordered)
+        starts, by_line = {}, {}
+        for occ in occurrences:
+            d = next((q for q in h_pages if q["page_number"] == occ.page_number), None)
+            if d is None:
+                continue
+            ngid, reason = AP.resolve_start_ngid(d["page"], d["emitted"], occ.merged_index, occ.start_offset)
+            if reason:
+                continue
+            starts.setdefault(occ.page_number, set()).add(ngid)
+            by_line.setdefault((occ.anchor.page_number, occ.anchor.line_number), []).append(ngid)
+        collisions = {(p, n) for (p, _ln), gs in by_line.items() if len(gs) > 1 for n in gs}
+
         doc = pymupdf.open(path)
         try:
             for pf in frame["pages"]:
                 page = doc[pf["page_number"] - 1]
                 rotations[page.rotation] = rotations.get(page.rotation, 0) + 1
+                d_h = next(q for q in h_pages if q["page_number"] == pf["page_number"])
+                xmap = glyph_map(d_h["chars"])
+                region_of = {}
+                for region in pf["regions"]:
+                    for k in region["neutral_line_keys"]:
+                        region_of[tuple(k)] = region["region_ordinal"]
+
                 for region in pf["regions"]:
                     n_regions += 1
                     n_short += bool(region["short_trailing"])
@@ -412,55 +548,103 @@ def part_development() -> dict:
                         continue
                     widths.append(bbox[2] - bbox[0])
                     heights.append(bbox[3] - bbox[1])
-                    if bbox[0] < 0 or bbox[1] < 0 or bbox[2] > page.rect.width or bbox[3] > page.rect.height:
+                    if raised(lambda b=bbox: OG.validate_region_bbox_for_page(b, page.rect.width, page.rect.height)):
                         n_outside += 1
-                    # A33.1 clipping check: every committed line must sit inside the union
+                    keys = {tuple(k) for k in region["neutral_line_keys"]}
                     for line in pf["neutral_lines"]:
-                        if tuple(line["key"]) in {tuple(k) for k in region["neutral_line_keys"]}:
+                        if tuple(line["key"]) in keys:
                             lb = line["bbox"]
                             if lb[0] < bbox[0] or lb[2] > bbox[2] or lb[1] < bbox[1] or lb[3] > bbox[3]:
                                 clipped.append({"document": name, "page": pf["page_number"], "line": line["key"]})
-                    if n_regions % 17:  # render a sample; rendering every region is not the point
-                        continue
+
+                    # EVERY region is rendered, so the denominators below are 1:1 with n_regions
                     ph = page.rect.height
                     clip = pymupdf.Rect(bbox[0], ph - bbox[3], bbox[2], ph - bbox[1])
-                    a = page.get_pixmap(
-                        matrix=pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI)), clip=clip, alpha=False
-                    )
-                    b = page.get_pixmap(
-                        matrix=pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI)), clip=clip, alpha=False
-                    )
-                    ha, hb = hashlib.sha256(a.tobytes("png")).hexdigest(), hashlib.sha256(b.tobytes("png")).hexdigest()
-                    if ha != hb:
+                    mat = pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI))
+                    a = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
+                    b = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
+                    n_rendered += 1
+                    if hashlib.sha256(a.tobytes("png")).hexdigest() != hashlib.sha256(b.tobytes("png")).hexdigest():
                         n_determinism += 1
                     if a.width == 0 or a.height == 0:
                         n_empty += 1
-                    # 10 -- 300 and 330 must use the SAME PDF bbox
                     c330 = page.get_pixmap(
                         matrix=pymupdf.Matrix(OG.scale(R1_DPI), OG.scale(R1_DPI)), clip=clip, alpha=False
                     )
-                    if c330.width != OG.expected_image_width(bbox[0], bbox[2], R1_DPI):
-                        n_inversion_fail += 1
-                    rows.append(
-                        {
-                            "document": name,
-                            "page": pf["page_number"],
-                            "region": region["region_ordinal"],
-                            "bbox": list(bbox),
-                            "w300": a.width,
-                            "w330": c330.width,
-                            "png_deterministic": ha == hb,
-                        }
-                    )
+                    if a.width != OG.expected_image_width(
+                        bbox[0], bbox[2], PRIMARY_DPI
+                    ) or c330.width != OG.expected_image_width(bbox[0], bbox[2], R1_DPI):
+                        n_width_fail += 1
+                    if len(rows) < 12:
+                        rows.append(
+                            {
+                                "document": name,
+                                "page": pf["page_number"],
+                                "region": region["region_ordinal"],
+                                "bbox": list(bbox),
+                                "w300": a.width,
+                                "w330": c330.width,
+                            }
+                        )
+
+                # --- END-TO-END: known start -> pixel -> A33 inverse -> ACTUAL A30 resolver
+                for line in pf["neutral_lines"]:
+                    gids = [g for g in line["gids"] if g in xmap]
+                    if not gids:
+                        continue
+                    ro = region_of.get(tuple(line["key"]))
+                    if ro is None:
+                        continue
+                    try:
+                        bbox = OG.region_bbox(pf, ro)
+                    except OG.OracleGeometryError:
+                        continue
+                    cands = [(g, xmap[g].x0) for g in gids]
+                    for g in gids:
+                        pops = []
+                        if g in starts.get(pf["page_number"], set()):
+                            pops.append("H")
+                        if (pf["page_number"], g) in collisions:
+                            pops.append("C")
+                        if not pops:
+                            continue
+                        for dpi in (PRIMARY_DPI, R1_DPI):
+                            col = OG.pdf_x_to_pixel(xmap[g].x0, bbox[0], dpi)
+                            est = OG.pixel_to_pdf_x(col, bbox[0], dpi)
+                            got, why = AP.resolve_oracle_start_ngid(cands, est)
+                            for pop in pops:
+                                recov[(pop, dpi)][1] += 1
+                                if got == g:
+                                    recov[(pop, dpi)][0] += 1
+                                else:
+                                    recovery_failures.append(
+                                        {
+                                            "population": pop,
+                                            "dpi": dpi,
+                                            "document": name,
+                                            "page": pf["page_number"],
+                                            "ngid": g,
+                                            "got": got,
+                                            "refusal": why,
+                                        }
+                                    )
         finally:
             doc.close()
 
+    for (pop, dpi), (ok, tot) in sorted(recov.items()):
+        print(f"  {pop}_{dpi} recovered {ok}/{tot}")
     check(
-        "10. 300 and 330 render from the SAME committed PDF bbox",
-        0,
-        n_inversion_fail,
-        "a width not matching the frozen derivation means the two scales disagree on geometry",
+        "end-to-end: every H/C start recovers its own ngid through the A33 transform + A30 resolver",
+        [],
+        recovery_failures[:10],
+        "a failure means the frozen transform and the frozen resolver do not compose",
     )
+    check(
+        "...and the end-to-end population is non-empty at both scales, so it is not vacuous",
+        True,
+        all(tot > 0 for _k, (_o, tot) in recov.items()),
+    )
+    check("10. every rendered region matches the frozen width derivation at BOTH scales", 0, n_width_fail)
     check("11. re-rendering the same bbox/renderer/DPI reproduces the PNG hash", 0, n_determinism)
     check(
         "no committed neutral line is clipped by the zero-padding union",
@@ -469,26 +653,33 @@ def part_development() -> dict:
         "if the union clipped committed content, A33.1 would need review -- padding is NOT tuned",
     )
     check("no DEVELOPMENT region produced an empty render", 0, n_empty)
-    check("every DEVELOPMENT page consumed has rotation 0, so the refusal costs nothing today", [0], sorted(rotations))
+    check("every region enumerated was also rendered, so render denominators are not a sample", n_regions, n_rendered)
+    check("every DEVELOPMENT page consumed has rotation 0", [0], sorted(rotations))
     if clipped:
         stop("ZERO_PADDING_UNION_CLIPS_COMMITTED_CONTENT", clipped[:10])
+    if recovery_failures:
+        stop("END_TO_END_RESOLVER_RECOVERY_FAILED", recovery_failures[:10])
     return {
         "n_regions": n_regions,
+        "n_regions_rendered": n_rendered,
+        "render_sample_rule": "none -- all regions rendered",
         "n_short_trailing": n_short,
         "n_invalid_bbox": n_invalid,
         "n_out_of_page_bbox": n_outside,
         "n_empty_render": n_empty,
         "n_render_determinism_failures": n_determinism,
-        "n_pixel_inversion_failures": n_inversion_fail,
+        "n_width_derivation_failures": n_width_fail,
         "page_rotation_census": rotations,
-        "bbox_width_pt": {"min": min(widths), "median": statistics.median(widths), "max": max(widths)}
-        if widths
-        else None,
-        "bbox_height_pt": {"min": min(heights), "median": statistics.median(heights), "max": max(heights)}
-        if heights
-        else None,
+        "end_to_end_recovery": {f"{p}_{d}": {"recovered": o, "n": t} for (p, d), (o, t) in sorted(recov.items())},
+        "end_to_end_failures": recovery_failures[:10],
+        "bbox_width_pt": (
+            {"min": min(widths), "median": statistics.median(widths), "max": max(widths)} if widths else None
+        ),
+        "bbox_height_pt": (
+            {"min": min(heights), "median": statistics.median(heights), "max": max(heights)} if heights else None
+        ),
         "clipped_lines": clipped[:10],
-        "sampled_renders": rows[:12],
+        "sampled_renders": rows,
     }
 
 

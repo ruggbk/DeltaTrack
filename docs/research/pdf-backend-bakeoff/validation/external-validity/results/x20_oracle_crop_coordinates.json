@@ -133,6 +133,69 @@
   ]
  },
  "roundtrip": {
+  "n_identity_crossings_under_wrong_transform": 48,
+  "identity_crossing_examples": [
+   {
+    "dpi": 300,
+    "bbox_width": 200.0,
+    "phase": 0.0,
+    "col": 0,
+    "drift_pt": 0.1600000000000108,
+    "drift_px": 0.6666666666667117,
+    "separation_pt": 0.25600000000001727,
+    "correct_transform_ngid": 1,
+    "wrong_transform_ngid": 2,
+    "wrong_refusal": null
+   },
+   {
+    "dpi": 300,
+    "bbox_width": 200.0,
+    "phase": 0.11,
+    "col": 833,
+    "drift_pt": -0.12980815347719954,
+    "drift_px": -0.5408673061549981,
+    "separation_pt": 0.20769304556351928,
+    "correct_transform_ngid": 1,
+    "wrong_transform_ngid": 2,
+    "wrong_refusal": null
+   },
+   {
+    "dpi": 300,
+    "bbox_width": 200.0,
+    "phase": 0.23,
+    "col": 0,
+    "drift_pt": 0.15000000000000568,
+    "drift_px": 0.6250000000000238,
+    "separation_pt": 0.2400000000000091,
+    "correct_transform_ngid": 1,
+    "wrong_transform_ngid": 2,
+    "wrong_refusal": null
+   },
+   {
+    "dpi": 300,
+    "bbox_width": 200.0,
+    "phase": 0.37,
+    "col": 833,
+    "drift_pt": -0.10980815347716089,
+    "drift_px": -0.4575339728215037,
+    "separation_pt": 0.17569304556345744,
+    "correct_transform_ngid": 1,
+    "wrong_transform_ngid": 2,
+    "wrong_refusal": null
+   },
+   {
+    "dpi": 300,
+    "bbox_width": 200.0,
+    "phase": 0.5,
+    "col": 834,
+    "drift_pt": -0.21952095808381955,
+    "drift_px": -0.9146706586825815,
+    "separation_pt": 0.3512335329341113,
+    "correct_transform_ngid": 1,
+    "wrong_transform_ngid": 2,
+    "wrong_refusal": null
+   }
+  ],
   "n_arithmetic_cases": 60,
   "frozen_inverse_ok": 60,
   "sketch_ok": 49,
@@ -341,153 +404,204 @@
   "ruling": "PROPOSED fail-closed NONZERO_PAGE_ROTATION -- the clip carries exactly, but at 90/270 the image x axis is the PDF y axis and at 180 it is mirrored, so start_x_px stops corresponding to a neutral glyph x0"
  },
  "development": {
-  "n_regions": 162,
-  "n_short_trailing": 34,
+  "n_regions": 1164,
+  "n_regions_rendered": 1164,
+  "render_sample_rule": "none -- all regions rendered",
+  "n_short_trailing": 282,
   "n_invalid_bbox": 0,
   "n_out_of_page_bbox": 0,
   "n_empty_render": 0,
   "n_render_determinism_failures": 0,
-  "n_pixel_inversion_failures": 0,
+  "n_width_derivation_failures": 0,
   "page_rotation_census": {
-   "0": 36
+   "0": 285
   },
+  "end_to_end_recovery": {
+   "C_300": {
+    "recovered": 4,
+    "n": 4
+   },
+   "C_330": {
+    "recovered": 4,
+    "n": 4
+   },
+   "H_300": {
+    "recovered": 541,
+    "n": 541
+   },
+   "H_330": {
+    "recovered": 541,
+    "n": 541
+   }
+  },
+  "end_to_end_failures": [],
   "bbox_width_pt": {
    "min": 52.83600000000001,
-   "median": 358.31854999999996,
-   "max": 461.4118
+   "median": 358.995,
+   "max": 461.7408
   },
   "bbox_height_pt": {
-   "min": 6.175000000000001,
-   "median": 129.20995000000002,
+   "min": 6.008000000000003,
+   "median": 192.16414999999995,
    "max": 721.5965
   },
   "clipped_lines": [],
   "sampled_renders": [
    {
     "document": "114-hr-2029/4",
-    "page": 5,
-    "region": 1,
+    "page": 1,
+    "region": 0,
     "bbox": [
-     127.5535,
-     340.1301,
-     486.1863,
-     534.4641
+     127.008,
+     479.2221,
+     485.81,
+     717.62
     ],
-    "w300": 1495,
-    "w330": 1645,
-    "png_deterministic": true
+    "w300": 1496,
+    "w330": 1645
    },
    {
     "document": "114-hr-2029/4",
-    "page": 9,
-    "region": 2,
+    "page": 1,
+    "region": 1,
     "bbox": [
-     126.4198,
-     134.8181,
-     485.3603,
-     326.5901
+     126.266,
+     263.8594,
+     484.9894,
+     472.9356
     ],
-    "w300": 1497,
-    "w330": 1646,
-    "png_deterministic": true
+    "w300": 1495,
+    "w330": 1645
    },
    {
-    "document": "118-hr-8752/1",
+    "document": "114-hr-2029/4",
+    "page": 1,
+    "region": 2,
+    "bbox": [
+     150.0702,
+     244.027,
+     202.9062,
+     252.889
+    ],
+    "w300": 221,
+    "w330": 243
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page": 2,
+    "region": 0,
+    "bbox": [
+     133.1679,
+     548.0601,
+     486.5101,
+     740.212
+    ],
+    "w300": 1474,
+    "w330": 1620
+   },
+   {
+    "document": "114-hr-2029/4",
     "page": 2,
     "region": 1,
     "bbox": [
-     127.5538,
-     340.1313,
-     486.5521,
-     534.5942
+     127.5533,
+     340.0601,
+     486.5283,
+     534.4641
     ],
     "w300": 1497,
-    "w330": 1647,
-    "png_deterministic": true
+    "w330": 1646
    },
    {
-    "document": "118-hr-8752/1",
-    "page": 6,
+    "document": "114-hr-2029/4",
+    "page": 2,
     "region": 2,
     "bbox": [
      126.4198,
-     132.2396,
-     485.5884,
-     326.5974
+     132.0601,
+     485.8984,
+     326.5761
     ],
-    "w300": 1498,
-    "w330": 1647,
-    "png_deterministic": true
+    "w300": 1499,
+    "w330": 1649
    },
    {
-    "document": "118-hr-8752/1",
-    "page": 10,
+    "document": "114-hr-2029/4",
+    "page": 2,
     "region": 3,
     "bbox": [
-     25.13,
-     18.661,
-     486.5418,
-     118.4778
+     126.4201,
+     36.888,
+     485.3437,
+     118.4641
     ],
-    "w300": 1924,
-    "w330": 2115,
-    "png_deterministic": true
+    "w300": 1497,
+    "w330": 1646
    },
    {
-    "document": "119-hr-1/1",
+    "document": "114-hr-2029/4",
     "page": 3,
-    "region": 5,
-    "bbox": [
-     25.13,
-     18.6155,
-     406.3367,
-     87.69
-    ],
-    "w300": 1590,
-    "w330": 1748,
-    "png_deterministic": true
-   },
-   {
-    "document": "119-hr-1/1",
-    "page": 6,
-    "region": 3,
-    "bbox": [
-     150.6195,
-     264.9002,
-     485.8495,
-     357.8602
-    ],
-    "w300": 1398,
-    "w330": 1537,
-    "png_deterministic": true
-   },
-   {
-    "document": "119-hr-1/1",
-    "page": 9,
     "region": 0,
     "bbox": [
-     150.62,
-     618.95,
-     449.64,
-     740.24
+     133.1678,
+     548.0601,
+     486.2344,
+     740.212
     ],
-    "w300": 1247,
-    "w330": 1371,
-    "png_deterministic": true
+    "w300": 1472,
+    "w330": 1619
    },
    {
-    "document": "119-hr-1/1",
-    "page": 11,
-    "region": 4,
+    "document": "114-hr-2029/4",
+    "page": 3,
+    "region": 1,
     "bbox": [
-     150.6201,
-     190.7802,
-     485.85,
-     281.5702
+     127.5533,
+     340.0601,
+     486.7357,
+     534.5901
     ],
-    "w300": 1398,
-    "w330": 1537,
-    "png_deterministic": true
+    "w300": 1498,
+    "w330": 1647
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page": 3,
+    "region": 2,
+    "bbox": [
+     126.4198,
+     132.0601,
+     486.5283,
+     326.5901
+    ],
+    "w300": 1502,
+    "w330": 1651
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page": 3,
+    "region": 3,
+    "bbox": [
+     126.4195,
+     36.888,
+     486.0058,
+     118.6041
+    ],
+    "w300": 1500,
+    "w330": 1649
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page": 4,
+    "region": 0,
+    "bbox": [
+     133.1681,
+     548.2281,
+     486.4961,
+     740.24
+    ],
+    "w300": 1474,
+    "w330": 1620
    }
   ]
  },
@@ -617,14 +731,70 @@
    "fails_when": ""
   },
   {
-   "test": "9c. a non-positive region bbox ABORTS",
-   "expected": "NON_POSITIVE_REGION_BBOX",
-   "observed": "NON_POSITIVE_REGION_BBOX",
+   "test": "9c. a degenerate sole line ABORTS via the stricter per-line check",
+   "expected": "NON_POSITIVE_LINE_BBOX",
+   "observed": "NON_POSITIVE_LINE_BBOX",
+   "pass": true,
+   "fails_when": "the region-union guard alone would not have caught a single degenerate line"
+  },
+  {
+   "test": "9d. ...while the clean frame does NOT abort, so 9a-9c prove something",
+   "expected": null,
+   "observed": null,
    "pass": true,
    "fails_when": ""
   },
   {
-   "test": "9d. ...while the clean frame does NOT abort, so 9a-9c prove something",
+   "test": "9e. one degenerate line among eight valid ones ABORTS (union alone would pass)",
+   "expected": "NON_POSITIVE_LINE_BBOX",
+   "observed": "NON_POSITIVE_LINE_BBOX",
+   "pass": true,
+   "fails_when": "a union-only check passes here, so the bad line would be rendered and never reported"
+  },
+  {
+   "test": "9f. ...and a zero-HEIGHT line aborts the same way",
+   "expected": "NON_POSITIVE_LINE_BBOX",
+   "observed": "NON_POSITIVE_LINE_BBOX",
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "9g. ...while the eight valid lines alone do NOT abort",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "a region bbox past the left page edge is REFUSED, not clipped",
+   "expected": "REGION_BBOX_OUTSIDE_PAGE",
+   "observed": "REGION_BBOX_OUTSIDE_PAGE",
+   "pass": true,
+   "fails_when": "clipping to the page would hand the adjudicator a stimulus that is not the region the frame committed to"
+  },
+  {
+   "test": "a region bbox past the bottom page edge is REFUSED, not clipped",
+   "expected": "REGION_BBOX_OUTSIDE_PAGE",
+   "observed": "REGION_BBOX_OUTSIDE_PAGE",
+   "pass": true,
+   "fails_when": "clipping to the page would hand the adjudicator a stimulus that is not the region the frame committed to"
+  },
+  {
+   "test": "a region bbox past the right page edge is REFUSED, not clipped",
+   "expected": "REGION_BBOX_OUTSIDE_PAGE",
+   "observed": "REGION_BBOX_OUTSIDE_PAGE",
+   "pass": true,
+   "fails_when": "clipping to the page would hand the adjudicator a stimulus that is not the region the frame committed to"
+  },
+  {
+   "test": "a region bbox past the top page edge is REFUSED, not clipped",
+   "expected": "REGION_BBOX_OUTSIDE_PAGE",
+   "observed": "REGION_BBOX_OUTSIDE_PAGE",
+   "pass": true,
+   "fails_when": "clipping to the page would hand the adjudicator a stimulus that is not the region the frame committed to"
+  },
+  {
+   "test": "...while a bbox inside the page passes, so the four refusals prove something",
    "expected": null,
    "observed": null,
    "pass": true,
@@ -684,6 +854,13 @@
    "fails_when": "a larger gap would mean the device origin rule is wrong, not merely antialiased"
   },
   {
+   "test": "the wrong transform can cross a nearest-x boundary and change the IDENTITY",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "without this the wrong-transform control only shows arithmetic drift, never that the resolver would return a different ngid"
+  },
+  {
    "test": "a clip in UNROTATED pdf space renders no ink on a rotated page",
    "expected": [
     true,
@@ -732,11 +909,25 @@
    "fails_when": ""
   },
   {
-   "test": "10. 300 and 330 render from the SAME committed PDF bbox",
+   "test": "end-to-end: every H/C start recovers its own ngid through the A33 transform + A30 resolver",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "a failure means the frozen transform and the frozen resolver do not compose"
+  },
+  {
+   "test": "...and the end-to-end population is non-empty at both scales, so it is not vacuous",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "10. every rendered region matches the frozen width derivation at BOTH scales",
    "expected": 0,
    "observed": 0,
    "pass": true,
-   "fails_when": "a width not matching the frozen derivation means the two scales disagree on geometry"
+   "fails_when": ""
   },
   {
    "test": "11. re-rendering the same bbox/renderer/DPI reproduces the PNG hash",
@@ -760,7 +951,14 @@
    "fails_when": ""
   },
   {
-   "test": "every DEVELOPMENT page consumed has rotation 0, so the refusal costs nothing today",
+   "test": "every region enumerated was also rendered, so render denominators are not a sample",
+   "expected": 1164,
+   "observed": 1164,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "every DEVELOPMENT page consumed has rotation 0",
    "expected": [
     0
    ],

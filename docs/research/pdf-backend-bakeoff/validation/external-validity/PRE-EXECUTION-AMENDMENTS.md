@@ -2838,7 +2838,7 @@ no scoring, no holdout document opened, no oracle/frame artifact created, and A3
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/oracle_geometry.py", "probes/x20_oracle_crop_coordinates.py"],
- "supersedes_text_in": "closes ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN (A32)",
+ "supersedes_text_in": "A30.3 PIXEL->PDF CONVERSION CLAUSE ONLY; closes ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN (A32)",
  "status": "MEASURED -- contract frozen at 397e65c before the probe ran; awaiting review"}
 ```
 
@@ -2945,6 +2945,39 @@ Region count, short-trailing count, bbox width/height distribution, invalid-bbox
 out-of-page bbox count, empty-render count, render-determinism failures, page-rotation census,
 pixel-inversion failures. **If the zero-padding union clips committed neutral content, `x20`
 STOPS and returns the cases — padding is not tuned after observing them.**
+
+### What A33 supersedes, and what survives untouched
+
+A33 supersedes **exactly one clause of A30.3: the pixel→PDF conversion.** A30.3 said the
+coordinate was converted from the "committed region bbox, the rendered image width and the
+frozen DPI"; `x20` measured that this describes a linear map across the bbox, which is not what
+MuPDF does. **A30.3's occurrence-identity design is NOT superseded.**
+
+The surviving A30.3 rule, in full:
+
+```
+adjudicator records start_physical_line + integer start_x_px
+  -> convert start_x_px with the A33 transform
+  -> choose the NEAREST neutral-ink glyph x0 on that physical line
+  -> no candidate  => UNMATCHED
+  -> exact tie     => UNMATCHED
+  -> no tolerance
+  -> the selected ngid IS the occurrence identity
+```
+
+The frozen A33 transform:
+
+```
+s         = DPI / 72
+device_x0 = floor(bbox_x0 * s)
+pdf_x     = (device_x0 + start_x_px) / s
+```
+
+**`image_width` is not the scale and is not required by the inversion.** It is retained only as
+a validation quantity. The historical record is not rewritten: A30.3 did originally carry the
+image-width wording, and this amendment corrects it forward rather than pretending otherwise.
+`HARNESS-PLAN` I15 and the §7 register row are updated to match, and I16/I17 record the bbox
+and rotation rules.
 
 ### MEASURED — the renderer's mapping is not the one A30.3 sketched
 

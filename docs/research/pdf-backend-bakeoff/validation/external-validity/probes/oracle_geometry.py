@@ -29,8 +29,10 @@ import math
 # abort classes -- each refuses; none is representable in a rendered stimulus
 MISSING_LINE_BBOX = "MISSING_LINE_BBOX"
 NON_FINITE_LINE_BBOX = "NON_FINITE_LINE_BBOX"
+NON_POSITIVE_LINE_BBOX = "NON_POSITIVE_LINE_BBOX"
 NON_POSITIVE_REGION_BBOX = "NON_POSITIVE_REGION_BBOX"
 REGION_HAS_NO_LINES = "REGION_HAS_NO_LINES"
+REGION_BBOX_OUTSIDE_PAGE = "REGION_BBOX_OUTSIDE_PAGE"
 NONZERO_PAGE_ROTATION = "NONZERO_PAGE_ROTATION"
 
 
@@ -71,6 +73,12 @@ def region_bbox(page_frame: dict, region_ordinal: int):
                 raise OracleGeometryError(MISSING_LINE_BBOX, {"line": line.get("key")})
             if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in bbox):
                 raise OracleGeometryError(NON_FINITE_LINE_BBOX, {"line": line.get("key"), "bbox": bbox})
+            # EACH committed line must be positive-area in its own right. Checking only the
+            # union would let a degenerate line pass whenever its siblings happen to make the
+            # union positive -- the region would render, and the defective committed geometry
+            # would never be seen. The bad line is refused, never silently dropped.
+            if not (bbox[2] > bbox[0] and bbox[3] > bbox[1]):
+                raise OracleGeometryError(NON_POSITIVE_LINE_BBOX, {"line": line.get("key"), "bbox": bbox})
             boxes.append(bbox)
     if len(boxes) != len(wanted):
         raise OracleGeometryError(MISSING_LINE_BBOX, {"expected": len(wanted), "found": len(boxes)})
@@ -84,6 +92,23 @@ def region_bbox(page_frame: dict, region_ordinal: int):
     return (x0, y0, x1, y1)
 
 
+def validate_region_bbox_for_page(bbox, page_width: float, page_height: float) -> None:
+    """A33.1 -- committed geometry that cannot be rendered whole is REFUSED, never repaired.
+
+    The reusable boundary a future `build_oracle` calls before rendering. There is deliberately
+    no clip-to-page, no intersection, no padding and no repair: a region extending past the
+    page means the committed frame geometry disagrees with the page it claims to describe, and
+    silently rendering the surviving part would hand the adjudicator a stimulus that is not the
+    region the frame committed to.
+    """
+    x0, y0, x1, y1 = bbox
+    if x0 < 0 or y0 < 0 or x1 > page_width or y1 > page_height:
+        raise OracleGeometryError(
+            REGION_BBOX_OUTSIDE_PAGE,
+            {"bbox": [x0, y0, x1, y1], "page": [page_width, page_height]},
+        )
+
+
 # ------------------------------------------------------------------ A33.3 the transform
 
 
@@ -91,28 +116,36 @@ def scale(dpi: int) -> float:
     return dpi / 72.0
 
 
+# MuPDF's own rounding fudge, MEASURED not assumed: sweeping the overhang of the transformed
+# right edge, a device rectangle rounds out only once it exceeds an integer by MORE than 0.001
+# px (2025.001 -> 2025; 2025.0011 -> 2026). This is `fz_round_rect`'s epsilon, applied
+# symmetrically at both edges. It is a RENDERER CONSTANT, not a tolerance: nothing in the
+# nearest-x resolver consults it, and it admits no slack in the identity decision.
+MUPDF_ROUND_EPS = 0.001
+
+
 def device_origin_px(bbox_x0: float, dpi: int) -> int:
-    """The device x of image column 0. MEASURED: MuPDF's pixmap is the rounded-OUT integer
-    bounding box of the transformed clip, so its origin is the floor, not `bbox_x0 * s`."""
-    return math.floor(bbox_x0 * scale(dpi))
+    """The device x of image column 0.
+
+    MEASURED: MuPDF's pixmap is the rounded-OUT integer bounding box of the transformed clip,
+    so its origin is a floor, not `bbox_x0 * s`. The epsilon matters here too, and its absence
+    would be a LATENT OFF-BY-ONE in the inversion: without it, a `bbox_x0 * s` sitting just
+    below an integer floors one pixel low, which no synthetic phase grid and no development
+    region happened to hit.
+    """
+    return math.floor(bbox_x0 * scale(dpi) + MUPDF_ROUND_EPS)
 
 
 def expected_image_width(bbox_x0: float, bbox_x1: float, dpi: int) -> int:
     """The width MuPDF returns for this clip: ceil(x1*s) - floor(x0*s).
 
     A VALIDATION helper only -- `pixel_to_pdf_x` does not use it, so nothing in the inversion
-    depends on this function. The tiny snap below is a FLOAT GUARD, not a tolerance: when
-    `x1 * s` is mathematically an integer, IEEE double arithmetic can land at 463.00000000000006
-    and `ceil` then returns 464 where MuPDF, computing exactly, returns 463. Measured on the
-    synthetic grid, the only disagreements were of exactly this form. It rounds a value that is
-    already within 1e-9 of an integer to that integer; it admits no genuine sub-pixel slack and
-    it never touches the resolver.
+    depends on this function. It applies `MUPDF_ROUND_EPS` at both edges, which is the
+    renderer's measured behaviour and which also subsumes the IEEE-double case where `x1 * s`
+    is mathematically an integer but evaluates to 463.00000000000006.
     """
     s = scale(dpi)
-    hi = bbox_x1 * s
-    if abs(hi - round(hi)) < 1e-9:
-        hi = round(hi)
-    return math.ceil(hi) - math.floor(bbox_x0 * s)
+    return math.ceil(bbox_x1 * s - MUPDF_ROUND_EPS) - math.floor(bbox_x0 * s + MUPDF_ROUND_EPS)
 
 
 def pixel_to_pdf_x(start_x_px: int, bbox_x0: float, dpi: int) -> float:
@@ -134,7 +167,7 @@ def pdf_x_to_pixel(pdf_x: float, bbox_x0: float, dpi: int) -> int:
 
 
 def check_rotation(rotation: int) -> None:
-    """A33.4 -- refuse a rotated page rather than improvise a transform.
+    """A33.4, RATIFIED -- a rotated source page is non-executable, and ABORTS.
 
     `x20` proves the CLIP can be carried exactly onto a rotated page by `page.rotation_matrix`.
     That is not sufficient, and the reason is the part that matters: at 90 and 270 the image's
@@ -143,7 +176,12 @@ def check_rotation(rotation: int) -> None:
     neutral glyph's `x0`, which is the quantity A30.3's nearest-x resolver compares. Rendering
     the right pixels is not the same as preserving the coordinate semantics.
 
-    Proposed for review, fail-closed, and NOT adopted unilaterally.
+    IT ABORTS ORACLE CONSTRUCTION. It must NEVER skip the page, skip the region, drop the
+    stimulus, or reduce any denominator. Those would each turn an unrepresentable condition
+    into a quietly smaller study -- the same silent-reduction failure the frame preconditions
+    exist to prevent -- and the loss would be invisible precisely because the affected pages
+    are the ones no longer counted. Encountered on confirmatory material, execution stops for
+    review; rotation is neither silently supported nor silently removed.
     """
     if rotation:
         raise OracleGeometryError(NONZERO_PAGE_ROTATION, {"rotation": rotation})

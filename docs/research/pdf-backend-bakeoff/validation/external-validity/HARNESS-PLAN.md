@@ -182,11 +182,27 @@ cropping; reveal control status; write the key after adjudication has begun.
   deterministic **build failure requiring review** — never an overwrite, a merge, a
   last-write-wins, or an automatic salt/re-roll. Salting after seeing the stimulus set would
   let the set choose the alias scheme, the influence A28.3 removed.
-- **I15** (A30.3) the adjudicated `start_x_px` is converted to page PDF coordinates from the
-  **committed region bbox, the rendered image width and the frozen DPI only**, then resolved
-  to the nearest neutral ink glyph on the reported physical line — **no tolerance**, and an
-  exact tie or an absent candidate yields `UNMATCHED`. The skeleton supplies **identity
-  only**, never heading truth.
+- **I15** (A30.3, **conversion clause superseded by A33**) the adjudicated `start_x_px` is
+  converted to page PDF coordinates by the **measured MuPDF transform**:
+
+  ```
+  s = DPI / 72;  device_x0 = floor(bbox_x0 * s);  pdf_x = (device_x0 + start_x_px) / s
+  ```
+
+  **`image_width` is not the scale and is not required by the inversion** — A30.3's original
+  "bbox + image width + DPI" wording described a linear map across the bbox, which `x20`
+  measured is not what the renderer does. Everything else in I15 stands: the result is resolved
+  to the **nearest neutral ink glyph** on the reported physical line, **no tolerance**, an exact
+  tie or an absent candidate yields `UNMATCHED`, and the skeleton supplies **identity only**,
+  never heading truth.
+- **I16** (A33) the region bbox is the **minimal union of the committed neutral-line bboxes,
+  zero padding**, read from the frame and never re-derived from the PDF. Geometry that is
+  missing, non-finite, non-positive (per line **or** per region), or that extends past the page
+  is **refused** — never clipped, intersected or padded.
+- **I17** (A33) a source page with **non-zero rotation** is non-executable: it **aborts** oracle
+  construction. It may never skip the page, skip the region, drop the stimulus, or reduce a
+  denominator — each of those would turn an unrepresentable condition into a quietly smaller
+  study, invisible precisely because the affected pages stop being counted.
 
 | control | what fact makes it fail |
 |---|---|
@@ -397,7 +413,7 @@ enforce it.
 |---|---|
 | A27.1's `occurrence_ordinal_on_that_line` was never derived | **A30.1** — the fourth component is the absolute **`start_ngid`**, the A24.2 ink identity of the occurrence's first neutral-ink character. Used for **equality only**; nothing orders occurrences by it |
 | could production supply it? | **A30.2** — yes. `Anchor` → merged-line start offset → `Page.merge_ranges` → print line + offset → `emitted[...].cells` → first cell carrying an `ngid`. Instrumented **study-locally**; production recognition unchanged; nine explicit refusal classes, all → `UNMATCHED` |
-| how does the oracle name the same occurrence? | **A30.3** — geometrically: `start_physical_line` + `start_x_px`, converted from the committed bbox / image width / frozen DPI, resolved to the nearest neutral ink glyph with **no tolerance**; tie or no candidate → `UNMATCHED` |
+| how does the oracle name the same occurrence? | **A30.3** — geometrically: `start_physical_line` + `start_x_px`, resolved to the nearest neutral ink glyph with **no tolerance**; tie or no candidate → `UNMATCHED`. **A33 supersedes the conversion clause only**: `pdf_x = (floor(bbox_x0·DPI/72) + start_x_px) / (DPI/72)`, not a linear map across the bbox |
 | §4.5 P-head was a caller obligation | **A30.4** — `filter_keys` now takes `(key, kind, population)` and applies both restrictions itself |
 | blind-ID uniqueness was only synthetic | **A30.5** — asserted over the **realized** set; a collision aborts the build |
 
