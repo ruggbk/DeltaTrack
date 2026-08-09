@@ -3322,6 +3322,162 @@ stimuli, 193 images rendered, 17 R1 repeats.
 
 ---
 
+## A36 — SUBSTANTIVE. C/D overlap semantics and M5 role coarsening
+
+```json
+{"id": "A36", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": [],
+ "supersedes_text_in": "the UNSPECIFIED INTERACTION of PRE-REGISTRATION 5.5.1 and 5.8 for a region in both frames, and HARNESS-PLAN section 7's claim of zero unresolved outcome-affecting ambiguities; no frozen clause is reversed",
+ "status": "RULED -- reviewed; committed before the implementation it governs"}
+```
+
+`affects_scoring_rule` is **true**: the overlap rule fixes which denominators a region enters
+and which adjudication source a metric reads, and the M5 map fixes a role comparison.
+
+**A35.5's STOP is resolved forward, not retroactively.** A35.5's historical record stands as
+written — it correctly reported that the frozen sources did not determine this. A36 supplies
+the ruling that was missing. HARNESS-PLAN §7's "**Unresolved outcome-affecting ambiguities:
+ZERO**" is likewise **corrected forward**, not rewritten: it was true of the sweep it
+described (surviving *"permitted"*/*"seeded"* phrases) and false of ambiguities arising from
+two frozen rules **interacting**, which that sweep could not see.
+
+**On materiality versus justification.** The DEVELOPMENT overlap measurement (17 of 24 C-frame
+regions) establishes only that the case is **material** and must be ruled before execution. It
+is **not** the reason for the rule chosen. The rule below is chosen because it is the only one
+that leaves the **independently frozen C and D estimands intact**: C remains a uniform draw over
+a P-head document's regions, D remains the complete discordance census, and neither is redefined
+as a function of the other. A rule selected to make an overlap count smaller would be a rule
+selected by the data.
+
+### A36.1 — C and D memberships MAY overlap
+
+C and D are **independent membership predicates**. A region selected into C stays in C even if
+it is also D; a region satisfying D stays in D even if it was already drawn into C.
+
+**Forbidden:** dropping the overlap from C; dropping it from D; replacing a C draw after
+observing D membership; re-sampling C; forcing the frames disjoint. A27.2's uniform C draw and
+A27.3's D census are **unchanged** — and note that A27.2 already forbids replacing a drawn
+region after inspecting its content, so an overlap-avoiding draw was never available.
+
+### A36.2 — one physical region is ONE stimulus identity
+
+For a C∩D region: **one** canonical base identity, **one** 300-DPI primary rendering, **one**
+primary PNG, **one** blind id.
+
+**Forbidden:** adding a frame component to A28.3's base identity; creating a separate C stimulus
+and D stimulus; salting or re-rolling a second blind id; rendering the same primary twice as two
+frame instances. A28.3 remains exactly:
+
+```
+("region", document_sha256, page_number, region_ordinal)
+```
+
+**Frame membership is metadata about a stimulus, not part of its identity.** The private key
+therefore carries an explicit membership list with deterministic ordering — `["C"]`, `["D"]`,
+`["C","D"]` — replacing the singular `frame` projection, which could not represent the overlap
+without being ambiguous. The adjudicator-facing artifact is **unchanged**: `{id, image,
+question}`. No frame membership, and no route, may leak.
+
+### A36.3 — "never pooled" means separate estimands, not disjoint sets
+
+> **C and D may overlap in physical regions. "Never pooled" means their estimands and
+> denominators remain separate; it does not require disjoint membership.**
+
+A C∩D region therefore counts **once** in the applicable C-frame denominator **and once** in the
+applicable D-frame census/denominator. `|C ∪ D|` is **never** substituted for either frame's
+denominator. The **raw overlap count is reported alongside both frame sizes**, so a reader can
+see the double-counting across estimands rather than infer it.
+
+### A36.4 — a stimulus and an adjudication are different objects
+
+The same blind stimulus receives **both** independently required answer routes:
+
+| membership | routes |
+|---|---|
+| C only | AI |
+| D only | human |
+| C ∩ D | AI **and** human |
+
+Neither answer may be visible to the other adjudicator before it answers. The eventual
+adjudication artifact must represent **two separately namespaced answers keyed to the same blind
+id** (`ai[id]`, `human[id]`). That **schema requirement is frozen here**; the artifact itself is
+not built in this pass.
+
+**CRITICAL PROHIBITION.** The human D answer is **not** substituted into C metrics merely
+because it exists. C's licensed claim is *AI image-adjudication with a seeded human audit*. D
+membership is **conditional on architecture disagreement**, so using human truth only on C∩D
+regions would make C a **mixed oracle whose source is selected by H/X discordance** — the
+architectures would be choosing their own oracle on precisely the regions where they disagree.
+
+```
+C metrics          -> AI answer
+D decision evidence -> human answer
+```
+
+### A36.5 — the 25-item C audit is invariant to D membership
+
+The audit sample is selected **solely** by the frozen `cframe-audit` ranking over **C base
+identities**. D membership may not change audit membership or its denominator.
+
+If a C-audit-selected region is also D, the **already-required human D answer MAY serve as that
+item's audit answer** — it is the same blind image and the human need not answer it twice. But a
+C∩D human answer **does NOT enter the C audit** unless that base identity was independently
+selected by `cframe-audit`.
+
+### A36.6 — route inheritance for controls and R1
+
+Every result-bearing adjudication route must remain falsifiable, so **N-A / N-B / N-C must be
+exercised on every route whose labels are later consumed**.
+
+R1 selection is still made **once** from canonical base identities under the frozen ranking and
+seed, both unchanged. The repeat remains **one** canonical `r1-repeat` identity and **inherits
+its primary's required route(s)**: C only → AI, D only → human, C∩D → both. **No route-specific
+R1 identities.** Where one physical R1 stimulus goes to two adjudicators, the answers stay
+separately namespaced.
+
+### A36.7 — M5 role coarsening, frozen
+
+The adjudicator continues to record the **fine §5.3 role**. **M5 alone** coarsens it.
+
+| oracle role | M5 | | emitted kind | M5 |
+|---|---|---|---|---|
+| `account` | LEAF | | `account` | LEAF |
+| `section` | LEAF | | `section` | LEAF |
+| `agency` | CONTAINER | | `major` | CONTAINER |
+| `grouping` | CONTAINER | | `agency` | CONTAINER |
+| `title` | CONTAINER | | `grouping` | CONTAINER |
+| `division` | CONTAINER | | `title` | CONTAINER |
+| `other` | UNSCORABLE | | `subsection` | UNSCORABLE |
+| | | | `preamble` | UNSCORABLE |
+
+**The emitted map is complete against production**, and this is asserted executably rather than
+believed: `AnchorKind` is `Literal["title","section","account","grouping","agency","major",
+"subsection","preamble"]` — exactly the eight mapped kinds. A control compares the map's domain
+with that Literal, so a kind added to production later **fails** instead of silently arriving as
+an unmapped role. (`division` is an oracle role and an `Anchor` *field*, never an emitted
+*kind*, which is why it appears in one column only.)
+
+**`section -> LEAF` is defined only at M5's adjudicated-heading granularity.** It is not a claim
+that a legal section cannot contain subsections.
+
+**M5 denominator:** matched heading occurrences where **both** sides map to LEAF or CONTAINER.
+If either side is `UNSCORABLE`, the occurrence is **excluded** and the **raw unscorable count is
+reported**. A zero denominator is **VACUOUS**. An unknown role on either side **refuses**.
+
+**M5 remains CORROBORATION ONLY and MAY NEVER AFFECT THE ARCHITECTURE DECISION.** Rule 1 is
+unchanged by this ruling.
+
+### Population and boundary
+
+Pre-execution. No membership change, no holdout document opened, nothing adjudicated or scored,
+and no confirmatory or scoring artifact created. `score_metrics.py` and
+`decide_architecture.py` remain **unstarted**.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
