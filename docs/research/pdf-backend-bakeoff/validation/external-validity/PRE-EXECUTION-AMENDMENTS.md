@@ -2639,6 +2639,151 @@ metrics or decision code written.
 
 ---
 
+## A32 — SUBSTANTIVE. Is A30.3's geometric occurrence position practically discriminable?
+
+```json
+{"id": "A32", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x18_start_x_discriminability.py"],
+ "supersedes_text_in": "none -- A32 does NOT supersede A30.3",
+ "status": "CONTRACT COMMITTED -- metrics frozen before the DEVELOPMENT measurement was run"}
+```
+
+**This block is committed BEFORE the measurement runs.** Every quantity below is defined here
+so that none of them can be chosen after seeing a DEVELOPMENT number. A32 is a *measurement*,
+not a ruling: it states no pass criterion and changes no rule. Its result may show that A30.3
+needs a future reviewed amendment; that decision is the reviewer's, not this amendment's.
+
+It is filed SUBSTANTIVE rather than TOOLING because it is a pre-execution feasibility
+measurement of an **outcome-affecting oracle-identity interface** — F9 rejects TOOLING that
+touches a scoring rule, and hiding a study of the oracle join under TOOLING would misstate what
+it is. It changes no rule itself, hence `affects_scoring_rule: false`.
+
+### The question
+
+A30.3 freezes: the adjudicator reports `start_physical_line` and an integer `start_x_px`; the
+resolver takes the **nearest** neutral-ink glyph `x0` on that physical line, with **no
+tolerance**, an exact tie → `UNMATCHED`, and no candidate → `UNMATCHED`.
+
+> Are real neutral-glyph starts separated enough, in pixel coordinates, for that nearest-x
+> operation to be practically discriminable at the frozen **300 DPI** primary and **330 DPI**
+> R1 scales?
+
+The load-bearing quantity is **distance to the nearest competing `x0`** — not average character
+spacing, which would answer a different and easier question.
+
+### Why the result is independent of the unfrozen crop rule
+
+The headline quantities are **invariant to horizontal crop translation**. A translation adds the
+same constant to every candidate and to the target, so it moves no nearest-neighbour spacing and
+no nearest-x decision boundary. Scaling by DPI is likewise uniform. The study therefore does not
+need — and **must not invent** — a padding or crop-origin value. Any quantity found to require
+one is separated as a diagnostic or dropped, never silently parameterised.
+
+### Populations, measured and reported separately
+
+| | |
+|---|---|
+| **G** stress census | every eligible neutral-ink glyph on every consumed DEVELOPMENT page, each treated *as if* it could be an occurrence start. Not a claim that every glyph is a heading start; it asks whether the mechanism can separate arbitrary physical marks, including narrow punctuation |
+| **H** task-relevant | every DEVELOPMENT heading occurrence whose A30 provenance path yields a valid `start_ngid`. Starts come from the A30 mechanism, never rediscovered from heading text. Heading kind is retained only as a descriptive stratum **after** identity is known, and never participates in the resolver |
+| **C** collisions | every occurrence in a same-physical-line multi-anchor collision, including the known `section` + inline `subsection` cases — the adversarial population that forced A30 |
+
+Frequency may not be used to retire the invariant.
+
+### Geometry, per target
+
+For a target `ngid` on its neutral line: collect every **distinct** neutral-ink glyph on that
+same line, use each candidate's physical PDF `x0`, and find the nearest candidate strictly left
+and strictly right by x.
+
+```
+left_gap_pt  = x - nearest_left_x          (+INF if no left neighbour)
+right_gap_pt = nearest_right_x - x         (+INF if no right neighbour)
+left_margin_pt  = left_gap_pt  / 2         the nearest-x decision boundary
+right_margin_pt = right_gap_pt / 2
+margin_px = margin_pt * DPI / 72           DPI in {300, 330}; NO rounding
+m = min(left_margin_px, right_margin_px)
+```
+
+Nothing here is derived from architecture output.
+
+### Exact-x collisions
+
+Distinct `ngid`s on one neutral line with **exactly equal** `x0` are recorded separately and
+excluded from the margin distribution, where `m` would be meaningless. For each, report
+document, page, neutral line, the `ngid`s, glyph geometry, whether any member is an A30 heading
+start, and whether any belongs to a same-line anchor collision. Codepoints appear only as a
+diagnostic **after** the geometry case is identified.
+
+**An exact-x collision involving a task-relevant heading start is a HARD finding**: A30.3 cannot
+uniquely identify that occurrence from `start_physical_line` + x alone. No tie is broken by
+`ngid`, text, kind, emitted order or y position.
+
+### Integer-annotation robustness, with no invented threshold
+
+No "human error tolerance" is chosen, and no post-hoc pass threshold is set. For each scale:
+
+```
+guaranteed_integer_error_px = the largest integer k >= 0 with  k + 0.5 < m
+```
+
+Read as: *whatever the subpixel phase between the PDF `x0` and the integer pixel grid, an
+integer annotation displaced by at most ±k px from the nearest integer representation of the
+true start stays strictly inside the target's nearest-x cell.* When `m <= 0.5` no `k >= 0`
+qualifies; that is reported as **`none`**, never rounded up to 0.
+
+Reported per population, per scale: N targets, N exact-x ambiguous, N with no competitor on
+their line (infinite margin, reported separately so they cannot inflate the good tail),
+min / p01 / p05 / median / p95 of `m`, min / p01 / p05 / median of `k`, and counts for
+`k = none, 0, 1, 2, 3, 4, 5, 6, 7, 8+`.
+
+**Per-document minima are reported separately and unweighted**, so one easy bill cannot hide one
+difficult document.
+
+### Resolver simulation
+
+The frozen nearest-x resolver is exercised as a pure function. Ten controls, each injecting
+**both sides** of the relevant boundary: clean isolated target; an x crossing the midpoint
+resolving to the neighbour; exact midpoint → `UNMATCHED`; duplicate candidate x → `UNMATCHED`
+when nearest; absent physical line → `UNMATCHED`; line with no neutral ink → `UNMATCHED`;
+changing heading text changes nothing; changing anchor kind changes nothing; an H/X spacing
+disagreement before the occurrence changes nothing; and same-line `section` + `subsection`
+starts remain separately resolvable where geometry permits. A translation-invariance control
+asserts the crop origin cannot change any resolution.
+
+### MuPDF raster diagnostic, and its stated limit
+
+PRE-REGISTRATION §5 renders adjudication stimuli with **MuPDF (`pymupdf`)**; that is the
+oracle's renderer and is unrelated to the pypdfium2 extraction engine frozen by ADR 0002.
+`pymupdf` is **not installed in the project venv**, and it is not added there: the venv is
+shared across worktrees and PyMuPDF is a deliberately rejected extractor, so the diagnostic runs
+in an **isolated throwaway environment** and touches no project dependency.
+
+Its purpose is narrow: *does the rendered raster reveal a systematic reason that "left edge of
+the first printed character" would be materially displaced from the neutral glyph's geometric
+`x0`?* No OCR step is invented. No pixel-intensity threshold is invented and then treated as
+truth. **If a faithful glyph-specific visible-edge measurement cannot be made without inventing
+a threshold or a segmentation heuristic, that sub-measurement STOPS** and returns worst-case
+rendered crops for human inspection instead. Inability to automate the visual-edge measurement
+may not be allowed to corrupt the exact geometry census, which stands on its own.
+
+### Hard stop conditions
+
+Measurement STOPS and returns immediately if population **H** or **C** shows: distinct
+task-relevant candidates at exactly equal `x0`; a true target absent from its neutral line's
+candidate set; the frozen resolver unable to return the known A30 `start_ngid` even at the exact
+geometric start; same-line collision identities collapsing under the resolver; or a case
+requiring text/kind/order to disambiguate. A30.3 is **not** patched in the same pass. A finding
+confined to the all-glyph stress census **G** is flagged separately and not generalised to
+heading starts.
+
+**Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
+no scoring, no holdout document opened, no oracle/frame artifact created, and A30.3 unchanged.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
