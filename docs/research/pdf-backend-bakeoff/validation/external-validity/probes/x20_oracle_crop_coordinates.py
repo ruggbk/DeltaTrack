@@ -275,7 +275,11 @@ def part_mapping() -> dict:
         (sum(origin_ok), all(origin_ok)),
         "A30.3 sketched column 0 == bbox_x0; if that were right this control would fail",
     )
-    check("the returned width is ceil(x1*s) - floor(x0*s), so it needs no extra metadata", len(width_ok), sum(width_ok))
+    check(
+        "the returned width is ceil(x1*s - eps) - floor(x0*s + eps), so it needs no extra metadata",
+        len(width_ok),
+        sum(width_ok),
+    )
     n_mismatch = sum(1 for r in rows if abs((r["x1"] - r["x0"]) * OG.scale(r["dpi"]) - r["pix_width"]) > 0.5)
     return {
         "n_cases": len(rows),
@@ -626,8 +630,8 @@ def part_rotation() -> dict:
     return {
         "synthetic": findings,
         "ruling": "RATIFIED fail-closed NONZERO_PAGE_ROTATION -- ABORTS oracle construction and "
-                  "may never skip a page/region, drop a stimulus or reduce a denominator. "
-                  "The clip carries exactly, "
+        "may never skip a page/region, drop a stimulus or reduce a denominator. "
+        "The clip carries exactly, "
         "but at 90/270 the image x axis is the PDF y axis and at 180 it is "
         "mirrored, so start_x_px stops corresponding to a neutral glyph x0",
     }

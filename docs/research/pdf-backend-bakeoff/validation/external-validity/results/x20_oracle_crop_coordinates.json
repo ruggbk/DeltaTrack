@@ -1017,7 +1017,7 @@
    "fails_when": "A30.3 sketched column 0 == bbox_x0; if that were right this control would fail"
   },
   {
-   "test": "the returned width is ceil(x1*s) - floor(x0*s), so it needs no extra metadata",
+   "test": "the returned width is ceil(x1*s - eps) - floor(x0*s + eps), so it needs no extra metadata",
    "expected": 80,
    "observed": 80,
    "pass": true,
