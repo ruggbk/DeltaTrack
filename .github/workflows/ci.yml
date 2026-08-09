@@ -60,6 +60,16 @@ jobs:
     permissions:
       contents: read
     strategy:
+      # The two legs test DIFFERENT supported interpreter surfaces, so one leg's failure
+      # must not cancel the other before it reports. With the default `fail-fast: true`,
+      # one failing leg cancels its sibling mid-run and that sibling's verdict is lost --
+      # so a floor-only regression can hide behind an unrelated failure on the newest
+      # patch, which is the leg most likely to fail for reasons unrelated to the floor.
+      # This is diagnostic completeness, NOT permissiveness: a failed leg still fails, and
+      # the `test` aggregator below still demands success from EVERY leg. Same reasoning
+      # as `cancel-in-progress` in this file: never destroy a verdict.
+      # `tests/test_ci_workflow.py` fails if this is undone.
+      fail-fast: false
       matrix:
         # "3.12" resolves to the NEWEST patch uv knows, so a lone `uv python install
         # 3.12` never visits the oldest interpreters `requires-python = ">=3.12"`
