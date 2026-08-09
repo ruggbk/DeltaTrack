@@ -240,6 +240,279 @@ def part_dpi() -> None:
     )
 
 
+def refusal(fn):
+    """The refusal class a callable raises, or None if it returned. Never swallows the reason."""
+    try:
+        fn()
+    except MC.BootstrapInputError as exc:
+        return exc.reason
+    return None
+
+
+def unsorted_resample(statistic_id, records, replicate):
+    """The A37.2 COUNTERFACTUAL: the identical draw WITHOUT canonical sorting.
+
+    Deliberately a separate implementation rather than a monkeypatch, so control 19 exercises
+    an independent counterfactual instead of asking the production helper about itself. This is
+    what withdrawn A29 measured as defective.
+    """
+    n = len(records)
+    return [records[MC.bootstrap_draw_index(statistic_id, replicate, d, n)] for d in range(n)]
+
+
+def part_bootstrap() -> dict:
+    """A37 -- the supplementary document bootstrap. SYNTHETIC only, and non-gating."""
+    docs = [(f"doc-{i}", i % 3 == 0) for i in range(9)]  # 3 of 9 events
+    reversed_docs = list(reversed(docs))
+    permutations = [
+        docs,
+        reversed_docs,
+        [docs[i] for i in (4, 0, 8, 2, 6, 1, 7, 3, 5)],
+        [docs[i] for i in (7, 3, 1, 8, 0, 5, 2, 6, 4)],
+    ]
+
+    base = MC.section8_document_bootstrap(docs)
+    again = MC.section8_document_bootstrap(docs)
+    check(
+        "1. identical inputs reproduce resample 0 exactly",
+        MC.bootstrap_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, MC.canonical_document_vector(docs), 0),
+        MC.bootstrap_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, MC.canonical_document_vector(docs), 0),
+        "the draw consults something other than the committed identity and the two ordinals",
+    )
+    check(
+        "2. identical inputs reproduce the WHOLE result",
+        base,
+        again,
+        "two runs of the same committed inputs print different intervals",
+    )
+    check(
+        "3. REVERSED input order reproduces every resample",
+        [
+            MC.bootstrap_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, MC.canonical_document_vector(docs), r)
+            for r in range(5)
+        ],
+        [
+            MC.bootstrap_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, MC.canonical_document_vector(reversed_docs), r)
+            for r in range(5)
+        ],
+        "canonical sorting is missing or ineffective, so the caller's listing order selects "
+        "different documents -- the defect withdrawn A29 measured",
+    )
+    intervals = [MC.section8_document_bootstrap(p)["interval"] for p in permutations]
+    check(
+        "4. several permuted input orders give the IDENTICAL interval",
+        [intervals[0]] * len(permutations),
+        intervals,
+        "the reported interval depends on how the caller happened to list its documents",
+    )
+
+    # 5. the statistic must be LIVE -- a different event pattern must be able to move it.
+    all_events = [(f"doc-{i}", True) for i in range(9)]
+    other = MC.section8_document_bootstrap(all_events)
+    check(
+        "5. a different event pattern CHANGES the interval, so the statistic is live",
+        True,
+        other["interval"] != base["interval"],
+        "the interval is constant across event patterns, so it measures nothing and every "
+        "reproducibility control above would pass on a dead quantity",
+    )
+
+    # 6. domain separation must be live too.
+    vector = MC.canonical_document_vector(docs)
+    other_id = ("section8", "document-heading-discordance", "P-robust")
+    draws_frozen = [
+        MC.bootstrap_draw_index(MC.SECTION8_DOCUMENT_DISCORDANCE, r, d, len(vector))
+        for r in range(20)
+        for d in range(len(vector))
+    ]
+    draws_other = [MC.bootstrap_draw_index(other_id, r, d, len(vector)) for r in range(20) for d in range(len(vector))]
+    check(
+        "6. changing the statistic identity CHANGES the draws, so domain separation is live",
+        True,
+        draws_frozen != draws_other,
+        "two different statistics share a draw sequence, so the population component of the "
+        "identity is decorative and a P-robust variant could silently reuse P-head's draws",
+    )
+
+    # 7 + 8 + 9 + 17. input refusals.
+    check(
+        "7. NEGATIVE -- a duplicate document identity REFUSES",
+        MC.DUPLICATE_DOCUMENT_IDENTITY,
+        refusal(lambda: MC.section8_document_bootstrap(docs + [("doc-3", True)])),
+        "a repeated document is silently weighted twice, though the document is the "
+        "independent unit (8.3, red-team #7)",
+    )
+    check(
+        "8. NEGATIVE -- an empty document set REFUSES",
+        MC.EMPTY_DOCUMENT_SET,
+        refusal(lambda: MC.section8_document_bootstrap([])),
+        "N = 0 produces a division by zero or a vacuous interval instead of refusing",
+    )
+    check(
+        "9. NEGATIVE -- a non-boolean event REFUSES",
+        MC.NON_BOOLEAN_EVENT,
+        refusal(lambda: MC.section8_document_bootstrap([("doc-a", 1), ("doc-b", 0)])),
+        "a bare 0/1 is accepted -- it would work silently in sum() because bool subclasses "
+        "int, so the wrong type would never be seen",
+    )
+    headings = [(f"doc-{i // 4}", i % 5 == 0) for i in range(12)]  # 3 documents, 4 headings each
+    check(
+        "17. NEGATIVE -- a HEADINGS-as-rows table cannot be passed as documents",
+        MC.DUPLICATE_DOCUMENT_IDENTITY,
+        refusal(lambda: MC.section8_document_bootstrap(headings)),
+        "headings enter as independent observations, which is exactly the per-heading "
+        "probability 8.3 forbids (8.1 measured 0.1926 vs 0.00498, a 39x ratio)",
+    )
+
+    # 10 + 11. zero events.
+    zero = MC.section8_document_bootstrap([(f"doc-{i}", False) for i in range(14)])
+    check(
+        "10. zero events REFUSE the bootstrap",
+        (False, MC.ZERO_EVENTS_BOOTSTRAP_REFUSED),
+        (zero["reported"], zero["reason"]),
+        "a bootstrap is reported at zero events, where 8.1 measured every resample degenerate",
+    )
+    check(
+        "11. ...and no [0, 0] interval is emitted",
+        True,
+        "interval" not in zero,
+        "a degenerate [0.0, 0.0] is emitted and would read as a real confidence interval",
+    )
+    check(
+        "...and the zero-event branch still yields the frozen closed form 1 - 0.05**(1/N)",
+        1 - 0.05 ** (1 / 14),
+        zero["clopper_pearson_upper_bound"],
+        "the licensed number is missing, leaving only an absence where 8.3 specifies a bound",
+    )
+
+    # 12 + 13 + 14. the resampling itself.
+    seen_replicates, seen_sizes, repeated_within = set(), set(), 0
+    real_resample = MC.bootstrap_resample
+    try:
+
+        def counting(statistic_id, vec, replicate):
+            out = real_resample(statistic_id, vec, replicate)
+            seen_replicates.add(replicate)
+            seen_sizes.add(len(out))
+            return out
+
+        MC.bootstrap_resample = counting
+        counted = MC.section8_document_bootstrap(docs)
+    finally:
+        MC.bootstrap_resample = real_resample
+    for r in range(200):
+        picks = [d for d, _e in real_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, vector, r)]
+        if len(set(picks)) < len(picks):
+            repeated_within += 1
+    check(
+        "12. a non-zero statistic executes ALL 10,000 replicates",
+        MC.BOOTSTRAP_RESAMPLES,
+        len(seen_replicates),
+        "fewer replicates run than the frozen B, so the interval is computed on a smaller "
+        "resample set than the amendment states",
+    )
+    check(
+        "13. every replicate draws EXACTLY N documents",
+        [len(docs)],
+        sorted(seen_sizes),
+        "a replicate draws a different number of documents than the vector holds",
+    )
+    check(
+        "14. replacement is REAL -- documents repeat within a replicate",
+        True,
+        repeated_within > 0,
+        "no replicate ever picks a document twice in 200 tries, which would mean the draw is "
+        "a permutation rather than sampling with replacement",
+    )
+    check(
+        "...and the counted run agrees with the uninstrumented one",
+        base,
+        counted,
+        "instrumenting the resample changed the result, so control 12 measured a different run",
+    )
+
+    # 15 + 16. the endpoint rule.
+    check(
+        "15. the endpoint ranks are exactly 249 and 9749 at B = 10,000",
+        (249, 9749),
+        MC.percentile_indices(10_000),
+        "the order statistics move, so the interval is not the one A37.6 froze",
+    )
+    achievable = {k / len(docs) for k in range(len(docs) + 1)}
+    check(
+        "16. the endpoints are OBSERVED replicate values -- no interpolation",
+        (True, True),
+        (base["interval"][0] in achievable, base["interval"][1] in achievable),
+        "an endpoint lies between two achievable k/N rates, i.e. a library interpolated it "
+        "(NumPy's percentile default would) and the value was never actually resampled",
+    )
+    check(
+        "...and the reported endpoint indices are the frozen ones",
+        [249, 9749],
+        base["endpoint_indices"],
+        "the result reports different indices from the ones it used",
+    )
+
+    # 18. non-gating, structurally.
+    check(
+        "18. the gate vector is exactly A27.6's nine decision-blocking conditions",
+        (
+            "R1",
+            "N-A",
+            "N-B",
+            "N-C",
+            "S1",
+            "confirmatory X2-a",
+            "confirmatory X2-b",
+            "M9 evaluability",
+            "4.5 adequacy",
+        ),
+        MC.GATE_VECTOR,
+        "a condition was added to or removed from the decision gate",
+    )
+    check(
+        "18b. NO bootstrap field appears anywhere in the gate vector",
+        [],
+        [g for g in MC.GATE_VECTOR if "bootstrap" in g.lower() or "interval" in g.lower()],
+        "the bootstrap became a decision-blocking condition, promoting a supplementary number into evidence",
+    )
+    check(
+        "18c. ...and no key of the bootstrap result is a gate input",
+        [],
+        sorted(set(base) & set(MC.GATE_VECTOR)),
+        "a field the bootstrap emits is consumed by the architecture decision",
+    )
+    check(
+        "18d. ...and both branches declare themselves non-gating",
+        (False, False),
+        (base["gating"], zero["gating"]),
+        "a result does not carry gating: False, so a downstream reader could treat it as evidence",
+    )
+
+    # 19. canonical sorting is load-bearing -- an INDEPENDENT counterfactual.
+    cf_a = [unsorted_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, docs, r) for r in range(5)]
+    cf_b = [unsorted_resample(MC.SECTION8_DOCUMENT_DISCORDANCE, reversed_docs, r) for r in range(5)]
+    check(
+        "19. WITHOUT canonical sorting the same set in another order resamples DIFFERENTLY",
+        True,
+        cf_a != cf_b,
+        "the unsorted counterfactual is also order-independent, which would mean control 3 "
+        "passes for some other reason and proves nothing about the sorting",
+    )
+    return {
+        "statistic_identity": list(MC.SECTION8_DOCUMENT_DISCORDANCE),
+        "namespace": MC.BOOTSTRAP_NAMESPACE,
+        "resamples": MC.BOOTSTRAP_RESAMPLES,
+        "endpoint_indices": list(MC.percentile_indices()),
+        "gate_vector": list(MC.GATE_VECTOR),
+        "fixture_n_documents": len(docs),
+        "fixture_events": sum(1 for _d, e in docs if e),
+        "interval": base["interval"],
+        "replicates_with_a_repeated_document_in_200": repeated_within,
+        "zero_event_branch": zero,
+    }
+
+
 def main() -> int:
     print("== 4.5 adequacy ==")
     part_adequacy()
@@ -247,12 +520,15 @@ def main() -> int:
     part_determinism()
     print("\n== A28.4 renderer scale ==")
     part_dpi()
+    print("\n== A37 supplementary document bootstrap (NON-GATING) ==")
+    bootstrap = part_bootstrap()
     doc = {
         "population": "SYNTHETIC only -- no PDF opened, no architecture run, nothing scored",
         "adequacy_kinds": sorted(MC.ADEQUACY_KINDS),
         "selection_seed": MC.SELECTION_SEED,
         "primary_dpi": MC.PRIMARY_DPI,
         "r1_repeat_dpi": MC.R1_REPEAT_DPI,
+        "a37_bootstrap": bootstrap,
         "tests": ROWS,
         "failures": FAILED,
     }

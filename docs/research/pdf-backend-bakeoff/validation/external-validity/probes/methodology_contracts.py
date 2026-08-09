@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 
 # ----------------------------------------------------------------- A27.7 determinism
 
@@ -251,6 +252,178 @@ def m5_agreement(oracle_role: str, emitted_kind: str):
     if not m5_scorable(oracle_role, emitted_kind):
         return None
     return m5_oracle_role(oracle_role) == m5_emitted_kind(emitted_kind)
+
+
+# ------------------------------ A37 the supplementary document bootstrap (NON-GATING)
+
+#: A27.6's decision-blocking conditions, written down so "the bootstrap is not one of them"
+#: is a CHECKABLE statement rather than a promise in prose. Cross-engine (x09) is absent on
+#: purpose: it qualifies reporting and never blocks a decision.
+GATE_VECTOR = (
+    "R1",
+    "N-A",
+    "N-B",
+    "N-C",
+    "S1",
+    "confirmatory X2-a",
+    "confirmatory X2-b",
+    "M9 evaluability",
+    "4.5 adequacy",
+)
+
+BOOTSTRAP_NAMESPACE = "bootstrap-document"
+BOOTSTRAP_RESAMPLES = 10_000
+
+#: A37.3 -- THE canonical identity of the section 8 event. One constant, so callers cannot
+#: invent competing labels for the same statistic and get different draw sequences.
+#:
+#: The population component is NOT decoration. Section 4.4.1 splits P-head from P-robust and
+#: states that NO heading metric is claimed on P-robust; the section 8 event is heading-level,
+#: so this statistic is P-head only. Encoding that here means a P-robust variant cannot
+#: silently reuse this draw sequence.
+SECTION8_DOCUMENT_DISCORDANCE = ("section8", "document-heading-discordance", P_HEAD)
+
+EMPTY_DOCUMENT_SET = "EMPTY_DOCUMENT_SET"
+DUPLICATE_DOCUMENT_IDENTITY = "DUPLICATE_DOCUMENT_IDENTITY"
+NON_BOOLEAN_EVENT = "NON_BOOLEAN_EVENT"
+ZERO_EVENTS_BOOTSTRAP_REFUSED = "ZERO_EVENTS_BOOTSTRAP_REFUSED"
+
+
+class BootstrapInputError(Exception):
+    """A37.2 -- the document vector is not a valid set of independent units. Refuses."""
+
+    def __init__(self, reason: str, detail=None):
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{reason} {detail!r}")
+
+
+def bootstrap_draw_index(statistic_id, replicate: int, draw: int, n: int) -> int:
+    """A37.4 -- which document the `draw`-th pick of `replicate` takes, from `n` documents.
+
+    Hash-derived rather than drawn from a PRNG. A seeded PRNG would freeze the interval only
+    for one library's generator and one consumption order; this depends on nothing but the
+    committed identity of the statistic and the two ordinals, so any implementation in any
+    language reproduces the same resample. There is no RNG object and no input-order
+    dependence to leak in.
+    """
+    digest = hashlib.sha256(
+        f"{BOOTSTRAP_NAMESPACE}|{SELECTION_SEED}|{canonical(statistic_id)}|{replicate}|{draw}".encode()
+    ).digest()
+    return int.from_bytes(digest[:8], "big") % n
+
+
+def canonical_document_vector(records) -> list:
+    """A37.2 -- validate and CANONICALLY SORT one record per independent document.
+
+    `records` is `[(document_identity, event_boolean), ...]`.
+
+    A duplicate identity REFUSES rather than being weighted twice: the document is the
+    independent unit (8.3, red-team #7), so a repeated document is either a caller error or a
+    headings-as-rows table being passed in, and silently double-weighting it would inflate
+    whatever it carries. That refusal is what makes a heading-level table unpassable here.
+
+    Sorting is LOAD-BEARING, not tidiness: the draw is an INDEX, so without a canonical order
+    the caller's listing order silently selects different documents and two runs over the same
+    set print different intervals. That is the defect withdrawn A29 measured.
+    """
+    rows = list(records)
+    if not rows:
+        raise BootstrapInputError(EMPTY_DOCUMENT_SET, {"n": 0})
+    seen = set()
+    for identity, event in rows:
+        # `isinstance(1, bool)` is False, so a bare 0/1 is correctly refused here even though
+        # bool subclasses int. An int event would silently work in `sum()` and never be seen.
+        if not isinstance(event, bool):
+            raise BootstrapInputError(NON_BOOLEAN_EVENT, {"document": identity, "event": repr(event)})
+        form = canonical(identity)
+        if form in seen:
+            raise BootstrapInputError(DUPLICATE_DOCUMENT_IDENTITY, {"document": form})
+        seen.add(form)
+    return sorted(rows, key=lambda row: canonical(row[0]))
+
+
+def bootstrap_resample(statistic_id, vector: list, replicate: int) -> list:
+    """One replicate: `n` draws WITH REPLACEMENT over documents, the resampling unit (A27.5).
+
+    `vector` must already be canonical -- see `canonical_document_vector`.
+    """
+    n = len(vector)
+    return [vector[bootstrap_draw_index(statistic_id, replicate, d, n)] for d in range(n)]
+
+
+def percentile_indices(b: int = BOOTSTRAP_RESAMPLES) -> tuple[int, int]:
+    """A37.6 -- the frozen ORDER-STATISTIC indices. B = 10_000 gives exactly (249, 9749).
+
+    Stated normatively rather than left to a library: NumPy's default `percentile` linearly
+    INTERPOLATES between neighbours, which would emit an endpoint that is not an observed
+    replicate value and would drift if the backend changed. Both endpoints here are always
+    values the bootstrap actually produced.
+    """
+    return math.floor(0.025 * (b - 1)), math.floor(0.975 * (b - 1))
+
+
+def zero_event_upper_bound(n: int) -> float:
+    """8.3 / A27.5 -- the frozen zero-event Clopper-Pearson closed form `1 - 0.05**(1/N)`.
+
+    Only the ZERO-EVENT form lives here, because it is a closed form the protocol froze
+    verbatim. The general Clopper-Pearson bound remains `score_metrics`' obligation (A27.5)
+    and is deliberately not implemented in this pure-contract module.
+    """
+    if n < 1:
+        raise BootstrapInputError(EMPTY_DOCUMENT_SET, {"n": n})
+    return 1 - 0.05 ** (1 / n)
+
+
+def section8_document_bootstrap(records) -> dict:
+    """A37 -- SUPPLEMENTARY ONLY. A 95 % percentile interval over 10,000 document resamples.
+
+    **This value is reporting, never evidence.** It is not an input to Rule 0, Rule 1, Rule 3,
+    any adequacy gate, or any architecture-selection outcome -- `GATE_VECTOR` states the
+    decision-blocking conditions so that claim is checkable. A27.5 already fixed the inference:
+    the primary bound is the exact one-sided 95 % Clopper-Pearson bound on the document unit.
+
+    The event count is DERIVED from the records. There is no `events=` parameter, because a
+    caller-supplied count can contradict the vector it claims to summarise and nothing would
+    detect the disagreement.
+
+    Refuses at zero events rather than returning a degenerate `[0.0, 0.0]`, which 8.1 measured
+    and section 8 forbids.
+    """
+    vector = canonical_document_vector(records)
+    n = len(vector)
+    events = sum(1 for _identity, event in vector if event)
+
+    if events == 0:
+        return {
+            "reported": False,
+            "reason": ZERO_EVENTS_BOOTSTRAP_REFUSED,
+            "n_documents": n,
+            "events": 0,
+            # the branch still yields the licensed number rather than only an absence
+            "clopper_pearson_upper_bound": zero_event_upper_bound(n),
+            "gating": False,
+        }
+
+    rates = sorted(
+        sum(1 for _identity, event in bootstrap_resample(SECTION8_DOCUMENT_DISCORDANCE, vector, r) if event) / n
+        for r in range(BOOTSTRAP_RESAMPLES)
+    )
+    lo_i, hi_i = percentile_indices(BOOTSTRAP_RESAMPLES)
+    return {
+        "reported": True,
+        "statistic": list(SECTION8_DOCUMENT_DISCORDANCE),
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "namespace": BOOTSTRAP_NAMESPACE,
+        "seed": SELECTION_SEED,
+        "unit": "document",
+        "n_documents": n,
+        "events": events,
+        "observed_rate": events / n,
+        "endpoint_indices": [lo_i, hi_i],
+        "interval": [rates[lo_i], rates[hi_i]],
+        "gating": False,
+    }
 
 
 def adequacy(strata_filled: int, occurrences: int) -> str:

@@ -412,8 +412,10 @@ def part_render(tmp: Path) -> dict:
         line["line_state"]["h_text"] = "MUTATED-H-" * 4
         line["line_state"]["x_text"] = "MUTATED-X-" * 4
     mutated[0]["architecture_output"] = {"1:0": {"H": ["TOTALLY DIFFERENT"], "X": ["ALSO DIFFERENT"]}}
-    base_hashes = {r["png_sha256"] for r in BO.build(docs).key["stimuli"].values()}
-    mutated_hashes = {r["png_sha256"] for r in BO.build(mutated).key["stimuli"].values()}
+    # sorted, not a set: a set's repr order varies with per-process string hash randomisation,
+    # which made this committed artifact differ between runs of identical inputs
+    base_hashes = sorted({r["png_sha256"] for r in BO.build(docs).key["stimuli"].values()})
+    mutated_hashes = sorted({r["png_sha256"] for r in BO.build(mutated).key["stimuli"].values()})
     check(
         "5. changing H/X text cannot change ANY rendered PNG",
         base_hashes,
@@ -1015,8 +1017,8 @@ def part_m5() -> dict:
     produced = set(get_args(AnchorKind))
     check(
         "the emitted map is COMPLETE against production's AnchorKind",
-        produced,
-        set(MC.EMITTED_KIND_TO_M5),
+        sorted(produced),
+        sorted(MC.EMITTED_KIND_TO_M5),
         "production emits a kind the M5 map does not cover, so that kind would arrive as an "
         "unmapped role -- this control is what makes a future kind FAIL instead of slipping in",
     )
