@@ -3181,7 +3181,7 @@ conditions; H 541/541 and C 4/4 at both scales; 1164/1164 DEVELOPMENT regions re
  "files_touched": ["probes/adjudicator_prompt.md", "probes/build_oracle.py",
                    "probes/x21_build_oracle.py"],
  "supersedes_text_in": "none",
- "status": "IMPLEMENTED -- one STOP open for review (REGION_IN_BOTH_FRAMES)"}
+ "status": "FROZEN -- reviewed; adjudicator prompt and oracle builder approved under A36 overlap semantics"}
 ```
 
 **Why SUBSTANTIVE despite `affects_scoring_rule: false`.** `adjudicator_prompt.md` and
@@ -3302,6 +3302,12 @@ cannot be designed away in the draw either.
 Choosing here would silently decide **who adjudicates 71 % of the C-frame** and which
 denominators move. `x21` records the stop with its instances; the ruling belongs to review.
 
+> **RESOLVED FORWARD BY [A36](#a36--substantive-cd-overlap-semantics-and-m5-role-coarsening).**
+> The stop was reviewed and held **valid**. A36 rules that C and D may overlap, that one
+> physical region is one stimulus carrying both memberships, and that the single blind stimulus
+> takes both adjudication routes. This paragraph is the historical record of the open question
+> and is **not** rewritten to read as though it had always been answered.
+
 Note this contradicts HARNESS-PLAN §7's "**Unresolved outcome-affecting ambiguities: ZERO**".
 That sweep looked for surviving *"permitted"* and *"seeded"* phrases — a choice a source hands
 to implementation explicitly. This ambiguity is of a different kind: it arises from the
@@ -3317,8 +3323,14 @@ nothing is adjudicated or scored, and none of `results/frames.json`, `results/or
 `EXECUTION-START.json` is created. `score_metrics.py` and `decide_architecture.py` are **not**
 started.
 
-**Realized:** `x21` 55/55 controls pass, **1 stop condition**. DEVELOPMENT: 3 documents, 193
-stimuli, 193 images rendered, 17 R1 repeats.
+**Realized at A35 (superseded by A36's rerun):** `x21` 55/55 controls pass, **1 stop
+condition**. DEVELOPMENT: 3 documents, 193 stimuli, 193 images rendered, 17 R1 repeats. After
+A36 the same probe reports **93/93 and 0 stop conditions**; the A35 figures are kept as the
+state at which the stop was raised.
+
+**Forward finding closed:** A35.1 flagged that M5's leaf-vs-container coarsening map was
+defined nowhere. **A36.7 freezes it**, so `score_metrics` no longer opens onto a known
+ambiguity.
 
 ---
 
@@ -3326,12 +3338,13 @@ stimuli, 193 images rendered, 17 R1 repeats.
 
 ```json
 {"id": "A36", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["34e5384", "368ae63"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
- "files_touched": [],
+ "files_touched": ["probes/build_oracle.py", "probes/methodology_contracts.py",
+                   "probes/x21_build_oracle.py"],
  "supersedes_text_in": "the UNSPECIFIED INTERACTION of PRE-REGISTRATION 5.5.1 and 5.8 for a region in both frames, and HARNESS-PLAN section 7's claim of zero unresolved outcome-affecting ambiguities; no frozen clause is reversed",
- "status": "RULED -- reviewed; committed before the implementation it governs"}
+ "status": "IMPLEMENTED -- reviewed and ruled; x21 93/93, 0 stop conditions"}
 ```
 
 `affects_scoring_rule` is **true**: the overlap rule fixes which denominators a region enters
@@ -3475,6 +3488,21 @@ unchanged by this ruling.
 Pre-execution. No membership change, no holdout document opened, nothing adjudicated or scored,
 and no confirmatory or scoring artifact created. `score_metrics.py` and
 `decide_architecture.py` remain **unstarted**.
+
+### Realized under A36
+
+`x21` **93/93 controls pass, 0 failures, 0 stop conditions** (was 55/55 with one stop). The
+`REGION_IN_BOTH_FRAMES` refusal is removed because A36 resolves it — **duplication is no longer
+attempted**, and A30.5's identity uniqueness was *not* weakened to permit it.
+
+DEVELOPMENT, 20-page demonstration window (not a census): **C 24, D 170, overlap 18**, union
+**176 = 24 + 170 − 18**, and 193 stimuli = 176 primaries + 17 R1 repeats. The union is labelled
+information-only and is never substituted for either denominator. `c_audit_selected` is **24
+rather than 25** because this window contains only 24 C regions in total; the draw takes
+`min(k, available)` and does not invent items.
+
+Regression: `x15` remains **26/26** and its committed artifact is **byte-identical**, so the M5
+block changed no existing contract.
 
 ---
 
