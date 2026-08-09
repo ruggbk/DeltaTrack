@@ -1,0 +1,775 @@
+{
+ "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened, nothing scored",
+ "contract": "A33, committed before this probe existed",
+ "renderer": "MuPDF (pymupdf)",
+ "renderer_version": "('1.28.2', '1.28.2', None)",
+ "region_bbox_rule": "minimal axis-aligned union of COMMITTED neutral-line bboxes, zero padding",
+ "frozen_inversion": "pdf_x = (floor(bbox_x0 * DPI/72) + start_x_px) / (DPI/72)",
+ "a30_3_sketch_was": "pdf_x = bbox_x0 + (start_x_px / image_width) * (bbox_x1 - bbox_x0)",
+ "metadata_insufficient": false,
+ "bbox": {
+  "synthetic_bbox": [
+   98.5,
+   672.0,
+   505.5,
+   712.0
+  ]
+ },
+ "mupdf_mapping": {
+  "n_cases": 80,
+  "origin_rule": "pix.x == floor(bbox_x0 * DPI/72)",
+  "width_rule": "pix.width == ceil(bbox_x1*s) - floor(bbox_x0*s)",
+  "n_cases_where_width_differs_from_bbox_width_times_scale": 69,
+  "metadata_needed_beyond_bbox_and_dpi": null,
+  "cases": [
+   {
+    "dpi": 300,
+    "x0": 100.0,
+    "x1": 110.0,
+    "pix_x": 416,
+    "pix_width": 43,
+    "predicted_origin": 416,
+    "predicted_width": 43
+   },
+   {
+    "dpi": 300,
+    "x0": 100.0,
+    "x1": 110.37,
+    "pix_x": 416,
+    "pix_width": 44,
+    "predicted_origin": 416,
+    "predicted_width": 44
+   },
+   {
+    "dpi": 300,
+    "x0": 100.0,
+    "x1": 112.5,
+    "pix_x": 416,
+    "pix_width": 53,
+    "predicted_origin": 416,
+    "predicted_width": 53
+   },
+   {
+    "dpi": 300,
+    "x0": 100.0,
+    "x1": 140.0,
+    "pix_x": 416,
+    "pix_width": 168,
+    "predicted_origin": 416,
+    "predicted_width": 168
+   },
+   {
+    "dpi": 300,
+    "x0": 100.05,
+    "x1": 110.05,
+    "pix_x": 416,
+    "pix_width": 43,
+    "predicted_origin": 416,
+    "predicted_width": 43
+   },
+   {
+    "dpi": 300,
+    "x0": 100.05,
+    "x1": 110.42,
+    "pix_x": 416,
+    "pix_width": 45,
+    "predicted_origin": 416,
+    "predicted_width": 45
+   },
+   {
+    "dpi": 300,
+    "x0": 100.05,
+    "x1": 112.55,
+    "pix_x": 416,
+    "pix_width": 53,
+    "predicted_origin": 416,
+    "predicted_width": 53
+   },
+   {
+    "dpi": 300,
+    "x0": 100.05,
+    "x1": 140.05,
+    "pix_x": 416,
+    "pix_width": 168,
+    "predicted_origin": 416,
+    "predicted_width": 168
+   },
+   {
+    "dpi": 300,
+    "x0": 100.1,
+    "x1": 110.1,
+    "pix_x": 417,
+    "pix_width": 42,
+    "predicted_origin": 417,
+    "predicted_width": 42
+   },
+   {
+    "dpi": 300,
+    "x0": 100.1,
+    "x1": 110.47,
+    "pix_x": 417,
+    "pix_width": 44,
+    "predicted_origin": 417,
+    "predicted_width": 44
+   },
+   {
+    "dpi": 300,
+    "x0": 100.1,
+    "x1": 112.6,
+    "pix_x": 417,
+    "pix_width": 53,
+    "predicted_origin": 417,
+    "predicted_width": 53
+   },
+   {
+    "dpi": 300,
+    "x0": 100.1,
+    "x1": 140.1,
+    "pix_x": 417,
+    "pix_width": 167,
+    "predicted_origin": 417,
+    "predicted_width": 167
+   }
+  ]
+ },
+ "roundtrip": {
+  "n_arithmetic_cases": 60,
+  "frozen_inverse_ok": 60,
+  "sketch_ok": 49,
+  "worst_sketch_error_pt": 0.3523809523809689,
+  "worst_sketch_error_px_300": 1.468253968254037,
+  "renderer_agreement": [
+   {
+    "dpi": 300,
+    "bbox_x0": 100.0,
+    "mark_x": 117.3,
+    "leftmost_inked_col": 72,
+    "predicted_col": 72,
+    "delta_col": 0
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.29,
+    "mark_x": 117.59,
+    "leftmost_inked_col": 72,
+    "predicted_col": 72,
+    "delta_col": 0
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.5,
+    "mark_x": 117.8,
+    "leftmost_inked_col": 72,
+    "predicted_col": 72,
+    "delta_col": 0
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.77,
+    "mark_x": 118.07,
+    "leftmost_inked_col": 72,
+    "predicted_col": 72,
+    "delta_col": 0
+   },
+   {
+    "dpi": 330,
+    "bbox_x0": 100.0,
+    "mark_x": 117.3,
+    "leftmost_inked_col": 79,
+    "predicted_col": 79,
+    "delta_col": 0
+   },
+   {
+    "dpi": 330,
+    "bbox_x0": 100.29,
+    "mark_x": 117.59,
+    "leftmost_inked_col": 79,
+    "predicted_col": 79,
+    "delta_col": 0
+   },
+   {
+    "dpi": 330,
+    "bbox_x0": 100.5,
+    "mark_x": 117.8,
+    "leftmost_inked_col": 79,
+    "predicted_col": 79,
+    "delta_col": 0
+   },
+   {
+    "dpi": 330,
+    "bbox_x0": 100.77,
+    "mark_x": 118.07,
+    "leftmost_inked_col": 80,
+    "predicted_col": 80,
+    "delta_col": 0
+   }
+  ],
+  "cases": [
+   {
+    "dpi": 300,
+    "bbox_x0": 100.0,
+    "mark_x": 100.0,
+    "col": 0,
+    "frozen_inverse": 99.83999999999999,
+    "frozen_err_pt": -0.1600000000000108,
+    "a30_3_sketch_inverse": 100.0,
+    "sketch_err_pt": 0.0
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.0,
+    "mark_x": 117.3,
+    "col": 72,
+    "frozen_inverse": 117.11999999999999,
+    "frozen_err_pt": -0.18000000000000682,
+    "a30_3_sketch_inverse": 117.14285714285714,
+    "sketch_err_pt": -0.15714285714285836
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.0,
+    "mark_x": 139.4,
+    "col": 164,
+    "frozen_inverse": 139.2,
+    "frozen_err_pt": -0.20000000000001705,
+    "a30_3_sketch_inverse": 139.04761904761904,
+    "sketch_err_pt": -0.3523809523809689
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.07,
+    "mark_x": 100.07,
+    "col": 0,
+    "frozen_inverse": 99.83999999999999,
+    "frozen_err_pt": -0.23000000000000398,
+    "a30_3_sketch_inverse": 100.07,
+    "sketch_err_pt": 0.0
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.07,
+    "mark_x": 117.36999999999999,
+    "col": 73,
+    "frozen_inverse": 117.35999999999999,
+    "frozen_err_pt": -0.010000000000005116,
+    "a30_3_sketch_inverse": 117.45095238095237,
+    "sketch_err_pt": 0.08095238095238244
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.07,
+    "mark_x": 139.47,
+    "col": 165,
+    "frozen_inverse": 139.44,
+    "frozen_err_pt": -0.030000000000001137,
+    "a30_3_sketch_inverse": 139.35571428571427,
+    "sketch_err_pt": -0.11428571428572809
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.13,
+    "mark_x": 100.13,
+    "col": 0,
+    "frozen_inverse": 100.08,
+    "frozen_err_pt": -0.04999999999999716,
+    "a30_3_sketch_inverse": 100.13,
+    "sketch_err_pt": 0.0
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.13,
+    "mark_x": 117.42999999999999,
+    "col": 72,
+    "frozen_inverse": 117.35999999999999,
+    "frozen_err_pt": -0.07000000000000739,
+    "a30_3_sketch_inverse": 117.37550898203592,
+    "sketch_err_pt": -0.05449101796406808
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.13,
+    "mark_x": 139.53,
+    "col": 164,
+    "frozen_inverse": 139.44,
+    "frozen_err_pt": -0.09000000000000341,
+    "a30_3_sketch_inverse": 139.4114371257485,
+    "sketch_err_pt": -0.11856287425149503
+   },
+   {
+    "dpi": 300,
+    "bbox_x0": 100.29,
+    "mark_x": 100.29,
+    "col": 0,
+    "frozen_inverse": 100.08,
+    "frozen_err_pt": -0.21000000000000796,
+    "a30_3_sketch_inverse": 100.29,
+    "sketch_err_pt": 0.0
+   }
+  ]
+ },
+ "rotation": {
+  "synthetic": [
+   {
+    "rotation": 0,
+    "naive_clip_has_ink": true,
+    "rotated_clip_has_ink": true,
+    "image_x_axis_is_pdf_x": true,
+    "image_x_axis_direction": "same"
+   },
+   {
+    "rotation": 90,
+    "naive_clip_has_ink": false,
+    "rotated_clip_has_ink": true,
+    "image_x_axis_is_pdf_x": false,
+    "image_x_axis_direction": "pdf_y"
+   },
+   {
+    "rotation": 180,
+    "naive_clip_has_ink": false,
+    "rotated_clip_has_ink": true,
+    "image_x_axis_is_pdf_x": true,
+    "image_x_axis_direction": "mirrored"
+   },
+   {
+    "rotation": 270,
+    "naive_clip_has_ink": false,
+    "rotated_clip_has_ink": true,
+    "image_x_axis_is_pdf_x": false,
+    "image_x_axis_direction": "pdf_y"
+   }
+  ],
+  "ruling": "PROPOSED fail-closed NONZERO_PAGE_ROTATION -- the clip carries exactly, but at 90/270 the image x axis is the PDF y axis and at 180 it is mirrored, so start_x_px stops corresponding to a neutral glyph x0"
+ },
+ "development": {
+  "n_regions": 162,
+  "n_short_trailing": 34,
+  "n_invalid_bbox": 0,
+  "n_out_of_page_bbox": 0,
+  "n_empty_render": 0,
+  "n_render_determinism_failures": 0,
+  "n_pixel_inversion_failures": 0,
+  "page_rotation_census": {
+   "0": 36
+  },
+  "bbox_width_pt": {
+   "min": 52.83600000000001,
+   "median": 358.31854999999996,
+   "max": 461.4118
+  },
+  "bbox_height_pt": {
+   "min": 6.175000000000001,
+   "median": 129.20995000000002,
+   "max": 721.5965
+  },
+  "clipped_lines": [],
+  "sampled_renders": [
+   {
+    "document": "114-hr-2029/4",
+    "page": 5,
+    "region": 1,
+    "bbox": [
+     127.5535,
+     340.1301,
+     486.1863,
+     534.4641
+    ],
+    "w300": 1495,
+    "w330": 1645,
+    "png_deterministic": true
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page": 9,
+    "region": 2,
+    "bbox": [
+     126.4198,
+     134.8181,
+     485.3603,
+     326.5901
+    ],
+    "w300": 1497,
+    "w330": 1646,
+    "png_deterministic": true
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page": 2,
+    "region": 1,
+    "bbox": [
+     127.5538,
+     340.1313,
+     486.5521,
+     534.5942
+    ],
+    "w300": 1497,
+    "w330": 1647,
+    "png_deterministic": true
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page": 6,
+    "region": 2,
+    "bbox": [
+     126.4198,
+     132.2396,
+     485.5884,
+     326.5974
+    ],
+    "w300": 1498,
+    "w330": 1647,
+    "png_deterministic": true
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page": 10,
+    "region": 3,
+    "bbox": [
+     25.13,
+     18.661,
+     486.5418,
+     118.4778
+    ],
+    "w300": 1924,
+    "w330": 2115,
+    "png_deterministic": true
+   },
+   {
+    "document": "119-hr-1/1",
+    "page": 3,
+    "region": 5,
+    "bbox": [
+     25.13,
+     18.6155,
+     406.3367,
+     87.69
+    ],
+    "w300": 1590,
+    "w330": 1748,
+    "png_deterministic": true
+   },
+   {
+    "document": "119-hr-1/1",
+    "page": 6,
+    "region": 3,
+    "bbox": [
+     150.6195,
+     264.9002,
+     485.8495,
+     357.8602
+    ],
+    "w300": 1398,
+    "w330": 1537,
+    "png_deterministic": true
+   },
+   {
+    "document": "119-hr-1/1",
+    "page": 9,
+    "region": 0,
+    "bbox": [
+     150.62,
+     618.95,
+     449.64,
+     740.24
+    ],
+    "w300": 1247,
+    "w330": 1371,
+    "png_deterministic": true
+   },
+   {
+    "document": "119-hr-1/1",
+    "page": 11,
+    "region": 4,
+    "bbox": [
+     150.6201,
+     190.7802,
+     485.85,
+     281.5702
+    ],
+    "w300": 1398,
+    "w330": 1537,
+    "png_deterministic": true
+   }
+  ]
+ },
+ "stop_conditions": [],
+ "tests": [
+  {
+   "test": "1. bbox is exactly the min/max union of the committed line bboxes",
+   "expected": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "observed": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "pass": true,
+   "fails_when": "any other rectangle means padding, a column, or a re-derivation crept in"
+  },
+  {
+   "test": "2. input line ORDER cannot change the bbox",
+   "expected": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "observed": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "3+4. H/X text and anchor content cannot change the bbox",
+   "expected": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "observed": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "pass": true,
+   "fails_when": "if either moved it, the renderer would be reading architecture output"
+  },
+  {
+   "test": "5. no padding is added on any side",
+   "expected": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "observed": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "pass": true,
+   "fails_when": "a non-zero delta is a free parameter the protocol never froze"
+  },
+  {
+   "test": "6. every region line bbox is contained by the region bbox",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "7. a neighbouring line outside the region does not expand the crop",
+   "expected": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "observed": [
+    98.5,
+    672.0,
+    505.5,
+    712.0
+   ],
+   "pass": true,
+   "fails_when": "the crop would otherwise show content the frozen region does not claim"
+  },
+  {
+   "test": "8. a short trailing region follows the identical rule",
+   "expected": [
+    100.0,
+    700.0,
+    500.0,
+    712.0
+   ],
+   "observed": [
+    100.0,
+    700.0,
+    500.0,
+    712.0
+   ],
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "9a. non-finite committed geometry ABORTS",
+   "expected": "NON_FINITE_LINE_BBOX",
+   "observed": "NON_FINITE_LINE_BBOX",
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "9b. a missing line bbox ABORTS",
+   "expected": "MISSING_LINE_BBOX",
+   "observed": "MISSING_LINE_BBOX",
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "9c. a non-positive region bbox ABORTS",
+   "expected": "NON_POSITIVE_REGION_BBOX",
+   "observed": "NON_POSITIVE_REGION_BBOX",
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "9d. ...while the clean frame does NOT abort, so 9a-9c prove something",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "image column 0 is floor(bbox_x0 * DPI/72), on EVERY fractional phase and both scales",
+   "expected": [
+    80,
+    true
+   ],
+   "observed": [
+    80,
+    true
+   ],
+   "pass": true,
+   "fails_when": "A30.3 sketched column 0 == bbox_x0; if that were right this control would fail"
+  },
+  {
+   "test": "the returned width is ceil(x1*s) - floor(x0*s), so it needs no extra metadata",
+   "expected": 80,
+   "observed": 80,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "12. the frozen inverse recovers the source position at every fractional origin",
+   "expected": [
+    60,
+    true
+   ],
+   "observed": [
+    60,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a failure means the encoded transform is not the renderer's actual mapping"
+  },
+  {
+   "test": "13. the deliberately wrong (linear-across-bbox) convention does NOT always recover it",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "if the wrong convention also passed, control 12 would prove nothing"
+  },
+  {
+   "test": "the RENDERER's leftmost inked column matches the forward map within 1 px",
+   "expected": [
+    8,
+    true
+   ],
+   "observed": [
+    8,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a larger gap would mean the device origin rule is wrong, not merely antialiased"
+  },
+  {
+   "test": "a clip in UNROTATED pdf space renders no ink on a rotated page",
+   "expected": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "observed": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "pass": true,
+   "fails_when": "if it did render, rotation would be a non-issue and the refusal unnecessary"
+  },
+  {
+   "test": "...the rotation matrix carries the clip exactly, at every rotation",
+   "expected": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "14. a non-zero rotation is REFUSED, fail-closed",
+   "expected": "NONZERO_PAGE_ROTATION",
+   "observed": "NONZERO_PAGE_ROTATION",
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "14b. ...and rotation 0 is not refused",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "10. 300 and 330 render from the SAME committed PDF bbox",
+   "expected": 0,
+   "observed": 0,
+   "pass": true,
+   "fails_when": "a width not matching the frozen derivation means the two scales disagree on geometry"
+  },
+  {
+   "test": "11. re-rendering the same bbox/renderer/DPI reproduces the PNG hash",
+   "expected": 0,
+   "observed": 0,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "no committed neutral line is clipped by the zero-padding union",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "if the union clipped committed content, A33.1 would need review -- padding is NOT tuned"
+  },
+  {
+   "test": "no DEVELOPMENT region produced an empty render",
+   "expected": 0,
+   "observed": 0,
+   "pass": true,
+   "fails_when": ""
+  },
+  {
+   "test": "every DEVELOPMENT page consumed has rotation 0, so the refusal costs nothing today",
+   "expected": [
+    0
+   ],
+   "observed": [
+    0
+   ],
+   "pass": true,
+   "fails_when": ""
+  }
+ ],
+ "failures": []
+}

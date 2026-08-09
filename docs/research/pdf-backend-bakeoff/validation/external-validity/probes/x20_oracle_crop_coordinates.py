@@ -1,0 +1,527 @@
+"""x20 -- A33: the region crop, and how MuPDF maps a fractional clip onto integer pixels.
+
+NOT CONFIRMATORY. SYNTHETIC + DEVELOPMENT only. No holdout document is opened, nothing is
+scored, and no oracle artifact is created. Evidence: `results/x20_oracle_crop_coordinates.json`.
+
+The A33 contract fixed every rule and control below BEFORE this probe existed. The mapping is
+reported because the renderer does it, never because it flatters x18.
+
+RUN WITH AN INTERPRETER CARRYING BOTH `pymupdf` AND `pypdfium2` (pinned to the project's
+version). `pymupdf` is deliberately absent from the project venv -- shared across worktrees, and
+PyMuPDF is a rejected EXTRACTOR under ADR 0002. Here it is only the renderer PRE-REGISTRATION
+5.2 already names.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import statistics
+import sys
+from pathlib import Path
+
+import pymupdf
+
+HERE = Path(__file__).resolve()
+EV = HERE.parents[1]
+BAKE = EV.parents[1]
+REPO = BAKE.parents[2]
+sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(BAKE / "probes"))
+sys.path.insert(0, str(BAKE / "probes" / "backends"))
+
+import build_frames as BF  # noqa: E402
+import oracle_geometry as OG  # noqa: E402
+import run_extended  # noqa: E402
+import run_hybrid  # noqa: E402
+
+OUT = EV / "results" / "x20_oracle_crop_coordinates.json"
+ROWS: list[dict] = []
+FAILED: list[str] = []
+STOPS: list[dict] = []
+
+PRIMARY_DPI, R1_DPI = 300, 330
+DOCS = [
+    ("114-hr-2029/4", REPO / "tests/corpus/114-hr-2029/4_reported-in-senate.pdf"),
+    ("118-hr-8752/1", REPO / "tests/corpus/118-hr-8752/1_reported-in-house.pdf"),
+    ("119-hr-1/1", REPO / "tests/corpus/119-hr-1/1_reported-in-house.pdf"),
+]
+PAGE_LIMIT = 12
+HOLDOUT_GUARD = {
+    "116-hr-7611",
+    "115-hr-5961",
+    "115-hr-6147",
+    "115-s-2976",
+    "115-s-1609",
+    "114-s-3001",
+    "115-hr-6157",
+    "117-hr-3237",
+    "119-hr-6938",
+    "119-hr-7148",
+    "CRPT-114HRPT215",
+    "CRPT-119HRPT632",
+    "CRPT-114HRPT605",
+    "117-s-4663",
+    "119-hr-8469",
+    "116-hr-7617",
+    "113-hr-933",
+}
+
+
+def check(name, expected, observed, fails_when=""):
+    ok = expected == observed
+    ROWS.append({"test": name, "expected": expected, "observed": observed, "pass": ok, "fails_when": fails_when})
+    print(f"[PASS] {name}" if ok else f"[FAIL] {name}\n        expected={expected!r}\n        observed={observed!r}")
+    if not ok:
+        FAILED.append(name)
+
+
+def stop(kind, detail):
+    STOPS.append({"condition": kind, "detail": detail})
+    print(f"[STOP CONDITION] {kind}: {detail}")
+
+
+def raised(fn):
+    try:
+        fn()
+    except OG.OracleGeometryError as exc:
+        return exc.reason
+    except Exception as exc:  # noqa: BLE001
+        return f"OTHER:{type(exc).__name__}"
+    return None
+
+
+def leftmost_ink(pix):
+    n, w, h = pix.n, pix.width, pix.height
+    b = pix.samples
+    for x in range(w):
+        for y in range(h):
+            if b[(y * w + x) * n + (n - 1)]:
+                return x
+    return None
+
+
+# ------------------------------------------------------------------ synthetic frames
+
+
+def synth_page_frame(lines, region_ordinal=0):
+    """A committed-frame-shaped page object. Only geometry matters here."""
+    return {
+        "page_number": 1,
+        "neutral_lines": [{"key": [1, i], "bbox": b} for i, b in enumerate(lines)],
+        "regions": [{"region_ordinal": region_ordinal, "neutral_line_keys": [[1, i] for i in range(len(lines))]}],
+    }
+
+
+def part_bbox() -> dict:
+    print("\n== A33.1/A33.2 region bbox: minimal union of committed line bboxes, zero padding ==")
+    lines = [[100.0, 700.0, 500.0, 712.0], [102.0, 686.0, 495.0, 698.0], [98.5, 672.0, 505.5, 684.0]]
+    bbox = OG.region_bbox(synth_page_frame(lines), 0)
+
+    check(
+        "1. bbox is exactly the min/max union of the committed line bboxes",
+        (98.5, 672.0, 505.5, 712.0),
+        bbox,
+        "any other rectangle means padding, a column, or a re-derivation crept in",
+    )
+    check(
+        "2. input line ORDER cannot change the bbox", bbox, OG.region_bbox(synth_page_frame(list(reversed(lines))), 0)
+    )
+
+    # 3/4 -- text and anchor content are not inputs; adding them to the frame changes nothing
+    noisy = synth_page_frame(lines)
+    for ln in noisy["neutral_lines"]:
+        ln["line_state"] = {"h_text": "FAMILY HOUSING", "x_text": "FAMILYHOUSING"}
+    noisy["regions"][0]["anchor_evidence"] = {"differ": True, "H": [["a"]], "X": []}
+    check(
+        "3+4. H/X text and anchor content cannot change the bbox",
+        bbox,
+        OG.region_bbox(noisy, 0),
+        "if either moved it, the renderer would be reading architecture output",
+    )
+
+    check(
+        "5. no padding is added on any side",
+        (0.0, 0.0, 0.0, 0.0),
+        (bbox[0] - 98.5, bbox[1] - 672.0, bbox[2] - 505.5, bbox[3] - 712.0),
+        "a non-zero delta is a free parameter the protocol never froze",
+    )
+    contained = all(b[0] >= bbox[0] and b[1] >= bbox[1] and b[2] <= bbox[2] and b[3] <= bbox[3] for b in lines)
+    check("6. every region line bbox is contained by the region bbox", True, contained)
+
+    # 7 -- a neighbouring line NOT in the region must not expand the crop
+    withneighbour = synth_page_frame([*lines, [10.0, 600.0, 600.0, 612.0]])
+    withneighbour["regions"][0]["neutral_line_keys"] = [[1, 0], [1, 1], [1, 2]]
+    check(
+        "7. a neighbouring line outside the region does not expand the crop",
+        bbox,
+        OG.region_bbox(withneighbour, 0),
+        "the crop would otherwise show content the frozen region does not claim",
+    )
+
+    short = synth_page_frame([lines[0]])
+    check("8. a short trailing region follows the identical rule", tuple(lines[0]), OG.region_bbox(short, 0))
+
+    # 9 -- invalid committed geometry aborts, and is never repaired with padding
+    bad = synth_page_frame([[100.0, 700.0, float("nan"), 712.0]])
+    check("9a. non-finite committed geometry ABORTS", OG.NON_FINITE_LINE_BBOX, raised(lambda: OG.region_bbox(bad, 0)))
+    missing = synth_page_frame([lines[0]])
+    missing["neutral_lines"][0].pop("bbox")
+    check("9b. a missing line bbox ABORTS", OG.MISSING_LINE_BBOX, raised(lambda: OG.region_bbox(missing, 0)))
+    degenerate = synth_page_frame([[100.0, 700.0, 100.0, 712.0]])
+    check(
+        "9c. a non-positive region bbox ABORTS",
+        OG.NON_POSITIVE_REGION_BBOX,
+        raised(lambda: OG.region_bbox(degenerate, 0)),
+    )
+    check(
+        "9d. ...while the clean frame does NOT abort, so 9a-9c prove something",
+        None,
+        raised(lambda: OG.region_bbox(synth_page_frame(lines), 0)),
+    )
+    return {"synthetic_bbox": list(bbox)}
+
+
+# --------------------------------------------------- MuPDF device mapping, measured
+def part_mapping() -> dict:
+    print("\n== A33.3 MuPDF fractional-clip mapping (measured, not assumed) ==")
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=792)
+    phases = [0.0, 0.05, 0.1, 0.25, 0.37, 0.5, 0.63, 0.75, 0.9, 0.99]
+    widths = [10.0, 10.37, 12.5, 40.0]
+    origin_ok, width_ok, rows = [], [], []
+    for dpi in (PRIMARY_DPI, R1_DPI):
+        for ph in phases:
+            for w in widths:
+                x0, x1 = 100.0 + ph, 100.0 + ph + w
+                pix = page.get_pixmap(
+                    matrix=pymupdf.Matrix(OG.scale(dpi), OG.scale(dpi)),
+                    clip=pymupdf.Rect(x0, 100.0, x1, 120.0),
+                    alpha=True,
+                )
+                origin_ok.append(pix.x == OG.device_origin_px(x0, dpi))
+                width_ok.append(pix.width == OG.expected_image_width(x0, x1, dpi))
+                rows.append(
+                    {
+                        "dpi": dpi,
+                        "x0": x0,
+                        "x1": x1,
+                        "pix_x": pix.x,
+                        "pix_width": pix.width,
+                        "predicted_origin": OG.device_origin_px(x0, dpi),
+                        "predicted_width": OG.expected_image_width(x0, x1, dpi),
+                    }
+                )
+    doc.close()
+    check(
+        "image column 0 is floor(bbox_x0 * DPI/72), on EVERY fractional phase and both scales",
+        (len(origin_ok), True),
+        (sum(origin_ok), all(origin_ok)),
+        "A30.3 sketched column 0 == bbox_x0; if that were right this control would fail",
+    )
+    check("the returned width is ceil(x1*s) - floor(x0*s), so it needs no extra metadata", len(width_ok), sum(width_ok))
+    n_mismatch = sum(1 for r in rows if abs((r["x1"] - r["x0"]) * OG.scale(r["dpi"]) - r["pix_width"]) > 0.5)
+    return {
+        "n_cases": len(rows),
+        "origin_rule": "pix.x == floor(bbox_x0 * DPI/72)",
+        "width_rule": "pix.width == ceil(bbox_x1*s) - floor(bbox_x0*s)",
+        "n_cases_where_width_differs_from_bbox_width_times_scale": n_mismatch,
+        "metadata_needed_beyond_bbox_and_dpi": None,
+        "cases": rows[:12],
+    }
+
+
+def part_roundtrip() -> dict:
+    """12/13 -- the arithmetic roundtrip, then the renderer's agreement with it."""
+    print("\n== A33.3 roundtrip across fractional origins, and a wrong-origin control ==")
+
+    # (a) PURE ARITHMETIC. No renderer, so antialiasing cannot confound it: for a known PDF x,
+    #     the forward map to an integer column and the frozen inverse must land within one
+    #     pixel, at every fractional origin phase and both scales.
+    exact, sketch_ok, rows = [], [], []
+    for dpi in (PRIMARY_DPI, R1_DPI):
+        px_pt = 72.0 / dpi
+        for ph in [0.0, 0.07, 0.13, 0.29, 0.41, 0.5, 0.61, 0.77, 0.88, 0.96]:
+            bx0 = 100.0 + ph
+            bx1 = bx0 + 40.0
+            width = OG.expected_image_width(bx0, bx1, dpi)
+            for frac in (0.0, 17.3, 39.4):
+                mark = bx0 + frac
+                col = OG.pdf_x_to_pixel(mark, bx0, dpi)
+                est = OG.pixel_to_pdf_x(col, bx0, dpi)
+                exact.append(abs(est - mark) <= px_pt)
+                # the DELIBERATELY WRONG convention A30.3 sketched: linear across the bbox
+                wrong = bx0 + (col / width) * (bx1 - bx0)
+                sketch_ok.append(abs(wrong - mark) <= px_pt)
+                rows.append(
+                    {
+                        "dpi": dpi,
+                        "bbox_x0": bx0,
+                        "mark_x": mark,
+                        "col": col,
+                        "frozen_inverse": est,
+                        "frozen_err_pt": est - mark,
+                        "a30_3_sketch_inverse": wrong,
+                        "sketch_err_pt": wrong - mark,
+                    }
+                )
+    check(
+        "12. the frozen inverse recovers the source position at every fractional origin",
+        (len(exact), True),
+        (sum(exact), all(exact)),
+        "a failure means the encoded transform is not the renderer's actual mapping",
+    )
+    check(
+        "13. the deliberately wrong (linear-across-bbox) convention does NOT always recover it",
+        False,
+        all(sketch_ok),
+        "if the wrong convention also passed, control 12 would prove nothing",
+    )
+
+    # (b) THE RENDERER AGREES with the forward map. Marks are FILL-ONLY: draw_rect(color=...)
+    #     strokes the path with a default ~1pt pen, which puts ink ~0.5pt (2px at 300 DPI) left
+    #     of the intended x and would look exactly like a broken transform.
+    render_rows, agree = [], []
+    for dpi in (PRIMARY_DPI, R1_DPI):
+        for ph in (0.0, 0.29, 0.5, 0.77):
+            bx0 = 100.0 + ph
+            mark = bx0 + 17.3
+            doc = pymupdf.open()
+            page = doc.new_page(width=612, height=792)
+            page.draw_rect(pymupdf.Rect(mark, 100.0, mark + 0.6, 120.0), color=None, fill=(0, 0, 0))
+            pix = page.get_pixmap(
+                matrix=pymupdf.Matrix(OG.scale(dpi), OG.scale(dpi)),
+                clip=pymupdf.Rect(bx0, 100.0, bx0 + 40.0, 120.0),
+                alpha=True,
+            )
+            col = leftmost_ink(pix)
+            doc.close()
+            predicted = OG.pdf_x_to_pixel(mark, bx0, dpi)
+            delta = None if col is None else col - predicted
+            agree.append(delta is not None and abs(delta) <= 1)
+            render_rows.append(
+                {
+                    "dpi": dpi,
+                    "bbox_x0": bx0,
+                    "mark_x": mark,
+                    "leftmost_inked_col": col,
+                    "predicted_col": predicted,
+                    "delta_col": delta,
+                }
+            )
+    check(
+        "the RENDERER's leftmost inked column matches the forward map within 1 px",
+        (len(agree), True),
+        (sum(agree), all(agree)),
+        "a larger gap would mean the device origin rule is wrong, not merely antialiased",
+    )
+    worst = max((abs(r["sketch_err_pt"]) for r in rows), default=0.0)
+    return {
+        "n_arithmetic_cases": len(rows),
+        "frozen_inverse_ok": sum(exact),
+        "sketch_ok": sum(sketch_ok),
+        "worst_sketch_error_pt": worst,
+        "worst_sketch_error_px_300": worst * PRIMARY_DPI / 72.0,
+        "renderer_agreement": render_rows,
+        "cases": rows[:10],
+    }
+
+
+def part_rotation() -> dict:
+    print("\n== A33.4 rotation: exact clip carry, but start_x_px loses its meaning ==")
+    findings = []
+    for rot in (0, 90, 180, 270):
+        doc = pymupdf.open()
+        page = doc.new_page(width=612, height=792)
+        page.set_rotation(rot)
+        page.draw_rect(pymupdf.Rect(200, 300, 210, 310), color=(0, 0, 0), fill=(0, 0, 0))
+        clip = pymupdf.Rect(195, 295, 215, 315)
+        naive = page.get_pixmap(
+            matrix=pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI)), clip=clip, alpha=True
+        )
+        rclip = clip * page.rotation_matrix
+        fixed = page.get_pixmap(
+            matrix=pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI)), clip=rclip, alpha=True
+        )
+        findings.append(
+            {
+                "rotation": rot,
+                "naive_clip_has_ink": leftmost_ink(naive) is not None,
+                "rotated_clip_has_ink": leftmost_ink(fixed) is not None,
+                "image_x_axis_is_pdf_x": rot in (0, 180),
+                "image_x_axis_direction": "same" if rot == 0 else ("mirrored" if rot == 180 else "pdf_y"),
+            }
+        )
+        doc.close()
+    check(
+        "a clip in UNROTATED pdf space renders no ink on a rotated page",
+        [True, False, False, False],
+        [f["naive_clip_has_ink"] for f in findings],
+        "if it did render, rotation would be a non-issue and the refusal unnecessary",
+    )
+    check(
+        "...the rotation matrix carries the clip exactly, at every rotation",
+        [True] * 4,
+        [f["rotated_clip_has_ink"] for f in findings],
+    )
+    check(
+        "14. a non-zero rotation is REFUSED, fail-closed",
+        OG.NONZERO_PAGE_ROTATION,
+        raised(lambda: OG.check_rotation(90)),
+    )
+    check("14b. ...and rotation 0 is not refused", None, raised(lambda: OG.check_rotation(0)))
+    return {
+        "synthetic": findings,
+        "ruling": "PROPOSED fail-closed NONZERO_PAGE_ROTATION -- the clip carries exactly, "
+        "but at 90/270 the image x axis is the PDF y axis and at 180 it is "
+        "mirrored, so start_x_px stops corresponding to a neutral glyph x0",
+    }
+
+
+# ----------------------------------------------------------------- DEVELOPMENT crops
+
+
+def part_development() -> dict:
+    print("\n== DEVELOPMENT crop diagnostics (not pass thresholds) ==")
+    widths, heights, rows = [], [], []
+    n_regions = n_short = n_invalid = n_outside = n_empty = n_determinism = n_inversion_fail = 0
+    rotations, clipped = {}, []
+
+    for name, path in DOCS:
+        for member in HOLDOUT_GUARD:
+            if member in str(path):
+                raise SystemExit(f"REFUSED: {path} touches holdout member {member}")
+        if not path.exists():
+            continue
+        h_pages = run_hybrid.run(path, limit=PAGE_LIMIT)
+        x_pages, _s = run_extended.run(path, limit=PAGE_LIMIT)
+        frame = BF.build_document_frame("devsha", name, BF.P_HEAD, h_pages, x_pages)
+        doc = pymupdf.open(path)
+        try:
+            for pf in frame["pages"]:
+                page = doc[pf["page_number"] - 1]
+                rotations[page.rotation] = rotations.get(page.rotation, 0) + 1
+                for region in pf["regions"]:
+                    n_regions += 1
+                    n_short += bool(region["short_trailing"])
+                    try:
+                        bbox = OG.region_bbox(pf, region["region_ordinal"])
+                    except OG.OracleGeometryError:
+                        n_invalid += 1
+                        continue
+                    widths.append(bbox[2] - bbox[0])
+                    heights.append(bbox[3] - bbox[1])
+                    if bbox[0] < 0 or bbox[1] < 0 or bbox[2] > page.rect.width or bbox[3] > page.rect.height:
+                        n_outside += 1
+                    # A33.1 clipping check: every committed line must sit inside the union
+                    for line in pf["neutral_lines"]:
+                        if tuple(line["key"]) in {tuple(k) for k in region["neutral_line_keys"]}:
+                            lb = line["bbox"]
+                            if lb[0] < bbox[0] or lb[2] > bbox[2] or lb[1] < bbox[1] or lb[3] > bbox[3]:
+                                clipped.append({"document": name, "page": pf["page_number"], "line": line["key"]})
+                    if n_regions % 17:  # render a sample; rendering every region is not the point
+                        continue
+                    ph = page.rect.height
+                    clip = pymupdf.Rect(bbox[0], ph - bbox[3], bbox[2], ph - bbox[1])
+                    a = page.get_pixmap(
+                        matrix=pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI)), clip=clip, alpha=False
+                    )
+                    b = page.get_pixmap(
+                        matrix=pymupdf.Matrix(OG.scale(PRIMARY_DPI), OG.scale(PRIMARY_DPI)), clip=clip, alpha=False
+                    )
+                    ha, hb = hashlib.sha256(a.tobytes("png")).hexdigest(), hashlib.sha256(b.tobytes("png")).hexdigest()
+                    if ha != hb:
+                        n_determinism += 1
+                    if a.width == 0 or a.height == 0:
+                        n_empty += 1
+                    # 10 -- 300 and 330 must use the SAME PDF bbox
+                    c330 = page.get_pixmap(
+                        matrix=pymupdf.Matrix(OG.scale(R1_DPI), OG.scale(R1_DPI)), clip=clip, alpha=False
+                    )
+                    if c330.width != OG.expected_image_width(bbox[0], bbox[2], R1_DPI):
+                        n_inversion_fail += 1
+                    rows.append(
+                        {
+                            "document": name,
+                            "page": pf["page_number"],
+                            "region": region["region_ordinal"],
+                            "bbox": list(bbox),
+                            "w300": a.width,
+                            "w330": c330.width,
+                            "png_deterministic": ha == hb,
+                        }
+                    )
+        finally:
+            doc.close()
+
+    check(
+        "10. 300 and 330 render from the SAME committed PDF bbox",
+        0,
+        n_inversion_fail,
+        "a width not matching the frozen derivation means the two scales disagree on geometry",
+    )
+    check("11. re-rendering the same bbox/renderer/DPI reproduces the PNG hash", 0, n_determinism)
+    check(
+        "no committed neutral line is clipped by the zero-padding union",
+        [],
+        clipped[:10],
+        "if the union clipped committed content, A33.1 would need review -- padding is NOT tuned",
+    )
+    check("no DEVELOPMENT region produced an empty render", 0, n_empty)
+    check("every DEVELOPMENT page consumed has rotation 0, so the refusal costs nothing today", [0], sorted(rotations))
+    if clipped:
+        stop("ZERO_PADDING_UNION_CLIPS_COMMITTED_CONTENT", clipped[:10])
+    return {
+        "n_regions": n_regions,
+        "n_short_trailing": n_short,
+        "n_invalid_bbox": n_invalid,
+        "n_out_of_page_bbox": n_outside,
+        "n_empty_render": n_empty,
+        "n_render_determinism_failures": n_determinism,
+        "n_pixel_inversion_failures": n_inversion_fail,
+        "page_rotation_census": rotations,
+        "bbox_width_pt": {"min": min(widths), "median": statistics.median(widths), "max": max(widths)}
+        if widths
+        else None,
+        "bbox_height_pt": {"min": min(heights), "median": statistics.median(heights), "max": max(heights)}
+        if heights
+        else None,
+        "clipped_lines": clipped[:10],
+        "sampled_renders": rows[:12],
+    }
+
+
+def main() -> int:
+    bbox = part_bbox()
+    mapping = part_mapping()
+    roundtrip = part_roundtrip()
+    rotation = part_rotation()
+    dev = part_development()
+    doc = {
+        "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened, nothing scored",
+        "contract": "A33, committed before this probe existed",
+        "renderer": "MuPDF (pymupdf)",
+        "renderer_version": str(pymupdf.version),
+        "region_bbox_rule": "minimal axis-aligned union of COMMITTED neutral-line bboxes, zero padding",
+        "frozen_inversion": "pdf_x = (floor(bbox_x0 * DPI/72) + start_x_px) / (DPI/72)",
+        "a30_3_sketch_was": "pdf_x = bbox_x0 + (start_x_px / image_width) * (bbox_x1 - bbox_x0)",
+        "metadata_insufficient": False,
+        "bbox": bbox,
+        "mupdf_mapping": mapping,
+        "roundtrip": roundtrip,
+        "rotation": rotation,
+        "development": dev,
+        "stop_conditions": STOPS,
+        "tests": ROWS,
+        "failures": FAILED,
+    }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(doc, indent=1, default=str))
+    print(f"\n{len(ROWS) - len(FAILED)}/{len(ROWS)} checks pass; {len(STOPS)} stop conditions")
+    print(f"wrote {OUT}")
+    return 1 if FAILED or STOPS else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
