@@ -179,6 +179,80 @@ def filter_keys(keyed) -> set:
     return {key for key, kind, population in keyed if population == P_HEAD and kind in ADEQUACY_KINDS}
 
 
+# ------------------------------------------------------- A36.7 the M5 role coarsening
+
+M5_LEAF = "LEAF"
+M5_CONTAINER = "CONTAINER"
+M5_UNSCORABLE = "UNSCORABLE"
+
+# The adjudicator records the FINE section 5.3 role; M5 alone coarsens it. HARNESS-PLAN 3's
+# "coarse leaf/container role" described this SCORING map, not what the adjudicator writes down
+# -- asking only leaf-vs-container would discard information 5.3 requires and could not be
+# recovered later.
+ORACLE_ROLE_TO_M5 = {
+    "account": M5_LEAF,
+    "section": M5_LEAF,
+    "agency": M5_CONTAINER,
+    "grouping": M5_CONTAINER,
+    "title": M5_CONTAINER,
+    "division": M5_CONTAINER,
+    "other": M5_UNSCORABLE,
+}
+
+# Production's emitted anchor kinds. COMPLETE against `AnchorKind`, which x21 asserts against
+# the production Literal rather than trusting this comment -- a kind added to production later
+# must FAIL a control instead of arriving silently as an unmapped role.
+#
+# `division` is an oracle role and an `Anchor` FIELD, never an emitted KIND, which is why it
+# appears in the oracle map only.
+EMITTED_KIND_TO_M5 = {
+    "account": M5_LEAF,
+    "section": M5_LEAF,
+    "major": M5_CONTAINER,
+    "agency": M5_CONTAINER,
+    "grouping": M5_CONTAINER,
+    "title": M5_CONTAINER,
+    "subsection": M5_UNSCORABLE,
+    "preamble": M5_UNSCORABLE,
+}
+
+
+class UnknownRole(Exception):
+    """A36.7 -- a role outside the frozen map. Refuses; never silently UNSCORABLE.
+
+    Mapping an unknown role to UNSCORABLE would quietly SHRINK the M5 denominator, and a
+    smaller denominator reads as a cleaner result rather than as a defect.
+    """
+
+
+def m5_oracle_role(role: str) -> str:
+    if role not in ORACLE_ROLE_TO_M5:
+        raise UnknownRole(f"oracle role not in the frozen A36.7 map: {role!r}")
+    return ORACLE_ROLE_TO_M5[role]
+
+
+def m5_emitted_kind(kind: str) -> str:
+    if kind not in EMITTED_KIND_TO_M5:
+        raise UnknownRole(f"emitted kind not in the frozen A36.7 map: {kind!r}")
+    return EMITTED_KIND_TO_M5[kind]
+
+
+def m5_scorable(oracle_role: str, emitted_kind: str) -> bool:
+    """A36.7 -- in the M5 denominator only when BOTH sides coarsen to LEAF or CONTAINER."""
+    return M5_UNSCORABLE not in (m5_oracle_role(oracle_role), m5_emitted_kind(emitted_kind))
+
+
+def m5_agreement(oracle_role: str, emitted_kind: str):
+    """Do the two sides agree after coarsening? `None` when the pair is out of scope.
+
+    `None` rather than False: an excluded pair is not a disagreement, and counting it as one
+    would penalise the architecture for a role M5 was never licensed to score.
+    """
+    if not m5_scorable(oracle_role, emitted_kind):
+        return None
+    return m5_oracle_role(oracle_role) == m5_emitted_kind(emitted_kind)
+
+
 def adequacy(strata_filled: int, occurrences: int) -> str:
     """A28.2 -- the 4.5 rows as an ORDERED, EXHAUSTIVE state machine. No threshold changed.
 

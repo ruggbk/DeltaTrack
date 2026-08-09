@@ -9,7 +9,8 @@ nor chooses.
 WHAT IT PRODUCES, and why the two artifacts differ deliberately:
 
   PRIVATE KEY   blind id -> canonical pre-blinding identity, document_sha256, page,
-                region_ordinal, stratum, frame C|D, control/repeat bookkeeping, the H/X output
+                region_ordinal, stratum, frames ["C"]/["D"]/["C","D"] (A36.2), the required
+                adjudication routes, control/repeat bookkeeping, the H/X output
                 the later join needs, renderer name + version, DPI, committed bbox in PDF
                 points, PNG sha256, and the region-line bijection A35.2 records.
 
@@ -31,7 +32,7 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import methodology_contracts as MC
@@ -62,26 +63,53 @@ RENDERED_WIDTH_DISAGREES = "RENDERED_WIDTH_DISAGREES"
 START_LINE_OUT_OF_RANGE = "START_LINE_OUT_OF_RANGE"
 CONFIRMATORY_WRITE_BEFORE_EXECUTION = "CONFIRMATORY_WRITE_BEFORE_EXECUTION"
 
-# A35 STOP -- reported to review, NOT resolved here.
+UNKNOWN_ADJUDICATION_PURPOSE = "UNKNOWN_ADJUDICATION_PURPOSE"
+ANSWER_MISSING_FOR_REQUIRED_ROUTE = "ANSWER_MISSING_FOR_REQUIRED_ROUTE"
+ADJUDICATION_NOT_NAMESPACED = "ADJUDICATION_NOT_NAMESPACED"
+
+# ----------------------------------------------------------- A36 C/D overlap semantics
 #
-# A region can be in the C-frame AND the D-frame. This is not hypothetical: measured on the
-# same DEVELOPMENT frames x17 committed, 17 of 24 C-frame regions (71%) are also D-frame
-# regions, because the C draw ranks EVERY region of a P-head document while ~70% of regions
-# carry text discordance. A27.2 forbids replacing a drawn region after inspecting its content,
-# so the overlap cannot be designed away in the draw either.
+# A35.5 STOPPED here because the frozen sources did not say what happens when a region is in
+# BOTH frames. A36 ruled it, and the ruling is implemented rather than re-decided:
 #
-# Three things the frozen sources do not determine, each outcome-affecting:
-#   1. one stimulus or two? A28.3's base identity is ("region", doc_sha, page, ordinal) with NO
-#      frame component, so two instances of one region are UNREPRESENTABLE -- A30.5 sees a
-#      duplicate identity and aborts. Adding a frame component would be new methodology.
-#   2. which adjudication route? 5.5.1 sends C-frame to AI adjudication and D-frame to HUMAN
-#      adjudication item by item. An overlapping region has two routes and no rule to pick one.
-#   3. which denominators? RQ2's coverage figures and RQ1's discordance census would each
-#      either count it or not, and 5.8's "never pooled" governs METRICS, not set membership.
-#
-# So construction REFUSES. Choosing here would silently decide who adjudicates 71% of the
-# C-frame and which denominators move -- exactly the kind of convenient answer A35 forbids.
-REGION_IN_BOTH_FRAMES = "REGION_IN_BOTH_FRAMES"
+#   A36.1  C and D are INDEPENDENT predicates and may overlap. Neither frame drops the
+#          overlap, the C draw is never replaced after observing D membership, and the frames
+#          are never forced disjoint.
+#   A36.2  one physical region is ONE stimulus identity -- one base identity, one 300-DPI
+#          primary, one PNG, one blind id. A28.3 gains NO frame component; membership is
+#          METADATA about a stimulus, carried as an explicit ordered list because the old
+#          singular `frame` projection could not represent an overlap unambiguously.
+#   A36.3  "never pooled" separates ESTIMANDS, not SETS: the region counts once in each
+#          frame's own denominator, and |C union D| is never substituted for either.
+#   A36.4  a stimulus and an adjudication are different objects, so one blind stimulus takes
+#          both required routes, separately namespaced.
+C_FRAME_ROUTE = "ai"
+D_FRAME_ROUTE = "human"
+
+ROUTE_AI = "ai"
+ROUTE_HUMAN = "human"
+# Deterministic order, so a membership set can never serialize two ways.
+ROUTE_ORDER = (ROUTE_AI, ROUTE_HUMAN)
+FRAME_ORDER = (C_FRAME, D_FRAME)
+
+PURPOSE_C_METRICS = "c_metrics"
+PURPOSE_D_DECISION = "d_decision"
+PURPOSE_C_AUDIT = "c_audit"
+
+# A36.4's CRITICAL PROHIBITION, as a table rather than as prose a caller might not read.
+# C metrics read the AI answer even where a human answer exists, because D membership is
+# CONDITIONAL ON ARCHITECTURE DISAGREEMENT -- taking human truth only on C-and-D regions would
+# make C a mixed oracle whose source is selected by H/X discordance, i.e. the architectures
+# would be choosing their own oracle on exactly the regions where they disagree.
+PURPOSE_ROUTE = {
+    PURPOSE_C_METRICS: ROUTE_AI,
+    PURPOSE_D_DECISION: ROUTE_HUMAN,
+    PURPOSE_C_AUDIT: ROUTE_HUMAN,
+}
+
+# A36.4 -- the adjudication artifact must carry two separately namespaced answer sets keyed by
+# the SAME blind id. The schema requirement is frozen now; the artifact is not built here.
+ADJUDICATION_NAMESPACES = (ROUTE_AI, ROUTE_HUMAN)
 
 
 class OracleBuildError(Exception):
@@ -252,12 +280,55 @@ class StimulusSpec:
     document_sha256: str
     page_number: int
     region_ordinal: int
-    frame: str
+    frames: tuple[str, ...]
     stratum: str
     is_r1_repeat: bool = False
+    is_c_audit_selected: bool = False
     control_kind: str | None = None
     control_variant: str | None = None
     source_fixture_sha256: str | None = None
+
+    @property
+    def frame_routes(self) -> tuple[str, ...]:
+        """A36.4 -- the routes implied by FRAME MEMBERSHIP alone. C -> AI, D -> human.
+
+        This is what an R1 repeat inherits (A36.6). The audit is deliberately not here: it is a
+        property of the primary presentation of a base identity, not of frame membership.
+        """
+        routes = set()
+        if C_FRAME in self.frames:
+            routes.add(C_FRAME_ROUTE)
+        if D_FRAME in self.frames:
+            routes.add(D_FRAME_ROUTE)
+        return tuple(r for r in ROUTE_ORDER if r in routes)
+
+    @property
+    def adjudication_routes(self) -> tuple[str, ...]:
+        """Every route this stimulus must actually be answered on."""
+        routes = set(self.frame_routes)
+        if self.is_c_audit_selected:
+            routes.add(ROUTE_HUMAN)
+        return tuple(r for r in ROUTE_ORDER if r in routes)
+
+    @property
+    def human_answer_purposes(self) -> tuple[str, ...]:
+        """What the ONE human answer is consumed for. A36.5 lets a C-audit item reuse its D answer.
+
+        The purposes are separate because the audit denominator is defined over `cframe-audit`
+        selections only: a C-and-D human answer that was NOT independently drawn must never
+        enlarge the audit.
+        """
+        purposes = []
+        if D_FRAME in self.frames:
+            purposes.append(PURPOSE_D_DECISION)
+        if self.is_c_audit_selected:
+            purposes.append(PURPOSE_C_AUDIT)
+        return tuple(purposes)
+
+    @property
+    def n_human_tasks(self) -> int:
+        """A36.5 -- ONE human task, however many purposes consume it. Same blind image."""
+        return 1 if ROUTE_HUMAN in self.adjudication_routes else 0
 
     @property
     def base_identity(self):
@@ -282,41 +353,57 @@ class StimulusSpec:
 
 
 def plan_document_stimuli(frame: dict, stratum: str) -> list[StimulusSpec]:
-    """Primary stimuli for one document: every C-frame region and every D-frame region.
+    """ONE stimulus per region that is in either frame, carrying its membership (A36.2).
 
     Reads the COMMITTED frame only. It does not re-decide membership -- `build_frames` already
     settled which regions are C and which are D, and re-deriving either here would let the
     oracle layer move a frame boundary the frame layer owns.
 
-    A region in BOTH frames REFUSES -- see `REGION_IN_BOTH_FRAMES`. That is not a choice; it is
-    the absence of one.
+    A region in BOTH frames yields ONE stimulus with `frames == ("C", "D")`. It is NOT emitted
+    twice: A28.3's base identity has no frame component, so a second instance would be the same
+    canonical identity and A30.5 would abort. A36.2 rules that this is correct -- membership is
+    metadata, identity is the region.
     """
     specs = []
     for page_frame in frame["pages"]:
         for region in page_frame["regions"]:
-            if region["c_frame"] and region["d_frame"]:
-                raise OracleBuildError(
-                    REGION_IN_BOTH_FRAMES,
-                    {
-                        "document": frame["document"],
-                        "page_number": page_frame["page_number"],
-                        "region_ordinal": region["region_ordinal"],
-                        "d_reasons": region["d_reasons"],
-                    },
+            frames = tuple(name for flag, name in ((region["c_frame"], C_FRAME), (region["d_frame"], D_FRAME)) if flag)
+            if not frames:
+                continue
+            specs.append(
+                StimulusSpec(
+                    document_id=frame["document"],
+                    document_sha256=frame["document_sha256"],
+                    page_number=page_frame["page_number"],
+                    region_ordinal=region["region_ordinal"],
+                    frames=frames,
+                    stratum=stratum,
                 )
-            for in_frame, name in ((region["c_frame"], C_FRAME), (region["d_frame"], D_FRAME)):
-                if in_frame:
-                    specs.append(
-                        StimulusSpec(
-                            document_id=frame["document"],
-                            document_sha256=frame["document_sha256"],
-                            page_number=page_frame["page_number"],
-                            region_ordinal=region["region_ordinal"],
-                            frame=name,
-                            stratum=stratum,
-                        )
-                    )
+            )
     return specs
+
+
+C_AUDIT_SIZE = 25
+
+
+def select_c_audit(primaries: list[StimulusSpec], k: int = C_AUDIT_SIZE) -> list[StimulusSpec]:
+    """A36.5 -- the 25-item human audit, ranked by `cframe-audit` over C BASE identities.
+
+    D membership may not enter this function in any way. It does not appear in the candidate
+    predicate (C membership only), in the ranked item (the base identity), or in `k`. That is
+    what makes the audit sample and its denominator INVARIANT under D membership, which x21
+    falsifies by marking many non-audit C regions as D and requiring the selection to stay
+    byte-identical.
+    """
+    candidates = [s for s in primaries if C_FRAME in s.frames and not s.is_r1_repeat and s.control_kind is None]
+    chosen = set(map(MC.canonical, MC.select("cframe-audit", [s.base_identity for s in candidates], k)))
+    return [s for s in candidates if MC.canonical(s.base_identity) in chosen]
+
+
+def apply_c_audit(primaries: list[StimulusSpec], k: int = C_AUDIT_SIZE) -> list[StimulusSpec]:
+    """Mark the audit-selected primaries, preserving every other field."""
+    chosen = {MC.canonical(s.base_identity) for s in select_c_audit(primaries, k)}
+    return [replace(s, is_c_audit_selected=True) if MC.canonical(s.base_identity) in chosen else s for s in primaries]
 
 
 def plan_r1_repeats(primaries: list[StimulusSpec], fraction: float = 0.10) -> list[StimulusSpec]:
@@ -325,15 +412,56 @@ def plan_r1_repeats(primaries: list[StimulusSpec], fraction: float = 0.10) -> li
     The repeat carries the SAME committed bbox and source region; only the raster scale differs
     (A28.4). It records its own `start_x_px` later and resolves independently, so nothing here
     copies a primary's coordinate or resolved identity.
+
+    A36.6 -- the repeat INHERITS its primary's frame membership, and therefore its frame routes:
+    C only -> AI, D only -> human, C and D -> both. There are NO route-specific R1 identities;
+    one physical repeat presented to two adjudicators yields two namespaced answers, not two
+    stimuli. `is_c_audit_selected` is deliberately NOT inherited: the audit is 25 items drawn
+    over base identities, and auditing the repeat as well would make it 26 tasks for 25 items.
     """
     eligible = [s for s in primaries if s.control_kind is None]
     k = math.floor(len(eligible) * fraction)
     chosen = set(map(MC.canonical, MC.select("r1-repeat", [s.base_identity for s in eligible], k)))
     return [
-        StimulusSpec(**{**s.__dict__, "is_r1_repeat": True})
+        replace(s, is_r1_repeat=True, is_c_audit_selected=False)
         for s in eligible
         if MC.canonical(s.base_identity) in chosen
     ]
+
+
+def select_answer(record: dict, purpose: str, answers: dict):
+    """A36.4 -- read the answer from the route the PURPOSE mandates, never the one that exists.
+
+    The prohibition this enforces: C metrics take the AI answer even where a human answer is
+    present. Falling back to human on C-and-D regions would make C a mixed oracle whose source
+    is selected by H/X discordance. So a missing mandated answer REFUSES; it never substitutes.
+    """
+    if purpose not in PURPOSE_ROUTE:
+        raise OracleBuildError(UNKNOWN_ADJUDICATION_PURPOSE, {"purpose": purpose})
+    route = PURPOSE_ROUTE[purpose]
+    if route not in record.get("adjudication_routes", ()):
+        raise OracleBuildError(
+            ANSWER_MISSING_FOR_REQUIRED_ROUTE,
+            {"purpose": purpose, "route": route, "routes": record.get("adjudication_routes")},
+        )
+    if route not in answers or answers[route] is None:
+        raise OracleBuildError(ANSWER_MISSING_FOR_REQUIRED_ROUTE, {"purpose": purpose, "route": route})
+    return answers[route]
+
+
+def validate_adjudication_namespacing(adjudicated: dict) -> None:
+    """A36.4 -- the adjudication artifact must namespace answers by route under one blind id.
+
+    Frozen as a SCHEMA REQUIREMENT now so the artifact cannot later be built with one flat
+    answer per id, which would silently collapse a C-and-D region's two independent answers
+    into whichever was written last.
+    """
+    missing = [ns for ns in ADJUDICATION_NAMESPACES if ns not in adjudicated]
+    if missing:
+        raise OracleBuildError(ADJUDICATION_NOT_NAMESPACED, {"missing_namespaces": missing})
+    for ns in ADJUDICATION_NAMESPACES:
+        if not isinstance(adjudicated[ns], dict):
+            raise OracleBuildError(ADJUDICATION_NOT_NAMESPACED, {"namespace": ns, "type": type(adjudicated[ns])})
 
 
 def presentation_order(specs: list[StimulusSpec]) -> list[StimulusSpec]:
@@ -416,7 +544,10 @@ LEAKY_KEY_FIELDS = (
     "page_number",
     "region_ordinal",
     "stratum",
-    "frame",
+    "frames",
+    "adjudication_routes",
+    "human_answer_purposes",
+    "is_c_audit_selected",
     "control_kind",
     "control_variant",
     "is_r1_repeat",
@@ -488,6 +619,7 @@ def build(
     *,
     prompt_path: Path = PROMPT_PATH,
     r1_fraction: float = 0.10,
+    c_audit_size: int = C_AUDIT_SIZE,
     controls: list[StimulusSpec] | None = None,
 ) -> BuildResult:
     """Build the private key and the blind file for a set of documents.
@@ -507,6 +639,9 @@ def build(
         assert_not_holdout(frame["document"], doc.get("pdf_path"))
         specs.extend(plan_document_stimuli(frame, doc.get("stratum", "UNSTRATIFIED")))
     specs.extend(controls or [])
+    # A36.5 -- the audit is drawn over C base identities BEFORE repeats exist, and never sees
+    # D membership. Repeats are added after, and do not inherit audit selection (A36.6).
+    specs = apply_c_audit(specs, c_audit_size)
     specs.extend(plan_r1_repeats(specs, r1_fraction))
 
     # I14 / A30.5 -- asserted over the COMPLETE realized set, controls and repeats included,
@@ -547,7 +682,16 @@ def build(
                 "page_number": spec.page_number,
                 "region_ordinal": spec.region_ordinal,
                 "stratum": spec.stratum,
-                "frame": spec.frame,
+                # A36.2 -- explicit membership, deterministically ordered. NOT a single-frame
+                # projection, which could not represent C-and-D without being ambiguous.
+                "frames": list(spec.frames),
+                "in_c_frame": C_FRAME in spec.frames,
+                "in_d_frame": D_FRAME in spec.frames,
+                # A36.4 -- routes are metadata about the stimulus; the answers live apart.
+                "adjudication_routes": list(spec.adjudication_routes),
+                "human_answer_purposes": list(spec.human_answer_purposes),
+                "n_human_tasks": spec.n_human_tasks,
+                "is_c_audit_selected": spec.is_c_audit_selected,
                 "control_kind": spec.control_kind,
                 "control_variant": spec.control_variant,
                 "is_r1_repeat": spec.is_r1_repeat,
@@ -578,10 +722,11 @@ def build(
     _assert_r1_matches_primary(key_stimuli)
 
     result.key = {
-        "schema": "oracle_key/1",
+        "schema": "oracle_key/2",
         "population": "DEVELOPMENT + SYNTHETIC -- pre-execution",
         "prompt_sha256": hashlib.sha256(question.encode()).hexdigest(),
         "n_stimuli": len(key_stimuli),
+        "frame_counts": frame_counts(key_stimuli),
         "stimuli": key_stimuli,
     }
     result.blind = {
@@ -590,6 +735,29 @@ def build(
         "items": blind_items,
     }
     return result
+
+
+def frame_counts(key_stimuli: dict) -> dict:
+    """A36.3 -- raw C, raw D and the overlap, reported SEPARATELY.
+
+    `|C union D|` is never substituted for either frame's denominator. Publishing the overlap
+    beside both sizes is what lets a reader see that a C-and-D region is counted once in each
+    estimand, rather than having to infer it from a single pooled total.
+    """
+    primaries = [r for r in key_stimuli.values() if not r["is_r1_repeat"] and r["control_kind"] is None]
+    c = [r for r in primaries if r["in_c_frame"]]
+    d = [r for r in primaries if r["in_d_frame"]]
+    both = [r for r in primaries if r["in_c_frame"] and r["in_d_frame"]]
+    return {
+        "c_frame": len(c),
+        "d_frame": len(d),
+        "c_and_d_overlap": len(both),
+        "union_reported_for_information_only": len({id(r) for r in c + d}),
+        "c_audit_selected": sum(1 for r in primaries if r["is_c_audit_selected"]),
+        "human_tasks": sum(r["n_human_tasks"] for r in key_stimuli.values()),
+        "ai_route": sum(1 for r in key_stimuli.values() if ROUTE_AI in r["adjudication_routes"]),
+        "human_route": sum(1 for r in key_stimuli.values() if ROUTE_HUMAN in r["adjudication_routes"]),
+    }
 
 
 def _assert_r1_matches_primary(key_stimuli: dict) -> None:
@@ -619,7 +787,8 @@ REQUIRED_JOIN_FIELDS = (
     "document_sha256",
     "page_number",
     "region_ordinal",
-    "frame",
+    "frames",
+    "adjudication_routes",
     "stratum",
     "dpi",
     "bbox_pdf_points",

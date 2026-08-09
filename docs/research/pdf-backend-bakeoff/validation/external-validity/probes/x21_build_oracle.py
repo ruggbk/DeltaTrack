@@ -69,7 +69,7 @@ def refusal(fn) -> str | None:
         fn()
     except (BO.OracleBuildError, OG.OracleGeometryError) as exc:
         return exc.reason
-    except (MC.BlindIdCollision, MC.DuplicateStimulusIdentity) as exc:
+    except (MC.BlindIdCollision, MC.DuplicateStimulusIdentity, MC.UnknownRole) as exc:
         return type(exc).__name__
     return None
 
@@ -100,7 +100,7 @@ def synthetic_pdf(tmp: Path, rotation: int = 0, n_pages: int = N_SYNTHETIC_REGIO
     return path
 
 
-def synthetic_page_frame(page_number: int) -> dict:
+def synthetic_page_frame(page_number: int, c_frame: bool = True, d_frame: bool = False) -> dict:
     lines, keys = [], []
     for i in range(SYNTHETIC_LINES_PER_REGION):
         baseline = 792.0 - (120.0 + i * 20.0)
@@ -127,31 +127,40 @@ def synthetic_page_frame(page_number: int) -> dict:
                 "neutral_line_keys": keys,
                 "short_trailing": False,
                 "line_count": SYNTHETIC_LINES_PER_REGION,
-                "d_frame": False,
-                "d_reasons": [],
-                "c_frame": True,
+                "d_frame": d_frame,
+                "d_reasons": ["TEXT_DISCORDANCE"] if d_frame else [],
+                "c_frame": c_frame,
             }
         ],
     }
 
 
 def synthetic_frame(
-    document_sha256="synthsha0123456789", document_id="SYNTHETIC/1", n_pages: int = N_SYNTHETIC_REGIONS
+    document_sha256="synthsha0123456789",
+    document_id="SYNTHETIC/1",
+    n_pages: int = N_SYNTHETIC_REGIONS,
+    memberships: list[tuple[bool, bool]] | None = None,
 ) -> dict:
-    """A frame in `build_frames`' emitted shape, with bboxes we control exactly."""
+    """A frame in `build_frames`' emitted shape, with bboxes and C/D membership we control."""
+    memberships = memberships or [(True, False)] * n_pages
     return {
         "document": document_id,
         "document_sha256": document_sha256,
         "population": BF.P_HEAD,
         "region_size": SYNTHETIC_LINES_PER_REGION,
-        "pages": [synthetic_page_frame(p + 1) for p in range(n_pages)],
+        "pages": [synthetic_page_frame(p + 1, c, d) for p, (c, d) in enumerate(memberships[:n_pages])],
     }
 
 
-def synthetic_documents(tmp: Path, rotation: int = 0, n_pages: int = N_SYNTHETIC_REGIONS) -> list[dict]:
+def synthetic_documents(
+    tmp: Path,
+    rotation: int = 0,
+    n_pages: int = N_SYNTHETIC_REGIONS,
+    memberships: list[tuple[bool, bool]] | None = None,
+) -> list[dict]:
     return [
         {
-            "frame": synthetic_frame(n_pages=n_pages),
+            "frame": synthetic_frame(n_pages=n_pages, memberships=memberships),
             "pdf_path": synthetic_pdf(tmp, rotation, n_pages),
             "stratum": "SYNTHETIC",
             "architecture_output": {f"{p + 1}:0": {"H": ["LINE 0"], "X": ["LINE 0"]} for p in range(n_pages)},
@@ -740,6 +749,353 @@ def part_start_line(tmp: Path) -> dict:
 # --------------------------------------------------------------- DEVELOPMENT end-to-end
 
 
+def part_overlap(tmp: Path) -> dict:
+    """A36.1-A36.6 -- C/D overlap semantics, routes, the audit, and R1 inheritance."""
+    print("\n== A36: C/D overlap is BUILT, not refused ==")
+
+    # C-only, D-only, and overlap, side by side in one realized set.
+    memberships = [(True, False), (False, True), (True, True)] + [(True, False)] * (N_SYNTHETIC_REGIONS - 3)
+    docs = synthetic_documents(tmp, memberships=memberships)
+    result = BO.build(docs)
+    by_page = {r["page_number"]: r for r in result.key["stimuli"].values() if not r["is_r1_repeat"]}
+
+    check(
+        "1. a C-only region yields ONE stimulus with frames == ['C']",
+        (1, ["C"]),
+        (sum(1 for r in by_page.values() if r["page_number"] == 1), by_page[1]["frames"]),
+        "a C-only region is mislabelled or emitted more than once",
+    )
+    check(
+        "2. a D-only region yields ONE stimulus with frames == ['D']",
+        ["D"],
+        by_page[2]["frames"],
+        "a D-only region is mislabelled or emitted more than once",
+    )
+    check(
+        "3. an OVERLAP region yields ONE stimulus with frames == ['C','D']",
+        ["C", "D"],
+        by_page[3]["frames"],
+        "the overlap is projected onto a single frame, losing one membership (A36.2)",
+    )
+    overlap_ids = [
+        bid
+        for bid, r in result.key["stimuli"].items()
+        if r["page_number"] == 3 and not r["is_r1_repeat"] and r["control_kind"] is None
+    ]
+    check(
+        "4. the overlap creates EXACTLY ONE primary blind id",
+        1,
+        len(overlap_ids),
+        "two blind ids exist for one physical region, so it would be rendered and adjudicated "
+        "twice and A30.5's identity uniqueness would have had to be weakened to permit it",
+    )
+    check(
+        "17. ...and is rendered exactly once at primary DPI",
+        1,
+        sum(
+            1
+            for r in result.key["stimuli"].values()
+            if r["page_number"] == 3 and r["dpi"] == MC.PRIMARY_DPI and r["control_kind"] is None
+        ),
+        "the same primary region is rasterised twice, which would also produce two PNG hashes for one committed bbox",
+    )
+
+    # 5 + 8. adding a membership must not disturb identity or the other frame's census.
+    c_only = BO.plan_document_stimuli(synthetic_frame(n_pages=3, memberships=[(True, False)] * 3), "S")
+    now_both = BO.plan_document_stimuli(synthetic_frame(n_pages=3, memberships=[(True, True)] * 3), "S")
+    check(
+        "5. adding D membership to a C item cannot change its BASE IDENTITY",
+        [MC.canonical(s.base_identity) for s in c_only],
+        [MC.canonical(s.base_identity) for s in now_both],
+        "frame membership leaked into A28.3's identity, which would re-key every selection "
+        "and every blind id the moment a region became discordant",
+    )
+    d_only = BO.plan_document_stimuli(synthetic_frame(n_pages=3, memberships=[(False, True)] * 3), "S")
+    check(
+        "8. adding C membership to a D item cannot remove it from the D census",
+        [True, True, True],
+        [BO.D_FRAME in s.frames for s in now_both],
+        "a region drawn into C is dropped from the discordance census, shrinking the only "
+        "evidence that can satisfy Rule 1",
+    )
+    check(
+        "...and the D-only items are in D too, so control 8 is not comparing against nothing",
+        [True, True, True],
+        [BO.D_FRAME in s.frames for s in d_only],
+        "the D-only fixture is not actually in D",
+    )
+    check(
+        "9. frame membership ORDER cannot change canonical output",
+        by_page[3]["frames"],
+        sorted(by_page[3]["frames"], key=lambda f: BO.FRAME_ORDER.index(f)),
+        "membership is emitted in input order, so the same stimulus could serialize two ways",
+    )
+
+    # 6 + 7. D membership must not move the C draw or the C audit.
+    n = N_SYNTHETIC_REGIONS
+    plain = synthetic_frame(n_pages=n, memberships=[(True, False)] * n)
+    # mark MANY non-audit C regions as D -- the required negative control
+    d_heavy = synthetic_frame(n_pages=n, memberships=[(True, i % 2 == 1) for i in range(n)])
+    plain_specs = BO.plan_document_stimuli(plain, "S")
+    heavy_specs = BO.plan_document_stimuli(d_heavy, "S")
+    check(
+        "6. adding D membership cannot change C selection",
+        [MC.canonical(s.base_identity) for s in plain_specs if BO.C_FRAME in s.frames],
+        [MC.canonical(s.base_identity) for s in heavy_specs if BO.C_FRAME in s.frames],
+        "the C membership set moved when D membership changed, i.e. the draw consumed the "
+        "thing it is supposed to be independent of",
+    )
+    audit_plain = [MC.canonical(s.base_identity) for s in BO.select_c_audit(plain_specs, k=5)]
+    audit_heavy = [MC.canonical(s.base_identity) for s in BO.select_c_audit(heavy_specs, k=5)]
+    check(
+        "7. adding D membership cannot change C AUDIT selection or its denominator",
+        (audit_plain, 5),
+        (audit_heavy, len(audit_heavy)),
+        "the 25-item audit sample or size moved with D membership, which would make the "
+        "audit a function of architecture disagreement (A36.5)",
+    )
+    check(
+        "...and the D-heavy fixture really did gain D members, so control 7 is not vacuous",
+        True,
+        sum(1 for s in heavy_specs if BO.D_FRAME in s.frames) > 0,
+        "no region gained D membership, so nothing was perturbed",
+    )
+
+    # 11 + 12 + 13. routes, and the critical prohibition.
+    audited = BO.apply_c_audit(BO.plan_document_stimuli(d_heavy, "S"), k=5)
+    routes = {
+        "c_only": next(s for s in audited if s.frames == ("C",) and not s.is_c_audit_selected),
+        "d_only": BO.plan_document_stimuli(synthetic_frame(n_pages=1, memberships=[(False, True)]), "S")[0],
+        "overlap": next(s for s in audited if s.frames == ("C", "D")),
+    }
+    check(
+        "11. an overlap stimulus requires BOTH the AI and the human route",
+        ("ai", "human"),
+        routes["overlap"].adjudication_routes,
+        "an overlap region is answered on one route, dropping it from RQ2 metrics or from "
+        "Rule 1 decision evidence (A36.4)",
+    )
+    check(
+        "...and C-only takes AI while D-only takes human",
+        (("ai",), ("human",)),
+        (routes["c_only"].adjudication_routes, routes["d_only"].adjudication_routes),
+        "a frame's route is wrong, so the wrong oracle would supply its labels",
+    )
+    both_answers = {"ai": "AI-ANSWER", "human": "HUMAN-ANSWER"}
+    overlap_record = by_page[3]
+    check(
+        "12. the C metric route reads the AI answer EVEN WHERE a human answer exists",
+        "AI-ANSWER",
+        BO.select_answer(overlap_record, BO.PURPOSE_C_METRICS, both_answers),
+        "human truth is substituted into C on overlap regions, making C a mixed oracle whose "
+        "source is selected by H/X discordance -- the architectures choosing their own oracle "
+        "on exactly the regions where they disagree",
+    )
+    check(
+        "13. the D decision route reads the human answer EVEN WHERE an AI answer exists",
+        "HUMAN-ANSWER",
+        BO.select_answer(overlap_record, BO.PURPOSE_D_DECISION, both_answers),
+        "an AI answer decides Rule 1, which 5.5.1 reserves for human adjudication",
+    )
+    check(
+        "...and a missing mandated answer REFUSES rather than falling back to the other route",
+        BO.ANSWER_MISSING_FOR_REQUIRED_ROUTE,
+        refusal(lambda: BO.select_answer(overlap_record, BO.PURPOSE_C_METRICS, {"human": "HUMAN-ANSWER"})),
+        "a missing AI answer silently falls back to human, which is the prohibited substitution "
+        "arriving through the back door",
+    )
+    check(
+        "the adjudication artifact schema requires two namespaced answer sets (A36.4)",
+        BO.ADJUDICATION_NOT_NAMESPACED,
+        refusal(lambda: BO.validate_adjudication_namespacing({"ai": {}})),
+        "a flat one-answer-per-id artifact validates, which would collapse an overlap region's "
+        "two independent answers into whichever was written last",
+    )
+    check(
+        "...and a correctly namespaced artifact is accepted",
+        None,
+        refusal(lambda: BO.validate_adjudication_namespacing({"ai": {}, "human": {}})),
+        "the validator refuses everything, making the control above meaningless",
+    )
+
+    # 14 + 15. audit reuse, and the audit denominator.
+    audit_overlap = [s for s in audited if s.is_c_audit_selected and BO.D_FRAME in s.frames]
+    check(
+        "14. an audit-selected C-and-D item uses ONE human task for both D and the audit",
+        (True, [1] * len(audit_overlap)),
+        (len(audit_overlap) > 0, [s.n_human_tasks for s in audit_overlap]),
+        "the human is asked to answer the same blind image twice, or the item exists in no "
+        "fixture so the reuse rule was never exercised",
+    )
+    check(
+        "...and that one task carries BOTH purposes",
+        [("d_decision", "c_audit")] * len(audit_overlap),
+        [s.human_answer_purposes for s in audit_overlap],
+        "the shared answer is recorded as serving only one purpose",
+    )
+    non_audit_overlap = [s for s in audited if not s.is_c_audit_selected and BO.D_FRAME in s.frames]
+    check(
+        "15. a NON-audit C-and-D human answer cannot enlarge the audit denominator",
+        (True, 5),
+        (
+            all(BO.PURPOSE_C_AUDIT not in s.human_answer_purposes for s in non_audit_overlap),
+            sum(1 for s in audited if s.is_c_audit_selected),
+        ),
+        "a human answer that exists only because of D membership counts as an audit item, "
+        "inflating the audit beyond the seeded cframe-audit draw (A36.5)",
+    )
+    check(
+        "...and non-audit overlap items exist, so control 15 is not vacuous",
+        True,
+        len(non_audit_overlap) > 0,
+        "every overlap item happened to be audit-selected, so nothing was tested",
+    )
+
+    # 16. R1 route inheritance.
+    repeats = [r for r in result.key["stimuli"].values() if r["is_r1_repeat"]]
+    inherited = []
+    for rep in repeats:
+        primary = next(
+            r
+            for r in result.key["stimuli"].values()
+            if not r["is_r1_repeat"] and r["base_identity"] == rep["base_identity"]
+        )
+        # the routes a membership implies, independent of audit status (A36.6)
+        expected = [
+            route
+            for route in BO.ROUTE_ORDER
+            if (route == BO.C_FRAME_ROUTE and BO.C_FRAME in rep["frames"])
+            or (route == BO.D_FRAME_ROUTE and BO.D_FRAME in rep["frames"])
+        ]
+        inherited.append(rep["frames"] == primary["frames"] and rep["adjudication_routes"] == expected)
+    check(
+        "16. an R1 repeat keeps ONE identity and inherits its primary's routes",
+        (len(repeats), True),
+        (sum(inherited), all(inherited) and bool(inherited)),
+        "a repeat carries a route-specific identity or a route its primary does not have, "
+        "which would make the reliability measurement compare two different things",
+    )
+    check(
+        "10. the blind artifact leaks no membership and no route",
+        (0, [], []),
+        (
+            BO.leakage_report(result.blind, result.key)["n_leaked_values"],
+            BO.leakage_report(result.blind, result.key)["unexpected_keys"],
+            BO.leakage_report(result.blind, result.key)["forbidden_text"],
+        ),
+        "frame membership, audit status or adjudication route reaches the adjudicator, who "
+        "could then infer that a region is one the architectures disagree about",
+    )
+    injected = copy.deepcopy(result.blind)
+    injected["items"][0]["frames"] = ["C", "D"]
+    injected["items"][1]["adjudication_routes"] = ["ai", "human"]
+    check(
+        "10b. NEGATIVE -- injected membership/route in the blind file FAILS the gate",
+        True,
+        bool(BO.leakage_report(injected, result.key)["unexpected_keys"]),
+        "membership or route can be added to the adjudicator's file without the gate firing",
+    )
+    return {
+        "frame_counts": result.key["frame_counts"],
+        "synthetic_overlap_regions": sum(1 for m in memberships if m[0] and m[1]),
+        "audit_size_used": 5,
+        "n_audit_overlap_items": len(audit_overlap),
+        "n_non_audit_overlap_items": len(non_audit_overlap),
+        "n_r1_repeats": len(repeats),
+    }
+
+
+def part_m5() -> dict:
+    """A36.7 -- the M5 coarsening map, both sides, with completeness asserted against production."""
+    print("\n== A36.7: the M5 role coarsening map ==")
+    from typing import get_args
+
+    from deltatrack.parsers.pdf_anchors import AnchorKind
+
+    produced = set(get_args(AnchorKind))
+    check(
+        "the emitted map is COMPLETE against production's AnchorKind",
+        produced,
+        set(MC.EMITTED_KIND_TO_M5),
+        "production emits a kind the M5 map does not cover, so that kind would arrive as an "
+        "unmapped role -- this control is what makes a future kind FAIL instead of slipping in",
+    )
+    oracle_map = {role: MC.m5_oracle_role(role) for role in MC.ORACLE_ROLE_TO_M5}
+    emitted_map = {kind: MC.m5_emitted_kind(kind) for kind in MC.EMITTED_KIND_TO_M5}
+    check(
+        "every oracle role maps exactly as A36.7 freezes it",
+        {
+            "account": "LEAF",
+            "section": "LEAF",
+            "agency": "CONTAINER",
+            "grouping": "CONTAINER",
+            "title": "CONTAINER",
+            "division": "CONTAINER",
+            "other": "UNSCORABLE",
+        },
+        oracle_map,
+        "a role coarsens differently from the frozen table",
+    )
+    check(
+        "every emitted kind maps exactly as A36.7 freezes it",
+        {
+            "account": "LEAF",
+            "section": "LEAF",
+            "major": "CONTAINER",
+            "agency": "CONTAINER",
+            "grouping": "CONTAINER",
+            "title": "CONTAINER",
+            "subsection": "UNSCORABLE",
+            "preamble": "UNSCORABLE",
+        },
+        emitted_map,
+        "an emitted kind coarsens differently from the frozen table",
+    )
+    check(
+        "a LEAF/LEAF pair is scorable and agrees",
+        (True, True),
+        (MC.m5_scorable("account", "account"), MC.m5_agreement("account", "account")),
+        "an account-to-account match is excluded or read as disagreement",
+    )
+    check(
+        "a LEAF/CONTAINER pair is scorable and DISAGREES",
+        (True, False),
+        (MC.m5_scorable("account", "agency"), MC.m5_agreement("account", "agency")),
+        "a genuine role disagreement is hidden",
+    )
+    check(
+        "an UNSCORABLE oracle role is EXCLUDED, not counted as disagreement",
+        (False, None),
+        (MC.m5_scorable("other", "account"), MC.m5_agreement("other", "account")),
+        "`other` enters the M5 denominator, penalising the architecture for a role M5 was never licensed to score",
+    )
+    check(
+        "an UNSCORABLE emitted kind is EXCLUDED on the other side too",
+        (False, None),
+        (MC.m5_scorable("account", "subsection"), MC.m5_agreement("account", "subsection")),
+        "`subsection` or `preamble` enters the denominator",
+    )
+    check(
+        "NEGATIVE -- an unknown oracle role REFUSES rather than becoming UNSCORABLE",
+        "UnknownRole",
+        refusal(lambda: MC.m5_oracle_role("chapter")),
+        "an unmapped role silently becomes UNSCORABLE, quietly SHRINKING the denominator -- "
+        "and a smaller denominator reads as a cleaner result rather than as a defect",
+    )
+    check(
+        "NEGATIVE -- an unknown emitted kind REFUSES",
+        "UnknownRole",
+        refusal(lambda: MC.m5_emitted_kind("footnote")),
+        "an unmapped emitted kind is silently excluded",
+    )
+    return {
+        "production_anchor_kinds": sorted(produced),
+        "oracle_role_to_m5": oracle_map,
+        "emitted_kind_to_m5": emitted_map,
+        "m5_status": "CORROBORATION ONLY -- may never affect the architecture decision",
+    }
+
+
 def part_development() -> dict:
     """Real PDFs, real committed frames. Demonstration of behaviour, NOT a census."""
     print("\n== DEVELOPMENT end-to-end (real PDFs, real frames) ==")
@@ -772,43 +1128,48 @@ def part_development() -> dict:
         )
         docs.append({"frame": frame, "pdf_path": path, "stratum": "DEVELOPMENT"})
 
-    # THE A35 STOP, demonstrated on real material rather than argued.
-    stop_reason = refusal(lambda: BO.build(copy.deepcopy(docs)))
-    check(
-        "the C-and-D overlap REFUSES construction rather than resolving it silently",
-        BO.REGION_IN_BOTH_FRAMES,
-        stop_reason,
-        "the builder proceeds, silently deciding who adjudicates an overlapping region and "
-        "which denominators move -- a choice the frozen sources do not license",
-    )
-    if overlaps:
-        STOPS.append(
-            {
-                "stop": BO.REGION_IN_BOTH_FRAMES,
-                "why": "A region can be in the C-frame and the D-frame. 5.5.1 routes C to AI "
-                "adjudication and D to human adjudication item by item; A28.3's base identity "
-                "has no frame component so two instances of one region are unrepresentable; and "
-                "neither the route nor the denominators are determined by the frozen sources.",
-                "measured_on": "DEVELOPMENT frames, first %d pages of each document" % PAGE_LIMIT,
-                "n_overlapping_regions": len(overlaps),
-                "instances": overlaps[:24],
-            }
-        )
-
-    # Everything downstream of the ruling is exercised on the unambiguous regions. The overlap
-    # is NOT dropped from any denominator -- it is recorded above as an open STOP.
-    resolvable = copy.deepcopy(docs)
-    n_set_aside = 0
-    for doc in resolvable:
-        for page_frame in doc["frame"]["pages"]:
-            for region in page_frame["regions"]:
-                if region["c_frame"] and region["d_frame"]:
-                    region["d_frame"] = False
-                    n_set_aside += 1
-
-    result = BO.build(resolvable)
+    # A36 -- the overlap is now BUILT, not refused. A35.5's STOP is resolved forward; its
+    # historical record stands in the ledger and in this probe's earlier committed artifact.
+    result = BO.build(docs)
     report = BO.leakage_report(result.blind, result.key)
     defects = BO.verify_join(result)
+
+    counts = result.key["frame_counts"]
+    overlap_records = [
+        r
+        for r in result.key["stimuli"].values()
+        if r["in_c_frame"] and r["in_d_frame"] and not r["is_r1_repeat"] and r["control_kind"] is None
+    ]
+    check(
+        "18. raw C, raw D and the C-and-D overlap are reported SEPARATELY on real material",
+        True,
+        counts["c_frame"] > 0 and counts["d_frame"] > 0 and counts["c_and_d_overlap"] == len(overlaps),
+        "a frame size or the overlap count is missing or disagrees with the frames, so a "
+        "reader could not see that an overlap region is counted once in each estimand",
+    )
+    check(
+        "every DEVELOPMENT overlap region produced EXACTLY ONE stimulus (A36.2)",
+        len(overlaps),
+        len(overlap_records),
+        "an overlap region was emitted twice or dropped, so |C| + |D| would not reconcile "
+        "with the realized stimulus set",
+    )
+    check(
+        "...and every one of them carries BOTH required routes",
+        (len(overlap_records), True),
+        (
+            sum(1 for r in overlap_records if r["adjudication_routes"] == ["ai", "human"]),
+            all(r["adjudication_routes"] == ["ai", "human"] for r in overlap_records),
+        ),
+        "an overlap region is answered on one route only, silently dropping it from either "
+        "the RQ2 metrics or the Rule 1 decision evidence",
+    )
+    check(
+        "the DEVELOPMENT overlap population is non-empty, so the two controls above are not vacuous",
+        True,
+        len(overlap_records) > 0,
+        "no overlap region exists on this material, so nothing about overlap was exercised",
+    )
 
     widths = [r["image_width_px"] for r in result.key["stimuli"].values()]
     width_ok = [
@@ -854,8 +1215,10 @@ def part_development() -> dict:
         "n_images": len(result.images),
         "image_width_px_min": min(widths) if widths else None,
         "image_width_px_max": max(widths) if widths else None,
+        # A36.3 -- raw sizes and the overlap, never a pooled union substituted for either
+        "frame_counts": counts,
         "c_and_d_overlap_regions": len(overlaps),
-        "c_and_d_set_aside_for_downstream_controls": n_set_aside,
+        "overlap_instances": overlaps[:24],
     }
 
 
@@ -868,21 +1231,28 @@ def main() -> int:
         fail_closed = part_fail_closed(tmp)
         leakage = part_leakage_and_join(tmp)
         start_line = part_start_line(tmp)
+        overlap = part_overlap(tmp)
+        m5 = part_m5()
         development = part_development()
 
     doc = {
         "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened, nothing adjudicated, nothing scored",
-        "contract": "A35 (adjudicator prompt + build_oracle), implementing A19-A34 and HARNESS-PLAN 3-4",
+        "contract": "A35 (adjudicator prompt + build_oracle) as amended by A36 (C/D overlap "
+        "semantics + M5 coarsening), implementing A19-A34 and HARNESS-PLAN 3-4",
         "renderer": "MuPDF (pymupdf)",
         "renderer_version": str(pymupdf.version),
         "artifacts_created": "NONE of frames.json, oracle_key.json, oracle_adjudicated.json, "
         "metrics.json, scores.json, EXECUTION-START.json",
+        "a35_5_stop_resolved_by": "A36 -- REGION_IN_BOTH_FRAMES is no longer raised; the overlap "
+        "is BUILT as one stimulus carrying both memberships and both routes",
         "prompt": prompt,
         "blinding": blinding,
         "render": render,
         "fail_closed": fail_closed,
         "leakage_and_join": leakage,
         "start_line_bijection": start_line,
+        "overlap_semantics": overlap,
+        "m5_coarsening": m5,
         "development": development,
         "stop_conditions": STOPS,
         "tests": ROWS,

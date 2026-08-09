@@ -1,9 +1,10 @@
 {
  "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened, nothing adjudicated, nothing scored",
- "contract": "A35 (adjudicator prompt + build_oracle), implementing A19-A34 and HARNESS-PLAN 3-4",
+ "contract": "A35 (adjudicator prompt + build_oracle) as amended by A36 (C/D overlap semantics + M5 coarsening), implementing A19-A34 and HARNESS-PLAN 3-4",
  "renderer": "MuPDF (pymupdf)",
  "renderer_version": "('1.28.2', '1.28.2', None)",
  "artifacts_created": "NONE of frames.json, oracle_key.json, oracle_adjudicated.json, metrics.json, scores.json, EXECUTION-START.json",
+ "a35_5_stop_resolved_by": "A36 -- REGION_IN_BOTH_FRAMES is no longer raised; the overlap is BUILT as one stimulus carrying both memberships and both routes",
  "prompt": {
   "prompt_sha256": "d56ff68c0fc4b1efa87a305fa328b55bfe36c1d6f9e92acc6f01ee0cf4819736",
   "prompt_chars": 5027,
@@ -127,6 +128,55 @@
    ]
   ]
  },
+ "overlap_semantics": {
+  "frame_counts": {
+   "c_frame": 19,
+   "d_frame": 2,
+   "c_and_d_overlap": 1,
+   "union_reported_for_information_only": 20,
+   "c_audit_selected": 19,
+   "human_tasks": 21,
+   "ai_route": 21,
+   "human_route": 21
+  },
+  "synthetic_overlap_regions": 1,
+  "audit_size_used": 5,
+  "n_audit_overlap_items": 2,
+  "n_non_audit_overlap_items": 8,
+  "n_r1_repeats": 2
+ },
+ "m5_coarsening": {
+  "production_anchor_kinds": [
+   "account",
+   "agency",
+   "grouping",
+   "major",
+   "preamble",
+   "section",
+   "subsection",
+   "title"
+  ],
+  "oracle_role_to_m5": {
+   "account": "LEAF",
+   "section": "LEAF",
+   "agency": "CONTAINER",
+   "grouping": "CONTAINER",
+   "title": "CONTAINER",
+   "division": "CONTAINER",
+   "other": "UNSCORABLE"
+  },
+  "emitted_kind_to_m5": {
+   "account": "LEAF",
+   "section": "LEAF",
+   "major": "CONTAINER",
+   "agency": "CONTAINER",
+   "grouping": "CONTAINER",
+   "title": "CONTAINER",
+   "subsection": "UNSCORABLE",
+   "preamble": "UNSCORABLE"
+  },
+  "m5_status": "CORROBORATION ONLY -- may never affect the architecture decision"
+ },
  "development": {
   "documents": [
    {
@@ -161,109 +211,111 @@
   "n_images": 193,
   "image_width_px_min": 934,
   "image_width_px_max": 2110,
+  "frame_counts": {
+   "c_frame": 24,
+   "d_frame": 170,
+   "c_and_d_overlap": 18,
+   "union_reported_for_information_only": 176,
+   "c_audit_selected": 24,
+   "human_tasks": 192,
+   "ai_route": 27,
+   "human_route": 192
+  },
   "c_and_d_overlap_regions": 18,
-  "c_and_d_set_aside_for_downstream_controls": 18
+  "overlap_instances": [
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 1,
+    "region_ordinal": 0
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 1,
+    "region_ordinal": 1
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 10,
+    "region_ordinal": 1
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 12,
+    "region_ordinal": 1
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 14,
+    "region_ordinal": 2
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 18,
+    "region_ordinal": 0
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 19,
+    "region_ordinal": 0
+   },
+   {
+    "document": "114-hr-2029/4",
+    "page_number": 20,
+    "region_ordinal": 0
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 4,
+    "region_ordinal": 1
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 10,
+    "region_ordinal": 2
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 11,
+    "region_ordinal": 3
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 14,
+    "region_ordinal": 3
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 18,
+    "region_ordinal": 0
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 19,
+    "region_ordinal": 0
+   },
+   {
+    "document": "118-hr-8752/1",
+    "page_number": 20,
+    "region_ordinal": 0
+   },
+   {
+    "document": "119-hr-1/1",
+    "page_number": 3,
+    "region_ordinal": 0
+   },
+   {
+    "document": "119-hr-1/1",
+    "page_number": 11,
+    "region_ordinal": 5
+   },
+   {
+    "document": "119-hr-1/1",
+    "page_number": 15,
+    "region_ordinal": 3
+   }
+  ]
  },
- "stop_conditions": [
-  {
-   "stop": "REGION_IN_BOTH_FRAMES",
-   "why": "A region can be in the C-frame and the D-frame. 5.5.1 routes C to AI adjudication and D to human adjudication item by item; A28.3's base identity has no frame component so two instances of one region are unrepresentable; and neither the route nor the denominators are determined by the frozen sources.",
-   "measured_on": "DEVELOPMENT frames, first 20 pages of each document",
-   "n_overlapping_regions": 18,
-   "instances": [
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 1,
-     "region_ordinal": 0
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 1,
-     "region_ordinal": 1
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 10,
-     "region_ordinal": 1
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 12,
-     "region_ordinal": 1
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 14,
-     "region_ordinal": 2
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 18,
-     "region_ordinal": 0
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 19,
-     "region_ordinal": 0
-    },
-    {
-     "document": "114-hr-2029/4",
-     "page_number": 20,
-     "region_ordinal": 0
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 4,
-     "region_ordinal": 1
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 10,
-     "region_ordinal": 2
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 11,
-     "region_ordinal": 3
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 14,
-     "region_ordinal": 3
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 18,
-     "region_ordinal": 0
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 19,
-     "region_ordinal": 0
-    },
-    {
-     "document": "118-hr-8752/1",
-     "page_number": 20,
-     "region_ordinal": 0
-    },
-    {
-     "document": "119-hr-1/1",
-     "page_number": 3,
-     "region_ordinal": 0
-    },
-    {
-     "document": "119-hr-1/1",
-     "page_number": 11,
-     "region_ordinal": 5
-    },
-    {
-     "document": "119-hr-1/1",
-     "page_number": 15,
-     "region_ordinal": 3
-    }
-   ]
-  }
- ],
+ "stop_conditions": [],
  "tests": [
   {
    "test": "18. the prompt asks NO M6 / amount-attribution question",
@@ -524,8 +576,8 @@
   },
   {
    "test": "5. changing H/X text cannot change ANY rendered PNG",
-   "expected": "{'64d9ab7852adf4bed4c745e97bdfa41d065587f80a38f80716af542d2369073e', '3682953cc91d9cdc67ef110947315ebb0ea20af0904ea701f82cfba21831ba68', '55b5c24f8bbde123a7761c23c69252b4a56d0a8af0f2f59d819851b33a0c4d0c', 'b465399f344653daf00f130dfd8c5c5739c019c5366b6c454161344d53f43af2', '2b3288194f435a2ef8b6d1578fe41e9200d6124a28ea2ca730148653d08dc4e8', '5787d162f1cc2b05461b08f7788961bc722a825750b37310543670eb121fcba7', 'f8158e1d2e7ba8ea9bc3e9cefcada264295baedd2c2e863284f7148f0c2e5d90', '523e76b2dcc43b0339269ad853ddf7cb233035b11b6f2972c16e84c01d60210f', '564afbde1c31bcf4a853c026f30d0043c8cfd7395f9dff6af4c6c14863974ee0', '0614bcc4e3217d3b7bfaa2d41ec4fdfa2412194c4672a525857067042ebd15c3', '2195c25922784fbea4f897eaa5a9497161a98ea87364045447ce4f4b11d46b38', 'dc8501c025ea68920ff6567fcec53decc88e548bc1644ba4702d3a71af625660', '910e42afcff3d204f4d112eb7dad76ee9f772f381691d6dd25101161ca21e753', '901a178efbf6b463699e4dd5e5880771353407eeb09fb6545f8c268773c3b7f1', '4596e5e78e706e9c0bb94e21fee823dac1d0a2e68e7f0dad36a021afb51b1155', '59993342398a90ed8c6928eecc169a6e31fd055a4d12663fb7ae2ffcfc8521ed', '83d9e4e005f8dc78f00a7c84dfaa05870f67cfc46d0371de8114194969265fd3', '0d36093aa058c89a6f51cf2c971c2ae23cb6a768b88bda2d52939e9221bf3ce5', 'cb65c619132bd2e46033116332991afd2634b1f9f4832648ab5214005779904f', '0393c3c15058a7731d0891e594c166be0afc87f262c87f33c88500df95cd385f', '77fb29c43c1a62ff27bc94d7a0eb61d6303bf707510ec65c350f8cec880d05dc', '0e41c40661c94c29ff2d116ad624822b891fdf3112599c2034faa6848b71c96c'}",
-   "observed": "{'64d9ab7852adf4bed4c745e97bdfa41d065587f80a38f80716af542d2369073e', '3682953cc91d9cdc67ef110947315ebb0ea20af0904ea701f82cfba21831ba68', '55b5c24f8bbde123a7761c23c69252b4a56d0a8af0f2f59d819851b33a0c4d0c', 'b465399f344653daf00f130dfd8c5c5739c019c5366b6c454161344d53f43af2', '2b3288194f435a2ef8b6d1578fe41e9200d6124a28ea2ca730148653d08dc4e8', '5787d162f1cc2b05461b08f7788961bc722a825750b37310543670eb121fcba7', 'f8158e1d2e7ba8ea9bc3e9cefcada264295baedd2c2e863284f7148f0c2e5d90', '523e76b2dcc43b0339269ad853ddf7cb233035b11b6f2972c16e84c01d60210f', '564afbde1c31bcf4a853c026f30d0043c8cfd7395f9dff6af4c6c14863974ee0', '0614bcc4e3217d3b7bfaa2d41ec4fdfa2412194c4672a525857067042ebd15c3', '2195c25922784fbea4f897eaa5a9497161a98ea87364045447ce4f4b11d46b38', 'dc8501c025ea68920ff6567fcec53decc88e548bc1644ba4702d3a71af625660', '910e42afcff3d204f4d112eb7dad76ee9f772f381691d6dd25101161ca21e753', '901a178efbf6b463699e4dd5e5880771353407eeb09fb6545f8c268773c3b7f1', '4596e5e78e706e9c0bb94e21fee823dac1d0a2e68e7f0dad36a021afb51b1155', '59993342398a90ed8c6928eecc169a6e31fd055a4d12663fb7ae2ffcfc8521ed', '83d9e4e005f8dc78f00a7c84dfaa05870f67cfc46d0371de8114194969265fd3', '0d36093aa058c89a6f51cf2c971c2ae23cb6a768b88bda2d52939e9221bf3ce5', 'cb65c619132bd2e46033116332991afd2634b1f9f4832648ab5214005779904f', '0393c3c15058a7731d0891e594c166be0afc87f262c87f33c88500df95cd385f', '77fb29c43c1a62ff27bc94d7a0eb61d6303bf707510ec65c350f8cec880d05dc', '0e41c40661c94c29ff2d116ad624822b891fdf3112599c2034faa6848b71c96c'}",
+   "expected": "{'4596e5e78e706e9c0bb94e21fee823dac1d0a2e68e7f0dad36a021afb51b1155', '59993342398a90ed8c6928eecc169a6e31fd055a4d12663fb7ae2ffcfc8521ed', '77fb29c43c1a62ff27bc94d7a0eb61d6303bf707510ec65c350f8cec880d05dc', '910e42afcff3d204f4d112eb7dad76ee9f772f381691d6dd25101161ca21e753', '901a178efbf6b463699e4dd5e5880771353407eeb09fb6545f8c268773c3b7f1', '83d9e4e005f8dc78f00a7c84dfaa05870f67cfc46d0371de8114194969265fd3', 'dc8501c025ea68920ff6567fcec53decc88e548bc1644ba4702d3a71af625660', '3682953cc91d9cdc67ef110947315ebb0ea20af0904ea701f82cfba21831ba68', '5787d162f1cc2b05461b08f7788961bc722a825750b37310543670eb121fcba7', 'cb65c619132bd2e46033116332991afd2634b1f9f4832648ab5214005779904f', '2b3288194f435a2ef8b6d1578fe41e9200d6124a28ea2ca730148653d08dc4e8', '64d9ab7852adf4bed4c745e97bdfa41d065587f80a38f80716af542d2369073e', '0393c3c15058a7731d0891e594c166be0afc87f262c87f33c88500df95cd385f', '564afbde1c31bcf4a853c026f30d0043c8cfd7395f9dff6af4c6c14863974ee0', '0614bcc4e3217d3b7bfaa2d41ec4fdfa2412194c4672a525857067042ebd15c3', '523e76b2dcc43b0339269ad853ddf7cb233035b11b6f2972c16e84c01d60210f', '0e41c40661c94c29ff2d116ad624822b891fdf3112599c2034faa6848b71c96c', '55b5c24f8bbde123a7761c23c69252b4a56d0a8af0f2f59d819851b33a0c4d0c', '2195c25922784fbea4f897eaa5a9497161a98ea87364045447ce4f4b11d46b38', '0d36093aa058c89a6f51cf2c971c2ae23cb6a768b88bda2d52939e9221bf3ce5', 'b465399f344653daf00f130dfd8c5c5739c019c5366b6c454161344d53f43af2', 'f8158e1d2e7ba8ea9bc3e9cefcada264295baedd2c2e863284f7148f0c2e5d90'}",
+   "observed": "{'4596e5e78e706e9c0bb94e21fee823dac1d0a2e68e7f0dad36a021afb51b1155', '59993342398a90ed8c6928eecc169a6e31fd055a4d12663fb7ae2ffcfc8521ed', '77fb29c43c1a62ff27bc94d7a0eb61d6303bf707510ec65c350f8cec880d05dc', '910e42afcff3d204f4d112eb7dad76ee9f772f381691d6dd25101161ca21e753', '901a178efbf6b463699e4dd5e5880771353407eeb09fb6545f8c268773c3b7f1', '83d9e4e005f8dc78f00a7c84dfaa05870f67cfc46d0371de8114194969265fd3', 'dc8501c025ea68920ff6567fcec53decc88e548bc1644ba4702d3a71af625660', '3682953cc91d9cdc67ef110947315ebb0ea20af0904ea701f82cfba21831ba68', '5787d162f1cc2b05461b08f7788961bc722a825750b37310543670eb121fcba7', 'cb65c619132bd2e46033116332991afd2634b1f9f4832648ab5214005779904f', '2b3288194f435a2ef8b6d1578fe41e9200d6124a28ea2ca730148653d08dc4e8', '64d9ab7852adf4bed4c745e97bdfa41d065587f80a38f80716af542d2369073e', '0393c3c15058a7731d0891e594c166be0afc87f262c87f33c88500df95cd385f', '564afbde1c31bcf4a853c026f30d0043c8cfd7395f9dff6af4c6c14863974ee0', '0614bcc4e3217d3b7bfaa2d41ec4fdfa2412194c4672a525857067042ebd15c3', '523e76b2dcc43b0339269ad853ddf7cb233035b11b6f2972c16e84c01d60210f', '0e41c40661c94c29ff2d116ad624822b891fdf3112599c2034faa6848b71c96c', '55b5c24f8bbde123a7761c23c69252b4a56d0a8af0f2f59d819851b33a0c4d0c', '2195c25922784fbea4f897eaa5a9497161a98ea87364045447ce4f4b11d46b38', '0d36093aa058c89a6f51cf2c971c2ae23cb6a768b88bda2d52939e9221bf3ce5', 'b465399f344653daf00f130dfd8c5c5739c019c5366b6c454161344d53f43af2', 'f8158e1d2e7ba8ea9bc3e9cefcada264295baedd2c2e863284f7148f0c2e5d90'}",
    "pass": true,
    "fails_when": "an arm's text reaches the renderer or the crop, which would let the thing under test choose its own stimulus"
   },
@@ -843,11 +895,521 @@
    "fails_when": "0 is accepted, silently reading as the last line under Python indexing"
   },
   {
-   "test": "the C-and-D overlap REFUSES construction rather than resolving it silently",
-   "expected": "REGION_IN_BOTH_FRAMES",
-   "observed": "REGION_IN_BOTH_FRAMES",
+   "test": "1. a C-only region yields ONE stimulus with frames == ['C']",
+   "expected": [
+    1,
+    [
+     "C"
+    ]
+   ],
+   "observed": [
+    1,
+    [
+     "C"
+    ]
+   ],
    "pass": true,
-   "fails_when": "the builder proceeds, silently deciding who adjudicates an overlapping region and which denominators move -- a choice the frozen sources do not license"
+   "fails_when": "a C-only region is mislabelled or emitted more than once"
+  },
+  {
+   "test": "2. a D-only region yields ONE stimulus with frames == ['D']",
+   "expected": [
+    "D"
+   ],
+   "observed": [
+    "D"
+   ],
+   "pass": true,
+   "fails_when": "a D-only region is mislabelled or emitted more than once"
+  },
+  {
+   "test": "3. an OVERLAP region yields ONE stimulus with frames == ['C','D']",
+   "expected": [
+    "C",
+    "D"
+   ],
+   "observed": [
+    "C",
+    "D"
+   ],
+   "pass": true,
+   "fails_when": "the overlap is projected onto a single frame, losing one membership (A36.2)"
+  },
+  {
+   "test": "4. the overlap creates EXACTLY ONE primary blind id",
+   "expected": 1,
+   "observed": 1,
+   "pass": true,
+   "fails_when": "two blind ids exist for one physical region, so it would be rendered and adjudicated twice and A30.5's identity uniqueness would have had to be weakened to permit it"
+  },
+  {
+   "test": "17. ...and is rendered exactly once at primary DPI",
+   "expected": 1,
+   "observed": 1,
+   "pass": true,
+   "fails_when": "the same primary region is rasterised twice, which would also produce two PNG hashes for one committed bbox"
+  },
+  {
+   "test": "5. adding D membership to a C item cannot change its BASE IDENTITY",
+   "expected": [
+    "[\"region\",\"synthsha0123456789\",1,0]",
+    "[\"region\",\"synthsha0123456789\",2,0]",
+    "[\"region\",\"synthsha0123456789\",3,0]"
+   ],
+   "observed": [
+    "[\"region\",\"synthsha0123456789\",1,0]",
+    "[\"region\",\"synthsha0123456789\",2,0]",
+    "[\"region\",\"synthsha0123456789\",3,0]"
+   ],
+   "pass": true,
+   "fails_when": "frame membership leaked into A28.3's identity, which would re-key every selection and every blind id the moment a region became discordant"
+  },
+  {
+   "test": "8. adding C membership to a D item cannot remove it from the D census",
+   "expected": [
+    true,
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a region drawn into C is dropped from the discordance census, shrinking the only evidence that can satisfy Rule 1"
+  },
+  {
+   "test": "...and the D-only items are in D too, so control 8 is not comparing against nothing",
+   "expected": [
+    true,
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the D-only fixture is not actually in D"
+  },
+  {
+   "test": "9. frame membership ORDER cannot change canonical output",
+   "expected": [
+    "C",
+    "D"
+   ],
+   "observed": [
+    "C",
+    "D"
+   ],
+   "pass": true,
+   "fails_when": "membership is emitted in input order, so the same stimulus could serialize two ways"
+  },
+  {
+   "test": "6. adding D membership cannot change C selection",
+   "expected": [
+    "[\"region\",\"synthsha0123456789\",1,0]",
+    "[\"region\",\"synthsha0123456789\",2,0]",
+    "[\"region\",\"synthsha0123456789\",3,0]",
+    "[\"region\",\"synthsha0123456789\",4,0]",
+    "[\"region\",\"synthsha0123456789\",5,0]",
+    "[\"region\",\"synthsha0123456789\",6,0]",
+    "[\"region\",\"synthsha0123456789\",7,0]",
+    "[\"region\",\"synthsha0123456789\",8,0]",
+    "[\"region\",\"synthsha0123456789\",9,0]",
+    "[\"region\",\"synthsha0123456789\",10,0]",
+    "[\"region\",\"synthsha0123456789\",11,0]",
+    "[\"region\",\"synthsha0123456789\",12,0]",
+    "[\"region\",\"synthsha0123456789\",13,0]",
+    "[\"region\",\"synthsha0123456789\",14,0]",
+    "[\"region\",\"synthsha0123456789\",15,0]",
+    "[\"region\",\"synthsha0123456789\",16,0]",
+    "[\"region\",\"synthsha0123456789\",17,0]",
+    "[\"region\",\"synthsha0123456789\",18,0]",
+    "[\"region\",\"synthsha0123456789\",19,0]",
+    "[\"region\",\"synthsha0123456789\",20,0]"
+   ],
+   "observed": [
+    "[\"region\",\"synthsha0123456789\",1,0]",
+    "[\"region\",\"synthsha0123456789\",2,0]",
+    "[\"region\",\"synthsha0123456789\",3,0]",
+    "[\"region\",\"synthsha0123456789\",4,0]",
+    "[\"region\",\"synthsha0123456789\",5,0]",
+    "[\"region\",\"synthsha0123456789\",6,0]",
+    "[\"region\",\"synthsha0123456789\",7,0]",
+    "[\"region\",\"synthsha0123456789\",8,0]",
+    "[\"region\",\"synthsha0123456789\",9,0]",
+    "[\"region\",\"synthsha0123456789\",10,0]",
+    "[\"region\",\"synthsha0123456789\",11,0]",
+    "[\"region\",\"synthsha0123456789\",12,0]",
+    "[\"region\",\"synthsha0123456789\",13,0]",
+    "[\"region\",\"synthsha0123456789\",14,0]",
+    "[\"region\",\"synthsha0123456789\",15,0]",
+    "[\"region\",\"synthsha0123456789\",16,0]",
+    "[\"region\",\"synthsha0123456789\",17,0]",
+    "[\"region\",\"synthsha0123456789\",18,0]",
+    "[\"region\",\"synthsha0123456789\",19,0]",
+    "[\"region\",\"synthsha0123456789\",20,0]"
+   ],
+   "pass": true,
+   "fails_when": "the C membership set moved when D membership changed, i.e. the draw consumed the thing it is supposed to be independent of"
+  },
+  {
+   "test": "7. adding D membership cannot change C AUDIT selection or its denominator",
+   "expected": [
+    [
+     "[\"region\",\"synthsha0123456789\",1,0]",
+     "[\"region\",\"synthsha0123456789\",3,0]",
+     "[\"region\",\"synthsha0123456789\",12,0]",
+     "[\"region\",\"synthsha0123456789\",15,0]",
+     "[\"region\",\"synthsha0123456789\",20,0]"
+    ],
+    5
+   ],
+   "observed": [
+    [
+     "[\"region\",\"synthsha0123456789\",1,0]",
+     "[\"region\",\"synthsha0123456789\",3,0]",
+     "[\"region\",\"synthsha0123456789\",12,0]",
+     "[\"region\",\"synthsha0123456789\",15,0]",
+     "[\"region\",\"synthsha0123456789\",20,0]"
+    ],
+    5
+   ],
+   "pass": true,
+   "fails_when": "the 25-item audit sample or size moved with D membership, which would make the audit a function of architecture disagreement (A36.5)"
+  },
+  {
+   "test": "...and the D-heavy fixture really did gain D members, so control 7 is not vacuous",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "no region gained D membership, so nothing was perturbed"
+  },
+  {
+   "test": "11. an overlap stimulus requires BOTH the AI and the human route",
+   "expected": [
+    "ai",
+    "human"
+   ],
+   "observed": [
+    "ai",
+    "human"
+   ],
+   "pass": true,
+   "fails_when": "an overlap region is answered on one route, dropping it from RQ2 metrics or from Rule 1 decision evidence (A36.4)"
+  },
+  {
+   "test": "...and C-only takes AI while D-only takes human",
+   "expected": [
+    [
+     "ai"
+    ],
+    [
+     "human"
+    ]
+   ],
+   "observed": [
+    [
+     "ai"
+    ],
+    [
+     "human"
+    ]
+   ],
+   "pass": true,
+   "fails_when": "a frame's route is wrong, so the wrong oracle would supply its labels"
+  },
+  {
+   "test": "12. the C metric route reads the AI answer EVEN WHERE a human answer exists",
+   "expected": "AI-ANSWER",
+   "observed": "AI-ANSWER",
+   "pass": true,
+   "fails_when": "human truth is substituted into C on overlap regions, making C a mixed oracle whose source is selected by H/X discordance -- the architectures choosing their own oracle on exactly the regions where they disagree"
+  },
+  {
+   "test": "13. the D decision route reads the human answer EVEN WHERE an AI answer exists",
+   "expected": "HUMAN-ANSWER",
+   "observed": "HUMAN-ANSWER",
+   "pass": true,
+   "fails_when": "an AI answer decides Rule 1, which 5.5.1 reserves for human adjudication"
+  },
+  {
+   "test": "...and a missing mandated answer REFUSES rather than falling back to the other route",
+   "expected": "ANSWER_MISSING_FOR_REQUIRED_ROUTE",
+   "observed": "ANSWER_MISSING_FOR_REQUIRED_ROUTE",
+   "pass": true,
+   "fails_when": "a missing AI answer silently falls back to human, which is the prohibited substitution arriving through the back door"
+  },
+  {
+   "test": "the adjudication artifact schema requires two namespaced answer sets (A36.4)",
+   "expected": "ADJUDICATION_NOT_NAMESPACED",
+   "observed": "ADJUDICATION_NOT_NAMESPACED",
+   "pass": true,
+   "fails_when": "a flat one-answer-per-id artifact validates, which would collapse an overlap region's two independent answers into whichever was written last"
+  },
+  {
+   "test": "...and a correctly namespaced artifact is accepted",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": "the validator refuses everything, making the control above meaningless"
+  },
+  {
+   "test": "14. an audit-selected C-and-D item uses ONE human task for both D and the audit",
+   "expected": [
+    true,
+    [
+     1,
+     1
+    ]
+   ],
+   "observed": [
+    true,
+    [
+     1,
+     1
+    ]
+   ],
+   "pass": true,
+   "fails_when": "the human is asked to answer the same blind image twice, or the item exists in no fixture so the reuse rule was never exercised"
+  },
+  {
+   "test": "...and that one task carries BOTH purposes",
+   "expected": [
+    [
+     "d_decision",
+     "c_audit"
+    ],
+    [
+     "d_decision",
+     "c_audit"
+    ]
+   ],
+   "observed": [
+    [
+     "d_decision",
+     "c_audit"
+    ],
+    [
+     "d_decision",
+     "c_audit"
+    ]
+   ],
+   "pass": true,
+   "fails_when": "the shared answer is recorded as serving only one purpose"
+  },
+  {
+   "test": "15. a NON-audit C-and-D human answer cannot enlarge the audit denominator",
+   "expected": [
+    true,
+    5
+   ],
+   "observed": [
+    true,
+    5
+   ],
+   "pass": true,
+   "fails_when": "a human answer that exists only because of D membership counts as an audit item, inflating the audit beyond the seeded cframe-audit draw (A36.5)"
+  },
+  {
+   "test": "...and non-audit overlap items exist, so control 15 is not vacuous",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "every overlap item happened to be audit-selected, so nothing was tested"
+  },
+  {
+   "test": "16. an R1 repeat keeps ONE identity and inherits its primary's routes",
+   "expected": [
+    2,
+    true
+   ],
+   "observed": [
+    2,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a repeat carries a route-specific identity or a route its primary does not have, which would make the reliability measurement compare two different things"
+  },
+  {
+   "test": "10. the blind artifact leaks no membership and no route",
+   "expected": [
+    0,
+    [],
+    []
+   ],
+   "observed": [
+    0,
+    [],
+    []
+   ],
+   "pass": true,
+   "fails_when": "frame membership, audit status or adjudication route reaches the adjudicator, who could then infer that a region is one the architectures disagree about"
+  },
+  {
+   "test": "10b. NEGATIVE -- injected membership/route in the blind file FAILS the gate",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "membership or route can be added to the adjudicator's file without the gate firing"
+  },
+  {
+   "test": "the emitted map is COMPLETE against production's AnchorKind",
+   "expected": "{'section', 'subsection', 'grouping', 'account', 'agency', 'major', 'preamble', 'title'}",
+   "observed": "{'section', 'subsection', 'grouping', 'account', 'agency', 'major', 'preamble', 'title'}",
+   "pass": true,
+   "fails_when": "production emits a kind the M5 map does not cover, so that kind would arrive as an unmapped role -- this control is what makes a future kind FAIL instead of slipping in"
+  },
+  {
+   "test": "every oracle role maps exactly as A36.7 freezes it",
+   "expected": {
+    "account": "LEAF",
+    "section": "LEAF",
+    "agency": "CONTAINER",
+    "grouping": "CONTAINER",
+    "title": "CONTAINER",
+    "division": "CONTAINER",
+    "other": "UNSCORABLE"
+   },
+   "observed": {
+    "account": "LEAF",
+    "section": "LEAF",
+    "agency": "CONTAINER",
+    "grouping": "CONTAINER",
+    "title": "CONTAINER",
+    "division": "CONTAINER",
+    "other": "UNSCORABLE"
+   },
+   "pass": true,
+   "fails_when": "a role coarsens differently from the frozen table"
+  },
+  {
+   "test": "every emitted kind maps exactly as A36.7 freezes it",
+   "expected": {
+    "account": "LEAF",
+    "section": "LEAF",
+    "major": "CONTAINER",
+    "agency": "CONTAINER",
+    "grouping": "CONTAINER",
+    "title": "CONTAINER",
+    "subsection": "UNSCORABLE",
+    "preamble": "UNSCORABLE"
+   },
+   "observed": {
+    "account": "LEAF",
+    "section": "LEAF",
+    "major": "CONTAINER",
+    "agency": "CONTAINER",
+    "grouping": "CONTAINER",
+    "title": "CONTAINER",
+    "subsection": "UNSCORABLE",
+    "preamble": "UNSCORABLE"
+   },
+   "pass": true,
+   "fails_when": "an emitted kind coarsens differently from the frozen table"
+  },
+  {
+   "test": "a LEAF/LEAF pair is scorable and agrees",
+   "expected": [
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": "an account-to-account match is excluded or read as disagreement"
+  },
+  {
+   "test": "a LEAF/CONTAINER pair is scorable and DISAGREES",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "fails_when": "a genuine role disagreement is hidden"
+  },
+  {
+   "test": "an UNSCORABLE oracle role is EXCLUDED, not counted as disagreement",
+   "expected": [
+    false,
+    null
+   ],
+   "observed": [
+    false,
+    null
+   ],
+   "pass": true,
+   "fails_when": "`other` enters the M5 denominator, penalising the architecture for a role M5 was never licensed to score"
+  },
+  {
+   "test": "an UNSCORABLE emitted kind is EXCLUDED on the other side too",
+   "expected": [
+    false,
+    null
+   ],
+   "observed": [
+    false,
+    null
+   ],
+   "pass": true,
+   "fails_when": "`subsection` or `preamble` enters the denominator"
+  },
+  {
+   "test": "NEGATIVE -- an unknown oracle role REFUSES rather than becoming UNSCORABLE",
+   "expected": "UnknownRole",
+   "observed": "UnknownRole",
+   "pass": true,
+   "fails_when": "an unmapped role silently becomes UNSCORABLE, quietly SHRINKING the denominator -- and a smaller denominator reads as a cleaner result rather than as a defect"
+  },
+  {
+   "test": "NEGATIVE -- an unknown emitted kind REFUSES",
+   "expected": "UnknownRole",
+   "observed": "UnknownRole",
+   "pass": true,
+   "fails_when": "an unmapped emitted kind is silently excluded"
+  },
+  {
+   "test": "18. raw C, raw D and the C-and-D overlap are reported SEPARATELY on real material",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "a frame size or the overlap count is missing or disagrees with the frames, so a reader could not see that an overlap region is counted once in each estimand"
+  },
+  {
+   "test": "every DEVELOPMENT overlap region produced EXACTLY ONE stimulus (A36.2)",
+   "expected": 18,
+   "observed": 18,
+   "pass": true,
+   "fails_when": "an overlap region was emitted twice or dropped, so |C| + |D| would not reconcile with the realized stimulus set"
+  },
+  {
+   "test": "...and every one of them carries BOTH required routes",
+   "expected": [
+    18,
+    true
+   ],
+   "observed": [
+    18,
+    true
+   ],
+   "pass": true,
+   "fails_when": "an overlap region is answered on one route only, silently dropping it from either the RQ2 metrics or the Rule 1 decision evidence"
+  },
+  {
+   "test": "the DEVELOPMENT overlap population is non-empty, so the two controls above are not vacuous",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "no overlap region exists on this material, so nothing about overlap was exercised"
   },
   {
    "test": "every DEVELOPMENT stimulus renders at the frozen width for its own DPI",
