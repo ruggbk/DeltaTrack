@@ -3506,6 +3506,139 @@ block changed no existing contract.
 
 ---
 
+## A37 — SUBSTANTIVE. Freeze the supplementary non-zero document bootstrap
+
+```json
+{"id": "A37", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": [],
+ "supersedes_text_in": "none -- A27.5 and PRE-REGISTRATION 8.3 are unchanged; this freezes the reproducibility of a quantity they already permit",
+ "status": "RULED -- committed before the implementation it governs"}
+```
+
+**`affects_scoring_rule` is false, and that is a substantive claim rather than a convenience.**
+The primary inferential procedure remains A27.5 / §8.3 exactly: the **exact one-sided 95 %
+Clopper–Pearson upper bound**, **independent unit = document**, zero-event closed form
+`1 − 0.05^(1/N)`. The bootstrap is **supplementary reporting only** and may never affect Rule 0,
+Rule 1, Rule 3, adequacy or `decide_architecture`. A37 freezes *how a permitted companion
+number is produced*; it does **not** promote that number into evidence.
+
+### A37.1 — provenance: A29 stays WITHDRAWN, its finding is adopted forward
+
+The order-dependence defect was measured by **withdrawn A29** (`134a115`). A29 was withdrawn
+for **process/ownership** reasons — two sessions writing one amendment number — **not** because
+its finding was rejected. A29 therefore remains **WITHDRAWN** and is not resurrected, silently
+or by cherry-pick; A37 adopts the valid finding under a fresh number and closes the details
+A29 left embodied in code rather than stated normatively. **A29 was not wrong.**
+
+| retained from A29 | made explicit or tighter by A37 |
+|---|---|
+| 10,000 document resamples | **one unique record per document**, duplicates refused |
+| with replacement | **event count DERIVED from the records**, never a caller-passed integer |
+| seed family `20260807` | scoped to **the §8 document-discordance event only**, no generic API |
+| hash-derived draws, no RNG object | **exact percentile order-statistic indices**, stated normatively |
+| canonical ordering before any draw | **no interpolation**, no library quantile convention |
+| supplementary / non-gating | canonical statistic identity **carries the population** |
+| zero-event refusal | |
+
+### A37.2 — the input is one record per independent document
+
+```
+records : [(document_identity, event_boolean), ...]
+```
+
+`N = len(records) >= 1`. The **event count is derived** as `sum(event_boolean)`. There is no
+`events=` parameter, because a caller-supplied count can contradict the vector it claims to
+summarise and nothing would detect the disagreement.
+
+**Refusals**, each deterministic: an **empty** set → `EMPTY_DOCUMENT_SET`; a **repeated**
+document identity → `DUPLICATE_DOCUMENT_IDENTITY`; a **non-boolean** event →
+`NON_BOOLEAN_EVENT`. A duplicate is refused rather than silently weighting that document twice,
+because **the document is the independent unit** (§8.3, red-team #7). This refusal is also what
+makes a headings-as-rows table unpassable: several headings from one document collide on that
+document's identity and the construction refuses.
+
+Records are **sorted by canonical document identity before any draw**. The draw is an *index*,
+so without canonical sorting the caller's listing order silently selects different documents —
+the exact defect A29 measured.
+
+### A37.3 — the canonical statistic identity carries the population
+
+```
+("section8", "document-heading-discordance", "P-head")
+```
+
+Frozen as a single constant; callers may not invent labels for the same statistic. **The
+population component is not decoration.** §4.4.1 splits **P-head** (strata 1,2,3,5,7,8) from
+**P-robust** (strata 4,6) and states that **no heading metric is claimed on P-robust**. The §8
+event is heading-level, so this statistic is **P-head only**, and encoding that in the identity
+means a P-robust variant cannot silently reuse the same draw sequence.
+
+### A37.4 — the frozen draw
+
+```
+B         = 10_000 resamples          unit = document, sampling = WITH REPLACEMENT
+seed      = 20260807                  namespace = bootstrap-document
+
+digest = sha256("bootstrap-document|20260807|<canonical statistic identity>|<r>|<d>")
+index  = int.from_bytes(digest[:8], "big") % N
+```
+
+Drawn from the **canonically sorted** vector. **No RNG object**, no dependence on Python /
+NumPy / `random` generator behaviour, and no dependence on caller input order — so any
+implementation in any language reproduces the same resample.
+
+### A37.5 — the statistic, scoped
+
+Per replicate, `bootstrap_rate = mean(resampled event booleans)`: a distribution over the
+**document-level discordance rate**. Explicitly **not** a bootstrap over headings as
+independent observations, over M1–M5 occurrence rows, or over the D-frame region census.
+
+### A37.6 — the percentile endpoint rule, stated normatively
+
+A29 froze the resamples but left the endpoint rule embodied in code. A37 states it:
+
+```
+sort the B replicate rates ascending
+lower_index = floor(0.025 * (B - 1))      # B = 10_000  ->  249
+upper_index = floor(0.975 * (B - 1))      # B = 10_000  ->  9749
+interval    = [sorted_rates[249], sorted_rates[9749]]
+```
+
+**No interpolation. No NumPy percentile default. No library-dependent quantile convention.**
+Both endpoints are therefore always *observed replicate values*, which is asserted rather than
+assumed.
+
+### A37.7 — zero events
+
+If `sum(event_boolean) == 0` there is **no bootstrap**:
+`reason = ZERO_EVENTS_BOOTSTRAP_REFUSED`. §8.1 measured it degenerate — every resample is 0.0 —
+and **`[0, 0]` is never emitted as an interval**. The only inferential result is the exact
+Clopper–Pearson upper bound, whose frozen zero-event closed form `1 − 0.05^(1/N)` is returned
+alongside the refusal so the branch yields the licensed number rather than only an absence.
+**The general (non-zero-event) Clopper–Pearson bound remains `score_metrics`' obligation under
+A27.5 and is not implemented here.**
+
+### A37.8 — non-gating, structurally
+
+A27.6's decision-blocking conditions are written down executably as `GATE_VECTOR` — R1, N-A,
+N-B, N-C, S1, confirmatory X2-a, confirmatory X2-b, M9 evaluability, §4.5 adequacy — so *"the
+bootstrap is not one of them"* is a **checkable statement rather than a promise in prose**. A
+control asserts no bootstrap field appears in the gate vector, and the result carries
+`gating: False`. Cross-engine (`x09`) is absent from the vector on purpose: it qualifies
+reporting and never blocks a decision.
+
+### Population and boundary
+
+SYNTHETIC only. No holdout document opened, nothing adjudicated or scored, no confirmatory or
+scoring artifact, no execution marker. `score_metrics.py` and `decide_architecture.py` remain
+**unstarted** — this is a pure contract in `probes/methodology_contracts.py` with its controls
+in `probes/x15_methodology_contracts.py`, the existing owner.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
