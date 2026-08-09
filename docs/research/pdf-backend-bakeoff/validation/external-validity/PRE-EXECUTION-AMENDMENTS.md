@@ -2834,12 +2834,12 @@ no scoring, no holdout document opened, no oracle/frame artifact created, and A3
 
 ```json
 {"id": "A33", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["3a07740"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/oracle_geometry.py", "probes/x20_oracle_crop_coordinates.py"],
  "supersedes_text_in": "closes ORACLE_CROP_OPERATIONALIZATION_REMAINS_OPEN (A32)",
- "status": "CONTRACT COMMITTED -- rules frozen before the DEVELOPMENT probe was run"}
+ "status": "MEASURED -- contract frozen at 397e65c before the probe ran; awaiting review"}
 ```
 
 **This block is committed BEFORE `x20` exists.** `affects_scoring_rule` is **true**, unlike A32:
@@ -2946,8 +2946,56 @@ out-of-page bbox count, empty-render count, render-determinism failures, page-ro
 pixel-inversion failures. **If the zero-padding union clips committed neutral content, `x20`
 STOPS and returns the cases — padding is not tuned after observing them.**
 
+### MEASURED — the renderer's mapping is not the one A30.3 sketched
+
+`x20`, 25/25 controls, **0 stop conditions**. Over 80 synthetic cases spanning ten fractional
+origin phases, four widths and both scales:
+
+```
+pix.x     == floor(bbox_x0 * DPI/72)                   80/80, every phase, both scales
+pix.width == ceil(bbox_x1*s) - floor(bbox_x0*s)
+```
+
+**Image column 0 is NOT `bbox_x0`**, and one pixel is exactly `72/DPI` points — never
+`(bbox_x1 - bbox_x0) / image_width`, because the integer pixmap is the rounded-**out** bounding
+box of the transformed clip. The frozen inversion is therefore
+
+```
+pdf_x = (floor(bbox_x0 * DPI/72) + start_x_px) / (DPI/72)
+```
+
+needing **only `bbox_x0` and the frozen DPI**. This is **not**
+`A30_3_RENDER_TRANSFORM_METADATA_INSUFFICIENT`: no pixmap origin and no renderer matrix is added
+to the oracle key, which is the outcome the contract preferred.
+
+The sketched convention is not merely inelegant. On a 40 pt test region it misses by up to
+**0.352 pt = 1.468 px at 300 DPI** and failed **11 of 60** arithmetic cases; against `x18`'s
+measured H minimum margin of **5.571 px** that is roughly a quarter of the worst-case budget.
+Real DEVELOPMENT regions are far wider — median **358 pt**, max **461 pt**.
+
+**Rotation.** A clip in unrotated PDF space renders **no ink at all** on a rotated page, and
+`page.rotation_matrix` carries it exactly at all four rotations — yet that is still not
+sufficient, and the reason is the point: at 90° and 270° the image's x axis is the PDF **y**
+axis, and at 180° it is **mirrored**, so `start_x_px` stops corresponding to a neutral glyph
+`x0`. **`NONZERO_PAGE_ROTATION` is PROPOSED fail-closed, for review, not adopted.** Every
+DEVELOPMENT page consumed has rotation 0 (36/36), so the refusal costs nothing today.
+
+**DEVELOPMENT diagnostics** (3 documents × 12 pages): 162 regions, 34 short trailing, **0**
+invalid bboxes, **0** out-of-page, **0** empty renders, **0** render-determinism failures, **0**
+pixel-inversion failures. **Zero committed neutral lines are clipped by the zero-padding union**,
+so no padding question arose and none was tuned.
+
+Two fixture defects were found and fixed rather than reported as findings, because either would
+have produced a false result: `draw_rect(color=...)` **strokes** with a default ~1 pt pen,
+placing ink ~2 px left of the mark and mimicking a broken transform (marks are now fill-only,
+and the renderer then matches the forward map with delta **0**); and `expected_image_width`
+applied `math.ceil` to a float where `x1*s` is mathematically an integer. The latter carries a
+documented float guard and is a **validation helper only** — `pixel_to_pdf_x` does not consume
+width, so nothing in the inversion depends on it.
+
 **Population impact: none.** Pre-execution, DEVELOPMENT + synthetic only. No membership change,
-no scoring, no holdout document opened, no oracle artifact created, and A30.3 unchanged.
+no scoring, no holdout document opened, no oracle artifact created, and A30.3's resolver, ties
+and no-tolerance rule unchanged.
 
 ---
 
