@@ -35,9 +35,12 @@ sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 import build_frames as BF  # noqa: E402
 import build_oracle as BO  # noqa: E402
+import cross_engine_control as CE  # noqa: E402
+import methodology_contracts as MC  # noqa: E402
 import run_extended  # noqa: E402
 import run_hybrid  # noqa: E402
 import s1_control as S1  # noqa: E402
+import x09_skeleton_cross_engine as X09  # noqa: E402
 
 from deltatrack.parsers import pdf_anchors as PA  # noqa: E402
 
@@ -566,6 +569,167 @@ def part_s1() -> dict:
 # ------------------------------------------------- the central question, end to end
 
 
+def part_cross_engine(sha: str) -> dict:
+    """A39.2 -- the REAL producer on a REAL DEVELOPMENT PDF, not the abstract helpers.
+
+    The previous coverage exercised only the sample and a duplicate qualification helper, so a
+    producer that read a nonexistent key and used the wrong denominator stayed green. This
+    control executes `cross_engine_result` end to end and compares it, field by field, against
+    `X09.gate` applied independently to the same sampled rows.
+    """
+    print("\n== A39.2: the confirmatory cross-engine producer, on real DEVELOPMENT material ==")
+
+    # 1-2. run the producer, and independently reproduce it through x09
+    produced = CE.cross_engine_result(DOC_NAME, sha, DOC_PATH, limit=PAGE_LIMIT)
+    pdfium_pages = X09.pdfium_lines(DOC_PATH, PAGE_LIMIT)
+    pymupdf_pages = X09.pymupdf_lines(DOC_PATH, PAGE_LIMIT)
+    measured = X09.measure(pdfium_pages, pymupdf_pages)
+    sampled = MC.cross_engine_pages(sha, [r["page"] for r in measured])
+    direct = X09.gate([r for r in measured if r["page"] in set(sampled)])
+    direct_rows = [r for r in measured if r["page"] in set(sampled)]
+
+    check(
+        "the producer RUNS on a real DEVELOPMENT PDF without raising",
+        True,
+        isinstance(produced, dict) and "gate" in produced,
+        "the producer cannot execute at all -- which is how a nonexistent row key and the "
+        "wrong denominator survived: nothing ever ran it on real measurements",
+    )
+    check(
+        "sampled pages equal the independently derived A39.2 sample",
+        sampled,
+        produced["sampled_pages"],
+        "the producer measures a different page set from the frozen sample",
+    )
+    check(
+        "matched count and DENOMINATOR equal the direct x09 computation",
+        (sum(r["matched"] for r in direct_rows), sum(max(r["pdfium"], r["pymupdf"]) for r in direct_rows)),
+        (produced["matched"], produced["denominator"]),
+        "the producer counts a different numerator or denominator than the frozen rule -- the "
+        "exact defect: matched/pdfium instead of matched/max(pdfium, pymupdf)",
+    )
+    check(
+        "the whole GATE VERDICT equals X09.gate on the same rows",
+        direct,
+        produced["gate"],
+        "the producer's verdict differs from the frozen rule applied directly, i.e. it is "
+        "recomputing the rule rather than calling it",
+    )
+    check(
+        "document fraction, worst page and pass all agree",
+        (direct["matched_fraction"], direct["worst_page"], direct["pass"]),
+        (produced["gate"]["matched_fraction"], produced["gate"]["worst_page"], produced["passed"]),
+        "a reported field disagrees with the gate that produced it",
+    )
+    check(
+        "cross-engine failure is NEVER decision-blocking",
+        False,
+        produced["decision_blocking"],
+        "a cross-engine failure blocks the architecture decision, which A27.6 forbids",
+    )
+
+    # 3. OVER-SEGMENTATION SYMMETRY -- the reason max(pdfium, pymupdf) is frozen.
+    pdfium_over = X09.gate([{"page": 1, "pdfium": 120, "pymupdf": 100, "matched": 100}])
+    pymupdf_over = X09.gate([{"page": 1, "pdfium": 100, "pymupdf": 120, "matched": 100}])
+    check(
+        "PyMuPDF over-segmentation scores 100/120, not 100/100",
+        round(100 / 120, 4),
+        pymupdf_over["matched_fraction"],
+        "the denominator is the PDFium count, so over-segmentation by the SECOND engine is "
+        "invisible -- the control would report perfect agreement while the engines disagree",
+    )
+    check(
+        "PDFium over-segmentation scores 100/120 too -- the gate is SYMMETRIC",
+        round(100 / 120, 4),
+        pdfium_over["matched_fraction"],
+        "the gate favours one engine, so which engine over-segments changes the verdict",
+    )
+    check(
+        "...and both are capable of FAILING the frozen thresholds",
+        (False, False),
+        (pdfium_over["pass"], pymupdf_over["pass"]),
+        "an 0.833 agreement passes, so the thresholds cannot see over-segmentation at all",
+    )
+
+    # 4. the document SHA is verified, not trusted
+    check(
+        "NEGATIVE -- a wrong document SHA REFUSES before any sample or measurement",
+        CE.SOURCE_SHA256_MISMATCH,
+        _sha_refusal("0" * 64),
+        "a caller-supplied SHA that does not match the bytes selects a different page sample "
+        "for the same document, silently and reproducibly",
+    )
+    check(
+        "...and the correct SHA is accepted",
+        None,
+        _sha_refusal(sha),
+        "verification refuses the real document, making the control above meaningless",
+    )
+
+    # 6. only SAMPLED rows reach the gate
+    unsampled = next((r["page"] for r in measured if r["page"] not in set(sampled)), None)
+    mutated_unsampled = [{**r, "matched": 0} if r["page"] == unsampled else r for r in measured]
+    mutated_sampled = [{**r, "matched": 0} if r["page"] == sampled[0] else r for r in measured]
+    check(
+        "mutating a NON-sampled page changes nothing",
+        direct,
+        X09.gate([r for r in mutated_unsampled if r["page"] in set(sampled)]),
+        "an unsampled page reaches the gate, so this is not a 10 % sampled control at all",
+    )
+    check(
+        "...while mutating a SAMPLED page DOES change the verdict",
+        True,
+        X09.gate([r for r in mutated_sampled if r["page"] in set(sampled)]) != direct,
+        "a sampled page cannot move the verdict, so sample membership is dead and the control "
+        "above passed for the wrong reason",
+    )
+    check(
+        "an unsampled page exists, so the membership control is not vacuous",
+        True,
+        unsampled is not None,
+        "every page is sampled here, so 'unsampled changes nothing' was trivially true",
+    )
+
+    # 5. the default whole-document path must work
+    whole = CE.cross_engine_result(DOC_NAME, sha, DOC_PATH, limit=None)
+    check(
+        "limit=None is a valid WHOLE-DOCUMENT call",
+        True,
+        whole["page_count"] >= produced["page_count"] and whole["n_sampled"] >= 1,
+        "the canonical writer's default path raises or silently measures a prefix -- a "
+        "truncated confirmatory measurement would qualify a frame on a fraction of its pages",
+    )
+    check(
+        "...and it measures MORE pages than the limited call, so None is not read as a prefix",
+        True,
+        whole["page_count"] > produced["page_count"],
+        "limit=None produced the same page count as the limited run, i.e. it was reinterpreted",
+    )
+    return {
+        "document": DOC_NAME,
+        "limited_page_count": produced["page_count"],
+        "whole_document_page_count": whole["page_count"],
+        "sampled_pages": produced["sampled_pages"],
+        "matched": produced["matched"],
+        "denominator": produced["denominator"],
+        "gate": produced["gate"],
+        "qualification": produced["qualification"],
+        "oversegmentation": {
+            "pdfium_over_120": pdfium_over["matched_fraction"],
+            "pymupdf_over_120": pymupdf_over["matched_fraction"],
+        },
+        "whole_document_gate": whole["gate"],
+    }
+
+
+def _sha_refusal(candidate: str):
+    try:
+        CE.verified_sha256(DOC_PATH, candidate)
+    except CE.CrossEngineError as exc:
+        return exc.reason
+    return None
+
+
 def part_no_pdf_needed(frame: dict, key: dict) -> dict:
     """Can the scoring facts be reached from committed JSON ALONE? Answered structurally."""
     print("\n== A38: every score input is reachable from committed artifacts ==")
@@ -623,6 +787,7 @@ def main() -> int:
     parent = part_parent(frame, h)
     m9 = part_m9(frame)
     s1 = part_s1()
+    cross_engine = part_cross_engine(sha)
 
     built = BO.build([{"frame": frame, "pdf_path": DOC_PATH, "stratum": "DEVELOPMENT"}])
     reach = part_no_pdf_needed(frame, built.key)
@@ -645,6 +810,7 @@ def main() -> int:
         "immediate_parent": parent,
         "m9_raw": m9,
         "s1": s1,
+        "cross_engine": cross_engine,
         "reachability": reach,
         "oracle_key_schema": built.key["schema"],
         "forward_ambiguities": STOPS,

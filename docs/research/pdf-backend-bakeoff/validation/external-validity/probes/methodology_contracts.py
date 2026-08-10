@@ -450,10 +450,13 @@ def margin_line_loss(h_recovered: int, x_recovered: int) -> dict:
     return {"loser": None, "fires": False, "h": h_recovered, "x": x_recovered, "deficit": 0}
 
 
+# A39.2 owns the SAMPLE. It deliberately does NOT own the gate: the matching rule, the
+# `max(pdfium, pymupdf)` denominator and both thresholds belong to `x09_skeleton_cross_engine`
+# and are called from there. A duplicate `cross_engine_qualification` lived here briefly and
+# drifted immediately -- the confirmatory producer built against it scored `matched / pdfium`,
+# which made PyMuPDF over-segmentation invisible. One executable owner, or the two disagree.
 CROSS_ENGINE_NAMESPACE = "cross-engine-page"
 CROSS_ENGINE_FRACTION = 0.10
-CROSS_ENGINE_DOC_MIN = 0.95
-CROSS_ENGINE_PAGE_MIN = 0.75
 
 
 def cross_engine_pages(document_sha256: str, page_numbers) -> list[int]:
@@ -474,25 +477,6 @@ def cross_engine_pages(document_sha256: str, page_numbers) -> list[int]:
     identities = [(document_sha256, p) for p in pages]
     chosen = select(CROSS_ENGINE_NAMESPACE, identities, k)
     return sorted(p for _sha, p in chosen)
-
-
-def cross_engine_qualification(document_agreement: float, page_agreements: dict) -> dict:
-    """A39.2 -- the frozen x09 gate, reused. NEVER decision-blocking (A27.6).
-
-    A failure labels results `PDFIUM-CONDITIONED FRAME`; it changes no architecture outcome and
-    no gate. The thresholds are x09's own and are not re-derived here.
-    """
-    failing = sorted(p for p, a in page_agreements.items() if a < CROSS_ENGINE_PAGE_MIN)
-    passed = document_agreement >= CROSS_ENGINE_DOC_MIN and not failing
-    return {
-        "document_agreement": document_agreement,
-        "document_min": CROSS_ENGINE_DOC_MIN,
-        "page_min": CROSS_ENGINE_PAGE_MIN,
-        "failing_pages": failing,
-        "passed": passed,
-        "qualification": None if passed else "PDFIUM-CONDITIONED FRAME",
-        "decision_blocking": False,
-    }
 
 
 def adequacy(strata_filled: int, occurrences: int) -> str:

@@ -134,6 +134,40 @@
   "fires": true,
   "reason": null
  },
+ "cross_engine": {
+  "document": "118-hr-8752/1",
+  "limited_page_count": 16,
+  "whole_document_page_count": 98,
+  "sampled_pages": [
+   13,
+   15
+  ],
+  "matched": 55,
+  "denominator": 55,
+  "gate": {
+   "matched_fraction": 1.0,
+   "worst_page": 13,
+   "worst_page_fraction": 1.0,
+   "document_threshold": 0.95,
+   "page_threshold": 0.75,
+   "pass": true,
+   "failed_on": []
+  },
+  "qualification": null,
+  "oversegmentation": {
+   "pdfium_over_120": 0.8333,
+   "pymupdf_over_120": 0.8333
+  },
+  "whole_document_gate": {
+   "matched_fraction": 1.0,
+   "worst_page": 13,
+   "worst_page_fraction": 1.0,
+   "document_threshold": 0.95,
+   "page_threshold": 0.75,
+   "pass": true,
+   "failed_on": []
+  }
+ },
  "reachability": {
   "reachable": {
    "M0a text discordance": true,
@@ -495,6 +529,176 @@
    "observed": false,
    "pass": true,
    "fails_when": "a comparator that cannot move still reports S1 firing, which is precisely the phase-1 defect S1 exists to catch"
+  },
+  {
+   "test": "the producer RUNS on a real DEVELOPMENT PDF without raising",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the producer cannot execute at all -- which is how a nonexistent row key and the wrong denominator survived: nothing ever ran it on real measurements"
+  },
+  {
+   "test": "sampled pages equal the independently derived A39.2 sample",
+   "expected": [
+    13,
+    15
+   ],
+   "observed": [
+    13,
+    15
+   ],
+   "pass": true,
+   "fails_when": "the producer measures a different page set from the frozen sample"
+  },
+  {
+   "test": "matched count and DENOMINATOR equal the direct x09 computation",
+   "expected": [
+    55,
+    55
+   ],
+   "observed": [
+    55,
+    55
+   ],
+   "pass": true,
+   "fails_when": "the producer counts a different numerator or denominator than the frozen rule -- the exact defect: matched/pdfium instead of matched/max(pdfium, pymupdf)"
+  },
+  {
+   "test": "the whole GATE VERDICT equals X09.gate on the same rows",
+   "expected": {
+    "matched_fraction": 1.0,
+    "worst_page": 13,
+    "worst_page_fraction": 1.0,
+    "document_threshold": 0.95,
+    "page_threshold": 0.75,
+    "pass": true,
+    "failed_on": []
+   },
+   "observed": {
+    "matched_fraction": 1.0,
+    "worst_page": 13,
+    "worst_page_fraction": 1.0,
+    "document_threshold": 0.95,
+    "page_threshold": 0.75,
+    "pass": true,
+    "failed_on": []
+   },
+   "pass": true,
+   "fails_when": "the producer's verdict differs from the frozen rule applied directly, i.e. it is recomputing the rule rather than calling it"
+  },
+  {
+   "test": "document fraction, worst page and pass all agree",
+   "expected": [
+    1.0,
+    13,
+    true
+   ],
+   "observed": [
+    1.0,
+    13,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a reported field disagrees with the gate that produced it"
+  },
+  {
+   "test": "cross-engine failure is NEVER decision-blocking",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "a cross-engine failure blocks the architecture decision, which A27.6 forbids"
+  },
+  {
+   "test": "PyMuPDF over-segmentation scores 100/120, not 100/100",
+   "expected": 0.8333,
+   "observed": 0.8333,
+   "pass": true,
+   "fails_when": "the denominator is the PDFium count, so over-segmentation by the SECOND engine is invisible -- the control would report perfect agreement while the engines disagree"
+  },
+  {
+   "test": "PDFium over-segmentation scores 100/120 too -- the gate is SYMMETRIC",
+   "expected": 0.8333,
+   "observed": 0.8333,
+   "pass": true,
+   "fails_when": "the gate favours one engine, so which engine over-segments changes the verdict"
+  },
+  {
+   "test": "...and both are capable of FAILING the frozen thresholds",
+   "expected": [
+    false,
+    false
+   ],
+   "observed": [
+    false,
+    false
+   ],
+   "pass": true,
+   "fails_when": "an 0.833 agreement passes, so the thresholds cannot see over-segmentation at all"
+  },
+  {
+   "test": "NEGATIVE -- a wrong document SHA REFUSES before any sample or measurement",
+   "expected": "SOURCE_SHA256_MISMATCH",
+   "observed": "SOURCE_SHA256_MISMATCH",
+   "pass": true,
+   "fails_when": "a caller-supplied SHA that does not match the bytes selects a different page sample for the same document, silently and reproducibly"
+  },
+  {
+   "test": "...and the correct SHA is accepted",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": "verification refuses the real document, making the control above meaningless"
+  },
+  {
+   "test": "mutating a NON-sampled page changes nothing",
+   "expected": {
+    "matched_fraction": 1.0,
+    "worst_page": 13,
+    "worst_page_fraction": 1.0,
+    "document_threshold": 0.95,
+    "page_threshold": 0.75,
+    "pass": true,
+    "failed_on": []
+   },
+   "observed": {
+    "matched_fraction": 1.0,
+    "worst_page": 13,
+    "worst_page_fraction": 1.0,
+    "document_threshold": 0.95,
+    "page_threshold": 0.75,
+    "pass": true,
+    "failed_on": []
+   },
+   "pass": true,
+   "fails_when": "an unsampled page reaches the gate, so this is not a 10 % sampled control at all"
+  },
+  {
+   "test": "...while mutating a SAMPLED page DOES change the verdict",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "a sampled page cannot move the verdict, so sample membership is dead and the control above passed for the wrong reason"
+  },
+  {
+   "test": "an unsampled page exists, so the membership control is not vacuous",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "every page is sampled here, so 'unsampled changes nothing' was trivially true"
+  },
+  {
+   "test": "limit=None is a valid WHOLE-DOCUMENT call",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the canonical writer's default path raises or silently measures a prefix -- a truncated confirmatory measurement would qualify a frame on a fraction of its pages"
+  },
+  {
+   "test": "...and it measures MORE pages than the limited call, so None is not read as a prefix",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "limit=None produced the same page count as the limited run, i.e. it was reinterpreted"
   },
   {
    "test": "EVERY listed score input is reachable from committed JSON, with no PDF or runner",

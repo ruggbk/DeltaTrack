@@ -53,8 +53,7 @@
  "a39_cross_engine": {
   "namespace": "cross-engine-page",
   "fraction": 0.1,
-  "doc_min": 0.95,
-  "page_min": 0.75,
+  "gate_owner": "x09_skeleton_cross_engine.gate -- not duplicated here",
   "k_by_page_count": {
    "1": 1,
    "5": 1,
@@ -1750,62 +1749,11 @@
    "implication": "a document with no pages yields a sampled page that does not exist"
   },
   {
-   "test": "a passing document carries NO qualification",
-   "expected": [
-    true,
-    null
-   ],
-   "observed": [
-    true,
-    null
-   ],
+   "test": "this module exposes NO cross-engine gate of its own",
+   "expected": [],
+   "observed": [],
    "pass": true,
-   "implication": "a clean cross-engine result still labels the frame conditioned"
-  },
-  {
-   "test": "a document below 0.95 acquires the qualification",
-   "expected": [
-    false,
-    "PDFIUM-CONDITIONED FRAME"
-   ],
-   "observed": [
-    false,
-    "PDFIUM-CONDITIONED FRAME"
-   ],
-   "pass": true,
-   "implication": "the document threshold does not fire"
-  },
-  {
-   "test": "ANY sampled page below 0.75 acquires the qualification",
-   "expected": [
-    false,
-    [
-     3
-    ]
-   ],
-   "observed": [
-    false,
-    [
-     3
-    ]
-   ],
-   "pass": true,
-   "implication": "a bad page hides inside a good document average, which is the exact failure the per-page floor exists to catch"
-  },
-  {
-   "test": "cross-engine failure is NEVER decision-blocking",
-   "expected": [
-    false,
-    false,
-    false
-   ],
-   "observed": [
-    false,
-    false,
-    false
-   ],
-   "pass": true,
-   "implication": "a cross-engine failure blocks the architecture decision, which A27.6 forbids -- it qualifies reporting and nothing more"
+   "implication": "a second executable copy of the gate exists here, so it can drift from X09.gate without any control noticing"
   }
  ],
  "failures": []

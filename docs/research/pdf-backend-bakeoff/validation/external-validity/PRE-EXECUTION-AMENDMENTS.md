@@ -3721,8 +3721,14 @@ re-read would be needed. **"PDF re-read" is `no` for every owned row — that is
 | **§8 document event** | derived: document has ≥ 1 heading-level H/X discordance | `score_metrics` | no |
 | **§8 Clopper–Pearson** | `score_metrics` (A27.5) | `score_metrics` | no |
 | **A37 bootstrap** | `methodology_contracts.section8_document_bootstrap(records)` | A37 | no |
-| **x09 cross-engine** | `results/x09_skeleton_cross_engine.json` | `x09` | no |
+| **cross-engine qualification** | `results/cross_engine_control.json` **(A39.2)** | `cross_engine_control.py` | no |
 | **N-A / N-B / N-C** | oracle key · `control_kind`, `control_variant` — **plumbing exists, SOURCE FIXTURES DO NOT** | **UNOWNED** | n/a |
+
+**`results/x09_skeleton_cross_engine.json` is DEVELOPMENT mechanism evidence only and is NEVER
+a confirmatory scorer input.** The row above named it as the producer, which was stale: `x09`
+proves the mechanism works and that its faults are detectable, on development material. The
+confirmatory qualification comes from `cross_engine_control.py`, which **calls `X09.gate`**
+rather than reimplementing the `max(pdfium, pymupdf)` denominator or either threshold.
 
 **One row is UNOWNED and it is not newly discovered.** The N-A/N-B/N-C *source fixtures* — the
 modified PDF, the XML-corroborated regions, the heading-free regions — do not exist. A35

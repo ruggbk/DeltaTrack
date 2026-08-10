@@ -611,40 +611,21 @@ def part_cross_engine() -> dict:
         "a document with no pages yields a sampled page that does not exist",
     )
 
-    passing = MC.cross_engine_qualification(0.99, {3: 0.9, 7: 0.8})
-    failing_doc = MC.cross_engine_qualification(0.94, {3: 0.9})
-    failing_page = MC.cross_engine_qualification(0.99, {3: 0.74})
+    # NO THRESHOLD CONTROLS HERE, deliberately. This module owns the SAMPLE only; the gate --
+    # the max(pdfium, pymupdf) denominator and both thresholds -- belongs to X09.gate and is
+    # exercised against the real producer in x22. A duplicate qualification helper lived here
+    # briefly and is deleted: keeping the rule executable in two places is what let the
+    # confirmatory producer drift to `matched / pdfium` while these controls stayed green.
     check(
-        "a passing document carries NO qualification",
-        (True, None),
-        (passing["passed"], passing["qualification"]),
-        "a clean cross-engine result still labels the frame conditioned",
-    )
-    check(
-        "a document below 0.95 acquires the qualification",
-        (False, "PDFIUM-CONDITIONED FRAME"),
-        (failing_doc["passed"], failing_doc["qualification"]),
-        "the document threshold does not fire",
-    )
-    check(
-        "ANY sampled page below 0.75 acquires the qualification",
-        (False, [3]),
-        (failing_page["passed"], failing_page["failing_pages"]),
-        "a bad page hides inside a good document average, which is the exact failure the "
-        "per-page floor exists to catch",
-    )
-    check(
-        "cross-engine failure is NEVER decision-blocking",
-        [False, False, False],
-        [passing["decision_blocking"], failing_doc["decision_blocking"], failing_page["decision_blocking"]],
-        "a cross-engine failure blocks the architecture decision, which A27.6 forbids -- it "
-        "qualifies reporting and nothing more",
+        "this module exposes NO cross-engine gate of its own",
+        [],
+        [n for n in ("cross_engine_qualification", "CROSS_ENGINE_DOC_MIN", "CROSS_ENGINE_PAGE_MIN") if hasattr(MC, n)],
+        "a second executable copy of the gate exists here, so it can drift from X09.gate without any control noticing",
     )
     return {
         "namespace": MC.CROSS_ENGINE_NAMESPACE,
         "fraction": MC.CROSS_ENGINE_FRACTION,
-        "doc_min": MC.CROSS_ENGINE_DOC_MIN,
-        "page_min": MC.CROSS_ENGINE_PAGE_MIN,
+        "gate_owner": "x09_skeleton_cross_engine.gate -- not duplicated here",
         "k_by_page_count": sizes,
         "sample_40_pages": forward,
     }
