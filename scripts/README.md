@@ -34,6 +34,8 @@ different population while reporting agreement.
 | `probe_splits.py` | How many removals and additions exist **only because classification ran** — the pairs the similarity cutoff splits into a removal plus an addition (#368). A retrieval round moved before classification cannot see these, so this sizes what such a reordering would change. |
 | `probe_provenance.py` | Whether `element_id` could stand in for a complete parser-sequence ordinal: how many tree nodes carry an empty or duplicated one. |
 | `probe_slice2.py [OUT.json]` | The same population and tie counts, plus the order-perturbation negative control: reverse and three seeded shuffles of the candidate list, checking whether the selected correspondences move. Prints how many pairs the perturbation *actually reordered*, because a perturbation that changed nothing would prove nothing. |
+| `probe_ordinal_loss.py` | Whether the engine still carries a complete parser-sequence ordinal where assignment runs: is `element_id` a unique address, and does `match_nodes` emit nodes in parser order? Sizes how far its output departs from document sequence, which is what the `(ri, ai)` tiebreak actually sorts on. |
+| `probe_correspondence_completeness.py` | Demonstrates against the real contracts whether `CorrespondenceSet` can hold first-pass results before the move pass revises them, rather than reasoning about it. |
 
 ### Refreshing the validation evidence
 
