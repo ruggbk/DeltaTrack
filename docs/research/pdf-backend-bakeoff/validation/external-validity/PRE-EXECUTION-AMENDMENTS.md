@@ -3891,14 +3891,15 @@ obviously synthetic placeholders, which removes both the collision and an anchor
 
 ```json
 {"id": "A39", "class": "SUBSTANTIVE",
- "commits": ["e25edcd", "ba8e899"],
+ "commits": ["e25edcd", "ba8e899", "b4bce1a"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/cross_engine_control.py", "probes/methodology_contracts.py",
                    "probes/s1_control.py", "probes/x04_freeze_check.py",
-                   "probes/x15_methodology_contracts.py"],
+                   "probes/x15_methodology_contracts.py",
+                   "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
- "status": "PARTIALLY IMPLEMENTED -- A39.1/A39.2/A39.5 done (x15 67/67); A39.3 control-source realization and A39.4 G6 NOT built"}
+ "status": "IMPLEMENTED for A39.1/A39.2/A39.5 (x22 51/51, x15 64/64); A39.3 STOPPED on the size-control liveness check and A39.4 G6 consequently NOT built -- awaiting review"}
 ```
 
 `affects_scoring_rule` is **true**: A39 makes the previously unspecified Rule 0 margin-line
