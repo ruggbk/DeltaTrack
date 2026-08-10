@@ -3521,7 +3521,7 @@ block changed no existing contract.
  "files_touched": ["probes/methodology_contracts.py", "probes/x15_methodology_contracts.py",
                    "probes/x21_build_oracle.py"],
  "supersedes_text_in": "none -- A27.5 and PRE-REGISTRATION 8.3 are unchanged; this freezes the reproducibility of a quantity they already permit",
- "status": "IMPLEMENTED -- x15 51/51, 0 failures; awaiting review"}
+ "status": "FROZEN -- reviewed; supplementary section 8 document bootstrap reproducibility approved"}
 ```
 
 **`affects_scoring_rule` is false, and that is a substantive claim rather than a convenience.**
