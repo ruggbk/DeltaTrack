@@ -25,6 +25,7 @@ fires.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -103,6 +104,49 @@ def _m0_from_arms(h_pages: list[dict], x_pages: list[dict]) -> dict:
         "text_discordant_lines": discordant,
         "m0a_rate": (discordant / risk) if risk else None,
     }
+
+
+def write_s1_control(documents: list[dict], out_path: Path | None = None) -> dict:
+    """A38.9/A39 -- the CANONICAL execution-time S1 artifact. Refuses before a VALID boundary.
+
+    `documents` items: {"document", "pdf_path"}. `s1_result` is the mechanism; this is the
+    committed input the future scorer reads, so it is guarded exactly as the oracle key is --
+    same four-state authority, same VALID-only rule. A DEVELOPMENT invocation of `s1_result`
+    is evidence about the mechanism and is deliberately NOT this artifact.
+
+    The architecture decision is not taken here. `fires` and the gate status are recorded;
+    A27.6 owns the consequence.
+    """
+    import build_oracle as BO
+
+    out_path = Path(out_path) if out_path else (HERE.parents[1] / "results" / "s1_control.json")
+    BO.assert_write_permitted(out_path)  # VALID-only; a stray marker unlocks nothing
+
+    per_document = []
+    for doc in documents:
+        BO.assert_source_permitted(doc["document"], doc.get("pdf_path"))
+        result = s1_result(Path(doc["pdf_path"]))
+        per_document.append({"document": doc["document"], **result})
+
+    artifact = {
+        "schema": "s1_control/1",
+        "population": BO.realized_population(
+            [{"frame": {"document": d["document"]}, "pdf_path": d.get("pdf_path")} for d in documents]
+        ),
+        "execution_boundary_state": BO.execution_boundary_state(),
+        "advance_scale": S1_ADVANCE_SCALE,
+        "sabotaged_arm": "X",
+        "per_document": per_document,
+        "n_documents": len(per_document),
+        "n_firing": sum(1 for d in per_document if d["fires"]),
+        # S1 is a GATE INPUT, not a decision: every document must show a live comparator.
+        "fires": bool(per_document) and all(d["fires"] for d in per_document),
+        "gate": "S1",
+        "decision_taken_here": False,
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(artifact, indent=1, default=str))
+    return artifact
 
 
 def s1_result(pdf_path: Path, limit: int | None = None) -> dict:

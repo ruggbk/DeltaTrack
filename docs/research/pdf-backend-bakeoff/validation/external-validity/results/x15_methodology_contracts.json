@@ -47,6 +47,30 @@
    "gating": false
   }
  },
+ "a39_rule0_margin": {
+  "rule": "count of Page.lines where line_number is not None; any positive deficit fires"
+ },
+ "a39_cross_engine": {
+  "namespace": "cross-engine-page",
+  "fraction": 0.1,
+  "doc_min": 0.95,
+  "page_min": 0.75,
+  "k_by_page_count": {
+   "1": 1,
+   "5": 1,
+   "9": 1,
+   "10": 1,
+   "11": 2,
+   "20": 2,
+   "21": 3
+  },
+  "sample_40_pages": [
+   14,
+   22,
+   34,
+   37
+  ]
+ },
  "tests": [
   {
    "test": "4.5 state machine matches the frozen rows on every branch",
@@ -1558,6 +1582,230 @@
    "observed": true,
    "pass": true,
    "implication": "the unsorted counterfactual is also order-independent, which would mean control 3 passes for some other reason and proves nothing about the sorting"
+  },
+  {
+   "test": "H recovering FEWER margin lines makes H the loser",
+   "expected": [
+    "H",
+    true,
+    1
+   ],
+   "observed": [
+    "H",
+    true,
+    1
+   ],
+   "pass": true,
+   "implication": "a one-line deficit does not fire, i.e. a tolerance was invented where the frozen text says 'loses', not 'loses more than N'"
+  },
+  {
+   "test": "X recovering FEWER margin lines makes X the loser",
+   "expected": [
+    "X",
+    true,
+    1
+   ],
+   "observed": [
+    "X",
+    true,
+    1
+   ],
+   "pass": true,
+   "implication": "the clause is not symmetric between the two architectures"
+  },
+  {
+   "test": "EQUAL counts do not fire the margin-line clause",
+   "expected": [
+    null,
+    false,
+    0
+   ],
+   "observed": [
+    null,
+    false,
+    0
+   ],
+   "pass": true,
+   "implication": "equality fires, so every document would carry a Rule 0 margin loss"
+  },
+  {
+   "test": "a LARGE deficit fires exactly as a one-line deficit does",
+   "expected": [
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true
+   ],
+   "pass": true,
+   "implication": "the clause is graded by severity, which the frozen text does not license"
+  },
+  {
+   "test": "zero recovered on BOTH sides is still not a comparative loss",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "implication": "a document where neither architecture recovers a margin line is reported as one architecture losing to the other"
+  },
+  {
+   "test": "the same inputs select the same pages",
+   "expected": [
+    14,
+    22,
+    34,
+    37
+   ],
+   "observed": [
+    14,
+    22,
+    34,
+    37
+   ],
+   "pass": true,
+   "implication": "selection is not reproducible from committed inputs"
+  },
+  {
+   "test": "input page PERMUTATION changes nothing",
+   "expected": [
+    [
+     14,
+     22,
+     34,
+     37
+    ],
+    [
+     14,
+     22,
+     34,
+     37
+    ]
+   ],
+   "observed": [
+    [
+     14,
+     22,
+     34,
+     37
+    ],
+    [
+     14,
+     22,
+     34,
+     37
+    ]
+   ],
+   "pass": true,
+   "implication": "the sample depends on the order the caller happened to list pages in"
+  },
+  {
+   "test": "changing the document SHA changes the ranking",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": "two documents share a page sample, so the identity component is not consumed"
+  },
+  {
+   "test": "changing the NAMESPACE changes the ranking",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": "domain separation is not live, so another purpose could reuse this draw sequence"
+  },
+  {
+   "test": "k = max(1, ceil(0.10 * page_count)) on every boundary",
+   "expected": {
+    "1": 1,
+    "5": 1,
+    "9": 1,
+    "10": 1,
+    "11": 2,
+    "20": 2,
+    "21": 3
+   },
+   "observed": {
+    "1": 1,
+    "5": 1,
+    "9": 1,
+    "10": 1,
+    "11": 2,
+    "20": 2,
+    "21": 3
+   },
+   "pass": true,
+   "implication": "a short document selects ZERO pages and silently escapes the control, or a boundary rounds the wrong way"
+  },
+  {
+   "test": "every document gets at least one sampled page",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "implication": "the per-document consequence could attach to a document with no sampled page"
+  },
+  {
+   "test": "an empty page set selects nothing rather than inventing a page",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "implication": "a document with no pages yields a sampled page that does not exist"
+  },
+  {
+   "test": "a passing document carries NO qualification",
+   "expected": [
+    true,
+    null
+   ],
+   "observed": [
+    true,
+    null
+   ],
+   "pass": true,
+   "implication": "a clean cross-engine result still labels the frame conditioned"
+  },
+  {
+   "test": "a document below 0.95 acquires the qualification",
+   "expected": [
+    false,
+    "PDFIUM-CONDITIONED FRAME"
+   ],
+   "observed": [
+    false,
+    "PDFIUM-CONDITIONED FRAME"
+   ],
+   "pass": true,
+   "implication": "the document threshold does not fire"
+  },
+  {
+   "test": "ANY sampled page below 0.75 acquires the qualification",
+   "expected": [
+    false,
+    [
+     3
+    ]
+   ],
+   "observed": [
+    false,
+    [
+     3
+    ]
+   ],
+   "pass": true,
+   "implication": "a bad page hides inside a good document average, which is the exact failure the per-page floor exists to catch"
+  },
+  {
+   "test": "cross-engine failure is NEVER decision-blocking",
+   "expected": [
+    false,
+    false,
+    false
+   ],
+   "observed": [
+    false,
+    false,
+    false
+   ],
+   "pass": true,
+   "implication": "a cross-engine failure blocks the architecture decision, which A27.6 forbids -- it qualifies reporting and nothing more"
   }
  ],
  "failures": []

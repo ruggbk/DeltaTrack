@@ -91,6 +91,14 @@ METHODOLOGY_SURFACE = {
     "probes/decide_architecture.py": "the architecture decision itself",
     "probes/x2_verify.py": "whether X's contract assertions actually hold",
     "probes/adjudicator_prompt.md": "what the adjudicator is asked and shown",
+    # A39.5 -- the denominator tracks the ACTUAL result-bearing surface. Both of these produce
+    # committed inputs a scorer or gate consumes: S1 is a Rule 3 gate input (A27.6), and the
+    # cross-engine producer decides whether results carry the PDFIUM-CONDITIONED FRAME
+    # qualification. Leaving them out kept the denominator at a tidy 11 while a
+    # decision-blocking and a result-qualifying producer were invisible to readiness. The
+    # point of G5 is truthful completeness, not a stable numerator.
+    "probes/s1_control.py": "the S1 liveness gate input (A27.6 decision-blocking)",
+    "probes/cross_engine_control.py": "the confirmatory PDFIUM-CONDITIONED FRAME qualification",
 }
 
 # Files whose post-freeze modification is a methodological change and must be declared

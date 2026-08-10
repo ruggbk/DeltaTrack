@@ -426,6 +426,75 @@ def section8_document_bootstrap(records) -> dict:
     }
 
 
+# ------------------------------- A39.1 Rule 0's margin-line clause, and A39.2 page sampling
+
+RULE0_NO_MARGIN_LINE_LOSS = "NO_MARGIN_LINE_LOSS"
+
+
+def margin_line_loss(h_recovered: int, x_recovered: int) -> dict:
+    """A39.1 -- which architecture, if either, LOSES margin-numbered lines on this document.
+
+    The quantity is `count of Page.lines where line_number is not None`, and NOT `_coverage`'s
+    numerator. Section 6's M9 row lists three SEPARATE quantities -- band, coverage >= 0.85,
+    and "how many margin-numbered lines are recovered" -- so the third cannot be the second's
+    numerator without the row naming one quantity twice.
+
+    ANY strictly positive deficit counts. There is no tolerance, no minimum count, no
+    percentage and no severity threshold, because the frozen text says "loses", not "loses
+    more than N". Inventing one here would be choosing the sensitivity of a decision rule.
+    """
+    if h_recovered < x_recovered:
+        return {"loser": "H", "fires": True, "h": h_recovered, "x": x_recovered, "deficit": x_recovered - h_recovered}
+    if x_recovered < h_recovered:
+        return {"loser": "X", "fires": True, "h": h_recovered, "x": x_recovered, "deficit": h_recovered - x_recovered}
+    return {"loser": None, "fires": False, "h": h_recovered, "x": x_recovered, "deficit": 0}
+
+
+CROSS_ENGINE_NAMESPACE = "cross-engine-page"
+CROSS_ENGINE_FRACTION = 0.10
+CROSS_ENGINE_DOC_MIN = 0.95
+CROSS_ENGINE_PAGE_MIN = 0.75
+
+
+def cross_engine_pages(document_sha256: str, page_numbers) -> list[int]:
+    """A39.2 -- the frozen 10 % cross-engine page sample for ONE document.
+
+    `k = max(1, ceil(0.10 * page_count))`. The `max(1, ...)` is LOAD-BEARING rather than
+    defensive: the frozen consequence is per-document, so a document with no sampled page
+    could never acquire the PDFIUM-CONDITIONED FRAME qualification the rule attaches to it,
+    and a short document would silently escape the control entirely.
+
+    Ranked by the A27.7 domain-separated hash over `(document_sha256, page_number)`. No RNG and
+    no caller-order dependence: the returned pages are the same for any input permutation.
+    """
+    pages = sorted(set(page_numbers))
+    if not pages:
+        return []
+    k = max(1, math.ceil(CROSS_ENGINE_FRACTION * len(pages)))
+    identities = [(document_sha256, p) for p in pages]
+    chosen = select(CROSS_ENGINE_NAMESPACE, identities, k)
+    return sorted(p for _sha, p in chosen)
+
+
+def cross_engine_qualification(document_agreement: float, page_agreements: dict) -> dict:
+    """A39.2 -- the frozen x09 gate, reused. NEVER decision-blocking (A27.6).
+
+    A failure labels results `PDFIUM-CONDITIONED FRAME`; it changes no architecture outcome and
+    no gate. The thresholds are x09's own and are not re-derived here.
+    """
+    failing = sorted(p for p, a in page_agreements.items() if a < CROSS_ENGINE_PAGE_MIN)
+    passed = document_agreement >= CROSS_ENGINE_DOC_MIN and not failing
+    return {
+        "document_agreement": document_agreement,
+        "document_min": CROSS_ENGINE_DOC_MIN,
+        "page_min": CROSS_ENGINE_PAGE_MIN,
+        "failing_pages": failing,
+        "passed": passed,
+        "qualification": None if passed else "PDFIUM-CONDITIONED FRAME",
+        "decision_blocking": False,
+    }
+
+
 def adequacy(strata_filled: int, occurrences: int) -> str:
     """A28.2 -- the 4.5 rows as an ORDERED, EXHAUSTIVE state machine. No threshold changed.
 

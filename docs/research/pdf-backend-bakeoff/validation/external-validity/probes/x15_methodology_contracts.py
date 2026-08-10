@@ -513,6 +513,143 @@ def part_bootstrap() -> dict:
     }
 
 
+def part_rule0_margin() -> dict:
+    """A39.1 -- the Rule 0 margin-line clause. No tolerance anywhere."""
+    print("\n== A39.1 Rule 0 margin-line clause ==")
+    check(
+        "H recovering FEWER margin lines makes H the loser",
+        ("H", True, 1),
+        tuple(MC.margin_line_loss(197, 198)[k] for k in ("loser", "fires", "deficit")),
+        "a one-line deficit does not fire, i.e. a tolerance was invented where the frozen "
+        "text says 'loses', not 'loses more than N'",
+    )
+    check(
+        "X recovering FEWER margin lines makes X the loser",
+        ("X", True, 1),
+        tuple(MC.margin_line_loss(198, 197)[k] for k in ("loser", "fires", "deficit")),
+        "the clause is not symmetric between the two architectures",
+    )
+    check(
+        "EQUAL counts do not fire the margin-line clause",
+        (None, False, 0),
+        tuple(MC.margin_line_loss(198, 198)[k] for k in ("loser", "fires", "deficit")),
+        "equality fires, so every document would carry a Rule 0 margin loss",
+    )
+    check(
+        "a LARGE deficit fires exactly as a one-line deficit does",
+        (True, True),
+        (MC.margin_line_loss(10, 198)["fires"], MC.margin_line_loss(197, 198)["fires"]),
+        "the clause is graded by severity, which the frozen text does not license",
+    )
+    check(
+        "zero recovered on BOTH sides is still not a comparative loss",
+        False,
+        MC.margin_line_loss(0, 0)["fires"],
+        "a document where neither architecture recovers a margin line is reported as one "
+        "architecture losing to the other",
+    )
+    return {"rule": "count of Page.lines where line_number is not None; any positive deficit fires"}
+
+
+def part_cross_engine() -> dict:
+    """A39.2 -- the frozen 10 % cross-engine page sample."""
+    print("\n== A39.2 cross-engine page sampling ==")
+    sha_a = "a" * 64
+    sha_b = "b" * 64
+    pages_40 = list(range(1, 41))
+
+    forward = MC.cross_engine_pages(sha_a, pages_40)
+    reversed_ = MC.cross_engine_pages(sha_a, list(reversed(pages_40)))
+    shuffled = MC.cross_engine_pages(sha_a, [pages_40[i] for i in (7, 3, 39, 0, 21, *range(1, 39))])
+    check(
+        "the same inputs select the same pages",
+        forward,
+        MC.cross_engine_pages(sha_a, pages_40),
+        "selection is not reproducible from committed inputs",
+    )
+    check(
+        "input page PERMUTATION changes nothing",
+        (forward, forward),
+        (reversed_, shuffled),
+        "the sample depends on the order the caller happened to list pages in",
+    )
+    check(
+        "changing the document SHA changes the ranking",
+        True,
+        MC.cross_engine_pages(sha_b, pages_40) != forward,
+        "two documents share a page sample, so the identity component is not consumed",
+    )
+    real_ns = MC.CROSS_ENGINE_NAMESPACE
+    try:
+        MC.CROSS_ENGINE_NAMESPACE = "some-other-namespace"
+        other_ns = MC.cross_engine_pages(sha_a, pages_40)
+    finally:
+        MC.CROSS_ENGINE_NAMESPACE = real_ns
+    check(
+        "changing the NAMESPACE changes the ranking",
+        True,
+        other_ns != forward,
+        "domain separation is not live, so another purpose could reuse this draw sequence",
+    )
+    sizes = {n: len(MC.cross_engine_pages(sha_a, list(range(1, n + 1)))) for n in (1, 5, 9, 10, 11, 20, 21)}
+    check(
+        "k = max(1, ceil(0.10 * page_count)) on every boundary",
+        {1: 1, 5: 1, 9: 1, 10: 1, 11: 2, 20: 2, 21: 3},
+        sizes,
+        "a short document selects ZERO pages and silently escapes the control, or a boundary rounds the wrong way",
+    )
+    check(
+        "every document gets at least one sampled page",
+        True,
+        all(v >= 1 for v in sizes.values()),
+        "the per-document consequence could attach to a document with no sampled page",
+    )
+    check(
+        "an empty page set selects nothing rather than inventing a page",
+        [],
+        MC.cross_engine_pages(sha_a, []),
+        "a document with no pages yields a sampled page that does not exist",
+    )
+
+    passing = MC.cross_engine_qualification(0.99, {3: 0.9, 7: 0.8})
+    failing_doc = MC.cross_engine_qualification(0.94, {3: 0.9})
+    failing_page = MC.cross_engine_qualification(0.99, {3: 0.74})
+    check(
+        "a passing document carries NO qualification",
+        (True, None),
+        (passing["passed"], passing["qualification"]),
+        "a clean cross-engine result still labels the frame conditioned",
+    )
+    check(
+        "a document below 0.95 acquires the qualification",
+        (False, "PDFIUM-CONDITIONED FRAME"),
+        (failing_doc["passed"], failing_doc["qualification"]),
+        "the document threshold does not fire",
+    )
+    check(
+        "ANY sampled page below 0.75 acquires the qualification",
+        (False, [3]),
+        (failing_page["passed"], failing_page["failing_pages"]),
+        "a bad page hides inside a good document average, which is the exact failure the "
+        "per-page floor exists to catch",
+    )
+    check(
+        "cross-engine failure is NEVER decision-blocking",
+        [False, False, False],
+        [passing["decision_blocking"], failing_doc["decision_blocking"], failing_page["decision_blocking"]],
+        "a cross-engine failure blocks the architecture decision, which A27.6 forbids -- it "
+        "qualifies reporting and nothing more",
+    )
+    return {
+        "namespace": MC.CROSS_ENGINE_NAMESPACE,
+        "fraction": MC.CROSS_ENGINE_FRACTION,
+        "doc_min": MC.CROSS_ENGINE_DOC_MIN,
+        "page_min": MC.CROSS_ENGINE_PAGE_MIN,
+        "k_by_page_count": sizes,
+        "sample_40_pages": forward,
+    }
+
+
 def main() -> int:
     print("== 4.5 adequacy ==")
     part_adequacy()
@@ -522,6 +659,8 @@ def main() -> int:
     part_dpi()
     print("\n== A37 supplementary document bootstrap (NON-GATING) ==")
     bootstrap = part_bootstrap()
+    rule0 = part_rule0_margin()
+    cross_engine = part_cross_engine()
     doc = {
         "population": "SYNTHETIC only -- no PDF opened, no architecture run, nothing scored",
         "adequacy_kinds": sorted(MC.ADEQUACY_KINDS),
@@ -529,6 +668,8 @@ def main() -> int:
         "primary_dpi": MC.PRIMARY_DPI,
         "r1_repeat_dpi": MC.R1_REPEAT_DPI,
         "a37_bootstrap": bootstrap,
+        "a39_rule0_margin": rule0,
+        "a39_cross_engine": cross_engine,
         "tests": ROWS,
         "failures": FAILED,
     }
