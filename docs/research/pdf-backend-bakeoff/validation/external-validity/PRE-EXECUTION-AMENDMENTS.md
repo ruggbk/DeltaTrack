@@ -3881,6 +3881,121 @@ obviously synthetic placeholders, which removes both the collision and an anchor
 
 ---
 
+## A39 — SUBSTANTIVE. Rule 0's margin-line clause, cross-engine page sampling, control sources
+
+```json
+{"id": "A39", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": [],
+ "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
+ "status": "CONTRACT -- rulings fixed before implementation"}
+```
+
+`affects_scoring_rule` is **true**: A39 makes the previously unspecified Rule 0 margin-line
+comparison **executable**, and freezes the cross-engine page sample whose failure attaches a
+reporting qualification.
+
+### A39.1 — Rule 0's margin-line clause, ruled
+
+A38.8 recorded three surviving readings and chose none. **The §6 M9 row settles it**: it lists
+three *separate* quantities — does `derive_size_bands` return a band; is `_coverage ≥ 0.85`;
+**how many margin-numbered lines are recovered**. The third is therefore **not** `_coverage`'s
+numerator, or the row would be naming the same quantity twice.
+
+```
+margin_lines_recovered(A, d) = count of Page.lines where line_number is not None
+                               for architecture A on document d
+```
+
+Per document: `H < X` → **H** has a Rule-0 margin-line loss; `X < H` → **X** has one; equal →
+the margin-line clause **does not fire**. **Any strictly positive deficit counts as "loses".
+There is NO tolerance** — no minimum lost lines, no percentage, no severity threshold. The
+frozen text says *loses*, not *loses more than N*.
+
+`n_margin_numbered_with_glyph_size` and `margin_numbered_line_keys` remain **diagnostics** and
+do **not** determine this clause; a per-line set difference may be *reported* but may never
+become a second Rule 0 gate. **`_coverage < 0.85` remains its own independent M9 failure
+condition** and is not double-counted as the margin-line criterion.
+
+### A39.2 — the cross-engine 10 % page sample, frozen
+
+`x09` stays the **DEVELOPMENT proof of the mechanism** and may **not** be consumed as the
+confirmatory qualification. A distinct canonical artifact
+(`results/cross_engine_control.json`) is produced at execution time, reusing **x09's already
+frozen matching rule and thresholds** — document ≥ **0.95**, every sampled page ≥ **0.75** —
+with **no second geometry comparator invented**.
+
+```
+scope     = per document (independent sampling)
+identity  = (document_sha256, page_number)
+seed      = 20260807
+namespace = "cross-engine-page"
+
+k = max(1, ceil(0.10 * page_count))
+rank ascending by sha256("cross-engine-page|20260807|<canonical page identity>"), take first k
+```
+
+No RNG and no caller-order dependence. **`max(1, …)` is load-bearing**: the frozen consequence
+is per-document, so a document with no sampled page could never acquire the qualification the
+rule attaches to it.
+
+**Never decision-blocking.** A failure labels results `PDFIUM-CONDITIONED FRAME` and changes no
+architecture outcome and no gate (A27.6).
+
+### A39.3 — the control sources must be realized
+
+N-A (8 modified-PDF regions), N-B (8 XML-corroborated unambiguous-heading regions) and N-C (4
+heading-free regions) are **already frozen by PRE-REGISTRATION §5.6** and are **all Rule 3
+blockers**. Their *existence* was never an open question; their **committed source fixtures**
+are what is missing. **No confirmatory holdout material may supply a control** — DEVELOPMENT
+and purpose-built synthetic material only.
+
+A committed manifest (`results/control_fixtures.json`) must carry, per control stimulus:
+control kind, variant, source type, source document/fixture identity, source sha256, page,
+committed bbox/region, expected control truth, and the construction recipe where the material
+is modified or generated.
+
+**N-A** — 8 regions, sources selected **deterministically before mutation**, with a balanced
+frozen assignment over the 8 ranked items: `index mod 3` → `0 DELETE_ONE_WORD`,
+`1 WELD_TWO_WORDS`, `2 PULL_HEADING_TO_BODY_SIZE`, realizing **3 delete / 3 weld / 2 size**.
+**Exactly one mutation per region**, its target deterministic and recorded, exact before/after
+printed strings recorded for delete and weld, and the size control using the **source
+document's already-derived body size** rather than an invented constant. **N-A truth comes from
+the committed mutation recipe, never from H or X's output on the modified PDF.**
+
+**N-B** — 8 real DEVELOPMENT regions whose printed heading is independently corroborated by
+paired GPO XML, expected text recorded **before** adjudication, selected deterministically from
+the complete eligible set (namespace `nb-source`, seed `20260807`) rather than by picking the
+best-looking eight. The gate consumes **only** the truth the frozen N-B statement supports.
+
+**N-C** — 4 heading-free regions; purpose-built body-only synthetic regions are preferred
+because they make "no heading" **constructionally certain**. They pass through the **same
+renderer and blinding path** as real items, and control status may not leak.
+
+### A39.4 — G6, execution readiness must know the controls exist
+
+A readiness condition **G6** requires the committed control-fixture manifest to exist and
+validate before an execution marker may be authorized: **8 N-A, 8 N-B, 4 N-C**, all source
+hashes present, all source files/recipes committed, **no confirmatory holdout member used**,
+all control identities unique, expected truth present. A malformed or missing control set keeps
+**EXECUTION FORBIDDEN**. This is **not** folded into G5's file-existence check.
+
+### A39.5 — G5 must be truthful, not stable
+
+G5's denominator tracks the **actual result-bearing surface**. `s1_control.py` and the
+confirmatory cross-engine producer are result-qualifying producers and belong in it. **The
+point of G5 is truthful completeness, not a stable numerator**, so a denominator larger than 11
+is correct if the surface is larger.
+
+### Population and boundary
+
+DEVELOPMENT + SYNTHETIC only. No holdout opened, nothing adjudicated or scored, no architecture
+decision, no confirmatory or scoring artifact, and no execution marker.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
