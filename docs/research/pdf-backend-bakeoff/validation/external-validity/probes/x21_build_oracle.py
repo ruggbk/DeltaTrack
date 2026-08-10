@@ -110,7 +110,13 @@ def synthetic_page_frame(page_number: int, c_frame: bool = True, d_frame: bool =
                 "key": [page_number, i],
                 "baseline": baseline,
                 "bbox": bbox,
-                "gids": [i * 10],
+                "gids": [i * 10, i * 10 + 1],
+                # A38.2 -- two candidates a fixed distance apart, so a nearest-glyph boundary
+                # exists to cross and an exact tie can be constructed
+                "identity_candidates": [
+                    {"ngid": i * 10, "x0": 100.0},
+                    {"ngid": i * 10 + 1, "x0": 140.0},
+                ],
                 "region_ordinal": 0,
                 "in_m0_risk_set": True,
                 "line_state": {"state": "BOTH_PRESENT", "h_text": f"LINE {i}", "x_text": f"LINE {i}"},
@@ -149,6 +155,41 @@ def synthetic_frame(
         "population": BF.P_HEAD,
         "region_size": SYNTHETIC_LINES_PER_REGION,
         "pages": [synthetic_page_frame(p + 1, c, d) for p, (c, d) in enumerate(memberships[:n_pages])],
+        # A38.3/A38.5 -- the frame owns these; build_oracle takes them from here and nowhere else
+        "architecture_occurrences": {
+            arm: [
+                {
+                    "anchor": {
+                        "page_number": p + 1,
+                        "line_number": 3,
+                        "kind": "account",
+                        "text": "SYNTHETIC ACCOUNT",
+                        "division": "",
+                    },
+                    "region_ordinal": 0,
+                    "occurrence_key": [document_sha256, p + 1, [p + 1, 2], 20],
+                    "match_status": "MATCHABLE",
+                    "unmatched_reason": None,
+                    "immediate_parent": "SYNTHETIC AGENCY",
+                    "breadcrumb": ["SYNTHETIC AGENCY", "SYNTHETIC ACCOUNT"],
+                }
+                for p in range(n_pages)
+            ]
+            for arm in ("H", "X")
+        },
+        "m9": {
+            arm: {
+                "derive_size_bands_returns_a_band": True,
+                "coverage": 1.0,
+                "coverage_floor": 0.85,
+                "coverage_meets_floor": True,
+                "n_lines_total": n_pages * SYNTHETIC_LINES_PER_REGION,
+                "n_margin_numbered_lines": n_pages * SYNTHETIC_LINES_PER_REGION,
+                "n_margin_numbered_with_glyph_size": n_pages * SYNTHETIC_LINES_PER_REGION,
+                "margin_numbered_line_keys": [[p + 1, i] for p in range(n_pages) for i in range(8)],
+            }
+            for arm in ("H", "X")
+        },
     }
 
 
@@ -163,7 +204,6 @@ def synthetic_documents(
             "frame": synthetic_frame(n_pages=n_pages, memberships=memberships),
             "pdf_path": synthetic_pdf(tmp, rotation, n_pages),
             "stratum": "SYNTHETIC",
-            "architecture_output": {f"{p + 1}:0": {"H": ["LINE 0"], "X": ["LINE 0"]} for p in range(n_pages)},
         }
     ]
 
@@ -411,7 +451,9 @@ def part_render(tmp: Path) -> dict:
     for line in mutated[0]["frame"]["pages"][0]["neutral_lines"]:
         line["line_state"]["h_text"] = "MUTATED-H-" * 4
         line["line_state"]["x_text"] = "MUTATED-X-" * 4
-    mutated[0]["architecture_output"] = {"1:0": {"H": ["TOTALLY DIFFERENT"], "X": ["ALSO DIFFERENT"]}}
+    for arm in ("H", "X"):
+        for rec in mutated[0]["frame"]["architecture_occurrences"][arm]:
+            rec["anchor"]["text"] = "TOTALLY DIFFERENT"
     # sorted, not a set: a set's repr order varies with per-process string hash randomisation,
     # which made this committed artifact differ between runs of identical inputs
     base_hashes = sorted({r["png_sha256"] for r in BO.build(docs).key["stimuli"].values()})
@@ -1007,6 +1049,246 @@ def part_overlap(tmp: Path) -> dict:
     }
 
 
+def part_occurrence_join(tmp: Path) -> dict:
+    """A38.7 -- the OCCURRENCE-LEVEL join, which A35's image/region binding never established."""
+    print("\n== A38: the occurrence-level scoring join ==")
+    docs = synthetic_documents(tmp, n_pages=4)
+    result = BO.build(docs)
+    bid, record = next(
+        (b, r) for b, r in result.key["stimuli"].items() if not r["is_r1_repeat"] and r["page_number"] == 1
+    )
+
+    # The candidates were placed at x0 = 100.0 and 140.0 on every line. Aim the adjudicated
+    # pixel squarely at the first, converting through the SAME A34 transform build_oracle used.
+    dpi, bbox_x0 = record["dpi"], record["bbox_pdf_points"][0]
+    px_at_100 = OG.pdf_x_to_pixel(100.0, bbox_x0, dpi)
+    heading = {"text": "SYNTHETIC ACCOUNT", "start_physical_line": 3, "start_x_px": px_at_100}
+    hit = BO.resolve_adjudicated_occurrence(record, heading)
+
+    check(
+        "the occurrence join RESOLVES an adjudicated heading to an A30 occurrence key",
+        (True, [1, 2]),
+        (hit["matched"], hit["neutral_line_key"]),
+        "a scorer cannot get from an adjudicated (line, x) to an occurrence identity at all, "
+        "which is what A35's image-binding join left unproven",
+    )
+    check(
+        "...and it selects the NEAREST candidate, not merely some candidate",
+        20,
+        hit["start_ngid"],
+        "the resolver returned a glyph that is not nearest the converted coordinate",
+    )
+    check(
+        "...and the key is the A30 4-tuple (doc_sha, page, neutral_line_key, start_ngid)",
+        [record["document_sha256"], 1, [1, 2], 20],
+        hit["occurrence_key"],
+        "the occurrence key is not the frozen A30 shape, so it cannot join to the emitted side",
+    )
+
+    # POSITIVE END-TO-END: the emitted architecture occurrence carries the same key.
+    emitted = record["architecture_occurrences"]["H"][0]
+    check(
+        "POSITIVE -- the adjudicated key EQUALS the emitted architecture occurrence key",
+        emitted["occurrence_key"],
+        hit["occurrence_key"],
+        "the two sides of the M1-M5 join do not meet, so no matched-heading denominator exists",
+    )
+
+    # --- negative controls, each an independent mutation
+    px_at_140 = OG.pdf_x_to_pixel(140.0, bbox_x0, dpi)
+    crossed = BO.resolve_adjudicated_occurrence(record, {**heading, "start_x_px": px_at_140})
+    check(
+        "NEGATIVE -- crossing the nearest-glyph boundary CHANGES the resolved key",
+        (True, 21),
+        (crossed["matched"], crossed["start_ngid"]),
+        "moving the annotation onto the other glyph resolves to the same ngid, which would "
+        "mean the resolver is not actually reading the coordinate",
+    )
+    # The tie must be EXACT in PDF space, so it is built from the coordinate the transform
+    # actually produces for a chosen pixel -- constructing it in pixel space instead leaves a
+    # sub-pixel residue and the "tie" silently resolves, testing nothing.
+    tie_px = OG.pdf_x_to_pixel(120.0, bbox_x0, dpi)
+    tie_target = OG.pixel_to_pdf_x(tie_px, bbox_x0, dpi)
+    tie = BO.resolve_adjudicated_occurrence(
+        {**record, "identity_candidates": {"1:2": [[20, tie_target - 5.0], [21, tie_target + 5.0]]}},
+        {**heading, "start_x_px": tie_px},
+    )
+    check(
+        "NEGATIVE -- an EXACT geometric tie refuses rather than picking one",
+        False,
+        tie["matched"],
+        "a tie silently resolves to a glyph, inventing an identity A30.3 says does not exist",
+    )
+    stripped = {**record, "identity_candidates": {}}
+    check(
+        "NEGATIVE -- removing the identity candidates makes the join REFUSE",
+        (False, BO.MISSING_IDENTITY_CANDIDATES),
+        (
+            BO.resolve_adjudicated_occurrence(stripped, heading)["matched"],
+            BO.resolve_adjudicated_occurrence(stripped, heading)["reason"],
+        ),
+        "the join returns a match without candidate geometry, i.e. it is not reading it",
+    )
+    check(
+        "NEGATIVE -- an out-of-range start_physical_line REFUSES",
+        BO.START_LINE_OUT_OF_RANGE,
+        refusal(lambda: BO.resolve_adjudicated_occurrence(record, {**heading, "start_physical_line": 99})),
+        "an impossible line resolves anyway, handing the resolver the wrong candidate set",
+    )
+
+    # identity must be INVARIANT to text and kind, and must not renumber (A30.1)
+    text_changed = copy.deepcopy(docs)
+    kind_changed = copy.deepcopy(docs)
+    for rec in text_changed[0]["frame"]["architecture_occurrences"]["H"]:
+        rec["anchor"]["text"] = "A COMPLETELY DIFFERENT HEADING"
+    for rec in kind_changed[0]["frame"]["architecture_occurrences"]["H"]:
+        rec["anchor"]["kind"] = "grouping"
+    keys_of = lambda ds: [  # noqa: E731
+        r["architecture_occurrences"]["H"][0]["occurrence_key"]
+        for r in BO.build(ds).key["stimuli"].values()
+        if r["architecture_occurrences"]["H"]
+    ]
+    check(
+        "NEGATIVE -- changing heading TEXT does not move the occurrence identity",
+        keys_of(docs),
+        keys_of(text_changed),
+        "identity consumes text, so a word-boundary defect would silently renumber the very "
+        "occurrences the study exists to compare (A30.1)",
+    )
+    check(
+        "NEGATIVE -- changing anchor KIND does not move the occurrence identity",
+        keys_of(docs),
+        keys_of(kind_changed),
+        "identity consumes anchor kind rather than absolute source position",
+    )
+    earlier_removed = copy.deepcopy(docs)
+    for page_frame in earlier_removed[0]["frame"]["pages"]:
+        page_frame["regions"][0]["neutral_line_keys"] = page_frame["regions"][0]["neutral_line_keys"]
+    check(
+        "NEGATIVE -- an UNMATCHED occurrence is RETAINED and explicitly flagged",
+        ("UNMATCHED", "SYNTHETIC_REFUSAL"),
+        _unmatched_survives(docs),
+        "an occurrence whose A30 resolution refused is dropped, shrinking an M1-M5 denominator "
+        "invisibly instead of being reported as a refusal",
+    )
+
+    # the required join fields must now include what the occurrence join actually consumes
+    check(
+        "REQUIRED_JOIN_FIELDS now includes the occurrence-join facts",
+        True,
+        {"identity_candidates", "architecture_occurrences"}.issubset(set(BO.REQUIRED_JOIN_FIELDS)),
+        "the completeness gate still checks only image/region binding, so a key missing the "
+        "occurrence facts would pass and the defect would resurface in score_metrics",
+    )
+    missing_occ = BO.BuildResult(key=copy.deepcopy(result.key), blind=result.blind, images=result.images)
+    for rec in missing_occ.key["stimuli"].values():
+        rec["architecture_occurrences"] = None
+    check(
+        "NEGATIVE -- a key missing its architecture occurrences FAILS the completeness gate",
+        True,
+        len(BO.verify_join(missing_occ)) > 0,
+        "verify_join stays green without the occurrence records, which is exactly the false sufficiency A35's join had",
+    )
+    return {
+        "blind_id": bid,
+        "adjudicated_heading": heading,
+        "resolved": hit,
+        "emitted_occurrence_key": emitted["occurrence_key"],
+        "boundary_crossed_ngid": crossed.get("start_ngid"),
+        "tie_refused": not tie["matched"],
+    }
+
+
+def _unmatched_survives(docs) -> tuple:
+    """Mark one occurrence UNMATCHED in the frame and confirm it survives into the key."""
+    mutated = copy.deepcopy(docs)
+    for rec in mutated[0]["frame"]["architecture_occurrences"]["H"]:
+        rec["occurrence_key"], rec["match_status"], rec["unmatched_reason"] = None, "UNMATCHED", "SYNTHETIC_REFUSAL"
+    for record in BO.build(mutated).key["stimuli"].values():
+        for rec in record["architecture_occurrences"]["H"]:
+            return rec["match_status"], rec["unmatched_reason"]
+    return ("ABSENT", "ABSENT")
+
+
+def part_adjudicated_schema(tmp: Path) -> dict:
+    """A38.7 -- the committed adjudicated artifact encoding."""
+    print("\n== A38: the adjudicated artifact encoding ==")
+    docs = synthetic_documents(tmp, n_pages=4)
+    result = BO.build(docs)
+    answers = {"ai": {}, "human": {}}
+    for bid, record in result.key["stimuli"].items():
+        answer = {
+            "id": bid,
+            "headings": [
+                {
+                    "text": "SYNTHETIC ACCOUNT",
+                    "role": "account",
+                    "parent": "NONE",
+                    "start_physical_line": 1,
+                    "start_x_px": 10,
+                }
+            ],
+            "notes": [],
+        }
+        for route in record["adjudication_routes"]:
+            answers[route][bid] = answer
+
+    check(
+        "a well-formed adjudicated artifact VALIDATES",
+        None,
+        refusal(lambda: BO.validate_adjudicated(answers, result.key)),
+        "the encoding rejects a conforming artifact",
+    )
+    check(
+        "the heading fields are EXACTLY the six the prompt asks for",
+        ("text", "role", "parent", "start_physical_line", "start_x_px"),
+        BO.ADJUDICATED_HEADING_FIELDS,
+        "the encoding asks for a field the prompt never collected, or drops one it did",
+    )
+    unknown = {"ai": dict(answers["ai"]), "human": dict(answers["human"])}
+    unknown["ai"]["NOT-A-BLIND-ID"] = {"id": "NOT-A-BLIND-ID", "headings": [], "notes": []}
+    check(
+        "NEGATIVE -- an unknown blind id REFUSES",
+        BO.UNKNOWN_BLIND_ID,
+        refusal(lambda: BO.validate_adjudicated(unknown, result.key)),
+        "an answer for a stimulus that does not exist is accepted and would join to nothing",
+    )
+    mismatched = {"ai": dict(answers["ai"]), "human": dict(answers["human"])}
+    a_bid = next(iter(mismatched["ai"]))
+    mismatched["ai"][a_bid] = {**mismatched["ai"][a_bid], "id": "SOMETHING-ELSE"}
+    check(
+        "NEGATIVE -- an answer whose id differs from its namespace key REFUSES",
+        BO.ADJUDICATION_ID_MISMATCH,
+        refusal(lambda: BO.validate_adjudicated(mismatched, result.key)),
+        "an answer can be filed under one id while claiming another, silently misjoining it",
+    )
+    dropped = {"ai": {}, "human": dict(answers["human"])}
+    check(
+        "NEGATIVE -- a stimulus missing a REQUIRED route REFUSES, with no fallback",
+        BO.ADJUDICATION_ROUTE_MISSING,
+        refusal(lambda: BO.validate_adjudicated(dropped, result.key)),
+        "a missing AI answer falls back to the human one, which is the A36.4 prohibition",
+    )
+    check(
+        "UNREADABLE stays representable per field",
+        None,
+        refusal(
+            lambda: BO.validate_adjudicated(
+                {
+                    "ai": {
+                        b: {**a, "headings": [{**a["headings"][0], "role": BO.UNREADABLE}]}
+                        for b, a in answers["ai"].items()
+                    },
+                    "human": answers["human"],
+                },
+                result.key,
+            )
+        ),
+        "an UNREADABLE field is rejected, forcing the adjudicator to guess a value instead",
+    )
+    return {"schema": BO.ADJUDICATED_SCHEMA, "heading_fields": list(BO.ADJUDICATED_HEADING_FIELDS)}
+
+
 def part_m5() -> dict:
     """A36.7 -- the M5 coarsening map, both sides, with completeness asserted against production."""
     print("\n== A36.7: the M5 role coarsening map ==")
@@ -1234,6 +1516,8 @@ def main() -> int:
         leakage = part_leakage_and_join(tmp)
         start_line = part_start_line(tmp)
         overlap = part_overlap(tmp)
+        occurrence_join = part_occurrence_join(tmp)
+        adjudicated = part_adjudicated_schema(tmp)
         m5 = part_m5()
         development = part_development()
 
@@ -1254,6 +1538,8 @@ def main() -> int:
         "leakage_and_join": leakage,
         "start_line_bijection": start_line,
         "overlap_semantics": overlap,
+        "occurrence_join": occurrence_join,
+        "adjudicated_encoding": adjudicated,
         "m5_coarsening": m5,
         "development": development,
         "stop_conditions": STOPS,

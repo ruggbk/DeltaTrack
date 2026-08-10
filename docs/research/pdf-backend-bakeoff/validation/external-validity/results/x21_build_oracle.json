@@ -6,7 +6,7 @@
  "artifacts_created": "NONE of frames.json, oracle_key.json, oracle_adjudicated.json, metrics.json, scores.json, EXECUTION-START.json",
  "a35_5_stop_resolved_by": "A36 -- REGION_IN_BOTH_FRAMES is no longer raised; the overlap is BUILT as one stimulus carrying both memberships and both routes",
  "prompt": {
-  "prompt_sha256": "d56ff68c0fc4b1efa87a305fa328b55bfe36c1d6f9e92acc6f01ee0cf4819736",
+  "prompt_sha256": "2067821ddb0464059bdb9d0b7c0555458446b77c0af94029afbbfe620384a406",
   "prompt_chars": 5027,
   "forbidden_patterns_checked": [
    "amount_attribution",
@@ -144,6 +144,53 @@
   "n_audit_overlap_items": 2,
   "n_non_audit_overlap_items": 8,
   "n_r1_repeats": 2
+ },
+ "occurrence_join": {
+  "blind_id": "cc4f046a87fd2a07",
+  "adjudicated_heading": {
+   "text": "SYNTHETIC ACCOUNT",
+   "start_physical_line": 3,
+   "start_x_px": 0
+  },
+  "resolved": {
+   "matched": true,
+   "neutral_line_key": [
+    1,
+    2
+   ],
+   "target_pdf_x": 99.83999999999999,
+   "start_ngid": 20,
+   "occurrence_key": [
+    "synthsha0123456789",
+    1,
+    [
+     1,
+     2
+    ],
+    20
+   ]
+  },
+  "emitted_occurrence_key": [
+   "synthsha0123456789",
+   1,
+   [
+    1,
+    2
+   ],
+   20
+  ],
+  "boundary_crossed_ngid": 21,
+  "tie_refused": true
+ },
+ "adjudicated_encoding": {
+  "schema": "oracle_adjudicated/1",
+  "heading_fields": [
+   "text",
+   "role",
+   "parent",
+   "start_physical_line",
+   "start_x_px"
+  ]
  },
  "m5_coarsening": {
   "production_anchor_kinds": [
@@ -1301,6 +1348,361 @@
    "observed": true,
    "pass": true,
    "fails_when": "membership or route can be added to the adjudicator's file without the gate firing"
+  },
+  {
+   "test": "the occurrence join RESOLVES an adjudicated heading to an A30 occurrence key",
+   "expected": [
+    true,
+    [
+     1,
+     2
+    ]
+   ],
+   "observed": [
+    true,
+    [
+     1,
+     2
+    ]
+   ],
+   "pass": true,
+   "fails_when": "a scorer cannot get from an adjudicated (line, x) to an occurrence identity at all, which is what A35's image-binding join left unproven"
+  },
+  {
+   "test": "...and it selects the NEAREST candidate, not merely some candidate",
+   "expected": 20,
+   "observed": 20,
+   "pass": true,
+   "fails_when": "the resolver returned a glyph that is not nearest the converted coordinate"
+  },
+  {
+   "test": "...and the key is the A30 4-tuple (doc_sha, page, neutral_line_key, start_ngid)",
+   "expected": [
+    "synthsha0123456789",
+    1,
+    [
+     1,
+     2
+    ],
+    20
+   ],
+   "observed": [
+    "synthsha0123456789",
+    1,
+    [
+     1,
+     2
+    ],
+    20
+   ],
+   "pass": true,
+   "fails_when": "the occurrence key is not the frozen A30 shape, so it cannot join to the emitted side"
+  },
+  {
+   "test": "POSITIVE -- the adjudicated key EQUALS the emitted architecture occurrence key",
+   "expected": [
+    "synthsha0123456789",
+    1,
+    [
+     1,
+     2
+    ],
+    20
+   ],
+   "observed": [
+    "synthsha0123456789",
+    1,
+    [
+     1,
+     2
+    ],
+    20
+   ],
+   "pass": true,
+   "fails_when": "the two sides of the M1-M5 join do not meet, so no matched-heading denominator exists"
+  },
+  {
+   "test": "NEGATIVE -- crossing the nearest-glyph boundary CHANGES the resolved key",
+   "expected": [
+    true,
+    21
+   ],
+   "observed": [
+    true,
+    21
+   ],
+   "pass": true,
+   "fails_when": "moving the annotation onto the other glyph resolves to the same ngid, which would mean the resolver is not actually reading the coordinate"
+  },
+  {
+   "test": "NEGATIVE -- an EXACT geometric tie refuses rather than picking one",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "a tie silently resolves to a glyph, inventing an identity A30.3 says does not exist"
+  },
+  {
+   "test": "NEGATIVE -- removing the identity candidates makes the join REFUSE",
+   "expected": [
+    false,
+    "MISSING_IDENTITY_CANDIDATES"
+   ],
+   "observed": [
+    false,
+    "MISSING_IDENTITY_CANDIDATES"
+   ],
+   "pass": true,
+   "fails_when": "the join returns a match without candidate geometry, i.e. it is not reading it"
+  },
+  {
+   "test": "NEGATIVE -- an out-of-range start_physical_line REFUSES",
+   "expected": "START_LINE_OUT_OF_RANGE",
+   "observed": "START_LINE_OUT_OF_RANGE",
+   "pass": true,
+   "fails_when": "an impossible line resolves anyway, handing the resolver the wrong candidate set"
+  },
+  {
+   "test": "NEGATIVE -- changing heading TEXT does not move the occurrence identity",
+   "expected": [
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ]
+   ],
+   "observed": [
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ]
+   ],
+   "pass": true,
+   "fails_when": "identity consumes text, so a word-boundary defect would silently renumber the very occurrences the study exists to compare (A30.1)"
+  },
+  {
+   "test": "NEGATIVE -- changing anchor KIND does not move the occurrence identity",
+   "expected": [
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ]
+   ],
+   "observed": [
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ],
+    [
+     "synthsha0123456789",
+     1,
+     [
+      1,
+      2
+     ],
+     20
+    ]
+   ],
+   "pass": true,
+   "fails_when": "identity consumes anchor kind rather than absolute source position"
+  },
+  {
+   "test": "NEGATIVE -- an UNMATCHED occurrence is RETAINED and explicitly flagged",
+   "expected": [
+    "UNMATCHED",
+    "SYNTHETIC_REFUSAL"
+   ],
+   "observed": [
+    "UNMATCHED",
+    "SYNTHETIC_REFUSAL"
+   ],
+   "pass": true,
+   "fails_when": "an occurrence whose A30 resolution refused is dropped, shrinking an M1-M5 denominator invisibly instead of being reported as a refusal"
+  },
+  {
+   "test": "REQUIRED_JOIN_FIELDS now includes the occurrence-join facts",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the completeness gate still checks only image/region binding, so a key missing the occurrence facts would pass and the defect would resurface in score_metrics"
+  },
+  {
+   "test": "NEGATIVE -- a key missing its architecture occurrences FAILS the completeness gate",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "verify_join stays green without the occurrence records, which is exactly the false sufficiency A35's join had"
+  },
+  {
+   "test": "a well-formed adjudicated artifact VALIDATES",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": "the encoding rejects a conforming artifact"
+  },
+  {
+   "test": "the heading fields are EXACTLY the six the prompt asks for",
+   "expected": [
+    "text",
+    "role",
+    "parent",
+    "start_physical_line",
+    "start_x_px"
+   ],
+   "observed": [
+    "text",
+    "role",
+    "parent",
+    "start_physical_line",
+    "start_x_px"
+   ],
+   "pass": true,
+   "fails_when": "the encoding asks for a field the prompt never collected, or drops one it did"
+  },
+  {
+   "test": "NEGATIVE -- an unknown blind id REFUSES",
+   "expected": "UNKNOWN_BLIND_ID",
+   "observed": "UNKNOWN_BLIND_ID",
+   "pass": true,
+   "fails_when": "an answer for a stimulus that does not exist is accepted and would join to nothing"
+  },
+  {
+   "test": "NEGATIVE -- an answer whose id differs from its namespace key REFUSES",
+   "expected": "ADJUDICATION_ID_MISMATCH",
+   "observed": "ADJUDICATION_ID_MISMATCH",
+   "pass": true,
+   "fails_when": "an answer can be filed under one id while claiming another, silently misjoining it"
+  },
+  {
+   "test": "NEGATIVE -- a stimulus missing a REQUIRED route REFUSES, with no fallback",
+   "expected": "ADJUDICATION_ROUTE_MISSING",
+   "observed": "ADJUDICATION_ROUTE_MISSING",
+   "pass": true,
+   "fails_when": "a missing AI answer falls back to the human one, which is the A36.4 prohibition"
+  },
+  {
+   "test": "UNREADABLE stays representable per field",
+   "expected": null,
+   "observed": null,
+   "pass": true,
+   "fails_when": "an UNREADABLE field is rejected, forcing the adjudicator to guess a value instead"
   },
   {
    "test": "the emitted map is COMPLETE against production's AnchorKind",

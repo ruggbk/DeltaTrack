@@ -99,9 +99,9 @@ Return JSON only, with no commentary before or after:
   "id": "<the id you were given, copied verbatim>",
   "headings": [
     {
-      "text": "SALARIES AND EXPENSES",
+      "text": "EXAMPLE-HEADING-TEXT-HERE",
       "role": "account",
-      "parent": "GENERAL SERVICES ADMINISTRATION",
+      "parent": "EXAMPLE-PARENT-HEADING-HERE",
       "start_physical_line": 3,
       "start_x_px": 412
     }

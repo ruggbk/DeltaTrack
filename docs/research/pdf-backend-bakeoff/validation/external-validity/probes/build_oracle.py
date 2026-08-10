@@ -35,6 +35,7 @@ import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+import anchor_provenance as AP
 import methodology_contracts as MC
 import oracle_geometry as OG
 import pymupdf
@@ -63,6 +64,12 @@ RENDERED_WIDTH_DISAGREES = "RENDERED_WIDTH_DISAGREES"
 START_LINE_OUT_OF_RANGE = "START_LINE_OUT_OF_RANGE"
 CONFIRMATORY_WRITE_BEFORE_EXECUTION = "CONFIRMATORY_WRITE_BEFORE_EXECUTION"
 
+MISSING_IDENTITY_CANDIDATES = "MISSING_IDENTITY_CANDIDATES"
+MISSING_ARCHITECTURE_OCCURRENCES = "MISSING_ARCHITECTURE_OCCURRENCES"
+OCCURRENCE_UNMATCHED = "OCCURRENCE_UNMATCHED"
+UNKNOWN_BLIND_ID = "UNKNOWN_BLIND_ID"
+ADJUDICATION_ID_MISMATCH = "ADJUDICATION_ID_MISMATCH"
+ADJUDICATION_ROUTE_MISSING = "ADJUDICATION_ROUTE_MISSING"
 UNKNOWN_ADJUDICATION_PURPOSE = "UNKNOWN_ADJUDICATION_PURPOSE"
 ANSWER_MISSING_FOR_REQUIRED_ROUTE = "ANSWER_MISSING_FOR_REQUIRED_ROUTE"
 ADJUDICATION_NOT_NAMESPACED = "ADJUDICATION_NOT_NAMESPACED"
@@ -496,6 +503,45 @@ def region_line_bijection(page_frame: dict, region_ordinal: int) -> list[list]:
     return [list(k) for k in sorted(keys, key=lambda k: k[1])]
 
 
+def region_identity_candidates(page_frame: dict, region_ordinal: int) -> dict:
+    """A38.2/A38.6 -- `{line_key: [(ngid, x0), ...]}` for the region's committed lines.
+
+    Carried rather than referenced so the private key alone is sufficient for the occurrence
+    join: a cross-artifact lookup could silently bind an adjudication to a frame the key was
+    not built from, and nothing downstream would see it.
+    """
+    region = next((r for r in page_frame["regions"] if r["region_ordinal"] == region_ordinal), None)
+    if region is None:
+        raise OracleBuildError(START_LINE_OUT_OF_RANGE, {"region_ordinal": region_ordinal})
+    wanted = {tuple(k) for k in region["neutral_line_keys"]}
+    out = {}
+    for line in page_frame["neutral_lines"]:
+        key = tuple(line["key"])
+        if key in wanted:
+            candidates = line.get("identity_candidates")
+            if candidates is None:
+                raise OracleBuildError(MISSING_IDENTITY_CANDIDATES, {"line": list(key)})
+            out[f"{key[0]}:{key[1]}"] = [[c["ngid"], c["x0"]] for c in candidates]
+    if len(out) != len(wanted):
+        raise OracleBuildError(MISSING_IDENTITY_CANDIDATES, {"expected": len(wanted), "found": len(out)})
+    return out
+
+
+def region_architecture_occurrences(frame: dict, region_ordinal: int) -> dict:
+    """A38.3/A38.6 -- each arm's occurrence records belonging to this region.
+
+    An UNMATCHED occurrence is carried through, never filtered: it is evidence that production
+    emitted a heading the A30 bridge could not key, and dropping it would shrink an M1-M5
+    denominator with nothing to show for it.
+    """
+    occurrences = frame.get("architecture_occurrences")
+    if not occurrences:
+        raise OracleBuildError(MISSING_ARCHITECTURE_OCCURRENCES, {"document": frame.get("document")})
+    return {
+        arm: [r for r in rows if r["region_ordinal"] == region_ordinal] for arm, rows in sorted(occurrences.items())
+    }
+
+
 def resolve_start_line(bijection: list[list], start_physical_line: int) -> tuple:
     """1-based printed-line index -> committed neutral-line key. REFUSES out of range.
 
@@ -554,7 +600,8 @@ LEAKY_KEY_FIELDS = (
     "dpi",
     "bbox_pdf_points",
     "png_sha256",
-    "architecture_output",
+    "architecture_occurrences",
+    "identity_candidates",
     "region_line_bijection",
 )
 
@@ -594,6 +641,14 @@ def leakage_report(blind: dict, key: dict) -> dict:
     }
 
 
+# The role/kind vocabulary is a CLOSED set the prompt publishes on purpose (5.3's codebook),
+# and production's `AnchorKind` uses the same words. A term drawn from it therefore cannot
+# identify WHICH stimulus an item is, so matching one in the blind file is not leakage -- it is
+# the codebook doing its job. Excluded by membership rather than by spelling, so a kind added
+# to either map is covered automatically instead of reappearing as a false positive.
+PUBLISHED_VOCABULARY = frozenset(MC.ORACLE_ROLE_TO_M5) | frozenset(MC.EMITTED_KIND_TO_M5)
+
+
 def _leak_tokens(value) -> list[str]:
     """Serialized forms of a private value worth searching for in the blind file.
 
@@ -602,7 +657,7 @@ def _leak_tokens(value) -> list[str]:
     being read. Structural allowlisting is what catches those, and `x21` proves it does.
     """
     if isinstance(value, str):
-        return [value] if len(value) >= 8 else []
+        return [value] if len(value) >= 8 and value not in PUBLISHED_VOCABULARY else []
     if isinstance(value, bool) or value is None:
         return []
     if isinstance(value, (int, float)):
@@ -624,9 +679,13 @@ def build(
 ) -> BuildResult:
     """Build the private key and the blind file for a set of documents.
 
-    `documents` items: {"frame", "pdf_path", "stratum", "architecture_output" (optional)}.
-    `architecture_output` is the per-region H/X data the LATER join needs; it is written to the
-    PRIVATE key only and never reaches the renderer or the blind file.
+    `documents` items: {"frame", "pdf_path", "stratum"}.
+
+    A38.6 -- THE ARCHITECTURE OCCURRENCES COME FROM THE COMMITTED FRAME, and from nowhere else.
+    There is deliberately no caller-supplied `architecture_output`: an optional blob had no
+    schema, no deterministic producer, and could contradict the frame it claimed to describe
+    with nothing able to detect the disagreement. One source of truth, or the join is a guess.
+    All of it is written to the PRIVATE key and never reaches the renderer or the blind file.
 
     Nothing is adjudicated here and nothing is scored. Refusals propagate and abort: a stimulus
     is never dropped and no denominator is ever reduced.
@@ -707,10 +766,10 @@ def build(
                 "png_sha256": hashlib.sha256(png).hexdigest(),
                 # A35.2 -- the printed-line index the adjudicator reports maps through this
                 "region_line_bijection": region_line_bijection(page_frame, spec.region_ordinal),
-                # the H/X data the LATER join needs. PRIVATE. Never rendered, never blinded.
-                "architecture_output": (doc.get("architecture_output") or {}).get(
-                    f"{spec.page_number}:{spec.region_ordinal}"
-                ),
+                # A38.6 -- the occurrence-level scoring join, from the COMMITTED FRAME and
+                # from nowhere else. There is no caller-provided alternative to disagree with.
+                "identity_candidates": region_identity_candidates(page_frame, spec.region_ordinal),
+                "architecture_occurrences": region_architecture_occurrences(frame, spec.region_ordinal),
             }
             blind_items.append({"id": bid, "image": image_name, "question": question})
             result.images[image_name] = png
@@ -722,7 +781,7 @@ def build(
     _assert_r1_matches_primary(key_stimuli)
 
     result.key = {
-        "schema": "oracle_key/2",
+        "schema": "oracle_key/3",
         "population": "DEVELOPMENT + SYNTHETIC -- pre-execution",
         "prompt_sha256": hashlib.sha256(question.encode()).hexdigest(),
         "n_stimuli": len(key_stimuli),
@@ -794,6 +853,11 @@ REQUIRED_JOIN_FIELDS = (
     "bbox_pdf_points",
     "png_sha256",
     "region_line_bijection",
+    # A38.6 -- the facts the OCCURRENCE-LEVEL scoring join actually needs. Without these the
+    # join proved only that a blind id stayed bound to its image, which A35 mistook for
+    # sufficiency: a scorer could not have resolved a single adjudicated heading from it.
+    "identity_candidates",
+    "architecture_occurrences",
 )
 
 
@@ -821,6 +885,93 @@ def verify_join(result: BuildResult) -> list[dict]:
         if record.get("image") != item["image"] or hashlib.sha256(png).hexdigest() != record.get("png_sha256"):
             defects.append({"reason": JOIN_PNG_SHA_MISMATCH, "blind_id": bid, "image": item["image"]})
     return defects
+
+
+# ------------------------------------------- A38.7 the occurrence-level scoring join
+
+ADJUDICATED_SCHEMA = "oracle_adjudicated/1"
+#: Fields of one adjudicated heading. EXACTLY the six `adjudicator_prompt.md` asks for.
+ADJUDICATED_HEADING_FIELDS = ("text", "role", "parent", "start_physical_line", "start_x_px")
+UNREADABLE = "UNREADABLE"
+
+
+def _jsonable_key(value):
+    """Tuples -> lists, recursively. One serialized form for an occurrence key.
+
+    Both sides of the M1-M5 join are compared as committed JSON; a tuple on one side and a
+    list on the other are unequal in Python while being the same key, which would silently
+    make every matched-heading denominator zero.
+    """
+    if isinstance(value, (list, tuple)):
+        return [_jsonable_key(v) for v in value]
+    return value
+
+
+def resolve_adjudicated_occurrence(key_record: dict, heading: dict) -> dict:
+    """A38.7 -- one adjudicated heading -> its A30 occurrence key, from COMMITTED facts only.
+
+        start_physical_line -> region_line_bijection      -> committed neutral line
+        start_x_px          -> oracle_geometry.pixel_to_pdf_x  (A34-aware)
+        identity_candidates -> nearest neutral glyph, NO TOLERANCE
+        resolved ngid       -> anchor_provenance.occurrence_key(...)
+
+    The superseded linear `anchor_provenance.image_x_to_pdf_x` is deliberately NOT used: `x20`
+    measured that MuPDF does not map a clip linearly across the bbox, and A33/A34 replaced it.
+
+    No candidate -> UNMATCHED. Exact tie -> UNMATCHED. No text, kind or order fallback. A
+    refusal is REPORTED, never converted into an incorrect match.
+    """
+    line_key = resolve_start_line(key_record["region_line_bijection"], heading["start_physical_line"])
+    candidates = key_record["identity_candidates"].get(f"{line_key[0]}:{line_key[1]}")
+    if not candidates:
+        return {"matched": False, "reason": MISSING_IDENTITY_CANDIDATES, "neutral_line_key": list(line_key)}
+
+    target_pdf_x = OG.pixel_to_pdf_x(heading["start_x_px"], key_record["bbox_pdf_points"][0], key_record["dpi"])
+    ngid, reason = AP.resolve_oracle_start_ngid([(int(c[0]), float(c[1])) for c in candidates], target_pdf_x)
+    if ngid is None:
+        return {
+            "matched": False,
+            "reason": reason or OCCURRENCE_UNMATCHED,
+            "neutral_line_key": list(line_key),
+            "target_pdf_x": target_pdf_x,
+        }
+    return {
+        "matched": True,
+        "neutral_line_key": list(line_key),
+        "target_pdf_x": target_pdf_x,
+        "start_ngid": ngid,
+        # JSON-normalised: the emitted side is serialized through the frame, so an occurrence
+        # key carrying a tuple here would compare unequal to an identical key carrying a list
+        "occurrence_key": _jsonable_key(
+            AP.occurrence_key(key_record["document_sha256"], key_record["page_number"], line_key, ngid)
+        ),
+    }
+
+
+def validate_adjudicated(adjudicated: dict, key: dict) -> None:
+    """A38.7 -- the committed adjudicated artifact's encoding. Refuses; never repairs.
+
+    Fields correspond exactly to `adjudicator_prompt.md`; `UNREADABLE` stays representable per
+    field; `notes` may never alter a field, so nothing here reads them; an answer's `id` must
+    equal its namespace key; an unknown blind id refuses; and a stimulus missing an answer on a
+    route it REQUIRES refuses -- there is no fallback to the other namespace.
+    """
+    validate_adjudication_namespacing(adjudicated)
+    for namespace in ADJUDICATION_NAMESPACES:
+        for bid, answer in adjudicated[namespace].items():
+            record = key["stimuli"].get(bid)
+            if record is None:
+                raise OracleBuildError(UNKNOWN_BLIND_ID, {"namespace": namespace, "blind_id": bid})
+            if answer.get("id") != bid:
+                raise OracleBuildError(ADJUDICATION_ID_MISMATCH, {"key": bid, "id": answer.get("id")})
+            for heading in answer.get("headings", []):
+                missing = [f for f in ADJUDICATED_HEADING_FIELDS if f not in heading]
+                if missing:
+                    raise OracleBuildError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "missing_fields": missing})
+    for bid, record in key["stimuli"].items():
+        for route in record["adjudication_routes"]:
+            if bid not in adjudicated.get(route, {}):
+                raise OracleBuildError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
 
 
 def write_artifacts(result: BuildResult, out_dir: Path, *, key_name="oracle_key.json", blind_name="oracle_blind.json"):

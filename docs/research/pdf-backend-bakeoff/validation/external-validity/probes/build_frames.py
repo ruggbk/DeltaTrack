@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import anchor_provenance as AP
 import methodology_contracts as MC
 from neutral_identity import (
     NeutralLine,
@@ -40,6 +41,7 @@ from neutral_identity import (
     text_discordance,
 )
 
+from deltatrack.parsers import pdf_anchors as PA
 from deltatrack.parsers.pdf_anchors import extract_anchors
 
 REGION_SIZE = 8  # A19, frozen
@@ -277,6 +279,9 @@ def build_page_frame(page: PageInput) -> dict:
                 "baseline": line.baseline,
                 "bbox": [line.x0, line.y0, line.x1, line.y1],
                 "gids": sorted(line.gids),
+                # A38.2 -- A30.3's nearest-glyph candidates. ngid-ordered for SERIALIZATION
+                # only; A30.1 forbids ordering occurrences by ngid.
+                "identity_candidates": [{"ngid": gid, "x0": x0} for gid, x0 in line.candidates],
                 "region_ordinal": line.ordinal // REGION_SIZE,
                 # I3 -- BOTH_ABSENT stays in the grid and in the artifact. It is excluded
                 # from the comparative risk set and can never alone qualify a D region.
@@ -479,8 +484,15 @@ def _page_inputs_from_arms(h_pages: list[dict], x_pages: list[dict]):
     x_by_page = {d["page_number"]: d for d in x_pages}
     for h in h_pages:
         x = x_by_page[h["page_number"]]
-        h_sk = [(ln.key, sorted(ln.gids)) for ln in h["neutral"]]
-        x_sk = [(ln.key, sorted(ln.gids)) for ln in x["neutral"]]
+        # A38.2 -- candidates, INCLUDING x0, are compared here too, so a divergent candidate
+        # geometry fails construction rather than being silently taken from H.
+        #
+        # STATED LIMIT: this is not two independent implementations. A19 requires ONE skeleton
+        # and both runners deliberately call the same `run_hybrid.neutral_skeleton`; the gate
+        # catches divergence in what each arm RETURNS AND CARRIES, which is the reachable
+        # failure. `x13` separately asserts the two runners' skeletons are identical.
+        h_sk = [(ln.key, sorted(ln.gids), ln.candidates) for ln in h["neutral"]]
+        x_sk = [(ln.key, sorted(ln.gids), ln.candidates) for ln in x["neutral"]]
         if h_sk != x_sk:
             raise FrameConstructionError(
                 NEUTRAL_SKELETON_MISMATCH,
@@ -548,6 +560,118 @@ def build_document_frame(
     passed, and the anchor evidence was assigned against a different partition than the one
     reported. That defect is not rejected here, it is unspellable.
     """
-    return _build_document_frame_from_inputs(
+    frame = _build_document_frame_from_inputs(
         document_sha256, document_id, population, _page_inputs_from_arms(h_pages, x_pages)
     )
+    # A38.3/A38.5 -- the frame owns the architecture occurrences, because this stage already
+    # holds the complete H/X extraction and the A30 source-position bridge. A scorer must not
+    # have to rebuild them from the serialized `anchor_evidence` tuples, which exist only as
+    # D-frame membership evidence and are deliberately not overloaded into occurrence scoring.
+    frame["architecture_occurrences"] = {
+        "H": architecture_occurrences(document_sha256, h_pages),
+        "X": architecture_occurrences(document_sha256, x_pages),
+    }
+    # A38.8 -- M9 RAW FACTS. Recorded, never decided: Rule 0 belongs to decide_architecture.
+    frame["m9"] = {"H": m9_facts(h_pages), "X": m9_facts(x_pages)}
+    return frame
+
+
+# --------------------------------------------- A38.3 architecture occurrence records
+
+
+ARCHITECTURE_EXTRACTION_DRIFT = "ARCHITECTURE_EXTRACTION_DRIFT"
+
+
+def _region_ordinal_for(neutral_lines, anchor_line_key):
+    line = next((ln for ln in neutral_lines if ln.key == anchor_line_key), None)
+    return None if line is None else line.ordinal // REGION_SIZE
+
+
+def architecture_occurrences(document_sha256: str, arm_pages: list[dict]) -> list[dict]:
+    """Every production heading occurrence for ONE arm, with its A30 identity.
+
+    Built from the FROZEN A30 machinery -- `instrumented_extract_anchors`, `strip_to_production`,
+    `key_for`. There is no third anchor-recognition implementation here, and identity never
+    comes from text, anchor kind, or an emitted occurrence ordinal (A30.1).
+
+    AN UNMATCHED OCCURRENCE IS RETAINED, explicitly flagged. Dropping one would shrink an M1-M5
+    denominator invisibly, which is the failure mode A30's nine refusal classes exist to make
+    visible rather than silent.
+
+    Document order, never ngid order: A30.1 permits `ngid` for EQUALITY ONLY, and ngid order
+    disagreed with printed order on 10 of 33,602 emitted lines.
+    """
+    ordered = [d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])]
+    occurrences, _refusals = AP.instrumented_extract_anchors(ordered)
+
+    # The instrumented mirror must still BE production. Asserted element for element rather
+    # than trusted: a drifted mirror would key occurrences that production never emitted.
+    mirrored = AP.strip_to_production(occurrences)
+    produced = PA.extract_anchors(ordered)
+    if list(mirrored) != list(produced):
+        raise FrameConstructionError(
+            ARCHITECTURE_EXTRACTION_DRIFT,
+            detail={"instrumented": len(mirrored), "production": len(produced)},
+        )
+
+    by_page = {d["page_number"]: d for d in arm_pages}
+    all_anchors = list(produced)
+    rows = []
+    for occ in occurrences:
+        page_data = by_page.get(occ.anchor.page_number)
+        key, reason, region_ordinal = None, "PAGE_NOT_CONSUMED", None
+        if page_data is not None:
+            owner = build_owner(page_data["neutral"])
+            key, reason = AP.key_for(document_sha256, occ, page_data["page"], page_data["emitted"], owner)
+            line_key = None if key is None else tuple(key[2])
+            if line_key is not None:
+                region_ordinal = _region_ordinal_for(page_data["neutral"], line_key)
+        # A38.4 -- the emitted immediate parent is production's own hierarchy, not a new walk
+        crumb = PA.breadcrumb_for(occ.anchor, all_anchors)
+        rows.append(
+            {
+                "anchor": {
+                    "page_number": occ.anchor.page_number,
+                    "line_number": occ.anchor.line_number,
+                    "kind": occ.anchor.kind,
+                    "text": occ.anchor.text,
+                    "division": occ.anchor.division,
+                },
+                "region_ordinal": region_ordinal,
+                "occurrence_key": None if key is None else _jsonable(key),
+                "match_status": "MATCHABLE" if key is not None else "UNMATCHED",
+                "unmatched_reason": reason,
+                "immediate_parent": crumb[-2] if len(crumb) >= 2 else None,
+                "breadcrumb": list(crumb),
+            }
+        )
+    return rows
+
+
+# ------------------------------------------------------- A38.8 M9 raw structural facts
+
+
+def m9_facts(arm_pages: list[dict]) -> dict:
+    """The RAW M9 basis for one arm, from production's own functions. No Rule 0 here.
+
+    Records every quantity the frozen phrase "loses margin-numbered lines" could denote --
+    the count of margin-numbered lines, `_coverage`'s actual numerator (numbered lines that
+    also carry a glyph size), and the per-line KEYS so a set comparison stays possible --
+    because the phrase does not pin one of them and A38 does not choose. See A38.8.
+    """
+    pages = [d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])]
+    numbered = [(pg.page_number, ln) for pg in pages for ln in pg.lines if ln.line_number is not None]
+    return {
+        "derive_size_bands_returns_a_band": PA.derive_size_bands(pages) is not None,
+        "coverage": PA._coverage(pages),
+        "coverage_floor": PA._COVERAGE_MIN,
+        "coverage_meets_floor": PA._coverage(pages) >= PA._COVERAGE_MIN,
+        "n_lines_total": sum(len(pg.lines) for pg in pages),
+        # reading (a): margin-numbered lines
+        "n_margin_numbered_lines": len(numbered),
+        # reading (b): _coverage's NUMERATOR -- numbered lines that also carry a glyph size
+        "n_margin_numbered_with_glyph_size": sum(1 for _p, ln in numbered if ln.glyph_size is not None),
+        # reading (c): the identities themselves, so a SET difference remains computable
+        "margin_numbered_line_keys": [[p, ln.line_number] for p, ln in numbered],
+        "rule0_comparison": "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it",
+    }

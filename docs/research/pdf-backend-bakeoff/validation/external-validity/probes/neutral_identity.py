@@ -133,6 +133,13 @@ class NeutralLine:
     x1: float
     y1: float
     gids: frozenset[int]
+    # A38.2 -- the A30.3 nearest-glyph CANDIDATES: (ngid, unrounded source x0) per member.
+    #
+    # `gids` alone cannot serve A30.3: the resolver compares an adjudicated PDF x against each
+    # neutral glyph's own x0, and the line's aggregate x0 is only the leftmost. Ordered by
+    # ngid for SERIALIZATION determinism ONLY -- A30.1 forbids ordering occurrences by ngid,
+    # which disagreed with printed order on 10 of 33,602 emitted lines.
+    candidates: tuple[tuple[int, float], ...] = ()
 
     @property
     def key(self) -> tuple[int, int]:
@@ -145,6 +152,12 @@ def cluster(glyphs: list[SourceGlyph], page: int) -> list[NeutralLine]:
     Same geometric rule A19 froze -- tolerance 0.5 x median ink height, descending baseline,
     anchored on the cluster's first glyph -- but each line now OWNS an explicit gid set, so
     membership is a fact rather than something inferred later.
+
+    A38.2: each line also owns its `(ngid, x0)` candidates, from the SAME eligible source
+    glyphs that formed it -- so `gids` and `candidates` cannot disagree by construction. The
+    x0 is NOT rounded: the line's aggregate bbox is rounded for reporting, but the identity
+    resolver compares candidate x0 against a converted pixel coordinate, and rounding there
+    would move a nearest-glyph decision.
     """
     if not glyphs:
         return []
@@ -167,6 +180,7 @@ def cluster(glyphs: list[SourceGlyph], page: int) -> list[NeutralLine]:
             x1=round(max(g.x1 for g in row), 4),
             y1=round(max(g.y1 for g in row), 4),
             gids=frozenset(g.gid for g in row),
+            candidates=tuple(sorted(((g.gid, g.x0) for g in row), key=lambda c: c[0])),
         )
         for i, row in enumerate(rows)
     ]
