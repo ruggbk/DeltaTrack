@@ -3667,12 +3667,15 @@ touched it.
 
 ```json
 {"id": "A38", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["e44dc39", "5f558c1"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
- "files_touched": [],
+ "files_touched": ["probes/adjudicator_prompt.md", "probes/build_frames.py",
+                   "probes/build_oracle.py", "probes/neutral_identity.py",
+                   "probes/s1_control.py", "probes/x21_build_oracle.py",
+                   "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is introduced or changed",
- "status": "CONTRACT -- obligations fixed before implementation"}
+ "status": "IMPLEMENTED -- x22 26/26, x21 112/112; one forward ambiguity open (A38.8)"}
 ```
 
 **`affects_scoring_rule` is false and A38 must keep it so.** It introduces **no** new metric,
@@ -3856,6 +3859,25 @@ nothing adjudicated or scored, no architecture decision, and none of `frames.jso
 `scores.json` or `EXECUTION-START.json` created. `score_metrics.py` and
 `decide_architecture.py` remain **unstarted**, and **G5 is not modified to hide an unowned
 component**.
+
+### Realized
+
+`x22` **26/26** (new), `x21` **112/112** (was 93/93), `x17` 56/56, `x16` 27/27, `x15` 51/51.
+Private key schema `oracle_key/2 → /3`. On the DEVELOPMENT window: 24 occurrences per arm, all
+MATCHABLE; every `immediate_parent` equals `breadcrumb_for`'s penultimate element; **S1 fires**,
+with the risk set provably unchanged by sabotage.
+
+**Two incidental fixes, found by the controls rather than by inspection.** Occurrence keys were
+compared **tuple-vs-list** across the two sides of the join — unequal while being the same key,
+which would have made every matched-heading denominator silently **zero**. Both sides now
+normalise to JSON lists. Separately the leakage value-scan fired 118 times on DEVELOPMENT; the
+token was `grouping`, an anchor **kind** colliding with the prompt's published role codebook. A
+term from that closed vocabulary cannot identify *which* stimulus an item is, so it is excluded
+by **membership of the A36.7 maps** — a kind added later is covered automatically rather than
+reappearing as a false positive — and the injection controls still fire, so the gate is not
+vacuous. The prompt's JSON example also used two **real** appropriations headings; they are now
+obviously synthetic placeholders, which removes both the collision and an anchoring risk.
+**What the prompt asks is unchanged.**
 
 ---
 
