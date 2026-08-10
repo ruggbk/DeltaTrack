@@ -3663,6 +3663,202 @@ touched it.
 
 ---
 
+## A38 — SUBSTANTIVE. Make the frozen scoring joins executable from committed artifacts
+
+```json
+{"id": "A38", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": [],
+ "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is introduced or changed",
+ "status": "CONTRACT -- obligations fixed before implementation"}
+```
+
+**`affects_scoring_rule` is false and A38 must keep it so.** It introduces **no** new metric,
+denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or
+decision rule. It makes already-frozen A30 / §6 / §8 facts **reachable from committed
+artifacts**, so the future `score_metrics.py` is a pure consumer that never reopens a PDF,
+re-runs neutral clustering, re-runs anchor recognition, or invents an input schema.
+
+### A38.0 — the defect being closed
+
+A35's `verify_join` proves a blind id stays bound to its **image and region**. It does **not**
+prove the **occurrence-level** join A30/M1–M5 require. Concretely: the committed frame stores
+`gids` but not each gid's `x0`, so A30.3's nearest-glyph resolver has no candidates;
+`architecture_output` is an **optional caller-supplied opaque blob** with no schema and no
+deterministic producer; and M9 and S1 have no committed producer at all. A38 closes these
+together rather than discovering them one at a time inside the scorer.
+
+### A38.1 — the score-input ownership table
+
+Every future `score_metrics` obligation, its committed producer, and whether any PDF or runner
+re-read would be needed. **"PDF re-read" is `no` for every owned row — that is the point.**
+
+| required fact | committed artifact · field | producer | PDF re-read |
+|---|---|---|---|
+| **M0a** text-discordant neutral lines | frames · `neutral_lines[].line_state.text_discordance` | `build_frames` | no |
+| **M0b** segmentation-discordant lines | frames · `neutral_lines[].line_state.segmentation_discordance` | `build_frames` | no |
+| **M0b_defined / rate_on_defined** | frames · `line_state.common_gids`, `line_state.diagnostics` | `build_frames` | no |
+| **M0-any** | derived from M0a ∪ M0b | `score_metrics` | no |
+| **M0c** anchor-discordant regions | frames · `regions[].anchor_evidence.differ`, `d_reasons` | `build_frames` | no |
+| **both_absent** | frames · `neutral_lines[].in_m0_risk_set == false` | `build_frames` | no |
+| **M1–M3** emitted occurrences | frames · `architecture_occurrences.{H,X}[]` **(A38.3, new)** | `build_frames` | no |
+| **M1–M5** adjudicated headings | `oracle_adjudicated` **(A38.7 encoding, new)** | adjudication | no |
+| **occurrence join** geometry | frames · `neutral_lines[].identity_candidates` **(A38.2, new)**; oracle key · `bbox_pdf_points`, `dpi`, `region_line_bijection` | `build_frames` + `build_oracle` | no |
+| **M4** emitted immediate parent | frames · `architecture_occurrences[].immediate_parent` **(A38.4, new)** | `build_frames` via production `breadcrumb_for` | no |
+| **M5** roles | adjudicated `role` + `architecture_occurrences[].anchor.kind`; map frozen by **A36.7** | adjudication + `build_frames` | no |
+| **M7** display-split signature | frames · `architecture_occurrences[].anchor.text` | `build_frames` | no |
+| **M9** structural viability | frames · `m9.{H,X}` **(A38.8, new)** | `build_frames` via production functions | no |
+| **C-frame AI answers** | `oracle_adjudicated.ai` | adjudication | no |
+| **D-frame human answers** | `oracle_adjudicated.human` | adjudication | no |
+| **C-audit answers** | oracle key · `is_c_audit_selected` + `human` namespace | `build_oracle` + adjudication | no |
+| **R1 answers** | oracle key · `is_r1_repeat`, `r1_base_identity` + both namespaces | `build_oracle` + adjudication | no |
+| **S1** liveness | `results/s1_control.json` **(A38.9, new)** | dedicated pre-score control | no |
+| **§8 document event** | derived: document has ≥ 1 heading-level H/X discordance | `score_metrics` | no |
+| **§8 Clopper–Pearson** | `score_metrics` (A27.5) | `score_metrics` | no |
+| **A37 bootstrap** | `methodology_contracts.section8_document_bootstrap(records)` | A37 | no |
+| **x09 cross-engine** | `results/x09_skeleton_cross_engine.json` | `x09` | no |
+| **N-A / N-B / N-C** | oracle key · `control_kind`, `control_variant` — **plumbing exists, SOURCE FIXTURES DO NOT** | **UNOWNED** | n/a |
+
+**One row is UNOWNED and it is not newly discovered.** The N-A/N-B/N-C *source fixtures* — the
+modified PDF, the XML-corroborated regions, the heading-free regions — do not exist. A35
+already recorded this. `build_oracle` carries the control plumbing (identity, blinding,
+routing, uniqueness), so nothing about A38 is blocked, but **A27.6 makes all three
+decision-blocking**, so a fixture-construction stage must exist before adjudication. It is
+listed here so it cannot be discovered inside the scorer.
+
+### A38.2 — persist the A30 identity candidates
+
+Additive on the committed frame: `neutral_lines[].identity_candidates = [{"ngid", "x0"}, …]`,
+where `ngid` is the A24.2 neutral ink identity and `x0` that source glyph's **physical PDF
+x0**. Requirements: candidates derive from the **same A24.2 neutral-eligible source glyphs**
+that formed the line; **every `gids` member has exactly one candidate and no candidate lies
+outside `gids`**; **U+0020 never appears** (A24.2 excludes it by codepoint); `x0` is **source
+geometry, never H/X reconstructed text geometry**; **`x0` is not rounded** — nearest-x identity
+consumes it; ordering is by `ngid` **for serialization only**, and **ngid order may never
+become reading order** (A30.1: equality only; ngid order disagreed with printed order on 10 of
+33,602 emitted lines).
+
+**Bilateral gate, with its limit stated.** The existing skeleton gate compares each arm's
+returned `(key, gids)`; A38 extends it to compare **candidates including `x0`**, so mutating
+one arm's candidate `x0` fails construction. **This is not two independent implementations**:
+A19 requires *one* skeleton and both runners deliberately call the same
+`run_hybrid.neutral_skeleton`. The gate therefore catches divergence in what each arm
+**returns and carries**, which is the reachable failure; `x13` separately asserts skeleton
+identity. Claiming more would overstate it.
+
+### A38.3 — persist deterministic architecture occurrence records
+
+The scorer receives **records, not an opaque blob**. Built from the frozen A30 machinery —
+`anchor_provenance.instrumented_extract_anchors`, `strip_to_production`, `key_for` — and **no
+third anchor-recognition implementation**. Per architecture, document-scope: run the
+instrumented extraction; assert `strip_to_production(instrumented) == production
+extract_anchors(...)` **element for element**; resolve every occurrence through A30 `key_for`.
+
+**Identity never comes from text, anchor kind, or emitted occurrence ordinal.** Every
+production occurrence is persisted **including one whose A30 resolution refuses** — an
+`UNMATCHED` occurrence is never dropped, because dropping it would shrink a denominator
+invisibly. Records carry the anchor, `region_ordinal`, `occurrence_key | null`, `match_status`,
+`unmatched_reason`, and `immediate_parent`, in **document order, never ngid order**.
+
+### A38.4 — immediate parent reuses production hierarchy
+
+M4's emitted parent is the **penultimate element of production
+`pdf_anchors.breadcrumb_for(anchor, all_anchors)`**; a one-element breadcrumb has **no** emitted
+parent. `division` behaviour is production's, unchanged. **No new hierarchy walk is invented**,
+and controls compare against `breadcrumb_for` itself rather than against a second copy of the
+same logic.
+
+### A38.5 — the frame owns the architecture occurrences
+
+The frame stage already owns the complete H/X extraction and the A30 source-position bridge, so
+`architecture_occurrences: {H: [...], X: [...]}` lives on the committed document frame.
+Existing `anchor_evidence` remains **D-frame membership evidence only** and is not overloaded
+into occurrence scoring. **No frame membership or metric changes; C/D counts keep their exact
+meaning.**
+
+### A38.6 — one source of truth in `build_oracle`
+
+The result-bearing path takes architecture occurrences **from the committed frame**, never from
+a caller-invented `architecture_output`. Accepting both a frame-derived and a conflicting
+caller-provided representation is forbidden. The private key carries or deterministically
+references, per stimulus: the region's architecture occurrences, its `identity_candidates`, the
+`region_line_bijection`, `bbox_pdf_points` and `dpi`. **The blind artifact remains exactly
+`{id, image, question}`** and no new private field may leak.
+
+### A38.7 — the occurrence-level join, and the adjudicated encoding
+
+A pure helper over **committed facts only**:
+
+```
+start_physical_line -> region_line_bijection      -> committed neutral line
+start_x_px          -> oracle_geometry.pixel_to_pdf_x(start_x_px, bbox_x0, dpi)   [A34-aware]
+identity_candidates -> anchor_provenance.resolve_oracle_start_ngid(candidates, target_pdf_x)
+resolved ngid       -> anchor_provenance.occurrence_key(doc_sha, page, line_key, ngid)
+```
+
+The **superseded linear** `anchor_provenance.image_x_to_pdf_x` is **not** used. No tolerance, no
+text/kind/order fallback; no candidate → `UNMATCHED`; exact tie → `UNMATCHED`; a refusal is
+reported and **never converted to an incorrect match**.
+
+The adjudicated artifact encoding is frozen (`oracle_adjudicated/1`) with `ai` and `human`
+namespaces keyed by blind id, fields corresponding **exactly** to `adjudicator_prompt.md`,
+`UNREADABLE` representable per field, `notes` never altering a field, the answer `id` equal to
+its namespace key, an unknown blind id refused, a missing required route refused, C metrics
+reading **AI** and D decisions reading **human**, a C-audit overlap reusing its one human answer,
+and **no route fallback**. **What the prompt asks is unchanged**, and no real confirmatory
+adjudicated artifact is created.
+
+### A38.8 — M9 raw facts, recorded not decided
+
+Per document per architecture, from production: whether `derive_size_bands` returns a band;
+`_coverage`; the frozen floor `_COVERAGE_MIN = 0.85`; total lines; margin-numbered lines
+(`line_number is not None`); margin-numbered lines **carrying a glyph size** (which is
+`_coverage`'s actual numerator); and the **margin-numbered line keys** themselves. **This stage
+records facts. It does not compute Rule 0.**
+
+> **FORWARD AMBIGUITY, recorded and deliberately NOT resolved.** Rule 0's *"loses
+> margin-numbered lines on a document the other keeps"* does **not** uniquely determine the
+> comparable quantity. At least three readings survive the frozen text: (a) the **count** of
+> lines with `line_number is not None`; (b) `_coverage`'s **numerator**, numbered lines that
+> also carry a glyph size — note §6's prose describes `_coverage` as counting lines whose
+> `line_number is not None`, which is its **denominator**, so the prose and the code do not
+> pin the same quantity; (c) a **set** difference, i.e. specific numbered lines present under
+> one architecture and absent under the other, which a count comparison cannot see. No
+> threshold is stated for "loses" either. **A38 chooses none of them**: it records the raw
+> basis for all three, including per-line keys so a set comparison remains possible. The
+> ruling belongs to `decide_architecture` and must be made before Rule 0 is implemented.
+
+### A38.9 — S1 gets a committed producer
+
+The frozen liveness control — **extended advances × 1.25 must raise M0** — gets a dedicated
+pre-score artifact so the scorer never re-runs an architecture. Requirements: the sabotage scale
+is exactly **1.25** and is **not a tunable parameter on the result-bearing path**; **only X's
+advances change**; ordinary H and ordinary X are untouched; S1 uses **the same M0 definition**
+as the primary comparison; primary M0 and sabotaged M0 are reported **separately** alongside
+`fires`; and S1 **never** changes C/D membership or any primary artifact. A DEVELOPMENT control
+proves the sabotage actually changes the input, and a **synthetic dead comparator, where
+sabotage does not raise M0, must report S1 FAIL**.
+
+### A38.10 — the A37 helper boundary
+
+The result-bearing scorer calls only `methodology_contracts.section8_document_bootstrap(records)`
+and may **not** supply a custom statistic id. `bootstrap_draw_index` and `bootstrap_resample`
+encode and test the frozen mechanism and domain separation; they are **not** a generic scoring
+surface.
+
+### Population and boundary
+
+SYNTHETIC + DEVELOPMENT only. No holdout document opened, no H/X run on any holdout member,
+nothing adjudicated or scored, no architecture decision, and none of `frames.json`,
+`oracle_key.json`, `oracle_blind.json`, `oracle_adjudicated.json`, `metrics.json`,
+`scores.json` or `EXECUTION-START.json` created. `score_metrics.py` and
+`decide_architecture.py` remain **unstarted**, and **G5 is not modified to hide an unowned
+component**.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
