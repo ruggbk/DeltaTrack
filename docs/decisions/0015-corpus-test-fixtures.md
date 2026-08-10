@@ -59,13 +59,16 @@ not the filesystem.
   which gives CI an offline, zero-fetch, byte-identical corpus.
 
 - **Committed fixtures and downloaded working data live in separate trees.** The
-  committed bill fixtures are their own tier, distinct from the disposable corpus the
-  fetch tooling downloads, which is gitignored in full and may be deleted or symlinked
-  in from another checkout at any time. A third tier holds the other tracked test data
-  (validation JSON, committee-report source documents, goldens). Each tree is tracked or
-  ignored *wholesale*: no tier is a deny-all list with per-fixture re-admissions, because
-  that made adding a fixture require an ignore-file edit that nothing enforced, and
-  `git add` on a still-ignored path is a silent no-op.
+  committed bill-fixture tier is tracked by default. The disposable corpus the fetch
+  tooling downloads is a tier of its own, ignored in full, and may be deleted or
+  symlinked in from another checkout at any time. A third tier holds the other tracked
+  test data (validation JSON, committee-report source documents, goldens), also tracked
+  by default, with specific local-only artifacts ignored.
+
+  **Committed fixtures do not depend on per-fixture `.gitignore` re-admissions.** Adding
+  a fixture that way required an ignore-file edit nothing enforced, and `git add` on a
+  still-ignored path is a silent no-op — so a fixture could be written, staged in good
+  faith, and still never tracked.
 
   Today those tiers are `tests/corpus/`, `bills/` and `tests/data/`.
 
@@ -73,9 +76,11 @@ not the filesystem.
   leaves a way to be green while proving nothing:
 
   1. **Collection is manifest-derived.** Gates parametrize from the manifest itself, and
-     the parametrization list is never filtered by whether the file is present. A
-     manifested fixture that is missing stays a collected case that fails; it does not
-     disappear from the run.
+     the parametrization list is never filtered by whether the file is present —
+     presence-filtering it is noncompliant, because that is exactly the shape that fails
+     open. A manifested fixture that is missing therefore stays represented in
+     collection: the case itself skips with a reason, and the completeness floor below
+     makes the gate fail, rather than the case quietly disappearing from the run.
   2. **Committedness, not presence.** Every manifested fixture must be on disk *and*
      tracked by git. A file the author has locally but never staged passes a presence
      check and then silently collects fewer cases on a fresh checkout. (Outside a git
@@ -83,14 +88,16 @@ not the filesystem.
      fallback; the untracked-fixture failure only exists inside a working checkout.)
   3. **A non-zero floor.** A gate may not quietly parametrize over zero cases, even if
      the manifest were empty or a filter removed everything.
-  4. **A content-skip ceiling.** The three layers above prove fixtures are committed and
-     cases collected; they do not prove any assertion ran. The corpus gates skip
-     per-case on content conditions, so a corpus-wide regression that turned every case
-     into a content-skip would keep CI green asserting nothing. Every content-skip in the
-     watched modules must therefore be allowlisted **by both node id and reason**: an
-     unlisted skip fails the session, and so does an allowlisted case that begins
-     skipping for a different reason. Adding an entry records a coverage gap and is a
-     deliberate act, not bookkeeping.
+  4. **A content-skip ceiling on the committed gate.** The three layers above prove
+     fixtures are committed and cases collected; they do not prove any assertion ran. The
+     corpus gates skip per-case on content conditions, so a corpus-wide regression that
+     turned every case into a content-skip would keep CI green asserting nothing. In the
+     committed-manifest run, therefore, every content-skip in the watched modules must be
+     allowlisted **by both node id and reason**: an unlisted skip fails the session, and
+     so does an allowlisted case that begins skipping for a different reason. Adding an
+     entry records a coverage gap and is a deliberate act, not bookkeeping. The ceiling is
+     calibrated against the committed set, so it governs that run and not the broad sweep
+     below.
 
   This is stated as guarantees rather than as one helper's behaviour, but it is a floor,
   not a menu: an implementation that filtered absent files out before parametrization,
