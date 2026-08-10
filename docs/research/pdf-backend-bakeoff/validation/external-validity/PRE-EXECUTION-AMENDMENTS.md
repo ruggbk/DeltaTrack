@@ -4002,6 +4002,42 @@ is correct if the surface is larger.
 DEVELOPMENT + SYNTHETIC only. No holdout opened, nothing adjudicated or scored, no architecture
 decision, no confirmatory or scoring artifact, and no execution marker.
 
+### A39.3 STOP — `PULL_HEADING_TO_BODY_SIZE` is observationally invisible to the frozen task
+
+**The liveness check A39.3 required was run before freezing the two size controls, and it
+fails. Reported, not worked around.**
+
+Measured over the **complete eligible DEVELOPMENT population** — every `account` anchor on the
+documents whose size bands are derivable:
+
+| document | account anchors | uppercase | size bands |
+|---|---:|---:|---|
+| `114-hr-2029/4` | 31 | **31 / 31** | body 14.0, heading 11.2 |
+| `118-hr-8752/1` | 20 | **20 / 20** | body 14.0, heading 11.2 |
+| `119-hr-1/1` | 0 | — | `derive_size_bands` → `None`, so no account anchors |
+| **total** | **51** | **51 / 51, zero exceptions** | |
+
+GPO sets account headings in the **sub-body** band: 11.2 pt against a 14.0 pt body, so the
+mutation `11.2 → 14.0` makes the heading the **same size as body text**, not smaller-to-larger.
+
+**Why that changes nothing the adjudicator records.** `adjudicator_prompt.md` defines a heading
+disjunctively — *centered, **or** set in capitals, **or** set in italic, **or** set in a
+distinctly larger or heavier face, **or** otherwise typographically separated*. Every one of
+the 51 candidates is **in capitals**, and the mutation does not change that. The line therefore
+remains a heading under the frozen definition. The prompt collects `text`, `role`, `parent`,
+`start_physical_line`, `start_x_px` — **it never asks for font size**. So the expected oracle
+answer is **identical before and after**: same heading present, same text, same role, same
+parent.
+
+A control whose expected answer cannot move cannot distinguish an oracle that sees the failure
+class from one that does not — which is the *only* thing N-A exists to establish.
+
+**Per A39.3 this STOPS.** The two `PULL_HEADING_TO_BODY_SIZE` slots are **not** counted as
+realized N-A controls. No substitute mutation was invented and the prompt was **not** changed;
+both would require a reviewer ruling. **Consequence:** N-A cannot reach 8, so the manifest
+cannot be completed and **G6 cannot pass**, which is why A39.3/A39.4 remain outstanding below
+rather than being delivered partially.
+
 ### Realized so far, and what is NOT built
 
 **Done** — A39.1 (Rule 0 margin clause), A39.2 (page sampling + the confirmatory cross-engine
@@ -4011,7 +4047,7 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
 | outstanding | what it needs |
 |---|---|
-| **A39.3** control-source realization | 8 N-A modified-PDF regions under the frozen `index mod 3` schedule (3 delete / 3 weld / 2 size) with before/after strings and the source document's own body size; 8 N-B XML-corroborated regions ranked under `nb-source`; 4 synthetic heading-free N-C regions; and the committed `results/control_fixtures.json` manifest |
+| **A39.3** control-source realization | **BLOCKED on the size-control STOP above.** The 3 delete + 3 weld N-A slots are constructible; the 2 size slots are not, so N-A cannot reach 8 and the manifest cannot validate. Also outstanding: 8 N-B XML-corroborated regions ranked under `nb-source`; 4 synthetic heading-free N-C regions; `results/control_fixtures.json` |
 | **A39.4** G6 readiness | the readiness condition that refuses authorization unless the manifest exists and validates (8/8/4, hashes, recipes, no holdout member, unique identities, expected truth) |
 
 **Consequence, stated rather than left implicit:** A27.6 makes N-A/N-B/N-C **Rule 3 blockers**,
