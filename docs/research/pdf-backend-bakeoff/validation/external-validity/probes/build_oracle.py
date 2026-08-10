@@ -52,6 +52,7 @@ D_FRAME = "D"
 # ------------------------------------------------------------------ refusal classes
 
 DOCUMENT_IS_HOLDOUT = "DOCUMENT_IS_HOLDOUT"
+HOLDOUT_BEFORE_EXECUTION_BOUNDARY = "HOLDOUT_BEFORE_EXECUTION_BOUNDARY"
 PROMPT_MISSING = "PROMPT_MISSING"
 PROMPT_LEAKS = "PROMPT_LEAKS"
 PROMPT_ASKS_FORBIDDEN_QUESTION = "PROMPT_ASKS_FORBIDDEN_QUESTION"
@@ -162,29 +163,98 @@ HOLDOUT_GUARD = frozenset(
 # Written only once execution is authorised. Its ABSENCE is the pre-execution state, so the
 # canonical artifacts below may not be written while it does not exist.
 EXECUTION_MARKER = EV / "results" / "EXECUTION-START.json"
+# Every canonical CONFIRMATORY artifact, so oracle, S1 and cross-engine writers all sit behind
+# one VALID-state requirement rather than three differently-strict ones.
 CANONICAL_ARTIFACTS = {
     (EV / "results" / "oracle_key.json").resolve(),
     (EV / "results" / "oracle_blind.json").resolve(),
+    (EV / "results" / "oracle_adjudicated.json").resolve(),
+    (EV / "results" / "s1_control.json").resolve(),
+    (EV / "results" / "cross_engine_control.json").resolve(),
+    (EV / "results" / "metrics.json").resolve(),
+    (EV / "results" / "scores.json").resolve(),
 }
 
 
-def assert_not_holdout(document_id: str, path=None) -> None:
-    """Refuse any confirmatory member, by id or by path substring."""
+def realized_population(documents: list[dict]) -> str:
+    """What population the key was ACTUALLY built from, derived from its sources.
+
+    A hardcoded label is a claim the artifact cannot check about itself, and this one would
+    have followed a confirmatory run onto disk still reading "pre-execution".
+    """
+    members = sorted(
+        {m for doc in documents if (m := holdout_member(doc["frame"]["document"], doc.get("pdf_path"))) is not None}
+    )
+    if not members:
+        return "NON-HOLDOUT (development / synthetic)"
+    return f"CONFIRMATORY HOLDOUT -- {len(members)} member(s): {', '.join(members)}"
+
+
+def holdout_member(document_id: str, path=None) -> str | None:
+    """The confirmatory member this source is, or None."""
     haystack = f"{document_id}|{path or ''}"
-    for member in HOLDOUT_GUARD:
-        if member in haystack:
-            raise OracleBuildError(DOCUMENT_IS_HOLDOUT, {"document": document_id, "member": member})
+    return next((m for m in sorted(HOLDOUT_GUARD) if m in haystack), None)
+
+
+def execution_boundary_state() -> str:
+    """ABSENT | UNCOMMITTED | MUTATED | VALID -- delegated to x04, the SINGLE authority.
+
+    Deliberately not a second, weaker definition. x04 already requires the marker to be
+    write-once (exactly one modifying commit, and the current blob equal to the one that
+    commit introduced), so a stray file on disk, an uncommitted marker, or an edited one all
+    fail here for the same reasons they fail there. Imported lazily so this module does not
+    take a hard dependency on the freeze-check probe at import time.
+    """
+    from x04_freeze_check import marker_state
+
+    state, _boundary, _errors = marker_state()
+    return state
+
+
+def assert_source_permitted(document_id: str, path=None) -> None:
+    """A38 repair -- the holdout is GATED, not permanently forbidden.
+
+    The previous rule refused all 17 confirmatory members unconditionally, which meant the
+    component G5 exists to freeze could never actually execute after authorization: the study
+    would have reached its boundary and found its own oracle builder unable to open the
+    population it was built for.
+
+        non-holdout DEVELOPMENT/SYNTHETIC   -> permitted, pre-execution
+        confirmatory holdout, state != VALID -> REFUSED
+        confirmatory holdout, state == VALID -> permitted
+
+    Authorization is the marker STATE, never mere path existence: an uncommitted or mutated
+    `EXECUTION-START.json` unlocks nothing.
+    """
+    member = holdout_member(document_id, path)
+    if member is None:
+        return
+    state = execution_boundary_state()
+    if state != "VALID":
+        raise OracleBuildError(
+            HOLDOUT_BEFORE_EXECUTION_BOUNDARY,
+            {"document": document_id, "member": member, "marker_state": state},
+        )
+
+
+# Back-compat alias: callers that mean "this must never be a holdout" keep the old refusal.
+def assert_not_holdout(document_id: str, path=None) -> None:
+    member = holdout_member(document_id, path)
+    if member is not None:
+        raise OracleBuildError(DOCUMENT_IS_HOLDOUT, {"document": document_id, "member": member})
 
 
 def assert_write_permitted(out_path: Path) -> None:
-    """The canonical oracle artifacts may not be written before the execution boundary exists.
+    """A canonical confirmatory artifact may be written only behind a VALID boundary.
 
-    Not a new rule: x04 already reports EXECUTION BOUNDARY ABSENT and forbids scoring, and this
-    makes that boundary refuse at the one place that would otherwise create a confirmatory
-    artifact by accident. It never CREATES the marker -- it only reads whether one is there.
+    Same authority and the same four states as source access, so an artifact cannot be created
+    under a weaker condition than the material it describes.
     """
-    if out_path.resolve() in CANONICAL_ARTIFACTS and not EXECUTION_MARKER.exists():
-        raise OracleBuildError(CONFIRMATORY_WRITE_BEFORE_EXECUTION, {"path": str(out_path)})
+    if out_path.resolve() in CANONICAL_ARTIFACTS and execution_boundary_state() != "VALID":
+        raise OracleBuildError(
+            CONFIRMATORY_WRITE_BEFORE_EXECUTION,
+            {"path": str(out_path), "marker_state": execution_boundary_state()},
+        )
 
 
 # ------------------------------------------------------------------------ the prompt gate
@@ -527,18 +597,26 @@ def region_identity_candidates(page_frame: dict, region_ordinal: int) -> dict:
     return out
 
 
-def region_architecture_occurrences(frame: dict, region_ordinal: int) -> dict:
-    """A38.3/A38.6 -- each arm's occurrence records belonging to this region.
+def region_architecture_occurrences(frame: dict, page_number: int, region_ordinal: int) -> dict:
+    """A38.3/A38.6 -- each arm's occurrence records for THIS PAGE and this region.
+
+    THE PAIR, NOT THE ORDINAL. Region ordinals restart on every page, so filtering on
+    `region_ordinal` alone gave a stimulus at (page P, region 0) the region-0 occurrences of
+    EVERY page in the document. That is cross-page contamination: the emitted side of the M1-M5
+    join would have contained headings printed on pages the adjudicator never saw, inflating
+    the emitted set and corrupting precision on every multi-page document.
 
     An UNMATCHED occurrence is carried through, never filtered: it is evidence that production
     emitted a heading the A30 bridge could not key, and dropping it would shrink an M1-M5
-    denominator with nothing to show for it.
+    denominator with nothing to show for it. Its physical placement comes from A28.5 and does
+    not depend on identity having succeeded.
     """
     occurrences = frame.get("architecture_occurrences")
     if not occurrences:
         raise OracleBuildError(MISSING_ARCHITECTURE_OCCURRENCES, {"document": frame.get("document")})
     return {
-        arm: [r for r in rows if r["region_ordinal"] == region_ordinal] for arm, rows in sorted(occurrences.items())
+        arm: [r for r in rows if r["page_number"] == page_number and r["region_ordinal"] == region_ordinal]
+        for arm, rows in sorted(occurrences.items())
     }
 
 
@@ -695,7 +773,7 @@ def build(
     specs: list[StimulusSpec] = []
     for doc in documents:
         frame = doc["frame"]
-        assert_not_holdout(frame["document"], doc.get("pdf_path"))
+        assert_source_permitted(frame["document"], doc.get("pdf_path"))
         specs.extend(plan_document_stimuli(frame, doc.get("stratum", "UNSTRATIFIED")))
     specs.extend(controls or [])
     # A36.5 -- the audit is drawn over C base identities BEFORE repeats exist, and never sees
@@ -769,7 +847,9 @@ def build(
                 # A38.6 -- the occurrence-level scoring join, from the COMMITTED FRAME and
                 # from nowhere else. There is no caller-provided alternative to disagree with.
                 "identity_candidates": region_identity_candidates(page_frame, spec.region_ordinal),
-                "architecture_occurrences": region_architecture_occurrences(frame, spec.region_ordinal),
+                "architecture_occurrences": region_architecture_occurrences(
+                    frame, spec.page_number, spec.region_ordinal
+                ),
             }
             blind_items.append({"id": bid, "image": image_name, "question": question})
             result.images[image_name] = png
@@ -782,7 +862,11 @@ def build(
 
     result.key = {
         "schema": "oracle_key/3",
-        "population": "DEVELOPMENT + SYNTHETIC -- pre-execution",
+        # A38 repair -- DERIVED from the realized sources, never a hardcoded label. The fixed
+        # "DEVELOPMENT + SYNTHETIC -- pre-execution" string would have travelled unchanged onto
+        # a confirmatory key and misdescribed the very population the artifact was built from.
+        "population": realized_population(documents),
+        "execution_boundary_state": execution_boundary_state(),
         "prompt_sha256": hashlib.sha256(question.encode()).hexdigest(),
         "n_stimuli": len(key_stimuli),
         "frame_counts": frame_counts(key_stimuli),

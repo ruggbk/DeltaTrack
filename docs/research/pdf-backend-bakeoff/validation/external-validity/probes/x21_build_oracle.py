@@ -163,10 +163,15 @@ def synthetic_frame(
                         "page_number": p + 1,
                         "line_number": 3,
                         "kind": "account",
-                        "text": "SYNTHETIC ACCOUNT",
+                        "text": f"SYNTHETIC ACCOUNT SENTINEL P{p + 1}",
                         "division": "",
                     },
+                    # A38 repair -- region ordinals restart per page, so the scope is the PAIR.
+                    # Every synthetic page deliberately reuses region_ordinal 0 with a distinct
+                    # sentinel text, so a page-blind filter would visibly contaminate.
+                    "page_number": p + 1,
                     "region_ordinal": 0,
+                    "placed_neutral_line_key": [p + 1, 2],
                     "occurrence_key": [document_sha256, p + 1, [p + 1, 2], 20],
                     "match_status": "MATCHABLE",
                     "unmatched_reason": None,
@@ -613,22 +618,69 @@ def part_fail_closed(tmp: Path) -> dict:
     holdout = copy.deepcopy(clean)
     holdout[0]["frame"]["document"] = "116-hr-7611/1"
     check(
-        "NEGATIVE -- a confirmatory holdout member is REFUSED by document id",
-        BO.DOCUMENT_IS_HOLDOUT,
+        "NEGATIVE -- a confirmatory holdout member is REFUSED while the boundary is not VALID",
+        BO.HOLDOUT_BEFORE_EXECUTION_BOUNDARY,
         refusal(lambda: BO.build(holdout)),
         "a holdout document can be opened before execution is authorised",
     )
+
+    # A38 REPAIR -- the execution-boundary ACCESS MATRIX. The old rule refused all 17 members
+    # unconditionally, so the component G5 exists to freeze could never execute after
+    # authorization. Authorization is the marker STATE, never mere path existence.
+    real_state = BO.execution_boundary_state
+    matrix = {}
+    try:
+        for state in ("ABSENT", "UNCOMMITTED", "MUTATED", "VALID"):
+            BO.execution_boundary_state = lambda s=state: s
+            matrix[state] = {
+                "holdout": refusal(lambda: BO.build(holdout)),
+                "canonical_write": refusal(lambda: BO.assert_write_permitted(EV / "results" / "oracle_key.json")),
+            }
+    finally:
+        BO.execution_boundary_state = real_state
     check(
-        "NEGATIVE -- writing the CANONICAL oracle artifact is refused pre-execution",
-        BO.CONFIRMATORY_WRITE_BEFORE_EXECUTION,
-        refusal(lambda: BO.assert_write_permitted(EV / "results" / "oracle_key.json")),
-        "results/oracle_key.json can be created while the execution boundary is absent",
+        "the boundary ACCESS MATRIX permits a holdout only at VALID",
+        {
+            "ABSENT": BO.HOLDOUT_BEFORE_EXECUTION_BOUNDARY,
+            "UNCOMMITTED": BO.HOLDOUT_BEFORE_EXECUTION_BOUNDARY,
+            "MUTATED": BO.HOLDOUT_BEFORE_EXECUTION_BOUNDARY,
+            "VALID": None,
+        },
+        {s: v["holdout"] for s, v in matrix.items()},
+        "an ABSENT, UNCOMMITTED or MUTATED marker unlocks the holdout -- a stray or edited "
+        "EXECUTION-START.json would then authorize the confirmatory run",
+    )
+    check(
+        "...and every CANONICAL confirmatory write obeys the same VALID-only rule",
+        {
+            "ABSENT": BO.CONFIRMATORY_WRITE_BEFORE_EXECUTION,
+            "UNCOMMITTED": BO.CONFIRMATORY_WRITE_BEFORE_EXECUTION,
+            "MUTATED": BO.CONFIRMATORY_WRITE_BEFORE_EXECUTION,
+            "VALID": None,
+        },
+        {s: v["canonical_write"] for s, v in matrix.items()},
+        "an artifact can be created under a weaker condition than the material it describes",
+    )
+    check(
+        "the S1 and cross-engine canonical paths are inside the same guarded set",
+        (True, True),
+        (
+            (EV / "results" / "s1_control.json").resolve() in BO.CANONICAL_ARTIFACTS,
+            (EV / "results" / "cross_engine_control.json").resolve() in BO.CANONICAL_ARTIFACTS,
+        ),
+        "an S1 or cross-engine confirmatory artifact could be written with no boundary at all",
     )
     check(
         "...and a scratch path is NOT refused, so the write guard is not blanket-refusing",
         None,
         refusal(lambda: BO.assert_write_permitted(tmp / "oracle_key.json")),
-        "the guard refuses everything, which would make the control above meaningless",
+        "the guard refuses everything, which would make the controls above meaningless",
+    )
+    check(
+        "no real execution marker was created by any of this",
+        False,
+        (EV / "results" / "EXECUTION-START.json").exists(),
+        "the boundary controls created the very marker they exist to test",
     )
     return {
         "n_clean_stimuli": n_clean,
@@ -1083,6 +1135,31 @@ def part_occurrence_join(tmp: Path) -> dict:
         [record["document_sha256"], 1, [1, 2], 20],
         hit["occurrence_key"],
         "the occurrence key is not the frozen A30 shape, so it cannot join to the emitted side",
+    )
+
+    # A38 REPAIR -- sentinel proof that a stimulus receives ONLY its own page's occurrences.
+    # Every synthetic page carries region_ordinal 0 with a page-distinct sentinel text, so a
+    # page-blind filter would put every page's sentinel into every stimulus.
+    by_page_stimulus = {r["page_number"]: r for r in result.key["stimuli"].values() if not r["is_r1_repeat"]}
+    sentinels = {
+        p: sorted({row["anchor"]["text"] for row in by_page_stimulus[p]["architecture_occurrences"]["H"]})
+        for p in sorted(by_page_stimulus)
+    }
+    check(
+        "each stimulus carries ONLY its own page's sentinel occurrence",
+        {p: [f"SYNTHETIC ACCOUNT SENTINEL P{p}"] for p in sorted(by_page_stimulus)},
+        sentinels,
+        "a stimulus holds another page's sentinel, i.e. region_ordinal is being matched "
+        "without the page and every multi-page document contaminates every region",
+    )
+    check(
+        "...and the fixture really does reuse region_ordinal across pages, so this is not vacuous",
+        (True, [0]),
+        (
+            len(by_page_stimulus) > 1,
+            sorted({r["region_ordinal"] for r in by_page_stimulus.values()}),
+        ),
+        "the fixture has one page or distinct ordinals per page, so a page-blind filter would have looked correct here",
     )
 
     # POSITIVE END-TO-END: the emitted architecture occurrence carries the same key.

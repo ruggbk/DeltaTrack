@@ -582,21 +582,23 @@ def build_document_frame(
 ARCHITECTURE_EXTRACTION_DRIFT = "ARCHITECTURE_EXTRACTION_DRIFT"
 
 
-def _region_ordinal_for(neutral_lines, anchor_line_key):
-    line = next((ln for ln in neutral_lines if ln.key == anchor_line_key), None)
-    return None if line is None else line.ordinal // REGION_SIZE
-
-
 def architecture_occurrences(document_sha256: str, arm_pages: list[dict]) -> list[dict]:
-    """Every production heading occurrence for ONE arm, with its A30 identity.
+    """Every production heading occurrence for ONE arm, physically placed AND identity-keyed.
 
-    Built from the FROZEN A30 machinery -- `instrumented_extract_anchors`, `strip_to_production`,
-    `key_for`. There is no third anchor-recognition implementation here, and identity never
-    comes from text, anchor kind, or an emitted occurrence ordinal (A30.1).
+    THE TWO ARE SEPARATE CONCEPTS, and conflating them was a real defect:
 
-    AN UNMATCHED OCCURRENCE IS RETAINED, explicitly flagged. Dropping one would shrink an M1-M5
-    denominator invisibly, which is the failure mode A30's nine refusal classes exist to make
-    visible rather than silent.
+        PHYSICAL REGION PLACEMENT  -- the A28.5 bridge. Where on the page this occurrence is.
+        A30 OCCURRENCE IDENTITY    -- `key_for`. What its cross-arm identity is, if any.
+
+    Placement runs FIRST and INDEPENDENTLY. Deriving `region_ordinal` from the A30 key, as this
+    previously did, meant a genuine A30 refusal produced `region_ordinal = None` and the
+    occurrence then vanished from every region-scoped record -- silently shrinking exactly the
+    M1-M5 denominators A38 exists to keep honest. An identity refusal is a statement about
+    identity; it says nothing about where the heading is printed.
+
+    Built from the FROZEN machinery only -- `place_anchor` (A28.5), `instrumented_extract_anchors`,
+    `strip_to_production`, `key_for`. No third anchor-recognition implementation, and no
+    text/kind/order matching rule is invented anywhere here.
 
     Document order, never ngid order: A30.1 permits `ngid` for EQUALITY ONLY, and ngid order
     disagreed with printed order on 10 of 33,602 emitted lines.
@@ -619,15 +621,32 @@ def architecture_occurrences(document_sha256: str, arm_pages: list[dict]) -> lis
     rows = []
     for occ in occurrences:
         page_data = by_page.get(occ.anchor.page_number)
-        key, reason, region_ordinal = None, "PAGE_NOT_CONSUMED", None
-        if page_data is not None:
-            owner = build_owner(page_data["neutral"])
-            key, reason = AP.key_for(document_sha256, occ, page_data["page"], page_data["emitted"], owner)
-            line_key = None if key is None else tuple(key[2])
-            if line_key is not None:
-                region_ordinal = _region_ordinal_for(page_data["neutral"], line_key)
-        # A38.4 -- the emitted immediate parent is production's own hierarchy, not a new walk
-        crumb = PA.breadcrumb_for(occ.anchor, all_anchors)
+        if page_data is None:
+            raise FrameConstructionError(
+                ANCHOR_PLACEMENT_REFUSED,
+                page_number=occ.anchor.page_number,
+                detail={"anchor": anchor_repr(occ.anchor), "refusal": "PAGE_NOT_CONSUMED"},
+            )
+        owner = build_owner(page_data["neutral"])
+        ordinal_by_key = {ln.key: ln.ordinal for ln in page_data["neutral"]}
+
+        # --- A28.5 PHYSICAL PLACEMENT, independent of identity. A refusal aborts, exactly as
+        # it does in `place_arm_anchors`: an unplaceable anchor census cannot be compared.
+        placed, place_reason = place_anchor(
+            occ.anchor, page_data["page"].print_lines, page_data["emitted"], owner, ordinal_by_key
+        )
+        if place_reason:
+            raise FrameConstructionError(
+                ANCHOR_PLACEMENT_REFUSED,
+                page_number=occ.anchor.page_number,
+                detail={"anchor": anchor_repr(occ.anchor), "refusal": place_reason},
+            )
+        region_ordinal, placed_line_key = placed
+
+        # --- A30 IDENTITY, separately. Failure leaves the placement above untouched.
+        key, reason = AP.key_for(document_sha256, occ, page_data["page"], page_data["emitted"], owner)
+
+        crumb = PA.breadcrumb_for(occ.anchor, all_anchors)  # A38.4, production's own hierarchy
         rows.append(
             {
                 "anchor": {
@@ -637,7 +656,12 @@ def architecture_occurrences(document_sha256: str, arm_pages: list[dict]) -> lis
                     "text": occ.anchor.text,
                     "division": occ.anchor.division,
                 },
+                # A38 repair -- region ordinals RESTART every page, so physical region identity
+                # is the PAIR. Filtering on the ordinal alone handed a stimulus every page's
+                # same-numbered region.
+                "page_number": occ.anchor.page_number,
                 "region_ordinal": region_ordinal,
+                "placed_neutral_line_key": list(placed_line_key),
                 "occurrence_key": None if key is None else _jsonable(key),
                 "match_status": "MATCHABLE" if key is not None else "UNMATCHED",
                 "unmatched_reason": reason,

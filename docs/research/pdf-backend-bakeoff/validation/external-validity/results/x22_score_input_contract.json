@@ -26,6 +26,44 @@
    "UNMATCHED": 0
   }
  },
+ "occurrence_scope": {
+  "ordinals_reused_across_pages": {
+   "0": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    11,
+    13,
+    15,
+    16
+   ],
+   "1": [
+    2,
+    3,
+    4,
+    5
+   ],
+   "2": [
+    3,
+    8,
+    12,
+    14,
+    15
+   ]
+  },
+  "n_stimuli": 51,
+  "n_occurrence_rows_in_key": 50,
+  "counterfactual_contaminated_rows": 425
+ },
+ "genuine_unmatched": {
+  "lever": "merged-line text perturbation -> MERGE_RECONSTRUCTION_MISMATCH; placement reads print_lines/emitted and is unaffected",
+  "page": 2,
+  "region_ordinal": 0,
+  "unmatched_reason": "MERGE_RECONSTRUCTION_MISMATCH",
+  "stimuli_carrying_it": 1
+ },
  "immediate_parent": {
   "checked": 33,
   "agree": 33,
@@ -219,6 +257,87 @@
    "observed": true,
    "pass": true,
    "fails_when": "occurrences are ordered by ngid, which A30.1 forbids -- ngid order disagreed with printed order on 10 of 33,602 emitted lines"
+  },
+  {
+   "test": "the DEVELOPMENT material really does reuse region ordinals across pages",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "no ordinal repeats across pages here, so this material could not have exposed the contamination and the controls below would be vacuous"
+  },
+  {
+   "test": "EVERY private-key occurrence satisfies anchor.page == stimulus.page AND region == region",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "a stimulus carries an occurrence printed on another page or in another region, which would put headings the adjudicator never saw on the emitted side of the M1-M5 join"
+  },
+  {
+   "test": "NEGATIVE -- the retired region-ordinal-only filter DOES contaminate this material",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the old filter happens to be equivalent here, so the repair is unproven and the control above passes for the wrong reason"
+  },
+  {
+   "test": "no architecture occurrence is duplicated into multiple PRIMARY stimuli",
+   "expected": {},
+   "observed": {},
+   "pass": true,
+   "fails_when": "one emitted heading is counted in two regions, inflating the emitted set twice over"
+  },
+  {
+   "test": "a MATCHABLE occurrence's A30 key page AGREES with its stimulus page",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the identity key names a different page from the stimulus carrying it, so the join would bind an adjudication to a heading printed elsewhere"
+  },
+  {
+   "test": "a GENUINE A30 refusal is UNMATCHED with an explicit reason",
+   "expected": [
+    "UNMATCHED",
+    null,
+    true
+   ],
+   "observed": [
+    "UNMATCHED",
+    null,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the perturbation did not actually induce an identity refusal, so this control proves nothing about how refusals are handled"
+  },
+  {
+   "test": "...and it KEEPS its A28.5 physical page and region",
+   "expected": [
+    2,
+    0
+   ],
+   "observed": [
+    2,
+    0
+   ],
+   "pass": true,
+   "fails_when": "an identity refusal erased the physical placement, so the occurrence would vanish from every region-scoped record and shrink an M1-M5 denominator invisibly"
+  },
+  {
+   "test": "the UNMATCHED occurrence SURVIVES into its exact stimulus",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the refused occurrence reaches no private key at all, i.e. it was silently dropped"
+  },
+  {
+   "test": "...and appears in NO other page/region",
+   "expected": [
+    "0edf34ebb764cd39"
+   ],
+   "observed": [
+    "0edf34ebb764cd39"
+   ],
+   "pass": true,
+   "fails_when": "the refused occurrence also leaked into a stimulus for a different page or region"
   },
   {
    "test": "every committed immediate_parent EQUALS production breadcrumb_for's penultimate element",

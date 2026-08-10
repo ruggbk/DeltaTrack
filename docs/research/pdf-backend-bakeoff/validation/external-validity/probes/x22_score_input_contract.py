@@ -18,6 +18,7 @@ RUN WITH AN INTERPRETER CARRYING BOTH `pymupdf` AND `pypdfium2`, as `x20`/`x21` 
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 import sys
@@ -220,6 +221,198 @@ def part_occurrences(frame: dict) -> dict:
         "printed order on 10 of 33,602 emitted lines",
     )
     return counts
+
+
+def part_occurrence_scope(frame: dict) -> dict:
+    """A38 REPAIR -- an occurrence must bind to (page, region), never to region alone.
+
+    Region ordinals RESTART on every page. Filtering on the ordinal alone gave a stimulus at
+    (page P, region 0) the region-0 occurrences of EVERY page in the document.
+    """
+    print("\n== A38 repair: occurrence scope is (page, region), not region ==")
+    occ = frame["architecture_occurrences"]["H"]
+    by_ordinal: dict[int, set] = {}
+    for row in occ:
+        by_ordinal.setdefault(row["region_ordinal"], set()).add(row["page_number"])
+    multi = {o: sorted(p) for o, p in by_ordinal.items() if len(p) > 1}
+    check(
+        "the DEVELOPMENT material really does reuse region ordinals across pages",
+        True,
+        bool(multi),
+        "no ordinal repeats across pages here, so this material could not have exposed the "
+        "contamination and the controls below would be vacuous",
+    )
+
+    built = BO.build([{"frame": frame, "pdf_path": DOC_PATH, "stratum": "DEVELOPMENT"}])
+    wrong = [
+        {
+            "blind_id": bid,
+            "arm": arm,
+            "occurrence_page": row["page_number"],
+            "occurrence_region": row["region_ordinal"],
+            "stimulus_page": rec["page_number"],
+            "stimulus_region": rec["region_ordinal"],
+        }
+        for bid, rec in built.key["stimuli"].items()
+        for arm, rows in rec["architecture_occurrences"].items()
+        for row in rows
+        if row["page_number"] != rec["page_number"] or row["region_ordinal"] != rec["region_ordinal"]
+    ]
+    check(
+        "EVERY private-key occurrence satisfies anchor.page == stimulus.page AND region == region",
+        [],
+        wrong,
+        "a stimulus carries an occurrence printed on another page or in another region, which "
+        "would put headings the adjudicator never saw on the emitted side of the M1-M5 join",
+    )
+
+    # THE COUNTERFACTUAL: the retired region-ordinal-only filter must demonstrably contaminate.
+    contaminated = 0
+    for rec in built.key["stimuli"].values():
+        old_filter = [r for r in frame["architecture_occurrences"]["H"] if r["region_ordinal"] == rec["region_ordinal"]]
+        contaminated += sum(1 for r in old_filter if r["page_number"] != rec["page_number"])
+    check(
+        "NEGATIVE -- the retired region-ordinal-only filter DOES contaminate this material",
+        True,
+        contaminated > 0,
+        "the old filter happens to be equivalent here, so the repair is unproven and the "
+        "control above passes for the wrong reason",
+    )
+
+    # duplication: one occurrence must not appear in two primary stimuli
+    seen: dict[tuple, list] = {}
+    for bid, rec in built.key["stimuli"].items():
+        if rec["is_r1_repeat"]:
+            continue  # an R1 repeat legitimately re-presents its primary's region
+        for row in rec["architecture_occurrences"]["H"]:
+            seen.setdefault((row["page_number"], row["anchor"]["line_number"], row["anchor"]["text"]), []).append(bid)
+    dupes = {k: v for k, v in seen.items() if len(v) > 1}
+    check(
+        "no architecture occurrence is duplicated into multiple PRIMARY stimuli",
+        {},
+        dupes,
+        "one emitted heading is counted in two regions, inflating the emitted set twice over",
+    )
+
+    # a MATCHABLE key's page component must agree with its stimulus page
+    key_page_disagree = [
+        (bid, row["occurrence_key"])
+        for bid, rec in built.key["stimuli"].items()
+        for row in rec["architecture_occurrences"]["H"]
+        if row["match_status"] == "MATCHABLE" and row["occurrence_key"][1] != rec["page_number"]
+    ]
+    check(
+        "a MATCHABLE occurrence's A30 key page AGREES with its stimulus page",
+        [],
+        key_page_disagree,
+        "the identity key names a different page from the stimulus carrying it, so the join "
+        "would bind an adjudication to a heading printed elsewhere",
+    )
+    return {
+        "ordinals_reused_across_pages": {str(k): v for k, v in multi.items()},
+        "n_stimuli": built.key["n_stimuli"],
+        "n_occurrence_rows_in_key": sum(
+            len(rows) for rec in built.key["stimuli"].values() for rows in rec["architecture_occurrences"].values()
+        ),
+        "counterfactual_contaminated_rows": contaminated,
+    }
+
+
+def part_genuine_unmatched(sha, h_pages, x_pages) -> dict:
+    """A38 REPAIR -- a REAL A30 refusal must keep its A28.5 physical placement.
+
+    Induced through the REAL construction path, not by editing a built record: the resolved
+    start ngid is removed from the neutral skeleton, so `key_for` refuses with
+    START_NGID_NOT_OWNED_BY_NEUTRAL_LINE while `place_anchor` -- which resolves the EMITTED
+    line's first gid, a different glyph -- still succeeds.
+    """
+    print("\n== A38 repair: a genuine A30 refusal keeps its physical region ==")
+    clean = BF.build_document_frame(sha, DOC_NAME, BF.P_HEAD, h_pages, x_pages)
+
+    # The victim must be one whose A30 start ngid is NOT its emitted line's FIRST gid -- that
+    # is precisely the case where placement and identity read different glyphs, so removing
+    # the start ngid refuses identity while leaving A28.5 placement intact. Choosing any
+    # MATCHABLE occurrence instead hits headings that occupy their whole line (start ngid ==
+    # first gid), where the perturbation breaks placement too and aborts the frame.
+    victim = next(r for r in clean["architecture_occurrences"]["H"] if r["match_status"] == "MATCHABLE")
+    target_page = victim["page_number"]
+
+    # THE LEVER, chosen because it separates the two concepts cleanly. `resolve_start_ngid`
+    # rebuilds the MERGED line from its print lines and refuses with
+    # MERGE_RECONSTRUCTION_MISMATCH when the rebuild disagrees with `page.lines[...].text`.
+    # `place_anchor` never reads `page.lines` -- it uses `print_lines` and `emitted` -- so
+    # perturbing merged text refuses IDENTITY while leaving A28.5 PLACEMENT untouched.
+    #
+    # Removing the start ngid from the skeleton was tried first and does NOT work on this
+    # material: production headings occupy their whole line, so the start ngid IS the emitted
+    # line's first gid and stripping it breaks placement too, aborting the frame.
+    def perturb_merged_text(pages):
+        out = []
+        for d in pages:
+            if d["page_number"] != target_page:
+                out.append(d)
+                continue
+            page = d["page"]
+            merged = [dataclasses.replace(ln, text=ln.text + "␀SENTINEL") for ln in page.lines]
+            out.append({**d, "page": dataclasses.replace(page, lines=merged)})
+        return out
+
+    perturbed = BF.build_document_frame(
+        sha, DOC_NAME, BF.P_HEAD, perturb_merged_text(h_pages), perturb_merged_text(x_pages)
+    )
+    now = next(
+        r
+        for r in perturbed["architecture_occurrences"]["H"]
+        if r["page_number"] == victim["page_number"] and r["anchor"]["line_number"] == victim["anchor"]["line_number"]
+    )
+    check(
+        "a GENUINE A30 refusal is UNMATCHED with an explicit reason",
+        ("UNMATCHED", None, True),
+        (now["match_status"], now["occurrence_key"], bool(now["unmatched_reason"])),
+        "the perturbation did not actually induce an identity refusal, so this control proves "
+        "nothing about how refusals are handled",
+    )
+    check(
+        "...and it KEEPS its A28.5 physical page and region",
+        (victim["page_number"], victim["region_ordinal"]),
+        (now["page_number"], now["region_ordinal"]),
+        "an identity refusal erased the physical placement, so the occurrence would vanish "
+        "from every region-scoped record and shrink an M1-M5 denominator invisibly",
+    )
+
+    built = BO.build([{"frame": perturbed, "pdf_path": DOC_PATH, "stratum": "DEVELOPMENT"}])
+    carrying = [
+        bid
+        for bid, rec in built.key["stimuli"].items()
+        for r in rec["architecture_occurrences"]["H"]
+        if r["match_status"] == "UNMATCHED" and r["anchor"]["line_number"] == victim["anchor"]["line_number"]
+    ]
+    correct = [
+        bid
+        for bid in carrying
+        if built.key["stimuli"][bid]["page_number"] == victim["page_number"]
+        and built.key["stimuli"][bid]["region_ordinal"] == victim["region_ordinal"]
+    ]
+    check(
+        "the UNMATCHED occurrence SURVIVES into its exact stimulus",
+        True,
+        len(correct) >= 1,
+        "the refused occurrence reaches no private key at all, i.e. it was silently dropped",
+    )
+    check(
+        "...and appears in NO other page/region",
+        sorted(carrying),
+        sorted(correct),
+        "the refused occurrence also leaked into a stimulus for a different page or region",
+    )
+    return {
+        "lever": "merged-line text perturbation -> MERGE_RECONSTRUCTION_MISMATCH; placement "
+        "reads print_lines/emitted and is unaffected",
+        "page": victim["page_number"],
+        "region_ordinal": victim["region_ordinal"],
+        "unmatched_reason": now["unmatched_reason"],
+        "stimuli_carrying_it": len(correct),
+    }
 
 
 def part_parent(frame: dict, h_pages) -> dict:
@@ -425,6 +618,8 @@ def main() -> int:
     candidates = part_candidates(frame)
     bilateral = part_candidate_bilateral(sha, h, x)
     occurrences = part_occurrences(frame)
+    scope = part_occurrence_scope(frame)
+    unmatched = part_genuine_unmatched(sha, h, x)
     parent = part_parent(frame, h)
     m9 = part_m9(frame)
     s1 = part_s1()
@@ -445,6 +640,8 @@ def main() -> int:
         "identity_candidates": candidates,
         "bilateral_gate": bilateral,
         "architecture_occurrences": occurrences,
+        "occurrence_scope": scope,
+        "genuine_unmatched": unmatched,
         "immediate_parent": parent,
         "m9_raw": m9,
         "s1": s1,

@@ -767,25 +767,72 @@
    "fails_when": "the clean case produces nothing either, so 'None' proved nothing about rotation"
   },
   {
-   "test": "NEGATIVE -- a confirmatory holdout member is REFUSED by document id",
-   "expected": "DOCUMENT_IS_HOLDOUT",
-   "observed": "DOCUMENT_IS_HOLDOUT",
+   "test": "NEGATIVE -- a confirmatory holdout member is REFUSED while the boundary is not VALID",
+   "expected": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+   "observed": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
    "pass": true,
    "fails_when": "a holdout document can be opened before execution is authorised"
   },
   {
-   "test": "NEGATIVE -- writing the CANONICAL oracle artifact is refused pre-execution",
-   "expected": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
-   "observed": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+   "test": "the boundary ACCESS MATRIX permits a holdout only at VALID",
+   "expected": {
+    "ABSENT": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+    "UNCOMMITTED": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+    "MUTATED": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+    "VALID": null
+   },
+   "observed": {
+    "ABSENT": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+    "UNCOMMITTED": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+    "MUTATED": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY",
+    "VALID": null
+   },
    "pass": true,
-   "fails_when": "results/oracle_key.json can be created while the execution boundary is absent"
+   "fails_when": "an ABSENT, UNCOMMITTED or MUTATED marker unlocks the holdout -- a stray or edited EXECUTION-START.json would then authorize the confirmatory run"
+  },
+  {
+   "test": "...and every CANONICAL confirmatory write obeys the same VALID-only rule",
+   "expected": {
+    "ABSENT": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+    "UNCOMMITTED": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+    "MUTATED": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+    "VALID": null
+   },
+   "observed": {
+    "ABSENT": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+    "UNCOMMITTED": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+    "MUTATED": "CONFIRMATORY_WRITE_BEFORE_EXECUTION",
+    "VALID": null
+   },
+   "pass": true,
+   "fails_when": "an artifact can be created under a weaker condition than the material it describes"
+  },
+  {
+   "test": "the S1 and cross-engine canonical paths are inside the same guarded set",
+   "expected": [
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": "an S1 or cross-engine confirmatory artifact could be written with no boundary at all"
   },
   {
    "test": "...and a scratch path is NOT refused, so the write guard is not blanket-refusing",
    "expected": null,
    "observed": null,
    "pass": true,
-   "fails_when": "the guard refuses everything, which would make the control above meaningless"
+   "fails_when": "the guard refuses everything, which would make the controls above meaningless"
+  },
+  {
+   "test": "no real execution marker was created by any of this",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "the boundary controls created the very marker they exist to test"
   },
   {
    "test": "9. the adjudicator-facing artifact carries ONLY id, image and question",
@@ -1399,6 +1446,56 @@
    "fails_when": "the occurrence key is not the frozen A30 shape, so it cannot join to the emitted side"
   },
   {
+   "test": "each stimulus carries ONLY its own page's sentinel occurrence",
+   "expected": {
+    "1": [
+     "SYNTHETIC ACCOUNT SENTINEL P1"
+    ],
+    "2": [
+     "SYNTHETIC ACCOUNT SENTINEL P2"
+    ],
+    "3": [
+     "SYNTHETIC ACCOUNT SENTINEL P3"
+    ],
+    "4": [
+     "SYNTHETIC ACCOUNT SENTINEL P4"
+    ]
+   },
+   "observed": {
+    "1": [
+     "SYNTHETIC ACCOUNT SENTINEL P1"
+    ],
+    "2": [
+     "SYNTHETIC ACCOUNT SENTINEL P2"
+    ],
+    "3": [
+     "SYNTHETIC ACCOUNT SENTINEL P3"
+    ],
+    "4": [
+     "SYNTHETIC ACCOUNT SENTINEL P4"
+    ]
+   },
+   "pass": true,
+   "fails_when": "a stimulus holds another page's sentinel, i.e. region_ordinal is being matched without the page and every multi-page document contaminates every region"
+  },
+  {
+   "test": "...and the fixture really does reuse region_ordinal across pages, so this is not vacuous",
+   "expected": [
+    true,
+    [
+     0
+    ]
+   ],
+   "observed": [
+    true,
+    [
+     0
+    ]
+   ],
+   "pass": true,
+   "fails_when": "the fixture has one page or distinct ordinals per page, so a page-blind filter would have looked correct here"
+  },
+  {
    "test": "POSITIVE -- the adjudicated key EQUALS the emitted architecture occurrence key",
    "expected": [
     "synthsha0123456789",
@@ -1475,27 +1572,27 @@
     ],
     [
      "synthsha0123456789",
-     1,
+     2,
      [
-      1,
+      2,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     3,
      [
-      1,
+      3,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     4,
      [
-      1,
+      4,
       2
      ],
      20
@@ -1513,27 +1610,27 @@
     ],
     [
      "synthsha0123456789",
-     1,
+     2,
      [
-      1,
+      2,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     3,
      [
-      1,
+      3,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     4,
      [
-      1,
+      4,
       2
      ],
      20
@@ -1556,27 +1653,27 @@
     ],
     [
      "synthsha0123456789",
-     1,
+     2,
      [
-      1,
+      2,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     3,
      [
-      1,
+      3,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     4,
      [
-      1,
+      4,
       2
      ],
      20
@@ -1594,27 +1691,27 @@
     ],
     [
      "synthsha0123456789",
-     1,
+     2,
      [
-      1,
+      2,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     3,
      [
-      1,
+      3,
       2
      ],
      20
     ],
     [
      "synthsha0123456789",
-     1,
+     4,
      [
-      1,
+      4,
       2
      ],
      20
