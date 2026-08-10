@@ -3667,7 +3667,7 @@ touched it.
 
 ```json
 {"id": "A38", "class": "SUBSTANTIVE",
- "commits": ["e44dc39", "5f558c1"],
+ "commits": ["e44dc39", "5f558c1", "92cddbe"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/adjudicator_prompt.md", "probes/build_frames.py",
@@ -3675,7 +3675,7 @@ touched it.
                    "probes/s1_control.py", "probes/x21_build_oracle.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is introduced or changed",
- "status": "IMPLEMENTED -- x22 26/26, x21 112/112; one forward ambiguity open (A38.8)"}
+ "status": "IMPLEMENTED + REPAIRED -- x22 35/35, x21 117/117; NOT frozen: A39.3/A39.4 outstanding"}
 ```
 
 **`affects_scoring_rule` is false and A38 must keep it so.** It introduces **no** new metric,
@@ -3885,12 +3885,14 @@ obviously synthetic placeholders, which removes both the collision and an anchor
 
 ```json
 {"id": "A39", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["e25edcd", "ba8e899"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
- "files_touched": [],
+ "files_touched": ["probes/cross_engine_control.py", "probes/methodology_contracts.py",
+                   "probes/s1_control.py", "probes/x04_freeze_check.py",
+                   "probes/x15_methodology_contracts.py"],
  "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
- "status": "CONTRACT -- rulings fixed before implementation"}
+ "status": "PARTIALLY IMPLEMENTED -- A39.1/A39.2/A39.5 done (x15 67/67); A39.3 control-source realization and A39.4 G6 NOT built"}
 ```
 
 `affects_scoring_rule` is **true**: A39 makes the previously unspecified Rule 0 margin-line
@@ -3993,6 +3995,23 @@ is correct if the surface is larger.
 
 DEVELOPMENT + SYNTHETIC only. No holdout opened, nothing adjudicated or scored, no architecture
 decision, no confirmatory or scoring artifact, and no execution marker.
+
+### Realized so far, and what is NOT built
+
+**Done** — A39.1 (Rule 0 margin clause), A39.2 (page sampling + the confirmatory cross-engine
+producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
+
+**NOT BUILT, and not claimed as done:**
+
+| outstanding | what it needs |
+|---|---|
+| **A39.3** control-source realization | 8 N-A modified-PDF regions under the frozen `index mod 3` schedule (3 delete / 3 weld / 2 size) with before/after strings and the source document's own body size; 8 N-B XML-corroborated regions ranked under `nb-source`; 4 synthetic heading-free N-C regions; and the committed `results/control_fixtures.json` manifest |
+| **A39.4** G6 readiness | the readiness condition that refuses authorization unless the manifest exists and validates (8/8/4, hashes, recipes, no holdout member, unique identities, expected truth) |
+
+**Consequence, stated rather than left implicit:** A27.6 makes N-A/N-B/N-C **Rule 3 blockers**,
+so execution readiness cannot legitimately go green until A39.3 and A39.4 exist. **A38 is
+therefore NOT frozen in this pass** — the reviewer's freeze condition requires the ownership
+table to name real execution artifacts, and the control-fixture row is still UNOWNED.
 
 ---
 
