@@ -16,6 +16,25 @@ root.
 | `probe_observation_identity.py [root]` | Measure what can serve as an observation address: duplicated body texts, duplicated `match_path`s, emission determinism, and how much of `element_id` is recoverable from the source rather than synthesized. Read-only; the evidence behind [ADR 0019](../docs/decisions/0019-observation-identity.md). Defaults to the committed `tests/corpus`, so it needs no downloads. Re-run under a different `PYTHONHASHSEED` to check the determinism digest does not move. |
 | `probe_matching_stages.py [root]` | Size what the fused matching decision costs: pairs split by the similarity cutoff that carry amounts on both sides (#368), changes recovered by the post-classification move pass, and match paths whose output is not a one-to-one relation. Read-only; the evidence behind [ADR 0020](../docs/decisions/0020-matching-stages.md). Defaults to the committed `tests/corpus`, so it needs no downloads. |
 
+### ADR 0020 slice-2 evidence
+
+Whether the move-assignment pass can be extracted as its own [ADR 0020](../docs/decisions/0020-matching-stages.md)
+stage turns on four measurements. These are the probes behind them. All are read-only,
+all run against the committed corpus via `tests.test_canonical_baseline.baseline_pairs`
+so the probe and the byte-identity gate always describe the same population, and all
+instrument production by *wrapping* it rather than reimplementing it. Where a greedy loop
+has to be duplicated to see inside it, the duplicate asserts it still agrees with the real
+function before any number is reported — a drifted duplicate would otherwise measure a
+different population while reporting agreement.
+
+| Script | What it does |
+|--------|--------------|
+| `probe_move_assignment.py [--dump OUT.json]` | The candidate population `reconcile_moves` forms, how much of it ties on similarity, and how many selections are decided only by the `(ri, ai)` index tiebreak rather than by any property of the two sections. `--dump` records the selected correspondences keyed by element id, so two builds can be compared without re-deriving anything. |
+| `compare_selected.py A.json B.json` | Diff two `--dump` files, separating *a different correspondence was chosen* from *the same ones in another order*. The canonical digest is sensitive to both, so it cannot distinguish them on its own. |
+| `probe_splits.py` | How many removals and additions exist **only because classification ran** — the pairs the similarity cutoff splits into a removal plus an addition (#368). A retrieval round moved before classification cannot see these, so this sizes what such a reordering would change. |
+| `probe_provenance.py` | Whether `element_id` could stand in for a complete parser-sequence ordinal: how many tree nodes carry an empty or duplicated one. |
+| `probe_slice2.py [OUT.json]` | The same population and tie counts, plus the order-perturbation negative control: reverse and three seeded shuffles of the candidate list, checking whether the selected correspondences move. Prints how many pairs the perturbation *actually reordered*, because a perturbation that changed nothing would prove nothing. |
+
 ### Refreshing the validation evidence
 
 [docs/parser-validation.md](../docs/parser-validation.md) is the home for *why* this
