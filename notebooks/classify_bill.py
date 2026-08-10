@@ -1,14 +1,16 @@
 import re
 
 # Node-opening patterns
-RESTRICT = re.compile(r"^\s*None of the funds", re.IGNORECASE)
+RESTRICT = re.compile(r"^\s*(?:\([a-z0-9]+\)\s*)?None of the funds", re.IGNORECASE)
+RESTRICT_NOTWITHSTANDING = re.compile(r"^\s*Notwithstanding\b.{0,200}\bnone of the funds\b", re.IGNORECASE | re.DOTALL)
 TRANSFER = re.compile(r"^\s*Of (?:the )?amounts", re.IGNORECASE)
-APPROP = re.compile(r"^\s*For\b", re.IGNORECASE | re.DOTALL)
-RESCISSION = re.compile(r"is hereby rescinded", re.IGNORECASE)
+APPROP = re.compile(r"^\s*(?:\([a-z0-9]+\)\s*)?For\b", re.IGNORECASE | re.DOTALL)
+RESCISSION = re.compile(r"(?:is|are) hereby rescinded", re.IGNORECASE)
 DIRECTIVE = re.compile(r"^\s*The\s+\w[\w\s]+(?:shall|may not)\b", re.IGNORECASE)
 REPROGRAM = re.compile(r"^\s*no project may be (?:increased|decreased)", re.IGNORECASE)
 DELAYED_APPROP = re.compile(r"^\s*\$[\d,]+.{0,50}\bshall become available\b", re.IGNORECASE | re.DOTALL)
-APPROP_ALT = re.compile(r"there (?:is|are) appropriated", re.IGNORECASE)
+APPROP_ALT = re.compile(r"there (?:is|are)(?: hereby)? appropriated", re.IGNORECASE)
+AUTHORIZATION = re.compile(r"\bauthorized to be appropriated\b", re.IGNORECASE)
 FEE = re.compile(r"fee in the amount of\s+\$|impose a fee|\bpays a fee of\s+\$|\ba fee of\s+\$", re.IGNORECASE)
 
 # Sub-clause patterns
@@ -26,13 +28,15 @@ IN_ADDITION_RE = re.compile(r";\s*and,?\s*in addition,", re.IGNORECASE)
 CAP_AMOUNT_RE = re.compile(r"not (?:more than|to exceed)\s+\$[\d,]+(?:\.\d+)?", re.IGNORECASE)
 DOLLAR = re.compile(r"\$([\d,]+(?:\.\d+)?)")
 
-PRIMARY_LABELS = {"appropriation", "transfer", "rescission", "fee"}
+PRIMARY_LABELS = {"appropriation", "authorization", "transfer", "rescission", "fee"}
 
 
 def classify_text(text):
     if not text:
         return None
     if RESTRICT.match(text):
+        return "restriction"
+    if RESTRICT_NOTWITHSTANDING.match(text):
         return "restriction"
     if TRANSFER.match(text):
         return "transfer"
@@ -48,6 +52,8 @@ def classify_text(text):
         return "appropriation"
     if APPROP_ALT.search(text):
         return "rescission" if RESCISSION.search(text) else "appropriation"
+    if AUTHORIZATION.search(text):
+        return "authorization"
     if FEE.search(text):
         return "fee"
     if EARMARK.search(text):
