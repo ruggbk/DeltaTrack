@@ -51,13 +51,26 @@ is open and no delivery-channel ADR exists. This study is evidence for that deci
 does not make it. The record is: this study, then the PDF seam research, then eventually
 a channel decision.
 
-**Nothing was re-run on restore.** No probe in [`probes/`](probes/) was executed, so every
-number below remains the study's own, taken on macOS 15 / arm64 on 2026-08-05, and the
-environment caveat above stands in full. The probes are committed exactly as #549 carried
-them, which includes three harnesses that hardcode absolute paths from the machine they
-ran on (`native_baseline.py`, `exp1_imports.mjs`, `exp1_xml_e2e.mjs`) and two docstrings
-that still spell the probe directory `spike/`, its name before this study was filed under
-`docs/research/`. Correct those when re-running rather than reading them as live paths.
+**One probe was re-run on restore. The rest were not.**
+[`probes/verify_parity.py`](probes/verify_parity.py) was executed on 2026-08-11 against
+`develop` plus this restore, with its `--mutate` negative control. It passed: 3 fixtures
+by 2 artifacts identical between native CPython 3.12.12 / arm64 and Pyodide 314.0.3
+(CPython 3.14.2 / wasm32), and `--mutate` diverged all three HTML hashes while leaving all
+three canonical hashes identical, so the comparison can still fail rather than only ever
+having passed. The `small` and `senate_rewrite` artifact sizes came back byte-for-byte as
+recorded below. The tripwire stub was in place and was never triggered, so the second
+finding above also still holds. This re-measures the parity claim and nothing else.
+
+**Every other number below is the study's own**, taken on 2026-08-05, and the environment
+caveat above stands in full. Not re-run: the import matrix, the browser and `file://`
+capability probes, the single-file build, the PyInstaller build, and the PDF.js
+granularity probe. Nothing has been tested on Windows, then or now.
+
+The probes are committed exactly as #549 carried them, which includes three harnesses that
+hardcode absolute paths from the machine they ran on (`native_baseline.py`,
+`exp1_imports.mjs`, `exp1_xml_e2e.mjs`) and two docstrings that still spell the probe
+directory `spike/`, its name before this study was filed under `docs/research/`. Correct
+those when re-running rather than reading them as live paths.
 
 ---
 
