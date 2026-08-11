@@ -1,8 +1,9 @@
 """Corpus + golden validation for the PDF division level (DeltaTrack#107).
 
-Pins three things across every division-bearing version present (fetch with
-`./tools/fetch_bills.py download <congress> <type> <number> --format both`; absent bills
-skip, matching the other corpus suites):
+Pins three things across every division-bearing version in the committed manifest
+(tests/corpus_manifest.toml). Every fixture this module reads is committed, so an absence
+is a broken checkout, not an expected gap -- it is asserted rather than skipped (#539),
+the same treatment the module already gives the #141 zero-anchor layouts below:
   1. Division COUNT == the XML division count on every parseable version (hard) —
      the 33-division FY22 omnibus included.
   2. Division NAMES match XML (modulo casing) on every parseable version, with two
@@ -131,6 +132,22 @@ _DIVISION_VERSIONS = [(name, xml, pdf) for (name, xml, pdf) in dual_format_versi
 _IDS = [f"{name}/{xml.stem}" for (name, xml, _pdf) in _DIVISION_VERSIONS]
 
 
+def test_the_gate_collected_the_expected_case_set():
+    """The two parametrized gates below must actually have cases (#539).
+
+    `_DIVISION_VERSIONS` is a collection-time filter (dual_format_versions() narrowed to
+    versions whose XML carries divisions), so a bug that made `_xml_divisions` return {}
+    for every version -- or a corpus_manifest.toml edit that dropped every division-bearing
+    bill -- would shrink the parametrize to zero and both gates would pass having asserted
+    nothing. A floor well under the current count (15 at last count) so adding or removing
+    an unrelated fixture doesn't force an edit here, but a wholesale loss still reddens.
+    """
+    assert len(_DIVISION_VERSIONS) >= 10, (
+        f"expected >=10 division-bearing versions, collected {len(_DIVISION_VERSIONS)} -- "
+        "either the corpus lost fixtures or _xml_divisions() stopped finding divisions"
+    )
+
+
 @pytest.mark.parametrize(("name", "xml", "pdf"), _DIVISION_VERSIONS, ids=_IDS)
 def test_division_count_matches_xml(name, xml, pdf):
     """Detected division count == XML count, on every parseable version (hard).
@@ -165,11 +182,19 @@ def test_division_names_match_xml(name, xml, pdf):
 
 
 def _fixture(bill: str, stage: str):
-    """The PDF for a specific division-bearing version, or skip when not fetched."""
+    """The manifested PDF for a specific division-bearing version.
+
+    Fails closed rather than skipping: every (bill, stage) this is called with is a
+    committed corpus fixture, so its absence means a broken checkout, not an expected
+    gap -- a skip here would silently retire the caller (#539).
+    """
     for n, _x, p in _DIVISION_VERSIONS:
         if n == bill and stage in p.stem:
             return p
-    pytest.skip(f"{bill}/{stage} not fetched")
+    raise AssertionError(
+        f"{bill}/{stage} not found among the {len(_DIVISION_VERSIONS)} committed "
+        "division-bearing versions -- expected a manifested fixture (tests/corpus_manifest.toml)"
+    )
 
 
 def test_same_numbered_titles_separate_by_division():
@@ -204,8 +229,10 @@ def test_multi_division_breadcrumb_carries_division_end_to_end():
 def test_single_division_bill_has_no_division_labels():
     """Guard: a single-division bill (8752) tags nothing (breadcrumbs unchanged)."""
     pairs = [(n, x, p) for (n, x, p) in dual_format_versions() if n == "118-hr-8752"]
-    if not pairs:
-        pytest.skip("118-hr-8752 not present")
+    # 118-hr-8752 is a committed corpus fixture (both formats, both stages), so an empty
+    # result means a broken checkout, not an expected gap -- fails closed rather than
+    # skipping, which would silently retire this guard (#539).
+    assert pairs, "118-hr-8752 not found among committed dual-format versions"
     _name, _xml, pdf = pairs[0]
     anchors = extract_anchors(cached_pages(pdf))
     assert anchors, "expected anchors on 8752"
