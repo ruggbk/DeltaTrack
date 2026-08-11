@@ -59,12 +59,19 @@ jobs:
     # Least-privilege token: this job only checks out and runs the suite.
     permissions:
       contents: read
+    # Pins every uv call in this job -- including ones made from inside a test -- to the
+    # leg's interpreter. Without it `.python-version` (3.12) wins and a leg labelled
+    # "3.14" silently runs the whole suite on 3.12, green, for the wrong version.
+    # `tests/test_ci_workflow.py` fails if this is removed.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
-      # The two legs test DIFFERENT supported interpreter surfaces, so one leg's failure
-      # must not cancel the other before it reports. With the default `fail-fast: true`,
-      # one failing leg cancels its sibling mid-run and that sibling's verdict is lost --
-      # so a floor-only regression can hide behind an unrelated failure on the newest
-      # patch, which is the leg most likely to fail for reasons unrelated to the floor.
+      # Each leg tests a DIFFERENT supported interpreter, so one leg's failure must not
+      # cancel the others before they report. With the default `fail-fast: true`, one
+      # failing leg cancels its siblings mid-run and their verdicts are lost -- so a
+      # floor-only regression can hide behind an unrelated failure on a newer version,
+      # and a 3.14-only regression can hide behind a flake on the floor -- and which leg
+      # broke is most of the diagnosis.
       # This is diagnostic completeness, NOT permissiveness: a failed leg still fails, and
       # the `test` aggregator below still demands success from EVERY leg. Same reasoning
       # as `cancel-in-progress` in this file: never destroy a verdict.
@@ -78,7 +85,11 @@ jobs:
         # difference is behavioural, not cosmetic (#426). The "3.12.0" entry pins the
         # declared floor; "3.12" keeps tracking the newest patch. Ubuntu 24.04's system
         # Python (3.12.3) sits inside the band only the floor entry exercises.
-        python-version: ["3.12", "3.12.0"]
+        #
+        # Every entry is a version `requires-python = ">=3.12"` claims to support, so a
+        # newly released stable minor we intend to support gets a line here. No upper
+        # bound and no prereleases.
+        python-version: ["3.12.0", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
 
@@ -86,20 +97,14 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
-        # The other workflows install the version named in `.python-version` (#442).
-        # This job deliberately overrides it: the matrix exists to run the newest 3.12
-        # AND the declared floor, and one source of truth cannot name two interpreters.
-        # `.python-version` still governs developer environments and the
-        # single-interpreter workflows; the explicit version here, and the `--python`
-        # on `uv sync` below, are what hold the two legs apart (#426).
+        # The other workflows install the version named in `.python-version` (#442); this
+        # job overrides it per leg, because one source of truth cannot name four.
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        # --python pins the sync to the matrix interpreter. A bare `uv sync` follows
-        # uv's own preference order, so a later .python-version file or a UV_PYTHON
-        # env var would point BOTH legs at the same interpreter and the "3.12.0"
-        # floor leg would stay green while testing nothing.
-        run: uv sync --python ${{ matrix.python-version }}
+        # No `--python` flag: `UV_PYTHON` above pins this and every other uv call in the
+        # job. A flag here would cover this one command and look like it covered the job.
+        run: uv sync
 
       # Each check runs even if an earlier one failed (but not after cancellation),
       # so one push surfaces every problem at once instead of failing fast on the
