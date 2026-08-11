@@ -207,6 +207,40 @@ def test_ci_still_runs_on_pushes_to_main() -> None:
     assert "main" in branches, f"ci.yml no longer runs on pushes to main: {branches}"
 
 
+def test_security_runs_on_pushes_to_main() -> None:
+    """The security workflow fires when a commit lands on `main`.
+
+    docs/release.md step 4 tells a maintainer to watch the post-merge security run on
+    `main` as one of the three runs that actually test the promotion merge commit. That
+    instruction depends on `main` being in security.yml's `push` branches; removing it
+    would silently retire the run the runbook is about to watch. `ci.yml`'s push branches
+    were already pinned for both branches; security.yml's were not (#547).
+    """
+    triggers = _triggers(WORKFLOWS / "security.yml")
+    branches = triggers["push"]["branches"]
+    assert "main" in branches, (
+        f"security.yml no longer runs on pushes to main (push branches: {branches}). "
+        "docs/release.md step 4 watches this run after a promotion; without it the "
+        "promotion merge commit gets no security verdict on `main`."
+    )
+
+
+def test_security_push_guard_detects_a_mainless_trigger(tmp_path: Path) -> None:
+    """A security workflow that dropped `main` must go red, not pass via a vacuous read.
+
+    The assertion above reads the real `push` trigger structure, so a workflow that has
+    removed `main` registers as a failure rather than as "no branches found".
+    """
+    mainless = tmp_path / "security.yml"
+    mainless.write_text(
+        "name: security\non:\n  push:\n    branches: [develop]\n",
+        encoding="utf-8",
+    )
+    triggers = _triggers(mainless)
+    assert triggers["push"]["branches"] == ["develop"], "fixture did not parse as expected"
+    assert "main" not in triggers["push"]["branches"]
+
+
 def test_ci_does_not_cancel_in_progress_runs() -> None:
     """A cancelled run leaves a merge commit with no verdict, which is #412 again.
 
