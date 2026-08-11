@@ -839,6 +839,27 @@ def _format_version_listing(bills_dir: Path, slug: str, versions: list[tuple[int
     return "\n".join(lines)
 
 
+def _reject_bills_dir_conflict(bills_dir_explicit: bool, bills_dir: Path, target: str) -> None:
+    """Hard error when an explicit ``--bills-dir`` would be silently overridden.
+
+    ``Path(bills_dir) / target`` discards ``bills_dir`` outright when ``target`` is
+    absolute (#454), because that's how ``pathlib`` joins paths. Harmless -- and
+    deliberate -- for the bare-absolute-directory listing #426 added, since nobody
+    asked for ``--bills-dir`` there. It stops being harmless the moment someone names
+    both: the flag looks respected while a different corpus answers instead, with
+    nothing in the output to say so. Checked before any resolution is attempted, so the
+    conflict is reported instead of a diff that describes the wrong files.
+    """
+    if bills_dir_explicit and Path(target).is_absolute():
+        print(
+            f"--bills-dir {bills_dir} was given, but {target!r} is an absolute path and "
+            "would silently override it (an absolute path always wins the join). Drop "
+            "--bills-dir, or address the bill by a bare slug under it instead.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
 def _resolve_version_arg(bills_dir: Path, slug: str, ordinal: str) -> Path:
     """One ``<slug> <n>`` pair to the file it addresses, or exit with the version list.
 
@@ -873,24 +894,28 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
     0; every other unresolvable case is an error whose message is the same listing.
     """
     targets = args.targets
+    bills_dir_explicit = args.bills_dir is not None
+    bills_dir = args.bills_dir if bills_dir_explicit else Path("bills")
     if len(targets) == 2:
         return Path(targets[0]), Path(targets[1])
     if len(targets) == 3:
         slug, n_old, n_new = targets
+        _reject_bills_dir_conflict(bills_dir_explicit, bills_dir, slug)
         return (
-            _resolve_version_arg(args.bills_dir, slug, n_old),
-            _resolve_version_arg(args.bills_dir, slug, n_new),
+            _resolve_version_arg(bills_dir, slug, n_old),
+            _resolve_version_arg(bills_dir, slug, n_new),
         )
     if len(targets) == 1:
         target = targets[0]
+        _reject_bills_dir_conflict(bills_dir_explicit, bills_dir, target)
         # The listing is tried FIRST so that the shape check below only ever picks
         # between two failures. Checking the shape first let it pick between success and
         # failure instead: `cd bills && compare --bills-dir . 118-hr-4366` names both a
         # resolvable slug and an existing directory, and the check turned that working
         # command into "the second path is missing" (#426 review).
-        versions = local_versions(args.bills_dir, target)
+        versions = local_versions(bills_dir, target)
         if versions:
-            print(_format_version_listing(args.bills_dir, target, versions))
+            print(_format_version_listing(bills_dir, target, versions))
             raise SystemExit(0)
         if Path(target).is_file() or Path(target).is_dir():
             # One real path, no versions under it, and nothing else: `compare "$OLD"
@@ -904,7 +929,7 @@ def _compare_targets(args: argparse.Namespace) -> tuple[Path, Path]:
         # parser rejected outright — a wrapper reading the exit status has to keep
         # seeing that, rather than a clean exit and a message about a bill nobody
         # asked for.
-        raise SystemExit(_format_version_listing(args.bills_dir, target, versions))
+        raise SystemExit(_format_version_listing(bills_dir, target, versions))
     # argparse rejected these arities with exit 2 (a usage error); a wrapper keying on
     # the exit status has to keep seeing 2, not the 1 a bare SystemExit(message) gives.
     print(f"{_COMPARE_USAGE} — got {len(targets)}.", file=sys.stderr)
@@ -1024,8 +1049,13 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument(
         "--bills-dir",
         type=Path,
-        default=Path("bills"),
-        help="Root holding the per-bill download folders, for the <slug> forms (default: %(default)s)",
+        default=None,
+        help=(
+            "Root holding the per-bill download folders, for the <slug> forms "
+            "(default: bills). An absolute <slug>/<TARGET> always wins the path join "
+            "and passing both together is a hard error, except for a bare absolute "
+            "directory listing (compare <abs-dir>), which doesn't need this flag."
+        ),
     )
     compare.add_argument("-o", "--output", help="Output JSON file (default: stdout)")
     compare.add_argument(
