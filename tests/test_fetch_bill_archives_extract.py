@@ -423,18 +423,52 @@ class TestExtractArchive:
         assert (dest / "119-hr-0.xml").read_bytes() == b"<billStatus/>"
         assert len([p for p in dest.rglob("*") if p.is_file()]) == 3
 
-    def test_the_real_member_ceiling_clears_the_largest_known_archive(self, tmp_path):
-        # Calibration guard against the real default, no monkeypatch: the largest real
-        # BILLSTATUS archive is 10,564 members (#300). The ceiling must stay well above
-        # that so it never refuses legitimate data -- a change that lowered it under the
-        # real corpus would fail here loudly rather than start silently rejecting bills.
-        assert MAX_MEMBER_COUNT > 10_564
-        archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
-        dest = tmp_path / "out"
+    def test_member_ceiling_calibration_excludes_the_306_exhaustion_case(self):
+        # Two-sided calibration guard (#447): a floor alone only stops the ceiling
+        # being lowered too far -- raising it to 50,000,000, or effectively off at
+        # 10**12, passed the full suite before this upper bound existed.
+        #
+        # The floor is the largest known real BILLSTATUS archive, 10,564 members
+        # (#300). The ceiling is pinned to the CURRENT production value, 100,000 --
+        # NOT merely kept under 200,000, the member count #306 used to demonstrate
+        # inode exhaustion. `extract_archive` refuses only on
+        # `member_count > MAX_MEMBER_COUNT`, so any ceiling below 200,000, even
+        # 199,999, technically still refuses that exact archive, but only after
+        # nearly as many inodes are counted as the demonstrated-bad case consumed --
+        # eroding the safety margin to nothing while this assertion stayed green.
+        # The production comment's own stated rationale for 100,000 is a 2x margin
+        # under that threshold ("refusing the 200,000-member archive... by a factor
+        # of two"), so the calibration pins that margin explicitly rather than
+        # tolerating any widening up to one member short of #306's demonstration.
+        #
+        # No companion "still extracts a normal archive" test here: that positive
+        # control already exists and doesn't need duplicating --
+        # test_creates_the_destination_and_writes_members above extracts a small
+        # archive under both real, unpatched ceilings.
+        assert 10_564 < MAX_MEMBER_COUNT <= 100_000
 
-        extract_archive(archive, dest)
-
-        assert (dest / "a.xml").exists()
+    def test_byte_ceiling_calibration_has_real_corpus_headroom(self):
+        # Companion to the member-ceiling calibration above, for MAX_UNCOMPRESSED_BYTES
+        # (#447): before this test, the byte ceiling had no calibration assertion at
+        # all, one-sided or otherwise -- every byte-ceiling test builds its fixture
+        # FROM the constant (write_oversized_archive(..., [MAX_UNCOMPRESSED_BYTES + 1])),
+        # so the fixture rescales with whatever the constant is and can never disagree
+        # with it. Widening the constant to 3,900,000,000 -- nearly double its real
+        # value -- passed the full suite.
+        #
+        # The floor is the largest known real archive's expanded size, ~162 MiB
+        # (#300). Unlike the member ceiling, there is no single demonstrated-bad byte
+        # figure in the tracker to exclude, so the ceiling is set from the constant's
+        # own documented margin claim ("2 GiB leaves better than an order of
+        # magnitude of headroom" over 162 MiB): 3 GiB is roughly 19x the floor,
+        # comfortably inside that claimed order of magnitude while still catching a
+        # ceiling widened toward "off".
+        #
+        # No companion extraction test here either, for the same reason as the member
+        # ceiling above: test_creates_the_destination_and_writes_members and
+        # test_an_archive_at_the_ceiling_is_still_extracted already cover normal
+        # extraction under the real, unpatched byte ceiling.
+        assert 162 * 1024**2 < MAX_UNCOMPRESSED_BYTES <= 3 * 1024**3
 
     def test_raises_on_a_corrupt_archive(self, tmp_path):
         archive = tmp_path / "119-hr.zip"
