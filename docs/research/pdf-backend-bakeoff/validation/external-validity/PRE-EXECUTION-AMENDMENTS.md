@@ -4058,6 +4058,99 @@ table to name real execution artifacts, and the control-fixture row is still UNO
 
 ---
 
+## A40 — SUBSTANTIVE. Replace N-A's dead size mutation with a live boundary control
+
+```json
+{"id": "A40", "class": "SUBSTANTIVE",
+ "commits": [],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": [],
+ "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
+ "status": "CONTRACT -- ruling fixed before implementation"}
+```
+
+`affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
+machinery, so changing which perturbation satisfies that blocker changes what the gate tests.
+
+**A40 is permitted because the pre-execution liveness control falsified the previous mutation
+before any confirmatory material was opened.** The A39.3 STOP is **preserved as historical
+evidence** and is not rewritten as though the size control never existed. `PRE-REGISTRATION.md`
+itself is **not edited**; the amendment lives here.
+
+### A40.1 — three LIVE mutation classes
+
+```
+N-A total = 8        index mod 3:  0 -> DELETE_ONE_WORD
+                                   1 -> WELD_TWO_WORDS
+                                   2 -> SPLIT_ONE_WORD
+
+realized: 3 DELETE_ONE_WORD · 3 WELD_TWO_WORDS · 2 SPLIT_ONE_WORD
+```
+
+**Exactly one mutation per N-A region.** `PULL_HEADING_TO_BODY_SIZE` is **RETIRED**: the
+complete eligible DEVELOPMENT census (51/51 account headings uppercase) showed a size-only
+alteration cannot change any field the frozen task records, and a control whose expected answer
+is identical before and after cannot establish liveness. **No font-size field is added to the
+prompt and the heading definition is unchanged.**
+
+### A40.2 — `SPLIT_ONE_WORD`
+
+One ordinary visible word boundary is inserted **inside one existing alphabetic word**:
+`"SALARIES AND EXPENSES"` → `"SALA RIES AND EXPENSES"`. It removes no character, adds no
+non-space character, changes no other boundary, preserves case, changes no punctuation, and
+touches no other heading. **The non-space character sequence is identical before and after**,
+and the boundary vector changes at **exactly one position, `0 → 1`**. The exact inserted space
+and resulting printed string are committed as truth **before** adjudication, and **no
+architecture output** determines the target or the truth.
+
+### A40.3 — eligibility is frozen BEFORE ranking
+
+A candidate must: be a known real `account` heading under independently established source
+truth; be **non-holdout**; have enough words for DELETE and WELD; contain at least one
+alphabetic token of length **≥ 6** for SPLIT; and have a renderable source region. Eligibility
+is applied **before** ranking and **before** any mutation is assigned, so no variant-specific
+convenient source can be chosen afterwards. **Fewer than 8 eligible → STOP**; the criteria are
+not relaxed.
+
+Ranking: namespace **`na-source`**, seed **`20260807`**, first 8, then the frozen
+index-mod-3 schedule. **No H or X output participates** in eligibility, ranking or targeting.
+
+### A40.4 — deterministic mutation targets
+
+An *alphabetic token* is a maximal contiguous run of alphabetic characters in the independently
+recorded expected source string.
+
+| variant | target | assertion |
+|---|---|---|
+| `DELETE_ONE_WORD` | longest alphabetic token, tie → earliest | non-space sequence genuinely **changes** |
+| `WELD_TWO_WORDS` | first adjacent token pair separated only by whitespace | non-space **unchanged**, exactly one boundary `1 → 0` |
+| `SPLIT_ONE_WORD` | longest token with len ≥ 6, tie → earliest; insert one U+0020 after `floor(len/2)`, both pieces ≥ 3 chars | non-space **unchanged**, exactly one boundary `0 → 1` |
+
+No more visually convenient target may be chosen after rendering.
+
+### A40.5 — liveness is proven before the manifest exists
+
+Every realized N-A item must satisfy `expected_before != expected_after` at the
+exact-transcription level, **and** its structural class must be proven independently of any
+adjudicator, using **`m3_boundaries.decompose`** rather than a second boundary definition. A
+deliberately dead mutation (`before == after`) must make validation **fail**.
+
+### A40.6 — the metric-control mapping, corrected
+
+| metric | control | why |
+|---|---|---|
+| **M1** heading presence | **N-B, N-C** (was N-A, N-C) | N-B supplies 8 corroborated TRUE headings, N-C 4 constructionally certain NO-heading regions — together a direct positive/negative enumeration test. **The revised N-A is not a heading-presence control.** |
+| **M2** text exactness | **N-A** | the adjudicator must report the exact altered print; WELD and SPLIT must be capable of failing exactness under the frozen normalisation |
+| **M3** boundary integrity | **N-A** | N-A now spans `TEXT_ERROR` (delete), `WELD`, and `SPLIT`, aligning the control with M3's already-frozen distinctions. **M3 itself is unchanged.** |
+
+### Population and boundary
+
+DEVELOPMENT + SYNTHETIC only. No holdout opened, nothing adjudicated or scored, no architecture
+decision, no confirmatory or scoring artifact, and no execution marker.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
