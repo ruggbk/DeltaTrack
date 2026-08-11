@@ -35,16 +35,34 @@ recommendations. This section re-measures nothing. It says only which of the stu
 | `tomlkit` is declared in `[project.dependencies]` but imported only by `scripts/update_manifest_with_reports.py` | **Still true.** |
 | The probes are excluded from lint by the `docs/research/**/probes` rule | Still true. `docs/research/**/*.md` was added beside it since, so this write-up is no longer reformatted either. |
 
-**The PDF-specific open questions were taken up, and are not settled.** Next experiments
-3 (PDF.js geometry parity) and 4 (WASM PDFium feasibility), and the PDFium-to-WASM lead
-this document calls its highest-value speculative one under Option I, all became
-[`../pdf-backend-bakeoff/`](../pdf-backend-bakeoff/), which ran from 2026-08-05 and
-merged 2026-08-07. That directory already names this file as its predecessor. Enter it
-at [`../pdf-backend-bakeoff/validation/README.md`](../pdf-backend-bakeoff/validation/README.md),
-which carries the current state of the argument including where the earlier bake-off
-documents are wrong. **The engine/DeltaTrack seam question is still open and that work is
-still running**, so nothing below has been closed by it, and the bake-off has not closed
-itself either.
+**The PDF-specific follow-up work was taken up, several component questions have since been
+answered, and the architectural seam decision remains unsettled.** Next experiments 3
+(PDF.js geometry parity) and 4 (WASM PDFium feasibility), and the PDFium-to-WASM lead this
+document calls its highest-value speculative one under Option I, all became
+[`../pdf-backend-bakeoff/`](../pdf-backend-bakeoff/), which ran from 2026-08-05 and merged
+2026-08-07. That directory already names this file as its predecessor.
+
+Answered since, and the distinction matters because these are the two the study leaves most
+prominently open:
+
+- **PDFium-WASM feasibility was demonstrated.** Next-experiment 4 asks whether any credible
+  build exposes the FFI the extractor needs. One does. The bake-off records its Phase 0 gate
+  "expected PDFium-WASM might have no credible build exposing the FFI. One exists and works."
+- **The PDF.js geometry question was substantially refined, and this document's stated
+  reason for it was corrected.** Below, the limitation is given as text-item granularity of
+  roughly 13 characters with no per-character box. Later work found `getOperatorList()` does
+  expose a per-character advance at full coverage, and that the real blocker is the absence
+  of a per-character **pen origin**. The verdict held; the reason did not.
+
+**Still open, and still blocking: the choice between the viable seam architectures.** The
+validation names two things untested that "are blocking for an ADR" and that none of its
+three phases closes, a **valid heading-level oracle** and a **fresh structure-rich holdout**.
+The external-validity study that would supply them is pre-registered and not yet executed.
+Enter the current state at
+[`../pdf-backend-bakeoff/validation/README.md`](../pdf-backend-bakeoff/validation/README.md),
+which carries the argument as it stands including where the earlier bake-off documents are
+wrong, and check the PDF-related recommendations below against it rather than assuming in
+either direction.
 
 **The delivery channel is still undecided.** [#112](https://github.com/AgoraDMV/DeltaTrack/issues/112)
 is open and no delivery-channel ADR exists. This study is evidence for that decision and
