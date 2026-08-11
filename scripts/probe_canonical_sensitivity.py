@@ -14,15 +14,27 @@ enforced as a prediction rather than a remark: those exact three digests must mo
 others. The pair keys are imported from that probe rather than respelled here, so the two
 cannot drift into disagreeing about which pairs matter.
 
+RE-AIMED FOR SLICE 2. The fault used to be injected by replacing ``diff_bill.reconcile_moves``,
+a single post-classification function. That function is gone: round-2 retrieval, evidence and
+assignment now run before classification, and the ordering key lives in
+``diff_bill._greedy_move_links``. Injecting there keeps the fault on the LIVE production path --
+``assign_moves`` calls it, ``diff_bills`` calls that -- rather than on a parallel copy of a
+pipeline nothing runs any more, which is the only way this can still speak for the real gate.
+
+The re-aim also made the fault sharper. The old probe needed an ``element_id -> ordinal``
+bridge because ``NodeDiff`` carries no address; the migrated stages carry
+:class:`~deltatrack.matching.ObservationRef`, whose ``ordinal`` IS the parser's
+complete-sequence position. So the ordinal key is now read directly off the evidence and the
+bridge is gone, along with the chance of it silently pointing at the wrong node.
+
 FOUR PASSES, because a two-pass green/red would leave two other explanations open:
 
 1. **production** -- the harness reproduces the committed baseline. Without this a later
    mismatch could be the harness rather than the fault. Must be EMPTY.
-2. **duplicate, production key** -- the copied ``reconcile_moves`` below must reproduce the
-   committed baseline too. A copy made in order to instrument something is a second
-   implementation that can drift; unless it is shown equivalent first, pass 3 would be
-   comparing the ordinal key against a drifted copy rather than against production. Must
-   be EMPTY.
+2. **duplicate, production key** -- the copied greedy loop below must reproduce the committed
+   baseline too. A copy made in order to instrument something is a second implementation that
+   can drift; unless it is shown equivalent first, pass 3 would be comparing the ordinal key
+   against a drifted copy rather than against production. Must be EMPTY.
 3. **duplicate, ordinal key** -- the injected fault. Must be EXACTLY the expected three.
 4. **production, restored** -- the baseline matches again, so the difference was the fault
    and not something sticky the run left behind. Must be EMPTY.
@@ -30,12 +42,6 @@ FOUR PASSES, because a two-pass green/red would leave two other explanations ope
 An extra reddened pair, a missing one, or a different one fails the run. "Non-empty" would
 have been satisfied by a fault that reddened everything, which is the shape a genuinely
 broken harness produces.
-
-The ``element_id -> ordinal`` bridge is built through ``probe_round2_migration``'s
-fail-closed :func:`~scripts.probe_round2_migration.ordinal_bridge`, which refuses an empty
-or repeated id rather than silently constructing a dictionary that collapses two
-observations onto one address. The bridge is a MEASUREMENT convenience only -- ``NodeDiff``
-carries no node reference -- and ADR 0019 refuses ``element_id`` as identity.
 
 Read-only with respect to the repository: it patches module attributes at runtime and
 restores them, and writes no file. Exits non-zero on any failure. Run from the project
@@ -53,108 +59,63 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import deltatrack.diff_bill as db  # noqa: E402
-from deltatrack.diff_bill import NodeDiff, diff_text  # noqa: E402
-from deltatrack.similarity import MOVE_THRESHOLD, move_candidates  # noqa: E402
-from scripts.probe_round2_migration import ORDINAL_SENSITIVE_PAIRS, ordinal_bridge  # noqa: E402
+from deltatrack.diff_bill import WORD_OVERLAP, UnmatchedPopulation  # noqa: E402
+from deltatrack.matching import CorrespondenceEvidence  # noqa: E402
+from scripts.probe_round2_migration import ORDINAL_SENSITIVE_PAIRS  # noqa: E402
 from tests.corpus_paths import DATA_DIR  # noqa: E402
 from tests.test_canonical_baseline import baseline_pairs, baseline_record  # noqa: E402
 
-REAL_MATCH_NODES = db.match_nodes
-REAL_RECONCILE = db.reconcile_moves
-
-#: Element-id -> ordinal maps for the version pair currently being compared, populated by
-#: the ``match_nodes`` spy. A measurement bridge only: ``NodeDiff`` carries no node
-#: reference, and ADR 0019 refuses ``element_id`` as identity.
-CURRENT: dict[str, dict[str, int]] = {}
-
-#: The corpus key currently being compared, so a bridge failure names the pair.
-HOLDER: dict[str, str] = {"key": "<none>"}
+REAL_GREEDY = db._greedy_move_links
 
 
-def match_spy(old, new):
-    CURRENT["old"] = ordinal_bridge(old.nodes, f"{HOLDER['key']} [old]")
-    CURRENT["new"] = ordinal_bridge(new.nodes, f"{HOLDER['key']} [new]")
-    return REAL_MATCH_NODES(old, new)
+def greedy_copy(
+    population: UnmatchedPopulation,
+    evidence: tuple[CorrespondenceEvidence, ...],
+    threshold: float,
+    *,
+    key: str = "legacy",
+) -> list[CorrespondenceEvidence]:
+    """``diff_bill._greedy_move_links``, copied verbatim except for the sort key.
 
-
-def reconcile_copy(changes: list, threshold: float = MOVE_THRESHOLD, *, key: str = "legacy") -> list:
-    """``diff_bill.reconcile_moves``, copied verbatim except for the sort key.
-
-    ``key="legacy"`` sorts on the full ``(similarity, ri, ai)`` tuple exactly as production
-    does. ``key="ordinal"`` replaces ``(ri, ai)`` with the two observations' complete-
-    sequence ordinals, leaving similarity and every other step untouched.
+    ``key="legacy"`` sorts on ``(word_overlap, ri, ai)`` -- positions in the unmatched
+    population -- exactly as production does. ``key="ordinal"`` replaces those positions with the
+    two observations' ADR 0019 complete-sequence ordinals, leaving the score, the threshold and
+    every other step untouched.
     """
-    removed = [(i, c) for i, c in enumerate(changes) if c.change_type == "removed"]
-    added = [(i, c) for i, c in enumerate(changes) if c.change_type == "added"]
+    ri_of = {observation.ref: index for index, observation in enumerate(population.old)}
+    ai_of = {observation.ref: index for index, observation in enumerate(population.new)}
 
-    if not removed or not added:
-        return changes
-
-    candidates = move_candidates(
-        [db._normalize_text(rc.old_text or "") for _, rc in removed],
-        [db._normalize_text(ac.new_text or "") for _, ac in added],
-        threshold,
-    )
-
-    if not candidates:
-        return changes
+    def overlap(item: CorrespondenceEvidence) -> float:
+        return item.get(WORD_OVERLAP)
 
     if key == "ordinal":
-        removed_ordinals = [CURRENT["old"][c.element_id_old] for _, c in removed]
-        added_ordinals = [CURRENT["new"][c.element_id_new] for _, c in added]
-        candidates.sort(key=lambda t: (t[0], removed_ordinals[t[1]], added_ordinals[t[2]]), reverse=True)
+
+        def sort_key(item: CorrespondenceEvidence):
+            return (overlap(item), item.old.ordinal, item.new.ordinal)
     else:
-        candidates.sort(reverse=True)
 
-    claimed_removed: set[int] = set()
-    claimed_added: set[int] = set()
-    moved_indices: set[int] = set()
-    moved_entries: list[NodeDiff] = []
+        def sort_key(item: CorrespondenceEvidence):
+            return (overlap(item), ri_of[item.old], ai_of[item.new])
 
-    for _sim, ri, ai in candidates:
-        if ri in claimed_removed or ai in claimed_added:
+    eligible = [item for item in evidence if overlap(item) >= threshold]
+    ordered = sorted(eligible, key=sort_key, reverse=True)
+
+    claimed_old: set[int] = set()
+    claimed_new: set[int] = set()
+    selected: list[CorrespondenceEvidence] = []
+    for item in ordered:
+        ri, ai = ri_of[item.old], ai_of[item.new]
+        if ri in claimed_old or ai in claimed_new:
             continue
-        claimed_removed.add(ri)
-        claimed_added.add(ai)
-
-        orig_ri, rc = removed[ri]
-        orig_ai, ac = added[ai]
-        moved_indices.add(orig_ri)
-        moved_indices.add(orig_ai)
-
-        old_norm = db._normalize_text(rc.old_text or "")
-        new_norm = db._normalize_text(ac.new_text or "")
-        text_changes = diff_text(old_norm, new_norm) if old_norm != new_norm else None
-
-        moved_entries.append(
-            NodeDiff(
-                display_path_old=rc.display_path_old,
-                display_path_new=ac.display_path_new,
-                match_path=rc.match_path,
-                change_type="moved",
-                old_text=rc.old_text,
-                new_text=ac.new_text,
-                text_diff=text_changes,
-                section_number=ac.section_number or rc.section_number,
-                element_id_old=rc.element_id_old,
-                element_id_new=ac.element_id_new,
-                old_amount_text=rc.old_amount_text,
-                new_amount_text=ac.new_amount_text,
-            )
-        )
-
-    result = [c for i, c in enumerate(changes) if i not in moved_indices]
-    result.extend(moved_entries)
-    return result
+        claimed_old.add(ri)
+        claimed_new.add(ai)
+        selected.append(item)
+    return selected
 
 
 def digests() -> dict[str, dict]:
     """One ``baseline_record`` per corpus pair, through the public canonical producer."""
-    produced = {}
-    for key, old, new in baseline_pairs():
-        HOLDER["key"] = key
-        produced[key] = baseline_record(old, new)
-    return produced
+    return {key: baseline_record(old, new) for key, old, new in baseline_pairs()}
 
 
 def compare(label: str, committed: dict, produced: dict) -> set[str]:
@@ -173,21 +134,19 @@ def main() -> None:
     committed = json.loads((DATA_DIR / "canonical_baseline.json").read_text())
     expected = set(ORDINAL_SENSITIVE_PAIRS)
 
-    db.match_nodes = match_spy
     try:
-        pass1 = compare("PASS 1  production reconcile_moves          ", committed, digests())
+        pass1 = compare("PASS 1  production assignment               ", committed, digests())
 
-        db.reconcile_moves = lambda changes, threshold=MOVE_THRESHOLD: reconcile_copy(changes, threshold, key="legacy")
+        db._greedy_move_links = lambda p, e, t: greedy_copy(p, e, t, key="legacy")
         pass2 = compare("PASS 2  duplicated loop, PRODUCTION key     ", committed, digests())
 
-        db.reconcile_moves = lambda changes, threshold=MOVE_THRESHOLD: reconcile_copy(changes, threshold, key="ordinal")
+        db._greedy_move_links = lambda p, e, t: greedy_copy(p, e, t, key="ordinal")
         pass3 = compare("PASS 3  duplicated loop, ORDINAL key (fault)", committed, digests())
 
-        db.reconcile_moves = REAL_RECONCILE
+        db._greedy_move_links = REAL_GREEDY
         pass4 = compare("PASS 4  production restored                 ", committed, digests())
     finally:
-        db.match_nodes = REAL_MATCH_NODES
-        db.reconcile_moves = REAL_RECONCILE
+        db._greedy_move_links = REAL_GREEDY
 
     print()
     if pass1 or pass2 or pass4:
