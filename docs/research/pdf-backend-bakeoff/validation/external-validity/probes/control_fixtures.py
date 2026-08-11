@@ -97,6 +97,47 @@ def sha256_file(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+#: A PDF trailer `/ID` is two 32-hex-digit strings. pymupdf generates them RANDOMLY on every
+#: save, so an unmodified fixture rebuilt from identical inputs produced different bytes every
+#: run -- which made the manifest SHA stale immediately and flipped G6 red after any `x23`.
+#
+#: BOTH PDF string forms occur here and only handling `<hex>` is a silent no-op. One generated
+#: fixture came out as `/ID[<hex>(binary literal)]` -- a hex string and a LITERAL string -- so a
+#: hex-only pattern skipped it, left its random half in place, and that single file stayed
+#: irreproducible while the other eleven looked fine.
+_PDF_ID = re.compile(
+    rb"/ID\s*\[\s*(?:<[0-9A-Fa-f]*>|\((?:\\.|[^)\\])*\))\s*"
+    rb"(?:<[0-9A-Fa-f]*>|\((?:\\.|[^)\\])*\))\s*\]",
+    re.S,
+)
+
+
+def canonicalise_pdf_id(path: Path) -> bool:
+    """Replace the random trailer `/ID` with one DERIVED from the file's own content.
+
+    Same inputs -> same bytes -> same SHA, which is what lets the manifest commit a hash that
+    survives a rebuild. The digest is taken over the bytes with the whole `/ID` array blanked,
+    so it still CHANGES when the content changes.
+
+    The replacement is padded with spaces to the EXACT byte span it replaces. Length
+    preservation matters because a PDF may carry its trailer inside a cross-reference stream in
+    the body, where a shift would invalidate every later offset; padding sidesteps having to
+    know which layout this file uses.
+    """
+    raw = path.read_bytes()
+    m = _PDF_ID.search(raw)
+    if not m:
+        return False
+    span = m.end() - m.start()
+    blanked = raw[: m.start()] + b" " * span + raw[m.end() :]
+    digest = hashlib.sha256(blanked).hexdigest()[:32].upper().encode()
+    canonical = b"/ID[<" + digest + b"><" + digest + b">]"
+    if len(canonical) > span:
+        return False  # cannot preserve the byte span -> refuse rather than shift offsets
+    path.write_bytes(raw[: m.start()] + canonical + b" " * (span - len(canonical)) + raw[m.end() :])
+    return True
+
+
 def normalize_text(s: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", s)).strip()
 
@@ -358,6 +399,7 @@ def generate_na_pdf(row: dict, after_text: str, out_path: Path) -> dict:
         doc.save(str(out_path), garbage=0, deflate=True)
     finally:
         doc.close()
+    canonicalise_pdf_id(out_path)
     return {
         "generated_path": str(out_path.relative_to(EV)),
         "generated_sha256": sha256_file(out_path),
@@ -430,6 +472,7 @@ def generate_nc_pdf(index: int, out_path: Path) -> dict:
         page.insert_text((90.0, 120.0 + i * 24.0), f"{i + 1}  {line}", fontname="tiro", fontsize=14)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path), garbage=0, deflate=True)
+    canonicalise_pdf_id(out_path)
     # The committed region is DERIVED from the drawn page, not from the layout constants
     # above: a constant that drifted from what was actually drawn would commit a bbox that
     # crops the stimulus, and the mismatch would be invisible until adjudication.

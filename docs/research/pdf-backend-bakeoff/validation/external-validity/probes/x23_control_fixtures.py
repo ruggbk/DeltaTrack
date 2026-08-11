@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -277,6 +278,50 @@ def part_nc_rendered(manifest: dict) -> dict:
     }
 
 
+def part_reproducible(manifest: dict) -> dict:
+    """The fixtures must REBUILD to identical bytes, or the committed hashes are worthless.
+
+    pymupdf writes a RANDOM trailer `/ID` on every save, so an unmodified fixture rebuilt from
+    identical inputs used to produce different bytes each run -- the manifest SHA went stale
+    immediately and G6 flipped red after any `x23`. A hash that cannot survive a rebuild
+    certifies nothing.
+    """
+    print("\n== fixture bytes are REPRODUCIBLE ==")
+    committed = {f["generated_path"]: f["generated_sha256"] for f in manifest["fixtures"] if f.get("generated_path")}
+    before = {Path(p).name: h for p, h in committed.items()}
+    # Rebuild into a SCRATCH directory rather than over the committed fixtures. Doing it in
+    # place made this control ORDER-DEPENDENT: a later section that merely OPENS the generated
+    # PDFs perturbed the next rebuild, so it reported a reproducibility failure that
+    # back-to-back builds provably do not have. Comparing a clean rebuild against the committed
+    # hashes tests the property that matters -- same inputs, same bytes -- and cannot be
+    # disturbed by the rest of the probe.
+    scratch = CF.GENERATED_DIR / "_verify"
+    try:
+        rebuilt = CF.build_manifest(generated_dir=scratch)
+        after = {
+            Path(f["generated_path"]).name: f["generated_sha256"]
+            for f in rebuilt["fixtures"]
+            if f.get("generated_path")
+        }
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    check(
+        "a clean rebuild reproduces IDENTICAL bytes for every generated fixture",
+        before,
+        after,
+        "a rebuild from identical inputs produces different bytes, so every committed hash "
+        "goes stale on the next run and G6 cannot stay green",
+    )
+    check(
+        "the fixtures actually carry a canonicalised PDF /ID",
+        (12, True),
+        (len(committed), all(CF._PDF_ID.search((EV / p).read_bytes()) for p in committed)),
+        "a generated PDF has no /ID array, so the canonicalisation silently did nothing and "
+        "reproducibility would depend on luck",
+    )
+    return {"n_generated": len(before)}
+
+
 def part_holdout_identity(manifest: dict) -> dict:
     """F7 -- holdout exclusion by SOURCE IDENTITY, not just by name."""
     print("\n== F7: holdout exclusion is identity-based ==")
@@ -465,6 +510,7 @@ def main() -> int:
     CF.write_manifest(manifest)
     realized = part_manifest(manifest)
     nc_rendered = part_nc_rendered(manifest)
+    reproducible = part_reproducible(manifest)
     holdout = part_holdout_identity(manifest)
     g6 = part_g6(manifest)
 
@@ -475,6 +521,7 @@ def main() -> int:
         "mutation_classes": mutations,
         "realized": realized,
         "nc_rendered_distinctness": nc_rendered,
+        "reproducibility": reproducible,
         "holdout_identity_guard": holdout,
         "g6": g6,
         "tests": ROWS,

@@ -33,7 +33,7 @@
     "after": "AND SUPPORT",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "f6a4cf3982a5391d"
+    "generated_sha256": "4695eda3149cdd76"
    },
    {
     "index": 1,
@@ -49,7 +49,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "e0671872f7153293"
+    "generated_sha256": "74583d3fb1d91d3e"
    },
    {
     "index": 2,
@@ -65,7 +65,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "6eaca9dbf1b05bb2"
+    "generated_sha256": "c1f69f2396f48bb4"
    },
    {
     "index": 3,
@@ -76,7 +76,7 @@
     "after": "PROCUREMENT, , AND IMPROVEMENTS",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "55c13db003ac088a"
+    "generated_sha256": "9a520c6ecd9b5cf0"
    },
    {
     "index": 4,
@@ -92,7 +92,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "7b9a613d1df99e5d"
+    "generated_sha256": "c7c711cc52359e8d"
    },
    {
     "index": 5,
@@ -108,7 +108,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "31c48152cab17ff3"
+    "generated_sha256": "0dd652704c068480"
    },
    {
     "index": 6,
@@ -119,7 +119,7 @@
     "after": "TECHNOLOGY SYSTEMS",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "be2cf0fa39bfcb60"
+    "generated_sha256": "c92089b69d4d1bd5"
    },
    {
     "index": 7,
@@ -135,7 +135,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "d3b634252851f954"
+    "generated_sha256": "90f393f061cebade"
    }
   ],
   "nb": [
@@ -207,22 +207,22 @@
   "nc": [
    {
     "index": 0,
-    "generated_sha256": "69c03bcd7431c591",
+    "generated_sha256": "35339e49d5410943",
     "expected": []
    },
    {
     "index": 1,
-    "generated_sha256": "117b7b60869ffbdd",
+    "generated_sha256": "50355822f5277fc9",
     "expected": []
    },
    {
     "index": 2,
-    "generated_sha256": "83158525536d7211",
+    "generated_sha256": "995558d2e1080158",
     "expected": []
    },
    {
     "index": 3,
-    "generated_sha256": "d320a8a920375f94",
+    "generated_sha256": "19f6939bd4f00c1e",
     "expected": []
    }
   ]
@@ -235,12 +235,15 @@
    "d62985083b9d7b5757d52bb1750b0db40aeb0afd402ad4865c8393fcc974faa2"
   ],
   "container_sha256": [
-   "69c03bcd7431c591",
-   "117b7b60869ffbdd",
-   "83158525536d7211",
-   "d320a8a920375f94"
+   "35339e49d5410943",
+   "50355822f5277fc9",
+   "995558d2e1080158",
+   "19f6939bd4f00c1e"
   ],
   "distinct_rendered": 4
+ },
+ "reproducibility": {
+  "n_generated": 12
  },
  "holdout_identity_guard": {
   "n_holdout_source_sha256": 17,
@@ -595,6 +598,52 @@
    "observed": 4,
    "pass": true,
    "fails_when": "the generated files are byte-identical, which is a different defect"
+  },
+  {
+   "test": "a clean rebuild reproduces IDENTICAL bytes for every generated fixture",
+   "expected": {
+    "na_00_delete_one_word.pdf": "4695eda3149cdd762cc65152b1e9e94475a549d4544c98eda085057bcc1d0263",
+    "na_01_weld_two_words.pdf": "74583d3fb1d91d3e0590f5de62a2c099f0f5df38a8708692928aff98cc3ed8e5",
+    "na_02_split_one_word.pdf": "c1f69f2396f48bb4f578be29d9a985c2cd7d69e516460238ed306e84698d9eee",
+    "na_03_delete_one_word.pdf": "9a520c6ecd9b5cf0e08f4b977bf86f23596ad7bc61db9084617d4d0c62df19de",
+    "na_04_weld_two_words.pdf": "c7c711cc52359e8d3c8604e6240aa07621cfb7d04a3414e3cd063956ca31a001",
+    "na_05_split_one_word.pdf": "0dd652704c068480d749f2c096d7e811e5d92f2b24a0176b1234cbcdbf6fcaf6",
+    "na_06_delete_one_word.pdf": "c92089b69d4d1bd5db8a6bc51afa3972a82ff0e51f962c13a42d1e3219782731",
+    "na_07_weld_two_words.pdf": "90f393f061cebade6a45cb749bd043c92c75bc7b6a401eb7b04435ad8d7ff8f1",
+    "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
+    "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
+    "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
+    "nc_03_heading_free.pdf": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6"
+   },
+   "observed": {
+    "na_00_delete_one_word.pdf": "4695eda3149cdd762cc65152b1e9e94475a549d4544c98eda085057bcc1d0263",
+    "na_01_weld_two_words.pdf": "74583d3fb1d91d3e0590f5de62a2c099f0f5df38a8708692928aff98cc3ed8e5",
+    "na_02_split_one_word.pdf": "c1f69f2396f48bb4f578be29d9a985c2cd7d69e516460238ed306e84698d9eee",
+    "na_03_delete_one_word.pdf": "9a520c6ecd9b5cf0e08f4b977bf86f23596ad7bc61db9084617d4d0c62df19de",
+    "na_04_weld_two_words.pdf": "c7c711cc52359e8d3c8604e6240aa07621cfb7d04a3414e3cd063956ca31a001",
+    "na_05_split_one_word.pdf": "0dd652704c068480d749f2c096d7e811e5d92f2b24a0176b1234cbcdbf6fcaf6",
+    "na_06_delete_one_word.pdf": "c92089b69d4d1bd5db8a6bc51afa3972a82ff0e51f962c13a42d1e3219782731",
+    "na_07_weld_two_words.pdf": "90f393f061cebade6a45cb749bd043c92c75bc7b6a401eb7b04435ad8d7ff8f1",
+    "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
+    "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
+    "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
+    "nc_03_heading_free.pdf": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6"
+   },
+   "pass": true,
+   "fails_when": "a rebuild from identical inputs produces different bytes, so every committed hash goes stale on the next run and G6 cannot stay green"
+  },
+  {
+   "test": "the fixtures actually carry a canonicalised PDF /ID",
+   "expected": [
+    12,
+    true
+   ],
+   "observed": [
+    12,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a generated PDF has no /ID array, so the canonicalisation silently did nothing and reproducibility would depend on luck"
   },
   {
    "test": "the authoritative holdout SHA set is non-empty",
