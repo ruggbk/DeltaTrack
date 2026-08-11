@@ -428,7 +428,36 @@ class TestExtractArchive:
         # BILLSTATUS archive is 10,564 members (#300). The ceiling must stay well above
         # that so it never refuses legitimate data -- a change that lowered it under the
         # real corpus would fail here loudly rather than start silently rejecting bills.
-        assert MAX_MEMBER_COUNT > 10_564
+        #
+        # Two-sided (#447): a floor alone only stops the ceiling being lowered too far.
+        # Raising it -- to 50,000,000, or effectively off at 10**12 -- passed the full
+        # suite before this upper bound existed. 200,000 is double the member count
+        # #306's archive used to demonstrate inode exhaustion: comfortably above the
+        # floor for corpus growth, but low enough that a ceiling widened toward "off"
+        # fails here rather than shipping green.
+        assert 10_564 < MAX_MEMBER_COUNT <= 200_000
+        archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
+        dest = tmp_path / "out"
+
+        extract_archive(archive, dest)
+
+        assert (dest / "a.xml").exists()
+
+    def test_the_real_byte_ceiling_clears_the_largest_known_archive(self, tmp_path):
+        # Companion to the member-ceiling calibration above, for MAX_UNCOMPRESSED_BYTES
+        # (#447): before this test, the byte ceiling had no calibration assertion at
+        # all, one-sided or otherwise -- every byte-ceiling test builds its fixture
+        # FROM the constant (write_oversized_archive(..., [MAX_UNCOMPRESSED_BYTES + 1])),
+        # so the fixture rescales with whatever the constant is and can never disagree
+        # with it. Widening the constant to 3,900,000,000 -- nearly double its real
+        # value -- passed the full suite.
+        #
+        # The floor protects the largest real archive, ~162 MiB expanded (#300). The
+        # ceiling of 3 GiB is roughly 19x that: comfortably above the floor for corpus
+        # growth (the constant's own comment claims better than an order of magnitude
+        # of headroom), but low enough that a ceiling widened toward "off" fails here
+        # rather than shipping green.
+        assert 162 * 1024**2 < MAX_UNCOMPRESSED_BYTES <= 3 * 1024**3
         archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
         dest = tmp_path / "out"
 
