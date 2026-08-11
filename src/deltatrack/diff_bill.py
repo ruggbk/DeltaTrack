@@ -461,6 +461,85 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.split())
 
 
+def pairing_survives_similarity_rule(old_node: BillNode, new_node: BillNode) -> bool:
+    """Whether a provisional path pairing survives the similarity rule.
+
+    **Scope, stated first because the name could be read wider than it is.** This decides
+    exactly one thing: whether the similarity rule revokes a pairing ``match_nodes``
+    proposed. It is not a verdict on correspondence across the whole matcher, and this
+    slice does not build [ADR 0020](../../docs/decisions/0020-matching-stages.md)'s
+    assignment stage. ``match_nodes`` still owns ``match_path`` grouping, division
+    subgrouping, the cross-division fallback and ``_similarity_pair``'s unthresholded
+    greedy claim; ``reconcile_moves`` still runs a second retrieval and assignment pass
+    *after* classification. Those stay fused. What changes is that the one rule capable of
+    revoking a pairing now runs before classification rather than inside it, so
+    classification classifies the shape it is handed instead of deciding it.
+
+    **The condition is transcribed, not tidied.** It is the pre-refactor expression from
+    ``diff_bills``, read in the positive:
+
+        text_changes = diff_text(old_normalized, new_normalized)
+        if not text_changes:                                        -> kept
+        elif text_similarity(...) < SIMILARITY_THRESHOLD:           -> revoked
+        else:                                                       -> kept
+
+    The gate is the emptiness of a *word-level diff*, and it stays a ``diff_text`` call
+    rather than becoming ``old_normalized == new_normalized``. The two agree on every one
+    of the corpus's path-matched pairings, and that is not a reason to substitute one for
+    the other: an agreement measured on 27 documents is not a statement about every input a
+    bill can contain, and a Phase-1 extraction that swapped in a different-looking
+    condition would be changing the rule while claiming to move it. The resulting repeated
+    call is the visible residue of the fusion this slice does not yet remove; deleting it
+    is a later change owing its own evidence.
+
+    **A ``False`` result is final for these two observations, but not for either of them.**
+    The two halves become an unmatched old and an unmatched new observation, and
+    ``reconcile_moves`` may still pair each with a *different* partner. It cannot re-pair
+    them with each other: a revoked pairing scores below ``SIMILARITY_THRESHOLD`` and the
+    move pass requires ``MOVE_THRESHOLD``, over the same normalization and the same
+    measure. That ordering is checked rather than assumed, because ``move_candidates``
+    constructs its ``SequenceMatcher`` differently and a junk-heuristic difference between
+    the two sites would not announce itself.
+    """
+    old_normalized = _normalize_text(old_node.body_text)
+    new_normalized = _normalize_text(new_node.body_text)
+    if not diff_text(old_normalized, new_normalized):
+        return True
+    return text_similarity(old_normalized, new_normalized) >= SIMILARITY_THRESHOLD
+
+
+def apply_similarity_revocation(
+    pairs: list[tuple[BillNode | None, BillNode | None]],
+) -> list[tuple[BillNode | None, BillNode | None]]:
+    """Replace each revoked pairing with the two unmatched observations it becomes.
+
+    Input is ``match_nodes`` output; output is the same shape, so no new type is
+    introduced and nothing here is an ADR 0020 ``Correspondence``. A ``(old, None)`` or
+    ``(None, new)`` in the result is an *unmatched observation*, not a settled 1:0 or 0:1:
+    the move pass may still pair it with a different partner.
+
+    **The two replacements are adjacent and in place**, and that is load-bearing rather
+    than incidental. Classification emits one record per pairing in order, so emitting the
+    removal and the addition at the position the pairing occupied is what keeps the change
+    list identical to the pre-refactor one -- which in turn keeps ``reconcile_moves``'
+    ``(ri, ai)`` positions, its candidate population, its selections and every canonical
+    ``c-XXXX`` identifier where they were. Reversing the two, or appending them elsewhere,
+    moves canonical output while leaving every change *count* untouched.
+
+    Named for the one rule it applies. A broader name would suggest this assembles ADR
+    0020's assignment stage, which it does not -- see
+    :func:`pairing_survives_similarity_rule` for what remains fused.
+    """
+    decided: list[tuple[BillNode | None, BillNode | None]] = []
+    for old_node, new_node in pairs:
+        if old_node is not None and new_node is not None and not pairing_survives_similarity_rule(old_node, new_node):
+            decided.append((old_node, None))
+            decided.append((None, new_node))
+        else:
+            decided.append((old_node, new_node))
+    return decided
+
+
 def reconcile_moves(
     changes: list[NodeDiff],
     threshold: float = MOVE_THRESHOLD,
@@ -543,8 +622,23 @@ def _count_changes(changes: list[NodeDiff]) -> dict:
 
 
 def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
-    """Compare two bill versions and produce a structured diff."""
-    pairs = match_nodes(old, new)
+    """Compare two bill versions and produce a structured diff.
+
+    The loop below is classification only: it classifies the pairing shape it is handed and
+    never changes it. The similarity rule that can revoke a pairing runs ahead of it, in
+    :func:`apply_similarity_revocation`, so a revoked pairing arrives here as an unmatched
+    old observation followed by an unmatched new one and is classified by the same two
+    branches that already handle a structurally unmatched node. That is why this function
+    has three branches where it used to have four: the fourth built a removal and an
+    addition field-for-field identical to those two, and had nothing left to do once the
+    decision moved.
+
+    Everything else stays where it is, deliberately. ``match_nodes`` still owns the rest of
+    the retrieval and assignment behaviour, and ``reconcile_moves`` still runs after this
+    loop -- a second retrieval pass that ADR 0020 eventually requires to move ahead of
+    classification, and that this slice does not touch.
+    """
+    pairs = apply_similarity_revocation(match_nodes(old, new))
     changes: list[NodeDiff] = []
 
     for old_node, new_node in pairs:
@@ -600,38 +694,6 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
                         element_id_old=old_node.element_id,
                         element_id_new=new_node.element_id,
                         old_amount_text=amount_text(old_node),
-                        new_amount_text=amount_text(new_node),
-                    )
-                )
-            elif text_similarity(old_normalized, new_normalized) < SIMILARITY_THRESHOLD:
-                # Texts too different: false match (e.g., reused section number).
-                changes.append(
-                    NodeDiff(
-                        display_path_old=old_node.display_path,
-                        display_path_new=None,
-                        match_path=old_node.match_path,
-                        change_type="removed",
-                        old_text=old_node.body_text,
-                        new_text=None,
-                        text_diff=None,
-                        section_number=old_node.section_number,
-                        element_id_old=old_node.element_id,
-                        element_id_new="",
-                        old_amount_text=amount_text(old_node),
-                    )
-                )
-                changes.append(
-                    NodeDiff(
-                        display_path_old=None,
-                        display_path_new=new_node.display_path,
-                        match_path=new_node.match_path,
-                        change_type="added",
-                        old_text=None,
-                        new_text=new_node.body_text,
-                        text_diff=None,
-                        section_number=new_node.section_number,
-                        element_id_old="",
-                        element_id_new=new_node.element_id,
                         new_amount_text=amount_text(new_node),
                     )
                 )
