@@ -88,12 +88,13 @@ versions = [
 [[bill]]
 id = "115-hr-5895"
 subcommittee = "energy-water / legislative-branch / milcon-va (minibus)"
-covers = "Dead-zone similarity baseline (v4->v5, the corpus's densest 0.4-0.6 similarity gap; test_diff_validation TestDeadZoneBaseline) and multi-division minibus coverage — supplies the Legislative Branch subcommittee the Senate set omits. The v5 PDF is the unnumbered-enrolled-layout fixture for the decline guard (#141, tests/test_pdf_compare.py): the smallest enrolled print in the corpus. NOTE it contributes no PDF *tree* coverage — enrolled prints carry no margin line numbers, so extract_anchors returns [] and test_pdf_tree_invariants_hold_corpus_wide skips it ('no anchors / no offset table'). It is manifested so the completeness floor keeps it committed for the guard test."
+covers = "Dead-zone similarity baseline (v4->v5, the corpus's densest 0.4-0.6 similarity gap; test_diff_validation TestDeadZoneBaseline) and multi-division minibus coverage — supplies the Legislative Branch subcommittee the Senate set omits. The v5 PDF is the unnumbered-enrolled-layout fixture for the decline guard (#141, tests/test_pdf_compare.py): the smallest enrolled print in the corpus. NOTE it contributes no PDF *tree* coverage — enrolled prints carry no margin line numbers, so extract_anchors returns [] and test_pdf_tree_invariants_hold_corpus_wide skips it ('no anchors / no offset table'). It is manifested so the completeness floor keeps it committed for the guard test. The v3 PDF (Placed on Calendar, Senate) is the #140 unbulleted-footer fixture (tests/test_pdf_text.py TestUnbulletedFooterConsumedOutput): it carries the unbulleted `HR 5895 PCS` footer on 181 of 184 pages, which is what that end-to-end guard asserts is stripped from the consumed output. Committed PDF-only — the guard reads the print, not the markup, so the XML would add weight without adding coverage (#539)."
 versions = [
   { stage = "4_engrossed-amendment-senate", formats = ["xml", "pdf"], committee_report = [{citation = "none", chamber = "none", reason = "no senate committee report explains this stage"}]},
   { stage = "5_enrolled-bill", formats = ["xml", "pdf"], committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}, {pkg = "CRPT-115hrpt929", citation = "H. Rept. 115-929", chamber = "house", conference = true}]},
   { stage = "1_reported-in-house", formats = ["xml", "pdf"], committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}]},
   { stage = "2_engrossed-in-house", formats = ["xml", "pdf"], committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}]},
+  { stage = "3_placed-on-calendar-senate", formats = ["pdf"], committee_report = [{pkg = "CRPT-115hrpt697", citation = "H. Rept. 115-697", chamber = "house"}]},
 ]
 
 # --- Structural-shape coverage -------------------------------------------------

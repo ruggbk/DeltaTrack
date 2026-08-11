@@ -545,35 +545,38 @@ ALLOWED_CI_SLOW_SKIPS = {
 # cheap way to green it.
 #
 # test_pdf_text.py (#539): 18 modules skipped their way to a green run with no watch on any
-# of them. Of those, this is the one with a live, currently-firing skip: 115-hr-5895 v3
-# (Placed on Calendar, Senate) is never manifested (tests/corpus_manifest.toml only commits
-# stages 1, 2, 4, 5 for that bill), so TestUnbulletedFooterConsumedOutput's skipif fires on
-# every run and the #140 footer-strip regression gate has never actually asserted in CI.
-# That absence is permanent — the stage was never added to the corpus — so it is declared
-# below rather than fixed by committing a fixture. The module's other three skip guards
-# (_HR8752_V1, a manifested fixture) are left UNDECLARED on purpose: that fixture should
-# never be missing, so if one of those three starts skipping, the ceiling must fail.
+# of them. Of those, this was the one with a live, currently-firing skip: 115-hr-5895 v3
+# (Placed on Calendar, Senate) was not manifested, so TestUnbulletedFooterConsumedOutput's
+# skipif fired on every run and the #140 footer-strip regression gate had never once
+# asserted in CI — a shipped fix with no live guard, reported as a green run.
+#
+# The v3 PDF is committed now (manifested PDF-only, ~355 KB), so those two cases EXECUTE
+# rather than skip and the allowlist below is empty. That is the point of the fix: the
+# earlier draft of this change declared the absence as permanent, which would have made
+# the dead guard visible but kept it dead. "The stage was never added to the corpus"
+# described the corpus's history, not a constraint on it.
+#
+# So this module now has NO declared skip, and must not acquire one: every skip channel it
+# carries (the v3 skipif, and the three _HR8752_V1 guards) keys on a manifested fixture, so
+# any of them firing means a fixture went missing, not a documented gap. Declaring one here
+# to green a run would restore exactly the channel #539 closed — commit the fixture instead.
 FAST_GATE_MODULES = (
     "tests/test_pdf_anchor_golden.py",
     "tests/test_pdf_diff_recall.py",
     "tests/test_pdf_text.py",
 )
 
-# The account-vocab floor entries this dict once held (117-hr-4432, 118-hr-4820) are gone:
-# both pairs are committed now, so those cases assert instead of skipping.
+# Deliberately EMPTY, and that is the useful state: all three modules above have no skip
+# channel left. The entries this dict has held were each retired the same way — by
+# committing the fixture the skip keyed on, not by declaring the gap. The account-vocab
+# floor's 117-hr-4432 and 118-hr-4820 pointed at gitignored `bills/` and so had never run
+# in CI; 115-hr-5895 v3 was the #140 footer print (#539). All are committed now, so those
+# cases assert instead of skipping.
 #
-# An empty-looking allowlist is not an inert one: the group stays in _SKIP_WATCH_GROUPS, so
-# any skip not listed here fails the session and has to be justified. Deleting entries
-# instead of the fixture that no longer needs them would silently restore the fail-open
-# channel these gates just came out of.
-ALLOWED_FAST_GATE_SKIPS: dict[str, str] = {
-    "tests/test_pdf_text.py::TestUnbulletedFooterConsumedOutput::test_footer_absent_from_extracted_lines": (
-        "115-hr-5895 v3 PDF not present"
-    ),
-    "tests/test_pdf_text.py::TestUnbulletedFooterConsumedOutput::test_cross_page_word_rejoins_across_footer_seam": (
-        "115-hr-5895 v3 PDF not present"
-    ),
-}
+# An empty allowlist is not an inert one: the group stays in _SKIP_WATCH_GROUPS, so the
+# FIRST skip any of the three grows fails the session and has to be justified. Deleting the
+# dict instead would silently restore the fail-open channel these gates just came out of.
+ALLOWED_FAST_GATE_SKIPS: dict[str, str] = {}
 
 # (label, modules, allowlist) — each group's skips are watched and must be declared.
 _SKIP_WATCH_GROUPS = (

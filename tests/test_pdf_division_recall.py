@@ -181,6 +181,20 @@ def test_division_names_match_xml(name, xml, pdf):
     assert not mismatches, f"{name}/{pdf.stem} name mismatches: {mismatches}"
 
 
+# The (bill, stage-substring) pairs the fail-closed lookups below hardcode. Exposed as a
+# module constant because tests/test_corpus_manifest.py holds them to the committed
+# manifest: since #539 an absent pin RAISES instead of skipping, so pinning a
+# fetched-but-unmanifested version would hard-fail a clean checkout rather than quietly
+# skip there -- trading a fail-open for a fail-wrong. Both lookups read
+# dual_format_versions(), so each pin needs the version committed in BOTH formats. A stage
+# of None means "any manifested version of this bill".
+_SINGLE_DIVISION_BILL = "118-hr-8752"
+PINNED_FIXTURES: tuple[tuple[str, str | None], ...] = (
+    ("115-hr-5895", "engrossed-in-house"),  # _fixture(), both callers
+    (_SINGLE_DIVISION_BILL, None),  # test_single_division_bill_has_no_division_labels
+)
+
+
 def _fixture(bill: str, stage: str):
     """The manifested PDF for a specific division-bearing version.
 
@@ -188,6 +202,11 @@ def _fixture(bill: str, stage: str):
     committed corpus fixture, so its absence means a broken checkout, not an expected
     gap -- a skip here would silently retire the caller (#539).
     """
+    assert (bill, stage) in PINNED_FIXTURES, (
+        f"{bill}/{stage} is not registered in PINNED_FIXTURES -- add it there, so the "
+        "manifest coupling this lookup now depends on stays checked (#539, "
+        "tests/test_corpus_manifest.py::test_migrated_modules_pin_only_manifested_fixtures)"
+    )
     for n, _x, p in _DIVISION_VERSIONS:
         if n == bill and stage in p.stem:
             return p
@@ -228,11 +247,12 @@ def test_multi_division_breadcrumb_carries_division_end_to_end():
 
 def test_single_division_bill_has_no_division_labels():
     """Guard: a single-division bill (8752) tags nothing (breadcrumbs unchanged)."""
-    pairs = [(n, x, p) for (n, x, p) in dual_format_versions() if n == "118-hr-8752"]
+    pairs = [(n, x, p) for (n, x, p) in dual_format_versions() if n == _SINGLE_DIVISION_BILL]
     # 118-hr-8752 is a committed corpus fixture (both formats, both stages), so an empty
     # result means a broken checkout, not an expected gap -- fails closed rather than
-    # skipping, which would silently retire this guard (#539).
-    assert pairs, "118-hr-8752 not found among committed dual-format versions"
+    # skipping, which would silently retire this guard (#539). Named via the constant so
+    # the pin stays the one PINNED_FIXTURES declares and the manifest check cannot drift.
+    assert pairs, f"{_SINGLE_DIVISION_BILL} not found among committed dual-format versions"
     _name, _xml, pdf = pairs[0]
     anchors = extract_anchors(cached_pages(pdf))
     assert anchors, "expected anchors on 8752"

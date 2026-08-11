@@ -247,11 +247,37 @@ def test_migrated_modules_pin_only_manifested_fixtures() -> None:
     fetched-but-unmanifested bill, its floor would stay green (the rest of the manifest
     is present), and the parametrized test would ``FileNotFoundError`` on a clean
     checkout. This test locks the coupling the floor assumes: every fixture the three
-    migrated modules pin must be manifested. (Caught by review of #220.)"""
+    migrated modules pin must be manifested. (Caught by review of #220.)
+
+    Extended in #539 to cover ``test_pdf_division_recall``, which reaches the same
+    coupling by a different route: its lookups now RAISE instead of skipping when a pin is
+    absent, so an unmanifested pin turns a clean checkout red rather than quietly skipping
+    -- a fail-open traded for a fail-wrong. It pins (bill, stage-substring) patterns
+    rather than literal paths, so those are resolved against the manifest below instead of
+    being compared as strings."""
     from tests import test_node_join_corpus as nj
+    from tests import test_pdf_division_recall as dr
     from tests import test_pdf_subsection_recall as pr
 
     manifest = _manifest_rel_paths()
+
+    # Division recall: a pin is satisfied only by a stage manifested in BOTH formats,
+    # because both lookups read dual_format_versions().
+    for bill, stage_substr in dr.PINNED_FIXTURES:
+        stems = {rel.split("/", 1)[1].rsplit(".", 1)[0] for rel in manifest if rel.startswith(f"{bill}/")}
+        dual = sorted(
+            s
+            for s in stems
+            if (stage_substr is None or stage_substr in s)
+            and f"{bill}/{s}.xml" in manifest
+            and f"{bill}/{s}.pdf" in manifest
+        )
+        assert dual, (
+            f"test_pdf_division_recall pins {bill}/{stage_substr or '*'}, which no manifested "
+            "version satisfies in BOTH formats. Since #539 that lookup raises instead of "
+            "skipping, so this would hard-fail on a clean checkout rather than skip. Manifest "
+            "both formats of the stage, or stop pinning it."
+        )
 
     pinned: set[str] = set()
     # node-join: (bill, v1_stem, v2_stem) pairs, XML or PDF by which list they live in.
