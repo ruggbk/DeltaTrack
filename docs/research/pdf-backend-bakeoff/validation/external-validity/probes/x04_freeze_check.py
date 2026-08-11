@@ -215,7 +215,24 @@ def parse_amendments() -> tuple[list[dict], list[str]]:
                 continue
             # A path may legitimately be absent if the amendment DELETED it -- but only
             # when it is actually gone from the tree AND was present in history.
-            deleted = git("log", "--diff-filter=D", "--format=%H", "-1", "--", str((EV / f).relative_to(REPO)))
+            #
+            # `--full-history` is REQUIRED, and its absence was a latent gate defect that only
+            # appeared once the study branch merged. Path-limited `git log` applies history
+            # SIMPLIFICATION: at the merge commit this file is absent from the result and absent
+            # from the first parent (the integration branch never had it), so the merge is
+            # TREESAME to parent 1 and traversal never enters the side branch that recorded the
+            # deletion. F9 then reported a correctly-declared deletion as "neither exists nor was
+            # deleted" -- an artifact of merge topology, not of the ledger. `--full-history`
+            # disables that simplification and finds the real deleting commit (3d3e3fc).
+            deleted = git(
+                "log",
+                "--full-history",
+                "--diff-filter=D",
+                "--format=%H",
+                "-1",
+                "--",
+                str((EV / f).relative_to(REPO)),
+            )
             if not deleted:
                 errors.append(f"amendment {rec.get('id', '?')} touches {f}, which neither exists nor was deleted")
 
