@@ -41,13 +41,42 @@ class _Request:
         self.config = _Config(run_browser)
 
 
+class _FakeChromium:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def launch(self):
+        raise self._exc
+
+
+class _FakePlaywright:
+    """A Playwright whose entry succeeds but whose browser launch fails.
+
+    The failure the fixture guards against is the *launch* — a missing or drifted
+    Chromium binary — not a broken Playwright entrypoint. Raising from
+    ``sync_playwright()`` itself would short-circuit before ``p.chromium.launch()``,
+    exercising a path the fixture was never written for; raising at ``launch()`` is
+    the exact point a real-world failure lands on.
+    """
+
+    def __init__(self, exc):
+        self._exc = exc
+        self.chromium = _FakeChromium(exc)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
 def _force_launch_failure(monkeypatch, module, exc):
-    """Make ``sync_playwright()`` raise before a browser is ever launched."""
+    """Make ``p.chromium.launch()`` raise, as a real missing/drifted binary does."""
 
-    def boom():
-        raise exc
+    def fake_playwright():
+        return _FakePlaywright(exc)
 
-    monkeypatch.setattr(module, "sync_playwright", boom)
+    monkeypatch.setattr(module, "sync_playwright", fake_playwright)
 
 
 @pytest.mark.parametrize(
