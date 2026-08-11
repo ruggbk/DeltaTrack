@@ -221,21 +221,25 @@ or `-m "not network"` to deselect it outright. It replaced the `REQUIRE_CORPUS=1
 environment variable in #278, whose name described neither of the two unrelated things
 it had come to gate.
 
-### Test counts are not comparable between machines
+### Reading test counts
 
-A large share of the suite is data-driven, parametrized over real bill files that
-live in gitignored directories (`bills/`, `bills_corpus/`). How many tests collect,
-pass, or skip therefore depends on how much bill data that particular machine has
-fetched — a full working checkout and a fresh clone legitimately report very
-different totals for the same commit.
+The corpus correctness gates parametrize over the committed manifest, so **their
+declared cases are the same across comparable runs** — a fresh clone, a worktree and
+CI collect the same set. A differing case count there is a **fail-open signal**, not
+an expected consequence of which bills a machine happens to have fetched. Chase it;
+do not explain it away as environment.
 
-So an absolute count proves nothing on its own, and comparing one across machines
-proves less than nothing: a reviewer who measures a contributor's reported total
-against their own is reading corpus difference as a defect. The signal that does
-carry is the **red-green delta on a single machine**: revert the change and
-confirm the tests it added go red. Within one machine, a change in the *skip*
-count is worth reading too — `-rs` prints the reasons, and a category that
-quietly started skipping is coverage disappearing with no failure to show for it.
+Whole-suite totals can still differ legitimately, but for a narrower reason: the
+invocation. Optional capabilities are marker-gated — `browser` needs
+`playwright install chromium`, `network` is skipped unless you pass `--run-network` —
+and `CORPUS_SWEEP=1` deliberately widens the sweeping modules beyond the committed
+set. Compare like for like: the same selection, the same markers.
+
+An absolute count still proves little on its own. The signal that carries is the
+**red-green delta on a single machine**: revert the change and confirm the tests it
+added go red. A change in the *skip* count is worth reading too — `-rs` prints the
+reasons, and a category that quietly started skipping is coverage disappearing with
+no failure to show for it.
 
 ### The corpus gates run against committed fixtures
 

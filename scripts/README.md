@@ -26,9 +26,9 @@ so the probe and the byte-identity gate always describe the same population, and
 instrument production by *wrapping* it rather than reimplementing it.
 
 Where a greedy loop has to be duplicated to see inside it, the duplicate resolves every
-selection back to the same `(element_id_old, element_id_new)` identity production records,
-and asserts **exact agreement with production on both the selected set and the selected
-order**, per corpus pair, before any number is reported. Comparing selection *counts* is
+selection back to the corresponding production record using the same within-run lookup key,
+`(element_id_old, element_id_new)`, and asserts **exact agreement with production on both
+the selected set and the selected order**, per corpus pair, before any number is reported. Comparing selection *counts* is
 not sufficient and the gap is the very phenomenon these probes measure: a tie-policy
 difference changes which pair wins while leaving the count identical, so a count-only
 check passes straight through it. On disagreement the run stops and names the differing

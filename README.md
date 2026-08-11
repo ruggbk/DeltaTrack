@@ -136,12 +136,18 @@ The index is read from BILLSTATUS ZIPs in `bills/`, which are **not** part of a 
 # Include unchanged sections
 ./diff_bill.py compare old.xml new.xml --include-unchanged
 
-# Save machine-readable JSON to a file (output defaults to HTML, so request json explicitly)
-./diff_bill.py compare old.xml new.xml --format json -o diff.json
+# Save the engine's internal diff dictionary (output defaults to HTML, so request json explicitly)
+./diff_bill.py compare old.xml new.xml --format json -o internal-diff.json
 
 # Generate a standalone HTML report
 ./diff_bill.py compare old.xml new.xml --format html -o reports/report.html
 ```
+
+**Building something against the output?** `--format json` emits the engine's current
+*internal* diff dictionary, not the versioned canonical JSON that is the published
+interchange contract between the engine and its consumers. Use the canonical document
+instead: [`schema/canonical-diff.md`](schema/canonical-diff.md) specifies it, and the HTML
+report's **Export and share → Download `diff.json`** button produces one.
 
 ### HTML report
 

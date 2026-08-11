@@ -207,6 +207,8 @@ Adding or renaming a CLI subcommand? Add its row to the README "Command referenc
 
 When adding code, write tests for it. Test files live in `tests/`; mark tests that need real XML files with `@pytest.mark.slow`, front-end tests with `@pytest.mark.browser`, and anything fetching from a live external service with `@pytest.mark.network`. Shared helpers are in `tests/conftest.py`. [TESTING.md](TESTING.md) is the home for the full command catalog and what each validation layer proves.
 
+Adding a committed corpus fixture? Follow the fixture-selection guidance in [ADR 0015](docs/decisions/0015-corpus-test-fixtures.md).
+
 ### What CI checks
 
 Every pull request runs the gates defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which is the source of truth. Run the equivalent locally before pushing:
@@ -300,7 +302,7 @@ What to look at, roughly in priority order:
   - **Parser accuracy** (`src/deltatrack/bill_tree.py`, `src/deltatrack/parsers/`) -- does the bill's structure come through intact? A missing or mis-nested section corrupts everything downstream. See [docs/parser-validation.md](docs/parser-validation.md).
   - **Financial diff** (`src/deltatrack/diff_bill.py` and its financial filtering) -- dollar amounts and their changes must be exact.
   - **The canonical schema contract** (`src/deltatrack/formatters/canonical.py`) -- both pipelines and the renderer depend on it, so a breaking change there ripples everywhere.
-- **Tests for the change.** New behavior should come with a test that would fail without the fix. Judge that by the red-green delta on your own machine, not by the totals the author reported — test counts legitimately differ between machines here, and [TESTING.md](TESTING.md#test-counts-are-not-comparable-between-machines) explains why.
+- **Tests for the change.** New behavior should come with a test that would fail without the fix. Judge that by the red-green delta on your own machine rather than by the totals the author reported, and compare like-for-like selections — [TESTING.md](TESTING.md#reading-test-counts) explains what a count does and does not tell you, including which differences are a fail-open signal rather than an environment difference.
 - **Docs and decisions.** A non-obvious choice belongs in a code comment or a [decision record](docs/decisions/); a user-facing change belongs in the README.
 
 Leave specific comments, then approve or request changes. A maintainer does the actual merge.
