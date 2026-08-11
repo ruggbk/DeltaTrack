@@ -204,6 +204,176 @@ def _alt_split(text):
     }
 
 
+def part_g6_falsifications(manifest: dict) -> dict:
+    """The three falsifications that each caught a REAL false green during A40 freeze verification.
+
+    They were run ad hoc at the time and are committed here so that reintroducing any of the three
+    defects turns the suite red automatically. REGRESSION COVERAGE ONLY -- nothing below changes a
+    methodology rule, a population, a fixture or a gate's contract; every assertion calls the
+    authoritative validator directly and no new artifact is produced.
+    """
+    print("\n== A40 freeze-verification falsifications, preserved ==")
+    import build_oracle as BO
+    import run_extended
+    import run_hybrid
+
+    from deltatrack.parsers import pdf_anchors as PA
+
+    def boom(*_a, **_k):
+        raise AssertionError("architecture path used inside the result-bearing G6 validation")
+
+    out: dict = {}
+    saved = (run_hybrid.run, run_extended.run, PA.extract_anchors)
+    try:
+        # ---------- 1a. the cache CAN mask the sabotage, which is why clearing it is load-bearing.
+        # Warm the cache first, then sabotage WITHOUT clearing: a cached population is returned and
+        # no architecture path is touched. Asserting this proves the `.clear()` below is doing real
+        # work rather than being ceremonial -- without it the whole sabotage control is vacuous.
+        CF.replay_source_selection()
+        run_hybrid.run, run_extended.run, PA.extract_anchors = boom, boom, boom
+        masked = True
+        try:
+            CF.replay_source_selection()
+        except AssertionError:
+            masked = False
+        check(
+            "a WARM replay cache would mask the sabotage entirely",
+            True,
+            masked,
+            "the cache does not short-circuit the replay, so this control no longer explains why "
+            "the cache must be invalidated -- re-derive the sabotage control before trusting it",
+        )
+
+        # ---------- 1b. the real thing: invalidate, then run the ACTUAL G6 validator.
+        CF._REPLAY_CACHE.clear()
+        defects = sorted({d["reason"] for d in CF.validate_manifest(manifest)})
+        replay = CF.replay_source_selection()
+        expectations = CF.replay_na_expectations()
+        allocation = {v: sum(1 for e in expectations if e["variant"] == v) for v in CF.NA_VARIANTS}
+        observed = (
+            defects,
+            len(replay["population"]),
+            len(replay["na_eligible"]),
+            len(replay["nb_eligible"]),
+            len(replay["na_selected"]),
+            len(replay["nb_selected"]),
+            allocation,
+        )
+        check(
+            "G6 validates with run_hybrid/run_extended/extract_anchors ALL raising",
+            ([], 96, 83, 96, 8, 8, CF.NA_EXPECTED_ALLOCATION),
+            observed,
+            "an H, X or pdf_anchors dependency has entered the result-bearing G6 replay path, so "
+            "control source truth would be derived from the architectures under test",
+        )
+        out["sabotaged_g6"] = {"defects": defects, "allocation": allocation}
+
+        # ---------- 1c. each patch is live, or the two checks above prove nothing.
+        live = {}
+        for label, fn in (
+            ("run_hybrid.run", run_hybrid.run),
+            ("run_extended.run", run_extended.run),
+            ("pdf_anchors.extract_anchors", PA.extract_anchors),
+        ):
+            try:
+                fn(None)
+                live[label] = False
+            except AssertionError:
+                live[label] = True
+        check(
+            "every sabotaged entrypoint really raises when called",
+            {k: True for k in live},
+            live,
+            "a monkeypatch did not take, so the sabotage control passed because nothing was disabled",
+        )
+        out["sabotage_live"] = live
+    finally:
+        run_hybrid.run, run_extended.run, PA.extract_anchors = saved
+        CF._REPLAY_CACHE.clear()
+
+    # ---------- 2 + 3. the two x26 protections, proven SEPARATELY so neither masks the other.
+    #
+    # The mutation is a well-formed swap of private truth between two valid N-B controls: both
+    # records stay individually complete, the manifest stays valid, and nothing is malformed. That
+    # matters -- a negative that fails on a missing file or bad JSON would prove nothing.
+    mutated = copy.deepcopy(manifest)
+    nb = sorted(
+        [f for f in mutated["fixtures"] if f["control_kind"] == "N-B"], key=lambda f: f["schedule_index"]
+    )
+    a, b = nb[0], nb[1]
+    a["expected_adjudicated_headings"], b["expected_adjudicated_headings"] = (
+        b["expected_adjudicated_headings"],
+        a["expected_adjudicated_headings"],
+    )
+    check(
+        "the mutated control state is still WELL-FORMED (so the negatives cannot pass for the wrong reason)",
+        (True, True, True),
+        (
+            bool(a["expected_adjudicated_headings"]) and bool(b["expected_adjudicated_headings"]),
+            all(bool(f.get("canonical_identity")) for f in (a, b)),
+            len(mutated["fixtures"]) == len(manifest["fixtures"]),
+        ),
+        "the mutation broke a record's structure, so a rejection would demonstrate malformedness "
+        "rather than the binding invariant under test",
+    )
+
+    evidence_path = CF.ORACLE_INTEGRATION_EVIDENCE
+    original_evidence = evidence_path.read_bytes()
+    try:
+        # ---------- 2. the committed x26 evidence is now STALE for this state and must not certify it.
+        CF._REPLAY_CACHE.clear()
+        stale = sorted({d["reason"] for d in CF.validate_manifest(mutated)})
+        check(
+            "a valid-but-different control state is REJECTED while the old x26 evidence still says failures==[]",
+            True,
+            CF.ORACLE_EVIDENCE_STALE in stale,
+            "x26 evidence certifies a control/oracle state it was not produced for, which is the "
+            "exact false green A40.16 closed -- the evidence would only be certifying itself",
+        )
+        check(
+            "...and the untouched x26 artifact really did still report success",
+            [],
+            json.loads(original_evidence)["failures"],
+            "the committed evidence already reported failures, so the staleness negative above is "
+            "not isolating the input binding",
+        )
+        out["stale_x26"] = stale
+
+        # ---------- 3. make the evidence CURRENT for the mutated state; the second protection must
+        # still fire. Only the binding digest is recomputed -- re-rendering 20 controls is not
+        # needed to establish that the evidence is no longer stale.
+        refreshed = json.loads(original_evidence)
+        refreshed["control_oracle_input_digest"] = BO.control_oracle_input_digest(mutated)
+        evidence_path.write_text(json.dumps(refreshed, indent=1))
+        CF._REPLAY_CACHE.clear()
+        fresh = sorted({d["reason"] for d in CF.validate_manifest(mutated)})
+        check(
+            "even CURRENT x26 evidence cannot certify wrong N-B truth",
+            (True, False),
+            (CF.MUTATION_INPUT_MISMATCH in fresh, CF.ORACLE_EVIDENCE_STALE in fresh),
+            "N-B expected truth is not independently replayed from source, so a manifest and its "
+            "evidence can agree with each other while both disagree with the actual source",
+        )
+        out["fresh_x26_wrong_truth"] = fresh
+    finally:
+        evidence_path.write_bytes(original_evidence)
+        CF._REPLAY_CACHE.clear()
+
+    check(
+        "the x26 evidence file is byte-restored",
+        hashlib.sha256(original_evidence).hexdigest(),
+        hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        "the regression left the committed evidence modified, which would dirty the tree",
+    )
+    check(
+        "and the authoritative state still validates cleanly",
+        [],
+        CF.validate_manifest(manifest),
+        "the regression did not restore the state it mutated",
+    )
+    return out
+
+
 def part_pdf_id(manifest: dict) -> dict:
     """A40.14 section 1 -- the trailer /ID is deterministic, unique, and NON-SEMANTIC.
 
@@ -846,6 +1016,7 @@ def main() -> int:
     realized = part_manifest(manifest)
     pdf_id = part_pdf_id(manifest)
     replay = part_replay(manifest)
+    falsifications = part_g6_falsifications(manifest)
     nc_rendered = part_nc_rendered(manifest)
     reproducible = part_reproducible(manifest)
     holdout = part_holdout_identity(manifest)
@@ -859,6 +1030,7 @@ def main() -> int:
         "realized": realized,
         "pdf_id": pdf_id,
         "f3_f4_replay": replay,
+        "g6_falsifications": falsifications,
         "nc_rendered_distinctness": nc_rendered,
         "reproducibility": reproducible,
         "holdout_identity_guard": holdout,
