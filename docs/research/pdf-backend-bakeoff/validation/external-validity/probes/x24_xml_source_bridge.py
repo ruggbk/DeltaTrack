@@ -74,11 +74,18 @@ def na_eligible(paired: list[dict]) -> list[dict]:
 
 
 def enumerate_sources() -> dict:
-    """The complete independent source population, per document."""
+    """The complete independent source population, per document.
+
+    The bridge is run WITH the independent anchor set, so this reports the population under the
+    same validated rule `x25` falsifies. Running it without anchors would skip the bracketing
+    gate and report a larger, unlicensed population.
+    """
     per_doc, paired_all = {}, []
     for name, pdf, xml in DOCS:
         records = XS.account_records(xml)
-        result = XS.bridge(pdf, records)
+        lines = XS.physical_lines(pdf)
+        anchors = XS.independent_anchors(xml, pdf, lines=lines)
+        result = XS.bridge(pdf, records, anchors=anchors["anchors"], lines=lines)
         agreement = XS.order_agreement(result["paired"])
         for p in result["paired"]:
             p["document"] = name
@@ -89,6 +96,8 @@ def enumerate_sources() -> dict:
             "paired": result["n_paired"],
             "refusals": result["refusals"],
             "order_agreement": agreement,
+            "anchor_monotonicity": anchors["monotonicity"],
+            "n_independent_anchors": anchors["n"],
             "na_eligible": len(na_eligible(result["paired"])),
         }
         paired_all.extend(result["paired"])
@@ -161,18 +170,21 @@ def part_bridge(sources: dict) -> dict:
 
     inversions = {name: [c["n_inversions"] for c in d["order_agreement"]["checks"]] for name, d in per_doc.items()}
     check(
-        "XML document order agrees with PHYSICAL print order, with ZERO inversions",
+        "CONSISTENCY ONLY -- the paired set carries no order inversion",
         {n: [0, 0] for n in per_doc},
         inversions,
-        "XML order and physical order disagree on real DEVELOPMENT material, which would make "
-        "the index-to-index pairing rule unlicensed -- a STOP, not something to work around",
+        "the paired rows contradict themselves. NOTE this check CANNOT license the pairing rule: "
+        "these rows were paired index-to-index, so a green result is guaranteed by construction. "
+        "It is retained as a consistency assertion only",
     )
     check(
-        "the agreement is checked on INDEPENDENTLY identifiable records too, not only on pairs",
-        True,
-        all(d["order_agreement"]["n_unique"] > 0 for d in per_doc.values()),
-        "no unique-occurrence record exists, so the ordering evidence would rest entirely on "
-        "the pairing rule it is supposed to justify",
+        "the LICENSING evidence is independent of the pairing -- anchors alone, zero inversions",
+        {n: 0 for n in per_doc},
+        {n: d["anchor_monotonicity"]["n_inversions"] for n, d in per_doc.items()},
+        "the independent anchors invert, so XML reading order does not correspond to physical "
+        "print order and the ordinal pairing rule is unlicensed -- a STOP. This is the check the "
+        "unique-occurrence subset (n=1 in 114-hr-2029/4) was far too small to make; x25 falsifies "
+        "it in full, including the five bracketing negatives",
     )
 
     # NEGATIVE 1 -- a contradicted physical ordering must be DETECTABLE.
@@ -191,20 +203,25 @@ def part_bridge(sources: dict) -> dict:
     # NEGATIVE 2 -- a changed group count must REFUSE the whole group.
     name, pdf, xml = DOCS[1]
     records = XS.account_records(xml)
+    lines = XS.physical_lines(pdf)
+    anchors = XS.independent_anchors(xml, pdf, lines=lines)
+    victim = records[0]["xml_source_text"].upper()
     duplicated = records + [dict(records[0], xml_document_ordinal=len(records))]
-    result = XS.bridge(pdf, duplicated)
+    result = XS.bridge(pdf, duplicated, anchors=anchors["anchors"], lines=lines)
     check(
         "NEGATIVE -- an extra XML occurrence REFUSES the whole group on count mismatch",
         True,
-        any(r["reason"] == XS.GROUP_COUNT_MISMATCH for r in result["refusals"]),
+        any(r["reason"] == XS.GROUP_COUNT_MISMATCH and r["text"] == victim for r in result["refusals"]),
         "a count mismatch is paired anyway, so the k-to-k rule would silently mis-associate a "
         "heading with a different physical occurrence",
     )
     check(
         "...and the refusal removes the ENTIRE group, not just the surplus",
-        len(records) - sum(1 for r in records if r["xml_source_text"] == records[0]["xml_source_text"]),
-        result["n_paired"],
-        "only the extra record is dropped, leaving the rest of an unverifiable group paired",
+        0,
+        sum(1 for p in result["paired"] if p["xml_source_text"].upper() == victim),
+        "only the extra record is dropped, leaving the rest of an unverifiable group paired. "
+        "Asserted as a direct property of the paired set rather than as an arithmetic identity, "
+        "which would silently absorb any other refusal into the expected count",
     )
     return {
         "per_document": {n: {k: v for k, v in d.items() if k != "refusals"} for n, d in per_doc.items()},
