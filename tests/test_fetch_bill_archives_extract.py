@@ -423,19 +423,32 @@ class TestExtractArchive:
         assert (dest / "119-hr-0.xml").read_bytes() == b"<billStatus/>"
         assert len([p for p in dest.rglob("*") if p.is_file()]) == 3
 
-    def test_the_real_member_ceiling_clears_the_largest_known_archive(self, tmp_path):
-        # Calibration guard against the real default, no monkeypatch: the largest real
-        # BILLSTATUS archive is 10,564 members (#300). The ceiling must stay well above
-        # that so it never refuses legitimate data -- a change that lowered it under the
-        # real corpus would fail here loudly rather than start silently rejecting bills.
+    def test_member_ceiling_calibration_excludes_the_306_exhaustion_case(self):
+        # Two-sided calibration guard (#447): a floor alone only stops the ceiling
+        # being lowered too far -- raising it to 50,000,000, or effectively off at
+        # 10**12, passed the full suite before this upper bound existed.
         #
-        # Two-sided (#447): a floor alone only stops the ceiling being lowered too far.
-        # Raising it -- to 50,000,000, or effectively off at 10**12 -- passed the full
-        # suite before this upper bound existed. 200,000 is double the member count
-        # #306's archive used to demonstrate inode exhaustion: comfortably above the
-        # floor for corpus growth, but low enough that a ceiling widened toward "off"
-        # fails here rather than shipping green.
-        assert 10_564 < MAX_MEMBER_COUNT <= 200_000
+        # The floor is the largest known real BILLSTATUS archive, 10,564 members
+        # (#300). The ceiling is pinned to the CURRENT production value, 100,000 --
+        # NOT merely kept under 200,000, the member count #306 used to demonstrate
+        # inode exhaustion. `extract_archive` refuses only on
+        # `member_count > MAX_MEMBER_COUNT`, so any ceiling below 200,000, even
+        # 199,999, technically still refuses that exact archive, but only after
+        # nearly as many inodes are counted as the demonstrated-bad case consumed --
+        # eroding the safety margin to nothing while this assertion stayed green.
+        # The production comment's own stated rationale for 100,000 is a 2x margin
+        # under that threshold ("refusing the 200,000-member archive... by a factor
+        # of two"), so the calibration pins that margin explicitly rather than
+        # tolerating any widening up to one member short of #306's demonstration.
+        assert 10_564 < MAX_MEMBER_COUNT <= 100_000
+
+    def test_member_ceiling_at_default_extracts_a_normal_archive(self, tmp_path):
+        # Companion to the calibration assertion above: proves the real (unpatched)
+        # ceiling does not reject ordinary extraction, so a bound wired to refuse
+        # everything could not pass by accident. Deliberately a tiny two-member
+        # archive rather than a materialized 10,564-member fixture -- the real
+        # corpus figure is what the calibration assertion above checks; this only
+        # needs to exercise the unmodified extraction path on real input.
         archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
         dest = tmp_path / "out"
 
@@ -443,7 +456,7 @@ class TestExtractArchive:
 
         assert (dest / "a.xml").exists()
 
-    def test_the_real_byte_ceiling_clears_the_largest_known_archive(self, tmp_path):
+    def test_byte_ceiling_calibration_has_real_corpus_headroom(self):
         # Companion to the member-ceiling calibration above, for MAX_UNCOMPRESSED_BYTES
         # (#447): before this test, the byte ceiling had no calibration assertion at
         # all, one-sided or otherwise -- every byte-ceiling test builds its fixture
@@ -452,12 +465,21 @@ class TestExtractArchive:
         # with it. Widening the constant to 3,900,000,000 -- nearly double its real
         # value -- passed the full suite.
         #
-        # The floor protects the largest real archive, ~162 MiB expanded (#300). The
-        # ceiling of 3 GiB is roughly 19x that: comfortably above the floor for corpus
-        # growth (the constant's own comment claims better than an order of magnitude
-        # of headroom), but low enough that a ceiling widened toward "off" fails here
-        # rather than shipping green.
+        # The floor is the largest known real archive's expanded size, ~162 MiB
+        # (#300). Unlike the member ceiling, there is no single demonstrated-bad byte
+        # figure in the tracker to exclude, so the ceiling is set from the constant's
+        # own documented margin claim ("2 GiB leaves better than an order of
+        # magnitude of headroom" over 162 MiB): 3 GiB is roughly 19x the floor,
+        # comfortably inside that claimed order of magnitude while still catching a
+        # ceiling widened toward "off".
         assert 162 * 1024**2 < MAX_UNCOMPRESSED_BYTES <= 3 * 1024**3
+
+    def test_byte_ceiling_at_default_extracts_a_normal_archive(self, tmp_path):
+        # Companion to the calibration assertion above: proves the real (unpatched)
+        # ceiling does not reject ordinary extraction. Deliberately a tiny archive
+        # rather than a materialized 162 MiB fixture -- the real corpus figure is
+        # what the calibration assertion above checks; this only needs to exercise
+        # the unmodified extraction path on real input.
         archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
         dest = tmp_path / "out"
 
