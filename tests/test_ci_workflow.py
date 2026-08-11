@@ -61,6 +61,22 @@ def _push_branches(workflow: dict) -> list[str]:
     return triggers["push"]["branches"]
 
 
+def _security_push_failures(path: Path) -> list[str]:
+    """Why `path` does not run on pushes to `main`, as failures; empty when it does.
+
+    Single validation path for the security-on-main contract the release runbook
+    describes (#547): the live guard asserts this is empty for the real security.yml,
+    and the negative control asserts it fires for a deliberately mainless workflow, so
+    the only way both stay green is for the verdict the runbook depends on to hold. A
+    rewrite that accepts a mainless trigger, or that stops reading `push`, flips both.
+    """
+    triggers = _triggers(path)
+    branches = triggers.get("push", {}).get("branches", [])
+    if "main" not in branches:
+        return [f"push branches are {branches!r}, without 'main'"]
+    return []
+
+
 @pytest.mark.parametrize(("filename", "context"), sorted(REQUIRED_CHECK_WORKFLOWS.items()))
 def test_required_checks_report_to_a_merge_queue(filename: str, context: str) -> None:
     """Every required check answers `merge_group`, or a queue stalls on all merges.
@@ -216,10 +232,9 @@ def test_security_runs_on_pushes_to_main() -> None:
     would silently retire the run the runbook is about to watch. `ci.yml`'s push branches
     were already pinned for both branches; security.yml's were not (#547).
     """
-    triggers = _triggers(WORKFLOWS / "security.yml")
-    branches = triggers["push"]["branches"]
-    assert "main" in branches, (
-        f"security.yml no longer runs on pushes to main (push branches: {branches}). "
+    failures = _security_push_failures(WORKFLOWS / "security.yml")
+    assert not failures, (
+        f"security.yml no longer runs on pushes to main ({'; '.join(failures)}). "
         "docs/release.md step 4 watches this run after a promotion; without it the "
         "promotion merge commit gets no security verdict on `main`."
     )
@@ -228,17 +243,19 @@ def test_security_runs_on_pushes_to_main() -> None:
 def test_security_push_guard_detects_a_mainless_trigger(tmp_path: Path) -> None:
     """A security workflow that dropped `main` must go red, not pass via a vacuous read.
 
-    The assertion above reads the real `push` trigger structure, so a workflow that has
-    removed `main` registers as a failure rather than as "no branches found".
+    Runs the same validator the live guard uses, `_security_push_failures`, against a
+    deliberately mainless workflow, and proves it fires. If the validator were ever
+    rewritten to accept a mainless trigger (or to stop reading `push`), this goes red
+    along with the live guard, so the assertion above cannot pass vacuously.
     """
     mainless = tmp_path / "security.yml"
     mainless.write_text(
         "name: security\non:\n  push:\n    branches: [develop]\n",
         encoding="utf-8",
     )
-    triggers = _triggers(mainless)
-    assert triggers["push"]["branches"] == ["develop"], "fixture did not parse as expected"
-    assert "main" not in triggers["push"]["branches"]
+    failures = _security_push_failures(mainless)
+    assert failures, "the security validator accepted a workflow that does not run on pushes to main"
+    assert "main" in failures[0], "the failure does not name the missing branch"
 
 
 def test_ci_does_not_cancel_in_progress_runs() -> None:
