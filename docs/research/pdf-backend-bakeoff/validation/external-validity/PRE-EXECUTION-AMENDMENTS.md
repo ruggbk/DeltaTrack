@@ -4075,7 +4075,7 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
  "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0",
-             "9606a6e", "767abe9", "3f49fed", "2c06749"],
+             "9606a6e", "767abe9", "3f49fed", "2c06749", "84e3672", "0f89e9e"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/build_oracle.py", "probes/control_fixtures.py",
@@ -4635,7 +4635,29 @@ occurrence, and that is now asserted (`MUTATION_INPUT_MISMATCH`).
 
 Clearing `_REPLAY_CACHE` before the sabotage run is load-bearing: a cached population computed
 before the monkeypatch would have been returned without re-executing the source path, and the
-control would have passed while proving nothing.
+control would have passed while proving nothing. **Now committed as a regression — see below.**
+
+### A40 post-freeze bookkeeping — `84e3672` and `0f89e9e`
+
+**Post-freeze REGRESSION COVERAGE ONLY. No methodology, population, bridge, selection, fixture,
+mutation rule, oracle contract, scoring rule or decision rule changed, and no result-bearing
+contract changed.** Declared here mechanically because both commits touch protected `probes/*.py`
+already named in `files_touched`; **no A41 is opened**, because neither commit amends anything.
+
+- **`84e3672`** — `x04`'s F9 deletion probe gains `--full-history`. A latent gate defect that only
+  surfaced once the study merged: path-limited `git log` applies history simplification, so at the
+  merge commit the orphan PDF is absent from both the result and the first parent, the merge is
+  TREESAME to parent 1, and traversal never enters the side branch that recorded the deletion.
+  F9 then called a correctly-declared deletion "neither exists nor was deleted". Measured on the
+  merged tree: simplified → empty, `--full-history` → `3d3e3fc`, the commit A6/A18 already
+  declare. The ledger was right; the probe's traversal was wrong. This restores an already-frozen
+  invariant rather than changing one.
+- **`0f89e9e`** — `x23` gains the three A40 freeze-verification falsifications that had only ever
+  been run ad hoc: H/X sabotage through the **actual** G6 path (with a control proving a warm
+  `_REPLAY_CACHE` would otherwise mask it), stale `x26` evidence rejected via
+  `ORACLE_EVIDENCE_STALE`, and current-but-wrong `x26` evidence still rejected via
+  `MUTATION_INPUT_MISMATCH`. Each previously caught a real false green, so leaving them
+  uncommitted meant a reintroduced defect would have gone unnoticed. `x23` 55/55.
 
 ### Population and boundary
 
