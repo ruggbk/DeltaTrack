@@ -214,5 +214,16 @@ uv run python scripts/generate_validation_report.py   # refresh this page
     print(f"wrote {output} ({val}/{tot} recalled, {overall:.1f}%); skipped: {missing or 'none'}")
 
 
-if __name__ == "__main__":
+def _cli() -> None:
+    """The real CLI entrypoint: regenerate the tracked report.
+
+    This is the one caller of `main()` that may target `COMMITTED_OUTPUT` — writing
+    the tracked copy is intentional here. Kept as a named helper rather than inline so
+    the wiring test can pin that the CLI really does supply `COMMITTED_OUTPUT` (a
+    regression to a CWD-relative path here would recreate #445).
+    """
     main(output=COMMITTED_OUTPUT)
+
+
+if __name__ == "__main__":
+    _cli()

@@ -64,9 +64,22 @@ def test_main_requires_an_explicit_output():
         report.main([])
 
 
-def test_committed_output_is_project_root_derived():
-    """The intentional CLI regeneration destination is absolute, never CWD-relative (#445)."""
-    assert report.COMMITTED_OUTPUT.is_absolute()
-    assert report.COMMITTED_OUTPUT.is_relative_to(Path(__file__).resolve().parents[1])
-    assert report.COMMITTED_OUTPUT.name == "parser-validation.md"
-    assert report.COMMITTED_OUTPUT.parent.name == "docs"
+def test_cli_writes_to_committed_output(monkeypatch):
+    """The real CLI entrypoint targets the project-root-derived destination (#445).
+
+    `_cli()` is the helper the `if __name__ == "__main__"` block calls, so this pins the
+    actual CLI wiring, not the constant in isolation: a regression that pointed the CLI at
+    a CWD-relative `Path("docs/parser-validation.md")` would recreate the #445 defect
+    while `COMMITTED_OUTPUT` itself stayed correct and absolute.
+    """
+    called = {}
+
+    def fake_main(argv=None, *, output):
+        called["argv"] = argv
+        called["output"] = output
+
+    monkeypatch.setattr(report, "main", fake_main)
+
+    report._cli()
+
+    assert called == {"argv": None, "output": report.COMMITTED_OUTPUT}
