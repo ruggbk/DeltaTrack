@@ -27,11 +27,13 @@ divides that XML into nodes, which changes the *unit* the human ruling was about
 the fixture records nothing about which parse it meant, a representation change silently
 redefined its subject.
 
-**This has already happened.** Three of the answer key's twelve observations no longer
-resolve to any node the current parser emits, and its rebuild script cannot run. Nothing
-caught it, and nothing could have: the fixture's test scores the stored string against the
-stored score, which is true by construction and stays true forever. It is a
-threshold-regression test, correctly, and was never a drift guard.
+**This is not hypothetical: the matching answer key exposed the failure mode directly.**
+Observations identified by unstable properties stopped resolving once the parser evolved,
+leaving the human rulings they carried unreproducible without repair — three of that
+fixture's twelve observations, measured at the time the problem was found. Nothing caught
+it, and nothing could have: the fixture's test scores the stored string against the stored
+score, which is true by construction and stays true forever. It is a threshold-regression
+test, correctly, and was never a drift guard.
 
 That is the second form of the self-confirmation trap
 [ADR 0009](0009-validation-ground-truth.md) guards against. 0009 covers a test whose
@@ -172,20 +174,22 @@ Stated explicitly, so a later reader does not mistake silence for a ruling.
 
 ## Relationship to other records
 
-**Amends [ADR 0009](0009-validation-ground-truth.md); does not replace it.** Committee
-reports remain the external oracle for amounts, unchanged. What 0009 does not say is how a
-stored validation artifact names the thing it validated, and its own commitment to keeping
-misses "visible and hand-traced" only holds if the node a miss refers to is still
-identifiable.
-
+- **[ADR 0009](0009-validation-ground-truth.md)** — the authority for validation
+  methodology and for what the independent evidence establishes. It requires validation
+  misses to stay hand-traceable; the observation identity defined here is what lets a
+  stored validation judgment keep naming the same parsed observation. This record does not
+  decide whether an observation is *correct* — that is 0009's question, not this one.
 - **[ADR 0008](0008-deterministic-engine.md)** — the ordinal's precondition. This turns an
   existing commitment into an asserted, corpus-tested invariant.
 - **[ADR 0015](0015-corpus-test-fixtures.md)** — consistent with, and cashes in, its reserved
   checksum-registry clause for the non-committed tier.
 - **[ADR 0006](0006-canonical-diff-contract.md)** — unaffected; item 1 above is where a
   future change would be argued.
-- **The staged matching record (ADR 0020, proposed separately)** — depends on this one for
-  how the observations it retrieves, scores and assigns are named.
+- **[ADR 0020](0020-matching-stages.md)** — depends on this record for how the
+  observations it retrieves, scores and assigns are named, and owns the complementary
+  question: identity names an observation *within one parse*, while deciding that two
+  observations in different versions are the same provision is **correspondence**, which
+  is 0020's output and never an identity key.
 
 ## Invariants this decision implies
 
