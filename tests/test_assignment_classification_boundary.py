@@ -628,7 +628,16 @@ def candidate_maps(old_tree, new_tree) -> tuple[dict, dict]:
     The pre-slice side reaches `move_candidates` through this module's own import, so a control
     that patches `diff_bill.move_candidates` perturbs production alone and the oracle stays honest.
     That asymmetry is the point: a fault both sides felt would move them together and pass.
+
+    `element_id` is the MEASUREMENT BRIDGE into the oracle's vocabulary -- a `NodeDiff` carries no
+    address -- so its uniqueness per side is asserted rather than assumed. A repeated id would
+    collapse two candidates onto one key on BOTH sides, which is the shape that reads as agreement.
+    ADR 0019 refuses `element_id` as identity, and nothing here derives an ordinal from it.
     """
+    for side, nodes in (("old", old_tree.nodes), ("new", new_tree.nodes)):
+        ids = [node.element_id for node in nodes]
+        assert all(ids) and len(set(ids)) == len(ids), f"{side}-side element_id is empty or repeats; the bridge lies"
+
     stages = migrated_stages(old_tree, new_tree)
     registry = stages["registry"]
     migrated = {
