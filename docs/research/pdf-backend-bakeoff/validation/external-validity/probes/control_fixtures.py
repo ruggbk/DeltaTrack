@@ -794,6 +794,24 @@ def _replay_defects(manifest: dict, defect) -> None:
                     expected=MC.canonical(source_identity(r)),
                     found=f.get("source_canonical_identity"),
                 )
+            # A40.16 -- N-B's PRIVATE TRUTH is replayed too, not just its source identity.
+            #
+            # Found by the freeze-verification stale-evidence probe: swapping the expected
+            # headings between two valid N-B controls left BOTH x26 and G6 green once x26 was
+            # regenerated. Each record stayed well-formed and the key agreed with the manifest,
+            # because both were derived from the same mutated manifest -- so `verify_join` could
+            # not see it. Only the independently replayed source can: N-B's expected heading IS
+            # the rendered heading of its own source occurrence.
+            if kind == "N-B":
+                want = [{"text": r["expected_text"]}]
+                if f.get("expected_adjudicated_headings") != want:
+                    defect(
+                        MUTATION_INPUT_MISMATCH,
+                        control=kind,
+                        index=i,
+                        expected=want,
+                        found=f.get("expected_adjudicated_headings"),
+                    )
         if len(rows) != len(replayed):
             defect(SOURCE_POPULATION_MISMATCH, control=kind, expected=len(replayed), found=len(rows))
 
@@ -837,7 +855,10 @@ ORACLE_INTEGRATION_EVIDENCE = EV / "results" / "x26_control_oracle.json"
 ORACLE_INTEGRATION_NOT_VERIFIED = "ORACLE_INTEGRATION_NOT_VERIFIED"
 
 
-def _oracle_integration_defects(defect) -> None:
+ORACLE_EVIDENCE_STALE = "ORACLE_EVIDENCE_STALE"
+
+
+def _oracle_integration_defects(defect, manifest: dict) -> None:
     """A40 section 13 -- G6 may not go green on the manifest half of its contract alone.
 
     A manifest that DESCRIBES 20 controls is not evidence that 20 controls can be adjudicated:
@@ -864,6 +885,22 @@ def _oracle_integration_defects(defect) -> None:
         )
     if counts != {"N-A": NA_TOTAL, "N-B": NB_TOTAL, "N-C": NC_TOTAL}:
         defect(ORACLE_INTEGRATION_NOT_VERIFIED, why="x26 control mix disagrees with the frozen 8/8/4", found=counts)
+
+    # A40.16 -- THE BINDING. Without this the evidence certifies only itself: a x26 result whose
+    # every value was garbage still left G6 green, and a stale PASS produced for a DIFFERENT valid
+    # control state would have been accepted identically. Recomputed here from the manifest and
+    # prompt ON DISK, so the evidence cannot outlive the state it ran on.
+    import build_oracle as BO
+
+    recorded = evidence.get("control_oracle_input_digest")
+    current = BO.control_oracle_input_digest(manifest)
+    if recorded != current:
+        defect(
+            ORACLE_EVIDENCE_STALE,
+            recorded=recorded,
+            current=current,
+            why="x26 evidence was produced for a different control/oracle state",
+        )
 
 
 def region_realization(manifest: dict, defect) -> None:
@@ -1082,7 +1119,7 @@ def validate_manifest(manifest: dict, holdout_guard=None, holdout_shas=None) -> 
     if SOURCE_SELECTION_REPLAY_IMPLEMENTED and MUTATION_TARGET_REPLAY_IMPLEMENTED:
         _replay_defects(manifest, defect)
         region_realization(manifest, defect)
-        _oracle_integration_defects(defect)
+        _oracle_integration_defects(defect, manifest)
     else:
         if not SOURCE_SELECTION_REPLAY_IMPLEMENTED:
             defect(SOURCE_REPLAY_NOT_IMPLEMENTED, contract="A40 F3")

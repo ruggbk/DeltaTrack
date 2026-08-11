@@ -1103,6 +1103,32 @@ def control_record_digest(record: dict) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
+def control_oracle_input_digest(manifest: dict, prompt_path: Path = PROMPT_PATH) -> str:
+    """A40.16 -- the ONE authoritative digest of everything the 20-control oracle claim rests on.
+
+    THE PROBLEM THIS SOLVES. `x26` proves the controls traverse the real oracle path, and G6
+    requires that evidence -- but an evidence artifact that only reports its own verdict binds to
+    nothing. Measured: a `x26` result whose every certified value was replaced with garbage still
+    left G6 green, because `failures: []` was all G6 read. A stale PASS produced for a DIFFERENT
+    valid control state would have been accepted exactly the same way.
+
+    So both sides compute this from CURRENT inputs and G6 compares: `x26` records it beside its
+    verdict, and G6 recomputes it from the manifest and prompt on disk. Any change to a control's
+    identity, kind, variant, source or generated SHA, expected truth, mutation recipe or committed
+    region changes a record digest; any change to the adjudicator prompt or the frozen route
+    vocabulary changes the tail. The rendered PNGs are a deterministic function of those same
+    inputs, so binding the inputs binds the renders without G6 having to re-render.
+    """
+    payload = {
+        "schema": "control_oracle_inputs/1",
+        "record_digests": sorted(control_record_digest(f) for f in manifest.get("fixtures", [])),
+        "prompt_sha256": hashlib.sha256(load_prompt(prompt_path).encode()).hexdigest(),
+        "routes": list(ROUTE_ORDER),
+        "control_join_fields": list(CONTROL_JOIN_FIELDS),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
 def verify_join(result: BuildResult, control_manifest: dict | None = None) -> list[dict]:
     """I7 -- is every blind id still bound to the image and region the key says it is?
 

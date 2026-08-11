@@ -1,6 +1,7 @@
 {
  "population": "DEVELOPMENT + SYNTHETIC -- nothing adjudicated, scored or persisted as an oracle artifact",
  "contract": "A40 F5 -- the realized controls through the real build_oracle path",
+ "control_oracle_input_digest": "8abb6a66b0a0c428dfa61727db1095d2a1ccf3bdc6ddddcd844c9a6f92c31264",
  "n_controls": 20,
  "counts": {
   "N-A": 8,

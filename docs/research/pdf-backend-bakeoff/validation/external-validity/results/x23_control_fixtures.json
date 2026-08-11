@@ -361,6 +361,7 @@
   "n_holdout_source_sha256": 17,
   "counterfactual_reasons": [
    "HOLDOUT_SOURCE_IDENTITY",
+   "ORACLE_EVIDENCE_STALE",
    "STALE_SHA256"
   ]
  },

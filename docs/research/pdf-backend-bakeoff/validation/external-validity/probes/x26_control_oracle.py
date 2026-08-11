@@ -163,6 +163,9 @@ def main() -> int:
     doc = {
         "population": "DEVELOPMENT + SYNTHETIC -- nothing adjudicated, scored or persisted as an oracle artifact",
         "contract": "A40 F5 -- the realized controls through the real build_oracle path",
+        # A40.16 -- the binding. Recomputed by G6 from the manifest and prompt on disk, so this
+        # evidence cannot certify a control/oracle state other than the one it actually ran on.
+        "control_oracle_input_digest": BO.control_oracle_input_digest(manifest),
         "n_controls": len(specs),
         "counts": {k: sum(1 for s in specs if s.control_kind == k) for k in ("N-A", "N-B", "N-C")},
         "frame_counts": frames,
