@@ -18,8 +18,8 @@ Financial classifier and analysis tools for DeltaTrack bill data.
 From the `DeltaTrack/` directory:
 
 ```bash
-uv run python notebooks/stress_test_analysis.py
-uv run python notebooks/stress_test_detail.py approp        # or: reconciliation, authorization, all
+uv run python financial_classifier/stress_test_analysis.py
+uv run python financial_classifier/stress_test_detail.py approp        # or: reconciliation, authorization, all
 ```
 
 Scripts require bill XML files downloaded to `bills/` (gitignored). Download with:

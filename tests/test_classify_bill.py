@@ -1,4 +1,4 @@
-"""Unit tests for notebooks/classify_bill.py — classify_text() behavior.
+"""Unit tests for financial_classifier/classify_bill.py — classify_text() behavior.
 
 Covers every label outcome and the ordering/edge cases that matter:
 - subsection prefix variants (RESTRICT, APPROP) — fixed in #115
@@ -8,7 +8,7 @@ Covers every label outcome and the ordering/edge cases that matter:
 - unknown fallthrough
 """
 
-from notebooks.classify_bill import classify_text
+from financial_classifier.classify_bill import classify_text
 
 
 class TestRestriction:

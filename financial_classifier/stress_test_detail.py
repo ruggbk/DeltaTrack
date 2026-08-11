@@ -1,6 +1,6 @@
 """
 Detailed unknown-node inspection per bill.
-Run from DeltaTrack/:  uv run python notebooks/stress_test_detail.py
+Run from DeltaTrack/:  uv run python financial_classifier/stress_test_detail.py
 """
 
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from bill_tree import normalize_bill
-from notebooks.classify_bill import DOLLAR, classify_text
+from financial_classifier.classify_bill import DOLLAR, classify_text
 
 BILLS_DIR = Path(__file__).parent.parent / "bills"
 
