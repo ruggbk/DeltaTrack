@@ -4068,14 +4068,15 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
- "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5"],
+ "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
- "files_touched": ["probes/control_fixtures.py", "probes/x04_freeze_check.py",
-                   "probes/x23_control_fixtures.py", "probes/x24_xml_source_bridge.py",
-                   "probes/x25_bridge_validation.py", "probes/xml_sources.py"],
+ "files_touched": ["probes/build_oracle.py", "probes/control_fixtures.py",
+                   "probes/x04_freeze_check.py", "probes/x23_control_fixtures.py",
+                   "probes/x24_xml_source_bridge.py", "probes/x25_bridge_validation.py",
+                   "probes/xml_sources.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
- "status": "CONTRACT APPROVED; IMPLEMENTATION REPAIR IN PROGRESS -- NOT FROZEN. 8 reviewer findings falsified against HEAD, ALL 8 SURVIVED; F7 and F8 repaired; the F1/F2 bridge INDEPENDENTLY VALIDATED (A40.9); F1-F6 remain outstanding and the control_fixtures.py swap is HELD pending a ruling on A40.9's two findings"}
+ "status": "CONTRACT APPROVED; IMPLEMENTATION REPAIR IN PROGRESS -- NOT FROZEN. 8 reviewer findings falsified, ALL 8 SURVIVED; F7/F8 repaired; bridge INDEPENDENTLY VALIDATED and APPROVED (A40.9); parenthetical question ruled structurally (A40.10); F1/F2, F6 and F5 IMPLEMENTED (A40.11). OUTSTANDING: F3 and F4 -- G6 does NOT yet replay source selection or the deterministic mutation target, so a green G6 does not yet carry its section-12 meaning"}
 ```
 
 `affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
@@ -4356,7 +4357,76 @@ recorded here because it changes A40.8's reported refusal counts, not because it
 **Why the swap is held rather than performed under a stated assumption.** Swapping now would
 commit a manifest in which 5 of 16 control sources are not account headings, and the manifest is
 the artifact every later slice (F5, F6, G6) is verified against. The reviewer's own instruction
-to stop before the swap was given for exactly this class of question.
+to stop before the swap was given for exactly this class of question. **RESOLVED by A40.10.**
+
+### A40.10 — the parenthetical question, ruled STRUCTURALLY
+
+**No lexical rule was created.** Nothing reads the heading text — not its first character, not
+its words. The admission predicate is source POSITION: the legacy DTD models the appropriations
+hierarchy as flat siblings under `<title>` (`docs/bill-structure.md`), and exactly two parents
+occur in this corpus.
+
+| ancestor path | paired records | admitted-position accounts |
+|---|---:|---:|
+| `bill/legis-body/title/appropriations-small` | 79 | **79** |
+| `bill/legis-body/title/section/appropriations-small` | 17 | **0** |
+
+`title/section/appropriations-small` carries **17 paired records and not one** that shares a
+position with any admitted account, so it is a different source-defined structural role.
+`ACCOUNT_PARENT_ELEMENT = "title"`; the refusal is `NOT_ACCOUNT_POSITION`.
+
+**The corpus proves this is not a disguised parenthetical filter**: five parenthetical-headed
+records sit at the admitted position and REMAIN ELIGIBLE — `(INCLUDING TRANSFER OF FUNDS)` at
+118-hr-8752/1 p11 is in the realized **N-B 8**. 114-hr-2029/4's `(RESCISSIONS OF FUNDS)` records
+are excluded because they hang off `<section>`, not because of how they read.
+
+**Applied AFTER the bridge, never before.** Two 114-hr-2029/4 groups mix `section`- and
+`title`-parented records; filtering the enumeration would drop XML occurrences whose lines are
+still printed, break the equal-count test and refuse the whole group.
+
+### A40.11 — F1/F2, F6 and F5 landed; F3/F4 OUTSTANDING
+
+**`control_fixtures.py` no longer uses H for any result-bearing source truth.** The chain is
+committed XML → structurally identified `appropriations-small` under `<title>` → approved bridge
+→ independently observed printed line. No `run_hybrid`, no `run_extended`, no `extract_anchors`
+on the path. The three objects stay separately named on every record (`xml_source_text`,
+`expected_rendered_heading`, `expected_before`/`expected_text`).
+
+| | 114-hr-2029/4 | 118-hr-8752/1 |
+|---|---:|---:|
+| XML account records | 105 | 41 |
+| independent anchors / inversions | 85 / **0** | 111 / **0** |
+| bridge paired | 55 | 41 |
+| refused `UNDISCRIMINATED_GROUP` / `NO_PHYSICAL_OCCURRENCE` | 2 / 3 | 0 / 0 |
+| refused `NOT_ACCOUNT_POSITION` | 17 | 0 |
+| **admitted sources** | **38** | **41** |
+
+**79 admitted / 66 N-A eligible**, far above the 8 each frozen draw needs.
+
+**F6** commits the exact adjudication region under the already-frozen rule —
+`build_frames.REGION_SIZE`, non-overlapping, `ordinal = start // size`, A33's zero-padding union
+— applied to the independently observed lines, so the crop size stays frozen while H/X stay out
+of the geometry. Each record carries the canonical XML source identity, source PDF SHA, page,
+heading line index and bbox, region ordinal, `region_bbox_pdf_points`, the ordered line mapping
+and the expected rendered heading. Nothing downstream re-derives a boundary or searches for a crop.
+
+**F5** is done and measured: all **20 controls execute through the real `build_oracle`** — the
+same `load_prompt`, `render_region`, canonical identities, `blind_id`, `presentation_order`,
+`leakage_report` and `verify_join`. 20 stimuli, 20 blind ids, both routes on every control, **0 in
+C, 0 in D, 0 C-audit, 0 R1**, blind records exactly `{id,image,question}`, leakage clean, join
+clean, four N-C PNG hashes still distinct. `x21` **117/117**, so ordinary C/D/C∩D/C-audit/R1
+semantics are unchanged: every addition is additive (`frames=()` for a control, and
+`select_c_audit` / `plan_r1_repeats` already excluded `control_kind`).
+
+Byte reproducibility holds: 13 artifacts, **0 changed** on a second complete build.
+
+**OUTSTANDING, AND G6 DOES NOT YET CARRY ITS SECTION-12 MEANING.** `validate_manifest` still
+checks a self-consistent manifest; it does **not** yet replay source enumeration, the bridge,
+eligibility, ranking or the 8/8 selection (**F3**), and does **not** yet recompute
+`MUTATORS[variant](expected_before)` to prove the exact deterministic target (**F4**). The x25
+PDF-side anchor negatives and the committed end-to-end 20-control probe are also not yet in the
+tree. A green G6 at this commit means "coherent and internally verified", NOT "independently
+replayed", and must not be read as A40 complete.
 
 ### Population and boundary
 
