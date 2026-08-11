@@ -19,8 +19,11 @@ has its own way of going quietly wrong:
   `diff_bill`, `formatters` and `compare` in one call, so a subpackage missing from the
   wheel fails here rather than on a user's machine.
 * **`[project.dependencies]` is honest in both directions.** `pypdfium2` must arrive with
-  the engine, and the web stack must not -- the claim ADR 0016 makes and #367 shipped
-  with no way to check.
+  the engine, and nothing from the `web`, `fetch`, or `dev` dependency-groups must -- the
+  claim ADR 0016 makes and #367 shipped with no way to check. #593 broadened this from a
+  hardcoded three-name tuple (`fastapi`, `uvicorn`, `httpx`) that only ever covered the
+  `web` group: #533 found a `dev`-group package (`tomlkit`) declared in
+  `[project.dependencies]` too, and the old probe had no way to catch it.
 
 Marked `slow`: it builds a wheel and creates a virtualenv, so it belongs to the gate CI
 runs for engine changes rather than to the fast inner loop.
@@ -29,9 +32,12 @@ runs for engine changes rather than to the fast inner loop.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
+import tomllib
+from importlib.metadata import packages_distributions
 from pathlib import Path
 
 import pytest
@@ -140,19 +146,100 @@ def test_the_engine_install_brings_its_runtime_dependency(installed_engine):
     _run([str(installed_engine), "-c", "import pypdfium2"])
 
 
-def test_the_engine_install_does_not_drag_in_the_web_channel(installed_engine):
-    """ADR 0016's central claim, finally checkable.
+#: A bare distribution name off the front of a PEP 508 requirement string, e.g. pulls
+#: "uvicorn" out of "uvicorn[standard]>=0.52.1" and "python-dotenv" out of
+#: "python-dotenv>=1.0". Requirement strings in this file's dependency-groups carry no
+#: environment markers today, but split on ";" first regardless, since a marker would
+#: otherwise ride along inside what this regex treats as the version specifier.
+_REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _canonicalize(name: str) -> str:
+    """PEP 503 name normalization, so "pre-commit" and "pre_commit" compare equal.
+
+    A distribution's declared name (in pyproject.toml) and the name importlib.metadata
+    reports for it are not always spelled the same way -- observed for pre-commit, whose
+    own METADATA uses the underscore form. Comparing raw strings would silently drop it
+    out of the forbidden set instead of resolving it.
+    """
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _group_import_names(group: str) -> set[str]:
+    """Every import name a pyproject.toml dependency-group could bring into an install.
+
+    Resolved from the CURRENT interpreter's own installed packages, not a hardcoded
+    distribution-to-import table: `web`, `fetch`, and `dev` are all default groups (see
+    `[tool.uv]` below), so whatever a group declares is already installed here, and
+    `importlib.metadata.packages_distributions()` reports each installed distribution's
+    own claimed top-level import names. A distribution's name and its import name often
+    differ -- `pyyaml` imports as `yaml`, `pytest-xdist` as `xdist`, `python-dotenv` as
+    `dotenv` -- which a literal name list would get wrong for every one of them.
+
+    This is what makes the probe track pyproject.toml automatically: a new package added
+    to any of these groups is covered the moment it is declared, with nobody needing to
+    extend a second, parallel list here.
+    """
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    requirements = pyproject["dependency-groups"][group]
+
+    distributions_by_import = packages_distributions()
+    imports_by_distribution: dict[str, list[str]] = {}
+    for import_name, distribution_names in distributions_by_import.items():
+        for distribution_name in distribution_names:
+            imports_by_distribution.setdefault(_canonicalize(distribution_name), []).append(import_name)
+
+    import_names: set[str] = set()
+    for requirement in requirements:
+        match = _REQUIREMENT_NAME.match(requirement.split(";")[0].strip())
+        assert match, f"could not parse a distribution name out of {requirement!r} in the {group!r} group"
+        distribution_name = _canonicalize(match.group(0))
+
+        resolved = imports_by_distribution.get(distribution_name, [])
+        assert resolved, (
+            f"{match.group(0)!r} (from the {group!r} dependency-group) resolved to no "
+            "importable module in this environment. Either it isn't installed here (the "
+            "dev/web/fetch groups install by default -- see [tool.uv].default-groups) or "
+            "it ships no top-level module for importlib.metadata to find; either way this "
+            "probe cannot verify it stays out of an engine-only install, so it needs a "
+            "manual entry instead of silently dropping out of the check."
+        )
+        import_names.update(resolved)
+    return import_names
+
+
+def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(installed_engine):
+    """ADR 0016's central claim, finally checkable -- and checkable for ANY group package.
 
     #367 narrowed `[project.dependencies]` so that installing DeltaTrack to diff two bills
     would not install a web server -- but with nothing installable, that was an assertion
     about a config file rather than about an install. It is a real environment now, so
     check the environment.
 
+    This used to probe three hardcoded names (`fastapi`, `uvicorn`, `httpx`), which
+    covered only the `web` group -- #533 found `tomlkit`, a `dev`-group package, declared
+    in `[project.dependencies]` too, and the hardcoded probe had no way to catch it
+    (#593). It now derives the forbidden set from the `web`, `fetch`, and `dev` groups
+    themselves, so a package added to any of them is covered without anyone remembering
+    to extend a list here.
+
     Asserted as an ABSENCE, which is the vacuous-pass shape: a probe that could never
     import anything would pass this while proving nothing. The dependency test above is
-    the known-good case that proves this probe can resolve a package at all.
+    the known-good case that proves this probe can resolve a package at all -- and the
+    resolver's own assertion above rejects a group package it cannot map to an import
+    name, rather than silently excluding it from this set.
     """
-    for absent in ("fastapi", "uvicorn", "httpx"):
+    forbidden = set()
+    for group in ("web", "fetch", "dev"):
+        forbidden |= _group_import_names(group)
+    # A regression floor on the derivation itself: the hardcoded version this replaced
+    # checked 3 names, all from `web` alone. If the resolver ever collapsed back down to
+    # that scope, the assertions below would still pass -- vacuously, on a narrower set
+    # than the config actually declares -- so check the derivation grew, not just that it
+    # is non-empty.
+    assert len(forbidden) > 3, f"resolved suspiciously few forbidden imports: {sorted(forbidden)}"
+
+    for absent in sorted(forbidden):
         result = subprocess.run(
             [str(installed_engine), "-c", f"import {absent}"],
             capture_output=True,
