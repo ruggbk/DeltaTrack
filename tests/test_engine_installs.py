@@ -37,7 +37,6 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from importlib.metadata import packages_distributions
 from pathlib import Path
 
 import pytest
@@ -154,58 +153,26 @@ def test_the_engine_install_brings_its_runtime_dependency(installed_engine):
 _REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
-def _canonicalize(name: str) -> str:
-    """PEP 503 name normalization, so "pre-commit" and "pre_commit" compare equal.
+def _group_distribution_names(group: str) -> set[str]:
+    """Every distribution name a pyproject.toml dependency-group could install.
 
-    A distribution's declared name (in pyproject.toml) and the name importlib.metadata
-    reports for it are not always spelled the same way -- observed for pre-commit, whose
-    own METADATA uses the underscore form. Comparing raw strings would silently drop it
-    out of the forbidden set instead of resolving it.
-    """
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def _group_import_names(group: str) -> set[str]:
-    """Every import name a pyproject.toml dependency-group could bring into an install.
-
-    Resolved from the CURRENT interpreter's own installed packages, not a hardcoded
-    distribution-to-import table: `web`, `fetch`, and `dev` are all default groups (see
-    `[tool.uv]` below), so whatever a group declares is already installed here, and
-    `importlib.metadata.packages_distributions()` reports each installed distribution's
-    own claimed top-level import names. A distribution's name and its import name often
-    differ -- `pyyaml` imports as `yaml`, `pytest-xdist` as `xdist`, `python-dotenv` as
-    `dotenv` -- which a literal name list would get wrong for every one of them.
-
-    This is what makes the probe track pyproject.toml automatically: a new package added
-    to any of these groups is covered the moment it is declared, with nobody needing to
-    extend a second, parallel list here.
+    Bare parsing only -- no resolution against an import name, and no dependence on the
+    CURRENT interpreter having the group's packages installed. Presence is checked
+    directly against the engine-only venv's own distribution metadata (see the test
+    below): `importlib.metadata.distribution()` looks a distribution up by name with
+    PEP 503 normalization built in (case, "-"/"_"/"." all fold together), so nothing
+    here needs to pre-normalize or map a distribution name to whatever it happens to
+    import as.
     """
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     requirements = pyproject["dependency-groups"][group]
 
-    distributions_by_import = packages_distributions()
-    imports_by_distribution: dict[str, list[str]] = {}
-    for import_name, distribution_names in distributions_by_import.items():
-        for distribution_name in distribution_names:
-            imports_by_distribution.setdefault(_canonicalize(distribution_name), []).append(import_name)
-
-    import_names: set[str] = set()
+    names: set[str] = set()
     for requirement in requirements:
         match = _REQUIREMENT_NAME.match(requirement.split(";")[0].strip())
         assert match, f"could not parse a distribution name out of {requirement!r} in the {group!r} group"
-        distribution_name = _canonicalize(match.group(0))
-
-        resolved = imports_by_distribution.get(distribution_name, [])
-        assert resolved, (
-            f"{match.group(0)!r} (from the {group!r} dependency-group) resolved to no "
-            "importable module in this environment. Either it isn't installed here (the "
-            "dev/web/fetch groups install by default -- see [tool.uv].default-groups) or "
-            "it ships no top-level module for importlib.metadata to find; either way this "
-            "probe cannot verify it stays out of an engine-only install, so it needs a "
-            "manual entry instead of silently dropping out of the check."
-        )
-        import_names.update(resolved)
-    return import_names
+        names.add(match.group(0))
+    return names
 
 
 def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(installed_engine):
@@ -223,11 +190,20 @@ def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(in
     `pyproject.toml` itself, so a package -- or a whole group -- added later is covered
     without anyone remembering to extend a list here.
 
-    Asserted as an ABSENCE, which is the vacuous-pass shape: a probe that could never
-    import anything would pass this while proving nothing. The dependency test above is
-    the known-good case that proves this probe can resolve a package at all -- and the
-    resolver's own assertion above rejects a group package it cannot map to an import
-    name, rather than silently excluding it from this set.
+    Checked via INSTALLED DISTRIBUTION METADATA, not importability. An earlier version of
+    this probe ran `import {name}` and treated a `ModuleNotFoundError` as absence -- but a
+    forbidden package can be genuinely installed and still raise `ModuleNotFoundError`,
+    if importing it fails partway through on one of ITS OWN missing dependencies (e.g. a
+    `web`/`fetch`/`dev` package that itself needs something the engine-only install never
+    pulled in). That import would fail, stderr would say `ModuleNotFoundError`, and the
+    old probe would call it absent -- exactly the false-green #593 exists to close, just
+    one level deeper. Querying `importlib.metadata.distribution()` in the target venv
+    instead asks what ADR 0016 actually protects: whether the distribution is on disk in
+    that install, independent of whether importing it happens to succeed.
+
+    Asserted as an ABSENCE, which is the vacuous-pass shape: a probe that could never find
+    anything installed would pass this while proving nothing. The dependency test above is
+    the known-good case that proves this probe can find a package that IS there.
     """
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     groups = sorted(pyproject["dependency-groups"])
@@ -240,40 +216,42 @@ def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(in
     # would still pass a combined-cardinality check. Asserting each group individually
     # produced names proves every group pyproject.toml declares was actually evaluated,
     # regardless of how big any one of them is.
-    forbidden_by_group = {group: _group_import_names(group) for group in groups}
+    forbidden_by_group = {group: _group_distribution_names(group) for group in groups}
     for group, names in forbidden_by_group.items():
         assert names, (
             f"the {group!r} dependency-group is declared in pyproject.toml but this probe "
-            "resolved no forbidden import names for it. _group_import_names() already "
-            "fails loudly on a single unresolvable package, so an empty result here means "
-            f"{group!r} has become empty in pyproject.toml -- if that's not intentional, "
-            "the group (and this check's coverage of it) needs a look."
+            f"resolved no distribution names for it, which means {group!r} has become "
+            "empty in pyproject.toml -- if that's not intentional, the group (and this "
+            "check's coverage of it) needs a look."
         )
     forbidden = set().union(*forbidden_by_group.values())
 
     for absent in sorted(forbidden):
         result = subprocess.run(
-            [str(installed_engine), "-c", f"import {absent}"],
+            [str(installed_engine), "-c", f"import importlib.metadata; importlib.metadata.distribution({absent!r})"],
             capture_output=True,
             text=True,
         )
         owning_groups = [group for group, names in forbidden_by_group.items() if absent in names]
-        # Deliberately not phrased as "has re-acquired a dependency": importability alone
-        # cannot distinguish a leak in [project.dependencies] from `absent` having become
-        # a genuine transitive dependency of pypdfium2 (the engine's one real dependency).
-        # Either way this probe cannot resolve that ambiguity, and shouldn't try to -- it
-        # should fail closed and force whoever sees it to make the packaging-boundary call
-        # consciously, rather than staying silently green either way.
+        # Deliberately not phrased as "has re-acquired a dependency": installed presence
+        # alone cannot distinguish a leak in [project.dependencies] from `absent` having
+        # become a genuine transitive dependency of pypdfium2 (the engine's one real
+        # dependency). Either way this probe cannot resolve that ambiguity, and shouldn't
+        # try to -- it should fail closed and force whoever sees it to make the
+        # packaging-boundary call consciously, rather than staying silently green either
+        # way.
         assert result.returncode != 0, (
             f"{absent!r} (declared in the {'/'.join(owning_groups)!r} dependency-group) is "
-            "importable in an engine-only install. Either a delivery-channel or tooling "
-            "dependency has leaked into [project.dependencies] (ADR 0016), or it has "
-            "newly arrived as a legitimate transitive dependency of a real runtime "
-            "dependency -- this probe can't tell which. Either way, the packaging "
-            "boundary needs a conscious decision here, not a silent pass."
+            "installed in an engine-only install -- its distribution metadata is present, "
+            "regardless of whether importing it happens to succeed. Either a "
+            "delivery-channel or tooling dependency has leaked into "
+            "[project.dependencies] (ADR 0016), or it has newly arrived as a legitimate "
+            "transitive dependency of a real runtime dependency -- this probe can't tell "
+            "which. Either way, the packaging boundary needs a conscious decision here, "
+            "not a silent pass."
         )
-        assert "ModuleNotFoundError" in result.stderr, (
-            f"importing {absent!r} failed for an unexpected reason, so this assertion is "
+        assert "PackageNotFoundError" in result.stderr, (
+            f"checking {absent!r} failed for an unexpected reason, so this assertion is "
             f"not evidence of absence:\n{result.stderr}"
         )
 
