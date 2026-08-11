@@ -440,21 +440,12 @@ class TestExtractArchive:
         # under that threshold ("refusing the 200,000-member archive... by a factor
         # of two"), so the calibration pins that margin explicitly rather than
         # tolerating any widening up to one member short of #306's demonstration.
+        #
+        # No companion "still extracts a normal archive" test here: that positive
+        # control already exists and doesn't need duplicating --
+        # test_creates_the_destination_and_writes_members above extracts a small
+        # archive under both real, unpatched ceilings.
         assert 10_564 < MAX_MEMBER_COUNT <= 100_000
-
-    def test_member_ceiling_at_default_extracts_a_normal_archive(self, tmp_path):
-        # Companion to the calibration assertion above: proves the real (unpatched)
-        # ceiling does not reject ordinary extraction, so a bound wired to refuse
-        # everything could not pass by accident. Deliberately a tiny two-member
-        # archive rather than a materialized 10,564-member fixture -- the real
-        # corpus figure is what the calibration assertion above checks; this only
-        # needs to exercise the unmodified extraction path on real input.
-        archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
-        dest = tmp_path / "out"
-
-        extract_archive(archive, dest)
-
-        assert (dest / "a.xml").exists()
 
     def test_byte_ceiling_calibration_has_real_corpus_headroom(self):
         # Companion to the member-ceiling calibration above, for MAX_UNCOMPRESSED_BYTES
@@ -472,20 +463,12 @@ class TestExtractArchive:
         # magnitude of headroom" over 162 MiB): 3 GiB is roughly 19x the floor,
         # comfortably inside that claimed order of magnitude while still catching a
         # ceiling widened toward "off".
+        #
+        # No companion extraction test here either, for the same reason as the member
+        # ceiling above: test_creates_the_destination_and_writes_members and
+        # test_an_archive_at_the_ceiling_is_still_extracted already cover normal
+        # extraction under the real, unpatched byte ceiling.
         assert 162 * 1024**2 < MAX_UNCOMPRESSED_BYTES <= 3 * 1024**3
-
-    def test_byte_ceiling_at_default_extracts_a_normal_archive(self, tmp_path):
-        # Companion to the calibration assertion above: proves the real (unpatched)
-        # ceiling does not reject ordinary extraction. Deliberately a tiny archive
-        # rather than a materialized 162 MiB fixture -- the real corpus figure is
-        # what the calibration assertion above checks; this only needs to exercise
-        # the unmodified extraction path on real input.
-        archive = write_archive(tmp_path, "119-hr", {"a.xml": b"<a/>", "b.xml": b"<b/>"})
-        dest = tmp_path / "out"
-
-        extract_archive(archive, dest)
-
-        assert (dest / "a.xml").exists()
 
     def test_raises_on_a_corrupt_archive(self, tmp_path):
         archive = tmp_path / "119-hr.zip"
