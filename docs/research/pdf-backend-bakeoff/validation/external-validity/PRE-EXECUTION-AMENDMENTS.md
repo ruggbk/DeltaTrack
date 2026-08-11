@@ -4069,7 +4069,7 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
  "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0",
-             "9606a6e", "767abe9", "3f49fed"],
+             "9606a6e", "767abe9", "3f49fed", "2c06749"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/build_oracle.py", "probes/control_fixtures.py",
@@ -4590,6 +4590,46 @@ renamed copy carries a different id, and neither source selection nor any contro
 
 `x15` 64/64 · `x16` 27/27 · `x17` 56/56 · `x21` 117/117 · `x22` 52/52 · `x23` 46/46 · `x24` 16/16 ·
 `x25` 19/19 · `x26` 12/12. Double run over **40 artifacts: 0 changed**.
+
+### A40.16 — freeze verification found TWO real gaps in G6 itself, both closed
+
+The freeze pass was narrowly about whether **G6 deserves to be trusted**. It did not, in two ways.
+
+**Gap 1 — the x26 evidence certified only itself.** `_oracle_integration_defects` read the
+artifact's own `failures`, `n_controls` and `counts`. Measured: an x26 result whose every certified
+value was replaced with garbage (`nc_png_sha256` = `deadbeef`×4, `frame_counts` nonsense, a fourth
+blind key) **still left G6 green**, because `failures: []` was all G6 read. A stale PASS produced
+for a *different* valid control state would have been accepted identically — the precise
+false-green shape A40.12 was opened to remove.
+
+**Closed by a shared authoritative digest.** `build_oracle.control_oracle_input_digest(manifest)`
+covers every record's truth-bearing digest (identity, kind, variant, source/generated SHA, expected
+truth, mutation recipe, committed region), the adjudicator prompt SHA, the frozen route vocabulary
+and the control join fields. `x26` records it; **G6 recomputes it from the manifest and prompt on
+disk** and refuses on disagreement (`ORACLE_EVIDENCE_STALE`). The renders are a deterministic
+function of those inputs, so binding the inputs binds the images without G6 re-rendering.
+
+**Gap 2 — N-B private truth was never replayed.** Swapping the expected headings between two valid
+N-B controls left **both x26 and G6 green** once x26 was regenerated: each record stayed
+well-formed, and `verify_join` compares the key against the manifest, so with both derived from the
+same mutated manifest it could not see the swap. Only the independently replayed source can, and
+F4 covered N-A only. N-B's expected heading **is** the rendered heading of its own source
+occurrence, and that is now asserted (`MUTATION_INPUT_MISMATCH`).
+
+**The falsifications, after the repairs:**
+
+| condition | result |
+|---|---|
+| G6 run with `run_hybrid.run` / `run_extended.run` / `extract_anchors` raising, replay cache cleared | **0 defects**, same 96 / 83 / 96, 8/8, 3/3/2 |
+| each sabotaged entrypoint invoked directly | raises `AssertionError` |
+| well-formed N-B truth swap, x26 evidence left stale | `ORACLE_EVIDENCE_STALE` |
+| …and after regenerating x26 against that state | still fails, `MUTATION_INPUT_MISMATCH` |
+| x26 reporting its own binding negative as failed | `ORACLE_INTEGRATION_NOT_VERIFIED` |
+| inputs restored | G6 **0 defects**, x26 rc 0 |
+
+Clearing `_REPLAY_CACHE` before the sabotage run is load-bearing: a cached population computed
+before the monkeypatch would have been returned without re-executing the source path, and the
+control would have passed while proving nothing.
 
 ### Population and boundary
 
