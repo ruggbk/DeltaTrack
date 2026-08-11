@@ -37,9 +37,10 @@ round-2 pass placed after that stage does see them.
     change owing its own evidence rather than an obstacle.
 
 Accordingly this says "revoked" and "revocation-produced" throughout. The pre-#591
-architecture is the only place "classification-created" was ever true, and the figures
-below were first measured against it at develop 97f91ba; they are unchanged at
-0f07dc4 (post-#591), which is itself the evidence that #591 preserved the population.
+architecture is the only place "classification-created" was ever true. The figures below
+were first measured against it on this branch at c3b6387, whose base af83c28 differs from
+the last pre-#591 develop (97f91ba) by documentation only; they are unchanged at 0f07dc4
+(post-#591), which is itself independent evidence that #591 preserved the population.
 
 Section E then measures the "representational, not populational" claim above rather than
 leaving it as reasoning, since it is the sentence the next slice rests on.
