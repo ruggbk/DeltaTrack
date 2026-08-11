@@ -3827,7 +3827,15 @@ Per document per architecture, from production: whether `derive_size_bands` retu
 `_coverage`'s actual numerator); and the **margin-numbered line keys** themselves. **This stage
 records facts. It does not compute Rule 0.**
 
-> **FORWARD AMBIGUITY, recorded and deliberately NOT resolved.** Rule 0's *"loses
+> **STATUS: RESOLVED by [A39.1](#a39--substantive-rule-0s-margin-line-clause-cross-engine-sampling-control-sources).**
+> `margin_lines_recovered` is the **count of `Page.lines` where `line_number is not None`**, and
+> **any strictly positive per-document deficit fires, with no tolerance**. The glyph-size count
+> and the per-line keys remain **diagnostics** and do not determine the clause. `x22` carries an
+> **executable** assertion that `margin_line_loss` implements exactly this, so the resolution
+> cannot drift from the code. The original open question is preserved below as the record that
+> the gap was found and reported **before** execution rather than discovered inside the scorer.
+>
+> **FORWARD AMBIGUITY as originally recorded — HISTORICAL.** Rule 0's *"loses
 > margin-numbered lines on a document the other keeps"* does **not** uniquely determine the
 > comparable quantity. At least three readings survive the frozen text: (a) the **count** of
 > lines with `line_number is not None`; (b) `_coverage`'s **numerator**, numbered lines that

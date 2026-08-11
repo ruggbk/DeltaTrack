@@ -48,6 +48,10 @@ OUT = EV / "results" / "x22_score_input_contract.json"
 ROWS: list[dict] = []
 FAILED: list[str] = []
 STOPS: list[dict] = []
+# Ambiguities this probe once carried as OPEN and that a later amendment has since ruled.
+# Kept visible rather than deleted: the history is the evidence that the gap was found before
+# execution, and each entry is paired with an executable assertion that the ruling is live.
+RESOLVED: list[dict] = []
 
 DOC_NAME = "118-hr-8752/1"
 DOC_PATH = REPO / "tests/corpus/118-hr-8752/1_reported-in-house.pdf"
@@ -498,20 +502,32 @@ def part_m9(frame: dict) -> dict:
         "only counts are recorded, foreclosing the set-difference reading of Rule 0 before it has been ruled on",
     )
     check(
-        "A38 does NOT compute the Rule 0 comparison",
-        "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it",
-        m9["H"]["rule0_comparison"],
-        "this stage decided which margin-line quantity Rule 0 compares, which the frozen text does not determine",
+        "this stage still records FACTS and does not APPLY Rule 0",
+        True,
+        m9["H"]["rule0_comparison"].startswith("RAW FACTS ONLY"),
+        "frame construction applies the Rule 0 comparison, which belongs to the later architecture decision",
     )
-    STOPS.append(
+    # A39.1 RULED this. The assertion is EXECUTABLE rather than prose, so a ledger entry
+    # claiming the ambiguity is resolved cannot drift from what the code actually implements.
+    check(
+        "RULE0_MARGIN_LINE_QUANTITY is RESOLVED_BY_A39_1, and the ruling is implemented",
+        {"H_loses": ("H", True, 1), "X_loses": ("X", True, 1), "equal": (None, False, 0)},
         {
-            "forward_ambiguity": "RULE0_MARGIN_LINE_QUANTITY",
-            "why": "Rule 0's 'loses margin-numbered lines on a document the other keeps' does not "
-            "uniquely determine the comparable quantity: (a) count of line_number is not None; "
-            "(b) _coverage's numerator, numbered lines that also carry a glyph size; (c) a SET "
-            "difference a count cannot see. No threshold is stated for 'loses' either.",
-            "status": "NOT RESOLVED BY A38 -- raw basis for all three recorded; "
-            "decide_architecture must rule it before Rule 0 is implemented",
+            "H_loses": tuple(MC.margin_line_loss(197, 198)[k] for k in ("loser", "fires", "deficit")),
+            "X_loses": tuple(MC.margin_line_loss(198, 197)[k] for k in ("loser", "fires", "deficit")),
+            "equal": tuple(MC.margin_line_loss(198, 198)[k] for k in ("loser", "fires", "deficit")),
+        },
+        "the frozen A39.1 clause -- count of line_number is not None, ANY positive deficit "
+        "fires, no tolerance -- is not what margin_line_loss implements, so the ledger would "
+        "be claiming a resolution the code does not deliver",
+    )
+    RESOLVED.append(
+        {
+            "was": "RULE0_MARGIN_LINE_QUANTITY",
+            "status": "RESOLVED_BY_A39_1",
+            "ruling": "margin_lines_recovered = count of Page.lines where line_number is not None; "
+            "any strictly positive per-document deficit fires; no tolerance. The glyph-size count "
+            "and per-line keys remain diagnostics and do not determine the clause.",
         }
     )
     return {arm: {k: v for k, v in m9[arm].items() if k != "margin_numbered_line_keys"} for arm in ("H", "X")}
@@ -814,12 +830,16 @@ def main() -> int:
         "reachability": reach,
         "oracle_key_schema": built.key["schema"],
         "forward_ambiguities": STOPS,
+        "resolved_ambiguities": RESOLVED,
         "tests": ROWS,
         "failures": FAILED,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(doc, indent=1, default=str))
-    print(f"\n{len(ROWS) - len(FAILED)}/{len(ROWS)} checks pass; {len(STOPS)} forward ambiguities recorded")
+    print(
+        f"\n{len(ROWS) - len(FAILED)}/{len(ROWS)} checks pass; "
+        f"{len(STOPS)} forward ambiguities OPEN, {len(RESOLVED)} resolved"
+    )
     print(f"wrote {OUT}")
     return 1 if FAILED else 0
 

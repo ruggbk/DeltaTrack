@@ -678,10 +678,11 @@ def architecture_occurrences(document_sha256: str, arm_pages: list[dict]) -> lis
 def m9_facts(arm_pages: list[dict]) -> dict:
     """The RAW M9 basis for one arm, from production's own functions. No Rule 0 here.
 
-    Records every quantity the frozen phrase "loses margin-numbered lines" could denote --
-    the count of margin-numbered lines, `_coverage`'s actual numerator (numbered lines that
-    also carry a glyph size), and the per-line KEYS so a set comparison stays possible --
-    because the phrase does not pin one of them and A38 does not choose. See A38.8.
+    A39.1 RULED the comparison: `margin_lines_recovered` is the count of `Page.lines` with
+    `line_number is not None`, and ANY strictly positive per-document deficit fires. This
+    function still records only FACTS -- the glyph-size count and the per-line keys remain
+    diagnostics that A39.1 explicitly excluded from the clause, and applying the rule belongs
+    to the later architecture decision, not to frame construction.
     """
     pages = [d["page"] for d in sorted(arm_pages, key=lambda d: d["page_number"])]
     numbered = [(pg.page_number, ln) for pg in pages for ln in pg.lines if ln.line_number is not None]
@@ -697,5 +698,9 @@ def m9_facts(arm_pages: list[dict]) -> dict:
         "n_margin_numbered_with_glyph_size": sum(1 for _p, ln in numbered if ln.glyph_size is not None),
         # reading (c): the identities themselves, so a SET difference remains computable
         "margin_numbered_line_keys": [[p, ln.line_number] for p, ln in numbered],
-        "rule0_comparison": "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it",
+        "rule0_comparison": (
+            "RAW FACTS ONLY -- Rule 0 margin-line interpretation frozen by A39.1 "
+            "(count of Page.lines where line_number is not None; any positive deficit fires); "
+            "application belongs to the later architecture decision"
+        ),
     }

@@ -104,7 +104,7 @@
    "n_lines_total": 293,
    "n_margin_numbered_lines": 277,
    "n_margin_numbered_with_glyph_size": 277,
-   "rule0_comparison": "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it"
+   "rule0_comparison": "RAW FACTS ONLY -- Rule 0 margin-line interpretation frozen by A39.1 (count of Page.lines where line_number is not None; any positive deficit fires); application belongs to the later architecture decision"
   },
   "X": {
    "derive_size_bands_returns_a_band": true,
@@ -114,7 +114,7 @@
    "n_lines_total": 387,
    "n_margin_numbered_lines": 370,
    "n_margin_numbered_with_glyph_size": 370,
-   "rule0_comparison": "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it"
+   "rule0_comparison": "RAW FACTS ONLY -- Rule 0 margin-line interpretation frozen by A39.1 (count of Page.lines where line_number is not None; any positive deficit fires); application belongs to the later architecture decision"
   }
  },
  "s1": {
@@ -185,11 +185,12 @@
   }
  },
  "oracle_key_schema": "oracle_key/3",
- "forward_ambiguities": [
+ "forward_ambiguities": [],
+ "resolved_ambiguities": [
   {
-   "forward_ambiguity": "RULE0_MARGIN_LINE_QUANTITY",
-   "why": "Rule 0's 'loses margin-numbered lines on a document the other keeps' does not uniquely determine the comparable quantity: (a) count of line_number is not None; (b) _coverage's numerator, numbered lines that also carry a glyph size; (c) a SET difference a count cannot see. No threshold is stated for 'loses' either.",
-   "status": "NOT RESOLVED BY A38 -- raw basis for all three recorded; decide_architecture must rule it before Rule 0 is implemented"
+   "was": "RULE0_MARGIN_LINE_QUANTITY",
+   "status": "RESOLVED_BY_A39_1",
+   "ruling": "margin_lines_recovered = count of Page.lines where line_number is not None; any strictly positive per-document deficit fires; no tolerance. The glyph-size count and per-line keys remain diagnostics and do not determine the clause."
   }
  ],
  "tests": [
@@ -476,11 +477,50 @@
    "fails_when": "only counts are recorded, foreclosing the set-difference reading of Rule 0 before it has been ruled on"
   },
   {
-   "test": "A38 does NOT compute the Rule 0 comparison",
-   "expected": "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it",
-   "observed": "NOT DECIDED HERE -- see A38.8; decide_architecture must rule it",
+   "test": "this stage still records FACTS and does not APPLY Rule 0",
+   "expected": true,
+   "observed": true,
    "pass": true,
-   "fails_when": "this stage decided which margin-line quantity Rule 0 compares, which the frozen text does not determine"
+   "fails_when": "frame construction applies the Rule 0 comparison, which belongs to the later architecture decision"
+  },
+  {
+   "test": "RULE0_MARGIN_LINE_QUANTITY is RESOLVED_BY_A39_1, and the ruling is implemented",
+   "expected": {
+    "H_loses": [
+     "H",
+     true,
+     1
+    ],
+    "X_loses": [
+     "X",
+     true,
+     1
+    ],
+    "equal": [
+     null,
+     false,
+     0
+    ]
+   },
+   "observed": {
+    "H_loses": [
+     "H",
+     true,
+     1
+    ],
+    "X_loses": [
+     "X",
+     true,
+     1
+    ],
+    "equal": [
+     null,
+     false,
+     0
+    ]
+   },
+   "pass": true,
+   "fails_when": "the frozen A39.1 clause -- count of line_number is not None, ANY positive deficit fires, no tolerance -- is not what margin_line_loss implements, so the ledger would be claiming a resolution the code does not deliver"
   },
   {
    "test": "the S1 sabotage scale is exactly the frozen 1.25",
