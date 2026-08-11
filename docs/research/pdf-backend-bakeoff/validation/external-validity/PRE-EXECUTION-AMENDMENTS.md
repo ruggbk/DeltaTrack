@@ -4426,7 +4426,56 @@ eligibility, ranking or the 8/8 selection (**F3**), and does **not** yet recompu
 `MUTATORS[variant](expected_before)` to prove the exact deterministic target (**F4**). The x25
 PDF-side anchor negatives and the committed end-to-end 20-control probe are also not yet in the
 tree. A green G6 at this commit means "coherent and internally verified", NOT "independently
-replayed", and must not be read as A40 complete.
+replayed", and must not be read as A40 complete. **A40.12 WITHDRAWS this caveat as insufficient
+and makes the gate itself red.**
+
+### A40.12 — `ACCOUNT_PARENT_ELEMENT` FALSIFIED AND WITHDRAWN; G6 made RED; a new STOP
+
+**A40.10's parent rule was wrong, and its justification was the defect.** It rested on corpus
+correlation — "17 records sit at `title/section/appropriations-small` and no admitted account
+does" — which is observational clustering, not a source-semantic rule. Tested against the
+authorities, all key on the TAG and none conditions on the parent:
+
+| authority | what it says | bearing |
+|---|---|---|
+| `docs/bill-structure.md`, *Caveat: the level tags are convention* | the bill DTD gives `appropriations-major/intermediate/small` **identical content models and no defining comments**, verified against `usgpo/bill-dtd` | a content model that does not vary cannot license a parent distinction, and none is declared |
+| `docs/bill-structure.md` level table | `account` = "**leaf**, tag `appropriations-small` (and the default)" | the level is keyed on the tag; the same section states "the tag is authoritative" |
+| `docs/gpo-render-conventions.md` casing table; `billres-details.xsl:8279` `convertToNeededCase` | the branch is `<xsl:when test="ancestor::appropriations-small">` | an ELEMENT-TYPE ancestor test with **no parent predicate**, so GPO's own renderer applies the identical template under `<title>` or `<section>` |
+| `bills.css` | one class per appropriations level | styled per level, not per parent |
+
+**Decision: REMOVED.** No authoritative source distinguishes a section-parented
+`appropriations-small`, so all 96 bridged records are account sources. Restoring an exclusion
+needs new AUTHORITY, not a new correlation. Populations: **96 admitted / 83 N-A / 96 N-B**, and
+the 3/3/2 N-A allocation is unchanged.
+
+**G6 is now RED by machine, not by prose.** `validate_manifest` emits
+`SOURCE_REPLAY_NOT_IMPLEMENTED` (F3) and `MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED` (F4) until the
+replays land. `x23` asserts the defect set is EXACTLY those two, so a real defect cannot hide
+behind them, and separately asserts G6 is not green.
+
+### A40.12.1 — STOP: one selected N-A has no usable committed region
+
+Restoring the full population exposed a real defect the narrowed population had hidden. Measured
+on the rebuilt fixtures, over the GENERATED PDF:
+
+| # | page | variant | `expected_before` on page / in region | `expected_after` on page / in region |
+|---:|---:|---|---:|---:|
+| 1 | 126 | WELD | 1 / **0** | 1 / 1 |
+| 2 | 21 | SPLIT | 2 / **0** | 1 / 1 |
+| **6** | **23** | **DELETE** | 0 / 0 | 1 / **0** |
+
+Items 1 and 2 are **not** defects: the surviving original occurrences lie OUTSIDE the committed
+adjudication region, and the contract is region-scoped. `x23`'s page-scope check is stricter than
+the frozen contract, which is what surfaced them.
+
+**Item 6 IS the STOP.** `COMPENSATION AND PENSIONS` on page 23 renders its mutated heading
+OUTSIDE its own committed region, so the stimulus would not contain the mutation the control
+exists to test. Suspected cause, **not yet confirmed**: the region bbox is computed from the
+ORIGINAL page lines while `generate_na_pdf` redacts and redraws at `(rect.x0, rect.y1)` with
+`fontsize = rect.height`, so where the heading is the last line of its 8-line window the redrawn
+descender can fall below the region's lower bound. **It must not be repaired by loosening the
+region or re-selecting a more convenient source** — either would be choosing the population that
+gives nicer fixtures, which A40.12 has just finished removing.
 
 ### Population and boundary
 
