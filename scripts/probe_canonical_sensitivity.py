@@ -3,29 +3,43 @@
 The acceptance criterion for every ADR 0020 Phase 1 slice is that
 ``tests/test_canonical_baseline.py`` stays green. A gate nobody has ever seen fail cannot
 distinguish "the extraction preserved behaviour" from "the gate cannot see this class of
-change" — and correspondence is precisely the class it is being trusted for. So this
+change" -- and correspondence is precisely the class it is being trusted for. So this
 injects a real correspondence change and watches the digests move.
 
 The fault is chosen to be the one #581 is most likely to introduce by accident:
 **substituting ADR 0019 ordinals for the legacy ``(ri, ai)`` component of the sort key.**
 ``scripts/probe_round2_migration.py`` measures that this changes the selected move set on
-3 of the 16 selecting corpus pairs, so the prediction is sharp — exactly those 3 digests
-should move, and no others.
+exactly 3 of the 16 selecting corpus pairs, so the prediction is sharp -- and it is
+enforced as a prediction rather than a remark: those exact three digests must move and no
+others. The pair keys are imported from that probe rather than respelled here, so the two
+cannot drift into disagreeing about which pairs matter.
 
 FOUR PASSES, because a two-pass green/red would leave two other explanations open:
 
-1. **production** — the harness reproduces the committed baseline. Without this a later
-   mismatch could be the harness rather than the fault.
-2. **duplicate, production key** — the copied ``reconcile_moves`` below must reproduce the
+1. **production** -- the harness reproduces the committed baseline. Without this a later
+   mismatch could be the harness rather than the fault. Must be EMPTY.
+2. **duplicate, production key** -- the copied ``reconcile_moves`` below must reproduce the
    committed baseline too. A copy made in order to instrument something is a second
    implementation that can drift; unless it is shown equivalent first, pass 3 would be
-   comparing the ordinal key against a drifted copy rather than against production.
-3. **duplicate, ordinal key** — the injected fault. Reports which pairs moved.
-4. **production, restored** — the baseline matches again, so the difference was the fault
-   and not something sticky the run left behind.
+   comparing the ordinal key against a drifted copy rather than against production. Must
+   be EMPTY.
+3. **duplicate, ordinal key** -- the injected fault. Must be EXACTLY the expected three.
+4. **production, restored** -- the baseline matches again, so the difference was the fault
+   and not something sticky the run left behind. Must be EMPTY.
+
+An extra reddened pair, a missing one, or a different one fails the run. "Non-empty" would
+have been satisfied by a fault that reddened everything, which is the shape a genuinely
+broken harness produces.
+
+The ``element_id -> ordinal`` bridge is built through ``probe_round2_migration``'s
+fail-closed :func:`~scripts.probe_round2_migration.ordinal_bridge`, which refuses an empty
+or repeated id rather than silently constructing a dictionary that collapses two
+observations onto one address. The bridge is a MEASUREMENT convenience only -- ``NodeDiff``
+carries no node reference -- and ADR 0019 refuses ``element_id`` as identity.
 
 Read-only with respect to the repository: it patches module attributes at runtime and
-restores them, and writes no file. Run from the project root:
+restores them, and writes no file. Exits non-zero on any failure. Run from the project
+root:
 
     uv run python scripts/probe_canonical_sensitivity.py
 """
@@ -41,6 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import deltatrack.diff_bill as db  # noqa: E402
 from deltatrack.diff_bill import NodeDiff, diff_text  # noqa: E402
 from deltatrack.similarity import MOVE_THRESHOLD, move_candidates  # noqa: E402
+from scripts.probe_round2_migration import ORDINAL_SENSITIVE_PAIRS, ordinal_bridge  # noqa: E402
 from tests.corpus_paths import DATA_DIR  # noqa: E402
 from tests.test_canonical_baseline import baseline_pairs, baseline_record  # noqa: E402
 
@@ -52,10 +67,13 @@ REAL_RECONCILE = db.reconcile_moves
 #: reference, and ADR 0019 refuses ``element_id`` as identity.
 CURRENT: dict[str, dict[str, int]] = {}
 
+#: The corpus key currently being compared, so a bridge failure names the pair.
+HOLDER: dict[str, str] = {"key": "<none>"}
+
 
 def match_spy(old, new):
-    CURRENT["old"] = {node.element_id: ordinal for ordinal, node in enumerate(old.nodes)}
-    CURRENT["new"] = {node.element_id: ordinal for ordinal, node in enumerate(new.nodes)}
+    CURRENT["old"] = ordinal_bridge(old.nodes, f"{HOLDER['key']} [old]")
+    CURRENT["new"] = ordinal_bridge(new.nodes, f"{HOLDER['key']} [new]")
     return REAL_MATCH_NODES(old, new)
 
 
@@ -132,10 +150,14 @@ def reconcile_copy(changes: list, threshold: float = MOVE_THRESHOLD, *, key: str
 
 def digests() -> dict[str, dict]:
     """One ``baseline_record`` per corpus pair, through the public canonical producer."""
-    return {key: baseline_record(old, new) for key, old, new in baseline_pairs()}
+    produced = {}
+    for key, old, new in baseline_pairs():
+        HOLDER["key"] = key
+        produced[key] = baseline_record(old, new)
+    return produced
 
 
-def compare(label: str, committed: dict, produced: dict) -> list[str]:
+def compare(label: str, committed: dict, produced: dict) -> set[str]:
     moved = [key for key in committed if committed[key]["sha256"] != produced[key]["sha256"]]
     verdict = "MATCHES the committed baseline" if not moved else f"DIFFERS on {len(moved)} pair(s)"
     print(f"{label}: {verdict}")
@@ -144,11 +166,12 @@ def compare(label: str, committed: dict, produced: dict) -> list[str]:
         print(f"    {key}")
         print(f"      changes {before['changes']} -> {after['changes']}, bytes {before['bytes']} -> {after['bytes']}")
         print(f"      summary {before['summary']} -> {after['summary']}")
-    return moved
+    return set(moved)
 
 
 def main() -> None:
     committed = json.loads((DATA_DIR / "canonical_baseline.json").read_text())
+    expected = set(ORDINAL_SENSITIVE_PAIRS)
 
     db.match_nodes = match_spy
     try:
@@ -170,15 +193,24 @@ def main() -> None:
     if pass1 or pass2 or pass4:
         raise SystemExit(
             "the harness or the duplicated loop is not equivalent to production; pass 3 proves nothing. "
-            f"pass1={pass1} pass2={pass2} pass4={pass4}"
+            f"pass1={sorted(pass1)} pass2={sorted(pass2)} pass4={sorted(pass4)}"
         )
-    if not pass3:
+    if pass3 != expected:
+        print("PASS 3 DID NOT REDDEN THE PREDICTED PAIRS:")
+        for key in sorted(expected - pass3):
+            print(f"  MISSING (predicted, did not redden): {key}")
+        for key in sorted(pass3 - expected):
+            print(f"  UNEXPECTED (reddened, not predicted): {key}")
         raise SystemExit(
-            "VACUOUS: the injected correspondence change moved no canonical byte. Either the fault did not "
-            "reach selection, or the baseline cannot see a correspondence change -- both make it unusable "
-            "as the ADR 0020 acceptance gate."
+            "the gate's response does not match the measured prediction. Either the injected change no "
+            "longer reaches selection where probe_round2_migration says it does, or the baseline sees a "
+            "different set of pairs than it did -- both need a human before this is used as the ADR 0020 "
+            "acceptance gate."
         )
-    print(f"RESULT: the gate is SENSITIVE to a move-correspondence change -- {len(pass3)} pair(s) reddened.")
+    print(f"RESULT: the gate is SENSITIVE to a move-correspondence change -- EXACTLY the predicted {len(expected)}")
+    print("pair(s) reddened, no more and no fewer:")
+    for key in sorted(expected):
+        print(f"  {key}")
     print("Passes 1, 2 and 4 all reproduce the committed baseline, so the difference is the injected key.")
 
 
