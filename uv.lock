@@ -244,7 +244,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pypdfium2" },
-    { name = "tomlkit" },
 ]
 
 [package.dev-dependencies]
@@ -274,10 +273,7 @@ web = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pypdfium2", specifier = ">=5.12.1" },
-    { name = "tomlkit", specifier = ">=0.15.1" },
-]
+requires-dist = [{ name = "pypdfium2", specifier = ">=5.12.1" }]
 
 [package.metadata.requires-dev]
 dev = [
