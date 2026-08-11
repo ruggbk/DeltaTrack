@@ -3897,12 +3897,12 @@ obviously synthetic placeholders, which removes both the collision and an anchor
 
 ```json
 {"id": "A39", "class": "SUBSTANTIVE",
- "commits": ["e25edcd", "ba8e899", "b4bce1a"],
+ "commits": ["e25edcd", "ba8e899", "b4bce1a", "67ae92a"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
- "files_touched": ["probes/cross_engine_control.py", "probes/methodology_contracts.py",
-                   "probes/s1_control.py", "probes/x04_freeze_check.py",
-                   "probes/x15_methodology_contracts.py",
+ "files_touched": ["probes/build_frames.py", "probes/cross_engine_control.py",
+                   "probes/methodology_contracts.py", "probes/s1_control.py",
+                   "probes/x04_freeze_check.py", "probes/x15_methodology_contracts.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
  "status": "IMPLEMENTED -- A39.1 ruled+implemented; A39.2 implemented and REVIEWED; A39.3's original size clause STOPPED and superseded by A40; A39.4 G6 implemented under A40's revised control contract; A39.5 implemented"}
