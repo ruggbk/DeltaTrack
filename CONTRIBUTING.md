@@ -200,7 +200,7 @@ as an undocumented command.
 Tests are split into groups by speed and dependencies:
 
 - **Fast tests** (`uv run pytest -m "not slow and not browser"`) -- unit tests on inline XML and mocked data; no bill files needed.
-- **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`.
+- **Browser tests** (`uv run pytest -m browser`) -- Playwright/Chromium front-end tests. One-time setup: `uv run playwright install chromium`. The default tier skips when Chromium can't launch; CI's dedicated step passes `--run-browser` so a launch failure there fails the run instead of skipping into a green no-op (#599).
 - **Slow tests** (`uv run pytest -m slow`) -- integration and external-validation tests against real bill files. Nearly all of them run in CI against fixtures committed to the repo, so they need no downloads and their counts are reproducible; the corpus correctness gates additionally fail closed if a manifested bill is uncommitted. The exception is the live-network govinfo parity gate, marked `network` and skipped unless you pass `--run-network`. `CORPUS_SWEEP=1` opts into sweeping both trees — the committed fixtures plus every locally-fetched bill under `bills/` — for non-CI exploration. [TESTING.md](TESTING.md) has the details and says which suites still want a download.
 
 Adding or renaming a CLI subcommand? Add its row to the README "Command reference" table in the same change -- `tests/test_docs_consistency.py` introspects each root command script's parser and fails if a command has no row. Adding a whole new command? See ["Adding a CLI command"](#adding-a-cli-command) above for the convention the gate enforces.
@@ -217,7 +217,7 @@ Every pull request runs the gates defined in [`.github/workflows/ci.yml`](.githu
 uv run ruff check .                          # 1. Lint
 uv run ruff format --check .                 # 2. Formatting (run `ruff format .` to fix)
 uv run pytest -m "not slow and not browser"  # 3. Fast tests
-uv run pytest -m browser                     # 4. Browser tests (needs `playwright install chromium`)
+uv run pytest -m browser --run-browser         # 4. Browser tests (needs `playwright install chromium`; `--run-browser` mirrors CI's fail-closed step)
 uv run pytest -m slow \
   --deselect tests/test_govinfo_corpus_parity.py   # 5. Every slow gate CI runs
 ```
