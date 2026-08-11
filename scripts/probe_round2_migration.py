@@ -338,6 +338,61 @@ def main() -> None:
     print("\nGUARD: the replay reproduced production's set AND order on every pair above,")
     print("and the revocation predicate agreed with the revocation stage on every pair.")
 
+    report_input_availability(captured)
+
+
+def report_input_availability(captured: dict[str, dict]) -> None:
+    """Is round 2's whole input population already present BEFORE classification?
+
+    Section B says the remaining obstacle to relocating round 2 is representational
+    rather than populational. That is a claim about availability, so it is measured here
+    rather than argued: every ``(old, None)`` in the revocation stage's output must
+    correspond to a ``removed`` record reaching ``reconcile_moves``, and every
+    ``(None, new)`` to an ``added`` one. A shortfall on either side would mean some of
+    round 2's input genuinely does not exist until classification has run, and the
+    "representational only" reading would be wrong.
+
+    Compared per pair, not in aggregate: two pairs whose errors cancelled would agree on
+    the totals and disagree on every document.
+    """
+    unmatched_old = unmatched_new = records_removed = records_added = 0
+    mismatches: list[tuple] = []
+
+    for key in sorted(captured):
+        decided = captured[key]["decided"]
+        changes = captured[key]["changes"]
+        tuples = (
+            sum(1 for a, b in decided if a is not None and b is None),
+            sum(1 for a, b in decided if a is None and b is not None),
+        )
+        records = (
+            sum(1 for c in changes if c.change_type == "removed"),
+            sum(1 for c in changes if c.change_type == "added"),
+        )
+        unmatched_old += tuples[0]
+        unmatched_new += tuples[1]
+        records_removed += records[0]
+        records_added += records[1]
+        if tuples != records:
+            mismatches.append((key, tuples, records))
+
+    print("\n===== E: IS ROUND 2's INPUT AVAILABLE BEFORE CLASSIFICATION? =====")
+    print(f"(old, None) unmatched observations out of the revocation stage: {unmatched_old}")
+    print(f"  'removed' records reaching reconcile_moves after classification: {records_removed}")
+    print(f"(None, new) unmatched observations out of the revocation stage: {unmatched_new}")
+    print(f"  'added' records reaching reconcile_moves after classification: {records_added}")
+    print(f"per-pair mismatches: {len(mismatches)}")
+    if mismatches:
+        for row in mismatches:
+            print(f"  {row}")
+        raise SystemExit(
+            "part of round 2's input does not exist before classification; section B's "
+            "'representational, not populational' reading does not hold"
+        )
+    print("None. Every removal and addition round 2 consumes is already an unmatched")
+    print("observation before classification runs, so what a relocation has to rebuild is")
+    print("the NodeDiff representation, not the population.")
+
 
 if __name__ == "__main__":
     main()
