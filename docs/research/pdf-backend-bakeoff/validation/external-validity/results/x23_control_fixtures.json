@@ -339,6 +339,28 @@
    "SPLIT_ONE_WORD": true
   }
  },
+ "g6_falsifications": {
+  "sabotaged_g6": {
+   "defects": [],
+   "allocation": {
+    "DELETE_ONE_WORD": 3,
+    "WELD_TWO_WORDS": 3,
+    "SPLIT_ONE_WORD": 2
+   }
+  },
+  "sabotage_live": {
+   "run_hybrid.run": true,
+   "run_extended.run": true,
+   "pdf_anchors.extract_anchors": true
+  },
+  "stale_x26": [
+   "MUTATION_INPUT_MISMATCH",
+   "ORACLE_EVIDENCE_STALE"
+  ],
+  "fresh_x26_wrong_truth": [
+   "MUTATION_INPUT_MISMATCH"
+  ]
+ },
  "nc_rendered_distinctness": {
   "rendered_png_sha256": [
    "ce7aefae40978180bfe7e81310238808657ec42b8845b0d6c81160fdcc309596",
@@ -961,6 +983,115 @@
    "observed": true,
    "pass": true,
    "fails_when": "the replay takes expected_before from the manifest, so a record that rewrites its own input and recomputes everything from it validates against itself -- F4 would be self-validating rather than independent"
+  },
+  {
+   "test": "a WARM replay cache would mask the sabotage entirely",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the cache does not short-circuit the replay, so this control no longer explains why the cache must be invalidated -- re-derive the sabotage control before trusting it"
+  },
+  {
+   "test": "G6 validates with run_hybrid/run_extended/extract_anchors ALL raising",
+   "expected": [
+    [],
+    96,
+    83,
+    96,
+    8,
+    8,
+    {
+     "DELETE_ONE_WORD": 3,
+     "WELD_TWO_WORDS": 3,
+     "SPLIT_ONE_WORD": 2
+    }
+   ],
+   "observed": [
+    [],
+    96,
+    83,
+    96,
+    8,
+    8,
+    {
+     "DELETE_ONE_WORD": 3,
+     "WELD_TWO_WORDS": 3,
+     "SPLIT_ONE_WORD": 2
+    }
+   ],
+   "pass": true,
+   "fails_when": "an H, X or pdf_anchors dependency has entered the result-bearing G6 replay path, so control source truth would be derived from the architectures under test"
+  },
+  {
+   "test": "every sabotaged entrypoint really raises when called",
+   "expected": {
+    "run_hybrid.run": true,
+    "run_extended.run": true,
+    "pdf_anchors.extract_anchors": true
+   },
+   "observed": {
+    "run_hybrid.run": true,
+    "run_extended.run": true,
+    "pdf_anchors.extract_anchors": true
+   },
+   "pass": true,
+   "fails_when": "a monkeypatch did not take, so the sabotage control passed because nothing was disabled"
+  },
+  {
+   "test": "the mutated control state is still WELL-FORMED (so the negatives cannot pass for the wrong reason)",
+   "expected": [
+    true,
+    true,
+    true
+   ],
+   "observed": [
+    true,
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the mutation broke a record's structure, so a rejection would demonstrate malformedness rather than the binding invariant under test"
+  },
+  {
+   "test": "a valid-but-different control state is REJECTED while the old x26 evidence still says failures==[]",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "x26 evidence certifies a control/oracle state it was not produced for, which is the exact false green A40.16 closed -- the evidence would only be certifying itself"
+  },
+  {
+   "test": "...and the untouched x26 artifact really did still report success",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the committed evidence already reported failures, so the staleness negative above is not isolating the input binding"
+  },
+  {
+   "test": "even CURRENT x26 evidence cannot certify wrong N-B truth",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "fails_when": "N-B expected truth is not independently replayed from source, so a manifest and its evidence can agree with each other while both disagree with the actual source"
+  },
+  {
+   "test": "the x26 evidence file is byte-restored",
+   "expected": "cc0fd95b152e1dd0b3c5ffd5f8415a514dbc9274597b376087018c82fdc09aee",
+   "observed": "cc0fd95b152e1dd0b3c5ffd5f8415a514dbc9274597b376087018c82fdc09aee",
+   "pass": true,
+   "fails_when": "the regression left the committed evidence modified, which would dirty the tree"
+  },
+  {
+   "test": "and the authoritative state still validates cleanly",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the regression did not restore the state it mutated"
   },
   {
    "test": "the four N-C controls render to FOUR DISTINCT PNG hashes",
