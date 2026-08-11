@@ -4068,14 +4068,14 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
- "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216"],
+ "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/control_fixtures.py", "probes/x04_freeze_check.py",
                    "probes/x23_control_fixtures.py", "probes/x24_xml_source_bridge.py",
-                   "probes/xml_sources.py"],
+                   "probes/x25_bridge_validation.py", "probes/xml_sources.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
- "status": "CONTRACT APPROVED; IMPLEMENTATION CHANGE -- repair under review. 8 reviewer findings falsified against HEAD, ALL 8 SURVIVED; F7 and F8 repaired, F1-F6 outstanding"}
+ "status": "CONTRACT APPROVED; IMPLEMENTATION REPAIR IN PROGRESS -- NOT FROZEN. 8 reviewer findings falsified against HEAD, ALL 8 SURVIVED; F7 and F8 repaired; the F1/F2 bridge INDEPENDENTLY VALIDATED (A40.9); F1-F6 remain outstanding and the control_fixtures.py swap is HELD pending a ruling on A40.9's two findings"}
 ```
 
 `affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
@@ -4225,6 +4225,138 @@ ordering is detected, and an added occurrence refuses the **whole** group.
 
 **Populations after the bridge: 86 paired sources, 73 N-A eligible** — far above the 8 each
 frozen draw needs, so STOP condition 17 is not triggered.
+
+### A40.9 — the bridge, falsified on evidence independent of the pairing (`x25` 18/18)
+
+**A40.8's ordering claim is CORRECTED, and the correction is the point.** A40.8 reported "zero
+inversions … on the all-paired set *and* separately on the independently identifiable
+unique-occurrence subset". The all-paired half of that is **circular**: those rows were paired
+index-to-index, so the check cannot falsify the rule that produced them and a green result is
+guaranteed by construction. The independent half is **n=1** in 114-hr-2029/4 (n=8 in
+118-hr-8752/1), and n=1 establishes nothing about order preservation. A40.8's sentence is left
+standing as the historical record; `x24` now labels that check `CONSISTENCY ONLY` in its own
+output, and the licensing evidence moved to `x25`.
+
+**What replaces it.** An anchor is admitted only if its XML identity is structural, its physical
+occurrence is uniquely locatable without pairing, and neither side consults H or X:
+
+| class | XML identity | physical identity |
+|---|---|---|
+| **A** | a `<header>` at ANY legacy-DTD level, text unique among all structural headings | occupies exactly one whole printed line |
+| **C** | a monetary literal, unique **substring** of the reading-order text | unique substring of the printed text, on exactly one line |
+
+Class A is the reviewer-permitted widening beyond account headings; it is what lifts
+118-hr-8752/1 from 8 to 22. Class C is what makes 114-hr-2029/4 tractable at all — that document
+has **3 XML-unique header texts out of 183**, because an omnibus reuses heading strings
+pervasively, so structural headings alone yield **2 anchors over 138 pages** and every bracketing
+test would pass vacuously. `x25` enforces a floor of 50 anchors per document precisely so that a
+green bracketing result cannot be produced by an empty grid.
+
+| | 114-hr-2029/4 | 118-hr-8752/1 |
+|---|---:|---:|
+| independent anchors (A + C) | **85** (2 + 83) | **111** (22 + 89) |
+| anchor inversions | **0** / 84 pairs | **0** / 110 pairs |
+| repeated account groups | 27 | 4 |
+| bracket-DISAGREEING groups | **0** | **0** |
+| refused `UNDISCRIMINATED_GROUP` | 2 | 0 |
+| refused `NO_PHYSICAL_OCCURRENCE` | 3 | 0 |
+| paired | 55 | 41 |
+
+**The bracketing rule is set agreement, not nearest-neighbour.** For occurrence *k* the anchors
+preceding it in XML reading order must be the **same set** as the anchors preceding it on the
+page. That is strictly stronger than an interval test and it is what detects a structurally
+incompatible heading interleaving in only one representation. **Discrimination is required
+separately**: if two consecutive occurrences share an anchor prefix, nothing independent
+separates them, so the group is REFUSED rather than paired — `(INCLUDING TRANSFER OF FUNDS)`
+(n=38) and `SALARIES AND EXPENSES` (n=6).
+
+**Three defects were found while building this, each of which had made an earlier number look
+better than it was.** They are recorded because two of them presented *as* order violations:
+
+1. **Element index is not a text position.** A child's `.tail` belongs to the parent, which sorts
+   earlier, so a tree-walk coordinate manufactures inversions that are artifacts of the walk.
+   Every class now shares one coordinate: character offset in the reading-order text.
+2. **`\$[\d,]{7,}` absorbs a trailing separator.** `$150,000,000,` (XML) and `$150,000,000.`
+   (PDF) tokenise differently, so a `find()` on the shorter form lands on a **different
+   instance** — presenting as three document-order inversions that do not exist. Literals are now
+   digit-delimited and uniqueness is a **substring** count in both representations.
+3. **`bridge()` grouped case-SENSITIVELY while the comparator is case-insensitive.** Five texts
+   in 114-hr-2029/4 carry case variants, so 33 phantom groups formed over 28 real ones and each
+   split group self-refused on count mismatch. It **fails closed** — nothing wrong was ever
+   paired — but it shrank the document from 55 paired to 45 and mis-labelled the loss as
+   `GROUP_COUNT_MISMATCH`.
+
+**A fourth anchor class was built, measured and REJECTED rather than patched.** "Any printed line
+unique in the PDF and a unique substring of the XML" yields ~1000 anchors per document, but the
+printed bill's **endorsement page reprints the long title with different line breaking**, so
+front-matter fragments resolve to back-matter lines and invert against everything (2 and 3
+residual inversions, all front/back matter). A class that needs a special case to stay monotone
+is not independent evidence of monotony.
+
+**All five required negatives attack the bracketing rule, not a derived summary field**: swapping
+two repeated occurrences, moving one across its neighbouring anchor, adding one, removing one,
+and swapping two anchors — the last both registers as an inversion *and* makes real groups refuse
+with `CROSSES_INDEPENDENT_ANCHOR`, proving the corruption reaches the pairing decision.
+
+### A40.9.1 — the three objects, and which authority decides each dimension
+
+| dimension | provenance | authority |
+|---|---|---|
+| text content | **SOURCE-DETERMINED** | every rule recorded at this level is a pure case transform; none edits a character |
+| punctuation | **SOURCE-DETERMINED** | as above |
+| whitespace | **SOURCE-DETERMINED** | as above, up to run collapse |
+| **case** | **PHYSICALLY OBSERVED** | see below |
+| margin number | **PHYSICALLY OBSERVED** | GPO page furniture, stripped before comparison |
+
+**Case is not source-determined, and asserting it from the stylesheet would have been wrong.**
+`convertToNeededCase` (`billres-details.xsl:8279`) applies `translate($upper,$lower)` at
+`appropriations-small` and `bills.css` small-caps it — but **those artifacts govern GPO's HTML
+renderer**, and `docs/gpo-render-conventions.md` (#89) records the measurement that forces the
+distinction: the CSS `em` values predict agency > body > account while the PDF measures agency ≈
+account < body, because "the published PDF is typeset by GPO's separate photocomposition system,
+whose point sizes do not track the HTML renderer's `em` values". The PDF prints real capitals.
+So the stylesheet is authoritative for **content** and silent about the PDF's realised **case**.
+
+`cross_check_rendering()` requires the observed whole line to equal the source-determined
+expectation **under case folding alone**; a one-letter content change, a punctuation change or a
+whitespace change all REFUSE, and each is exercised as a negative. This is what keeps the
+independent PDF backend an *observation instrument* rather than the source of account semantics.
+
+### A40.9.2 — TWO FINDINGS RETURNED FOR RULING; the `control_fixtures.py` swap is HELD
+
+**Neither is a bridge contradiction, so section 1 is not a STOP.** Both change what the source
+population *means*, and both are result-bearing, so the swap is not performed.
+
+**Finding 1 — `appropriations-small/header` is not always an account name.** GPO's markup in the
+MilCon division puts the account name on the **preceding `appropriations-intermediate`** and
+leaves the `appropriations-small` carrying only a parenthetical qualifier:
+
+```xml
+<appropriations-intermediate><header>Military construction, defense-<enum-in-header>W</enum-in-header>ide</header></appropriations-intermediate>
+<appropriations-small><header>(including transfer of funds)</header><text>For acquisition, … $1,931,456,000 …</text></appropriations-small>
+```
+
+Measured: **56 of 105** `appropriations-small` headers in 114-hr-2029/4 and 4 of 41 in
+118-hr-8752/1 are purely parenthetical; **22 of the 96 paired** survive the bridge. All seven
+distinct texts are GPO transfer/rescission qualifiers — `(INCLUDING TRANSFER OF FUNDS)`,
+`(RESCISSION(S) OF FUNDS)`, `(TRANSFER OF FUNDS)`, `(INCLUDING TRANSFERS AND RESCISSIONS OF
+FUNDS)`, `(INCLUDING TRANSFERS OF FUNDS)`, `(INCLUDING RESCISSIONS OF FUNDS)`. **This is
+result-bearing now**: under the validated bridge the `na-source` draw selects
+`(RESCISSIONS OF FUNDS)` **twice** and the `nb-source` draw **three times** — 5 of the 16
+selected sources. **A40.3 requires a candidate to "be a known real `account` heading"**, and
+A40.6 assigns N-B the job of supplying "8 corroborated TRUE headings" for M1. Excluding wholly
+parenthetical headers is fail-closed and leaves 74 N-B / 61 N-A eligible, far above 8 — but it
+narrows an approved predicate on a source-side text rule, so it is the reviewer's call, not an
+implementation detail. **Not acted on.**
+
+**Finding 2 — the case-grouping defect** (A40.9 item 3) is fixed in this slice because it fails
+closed and its correction only *restores* records the comparator always intended to group. It is
+recorded here because it changes A40.8's reported refusal counts, not because it is contested.
+
+**Why the swap is held rather than performed under a stated assumption.** Swapping now would
+commit a manifest in which 5 of 16 control sources are not account headings, and the manifest is
+the artifact every later slice (F5, F6, G6) is verified against. The reviewer's own instruction
+to stop before the swap was given for exactly this class of question.
 
 ### Population and boundary
 
