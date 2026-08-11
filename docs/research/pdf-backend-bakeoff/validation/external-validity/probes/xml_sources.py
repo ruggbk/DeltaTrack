@@ -335,12 +335,22 @@ def physical_lines(pdf_path) -> list[dict]:
                 for line in block.get("lines", []):
                     text = normalize("".join(span["text"] for span in line["spans"]))
                     if text:
+                        # A40.13 -- the first INKED span's own origin and size. The line bbox is
+                        # not a substitute for either: a trailing whitespace span at a different
+                        # size inflates the box, so `bbox.height` is not the font size and
+                        # `bbox.y1` is not the baseline. Both were used as such, and put a
+                        # replacement heading outside its own committed region.
+                        inked = next((sp for sp in line["spans"] if sp["text"].strip()), None)
                         out.append(
                             {
                                 "page_number": pno + 1,
                                 "bbox_topleft": list(line["bbox"]),
                                 "printed_text": text,
                                 "page_height": page.rect.height,
+                                "span_origin": list(inked["origin"]) if inked else None,
+                                "span_size": float(inked["size"]) if inked else None,
+                                "span_font": inked["font"] if inked else None,
+                                "n_spans": len(line["spans"]),
                             }
                         )
         out.sort(key=lambda h: (h["page_number"], round(h["bbox_topleft"][1], 3), round(h["bbox_topleft"][0], 3)))

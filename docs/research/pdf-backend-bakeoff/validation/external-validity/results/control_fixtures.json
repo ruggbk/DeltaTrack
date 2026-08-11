@@ -153,14 +153,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_00_delete_one_word.pdf",
-   "generated_sha256": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
+   "generated_sha256": "cd1460a092dc44fc4cf2f7d33b4fd9ece0d21adf2f7f5d0fd1b83cbf037a522f",
    "source_bbox": [
     227.60000610351562,
     282.338623046875,
     412.0292053222656,
     296.338623046875
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    227.60000610351562,
+    292.9999084472656
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -277,14 +282,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_01_weld_two_words.pdf",
-   "generated_sha256": "6ec883aa5014ffcbadb3f1e92cdfe19b5820b3a39a715b5ba82b0a3951a095b2",
+   "generated_sha256": "104f85729ac095d06e2a56e3d48bfcc30abe9f298b6c99bf98469c3c8d67c061",
    "source_bbox": [
     247.6199951171875,
     282.338623046875,
     391.76800537109375,
     296.338623046875
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    247.6199951171875,
+    292.9999084472656
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -399,14 +409,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_02_split_one_word.pdf",
-   "generated_sha256": "386c998560b295426a18ca89d482e2a98d635e884211b4001f63b5d0c73227eb",
+   "generated_sha256": "61c9178fc8c51ab4b81fc0c4a7b34303eaabbde27b9db39f59e8c8584642d7bd",
    "source_bbox": [
     248.6199951171875,
     126.33870697021484,
     391.0263977050781,
     140.33871459960938
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    248.6199951171875,
+    137.0
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -513,14 +528,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_03_delete_one_word.pdf",
-   "generated_sha256": "f579a30836144ea3189c4846f7d8118e9a2253396db4c38db04ec27e60397231",
+   "generated_sha256": "b3f30e24b50424c3e8f634ddfc501f1029352d7a361fad26a1c71831ec167469",
    "source_bbox": [
     239.13999938964844,
     438.338623046875,
     400.4857177734375,
     452.338623046875
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    239.13999938964844,
+    448.9999084472656
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -637,14 +657,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_04_weld_two_words.pdf",
-   "generated_sha256": "e2f8f9cb69567553fee1aae400962a4deaa15b944a785a5bd20491c69e5ca89f",
+   "generated_sha256": "d5f67bb44f8490cea2e9d3330cad0b373b7a0253d5f4f8179ff3892d820202ac",
    "source_bbox": [
     197.4600067138672,
     74.33870697021484,
     442.16241455078125,
     88.33870697021484
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    197.4600067138672,
+    85.0
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -759,14 +784,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_05_split_one_word.pdf",
-   "generated_sha256": "5678f874dde8e43f2bb3f2783818df42e70b74bf46df4223817d7b8111209c09",
+   "generated_sha256": "1bc08acb57b17f1220ae35046e931fac73647e46f41bf7da14f1428c9e9da45e",
    "source_bbox": [
     239.13999938964844,
     438.338623046875,
     400.4857177734375,
     452.338623046875
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    239.13999938964844,
+    448.9999084472656
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -873,14 +903,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_06_delete_one_word.pdf",
-   "generated_sha256": "7aecd1f8fe6033d926b3fce5c1b3847675b1fcc7a8d3aa93047a40d4b39fd42f",
+   "generated_sha256": "7f0fddf896985ff90a9a9fea34593b9cda3022c4cb86d5f8bdbf3740ca73eb4c",
    "source_bbox": [
     228.17999267578125,
     152.33859252929688,
     411.466796875,
     166.33859252929688
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    228.17999267578125,
+    162.9998779296875
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-A",
@@ -997,14 +1032,19 @@
     }
    ],
    "generated_path": "control_fixtures/na_07_weld_two_words.pdf",
-   "generated_sha256": "1256da1ca1585c3321ebef54b91545c44088d26dc021b2172fffae122297da69",
+   "generated_sha256": "ce75db58bfc020fb02e20f74eb827f77a8f2f90580ccb3f7900eb31e6f298b28",
    "source_bbox": [
     239.13999938964844,
     282.338623046875,
     400.4857177734375,
     296.338623046875
    ],
-   "drawn_fontsize": 14.0
+   "drawn_origin": [
+    239.13999938964844,
+    292.9999084472656
+   ],
+   "drawn_fontsize": 10.124,
+   "drawn_font": "tiro"
   },
   {
    "control_kind": "N-B",
@@ -1667,10 +1707,10 @@
    "variant": "SYNTHETIC_HEADING_FREE",
    "schedule_index": 0,
    "source_type": "SYNTHETIC, generated",
-   "canonical_identity": "[\"control\",\"N-C\",\"35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d\",1,0,\"SYNTHETIC_HEADING_FREE\"]",
+   "canonical_identity": "[\"control\",\"N-C\",\"89c88afa4c4e941e2f99eab249212fc607b348ff34326debe668614f05678e24\",1,0,\"SYNTHETIC_HEADING_FREE\"]",
    "source_document": "SYNTHETIC/heading-free/0",
    "source_path": null,
-   "source_sha256": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
+   "source_sha256": "89c88afa4c4e941e2f99eab249212fc607b348ff34326debe668614f05678e24",
    "parent_sha256": null,
    "page_number": 1,
    "region_ordinal": 0,
@@ -1710,7 +1750,7 @@
    ],
    "expected_adjudicated_headings": [],
    "generated_path": "control_fixtures/nc_00_heading_free.pdf",
-   "generated_sha256": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
+   "generated_sha256": "89c88afa4c4e941e2f99eab249212fc607b348ff34326debe668614f05678e24",
    "n_lines": 8,
    "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered",
    "region_bbox_pdf_points": [
@@ -1725,10 +1765,10 @@
    "variant": "SYNTHETIC_HEADING_FREE",
    "schedule_index": 1,
    "source_type": "SYNTHETIC, generated",
-   "canonical_identity": "[\"control\",\"N-C\",\"50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63\",1,1,\"SYNTHETIC_HEADING_FREE\"]",
+   "canonical_identity": "[\"control\",\"N-C\",\"1a43384798a0d0595cefb1628bf092c867efa109da82c7d87c48fa3ef45f501d\",1,1,\"SYNTHETIC_HEADING_FREE\"]",
    "source_document": "SYNTHETIC/heading-free/1",
    "source_path": null,
-   "source_sha256": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
+   "source_sha256": "1a43384798a0d0595cefb1628bf092c867efa109da82c7d87c48fa3ef45f501d",
    "parent_sha256": null,
    "page_number": 1,
    "region_ordinal": 1,
@@ -1768,7 +1808,7 @@
    ],
    "expected_adjudicated_headings": [],
    "generated_path": "control_fixtures/nc_01_heading_free.pdf",
-   "generated_sha256": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
+   "generated_sha256": "1a43384798a0d0595cefb1628bf092c867efa109da82c7d87c48fa3ef45f501d",
    "n_lines": 8,
    "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered",
    "region_bbox_pdf_points": [
@@ -1783,10 +1823,10 @@
    "variant": "SYNTHETIC_HEADING_FREE",
    "schedule_index": 2,
    "source_type": "SYNTHETIC, generated",
-   "canonical_identity": "[\"control\",\"N-C\",\"995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26\",1,2,\"SYNTHETIC_HEADING_FREE\"]",
+   "canonical_identity": "[\"control\",\"N-C\",\"14a0d4bc036147c7113f9ca2d5b8b77868112b2db725b6a456355f8b1b0abe17\",1,2,\"SYNTHETIC_HEADING_FREE\"]",
    "source_document": "SYNTHETIC/heading-free/2",
    "source_path": null,
-   "source_sha256": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
+   "source_sha256": "14a0d4bc036147c7113f9ca2d5b8b77868112b2db725b6a456355f8b1b0abe17",
    "parent_sha256": null,
    "page_number": 1,
    "region_ordinal": 2,
@@ -1826,7 +1866,7 @@
    ],
    "expected_adjudicated_headings": [],
    "generated_path": "control_fixtures/nc_02_heading_free.pdf",
-   "generated_sha256": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
+   "generated_sha256": "14a0d4bc036147c7113f9ca2d5b8b77868112b2db725b6a456355f8b1b0abe17",
    "n_lines": 8,
    "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered",
    "region_bbox_pdf_points": [
@@ -1841,10 +1881,10 @@
    "variant": "SYNTHETIC_HEADING_FREE",
    "schedule_index": 3,
    "source_type": "SYNTHETIC, generated",
-   "canonical_identity": "[\"control\",\"N-C\",\"19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6\",1,3,\"SYNTHETIC_HEADING_FREE\"]",
+   "canonical_identity": "[\"control\",\"N-C\",\"e9a091786d020f59edf0c959a79e4c0ddae3fa59dee139b54e77693571108c94\",1,3,\"SYNTHETIC_HEADING_FREE\"]",
    "source_document": "SYNTHETIC/heading-free/3",
    "source_path": null,
-   "source_sha256": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6",
+   "source_sha256": "e9a091786d020f59edf0c959a79e4c0ddae3fa59dee139b54e77693571108c94",
    "parent_sha256": null,
    "page_number": 1,
    "region_ordinal": 3,
@@ -1884,7 +1924,7 @@
    ],
    "expected_adjudicated_headings": [],
    "generated_path": "control_fixtures/nc_03_heading_free.pdf",
-   "generated_sha256": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6",
+   "generated_sha256": "e9a091786d020f59edf0c959a79e4c0ddae3fa59dee139b54e77693571108c94",
    "n_lines": 8,
    "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered",
    "region_bbox_pdf_points": [

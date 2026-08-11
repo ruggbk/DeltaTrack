@@ -34,6 +34,39 @@ ROWS: list[dict] = []
 FAILED: list[str] = []
 
 
+NA_EXPECTED = CF.NA_TOTAL
+
+#: A40.13 -- half a point of slack, so a rendered box coinciding with the region edge is not
+#: rejected by float noise. Far smaller than a line, so it cannot admit a neighbouring line.
+REGION_EDGE_TOLERANCE = 0.5
+
+
+def region_occupancy(pdf_path, record: dict, region_bbox=None) -> dict:
+    """Whole-line occurrences of the before/after headings, split by TARGET REGION membership.
+
+    A40.13 -- the frozen contract is about the selected physical OCCURRENCE, not the page. GPO
+    legitimately repeats a heading elsewhere on the same page, and such a duplicate is a different
+    occurrence the adjudicator never sees; gating on it made a correct fixture fail.
+    `region_bbox` is injectable so the negatives can move the crop without fabricating a PDF.
+    """
+    import xml_sources as XS
+
+    rb = region_bbox or record["region_bbox_pdf_points"]
+    height = record["page_height"]
+    lines = [ln for ln in XS.physical_lines(pdf_path) if ln["page_number"] == record["page_number"]]
+
+    def inside(ln):
+        y0, y1 = height - ln["bbox_topleft"][3], height - ln["bbox_topleft"][1]
+        return y0 >= rb[1] - REGION_EDGE_TOLERANCE and y1 <= rb[3] + REGION_EDGE_TOLERANCE
+
+    out = {}
+    for key, text in (("before", record["expected_before"]), ("after", record["expected_after"])):
+        hits = [ln for ln in lines if XS.stripped_line(ln) == text.upper()]
+        out[f"{key}_in_region"] = sum(1 for ln in hits if inside(ln))
+        out[f"{key}_elsewhere_on_page"] = sum(1 for ln in hits if not inside(ln))
+    return out
+
+
 def check(name: str, expected, observed, fails_when: str = "") -> bool:
     ok = expected == observed
     ROWS.append({"test": name, "expected": expected, "observed": observed, "pass": ok, "fails_when": fails_when})
@@ -165,32 +198,53 @@ def part_manifest(manifest: dict) -> dict:
         "two controls share an identity, so one would silently overwrite the other",
     )
 
-    # WHAT THE GENERATED PDF ACTUALLY PRINTS -- the recipe is truth, but a fixture whose
-    # rendering did not take would hand the adjudicator the UNMUTATED heading.
-    import pymupdf
-
-    printed_ok, original_gone = [], []
-    for f in na:
-        doc = pymupdf.open(str(EV / f["generated_path"]))
-        try:
-            text = " ".join(doc[f["page_number"] - 1].get_text().split())
-        finally:
-            doc.close()
-        printed_ok.append(" ".join(f["expected_after"].split()) in text)
-        original_gone.append(" ".join(f["expected_before"].split()) not in text)
+    # WHAT THE GENERATED PDF PRINTS IN THE CROP THE ADJUDICATOR SEES. The recipe is truth, but a
+    # fixture whose rendering did not land in the region would show the adjudicator nothing.
+    occupancy = [region_occupancy(EV / f["generated_path"], f) for f in na]
     check(
-        "every generated N-A PDF actually PRINTS the mutated heading",
-        (8, True),
-        (len(printed_ok), all(printed_ok)),
-        "the mutation did not reach the page, so the adjudicator would transcribe something "
-        "other than the committed truth",
+        "every generated N-A prints its mutation in the TARGET REGION exactly once",
+        [1] * NA_EXPECTED,
+        [o["after_in_region"] for o in occupancy],
+        "the mutation did not reach the adjudicated region, so the stimulus would not contain "
+        "the alteration the control exists to test",
     )
     check(
-        "...and the ORIGINAL heading is gone from that page",
-        (8, True),
-        (len(original_gone), all(original_gone)),
-        "the unmutated heading survives alongside the mutation, so the region shows both and "
-        "the control cannot distinguish an oracle that saw the alteration",
+        "...and the ORIGINAL heading is absent from that TARGET REGION",
+        [0] * NA_EXPECTED,
+        [o["before_in_region"] for o in occupancy],
+        "the unmutated heading survives inside the crop, so the region shows both and the "
+        "control cannot distinguish an oracle that saw the alteration",
+    )
+    check(
+        "DIAGNOSTIC -- some N-A pages legitimately repeat the original heading OUTSIDE the crop",
+        True,
+        any(o["before_elsewhere_on_page"] > 0 for o in occupancy),
+        "no fixture exercises the duplicate-elsewhere case, so the occurrence-scoped rule is "
+        "indistinguishable from the page-scoped one it replaced",
+    )
+    # The three scope controls. A40.13 -- prove the new rule is LIVE rather than merely weaker.
+    victim = next(f for f, o in zip(na, occupancy) if o["before_elsewhere_on_page"] > 0)
+    wide = region_occupancy(EV / victim["generated_path"], victim, region_bbox=[0.0, 0.0, 1e4, victim["page_height"]])
+    check(
+        "NEGATIVE A -- an original heading INSIDE the target region is detected",
+        True,
+        wide["before_in_region"] > 0,
+        "an unmutated heading inside the crop goes unnoticed, so the region rule cannot fail",
+    )
+    check(
+        "NEGATIVE B -- a mutation absent from the target region is detected",
+        0,
+        region_occupancy(EV / victim["generated_path"], victim, region_bbox=[0.0, 0.0, 1e4, 1.0])["after_in_region"],
+        "the mutation counts even when it lies outside the crop, so the rule would pass a "
+        "stimulus that shows the adjudicator nothing",
+    )
+    same = region_occupancy(EV / victim["generated_path"], victim)
+    check(
+        "POSITIVE -- a fixture whose original repeats ELSEWHERE on the page still passes",
+        (1, 0, True),
+        (same["after_in_region"], same["before_in_region"], same["before_elsewhere_on_page"] > 0),
+        "the rule still gates on an unrelated duplicate outside the selected region, which is "
+        "the scope error A40.13 corrects",
     )
     return {
         "counts": manifest["counts"],

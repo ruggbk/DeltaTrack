@@ -129,31 +129,32 @@ _PDF_ID = re.compile(
 )
 
 
-def canonicalise_pdf_id(path: Path) -> bool:
-    """Replace the random trailer `/ID` with one DERIVED from the file's own content.
+def deterministic_pdf_id(name: str) -> str:
+    """A40.14 -- the trailer `/ID`, derived from the fixture's stable name. NO byte surgery.
 
-    Same inputs -> same bytes -> same SHA, which is what lets the manifest commit a hash that
-    survives a rebuild. The digest is taken over the bytes with the whole `/ID` array blanked,
-    so it still CHANGES when the content changes.
+    ROOT CAUSE, measured rather than guessed. Every fixture-byte difference collapsed to this one
+    array: masking `/ID` alone made two differing outputs byte-identical across their whole
+    537 KB. Two independent save-time behaviours produced it, and only both together explain what
+    was observed:
 
-    The replacement is padded with spaces to the EXACT byte span it replaces. Length
-    preservation matters because a PDF may carry its trailer inside a cross-reference stream in
-    the body, where a shift would invalidate every later offset; padding sidesteps having to
-    know which layout this file uses.
+      * pymupdf writes a RANDOM `/ID` on every save and its serialized length is NOT constant --
+        measured spans of 69 AND 73 bytes on the same fixture. The old repair padded its
+        replacement to whatever span it found, so file length followed the random id (537524 vs
+        537528). That is the intermittent, arbitrary-fixture difference that kept reappearing.
+      * setting the trailer id WITHOUT `no_new_id=True` is silently half-undone: the save
+        replaces the SECOND element, giving `[<0000...><4F0890...>]` and 40 distinct SHAs in 40
+        builds. That is why an earlier `xref_set_key`-only attempt looked right and was not.
+
+    The fix is native and structural: set a deterministic id, then save with `no_new_id=True` so
+    the save leaves it alone. Nothing rewrites a saved PDF afterwards, which is why
+    `canonicalise_pdf_id` is deleted rather than kept alongside this.
+
+    Derived from the output basename so each fixture keeps a DISTINCT id -- one shared constant
+    would be equally deterministic but would give every control the same PDF identity -- and a
+    basename is machine-independent, unlike an absolute path.
     """
-    raw = path.read_bytes()
-    m = _PDF_ID.search(raw)
-    if not m:
-        return False
-    span = m.end() - m.start()
-    blanked = raw[: m.start()] + b" " * span + raw[m.end() :]
-    digest = hashlib.sha256(blanked).hexdigest()[:32].upper().encode()
-    canonical = b"/ID[<" + digest + b"><" + digest + b">]"
-    if len(canonical) > span:
-        return False  # cannot preserve the byte span -> refuse rather than shift offsets
-    path.write_bytes(raw[: m.start()] + canonical + b" " * (span - len(canonical)) + raw[m.end() :])
-    return True
-
+    digest = hashlib.sha256(name.encode()).hexdigest()[:32].upper()
+    return f"[<{digest}><{digest}>]"
 
 def normalize_text(s: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", s)).strip()
@@ -398,7 +399,13 @@ def source_population(page_limit: int = SOURCE_PAGE_LIMIT) -> dict:
                     "page_number": p["page_number"],
                     "line_index": p["line_index"],
                     "line_bbox_pdf": [tl[0], height - tl[3], tl[2], height - tl[1]],
+                    "line_bbox_topleft": list(tl),
                     "page_height": height,
+                    # A40.13 -- the INDEPENDENTLY OBSERVED text origin and size of the heading's
+                    # first inked span. The line bbox is not a substitute for either.
+                    "span_origin": p["span_origin"],
+                    "span_size": p["span_size"],
+                    "span_font": p["span_font"],
                     "kind": "account",
                     "expected_text": p["printed_text"],
                     "xml_evidence": (
@@ -482,6 +489,68 @@ def select_nb_sources(eligible: list[dict]) -> list[dict]:
 # ------------------------------------------------------------- generated PDF material
 
 HEADING_NOT_LOCATABLE = "HEADING_NOT_LOCATABLE"
+REPLACEMENT_TOO_SMALL = "REPLACEMENT_TOO_SMALL"
+
+#: The one replacement face, for every N-A control. Named once so no per-document choice exists.
+REPLACEMENT_FONT = "tiro"
+#: Below this the stimulus stops being a legible heading, so it REFUSES rather than shrinking on.
+MIN_REPLACEMENT_FONTSIZE = 6.0
+
+
+def replacement_placement(row: dict) -> tuple[tuple[float, float], float]:
+    """A40.13 -- where the mutated heading is drawn, and at what size. GENERAL, no constants.
+
+    THE DEFECT THIS REPLACES. The old rule took both facts off the line's bounding box:
+    `insert_text((rect.x0, rect.y1), ...)` used the box's BOTTOM EDGE as a baseline, and
+    `fontsize = rect.height` used the box HEIGHT as a font size. Measured on N-A #6, the real
+    span origin is y=163.000 and the real size 10.8671, while the box gave 166.339 and 14.0 --
+    a baseline 3.34 pt low and a face 29 % oversized. The 14.0 came from a trailing WHITESPACE
+    span at a different size, which inflates the line box without inking anything. That heading
+    is line 0 of its window, so the region's top edge IS the line's top edge, and the oversized
+    glyphs escaped it by 0.742 pt.
+
+    THE RULE. Draw at the independently observed span origin, at the source's own span size,
+    reduced only as far as the replacement face's MEASURED metrics require in order to sit inside
+    the source line's own box:
+
+        size = min(source span size, above / ascender, below / -descender)
+
+    `above`/`below` are the source line box's extent around its own baseline, and the ascender
+    and descender are read from the font at run time -- so the rule is arithmetic over measured
+    facts, identical for every N-A control, with no per-document or per-heading constant and no
+    "nudge until it fits" search. Times-Roman's ascender is 1.0530, which is why preserving the
+    baseline ALONE was not sufficient: 1.0530 x 10.8671 = 11.44 pt needs 10.661 pt of room.
+
+    Fitting inside the SOURCE LINE box rather than the region is deliberate and stronger: the
+    region is the union of its member lines' boxes, so a replacement that fits its own line
+    necessarily fits the region, whichever position the heading holds in the window.
+
+    Truncated rather than rounded to 3 dp: rounding can go UP and re-cross the bound it was
+    computed to respect.
+    """
+    import pymupdf
+
+    origin, size, box = row.get("span_origin"), row.get("span_size"), row.get("line_bbox_topleft")
+    if not origin or not size or not box:
+        raise ControlFixtureError(
+            HEADING_NOT_LOCATABLE,
+            {"why": "no inked span origin/size", "document": row["document"], "page": row["page_number"]},
+        )
+    baseline = origin[1]
+    above, below = baseline - box[1], box[3] - baseline
+    font = pymupdf.Font(REPLACEMENT_FONT)
+    limits = [float(size)]
+    if font.ascender > 0 and above > 0:
+        limits.append(above / font.ascender)
+    if font.descender < 0 and below > 0:
+        limits.append(below / -font.descender)
+    fitted = int(min(limits) * 1000) / 1000
+    if fitted < MIN_REPLACEMENT_FONTSIZE:
+        raise ControlFixtureError(
+            REPLACEMENT_TOO_SMALL,
+            {"fitted": fitted, "floor": MIN_REPLACEMENT_FONTSIZE, "document": row["document"]},
+        )
+    return (float(origin[0]), float(baseline)), fitted
 
 
 def generate_na_pdf(row: dict, after_text: str, out_path: Path) -> dict:
@@ -505,20 +574,22 @@ def generate_na_pdf(row: dict, after_text: str, out_path: Path) -> dict:
             raise ControlFixtureError(
                 HEADING_NOT_LOCATABLE, {"document": row["document"], "page": row["page_number"], "bbox": list(rect)}
             )
-        size = round(rect.height, 2)  # the neutral line's own ink height
+        point, size = replacement_placement(row)
         page.add_redact_annot(rect)
         page.apply_redactions()
-        page.insert_text((rect.x0, rect.y1), after_text, fontname="tiro", fontsize=size)
+        page.insert_text(point, after_text, fontname=REPLACEMENT_FONT, fontsize=size)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        doc.save(str(out_path), garbage=0, deflate=True)
+        doc.xref_set_key(-1, "ID", deterministic_pdf_id(out_path.name))
+        doc.save(str(out_path), garbage=0, deflate=True, no_new_id=True)
     finally:
         doc.close()
-    canonicalise_pdf_id(out_path)
     return {
         "generated_path": str(out_path.relative_to(EV)),
         "generated_sha256": sha256_file(out_path),
         "source_bbox": [rect.x0, rect.y0, rect.x1, rect.y1],
+        "drawn_origin": [point[0], point[1]],
         "drawn_fontsize": size,
+        "drawn_font": REPLACEMENT_FONT,
     }
 
 
@@ -585,8 +656,8 @@ def generate_nc_pdf(index: int, out_path: Path) -> dict:
     for i, line in enumerate(body):
         page.insert_text((90.0, 120.0 + i * 24.0), f"{i + 1}  {line}", fontname="tiro", fontsize=14)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(str(out_path), garbage=0, deflate=True)
-    canonicalise_pdf_id(out_path)
+    doc.xref_set_key(-1, "ID", deterministic_pdf_id(out_path.name))
+    doc.save(str(out_path), garbage=0, deflate=True, no_new_id=True)
     # The committed region is DERIVED from the drawn page, not from the layout constants
     # above: a constant that drifted from what was actually drawn would commit a bbox that
     # crops the stimulus, and the mismatch would be invisible until adjudication.

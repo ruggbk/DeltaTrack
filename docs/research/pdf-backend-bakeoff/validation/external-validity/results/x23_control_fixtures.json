@@ -55,7 +55,7 @@
     "after": "RESEARCH AND",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "730b5e29c265502d"
+    "generated_sha256": "cd1460a092dc44fc"
    },
    {
     "index": 1,
@@ -71,7 +71,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "6ec883aa5014ffcb"
+    "generated_sha256": "104f85729ac095d0"
    },
    {
     "index": 2,
@@ -87,7 +87,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "386c998560b29542"
+    "generated_sha256": "61c9178fc8c51ab4"
    },
    {
     "index": 3,
@@ -98,7 +98,7 @@
     "after": "AND SUPPORT",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "f579a30836144ea3"
+    "generated_sha256": "b3f30e24b50424c3"
    },
    {
     "index": 4,
@@ -114,7 +114,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "e2f8f9cb69567553"
+    "generated_sha256": "d5f67bb44f8490ce"
    },
    {
     "index": 5,
@@ -130,7 +130,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "5678f874dde8e43f"
+    "generated_sha256": "1bc08acb57b17f12"
    },
    {
     "index": 6,
@@ -141,7 +141,7 @@
     "after": "AND PENSIONS",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "7aecd1f8fe6033d9"
+    "generated_sha256": "7f0fddf896985ff9"
    },
    {
     "index": 7,
@@ -157,7 +157,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "1256da1ca1585c33"
+    "generated_sha256": "ce75db58bfc020fb"
    }
   ],
   "nb": [
@@ -229,22 +229,22 @@
   "nc": [
    {
     "index": 0,
-    "generated_sha256": "35339e49d5410943",
+    "generated_sha256": "89c88afa4c4e941e",
     "expected": []
    },
    {
     "index": 1,
-    "generated_sha256": "50355822f5277fc9",
+    "generated_sha256": "1a43384798a0d059",
     "expected": []
    },
    {
     "index": 2,
-    "generated_sha256": "995558d2e1080158",
+    "generated_sha256": "14a0d4bc036147c7",
     "expected": []
    },
    {
     "index": 3,
-    "generated_sha256": "19f6939bd4f00c1e",
+    "generated_sha256": "e9a091786d020f59",
     "expected": []
    }
   ]
@@ -257,10 +257,10 @@
    "d62985083b9d7b5757d52bb1750b0db40aeb0afd402ad4865c8393fcc974faa2"
   ],
   "container_sha256": [
-   "35339e49d5410943",
-   "50355822f5277fc9",
-   "995558d2e1080158",
-   "19f6939bd4f00c1e"
+   "89c88afa4c4e941e",
+   "1a43384798a0d059",
+   "14a0d4bc036147c7",
+   "e9a091786d020f59"
   ],
   "distinct_rendered": 4
  },
@@ -571,30 +571,90 @@
    "fails_when": "two controls share an identity, so one would silently overwrite the other"
   },
   {
-   "test": "every generated N-A PDF actually PRINTS the mutated heading",
+   "test": "every generated N-A prints its mutation in the TARGET REGION exactly once",
    "expected": [
-    8,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "observed": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "pass": true,
+   "fails_when": "the mutation did not reach the adjudicated region, so the stimulus would not contain the alteration the control exists to test"
+  },
+  {
+   "test": "...and the ORIGINAL heading is absent from that TARGET REGION",
+   "expected": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "observed": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "pass": true,
+   "fails_when": "the unmutated heading survives inside the crop, so the region shows both and the control cannot distinguish an oracle that saw the alteration"
+  },
+  {
+   "test": "DIAGNOSTIC -- some N-A pages legitimately repeat the original heading OUTSIDE the crop",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "no fixture exercises the duplicate-elsewhere case, so the occurrence-scoped rule is indistinguishable from the page-scoped one it replaced"
+  },
+  {
+   "test": "NEGATIVE A -- an original heading INSIDE the target region is detected",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "an unmutated heading inside the crop goes unnoticed, so the region rule cannot fail"
+  },
+  {
+   "test": "NEGATIVE B -- a mutation absent from the target region is detected",
+   "expected": 0,
+   "observed": 0,
+   "pass": true,
+   "fails_when": "the mutation counts even when it lies outside the crop, so the rule would pass a stimulus that shows the adjudicator nothing"
+  },
+  {
+   "test": "POSITIVE -- a fixture whose original repeats ELSEWHERE on the page still passes",
+   "expected": [
+    1,
+    0,
     true
    ],
    "observed": [
-    8,
+    1,
+    0,
     true
    ],
    "pass": true,
-   "fails_when": "the mutation did not reach the page, so the adjudicator would transcribe something other than the committed truth"
-  },
-  {
-   "test": "...and the ORIGINAL heading is gone from that page",
-   "expected": [
-    8,
-    true
-   ],
-   "observed": [
-    8,
-    false
-   ],
-   "pass": false,
-   "fails_when": "the unmutated heading survives alongside the mutation, so the region shows both and the control cannot distinguish an oracle that saw the alteration"
+   "fails_when": "the rule still gates on an unrelated duplicate outside the selected region, which is the scope error A40.13 corrects"
   },
   {
    "test": "the four N-C controls render to FOUR DISTINCT PNG hashes",
@@ -626,32 +686,32 @@
   {
    "test": "a clean rebuild reproduces IDENTICAL bytes for every generated fixture",
    "expected": {
-    "na_00_delete_one_word.pdf": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
-    "na_01_weld_two_words.pdf": "6ec883aa5014ffcbadb3f1e92cdfe19b5820b3a39a715b5ba82b0a3951a095b2",
-    "na_02_split_one_word.pdf": "386c998560b295426a18ca89d482e2a98d635e884211b4001f63b5d0c73227eb",
-    "na_03_delete_one_word.pdf": "f579a30836144ea3189c4846f7d8118e9a2253396db4c38db04ec27e60397231",
-    "na_04_weld_two_words.pdf": "e2f8f9cb69567553fee1aae400962a4deaa15b944a785a5bd20491c69e5ca89f",
-    "na_05_split_one_word.pdf": "5678f874dde8e43f2bb3f2783818df42e70b74bf46df4223817d7b8111209c09",
-    "na_06_delete_one_word.pdf": "7aecd1f8fe6033d926b3fce5c1b3847675b1fcc7a8d3aa93047a40d4b39fd42f",
-    "na_07_weld_two_words.pdf": "1256da1ca1585c3321ebef54b91545c44088d26dc021b2172fffae122297da69",
-    "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
-    "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
-    "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
-    "nc_03_heading_free.pdf": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6"
+    "na_00_delete_one_word.pdf": "cd1460a092dc44fc4cf2f7d33b4fd9ece0d21adf2f7f5d0fd1b83cbf037a522f",
+    "na_01_weld_two_words.pdf": "104f85729ac095d06e2a56e3d48bfcc30abe9f298b6c99bf98469c3c8d67c061",
+    "na_02_split_one_word.pdf": "61c9178fc8c51ab4b81fc0c4a7b34303eaabbde27b9db39f59e8c8584642d7bd",
+    "na_03_delete_one_word.pdf": "b3f30e24b50424c3e8f634ddfc501f1029352d7a361fad26a1c71831ec167469",
+    "na_04_weld_two_words.pdf": "d5f67bb44f8490cea2e9d3330cad0b373b7a0253d5f4f8179ff3892d820202ac",
+    "na_05_split_one_word.pdf": "1bc08acb57b17f1220ae35046e931fac73647e46f41bf7da14f1428c9e9da45e",
+    "na_06_delete_one_word.pdf": "7f0fddf896985ff90a9a9fea34593b9cda3022c4cb86d5f8bdbf3740ca73eb4c",
+    "na_07_weld_two_words.pdf": "ce75db58bfc020fb02e20f74eb827f77a8f2f90580ccb3f7900eb31e6f298b28",
+    "nc_00_heading_free.pdf": "89c88afa4c4e941e2f99eab249212fc607b348ff34326debe668614f05678e24",
+    "nc_01_heading_free.pdf": "1a43384798a0d0595cefb1628bf092c867efa109da82c7d87c48fa3ef45f501d",
+    "nc_02_heading_free.pdf": "14a0d4bc036147c7113f9ca2d5b8b77868112b2db725b6a456355f8b1b0abe17",
+    "nc_03_heading_free.pdf": "e9a091786d020f59edf0c959a79e4c0ddae3fa59dee139b54e77693571108c94"
    },
    "observed": {
-    "na_00_delete_one_word.pdf": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
-    "na_01_weld_two_words.pdf": "6ec883aa5014ffcbadb3f1e92cdfe19b5820b3a39a715b5ba82b0a3951a095b2",
-    "na_02_split_one_word.pdf": "386c998560b295426a18ca89d482e2a98d635e884211b4001f63b5d0c73227eb",
-    "na_03_delete_one_word.pdf": "f579a30836144ea3189c4846f7d8118e9a2253396db4c38db04ec27e60397231",
-    "na_04_weld_two_words.pdf": "e2f8f9cb69567553fee1aae400962a4deaa15b944a785a5bd20491c69e5ca89f",
-    "na_05_split_one_word.pdf": "5678f874dde8e43f2bb3f2783818df42e70b74bf46df4223817d7b8111209c09",
-    "na_06_delete_one_word.pdf": "7aecd1f8fe6033d926b3fce5c1b3847675b1fcc7a8d3aa93047a40d4b39fd42f",
-    "na_07_weld_two_words.pdf": "1256da1ca1585c3321ebef54b91545c44088d26dc021b2172fffae122297da69",
-    "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
-    "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
-    "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
-    "nc_03_heading_free.pdf": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6"
+    "na_00_delete_one_word.pdf": "cd1460a092dc44fc4cf2f7d33b4fd9ece0d21adf2f7f5d0fd1b83cbf037a522f",
+    "na_01_weld_two_words.pdf": "104f85729ac095d06e2a56e3d48bfcc30abe9f298b6c99bf98469c3c8d67c061",
+    "na_02_split_one_word.pdf": "61c9178fc8c51ab4b81fc0c4a7b34303eaabbde27b9db39f59e8c8584642d7bd",
+    "na_03_delete_one_word.pdf": "b3f30e24b50424c3e8f634ddfc501f1029352d7a361fad26a1c71831ec167469",
+    "na_04_weld_two_words.pdf": "d5f67bb44f8490cea2e9d3330cad0b373b7a0253d5f4f8179ff3892d820202ac",
+    "na_05_split_one_word.pdf": "1bc08acb57b17f1220ae35046e931fac73647e46f41bf7da14f1428c9e9da45e",
+    "na_06_delete_one_word.pdf": "7f0fddf896985ff90a9a9fea34593b9cda3022c4cb86d5f8bdbf3740ca73eb4c",
+    "na_07_weld_two_words.pdf": "ce75db58bfc020fb02e20f74eb827f77a8f2f90580ccb3f7900eb31e6f298b28",
+    "nc_00_heading_free.pdf": "89c88afa4c4e941e2f99eab249212fc607b348ff34326debe668614f05678e24",
+    "nc_01_heading_free.pdf": "1a43384798a0d0595cefb1628bf092c867efa109da82c7d87c48fa3ef45f501d",
+    "nc_02_heading_free.pdf": "14a0d4bc036147c7113f9ca2d5b8b77868112b2db725b6a456355f8b1b0abe17",
+    "nc_03_heading_free.pdf": "e9a091786d020f59edf0c959a79e4c0ddae3fa59dee139b54e77693571108c94"
    },
    "pass": true,
    "fails_when": "a rebuild from identical inputs produces different bytes, so every committed hash goes stale on the next run and G6 cannot stay green"
@@ -783,7 +843,5 @@
    "fails_when": "the byte-level control left the fixture set permanently invalid"
   }
  ],
- "failures": [
-  "...and the ORIGINAL heading is gone from that page"
- ]
+ "failures": []
 }
