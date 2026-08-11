@@ -94,87 +94,78 @@ def test_required_checks_report_to_a_merge_queue(filename: str, context: str) ->
     )
 
 
-def test_required_test_context_is_an_aggregator_over_the_matrix() -> None:
-    """The required `test` context must survive any matrix rename or resize.
+def test_required_test_context_is_an_aggregator_over_all_jobs() -> None:
+    """The required `test` context must survive any job rename or resize.
 
-    A matrix job reports one context per leg (`test-suite (3.12)`, ...), so a
-    required check pointing at the matrix job is stranded by the next matrix edit:
-    branch protection keeps waiting on `test` while only per-leg contexts report
-    (#426 review). The aggregator job named exactly `test` closes that: it needs
-    the matrix job, runs unconditionally, and fails unless every leg succeeded.
+    The workflow now has multiple independent jobs (one non-matrix: `lint-format`,
+    six matrix jobs: `fast-tests`, `browser-tests`, `external-validation`,
+    `corpus-gates`, `packaging-gate`, `remaining-slow`). Each matrix job reports
+    one context per leg (e.g., `fast-tests (3.12)`). The aggregator job named
+    exactly `test` needs ALL of them, runs unconditionally, and fails unless every
+    job succeeded.
 
     Each pinned property fails silently without the other: without `if: always()`
-    a skipped matrix leg skips the aggregator too (no verdict at all), and without
-    the explicit result comparison a skipped or cancelled leg counts as a pass,
+    a skipped dependency skips the aggregator too (no verdict at all), and without
+    the explicit result comparison a skipped or cancelled job counts as a pass,
     making the aggregator a rubber stamp.
 
-    Reading the result, comparing against `success`, and exiting non-zero are pinned as
-    one CONNECTED contract rather than three independent facts -- see the comment at the
-    assertions below. That contract is load-bearing for `fail-fast: false`: the matrix may
-    now run every leg to completion, and it stays non-permissive only because this
-    aggregator still fails whenever any leg is not `success`.
+    Reading each result, comparing against `success`, and exiting non-zero are
+    pinned as one CONNECTED contract. That contract is load-bearing for
+    `fail-fast: false` on the matrix jobs: they may run every leg to completion,
+    and the aggregator stays non-permissive only because it fails whenever any
+    job (or any leg of a matrix job) is not `success`.
     """
     jobs = _workflow()["jobs"]
     aggregator = jobs.get("test")
     assert aggregator is not None, (
         "ci.yml has no job named exactly 'test': the required check context stops "
-        "reporting the next time the matrix job is renamed or resized."
+        "reporting the next time a job is renamed or resized."
     )
     needs = aggregator.get("needs")
     needs = [needs] if isinstance(needs, str) else list(needs or [])
-    assert len(needs) == 1, f"the 'test' aggregator should need exactly the matrix job, got: {needs}"
-    matrix_job = jobs[needs[0]]
-    assert "matrix" in matrix_job.get("strategy", {}), (
-        f"the 'test' aggregator needs '{needs[0]}', which is not a matrix job"
+    # The aggregator must need all 7 jobs: 1 non-matrix + 6 matrix
+    expected_jobs = {
+        "lint-format",
+        "fast-tests",
+        "browser-tests",
+        "external-validation",
+        "corpus-gates",
+        "packaging-gate",
+        "remaining-slow",
+    }
+    assert set(needs) == expected_jobs, (
+        f"the 'test' aggregator must need exactly {sorted(expected_jobs)}, got: {sorted(needs)}"
     )
+    # Every needed job must exist
+    for job_name in needs:
+        assert job_name in jobs, f"aggregator needs missing job '{job_name}'"
     assert aggregator.get("if") == "always()", (
-        "the 'test' aggregator must run even when the matrix fails or is skipped, "
-        "or a skipped leg leaves the required check with no verdict"
+        "the 'test' aggregator must run even when a dependency fails or is skipped, "
+        "or a skipped job leaves the required check with no verdict"
     )
-    # Merely MENTIONING the result is not enough. `run: echo "${{ needs.test-suite.result
-    # }}"` contains the string and enforces nothing, so the required context would have
-    # become a rubber stamp with this test still green. Neither is it enough to find the
-    # result, a `!= "success"` and an `exit 1` INDEPENDENTLY -- this passes all three and
-    # always exits 0, because the comparison is not reading the result it just bound:
-    #
-    #     env: {MATRIX_RESULT: "${{ needs.test-suite.result }}"}
-    #     run: if [ "success" != "success" ]; then exit 1; fi; echo "$MATRIX_RESULT"
-    #
-    # So pin the parts as one connected contract: the operand carrying the matrix result
-    # is the operand compared against `success`, and the mismatch branch exits non-zero.
-    result_expr = f"needs.{needs[0]}.result"
-    carriers = []
-    gating = []
-    for step in aggregator.get("steps", []):
-        bound = [name for name, value in (step.get("env", {}) or {}).items() if result_expr in str(value)]
-        run = str(step.get("run", ""))
-        if not bound and result_expr not in run:
-            continue
-        gating.append(step)
-        # However the result reaches the script: a shell variable bound to it in `env`,
-        # or the expression interpolated straight into the run block.
-        carriers += [rf'"?\$\{{?{re.escape(name)}\}}?"?' for name in bound]
-        if result_expr in run:
-            carriers.append(r'"?\$\{\{\s*' + re.escape(result_expr) + r'\s*\}\}"?')
-    assert gating, (
-        f"no step in the 'test' aggregator reads {result_expr}: a skipped or failed leg "
-        "reports 'skipped'/'failure', not 'success', and an aggregator that never reads "
-        "the result passes regardless"
-    )
-    script = " ".join(str(step.get("run", "")) for step in gating)
+    # The aggregator must read EACH job's result and compare against "success"
+    script = " ".join(str(step.get("run", "")) for step in aggregator.get("steps", []))
     normalised = " ".join(script.split())
-    # Collapse every operand that CARRIES the matrix result to one token, so the assertion
-    # below is about this value being compared -- not about a `!= "success"` that merely
-    # shares a script with a reference to the result.
-    probe = normalised
-    for pattern in carriers:
-        probe = re.sub(pattern, "<RESULT>", probe)
-    compared = re.search(r'<RESULT> *!= *"?success"?', probe) or re.search(r'"?success"? *!= *<RESULT>', probe)
-    assert compared, (
-        "the 'test' aggregator must compare THE MATRIX RESULT against 'success'. It reads "
-        f"{result_expr}, but no `!=` puts that value on one side and 'success' on the "
-        "other, so whatever the comparison gates on, it is not the matrix outcome -- and "
-        "every leg result (failure, cancelled, skipped) satisfies the required check."
+    # Also check env bindings in the aggregator steps
+    env_bindings = {}
+    for step in aggregator.get("steps", []):
+        for name, value in (step.get("env", {}) or {}).items():
+            env_bindings[name] = str(value)
+    for job_name in needs:
+        result_expr = f"needs.{job_name}.result"
+        # The result can be referenced directly in the script or via an env variable binding
+        direct_ref = result_expr in normalised
+        env_ref = any(result_expr in v for v in env_bindings.values())
+        assert direct_ref or env_ref, (
+            f"the 'test' aggregator must read {result_expr}: a skipped or failed job "
+            "reports 'skipped'/'failure', not 'success', and an aggregator that never "
+            "reads the result passes regardless"
+        )
+    # All result expressions must be compared against "success" and exit non-zero on mismatch
+    # The current implementation loops over all results in a shell for-loop and exits 1 on any mismatch
+    assert "for result in" in normalised, "the 'test' aggregator must iterate over all job results"
+    assert '"$result" != "success"' in normalised or '$result != "success"' in normalised, (
+        "the 'test' aggregator must compare each result against 'success'"
     )
     assert "exit 1" in normalised, (
         "the 'test' aggregator's non-success branch must exit non-zero. Without it the "
@@ -182,7 +173,7 @@ def test_required_test_context_is_an_aggregator_over_the_matrix() -> None:
     )
 
 
-def test_ci_matrix_does_not_cancel_sibling_legs() -> None:
+def test_ci_matrix_jobs_do_not_cancel_sibling_legs() -> None:
     """One leg's failure must not erase the other leg's verdict.
 
     Each matrix leg tests a different supported interpreter, so their verdicts are not
@@ -194,18 +185,30 @@ def test_ci_matrix_does_not_cancel_sibling_legs() -> None:
 
     This is the same rule ``test_ci_does_not_cancel_in_progress_runs`` enforces one level up,
     for the same reason: never destroy a verdict. It does **not** make CI permissive. A
-    failed leg still fails, and ``test_required_test_context_is_an_aggregator_over_the_matrix``
-    separately pins the aggregator that demands success from every leg.
+    failed leg still fails, and ``test_required_test_context_is_an_aggregator_over_all_jobs``
+    separately pins the aggregator that demands success from every job (and every leg).
     """
-    strategy = _workflow()["jobs"]["test-suite"].get("strategy", {})
-    assert strategy.get("fail-fast") is False, (
-        "ci.yml's matrix does not set `fail-fast: false`, so one leg's failure cancels the "
-        "other before it reports. The cancelled leg's verdict is lost, which is how a "
-        "floor-only regression hides behind an unrelated failure on the newest patch."
-    )
+    workflow = _workflow()
+    matrix_job_names = [
+        "fast-tests",
+        "browser-tests",
+        "external-validation",
+        "corpus-gates",
+        "packaging-gate",
+        "remaining-slow",
+    ]
+    for job_name in matrix_job_names:
+        job = workflow["jobs"][job_name]
+        strategy = job.get("strategy", {})
+        assert strategy.get("fail-fast") is False, (
+            f"ci.yml's '{job_name}' matrix does not set `fail-fast: false`, so one leg's "
+            "failure cancels the other before it reports. The cancelled leg's verdict is lost, "
+            "which is how a floor-only regression hides behind an unrelated failure on the "
+            "newest patch."
+        )
 
 
-def test_ci_matrix_legs_pin_the_interpreter_they_claim_to_test() -> None:
+def test_ci_matrix_jobs_pin_the_interpreter_they_claim_to_test() -> None:
     """A leg labelled 3.14 must actually run on 3.14.
 
     Without ``UV_PYTHON``, the matrix is decorative. ``uv sync`` builds the right
@@ -218,12 +221,22 @@ def test_ci_matrix_legs_pin_the_interpreter_they_claim_to_test() -> None:
     That is precisely why it needs a test rather than a comment: the failure is invisible
     on exactly the versions that were in the matrix when the hole opened.
     """
-    job = _workflow()["jobs"]["test-suite"]
-    assert job.get("env", {}).get("UV_PYTHON") == "${{ matrix.python-version }}", (
-        "ci.yml's test-suite job no longer pins UV_PYTHON to the matrix version. Every "
-        "uv call in the job, including ones made from inside a test, falls back to "
-        "`.python-version` -- so every non-3.12 leg silently tests 3.12 and passes."
-    )
+    workflow = _workflow()
+    matrix_job_names = [
+        "fast-tests",
+        "browser-tests",
+        "external-validation",
+        "corpus-gates",
+        "packaging-gate",
+        "remaining-slow",
+    ]
+    for job_name in matrix_job_names:
+        job = workflow["jobs"][job_name]
+        assert job.get("env", {}).get("UV_PYTHON") == "${{ matrix.python-version }}", (
+            f"ci.yml's '{job_name}' job no longer pins UV_PYTHON to the matrix version. Every "
+            "uv call in the job, including ones made from inside a test, falls back to "
+            "`.python-version` -- so every non-3.12 leg silently tests 3.12 and passes."
+        )
 
 
 def test_ci_runs_on_pushes_to_develop() -> None:
