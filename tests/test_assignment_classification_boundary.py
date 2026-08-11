@@ -622,6 +622,36 @@ def test_the_migrated_stages_reproduce_the_pre_slice_change_records():
     assert moved_seen == 496, f"{moved_seen} moved records across the corpus; the pinned figure is 496"
 
 
+def candidate_maps(old_tree, new_tree) -> tuple[dict, dict]:
+    """`(migrated, pre-slice)` candidate populations as `{(element_id_old, element_id_new): score}`.
+
+    The pre-slice side reaches `move_candidates` through this module's own import, so a control
+    that patches `diff_bill.move_candidates` perturbs production alone and the oracle stays honest.
+    That asymmetry is the point: a fault both sides felt would move them together and pass.
+    """
+    stages = migrated_stages(old_tree, new_tree)
+    registry = stages["registry"]
+    migrated = {
+        (registry.node(candidate.old).element_id, registry.node(candidate.new).element_id): candidate.proposals[0].score
+        for candidate in stages["candidates"].candidates()
+    }
+
+    changes = legacy_change_records(stages["pairs"])
+    removed, added = legacy_filtered_sides(changes)
+    expected = {
+        (removed[ri][1].element_id_old, added[ai][1].element_id_new): sim for sim, ri, ai in legacy_candidates(changes)
+    }
+    return migrated, expected
+
+
+def _selecting_pair() -> tuple:
+    """A committed pair that carries candidates, so a control over it cannot be vacuous."""
+    return (
+        normalize_bill(fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml")),
+        normalize_bill(fixture_path("118-hr-4366", "5_engrossed-amendment-house.xml")),
+    )
+
+
 @pytest.mark.slow
 def test_the_retrieved_candidate_population_is_identical():
     """Candidate IDENTITY and SCORE, not the 1054 count.
@@ -631,22 +661,7 @@ def test_the_retrieved_candidate_population_is_identical():
     """
     total = pairs_carrying = 0
     for key, old_path, new_path in _baseline_pairs():
-        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        stages = migrated_stages(old_tree, new_tree)
-        registry = stages["registry"]
-
-        migrated = {}
-        for candidate in stages["candidates"].candidates():
-            link = (registry.node(candidate.old).element_id, registry.node(candidate.new).element_id)
-            migrated[link] = candidate.proposals[0].score
-
-        changes = legacy_change_records(stages["pairs"])
-        removed, added = legacy_filtered_sides(changes)
-        expected = {
-            (removed[ri][1].element_id_old, added[ai][1].element_id_new): sim
-            for sim, ri, ai in legacy_candidates(changes)
-        }
-
+        migrated, expected = candidate_maps(normalize_bill(old_path), normalize_bill(new_path))
         assert migrated == expected, (
             f"{key}: candidate population differs. "
             f"only migrated: {sorted(set(migrated) - set(expected))[:3]}; "
@@ -656,6 +671,44 @@ def test_the_retrieved_candidate_population_is_identical():
         pairs_carrying += bool(migrated)
 
     assert (total, pairs_carrying) == (1054, 16), f"{total} candidates over {pairs_carrying} pairs; pinned 1054 over 16"
+
+
+@pytest.mark.slow
+def test_the_population_comparison_rejects_a_dropped_candidate(monkeypatch):
+    """A checker that has never rejected anything cannot be told from one that accepts everything."""
+    old_tree, new_tree = _selecting_pair()
+    real = diff_bill.move_candidates
+    monkeypatch.setattr(diff_bill, "move_candidates", lambda removed, added, bound: real(removed, added, bound)[1:])
+
+    migrated, expected = candidate_maps(old_tree, new_tree)
+    assert len(expected) - len(migrated) == 1, "the control did not drop exactly one candidate"
+    assert migrated != expected
+
+
+@pytest.mark.slow
+def test_the_population_comparison_rejects_an_added_candidate(monkeypatch):
+    """The other direction: an extra pair that is otherwise perfectly well formed.
+
+    Scored at the bound itself and addressed at a position the real retrieval left free, so the
+    only thing wrong with it is that production did not retrieve it.
+    """
+    old_tree, new_tree = _selecting_pair()
+    real = diff_bill.move_candidates
+
+    def with_an_extra(removed, added, bound):
+        found = real(removed, added, bound)
+        taken = {(ri, ai) for _score, ri, ai in found}
+        spare = next(
+            ((ri, ai) for ri in range(len(removed)) for ai in range(len(added)) if (ri, ai) not in taken), None
+        )
+        assert spare is not None, "every position pair is already a candidate; the control cannot fire"
+        return [*found, (bound, *spare)]
+
+    monkeypatch.setattr(diff_bill, "move_candidates", with_an_extra)
+
+    migrated, expected = candidate_maps(old_tree, new_tree)
+    assert len(migrated) - len(expected) == 1, "the control did not add exactly one candidate"
+    assert migrated != expected
 
 
 @pytest.mark.slow
