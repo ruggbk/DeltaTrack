@@ -3675,7 +3675,7 @@ touched it.
                    "probes/s1_control.py", "probes/x21_build_oracle.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is introduced or changed",
- "status": "PROPOSED FROZEN -- reviewed after scorer-input integration repair; ownership table has no UNOWNED rows and no stale forward-ambiguity language. Awaiting reviewer confirmation."}
+ "status": "IMPLEMENTED + REPAIRED -- not frozen; control-fixture scorer/adjudication input path still under A40 review"}
 ```
 
 **`affects_scoring_rule` is false and A38 must keep it so.** It introduces **no** new metric,
@@ -3730,10 +3730,12 @@ proves the mechanism works and that its faults are detectable, on development ma
 confirmatory qualification comes from `cross_engine_control.py`, which **calls `X09.gate`**
 rather than reimplementing the `max(pdfium, pymupdf)` denominator or either threshold.
 
-**No row is UNOWNED.** The N-A/N-B/N-C *source fixtures* — the last outstanding row, recorded
-here from A35 onward — are **realized under A39.3 as amended by A40** and gated by **G6**:
-`results/control_fixtures.json` with 8 / 8 / 4, every source, XML and generated hash verified
-against the bytes, and no confirmatory provenance anywhere in the chain.
+**The control-fixture row has a producer but is NOT yet a complete input path.**
+`results/control_fixtures.json` exists with 8 / 8 / 4, every hash verified against the bytes,
+and holdout exclusion now enforced by **source identity** (A40.7 / F7). But the A40.7
+falsification established that the controls are **not executable through `build_oracle`**
+(F5) and that the manifest does **not** commit the adjudication region for N-A/N-B (F6), so
+this row is **owned but incomplete**. **A38 is therefore not frozen.**
 
 ### A38.2 — persist the A30 identity candidates
 
@@ -3905,7 +3907,7 @@ obviously synthetic placeholders, which removes both the collision and an anchor
                    "probes/x04_freeze_check.py", "probes/x15_methodology_contracts.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
- "status": "IMPLEMENTED -- A39.1 ruled+implemented; A39.2 implemented and REVIEWED; A39.3's original size clause STOPPED and superseded by A40; A39.4 G6 implemented under A40's revised control contract; A39.5 implemented"}
+ "status": "A39.1 APPROVED; A39.2 APPROVED; A39.3/A39.4 PENDING successful A40 fixture integration; A39.5 APPROVED"}
 ```
 
 `affects_scoring_rule` is **true**: A39 makes the previously unspecified Rule 0 margin-line
@@ -4066,13 +4068,13 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
- "commits": ["31b19c7", "c6ccd4e"],
+ "commits": ["31b19c7", "c6ccd4e", "c8df8cf"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/control_fixtures.py", "probes/x04_freeze_check.py",
                    "probes/x23_control_fixtures.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
- "status": "IMPLEMENTED -- awaiting review; x23 21/21, G6 PASS"}
+ "status": "CONTRACT APPROVED; IMPLEMENTATION CHANGE -- repair under review. 8 reviewer findings falsified against HEAD, ALL 8 SURVIVED; F7 and F8 repaired, F1-F6 outstanding"}
 ```
 
 `affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
@@ -4148,6 +4150,35 @@ deliberately dead mutation (`before == after`) must make validation **fail**.
 | **M1** heading presence | **N-B, N-C** (was N-A, N-C) | N-B supplies 8 corroborated TRUE headings, N-C 4 constructionally certain NO-heading regions — together a direct positive/negative enumeration test. **The revised N-A is not a heading-presence control.** |
 | **M2** text exactness | **N-A** | the adjudicator must report the exact altered print; WELD and SPLIT must be capable of failing exactness under the frozen normalisation |
 | **M3** boundary integrity | **N-A** | N-A now spans `TEXT_ERROR` (delete), `WELD`, and `SPLIT`, aligning the control with M3's already-frozen distinctions. **M3 itself is unchanged.** |
+
+### A40.7 — the eight-finding falsification pass, and what it found
+
+Every reviewer finding was attacked against the committed HEAD `2782140` **before** any code
+changed. **All eight SURVIVED**; none was withdrawn.
+
+| # | claim | verdict | evidence |
+|---|---|---|---|
+| **F1** | N-A/N-B source truth depends on H | **SURVIVES** | `control_fixtures.py:235` `run_hybrid.run`, `:240` `extract_anchors`, `:241` `anchor.kind != "account"` — all **before** the XML test at `:244`. The H anchor supplies membership, kind, text, page and line |
+| **F2** | XML proves only string occurrence | **SURVIVES** | operative test is `text.upper() not in xml_text`; the manifest records a fixed prose string and no element identity |
+| **F3** | G6 does not replay selection | **SURVIVES** | `x04.g6_control_fixtures()` loads the JSON and calls `validate_manifest`, which never rebuilds the eligible population, re-ranks, or re-selects |
+| **F4** | G6 does not replay the mutation target | **SURVIVES** | validator checks `recipe.variant == variant` and `mutation_evidence(...).live` only; it never calls `MUTATORS[variant](expected_before)`, so a **different but still live** target passes |
+| **F5** | controls are not executable through the oracle path | **SURVIVES** | 20 `StimulusSpec`s built from the manifest, then `build_oracle.build([], controls=...)` → **`KeyError: '118-hr-8752/1'`** from `frames_by_doc[spec.document_id]`. No manifest→spec adapter exists |
+| **F6** | the manifest lacks the adjudication region | **SURVIVES** | N-A carries only `source_bbox`, a **single 9.5 pt heading line**; N-B carries **no bbox at all**; N-C carried none. The 8-line oracle region would still be re-derived later |
+| **F7** | holdout exclusion is name-based | **SURVIVES → REPAIRED** | validator scanned provenance strings only. Now checks the **17 authoritative SHA-256** values from `holdout_membership.json`; a DEVELOPMENT-named record carrying a holdout SHA is rejected, and the control asserts the name scan does **not** fire on it |
+| **F8** | the four N-C controls may be visually duplicate | **SURVIVES → REPAIRED** | rendered through the real `render_region` at 300 DPI: **all four produced the identical PNG `3f709d21…`** while their container SHAs differed. `generate_nc_pdf` ignored its `index`. Now four distinct rendered hashes |
+
+**Feasibility established for the F1/F2 repair, so it is not blocked.** The committed GPO XML
+**does** independently determine `account` truth: `<appropriations-small id="…"><header>TEXT</header>`
+is GPO's own account-level element, carrying a stable element identity and the exact heading
+text — 41 and 105 such elements in the two DEVELOPMENT documents. **No STOP is owed.**
+
+Physical targeting was measured under two fail-closed rules: requiring the header text to be
+unique in **both** XML and PDF yields only **5** located sources (too few); pairing the *k*
+XML occurrences with the *k* PDF occurrences in document order, and **refusing the whole header
+group on any count mismatch**, yields **17** — enough for both the 8-item `na-source` and
+8-item `nb-source` draws.
+
+**Outstanding: F1, F2, F3, F4, F5, F6 (N-A/N-B regions).**
 
 ### Population and boundary
 
