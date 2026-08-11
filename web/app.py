@@ -101,9 +101,10 @@ def _rate_limit_key(request: Request) -> str:
 # skipped. That default is the safe direction (a new public endpoint is
 # limited unless it opts out via @limiter.exempt), but it does mean a future
 # route inherits this budget rather than being unlimited by oversight.
-# The counter storage is intentionally process-local (in-memory; #395): a
-# shared backend would be a change to the deploy, not the limiter. See
-# docs/web-compare.md before changing the worker count.
+# The counter storage is intentionally process-local (in-memory; #395).
+# Moving to multiple workers requires configuring the limiter with shared
+# storage and provisioning that backend; see docs/web-compare.md before
+# changing the worker count.
 limiter = Limiter(key_func=_rate_limit_key, default_limits=[f"{COMPARE_RATE_LIMIT_PER_MINUTE}/minute"])
 app.state.limiter = limiter
 
