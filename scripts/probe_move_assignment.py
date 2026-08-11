@@ -39,9 +39,21 @@ HOW IT INSTRUMENTS
     ``reconcile_moves`` is *wrapped*, not reimplemented, so the changes list measured is the
     one production's own classification loop produces. Where the greedy loop has to be
     duplicated in order to see inside it (a copy cannot be avoided: production keeps no
-    record of which candidate lost), the duplicate asserts its selected count matches the
-    real function's on every pair before any tie number is reported. A duplicate that
-    drifted would measure a different population while reporting agreement.
+    record of which candidate lost), the duplicate resolves each selection it makes back
+    to the same ``(element_id_old, element_id_new)`` identity production records, and
+    asserts **exact agreement with production on both the selected set and the selected
+    order**, per corpus pair, before any tie number is reported.
+
+    Comparing counts alone would not be enough, and the gap is precisely the phenomenon
+    this probe exists to measure: a tie-policy difference can change *which* pair wins
+    while leaving the number of selections identical. A count-only check would pass
+    through exactly that error. Identities come from the filtered ``removed``/``added``
+    lists rather than from positions in the emitted output, because a key read off the
+    post-selection order could not detect a change in that order.
+
+    If any pair disagrees, the run stops and reports the differing pair. No tie figure is
+    printed, because a drifted duplicate measures a different population than the one it
+    would be reporting about.
 """
 
 from __future__ import annotations
@@ -117,6 +129,53 @@ def selected_signature(changes) -> list[tuple]:
     return [(c.element_id_old, c.element_id_new) for c in out if c.change_type == "moved"]
 
 
+def replay_assignment(cands, removed, added) -> tuple[list[tuple[str, str]], int, list[tuple]]:
+    """Production's greedy loop, duplicated so the losing candidate is observable.
+
+    Returns the selected correspondences in selection order, keyed by the same
+    ``(element_id_old, element_id_new)`` identity production records, plus how many of
+    those selections a same-similarity rival contested and a sample of them.
+    """
+    ordered = sorted(cands, reverse=True)
+    claimed_r: set[int] = set()
+    claimed_a: set[int] = set()
+    selected: list[tuple[str, str]] = []
+    tie_decided = 0
+    examples: list[tuple] = []
+
+    for sim, ri, ai in ordered:
+        if ri in claimed_r or ai in claimed_a:
+            continue
+        # A competing candidate at the SAME similarity, still unclaimed at this moment,
+        # wanting one of the same two slots. If one exists, only (ri, ai) separated them.
+        rival = next(
+            (
+                (s2, r2, a2)
+                for s2, r2, a2 in ordered
+                if s2 == sim
+                and (s2, r2, a2) != (sim, ri, ai)
+                and r2 not in claimed_r
+                and a2 not in claimed_a
+                and (r2 == ri or a2 == ai)
+            ),
+            None,
+        )
+        claimed_r.add(ri)
+        claimed_a.add(ai)
+
+        # Resolve to the identity production records for this pair, so the comparison
+        # below is against what production actually emits rather than against a count.
+        _, rc = removed[ri]
+        _, ac = added[ai]
+        selected.append((rc.element_id_old, ac.element_id_new))
+
+        if rival is not None:
+            tie_decided += 1
+            examples.append((round(sim, 6), (ri, ai), rival[1:]))
+
+    return selected, tie_decided, examples
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dump", type=Path, default=None, help="write selected correspondences to JSON")
@@ -132,7 +191,7 @@ def main() -> None:
     total_selected = 0
     tie_decided = 0
     tie_examples: list[tuple] = []
-    agreement_failures: list[tuple] = []
+    disagreements: list[str] = []
     dump: dict[str, list] = {}
 
     for key, changes in sorted(captured.items()):
@@ -152,39 +211,39 @@ def main() -> None:
         if tied_here:
             pairs_with_ties += 1
 
-        # Production's ordering, reproduced: sort the raw tuple descending.
-        ordered = sorted(cands, reverse=True)
-        claimed_r: set[int] = set()
-        claimed_a: set[int] = set()
-        mine = 0
-        for sim, ri, ai in ordered:
-            if ri in claimed_r or ai in claimed_a:
-                continue
-            rival = next(
-                (
-                    (s2, r2, a2)
-                    for s2, r2, a2 in ordered
-                    if s2 == sim
-                    and (s2, r2, a2) != (sim, ri, ai)
-                    and r2 not in claimed_r
-                    and a2 not in claimed_a
-                    and (r2 == ri or a2 == ai)
-                ),
-                None,
-            )
-            claimed_r.add(ri)
-            claimed_a.add(ai)
-            mine += 1
-            total_selected += 1
-            if rival is not None:
-                tie_decided += 1
-                if len(tie_examples) < 10:
-                    tie_examples.append((key, round(sim, 6), (ri, ai), rival[1:]))
-
+        mine, mine_tie_decided, mine_examples = replay_assignment(cands, removed, added)
         sig = selected_signature(changes)
-        if len(sig) != mine:
-            agreement_failures.append((key, len(sig), mine))
+
+        # Exact agreement, on the set AND on the order. Reported separately so a failure
+        # says which property broke; either one voids the tie figures for this corpus.
+        if mine != sig:
+            only_mine = [p for p in mine if p not in set(sig)]
+            only_prod = [p for p in sig if p not in set(mine)]
+            if set(mine) == set(sig):
+                disagreements.append(
+                    f"{key}: same {len(sig)} correspondences, DIFFERENT ORDER "
+                    f"(first divergence at index {next(i for i, (a, b) in enumerate(zip(mine, sig)) if a != b)})"
+                )
+            else:
+                disagreements.append(
+                    f"{key}: SET differs -- {len(sig)} in production, {len(mine)} in the duplicate; "
+                    f"only in duplicate={only_mine[:3]}; only in production={only_prod[:3]}"
+                )
+            continue
+
+        # Only fold this pair's figures in once its duplicate is proven equivalent.
+        total_selected += len(mine)
+        tie_decided += mine_tie_decided
+        for sim, winner, rival in mine_examples:
+            if len(tie_examples) < 10:
+                tie_examples.append((key, sim, winner, rival))
         dump[key] = [list(pair) for pair in sig]
+
+    if disagreements:
+        print("DUPLICATE-LOOP AGREEMENT FAILURES -- no tie figure is valid:")
+        for line in disagreements:
+            print(f"  {line}")
+        raise SystemExit("duplicated greedy loop disagrees with production; numbers are void")
 
     counts = list(per_pair.values())
     nonzero = [n for n in counts if n]
@@ -213,13 +272,11 @@ def main() -> None:
     for ex in tie_examples:
         print(f"  {ex[0]}  sim={ex[1]}  winner={ex[2]}  rival={ex[3]}")
 
-    print(f"\nduplicate-loop agreement failures (MUST be empty): {agreement_failures}")
-    if agreement_failures:
-        raise SystemExit("duplicated greedy loop disagrees with production; numbers above are void")
+    print(f"\nduplicate-loop agreement: exact set AND order match on all {len(dump)} pairs carrying a selection")
 
     if args.dump:
         args.dump.write_text(json.dumps(dump, indent=2, sort_keys=True))
-        print(f"\nwrote selected correspondences for {len(dump)} pairs to {args.dump}")
+        print(f"wrote selected correspondences for {len(dump)} pairs to {args.dump}")
 
 
 if __name__ == "__main__":

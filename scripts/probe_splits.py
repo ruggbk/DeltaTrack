@@ -1,11 +1,26 @@
-"""Investigation D blocker: how many removals/additions exist ONLY because classification ran?
+"""Size the removal/addition population that exists only because classification has run.
 
-diff_bills splits a path-matched pair whose similarity is below SIMILARITY_THRESHOLD into a
-removal plus an addition (the #368 mechanism). Those entries are CREATED BY classification.
-A retrieval round moved before classification cannot see them, so its candidate population
-would differ. This measures how much of the move population depends on them.
+``diff_bills`` splits a path-matched pair whose similarity falls below
+``SIMILARITY_THRESHOLD`` into a removal plus an addition (the #368 mechanism). Those two
+entries are *created by classification*: they do not exist in ``match_nodes`` output,
+which paired those same two nodes. A retrieval round placed before classification would
+not see them, so this sizes that part of the input population.
 
-Uses production match_nodes / normalize_bill / text_similarity directly.
+SCOPE, stated because the number is easy to over-read:
+
+    This measures the removal/addition INPUT population only. It does **not** measure
+    overlap with the 1054 move candidates or the 496 selected moves reported by
+    ``probe_move_assignment.py``, and nothing here says how many of those contain a
+    classification-created side.
+
+    So it does not, on its own, establish what would change if the second retrieval pass
+    moved before classification. It establishes only how much of the input to that pass
+    is classification-created, which bounds the question without answering it.
+
+Uses production ``match_nodes`` / ``normalize_bill`` / ``text_similarity`` directly.
+Read-only, writes nothing.
+
+    uv run python scripts/probe_splits.py
 """
 
 from __future__ import annotations
@@ -13,7 +28,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path.cwd()))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
 from deltatrack.diff_bill import _normalize_text, match_nodes  # noqa: E402
@@ -59,3 +74,7 @@ print(
 print("\npairs with splits (pair, splits, unmatched_old, unmatched_new):")
 for row in sorted(per_pair, key=lambda r: -r[1])[:8]:
     print("  ", row)
+print(
+    "\nSCOPE: input population only. Overlap with the 1054 move candidates and the 496 "
+    "selected moves is NOT measured here."
+)

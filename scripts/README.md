@@ -19,23 +19,30 @@ root.
 ### ADR 0020 slice-2 evidence
 
 Whether the move-assignment pass can be extracted as its own [ADR 0020](../docs/decisions/0020-matching-stages.md)
-stage turns on four measurements. These are the probes behind them. All are read-only,
+stage turns on what the current code measurably does. These are the probes behind that.
+All are read-only,
 all run against the committed corpus via `tests.test_canonical_baseline.baseline_pairs`
 so the probe and the byte-identity gate always describe the same population, and all
-instrument production by *wrapping* it rather than reimplementing it. Where a greedy loop
-has to be duplicated to see inside it, the duplicate asserts it still agrees with the real
-function before any number is reported — a drifted duplicate would otherwise measure a
-different population while reporting agreement.
+instrument production by *wrapping* it rather than reimplementing it.
+
+Where a greedy loop has to be duplicated to see inside it, the duplicate resolves every
+selection back to the same `(element_id_old, element_id_new)` identity production records,
+and asserts **exact agreement with production on both the selected set and the selected
+order**, per corpus pair, before any number is reported. Comparing selection *counts* is
+not sufficient and the gap is the very phenomenon these probes measure: a tie-policy
+difference changes which pair wins while leaving the count identical, so a count-only
+check passes straight through it. On disagreement the run stops and names the differing
+pair rather than reporting a figure derived from a drifted duplicate.
 
 | Script | What it does |
 |--------|--------------|
 | `probe_move_assignment.py [--dump OUT.json]` | The candidate population `reconcile_moves` forms, how much of it ties on similarity, and how many selections are decided only by the `(ri, ai)` index tiebreak rather than by any property of the two sections. `--dump` records the selected correspondences keyed by element id, so two builds can be compared without re-deriving anything. |
 | `compare_selected.py A.json B.json` | Diff two `--dump` files, separating *a different correspondence was chosen* from *the same ones in another order*. The canonical digest is sensitive to both, so it cannot distinguish them on its own. |
-| `probe_splits.py` | How many removals and additions exist **only because classification ran** — the pairs the similarity cutoff splits into a removal plus an addition (#368). A retrieval round moved before classification cannot see these, so this sizes what such a reordering would change. |
+| `probe_splits.py` | Sizes the removal/addition **input population that exists only because classification has already run**: the pairs the similarity cutoff splits into a removal plus an addition (#368). Scope limit, stated in the script and its output: it does *not* measure overlap with the move-candidate population or the selected moves, so on its own it bounds rather than answers what moving retrieval before classification would change. |
 | `probe_provenance.py` | Whether `element_id` could stand in for a complete parser-sequence ordinal: how many tree nodes carry an empty or duplicated one. |
 | `probe_slice2.py [OUT.json]` | The same population and tie counts, plus the order-perturbation negative control: reverse and three seeded shuffles of the candidate list, checking whether the selected correspondences move. Prints how many pairs the perturbation *actually reordered*, because a perturbation that changed nothing would prove nothing. |
 | `probe_ordinal_loss.py` | Whether the engine still carries a complete parser-sequence ordinal where assignment runs: is `element_id` a unique address, and does `match_nodes` emit nodes in parser order? Sizes how far its output departs from document sequence, which is what the `(ri, ai)` tiebreak actually sorts on. |
-| `probe_correspondence_completeness.py` | Demonstrates against the real contracts whether `CorrespondenceSet` can hold first-pass results before the move pass revises them, rather than reasoning about it. |
+| `probe_correspondence_revision.py` | Demonstrates against the real types that a `CorrespondenceSet` which has already settled 1:0 and 0:1 records **cannot subsequently revise those same observations into a later 1:1** move correspondence under the current contract and API. Settling the two separately succeeds; the constraint bites on the revision. A constraint on migration order, not a defect in the contract or the engine, and this changes neither. |
 
 ### Refreshing the validation evidence
 
