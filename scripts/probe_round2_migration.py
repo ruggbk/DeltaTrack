@@ -1,32 +1,61 @@
 """What a pre-classification second retrieval round would have to reproduce exactly.
 
 Investigation D for the #581 prerequisite. ADR 0020 forbids retrieval after
-classification, so ``reconcile_moves`` — a second retrieval plus assignment pass running
-over already-classified changes — eventually has to move ahead of classification. Two
+classification, so ``reconcile_moves`` -- a second retrieval plus assignment pass running
+over already-classified changes -- eventually has to move ahead of classification. Two
 things decide whether that is a behaviour-preserving move or a behaviour change, and
 neither is measured by the probes committed with #586:
 
-**A. The input population.** ``probe_splits.py`` measures that 327 path-matched pairs are
-split into a removal plus an addition *by classification*, and says explicitly that their
-overlap with the move population is NOT measured. Without that overlap, "move the round
-earlier" is unscoped: an entry created by classification cannot be an input to a round
-that runs before it. This measures how much of the candidate and selected-move population
-depends on a classification-created entry.
+**A. The input population.** ``probe_splits.py`` measures that 327 path-matched pairings
+are replaced by a removal plus an addition, and says explicitly that their overlap with
+the move population is NOT measured. Without that overlap, "move the round earlier" is
+unscoped. This measures how much of the candidate and selected-move population depends on
+an observation that only exists because the similarity rule revoked its pairing.
 
 **B. The ordering key.** Production sorts candidates by ``(similarity, ri, ai)``, where
-``ri``/``ai`` are positions in the FILTERED removed/added lists. 37 of 496 selections are
-decided by that key rather than by similarity. An extraction that replaced it with ADR
-0019 ordinals would preserve behaviour only if the two orderings agree. This runs both
-keys through the same greedy loop and compares the selected correspondence — set and
-order — pair by pair.
+``ri``/``ai`` are positions in the FILTERED removed/added lists. An extraction that
+replaced that key with ADR 0019 ordinals would preserve behaviour only if the two
+orderings agree. This runs both keys through the same greedy loop and compares the
+selected correspondence -- set and order -- pair by pair.
 
-FAIL-CLOSED, in two places, because both numbers are void without them:
+WHAT #591 CHANGED, because it changes what A *means* without moving a single number.
+Before #591 the similarity cutoff ran inside ``diff_bills``' classification loop, so the
+removal and the addition it produced did not exist until classification had run, and a
+retrieval round placed before classification could not have seen them at all. #591 moved
+that decision into :func:`~deltatrack.diff_bill.apply_similarity_revocation`, which runs
+*ahead* of the loop. The two observations are now separated before classification, so a
+round-2 pass placed after that stage does see them.
 
+    The population figure is therefore no longer evidence that the round cannot move. It
+    now sizes a SEQUENCING CONSTRAINT INSIDE ASSIGNMENT: round 2 must run after the
+    similarity revocation, not merely before classification. What still blocks a literal
+    relocation is representational, not populational -- ``reconcile_moves`` consumes
+    ``NodeDiff`` records, which are classification output, so it would have to be
+    re-expressed over observations. Every field it reads (``old_text``, ``new_text``,
+    ``element_id_old``/``_new``, ``display_path_*``, ``match_path``, ``section_number``,
+    the amount texts) is derivable from the ``BillNode`` pair, so that is a mechanical
+    change owing its own evidence rather than an obstacle.
+
+Accordingly this says "revoked" and "revocation-produced" throughout. The pre-#591
+architecture is the only place "classification-created" was ever true, and the figures
+below were first measured against it at develop 97f91ba; they are unchanged at
+0f07dc4 (post-#591), which is itself the evidence that #591 preserved the population.
+
+FAIL-CLOSED, in three places, because the numbers are void without them:
+
+    - The revocation population is read from PRODUCTION's own predicate
+      (``pairing_survives_similarity_rule``), not from a transcription of it. A
+      lookalike condition -- ``old_norm != new_norm`` in place of the ``diff_text``
+      emptiness gate -- agrees on all 15,034 corpus pairings today, and that agreement is
+      a measurement rather than a guarantee. Reading production removes the question.
+    - That predicate's verdict is cross-checked against what
+      ``apply_similarity_revocation`` structurally *did*: one revocation must add exactly
+      one tuple. If the count disagrees, the probe stops rather than reporting a
+      population derived from a predicate production did not apply.
     - ``element_id`` is used only as a MEASUREMENT BRIDGE from a ``NodeDiff`` back to the
       node it came from, since ``NodeDiff`` carries no node reference. It is not proposed
       as identity (ADR 0019 refuses that). The probe asserts uniqueness and non-emptiness
-      per side and stops if either fails, rather than reporting numbers built on a lookup
-      that could silently hit the wrong twin.
+      per side and stops if either fails.
     - The duplicated greedy loop must reproduce production's selected set AND order under
       the production key before any comparison figure is printed. A drifted duplicate
       would be comparing the ordinal key against itself rather than against production.
@@ -45,24 +74,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import deltatrack.diff_bill as db  # noqa: E402
 from deltatrack.compare.xml import compare_xml  # noqa: E402
-from deltatrack.similarity import (  # noqa: E402
-    MOVE_THRESHOLD,
-    SIMILARITY_THRESHOLD,
-    move_candidates,
-    text_similarity,
-)
+from deltatrack.similarity import MOVE_THRESHOLD, move_candidates  # noqa: E402
 from deltatrack.version_stems import label_from_stem  # noqa: E402
 from tests.test_canonical_baseline import baseline_pairs  # noqa: E402
 
 REAL_MATCH_NODES = db.match_nodes
+REAL_REVOCATION = db.apply_similarity_revocation
 REAL_RECONCILE = db.reconcile_moves
 
 
 def capture() -> dict[str, dict]:
-    """Per corpus pair: the trees, the ``match_nodes`` output, and ``reconcile_moves``' input.
+    """Per corpus pair: the trees, ``match_nodes`` output, the revocation stage's output,
+    and ``reconcile_moves``' input.
 
-    Both are captured by wrapping the production functions inside a real ``compare_xml``
-    run, so every value measured is the value production actually produced rather than a
+    All captured by wrapping the production functions inside a real ``compare_xml`` run,
+    so every value measured is the value production actually produced rather than a
     reconstruction of it.
     """
     captured: dict[str, dict] = {}
@@ -73,11 +99,17 @@ def capture() -> dict[str, dict]:
         captured.setdefault(holder["key"], {}).update(old_tree=old, new_tree=new, pairs=pairs)
         return pairs
 
+    def revocation_spy(pairs):
+        decided = REAL_REVOCATION(pairs)
+        captured.setdefault(holder["key"], {})["decided"] = decided
+        return decided
+
     def reconcile_spy(changes, threshold=MOVE_THRESHOLD):
         captured.setdefault(holder["key"], {})["changes"] = list(changes)
         return REAL_RECONCILE(changes, threshold)
 
     db.match_nodes = match_spy
+    db.apply_similarity_revocation = revocation_spy
     db.reconcile_moves = reconcile_spy
     try:
         for key, old_path, new_path in baseline_pairs():
@@ -90,6 +122,7 @@ def capture() -> dict[str, dict]:
             )
     finally:
         db.match_nodes = REAL_MATCH_NODES
+        db.apply_similarity_revocation = REAL_REVOCATION
         db.reconcile_moves = REAL_RECONCILE
     return captured
 
@@ -104,22 +137,33 @@ def ordinal_bridge(nodes: list, key: str) -> dict[str, int]:
     return {element_id: ordinal for ordinal, element_id in enumerate(ids)}
 
 
-def split_element_ids(pairs: list) -> tuple[set[str], set[str]]:
-    """Element ids of the nodes classification revokes into a removal plus an addition.
+def revoked_element_ids(pairs: list, decided: list, key: str) -> tuple[set[str], set[str]]:
+    """Element ids of the observations the similarity rule left unmatched.
 
-    Reproduces ``diff_bills``' own condition: a path-matched pair whose normalised texts
-    differ and whose similarity falls below ``SIMILARITY_THRESHOLD``.
+    Asks PRODUCTION's ``pairing_survives_similarity_rule`` rather than transcribing it,
+    then checks that verdict against what ``apply_similarity_revocation`` structurally did:
+    each revocation replaces one tuple with two, so the output must be longer by exactly
+    the number of revocations counted here. A disagreement means the predicate being
+    consulted is not the one production applied, and every figure downstream would be
+    describing the wrong population.
     """
     old_ids: set[str] = set()
     new_ids: set[str] = set()
+    revocations = 0
     for old_node, new_node in pairs:
         if old_node is None or new_node is None:
             continue
-        old_norm = db._normalize_text(old_node.body_text)
-        new_norm = db._normalize_text(new_node.body_text)
-        if old_norm != new_norm and text_similarity(old_norm, new_norm) < SIMILARITY_THRESHOLD:
+        if not db.pairing_survives_similarity_rule(old_node, new_node):
+            revocations += 1
             old_ids.add(old_node.element_id)
             new_ids.add(new_node.element_id)
+
+    added_tuples = len(decided) - len(pairs)
+    if added_tuples != revocations:
+        raise SystemExit(
+            f"{key}: the revocation predicate and the revocation stage disagree -- "
+            f"predicate counted {revocations}, stage added {added_tuples} tuples"
+        )
     return old_ids, new_ids
 
 
@@ -154,16 +198,16 @@ def main() -> None:
 
     total_candidates = 0
     total_selected = 0
-    cand_split_removal = 0
-    cand_split_addition = 0
-    cand_split_either = 0
-    cand_split_both = 0
-    sel_split_removal = 0
-    sel_split_addition = 0
-    sel_split_either = 0
-    sel_split_both = 0
-    split_removals_in_input = 0
-    split_additions_in_input = 0
+    cand_revoked_removal = 0
+    cand_revoked_addition = 0
+    cand_revoked_either = 0
+    cand_revoked_both = 0
+    sel_revoked_removal = 0
+    sel_revoked_addition = 0
+    sel_revoked_either = 0
+    sel_revoked_both = 0
+    revoked_removals_in_input = 0
+    revoked_additions_in_input = 0
     removals_in_input = 0
     additions_in_input = 0
 
@@ -181,13 +225,13 @@ def main() -> None:
         changes = record["changes"]
         old_at = ordinal_bridge(record["old_tree"].nodes, key + " [old]")
         new_at = ordinal_bridge(record["new_tree"].nodes, key + " [new]")
-        split_old, split_new = split_element_ids(record["pairs"])
+        revoked_old, revoked_new = revoked_element_ids(record["pairs"], record["decided"], key)
 
         removed, added = filtered_sides(changes)
         removals_in_input += len(removed)
         additions_in_input += len(added)
-        split_removals_in_input += sum(1 for _, c in removed if c.element_id_old in split_old)
-        split_additions_in_input += sum(1 for _, c in added if c.element_id_new in split_new)
+        revoked_removals_in_input += sum(1 for _, c in removed if c.element_id_old in revoked_old)
+        revoked_additions_in_input += sum(1 for _, c in added if c.element_id_new in revoked_new)
 
         if not removed or not added:
             continue
@@ -202,15 +246,15 @@ def main() -> None:
         pairs_with_candidates += 1
         total_candidates += len(candidates)
 
-        removed_is_split = [c.element_id_old in split_old for _, c in removed]
-        added_is_split = [c.element_id_new in split_new for _, c in added]
+        removed_is_revoked = [c.element_id_old in revoked_old for _, c in removed]
+        added_is_revoked = [c.element_id_new in revoked_new for _, c in added]
         for _sim, ri, ai in candidates:
-            r_split = removed_is_split[ri]
-            a_split = added_is_split[ai]
-            cand_split_removal += r_split
-            cand_split_addition += a_split
-            cand_split_either += r_split or a_split
-            cand_split_both += r_split and a_split
+            r_revoked = removed_is_revoked[ri]
+            a_revoked = added_is_revoked[ai]
+            cand_revoked_removal += r_revoked
+            cand_revoked_addition += a_revoked
+            cand_revoked_either += r_revoked or a_revoked
+            cand_revoked_both += r_revoked and a_revoked
 
         # --- ordering: is the filtered-list order the parser-ordinal order? -----------
         removed_ordinals = [old_at[c.element_id_old] for _, c in removed]
@@ -232,12 +276,12 @@ def main() -> None:
         }
         for link in actual:
             ri, ai = selected_index[link]
-            r_split = removed_is_split[ri]
-            a_split = added_is_split[ai]
-            sel_split_removal += r_split
-            sel_split_addition += a_split
-            sel_split_either += r_split or a_split
-            sel_split_both += r_split and a_split
+            r_revoked = removed_is_revoked[ri]
+            a_revoked = added_is_revoked[ai]
+            sel_revoked_removal += r_revoked
+            sel_revoked_addition += a_revoked
+            sel_revoked_either += r_revoked or a_revoked
+            sel_revoked_both += r_revoked and a_revoked
 
         ordinal_order = sorted(
             candidates,
@@ -260,23 +304,27 @@ def main() -> None:
 
     print("===== A: INPUT POPULATION OF THE SECOND PASS =====")
     print(f"removals reaching reconcile_moves: {removals_in_input}")
-    print(f"  of those, CREATED BY CLASSIFICATION (path-matched then split): {split_removals_in_input}")
+    print(f"  of those, LEFT UNMATCHED BY THE SIMILARITY RULE (path-matched then revoked): {revoked_removals_in_input}")
     print(f"additions reaching reconcile_moves: {additions_in_input}")
-    print(f"  of those, CREATED BY CLASSIFICATION: {split_additions_in_input}")
+    print(f"  of those, LEFT UNMATCHED BY THE SIMILARITY RULE: {revoked_additions_in_input}")
 
-    print("\n===== B: HOW MUCH OF THE MOVE POPULATION DEPENDS ON A SPLIT =====")
+    print("\n===== B: HOW MUCH OF THE MOVE POPULATION DEPENDS ON A REVOKED PAIRING =====")
     print(f"candidates: {total_candidates}")
-    print(f"  with a classification-created REMOVAL: {cand_split_removal}")
-    print(f"  with a classification-created ADDITION: {cand_split_addition}")
-    print(f"  with either side classification-created: {cand_split_either}")
-    print(f"  with BOTH sides classification-created: {cand_split_both}")
+    print(f"  with a revocation-produced REMOVAL: {cand_revoked_removal}")
+    print(f"  with a revocation-produced ADDITION: {cand_revoked_addition}")
+    print(f"  with either side revocation-produced: {cand_revoked_either}")
+    print(f"  with BOTH sides revocation-produced: {cand_revoked_both}")
     print(f"selected moves: {total_selected}")
-    print(f"  with a classification-created REMOVAL: {sel_split_removal}")
-    print(f"  with a classification-created ADDITION: {sel_split_addition}")
-    print(f"  with either side classification-created: {sel_split_either}")
-    print(f"  with BOTH sides classification-created: {sel_split_both}")
+    print(f"  with a revocation-produced REMOVAL: {sel_revoked_removal}")
+    print(f"  with a revocation-produced ADDITION: {sel_revoked_addition}")
+    print(f"  with either side revocation-produced: {sel_revoked_either}")
+    print(f"  with BOTH sides revocation-produced: {sel_revoked_both}")
     if total_selected:
-        print(f"  share of selected moves touching a split: {100.0 * sel_split_either / total_selected:.1f}%")
+        print(
+            f"  share of selected moves touching a revoked pairing: {100.0 * sel_revoked_either / total_selected:.1f}%"
+        )
+    print("  (post-#591 this sizes an ORDERING constraint inside assignment -- round 2 must")
+    print("   run after the revocation stage -- not a dependency on classification output.)")
 
     print("\n===== C: IS THE (ri, ai) ORDER THE PARSER-ORDINAL ORDER? =====")
     print(f"pairs carrying candidates: {pairs_with_candidates}")
@@ -287,7 +335,8 @@ def main() -> None:
     print(f"pairs where the SELECTED SET changes: {len(ordinal_key_differs)} {ordinal_key_differs}")
     print(f"pairs where only the SELECTION ORDER changes: {len(ordinal_key_order_only)} {ordinal_key_order_only}")
     print(f"selected links added or lost by the ordinal key: {ordinal_selection_delta}")
-    print("\nGUARD: the replay reproduced production's set AND order on every pair above.")
+    print("\nGUARD: the replay reproduced production's set AND order on every pair above,")
+    print("and the revocation predicate agreed with the revocation stage on every pair.")
 
 
 if __name__ == "__main__":
