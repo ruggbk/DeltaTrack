@@ -185,11 +185,12 @@ def test_required_test_context_is_an_aggregator_over_the_matrix() -> None:
 def test_ci_matrix_does_not_cancel_sibling_legs() -> None:
     """One leg's failure must not erase the other leg's verdict.
 
-    The matrix legs test different supported interpreter surfaces -- the newest 3.12 patch
-    and the declared floor -- so their verdicts are not interchangeable. Under the default
-    ``fail-fast: true`` a failure in either one cancels the other mid-run, and the cancelled
-    leg reports nothing: a genuine floor-only regression can hide behind an unrelated flake
-    on the newest patch, and the reviewer sees three red checks from one cause.
+    Each matrix leg tests a different supported interpreter, so their verdicts are not
+    interchangeable -- WHICH leg broke is most of the diagnosis. Under the default
+    ``fail-fast: true`` a failure in any one cancels the rest mid-run, and the cancelled
+    legs report nothing: a floor-only regression hides behind an unrelated flake on a newer
+    version, a 3.14-only regression hides behind a flake on the floor, and the reviewer sees
+    a wall of red from one cause.
 
     This is the same rule ``test_ci_does_not_cancel_in_progress_runs`` enforces one level up,
     for the same reason: never destroy a verdict. It does **not** make CI permissive. A
@@ -201,6 +202,27 @@ def test_ci_matrix_does_not_cancel_sibling_legs() -> None:
         "ci.yml's matrix does not set `fail-fast: false`, so one leg's failure cancels the "
         "other before it reports. The cancelled leg's verdict is lost, which is how a "
         "floor-only regression hides behind an unrelated failure on the newest patch."
+    )
+
+
+def test_ci_matrix_legs_pin_the_interpreter_they_claim_to_test() -> None:
+    """A leg labelled 3.14 must actually run on 3.14.
+
+    Without ``UV_PYTHON``, the matrix is decorative. ``uv sync`` builds the right
+    environment and the next bare ``uv run`` decides it does not satisfy
+    ``.python-version`` (3.12), removes ``.venv`` and rebuilds it on 3.12 -- so the leg
+    reports its own label while testing something else, and reports it GREEN. Measured
+    when 3.13/3.14 were added: a "3.14" leg ran the suite on 3.12.12.
+
+    The 3.12 legs cannot show this, because any 3.12 patch satisfies a "3.12" request.
+    That is precisely why it needs a test rather than a comment: the failure is invisible
+    on exactly the versions that were in the matrix when the hole opened.
+    """
+    job = _workflow()["jobs"]["test-suite"]
+    assert job.get("env", {}).get("UV_PYTHON") == "${{ matrix.python-version }}", (
+        "ci.yml's test-suite job no longer pins UV_PYTHON to the matrix version. Every "
+        "uv call in the job, including ones made from inside a test, falls back to "
+        "`.python-version` -- so every non-3.12 leg silently tests 3.12 and passes."
     )
 
 

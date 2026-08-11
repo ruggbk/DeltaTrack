@@ -84,7 +84,11 @@ def installed_engine(tmp_path_factory) -> Path:
     assert len(wheels) == 1, f"expected exactly one wheel, built {[w.name for w in wheels]}"
 
     venv = workspace / "venv"
-    _run([uv, "venv", str(venv)])
+    # `--python sys.executable`, not a bare `uv venv`: uv resolves an unpinned request
+    # through `.python-version` (3.12) first, so on any other leg every assertion below
+    # would report on 3.12 while labelled as evidence for that leg's version.
+    # `test_the_clean_install_uses_the_interpreter_running_the_test` fails without it.
+    _run([uv, "venv", "--python", sys.executable, str(venv)])
     # A venv lays its interpreter out per-platform: POSIX `bin/python`, Windows
     # `Scripts\python.exe`. CI and the team run POSIX, so the second arm is for a
     # future Windows contributor rather than any environment this runs in today.
@@ -308,6 +312,27 @@ def test_the_pdf_wrapper_also_resolves_the_installed_engine(installed_engine, tm
     result = _run([str(installed_engine), str(wrapper), "--help"], cwd=tmp_path)
 
     assert "usage:" in result.stdout, f"the PDF wrapper printed no usage line:\n{result.stdout}"
+
+
+def test_the_clean_install_uses_the_interpreter_running_the_test(installed_engine):
+    """The gate must report on the interpreter it is running on, not on `.python-version`.
+
+    Everything else here asks "does the engine install and work"; this asks WHERE. A leg
+    labelled 3.14 that quietly builds a 3.12 environment is not weaker evidence, it is
+    evidence for the wrong claim, and it reads green either way.
+
+    Compared as (major, minor, micro), so a build tag or a differing `sys.version`
+    preamble cannot make two identical interpreters look unequal.
+    """
+    reported = _run([str(installed_engine), "-c", "import sys; print(*sys.version_info[:3])"])
+    inner = tuple(int(part) for part in reported.stdout.split())
+
+    assert inner == tuple(sys.version_info[:3]), (
+        f"the clean-install environment is Python {inner}, but this test is running on "
+        f"{tuple(sys.version_info[:3])}. The venv was created without `--python`, so uv "
+        "resolved it through `.python-version` instead of the running interpreter, and "
+        "every other assertion in this module is reporting on the wrong Python."
+    )
 
 
 def test_this_gate_ran_against_a_freshly_built_wheel(installed_engine):
