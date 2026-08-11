@@ -1,6 +1,6 @@
 # Classifier Notes — `classify_bill.py`
 
-_Last updated: 2026-08-08. Based on stress-test run across 7 bills (see `stress_test_analysis.py`)._
+_Last updated: 2026-08-11. Based on stress-test run across 7 bills (see `stress_test_analysis.py`)._
 
 ---
 
@@ -9,12 +9,12 @@ _Last updated: 2026-08-08. Based on stress-test run across 7 bills (see `stress_
 | Bill | Description | Dollar nodes | Unknown | FP risk |
 |---|---|---|---|---|
 | 118-hr-4366 | MILCON/VA FY2024 appropriations | 67 | 1 | 0 |
-| 119-hr-1 | Big Beautiful Bill (reconciliation) | 206 | 131 | 0 |
-| 118-s-2226 | NDAA FY2024 (authorization) | 85 | 71 | 0 |
-| 115-hr-2 | 2018 Farm Bill (authorization) | 62 | 54 | 0 |
-| 117-hr-3684 | IIJA (infrastructure authorization) | 71 | 60 | 0 |
-| 117-hr-5376 | IRA (reconciliation) | 597 | 156 | 0 |
-| 118-hr-4368 | CJS FY2024 appropriations | 84 | 10 | 0 |
+| 119-hr-1 | Big Beautiful Bill (reconciliation) | 206 | 128 | 0 |
+| 118-s-2226 | NDAA FY2024 (authorization) | 85 | 61 | 0 |
+| 115-hr-2 | 2018 Farm Bill (authorization) | 62 | 32 | 0 |
+| 117-hr-3684 | IIJA (infrastructure authorization) | 71 | 39 | 0 |
+| 117-hr-5376 | IRA (reconciliation) | 597 | 154 | 0 |
+| 118-hr-4368 | CJS FY2024 appropriations | 84 | 2 | 0 |
 
 "FP risk" = nodes labeled with a primary type (appropriation/transfer/rescission) that also contain AUTH_HINT language. After manual review, all 11 initially flagged were confirmed as real appropriation nodes that cross-reference authorization language — **zero actual false positives found**.
 
@@ -26,14 +26,16 @@ _Last updated: 2026-08-08. Based on stress-test run across 7 bills (see `stress_
 
 | Pattern | Regex trigger | Label |
 |---|---|---|
-| `RESTRICT` | `^\s*None of the funds` | `restriction` |
+| `RESTRICT` | `^\s*(?:\([a-z0-9]+\)\s*)?None of the funds` | `restriction` |
+| `RESTRICT_NOTWITHSTANDING` | `^\s*Notwithstanding\b.{0,200}\bnone of the funds\b` | `restriction` |
 | `TRANSFER` | `^\s*Of (?:the )?amounts` | `transfer` |
-| `APPROP` | `^\s*For\b` | `appropriation` (or `rescission` if RESCISSION also fires) |
-| `APPROP_ALT` | `there (?:is\|are) appropriated` (anywhere) | `appropriation` (or `rescission`) |
-| `RESCISSION` | `is hereby rescinded` (anywhere) | `rescission` |
+| `APPROP` | `^\s*(?:\([a-z0-9]+\)\s*)?For\b` | `appropriation` (or `rescission` if RESCISSION also fires) |
+| `APPROP_ALT` | `there (?:is\|are)(?: hereby)? appropriated` (anywhere) | `appropriation` (or `rescission`) |
+| `RESCISSION` | `(?:is\|are) hereby rescinded` (anywhere) | `rescission` |
 | `DIRECTIVE` | `^\s*The\s+\w[\w\s]+(?:shall\|may not)\b` | `directive` |
 | `REPROGRAM` | `^\s*no project may be (?:increased\|decreased)` | `cap` |
 | `DELAYED_APPROP` | `^\s*\$[\d,]+.{0,50}\bshall become available\b` | `appropriation` |
+| `AUTHORIZATION` | `\bauthorized to be appropriated\b` (anywhere; fires after APPROP_ALT) | `authorization` |
 | `FEE` | `fee in the amount of \$\|impose a fee\|pays a fee of \$\|a fee of \$` | `fee` |
 
 ### Sub-clause patterns (applied inside `split_clauses`)
@@ -53,17 +55,18 @@ _Last updated: 2026-08-08. Based on stress-test run across 7 bills (see `stress_
 
 The following categories were observed and deliberately left as `unknown`. Adding patterns for these would require scoping decisions or create false-positive risk.
 
-### 1. Authorization amounts ("authorized to be appropriated")
+### 1. Authorization amounts — partially resolved
+
 _Bills: NDAA, Farm Bill, IIJA_
 
-Text like:
-> "There is hereby authorized to be appropriated for fiscal year 2024 from the Armed Forces Retirement Home Trust Fund the sum of $77,000,000..."
-> "Of the $350,999,000 authorized to be appropriated to the Department of Defense for fiscal year 2024..."
-> "Using amounts appropriated pursuant to the authorization of appropriations in section 2103(a)..."
+The AUTHORIZATION pattern (`\bauthorized to be appropriated\b`, added in #115) now captures the common case:
+> "There is hereby authorized to be appropriated for fiscal year 2024 from the Armed Forces Retirement Home Trust Fund the sum of $77,000,000..." → `authorization`
 
-These are authorization amounts, not direct spending. They correctly classify `unknown`. The NDAA (85 dollar nodes) produces zero false positives; `authorized to be appropriated` never triggers APPROP, APPROP_ALT, or RESCISSION.
+Still `unknown` (pattern doesn't fire):
+> "Using amounts appropriated pursuant to the authorization of appropriations in section 2103(a)..." — no "authorized to be appropriated" phrase
+> NDAA project tables with tabular dollar amounts (see section 5)
 
-**Decision:** Leave as `unknown`. Adding an `authorization` label is a product/scope question — do we want to surface NDAA amounts at all? Pending team input.
+**Decision:** The `authorized to be appropriated` form is now classified. Cross-reference and table forms remain `unknown` — parsing those requires structural XML analysis beyond text matching.
 
 ### 2. Statutory threshold and penalty updates
 _Bills: IRA, BBB_

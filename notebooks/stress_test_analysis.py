@@ -163,7 +163,8 @@ def run():
 
     # False-positive risk
     print(f"\n\n{'=' * 70}")
-    print(f"FALSE-POSITIVE RISKS ({len(all_fp_risks)} nodes labeled primary type but have auth hint)")
+    fp_header = f"APPROPRIATION/TRANSFER/RESCISSION NODES WITH AUTH HINT ({len(all_fp_risks)})"
+    print(fp_header + " — verify these are real spending nodes, not mislabeled authorizations")
     print("=" * 70)
     for r in all_fp_risks[:30]:
         print(f"\n  [{r['bill']}] label={r['label']}")
@@ -172,7 +173,8 @@ def run():
     # Auth-hint unknowns
     auth_unknowns = [r for r in all_unknowns if r["has_auth_hint"]]
     print(f"\n\n{'=' * 70}")
-    print(f"UNKNOWN NODES WITH AUTH HINT ({len(auth_unknowns)} — likely authorizations, should stay unknown)")
+    auth_header = f"UNKNOWN NODES WITH AUTH-ADJACENT LANGUAGE ({len(auth_unknowns)})"
+    print(auth_header + " — 'is/are authorized' etc. but not 'authorized to be appropriated'; may indicate gaps")
     print("=" * 70)
     for r in auth_unknowns[:20]:
         print(f"  [{r['bill']}] {r['preview'][:180]}")
