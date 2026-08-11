@@ -923,6 +923,62 @@ class TestCompareVersionAddressableForm:
         assert data["financial_summary"] == {"sections_with_financial_changes": 1}
 
 
+class TestCompareBillsDirAbsoluteConflict:
+    """``--bills-dir`` vs. an absolute target is a hard CLI-boundary error (#454).
+
+    ``Path(bills_dir) / target`` discards ``bills_dir`` outright when ``target`` is
+    absolute, so an explicit ``--bills-dir`` combined with an absolute slug/target used
+    to resolve silently against the absolute path and disagree with the flag, with
+    nothing in the output to say so -- a diff of the wrong two files renders exactly
+    like a diff of the right two. The bare-absolute-directory listing #426 added is
+    unaffected: it never names ``--bills-dir``, so there is nothing to conflict with
+    (pinned by
+    ``TestCompareVersionListing.test_a_lone_absolute_directory_that_has_versions_gets_the_listing``).
+    """
+
+    def test_three_positional_form_rejects_an_absolute_slug_with_explicit_bills_dir(
+        self, synthetic_bills_dir, monkeypatch, capsys
+    ):
+        absolute_slug = str(synthetic_bills_dir / "118-hr-4366")
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, absolute_slug, "1", "6", "--bills-dir", str(synthetic_bills_dir))
+        assert exc.value.code == 2, "a rejected argument combination is a usage error, like the arity check"
+        err = capsys.readouterr().err
+        assert "--bills-dir" in err
+        assert str(synthetic_bills_dir) in err
+        assert absolute_slug in err
+
+    def test_bare_absolute_target_form_rejects_explicit_bills_dir(self, synthetic_bills_dir, monkeypatch, capsys):
+        absolute_target = str(synthetic_bills_dir / "118-hr-4366")
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, absolute_target, "--bills-dir", str(synthetic_bills_dir))
+        assert exc.value.code == 2
+        assert "--bills-dir" in capsys.readouterr().err
+
+    def test_two_corpora_reproduction_fails_closed_instead_of_reading_the_wrong_one(
+        self, synthetic_bills_dir, tmp_path, monkeypatch
+    ):
+        """The issue's exact shape: --bills-dir names one corpus, the target another.
+
+        Before the fix this silently diffed the corpus named by the target and ignored
+        --bills-dir; it now refuses instead of answering from the wrong corpus.
+        """
+        other_bill = tmp_path / "other-bills" / "118-hr-4366"
+        other_bill.mkdir(parents=True)
+        (other_bill / "1_reported-in-house.xml").write_text(_synthetic_bill_xml("Reported-in-House", "$9,000,000"))
+        (other_bill / "2_engrossed-in-house.xml").write_text(_synthetic_bill_xml("Engrossed-in-House", "$9,500,000"))
+        with pytest.raises(SystemExit) as exc:
+            _run_compare(monkeypatch, str(other_bill), "1", "2", "--bills-dir", str(synthetic_bills_dir))
+        assert exc.value.code == 2
+
+    def test_a_relative_slug_with_explicit_bills_dir_is_unaffected(self, synthetic_bills_dir, monkeypatch, capsys):
+        """The conflict check only fires on an absolute target; the common case is untouched."""
+        _run_compare(monkeypatch, "118-hr-4366", "1", "6", "--bills-dir", str(synthetic_bills_dir), "--format", "json")
+        data = json.loads(capsys.readouterr().out)
+        assert data["old_version_number"] == 1
+        assert data["new_version_number"] == 6
+
+
 class TestCompareVersionListing:
     """A bare slug, and a bad ordinal, both answer with the bill's local versions (#152)."""
 
