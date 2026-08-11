@@ -3675,7 +3675,7 @@ touched it.
                    "probes/s1_control.py", "probes/x21_build_oracle.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is introduced or changed",
- "status": "IMPLEMENTED + REPAIRED -- x22 35/35, x21 117/117; NOT frozen: A39.3/A39.4 outstanding"}
+ "status": "PROPOSED FROZEN -- reviewed after scorer-input integration repair; ownership table has no UNOWNED rows and no stale forward-ambiguity language. Awaiting reviewer confirmation."}
 ```
 
 **`affects_scoring_rule` is false and A38 must keep it so.** It introduces **no** new metric,
@@ -3722,7 +3722,7 @@ re-read would be needed. **"PDF re-read" is `no` for every owned row — that is
 | **§8 Clopper–Pearson** | `score_metrics` (A27.5) | `score_metrics` | no |
 | **A37 bootstrap** | `methodology_contracts.section8_document_bootstrap(records)` | A37 | no |
 | **cross-engine qualification** | `results/cross_engine_control.json` **(A39.2)** | `cross_engine_control.py` | no |
-| **N-A / N-B / N-C** | oracle key · `control_kind`, `control_variant` — **plumbing exists, SOURCE FIXTURES DO NOT** | **UNOWNED** | n/a |
+| **N-A / N-B / N-C** | `results/control_fixtures.json` **(A39.3/A40)** + oracle key · `control_kind`, `control_variant` | `control_fixtures.py`, gated by **G6** | no |
 
 **`results/x09_skeleton_cross_engine.json` is DEVELOPMENT mechanism evidence only and is NEVER
 a confirmatory scorer input.** The row above named it as the producer, which was stale: `x09`
@@ -3730,12 +3730,10 @@ proves the mechanism works and that its faults are detectable, on development ma
 confirmatory qualification comes from `cross_engine_control.py`, which **calls `X09.gate`**
 rather than reimplementing the `max(pdfium, pymupdf)` denominator or either threshold.
 
-**One row is UNOWNED and it is not newly discovered.** The N-A/N-B/N-C *source fixtures* — the
-modified PDF, the XML-corroborated regions, the heading-free regions — do not exist. A35
-already recorded this. `build_oracle` carries the control plumbing (identity, blinding,
-routing, uniqueness), so nothing about A38 is blocked, but **A27.6 makes all three
-decision-blocking**, so a fixture-construction stage must exist before adjudication. It is
-listed here so it cannot be discovered inside the scorer.
+**No row is UNOWNED.** The N-A/N-B/N-C *source fixtures* — the last outstanding row, recorded
+here from A35 onward — are **realized under A39.3 as amended by A40** and gated by **G6**:
+`results/control_fixtures.json` with 8 / 8 / 4, every source, XML and generated hash verified
+against the bytes, and no confirmatory provenance anywhere in the chain.
 
 ### A38.2 — persist the A30 identity candidates
 
@@ -3907,7 +3905,7 @@ obviously synthetic placeholders, which removes both the collision and an anchor
                    "probes/x15_methodology_contracts.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
- "status": "IMPLEMENTED for A39.1/A39.2/A39.5 (x22 51/51, x15 64/64); A39.3 STOPPED on the size-control liveness check and A39.4 G6 consequently NOT built -- awaiting review"}
+ "status": "IMPLEMENTED -- A39.1 ruled+implemented; A39.2 implemented and REVIEWED; A39.3's original size clause STOPPED and superseded by A40; A39.4 G6 implemented under A40's revised control contract; A39.5 implemented"}
 ```
 
 `affects_scoring_rule` is **true**: A39 makes the previously unspecified Rule 0 margin-line
@@ -4052,17 +4050,15 @@ rather than being delivered partially.
 **Done** — A39.1 (Rule 0 margin clause), A39.2 (page sampling + the confirmatory cross-engine
 producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
-**NOT BUILT, and not claimed as done:**
+**A39.3 and A39.4 are now COMPLETE**, under A40's revised control contract:
 
-| outstanding | what it needs |
+| | |
 |---|---|
-| **A39.3** control-source realization | **BLOCKED on the size-control STOP above.** The 3 delete + 3 weld N-A slots are constructible; the 2 size slots are not, so N-A cannot reach 8 and the manifest cannot validate. Also outstanding: 8 N-B XML-corroborated regions ranked under `nb-source`; 4 synthetic heading-free N-C regions; `results/control_fixtures.json` |
-| **A39.4** G6 readiness | the readiness condition that refuses authorization unless the manifest exists and validates (8/8/4, hashes, recipes, no holdout member, unique identities, expected truth) |
+| **A39.3** control sources | realized — 8 N-A (3 delete / 3 weld / 2 **split**), 8 N-B, 4 N-C, in `results/control_fixtures.json`. The original size clause remains **STOPPED** and is superseded by A40, not quietly replaced |
+| **A39.4** G6 | implemented in `x04`, **separate from G5**, validating counts, allocation, recomputed hashes, expected truth, identity uniqueness and the absence of confirmatory provenance |
 
-**Consequence, stated rather than left implicit:** A27.6 makes N-A/N-B/N-C **Rule 3 blockers**,
-so execution readiness cannot legitimately go green until A39.3 and A39.4 exist. **A38 is
-therefore NOT frozen in this pass** — the reviewer's freeze condition requires the ownership
-table to name real execution artifacts, and the control-fixture row is still UNOWNED.
+`x23` **21/21**, **G6 PASS**. The A39.3 STOP above is preserved as the record of why
+`PULL_HEADING_TO_BODY_SIZE` was retired.
 
 ---
 
@@ -4070,12 +4066,13 @@ table to name real execution artifacts, and the control-fixture row is still UNO
 
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
- "commits": [],
+ "commits": ["31b19c7", "c6ccd4e"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
- "files_touched": [],
+ "files_touched": ["probes/control_fixtures.py", "probes/x04_freeze_check.py",
+                   "probes/x23_control_fixtures.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
- "status": "CONTRACT -- ruling fixed before implementation"}
+ "status": "IMPLEMENTED -- awaiting review; x23 21/21, G6 PASS"}
 ```
 
 `affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
