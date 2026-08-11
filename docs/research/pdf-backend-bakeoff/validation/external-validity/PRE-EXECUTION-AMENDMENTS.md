@@ -4068,11 +4068,12 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
- "commits": ["31b19c7", "c6ccd4e", "c8df8cf"],
+ "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/control_fixtures.py", "probes/x04_freeze_check.py",
-                   "probes/x23_control_fixtures.py"],
+                   "probes/x23_control_fixtures.py", "probes/x24_xml_source_bridge.py",
+                   "probes/xml_sources.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
  "status": "CONTRACT APPROVED; IMPLEMENTATION CHANGE -- repair under review. 8 reviewer findings falsified against HEAD, ALL 8 SURVIVED; F7 and F8 repaired, F1-F6 outstanding"}
 ```
@@ -4179,6 +4180,51 @@ group on any count mismatch**, yields **17** — enough for both the 8-item `na-
 8-item `nb-source` draws.
 
 **Outstanding: F1, F2, F3, F4, F5, F6 (N-A/N-B regions).**
+
+### A40.8 — item 0 settled, and the F1/F2 foundation (`x24` 16/16)
+
+**The account population is established from the committed files and GPO's own renderer, not
+from naming and not from correlation with H.** Both DEVELOPMENT sources declare
+`<!DOCTYPE bill PUBLIC "-//US Congress//DTDs/bill.dtd//EN">` with `bill-type="appropriations"`
+— the **legacy** US Congress bill DTD, not USLM. Measured on those exact files:
+
+| | 114-hr-2029/4 | 118-hr-8752/1 |
+|---|---:|---:|
+| `<account>` elements | **0** | **0** |
+| `appropriations-small` | 107 | 44 |
+| `header` as **attribute** | **0** | **0** (always a `<header>` child) |
+| header-less (split-account money half) | 2 | 3 |
+
+So the newer schema's `<account><header>` does **not** exist here; the account level is
+`appropriations-small`, on the authority of GPO's own `bills.css` / `billres-details.xsl` as
+recorded in `docs/gpo-render-conventions.md` (agency = `appropriations-intermediate`, **account
+= `appropriations-small`**) with `docs/bill-structure.md` documenting the flat sibling model.
+**The direction is what makes it admissible:** the XML *carries* the hierarchy explicitly and
+PDF segmentation is what must *recover* it. **No STOP is owed.**
+
+**The XML header is not the printed string.** `billres-details.xsl` applies
+`translate($upper,$lower)` at this level, so 114-hr-2029 stores `Compensation and pensions`
+while the page prints `COMPENSATION AND PENSIONS`. The XML establishes *which* heading and that
+it is an account; the **exact printed characters are read back from the PDF** and are what every
+expectation uses. Left unnoticed this would have made every N-A control unsatisfiable.
+
+**The locator is whole-line, and that was measured.** A substring search paired only 13/105 and
+4/41 because the same words occur in body prose. Requiring the heading to be the entire printed
+line once its margin number is stripped gives **45/105 and 41/41, zero refusals** on
+118-hr-8752. It constrains *line occupancy*, not typography — no size, case or centering test,
+because classifying by those would re-implement the recognition under test.
+
+**The order bridge is validated before it is relied on:** XML document order agrees with
+physical print order with **zero inversions**, on the all-paired set *and* separately on the
+independently identifiable unique-occurrence subset. Both negatives fire — a contradicted
+ordering is detected, and an added occurrence refuses the **whole** group.
+
+**The decisive control:** with `run_hybrid.run`, `run_extended.run` and
+`pdf_anchors.extract_anchors` made to **raise**, the source population, N-A eligibility and the
+`na-source` selected 8 are **byte-identical**, and a further check proves the sabotage bites.
+
+**Populations after the bridge: 86 paired sources, 73 N-A eligible** — far above the 8 each
+frozen draw needs, so STOP condition 17 is not triggered.
 
 ### Population and boundary
 
