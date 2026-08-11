@@ -4069,15 +4069,15 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
  "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0",
-             "9606a6e", "767abe9"],
+             "9606a6e", "767abe9", "3f49fed"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/build_oracle.py", "probes/control_fixtures.py",
                    "probes/x04_freeze_check.py", "probes/x23_control_fixtures.py",
                    "probes/x24_xml_source_bridge.py", "probes/x25_bridge_validation.py",
-                   "probes/xml_sources.py"],
+                   "probes/x26_control_oracle.py", "probes/xml_sources.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
- "status": "CONTRACT APPROVED; IMPLEMENTATION REPAIR IN PROGRESS -- NOT FROZEN. 8 reviewer findings falsified, ALL 8 SURVIVED; F7/F8 repaired; bridge INDEPENDENTLY VALIDATED and APPROVED (A40.9); parenthetical question ruled structurally (A40.10); F1/F2, F6 and F5 IMPLEMENTED (A40.11). OUTSTANDING: F3 and F4 -- G6 does NOT yet replay source selection or the deterministic mutation target, so a green G6 does not yet carry its section-12 meaning"}
+ "status": "CONTRACT APPROVED; IMPLEMENTATION COMPLETE, NOT FROZEN -- awaiting reviewer ruling. F1-F8 all implemented and falsified: bridge independently validated (A40.9), parenthetical ruled structurally then WITHDRAWN on source authority (A40.10/A40.12), F1/F2/F5/F6 (A40.11), placement repaired (A40.13), PDF bytes deterministic (A40.14), F3/F4 replay + committed 20-control oracle probe (A40.15). G6 PASS now carries its full section-13 meaning. Freeze is the reviewer's call; nothing here is self-frozen"}
 ```
 
 `affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
@@ -4540,7 +4540,56 @@ fixture whose original repeats elsewhere still passes), plus a diagnostic provin
 duplicate-elsewhere case is actually exercised rather than hypothetical.
 
 **Still outstanding, and G6 stays RED for exactly this**: F3 and F4. `x23` **35/35**, `x24`
-**16/16**, `x25` **18/18**; a double run over **39 artifacts changed 0 bytes**.
+**16/16**, `x25` **18/18**; a double run over **39 artifacts changed 0 bytes**. **CLOSED by A40.15.**
+
+### A40.15 — F3 and F4 exist; G6 is GREEN on the whole section-13 contract
+
+**The two defects are gone because the replays were built, not because the flags were flipped.**
+`SOURCE_SELECTION_REPLAY_IMPLEMENTED` and `MUTATION_TARGET_REPLAY_IMPLEMENTED` remain as named
+switches precisely so a future slice that has to disable a replay makes G6 go RED for that reason.
+
+**F3.** `validate_manifest` rebuilds the entire selected population from committed primary inputs
+— XML structural enumeration, the approved bridge, every refusal, N-A/N-B eligibility, canonical
+identities, both deterministic rankings, the selected 8/8 and the 3/3/2 assignment. **The manifest
+is the object under test, never an input**: nothing on this path reads `control_fixtures.json`, a
+generated PDF, the oracle key, or H/X output. Counts are recomputed rather than hardcoded, so a
+corpus change surfaces as a disagreement instead of a stale constant.
+
+**F4.** Expectations come from the **replayed** source. `expected_before` is the independently
+replayed rendered heading and `variant` is the frozen `index mod 3` schedule — neither is read
+from the record being checked. That is what stops a manifest rewriting `expected_before`,
+`expected_after` and `mutation_recipe` *together* and remaining self-consistent; that exact case
+is exercised and rejected with `MUTATION_INPUT_MISMATCH`.
+
+| falsification | reason reached |
+|---|---|
+| alternate eligible N-A / N-B; 8-8 kept, one substituted | `SOURCE_SELECTION_MISMATCH` |
+| same text, wrong XML structural identity | `SOURCE_IDENTITY_MISMATCH` |
+| same text, wrong physical occurrence | `PHYSICAL_SOURCE_MISMATCH` |
+| right members, deterministic order broken | `SOURCE_SELECTION_ORDER_MISMATCH` |
+| live-but-different DELETE / WELD / SPLIT target | `MUTATION_TARGET_MISMATCH` |
+| recipe metadata altered, `expected_after` correct | `MUTATION_RECIPE_MISMATCH` |
+| self-consistent rewrite of before/after/recipe | `MUTATION_INPUT_MISMATCH` |
+
+None of these is a stale hash, a missing file or bad JSON. **Each alternative mutation is asserted
+LIVE before its rejection is asserted** — otherwise the negative would only re-prove that dead
+mutations fail. One trap worth recording: the first DELETE alternative picked "the last token",
+which in `RESEARCH AND DEVELOPMENT` *is* the token the frozen rule picks, so the negative silently
+tested nothing. It now selects relative to the frozen target.
+
+**F5 is now committed evidence (`x26`), not a manual run**: 20 controls through the real
+`build_oracle` — 20 identities, 20 renders, 20 blind ids, blind keys exactly `{id,image,question}`,
+both routes on all 20, **0 in C / D / C-audit / R1**, leakage clean, join clean, four distinct N-C
+images, and the shuffled-binding negative (valid truth on the wrong valid control is rejected
+**while both records stay well-formed**, so it cannot pass for the wrong reason).
+**G6 now requires that evidence**, so its green covers the oracle half of section 13 rather than
+the manifest half alone.
+
+**A40.14 §1**: the deterministic trailer `/ID` is proven **non-semantic** by counterfactual — a
+renamed copy carries a different id, and neither source selection nor any control identity moves.
+
+`x15` 64/64 · `x16` 27/27 · `x17` 56/56 · `x21` 117/117 · `x22` 52/52 · `x23` 46/46 · `x24` 16/16 ·
+`x25` 19/19 · `x26` 12/12. Double run over **40 artifacts: 0 changed**.
 
 ### Population and boundary
 
