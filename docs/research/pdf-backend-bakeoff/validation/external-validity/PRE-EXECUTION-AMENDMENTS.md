@@ -4068,7 +4068,8 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
- "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0"],
+ "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0",
+             "9606a6e"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/build_oracle.py", "probes/control_fixtures.py",
