@@ -5,7 +5,7 @@
 - Date: 2026-08-05
 - Prototypes and reproduction commands: [`probes/`](probes/) and
   [Findings from prototypes](#findings-from-prototypes)
-- Landed on `develop` 2026-08-11, salvaged from the unmerged #549. Read
+- Salvaged from the unmerged #549 and restored by #592, 2026-08-11. Read
   [What has moved since 2026-08-05](#what-has-moved-since-2026-08-05) first: the study
   below is unedited, and some of what it says about the repository has since changed.
 
