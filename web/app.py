@@ -41,6 +41,13 @@ DIFF_TIMEOUT_S = 120
 # CPU but not request volume; this caps how fast one client can queue work.
 # A legitimate session is a handful of compares, each taking seconds to
 # minutes, so 10/minute is far above real use and far below a flood.
+#
+# The rate-limit counters are process-local (#395). Production currently runs
+# one Uvicorn worker, so the 10 requests/minute budget is shared by all
+# requests handled by that process. Do not increase the worker/process count
+# without changing the limiter to shared storage; with N independent workers,
+# one client can receive up to roughly 10 × N requests/minute before being
+# throttled.
 COMPARE_RATE_LIMIT_PER_MINUTE = 10
 
 # Format → (label-extension, html entry point, json entry point).
@@ -94,6 +101,10 @@ def _rate_limit_key(request: Request) -> str:
 # skipped. That default is the safe direction (a new public endpoint is
 # limited unless it opts out via @limiter.exempt), but it does mean a future
 # route inherits this budget rather than being unlimited by oversight.
+# The counter storage is intentionally process-local (in-memory; #395).
+# Moving to multiple workers requires configuring the limiter with shared
+# storage and provisioning that backend; see docs/web-compare.md before
+# changing the worker count.
 limiter = Limiter(key_func=_rate_limit_key, default_limits=[f"{COMPARE_RATE_LIMIT_PER_MINUTE}/minute"])
 app.state.limiter = limiter
 
