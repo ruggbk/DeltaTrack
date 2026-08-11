@@ -41,7 +41,10 @@ architecture is the only place "classification-created" was ever true, and the f
 below were first measured against it at develop 97f91ba; they are unchanged at
 0f07dc4 (post-#591), which is itself the evidence that #591 preserved the population.
 
-FAIL-CLOSED, in three places, because the numbers are void without them:
+Section E then measures the "representational, not populational" claim above rather than
+leaving it as reasoning, since it is the sentence the next slice rests on.
+
+FAIL-CLOSED throughout, because the numbers are void without it:
 
     - The revocation population is read from PRODUCTION's own predicate
       (``pairing_survives_similarity_rule``), not from a transcription of it. A
@@ -59,6 +62,9 @@ FAIL-CLOSED, in three places, because the numbers are void without them:
     - The duplicated greedy loop must reproduce production's selected set AND order under
       the production key before any comparison figure is printed. A drifted duplicate
       would be comparing the ordinal key against itself rather than against production.
+    - Section E compares unmatched observations to change records PER PAIR, not in
+      aggregate, and stops on any mismatch. Two pairs whose errors cancelled would agree
+      on the totals and disagree on every document.
 
 Read-only, writes nothing. Run from the project root:
 
