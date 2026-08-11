@@ -630,6 +630,19 @@ def _workflow_run_commands(yml_path: Path) -> list[str]:
     return commands
 
 
+def _rendering_offenders(yml_path: Path) -> list[str]:
+    """Rendering invocations among a workflow's executable commands; empty if none.
+
+    Single verdict path for the publish-only contract: it is what the live guard below
+    asserts is empty for update-examples.yml, and what the negative control asserts
+    reports the render commands it is deliberately given, so a rewrite that stops
+    matching render commands (or starts reading nothing) flips both red rather than
+    passing the fixture while leaving the live guard vacuous.
+    """
+    commands = _workflow_run_commands(yml_path)
+    return [c for c in commands if any(rend in c for rend in _RENDERING_COMMANDS)]
+
+
 def test_update_examples_job_does_not_render():
     """The Pages job publishes committed files; it must not become a renderer again.
 
@@ -645,7 +658,7 @@ def test_update_examples_job_does_not_render():
     # nothing.
     assert commands, f"parsed no executable commands from {_UPDATE_EXAMPLES.name}"
 
-    offenders = [c for c in commands if any(rend in c for rend in _RENDERING_COMMANDS)]
+    offenders = _rendering_offenders(_UPDATE_EXAMPLES)
     assert not offenders, (
         f"{_UPDATE_EXAMPLES.name} runs a rendering command, but docs/release.md says it "
         "does not render (#547):\n" + "\n".join(offenders)
@@ -653,11 +666,13 @@ def test_update_examples_job_does_not_render():
 
 
 def test_the_publish_only_gate_rejects_a_render_step(tmp_path):
-    """The rule above must fire on a reintroduced render, not just describe it.
+    """The verdict above must fire on a reintroduced render, not just describe it.
 
-    A gate that passes on first run proves nothing about whether it can fail. Pin both
-    directions against a throwaway workflow, so a future rewrite that re-adds rendering
-    cannot slip through a check that has never been exercised.
+    Runs the SAME validator the live guard uses, `_rendering_offenders`, against
+    deliberately rendering workflows and proves it reports them; also proves it stays
+    silent on a publish-only workflow. A gate that passes on first run proves nothing
+    about whether it can fail, so a future rewrite that stops matching render commands
+    goes red here alongside the live guard.
     """
     workflow = tmp_path / "update-examples.yml"
     workflow.write_text(
@@ -671,9 +686,9 @@ def test_the_publish_only_gate_rejects_a_render_step(tmp_path):
         "          uv run python ./diff_bill.py compare --source xml 119-hr-8752\n",
         encoding="utf-8",
     )
-    commands = _workflow_run_commands(workflow)
-    assert any("fetch_bills" in c for c in commands), "fetch_bills invocation not read"
-    assert any("diff_bill.py compare" in c for c in commands), "diff_bill.py compare not read"
+    offenders = _rendering_offenders(workflow)
+    assert any("fetch_bills" in c for c in offenders), "fetch_bills render step went undetected"
+    assert any("diff_bill.py compare" in c for c in offenders), "diff_bill.py compare step went undetected"
 
     workflow.write_text(
         "on: {push: {branches: [main]}}\n"
@@ -685,8 +700,8 @@ def test_the_publish_only_gate_rejects_a_render_step(tmp_path):
         "          uv run python scripts/render_examples.py --examples-dir examples\n",
         encoding="utf-8",
     )
-    commands = _workflow_run_commands(workflow)
-    assert any("render_examples.py" in c for c in commands), "render_examples.py invocation not read"
+    offenders = _rendering_offenders(workflow)
+    assert any("render_examples.py" in c for c in offenders), "render_examples.py step went undetected"
 
     workflow.write_text(
         "on: {push: {branches: [main]}}\n"
@@ -699,8 +714,7 @@ def test_the_publish_only_gate_rejects_a_render_step(tmp_path):
         "          cp -r examples/. _site/\n",
         encoding="utf-8",
     )
-    commands = _workflow_run_commands(workflow)
-    assert not any(rend in c for c in commands for rend in _RENDERING_COMMANDS)
+    assert _rendering_offenders(workflow) == [], "a publish-only workflow was rejected"
 
 
 def test_publish_only_gate_ignores_prose_that_mentions_rendering(tmp_path):
@@ -724,10 +738,7 @@ def test_publish_only_gate_ignores_prose_that_mentions_rendering(tmp_path):
         "          cp -r examples/. _site/\n",
         encoding="utf-8",
     )
-    commands = _workflow_run_commands(workflow)
-    assert not any(rend in c for c in commands for rend in _RENDERING_COMMANDS), (
-        "a YAML comment mentioning a render command counted as an invocation"
-    )
+    assert _rendering_offenders(workflow) == [], "a YAML comment mentioning a render command counted as an invocation"
 
 
 # The publishing actions docs/release.md names by ROLE. The contract is that these roles
@@ -757,6 +768,19 @@ def _workflow_used_roles(yml_path: Path) -> set[str]:
     return roles
 
 
+def _missing_publishing_roles(yml_path: Path) -> list[str]:
+    """Required publishing roles that `yml_path` does not use, in declaration order.
+
+    Single verdict path for the publishing-roles contract: it is what the live guard
+    below asserts is empty for update-examples.yml, and what the negative control
+    asserts reports the role the workflow deliberately omits, so a rewrite that stops
+    comparing against `_REQUIRED_PUBLISHING_ROLES` flips both red rather than passing
+    the fixture while leaving the live guard vacuous.
+    """
+    roles = _workflow_used_roles(yml_path)
+    return [role for role in _REQUIRED_PUBLISHING_ROLES if role not in roles]
+
+
 def test_required_publishing_action_roles_still_exist():
     """The four publishing actions the runbook relies on are still in the workflow.
 
@@ -764,16 +788,21 @@ def test_required_publishing_action_roles_still_exist():
     so a removed or renamed publishing step would invalidate that instruction. This
     checks the roles survive (and are not broken by a version bump).
     """
-    roles = _workflow_used_roles(_UPDATE_EXAMPLES)
-    missing = [role for role in _REQUIRED_PUBLISHING_ROLES if role not in roles]
+    missing = _missing_publishing_roles(_UPDATE_EXAMPLES)
     assert not missing, (
         f"docs/release.md relies on publishing actions missing from {_UPDATE_EXAMPLES.name}: "
-        f"{missing}. Present roles: {sorted(roles)}"
+        f"{missing}. Present roles: {sorted(_workflow_used_roles(_UPDATE_EXAMPLES))}"
     )
 
 
 def test_the_action_role_gate_rejects_a_removed_step(tmp_path):
-    """Deleting one required publishing step must go red, so the gate can actually fire."""
+    """Deleting one required publishing step must go red, so the gate can actually fire.
+
+    Runs the SAME validator the live guard uses, `_missing_publishing_roles`, against a
+    workflow that omits `actions/configure-pages`, and proves it reports exactly that
+    role. A rewrite that stops comparing against `_REQUIRED_PUBLISHING_ROLES` goes red
+    here alongside the live guard.
+    """
     workflow = tmp_path / "update-examples.yml"
     workflow.write_text(
         "on: {push: {branches: [main]}}\n"
@@ -785,9 +814,8 @@ def test_the_action_role_gate_rejects_a_removed_step(tmp_path):
         "      - uses: actions/deploy-pages@v5\n",
         encoding="utf-8",
     )
-    roles = _workflow_used_roles(workflow)
-    missing = [role for role in _REQUIRED_PUBLISHING_ROLES if role not in roles]
-    assert "actions/configure-pages" in missing, f"removed step not detected; roles: {sorted(roles)}"
+    missing = _missing_publishing_roles(workflow)
+    assert missing == ["actions/configure-pages"], f"removing configure-pages went undetected; got {missing!r}"
 
 
 def test_the_action_role_gate_tolerates_a_version_bump(tmp_path):
@@ -804,8 +832,7 @@ def test_the_action_role_gate_tolerates_a_version_bump(tmp_path):
         "      - uses: actions/deploy-pages@v99\n",
         encoding="utf-8",
     )
-    roles = _workflow_used_roles(workflow)
-    missing = [role for role in _REQUIRED_PUBLISHING_ROLES if role not in roles]
+    missing = _missing_publishing_roles(workflow)
     assert not missing, f"a version bump broke the role gate: missing {missing}"
 
 
