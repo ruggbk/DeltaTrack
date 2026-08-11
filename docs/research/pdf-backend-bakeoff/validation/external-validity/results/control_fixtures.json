@@ -17,14 +17,14 @@
  },
  "source_truth": "legacy-DTD appropriations-small under <title> -> approved XML->PDF bridge -> independently observed printed line. No run_hybrid, run_extended or extract_anchors.",
  "account_position_rule": {
-  "parent_element": "title",
-  "refusal": "NOT_ACCOUNT_POSITION",
-  "note": "structural position only -- no lexical or typographic test of the heading text"
+  "rule": "NONE -- the account role is keyed on the TAG, not on the parent element",
+  "authority": "bill DTD gives appropriations-major/intermediate/small identical content models (docs/bill-structure.md); billres-details.xsl convertToNeededCase branches on ancestor::appropriations-small with no parent predicate",
+  "withdrawn": "A40.10's ACCOUNT_PARENT_ELEMENT was falsified and removed in A40.12"
  },
  "eligible_population": {
-  "admitted_account_sources": 79,
-  "na_eligible": 66,
-  "nb_eligible": 79,
+  "admitted_account_sources": 96,
+  "na_eligible": 83,
+  "nb_eligible": 96,
   "per_document": {
    "114-hr-2029/4": {
     "xml_account_records": 105,
@@ -35,8 +35,7 @@
      "UNDISCRIMINATED_GROUP": 2,
      "NO_PHYSICAL_OCCURRENCE": 3
     },
-    "refused_not_account_position": 17,
-    "admitted_sources": 38
+    "admitted_sources": 55
    },
    "118-hr-8752/1": {
     "xml_account_records": 41,
@@ -44,7 +43,6 @@
     "anchor_inversions": 0,
     "bridge_paired": 41,
     "bridge_refusals": {},
-    "refused_not_account_position": 0,
     "admitted_sources": 41
    }
   }
@@ -169,7 +167,253 @@
    "variant": "WELD_TWO_WORDS",
    "schedule_index": 1,
    "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",58,1,\"WELD_TWO_WORDS\"]",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",126,1,\"WELD_TWO_WORDS\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "legacy-DTD appropriations-small id=id7B6E2DF0F81A4AFDAAFD9EE47559AA49 at bill/legis-body/title/section/appropriations-small; printed line agrees with the XML header under case folding alone",
+   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"id7B6E2DF0F81A4AFDAAFD9EE47559AA49\",96,126]",
+   "element": "appropriations-small",
+   "element_id": "id7B6E2DF0F81A4AFDAAFD9EE47559AA49",
+   "ancestor_path": "bill/legis-body/title/section/appropriations-small",
+   "xml_document_ordinal": 96,
+   "xml_source_text": "(rescissions of funds)",
+   "expected_rendered_heading": "(rescissions of funds)",
+   "page_number": 126,
+   "page_height": 792.0,
+   "physical_line_index": 6537,
+   "heading_index_in_page": 18,
+   "heading_bbox_pdf_points": [
+    247.6199951171875,
+    495.661376953125,
+    391.76800537109375,
+    509.661376953125
+   ],
+   "region_ordinal": 2,
+   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
+   "region_bbox_pdf_points": [
+    125.99979400634766,
+    417.6847229003906,
+    489.4272155761719,
+    535.6649475097656
+   ],
+   "region_n_lines": 8,
+   "region_line_mapping": [
+    [
+     126,
+     16
+    ],
+    [
+     126,
+     17
+    ],
+    [
+     126,
+     18
+    ],
+    [
+     126,
+     19
+    ],
+    [
+     126,
+     20
+    ],
+    [
+     126,
+     21
+    ],
+    [
+     126,
+     22
+    ],
+    [
+     126,
+     23
+    ]
+   ],
+   "heading_index_in_region": 2,
+   "expected_before": "(RESCISSIONS OF FUNDS)",
+   "expected_after": "(RESCISSIONSOF FUNDS)",
+   "mutation_recipe": {
+    "variant": "WELD_TWO_WORDS",
+    "target_pair": [
+     "RESCISSIONS",
+     "OF"
+    ],
+    "removed_gap_span": [
+     12,
+     13
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "WELD_TWO_WORDS",
+    "expected_before": "(RESCISSIONS OF FUNDS)",
+    "expected_after": "(RESCISSIONSOF FUNDS)",
+    "changed": true,
+    "non_space_before": "(RESCISSIONSOFFUNDS)",
+    "non_space_after": "(RESCISSIONSOFFUNDS)",
+    "non_space_unchanged": true,
+    "boundary_len_before": 19,
+    "boundary_len_after": 19,
+    "boundary_diff_positions": [
+     11
+    ],
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "(RESCISSIONSOF FUNDS)"
+    }
+   ],
+   "generated_path": "control_fixtures/na_01_weld_two_words.pdf",
+   "generated_sha256": "6ec883aa5014ffcbadb3f1e92cdfe19b5820b3a39a715b5ba82b0a3951a095b2",
+   "source_bbox": [
+    247.6199951171875,
+    282.338623046875,
+    391.76800537109375,
+    296.338623046875
+   ],
+   "drawn_fontsize": 14.0
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "SPLIT_ONE_WORD",
+   "schedule_index": 2,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",21,2,\"SPLIT_ONE_WORD\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "legacy-DTD appropriations-small id=id6F67AFBC04BD41B4BB87288874CC1F2D at bill/legis-body/title/section/appropriations-small; printed line agrees with the XML header under case folding alone",
+   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"id6F67AFBC04BD41B4BB87288874CC1F2D\",5,21]",
+   "element": "appropriations-small",
+   "element_id": "id6F67AFBC04BD41B4BB87288874CC1F2D",
+   "ancestor_path": "bill/legis-body/title/section/appropriations-small",
+   "xml_document_ordinal": 5,
+   "xml_source_text": "(rescission of funds)",
+   "expected_rendered_heading": "(rescission of funds)",
+   "page_number": 21,
+   "page_height": 792.0,
+   "physical_line_index": 1011,
+   "heading_index_in_page": 6,
+   "heading_bbox_pdf_points": [
+    248.6199951171875,
+    651.6612854003906,
+    391.0263977050781,
+    665.6612930297852
+   ],
+   "region_ordinal": 0,
+   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
+   "region_bbox_pdf_points": [
+    132.99940490722656,
+    625.6835327148438,
+    489.6146545410156,
+    741.6612892150879
+   ],
+   "region_n_lines": 8,
+   "region_line_mapping": [
+    [
+     21,
+     0
+    ],
+    [
+     21,
+     1
+    ],
+    [
+     21,
+     2
+    ],
+    [
+     21,
+     3
+    ],
+    [
+     21,
+     4
+    ],
+    [
+     21,
+     5
+    ],
+    [
+     21,
+     6
+    ],
+    [
+     21,
+     7
+    ]
+   ],
+   "heading_index_in_region": 6,
+   "expected_before": "(RESCISSION OF FUNDS)",
+   "expected_after": "(RESCI SSION OF FUNDS)",
+   "mutation_recipe": {
+    "variant": "SPLIT_ONE_WORD",
+    "target_token": "RESCISSION",
+    "split_after_chars": 5,
+    "pieces": [
+     "RESCI",
+     "SSION"
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "SPLIT_ONE_WORD",
+    "expected_before": "(RESCISSION OF FUNDS)",
+    "expected_after": "(RESCI SSION OF FUNDS)",
+    "changed": true,
+    "non_space_before": "(RESCISSIONOFFUNDS)",
+    "non_space_after": "(RESCISSIONOFFUNDS)",
+    "non_space_unchanged": true,
+    "boundary_len_before": 18,
+    "boundary_len_after": 18,
+    "boundary_diff_positions": [
+     5
+    ],
+    "boundary_transitions": [
+     [
+      0,
+      1
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 0 -> 1"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "(RESCI SSION OF FUNDS)"
+    }
+   ],
+   "generated_path": "control_fixtures/na_02_split_one_word.pdf",
+   "generated_sha256": "386c998560b295426a18ca89d482e2a98d635e884211b4001f63b5d0c73227eb",
+   "source_bbox": [
+    248.6199951171875,
+    126.33870697021484,
+    391.0263977050781,
+    140.33871459960938
+   ],
+   "drawn_fontsize": 14.0
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "DELETE_ONE_WORD",
+   "schedule_index": 3,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",58,3,\"DELETE_ONE_WORD\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -239,47 +483,37 @@
    ],
    "heading_index_in_region": 6,
    "expected_before": "OPERATIONS AND SUPPORT",
-   "expected_after": "OPERATIONSAND SUPPORT",
+   "expected_after": "AND SUPPORT",
    "mutation_recipe": {
-    "variant": "WELD_TWO_WORDS",
-    "target_pair": [
-     "OPERATIONS",
-     "AND"
-    ],
-    "removed_gap_span": [
-     10,
-     11
+    "variant": "DELETE_ONE_WORD",
+    "target_token": "OPERATIONS",
+    "target_span": [
+     0,
+     10
     ]
    },
    "mutation_evidence": {
-    "variant": "WELD_TWO_WORDS",
+    "variant": "DELETE_ONE_WORD",
     "expected_before": "OPERATIONS AND SUPPORT",
-    "expected_after": "OPERATIONSAND SUPPORT",
+    "expected_after": "AND SUPPORT",
     "changed": true,
     "non_space_before": "OPERATIONSANDSUPPORT",
-    "non_space_after": "OPERATIONSANDSUPPORT",
-    "non_space_unchanged": true,
+    "non_space_after": "ANDSUPPORT",
+    "non_space_unchanged": false,
     "boundary_len_before": 19,
-    "boundary_len_after": 19,
-    "boundary_diff_positions": [
-     9
-    ],
-    "boundary_transitions": [
-     [
-      1,
-      0
-     ]
-    ],
+    "boundary_len_after": 9,
+    "boundary_diff_positions": [],
+    "boundary_transitions": [],
     "live": true,
-    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
+    "class_rule": "non-space sequence must CHANGE"
    },
    "expected_adjudicated_headings": [
     {
-     "text": "OPERATIONSAND SUPPORT"
+     "text": "AND SUPPORT"
     }
    ],
-   "generated_path": "control_fixtures/na_01_weld_two_words.pdf",
-   "generated_sha256": "a4f7a162467730c3d24284185d6245e2048d25c8cd396d516dc32c993c76cc90",
+   "generated_path": "control_fixtures/na_03_delete_one_word.pdf",
+   "generated_sha256": "f579a30836144ea3189c4846f7d8118e9a2253396db4c38db04ec27e60397231",
    "source_bbox": [
     239.13999938964844,
     438.338623046875,
@@ -290,10 +524,10 @@
   },
   {
    "control_kind": "N-A",
-   "variant": "SPLIT_ONE_WORD",
-   "schedule_index": 2,
+   "variant": "WELD_TWO_WORDS",
+   "schedule_index": 4,
    "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",25,2,\"SPLIT_ONE_WORD\"]",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",25,4,\"WELD_TWO_WORDS\"]",
    "source_document": "114-hr-2029/4",
    "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
    "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
@@ -363,20 +597,22 @@
    ],
    "heading_index_in_region": 2,
    "expected_before": "VETERANS INSURANCE AND INDEMNITIES",
-   "expected_after": "VETERANS INSURANCE AND INDEM NITIES",
+   "expected_after": "VETERANSINSURANCE AND INDEMNITIES",
    "mutation_recipe": {
-    "variant": "SPLIT_ONE_WORD",
-    "target_token": "INDEMNITIES",
-    "split_after_chars": 5,
-    "pieces": [
-     "INDEM",
-     "NITIES"
+    "variant": "WELD_TWO_WORDS",
+    "target_pair": [
+     "VETERANS",
+     "INSURANCE"
+    ],
+    "removed_gap_span": [
+     8,
+     9
     ]
    },
    "mutation_evidence": {
-    "variant": "SPLIT_ONE_WORD",
+    "variant": "WELD_TWO_WORDS",
     "expected_before": "VETERANS INSURANCE AND INDEMNITIES",
-    "expected_after": "VETERANS INSURANCE AND INDEM NITIES",
+    "expected_after": "VETERANSINSURANCE AND INDEMNITIES",
     "changed": true,
     "non_space_before": "VETERANSINSURANCEANDINDEMNITIES",
     "non_space_after": "VETERANSINSURANCEANDINDEMNITIES",
@@ -384,24 +620,24 @@
     "boundary_len_before": 30,
     "boundary_len_after": 30,
     "boundary_diff_positions": [
-     24
+     7
     ],
     "boundary_transitions": [
      [
-      0,
-      1
+      1,
+      0
      ]
     ],
     "live": true,
-    "class_rule": "non-space unchanged, exactly one boundary 0 -> 1"
+    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
    },
    "expected_adjudicated_headings": [
     {
-     "text": "VETERANS INSURANCE AND INDEM NITIES"
+     "text": "VETERANSINSURANCE AND INDEMNITIES"
     }
    ],
-   "generated_path": "control_fixtures/na_02_split_one_word.pdf",
-   "generated_sha256": "fd02faf891955c2ca001c9e6201cff8e15da59b467e248208a48c2d90463e851",
+   "generated_path": "control_fixtures/na_04_weld_two_words.pdf",
+   "generated_sha256": "e2f8f9cb69567553fee1aae400962a4deaa15b944a785a5bd20491c69e5ca89f",
    "source_bbox": [
     197.4600067138672,
     74.33870697021484,
@@ -412,10 +648,10 @@
   },
   {
    "control_kind": "N-A",
-   "variant": "DELETE_ONE_WORD",
-   "schedule_index": 3,
+   "variant": "SPLIT_ONE_WORD",
+   "schedule_index": 5,
    "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",56,3,\"DELETE_ONE_WORD\"]",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",56,5,\"SPLIT_ONE_WORD\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -485,37 +721,45 @@
    ],
    "heading_index_in_region": 6,
    "expected_before": "OPERATIONS AND SUPPORT",
-   "expected_after": "AND SUPPORT",
+   "expected_after": "OPERA TIONS AND SUPPORT",
    "mutation_recipe": {
-    "variant": "DELETE_ONE_WORD",
+    "variant": "SPLIT_ONE_WORD",
     "target_token": "OPERATIONS",
-    "target_span": [
-     0,
-     10
+    "split_after_chars": 5,
+    "pieces": [
+     "OPERA",
+     "TIONS"
     ]
    },
    "mutation_evidence": {
-    "variant": "DELETE_ONE_WORD",
+    "variant": "SPLIT_ONE_WORD",
     "expected_before": "OPERATIONS AND SUPPORT",
-    "expected_after": "AND SUPPORT",
+    "expected_after": "OPERA TIONS AND SUPPORT",
     "changed": true,
     "non_space_before": "OPERATIONSANDSUPPORT",
-    "non_space_after": "ANDSUPPORT",
-    "non_space_unchanged": false,
+    "non_space_after": "OPERATIONSANDSUPPORT",
+    "non_space_unchanged": true,
     "boundary_len_before": 19,
-    "boundary_len_after": 9,
-    "boundary_diff_positions": [],
-    "boundary_transitions": [],
+    "boundary_len_after": 19,
+    "boundary_diff_positions": [
+     4
+    ],
+    "boundary_transitions": [
+     [
+      0,
+      1
+     ]
+    ],
     "live": true,
-    "class_rule": "non-space sequence must CHANGE"
+    "class_rule": "non-space unchanged, exactly one boundary 0 -> 1"
    },
    "expected_adjudicated_headings": [
     {
-     "text": "AND SUPPORT"
+     "text": "OPERA TIONS AND SUPPORT"
     }
    ],
-   "generated_path": "control_fixtures/na_03_delete_one_word.pdf",
-   "generated_sha256": "a247f68b6cdadd752ce0bddbe0bffc9137859c5729005559931374df3275b639",
+   "generated_path": "control_fixtures/na_05_split_one_word.pdf",
+   "generated_sha256": "5678f874dde8e43f2bb3f2783818df42e70b74bf46df4223817d7b8111209c09",
    "source_bbox": [
     239.13999938964844,
     438.338623046875,
@@ -526,10 +770,10 @@
   },
   {
    "control_kind": "N-A",
-   "variant": "WELD_TWO_WORDS",
-   "schedule_index": 4,
+   "variant": "DELETE_ONE_WORD",
+   "schedule_index": 6,
    "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",23,4,\"WELD_TWO_WORDS\"]",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",23,6,\"DELETE_ONE_WORD\"]",
    "source_document": "114-hr-2029/4",
    "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
    "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
@@ -599,47 +843,37 @@
    ],
    "heading_index_in_region": 0,
    "expected_before": "COMPENSATION AND PENSIONS",
-   "expected_after": "COMPENSATIONAND PENSIONS",
+   "expected_after": "AND PENSIONS",
    "mutation_recipe": {
-    "variant": "WELD_TWO_WORDS",
-    "target_pair": [
-     "COMPENSATION",
-     "AND"
-    ],
-    "removed_gap_span": [
-     12,
-     13
+    "variant": "DELETE_ONE_WORD",
+    "target_token": "COMPENSATION",
+    "target_span": [
+     0,
+     12
     ]
    },
    "mutation_evidence": {
-    "variant": "WELD_TWO_WORDS",
+    "variant": "DELETE_ONE_WORD",
     "expected_before": "COMPENSATION AND PENSIONS",
-    "expected_after": "COMPENSATIONAND PENSIONS",
+    "expected_after": "AND PENSIONS",
     "changed": true,
     "non_space_before": "COMPENSATIONANDPENSIONS",
-    "non_space_after": "COMPENSATIONANDPENSIONS",
-    "non_space_unchanged": true,
+    "non_space_after": "ANDPENSIONS",
+    "non_space_unchanged": false,
     "boundary_len_before": 22,
-    "boundary_len_after": 22,
-    "boundary_diff_positions": [
-     11
-    ],
-    "boundary_transitions": [
-     [
-      1,
-      0
-     ]
-    ],
+    "boundary_len_after": 10,
+    "boundary_diff_positions": [],
+    "boundary_transitions": [],
     "live": true,
-    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
+    "class_rule": "non-space sequence must CHANGE"
    },
    "expected_adjudicated_headings": [
     {
-     "text": "COMPENSATIONAND PENSIONS"
+     "text": "AND PENSIONS"
     }
    ],
-   "generated_path": "control_fixtures/na_04_weld_two_words.pdf",
-   "generated_sha256": "f09f0fd5bdd5a4127adcb0e1cef249d648c349d6833be69da1b8aa20be5a985b",
+   "generated_path": "control_fixtures/na_06_delete_one_word.pdf",
+   "generated_sha256": "7aecd1f8fe6033d926b3fce5c1b3847675b1fcc7a8d3aa93047a40d4b39fd42f",
    "source_bbox": [
     228.17999267578125,
     152.33859252929688,
@@ -650,10 +884,10 @@
   },
   {
    "control_kind": "N-A",
-   "variant": "SPLIT_ONE_WORD",
-   "schedule_index": 5,
+   "variant": "WELD_TWO_WORDS",
+   "schedule_index": 7,
    "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",44,5,\"SPLIT_ONE_WORD\"]",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",44,7,\"WELD_TWO_WORDS\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -723,20 +957,22 @@
    ],
    "heading_index_in_region": 2,
    "expected_before": "OPERATIONS AND SUPPORT",
-   "expected_after": "OPERA TIONS AND SUPPORT",
+   "expected_after": "OPERATIONSAND SUPPORT",
    "mutation_recipe": {
-    "variant": "SPLIT_ONE_WORD",
-    "target_token": "OPERATIONS",
-    "split_after_chars": 5,
-    "pieces": [
-     "OPERA",
-     "TIONS"
+    "variant": "WELD_TWO_WORDS",
+    "target_pair": [
+     "OPERATIONS",
+     "AND"
+    ],
+    "removed_gap_span": [
+     10,
+     11
     ]
    },
    "mutation_evidence": {
-    "variant": "SPLIT_ONE_WORD",
+    "variant": "WELD_TWO_WORDS",
     "expected_before": "OPERATIONS AND SUPPORT",
-    "expected_after": "OPERA TIONS AND SUPPORT",
+    "expected_after": "OPERATIONSAND SUPPORT",
     "changed": true,
     "non_space_before": "OPERATIONSANDSUPPORT",
     "non_space_after": "OPERATIONSANDSUPPORT",
@@ -744,245 +980,7 @@
     "boundary_len_before": 19,
     "boundary_len_after": 19,
     "boundary_diff_positions": [
-     4
-    ],
-    "boundary_transitions": [
-     [
-      0,
-      1
-     ]
-    ],
-    "live": true,
-    "class_rule": "non-space unchanged, exactly one boundary 0 -> 1"
-   },
-   "expected_adjudicated_headings": [
-    {
-     "text": "OPERA TIONS AND SUPPORT"
-    }
-   ],
-   "generated_path": "control_fixtures/na_05_split_one_word.pdf",
-   "generated_sha256": "8895c0c2cf601f16e50bf35128766dc51164792e0aa34919ef25392ad24a915a",
-   "source_bbox": [
-    239.13999938964844,
-    282.338623046875,
-    400.4857177734375,
-    296.338623046875
-   ],
-   "drawn_fontsize": 14.0
-  },
-  {
-   "control_kind": "N-A",
-   "variant": "DELETE_ONE_WORD",
-   "schedule_index": 6,
-   "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",132,6,\"DELETE_ONE_WORD\"]",
-   "source_document": "114-hr-2029/4",
-   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
-   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
-   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
-   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
-   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
-   "xml_evidence": "legacy-DTD appropriations-small id=H506A309468FF4A949672831D165AC5E2 at bill/legis-body/title/appropriations-small; printed line agrees with the XML header under case folding alone",
-   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"H506A309468FF4A949672831D165AC5E2\",101,132]",
-   "element": "appropriations-small",
-   "element_id": "H506A309468FF4A949672831D165AC5E2",
-   "ancestor_path": "bill/legis-body/title/appropriations-small",
-   "xml_document_ordinal": 101,
-   "xml_source_text": "Foreign currency fluctuations account",
-   "expected_rendered_heading": "Foreign currency fluctuations account",
-   "page_number": 132,
-   "page_height": 792.0,
-   "physical_line_index": 6835,
-   "heading_index_in_page": 8,
-   "heading_bbox_pdf_points": [
-    189.86000061035156,
-    625.6614074707031,
-    449.52020263671875,
-    639.6614074707031
-   ],
-   "region_ordinal": 1,
-   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
-   "region_bbox_pdf_points": [
-    132.99981689453125,
-    521.6859741210938,
-    489.5267639160156,
-    639.6614074707031
-   ],
-   "region_n_lines": 8,
-   "region_line_mapping": [
-    [
-     132,
-     8
-    ],
-    [
-     132,
      9
-    ],
-    [
-     132,
-     10
-    ],
-    [
-     132,
-     11
-    ],
-    [
-     132,
-     12
-    ],
-    [
-     132,
-     13
-    ],
-    [
-     132,
-     14
-    ],
-    [
-     132,
-     15
-    ]
-   ],
-   "heading_index_in_region": 0,
-   "expected_before": "FOREIGN CURRENCY FLUCTUATIONS ACCOUNT",
-   "expected_after": "FOREIGN CURRENCY ACCOUNT",
-   "mutation_recipe": {
-    "variant": "DELETE_ONE_WORD",
-    "target_token": "FLUCTUATIONS",
-    "target_span": [
-     17,
-     29
-    ]
-   },
-   "mutation_evidence": {
-    "variant": "DELETE_ONE_WORD",
-    "expected_before": "FOREIGN CURRENCY FLUCTUATIONS ACCOUNT",
-    "expected_after": "FOREIGN CURRENCY ACCOUNT",
-    "changed": true,
-    "non_space_before": "FOREIGNCURRENCYFLUCTUATIONSACCOUNT",
-    "non_space_after": "FOREIGNCURRENCYACCOUNT",
-    "non_space_unchanged": false,
-    "boundary_len_before": 33,
-    "boundary_len_after": 21,
-    "boundary_diff_positions": [],
-    "boundary_transitions": [],
-    "live": true,
-    "class_rule": "non-space sequence must CHANGE"
-   },
-   "expected_adjudicated_headings": [
-    {
-     "text": "FOREIGN CURRENCY ACCOUNT"
-    }
-   ],
-   "generated_path": "control_fixtures/na_06_delete_one_word.pdf",
-   "generated_sha256": "ae62a84a35e6963f707997152aff1cef8fe9aea0cf55d80205c6ad780ad6278e",
-   "source_bbox": [
-    189.86000061035156,
-    152.33859252929688,
-    449.52020263671875,
-    166.33859252929688
-   ],
-   "drawn_fontsize": 14.0
-  },
-  {
-   "control_kind": "N-A",
-   "variant": "WELD_TWO_WORDS",
-   "schedule_index": 7,
-   "source_type": "DEVELOPMENT PDF, mutated",
-   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",101,7,\"WELD_TWO_WORDS\"]",
-   "source_document": "114-hr-2029/4",
-   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
-   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
-   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
-   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
-   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
-   "xml_evidence": "legacy-DTD appropriations-small id=HE56DF44D7E454E9898F01E1D6652F69C at bill/legis-body/title/appropriations-small; printed line agrees with the XML header under case folding alone",
-   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"HE56DF44D7E454E9898F01E1D6652F69C\",75,101]",
-   "element": "appropriations-small",
-   "element_id": "HE56DF44D7E454E9898F01E1D6652F69C",
-   "ancestor_path": "bill/legis-body/title/appropriations-small",
-   "xml_document_ordinal": 75,
-   "xml_source_text": "Information technology systems",
-   "expected_rendered_heading": "Information technology systems",
-   "page_number": 101,
-   "page_height": 792.0,
-   "physical_line_index": 5256,
-   "heading_index_in_page": 30,
-   "heading_bbox_pdf_points": [
-    213.44000244140625,
-    339.661376953125,
-    425.9197998046875,
-    353.661376953125
-   ],
-   "region_ordinal": 3,
-   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
-   "region_bbox_pdf_points": [
-    125.99980163574219,
-    313.6841125488281,
-    489.5309143066406,
-    431.6679992675781
-   ],
-   "region_n_lines": 8,
-   "region_line_mapping": [
-    [
-     101,
-     24
-    ],
-    [
-     101,
-     25
-    ],
-    [
-     101,
-     26
-    ],
-    [
-     101,
-     27
-    ],
-    [
-     101,
-     28
-    ],
-    [
-     101,
-     29
-    ],
-    [
-     101,
-     30
-    ],
-    [
-     101,
-     31
-    ]
-   ],
-   "heading_index_in_region": 6,
-   "expected_before": "INFORMATION TECHNOLOGY SYSTEMS",
-   "expected_after": "INFORMATIONTECHNOLOGY SYSTEMS",
-   "mutation_recipe": {
-    "variant": "WELD_TWO_WORDS",
-    "target_pair": [
-     "INFORMATION",
-     "TECHNOLOGY"
-    ],
-    "removed_gap_span": [
-     11,
-     12
-    ]
-   },
-   "mutation_evidence": {
-    "variant": "WELD_TWO_WORDS",
-    "expected_before": "INFORMATION TECHNOLOGY SYSTEMS",
-    "expected_after": "INFORMATIONTECHNOLOGY SYSTEMS",
-    "changed": true,
-    "non_space_before": "INFORMATIONTECHNOLOGYSYSTEMS",
-    "non_space_after": "INFORMATIONTECHNOLOGYSYSTEMS",
-    "non_space_unchanged": true,
-    "boundary_len_before": 27,
-    "boundary_len_after": 27,
-    "boundary_diff_positions": [
-     10
     ],
     "boundary_transitions": [
      [
@@ -995,16 +993,16 @@
    },
    "expected_adjudicated_headings": [
     {
-     "text": "INFORMATIONTECHNOLOGY SYSTEMS"
+     "text": "OPERATIONSAND SUPPORT"
     }
    ],
    "generated_path": "control_fixtures/na_07_weld_two_words.pdf",
-   "generated_sha256": "1a19bb6683a373370d8df616196b6db435ea7c54d0834aa6c82d4ad1608438f2",
+   "generated_sha256": "1256da1ca1585c3321ebef54b91545c44088d26dc021b2172fffae122297da69",
    "source_bbox": [
-    213.44000244140625,
-    438.338623046875,
-    425.9197998046875,
-    452.338623046875
+    239.13999938964844,
+    282.338623046875,
+    400.4857177734375,
+    296.338623046875
    ],
    "drawn_fontsize": 14.0
   },
@@ -1013,7 +1011,89 @@
    "variant": "XML_CORROBORATED_HEADING",
    "schedule_index": 0,
    "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",49,0,\"XML_CORROBORATED_HEADING\"]",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",57,0,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "legacy-DTD appropriations-small id=HDF3F475772C041D8B38DF22D1534D2F9 at bill/legis-body/title/section/appropriations-small; printed line agrees with the XML header under case folding alone",
+   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"HDF3F475772C041D8B38DF22D1534D2F9\",47,57]",
+   "element": "appropriations-small",
+   "element_id": "HDF3F475772C041D8B38DF22D1534D2F9",
+   "ancestor_path": "bill/legis-body/title/section/appropriations-small",
+   "xml_document_ordinal": 47,
+   "xml_source_text": "(rescissions of funds)",
+   "expected_rendered_heading": "(rescissions of funds)",
+   "page_number": 57,
+   "page_height": 792.0,
+   "physical_line_index": 2966,
+   "heading_index_in_page": 44,
+   "heading_bbox_pdf_points": [
+    245.36000061035156,
+    157.66143798828125,
+    394.27362060546875,
+    171.66143798828125
+   ],
+   "region_ordinal": 5,
+   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
+   "region_bbox_pdf_points": [
+    125.99960327148438,
+    105.68353271484375,
+    489.6622314453125,
+    223.66143798828125
+   ],
+   "region_n_lines": 8,
+   "region_line_mapping": [
+    [
+     57,
+     40
+    ],
+    [
+     57,
+     41
+    ],
+    [
+     57,
+     42
+    ],
+    [
+     57,
+     43
+    ],
+    [
+     57,
+     44
+    ],
+    [
+     57,
+     45
+    ],
+    [
+     57,
+     46
+    ],
+    [
+     57,
+     47
+    ]
+   ],
+   "heading_index_in_region": 4,
+   "expected_adjudicated_headings": [
+    {
+     "text": "(RESCISSIONS OF FUNDS)"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 1,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",49,1,\"XML_CORROBORATED_HEADING\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -1093,9 +1173,9 @@
   {
    "control_kind": "N-B",
    "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 1,
+   "schedule_index": 2,
    "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",60,1,\"XML_CORROBORATED_HEADING\"]",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",60,2,\"XML_CORROBORATED_HEADING\"]",
    "source_document": "114-hr-2029/4",
    "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
    "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
@@ -1175,9 +1255,91 @@
   {
    "control_kind": "N-B",
    "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 2,
+   "schedule_index": 3,
    "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",57,2,\"XML_CORROBORATED_HEADING\"]",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",21,3,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "legacy-DTD appropriations-small id=id56679E906A574CD2999B872083B585C8 at bill/legis-body/title/section/appropriations-small; printed line agrees with the XML header under case folding alone",
+   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"id56679E906A574CD2999B872083B585C8\",7,21]",
+   "element": "appropriations-small",
+   "element_id": "id56679E906A574CD2999B872083B585C8",
+   "ancestor_path": "bill/legis-body/title/section/appropriations-small",
+   "xml_document_ordinal": 7,
+   "xml_source_text": "(rescission of funds)",
+   "expected_rendered_heading": "(rescission of funds)",
+   "page_number": 21,
+   "page_height": 792.0,
+   "physical_line_index": 1039,
+   "heading_index_in_page": 34,
+   "heading_bbox_pdf_points": [
+    248.6199951171875,
+    287.661376953125,
+    391.0263977050781,
+    301.661376953125
+   ],
+   "region_ordinal": 4,
+   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
+   "region_bbox_pdf_points": [
+    125.9993896484375,
+    209.68353271484375,
+    489.6621398925781,
+    327.661376953125
+   ],
+   "region_n_lines": 8,
+   "region_line_mapping": [
+    [
+     21,
+     32
+    ],
+    [
+     21,
+     33
+    ],
+    [
+     21,
+     34
+    ],
+    [
+     21,
+     35
+    ],
+    [
+     21,
+     36
+    ],
+    [
+     21,
+     37
+    ],
+    [
+     21,
+     38
+    ],
+    [
+     21,
+     39
+    ]
+   ],
+   "heading_index_in_region": 2,
+   "expected_adjudicated_headings": [
+    {
+     "text": "(RESCISSION OF FUNDS)"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 4,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",57,4,\"XML_CORROBORATED_HEADING\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -1257,9 +1419,9 @@
   {
    "control_kind": "N-B",
    "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 3,
+   "schedule_index": 5,
    "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",15,3,\"XML_CORROBORATED_HEADING\"]",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",15,5,\"XML_CORROBORATED_HEADING\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -1339,9 +1501,9 @@
   {
    "control_kind": "N-B",
    "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 4,
+   "schedule_index": 6,
    "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",94,4,\"XML_CORROBORATED_HEADING\"]",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",94,6,\"XML_CORROBORATED_HEADING\"]",
    "source_document": "114-hr-2029/4",
    "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
    "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
@@ -1421,9 +1583,9 @@
   {
    "control_kind": "N-B",
    "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 5,
+   "schedule_index": 7,
    "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",11,5,\"XML_CORROBORATED_HEADING\"]",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",11,7,\"XML_CORROBORATED_HEADING\"]",
    "source_document": "118-hr-8752/1",
    "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
    "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
@@ -1497,170 +1659,6 @@
    "expected_adjudicated_headings": [
     {
      "text": "(INCLUDING TRANSFER OF FUNDS)"
-    }
-   ]
-  },
-  {
-   "control_kind": "N-B",
-   "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 6,
-   "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",133,6,\"XML_CORROBORATED_HEADING\"]",
-   "source_document": "114-hr-2029/4",
-   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
-   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
-   "parent_sha256": null,
-   "generated_path": null,
-   "generated_sha256": null,
-   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
-   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
-   "xml_evidence": "legacy-DTD appropriations-small id=H4BF55239BE2944269976B585A6286134 at bill/legis-body/title/appropriations-small; printed line agrees with the XML header under case folding alone",
-   "source_canonical_identity": "[\"xml-account\",\"68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8\",\"H4BF55239BE2944269976B585A6286134\",104,133]",
-   "element": "appropriations-small",
-   "element_id": "H4BF55239BE2944269976B585A6286134",
-   "ancestor_path": "bill/legis-body/title/appropriations-small",
-   "xml_document_ordinal": 104,
-   "xml_source_text": "Trust fund",
-   "expected_rendered_heading": "Trust fund",
-   "page_number": 133,
-   "page_height": 792.0,
-   "physical_line_index": 6908,
-   "heading_index_in_page": 29,
-   "heading_bbox_pdf_points": [
-    282.3800048828125,
-    417.661376953125,
-    356.9921875,
-    431.661376953125
-   ],
-   "region_ordinal": 3,
-   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
-   "region_bbox_pdf_points": [
-    125.99978637695312,
-    391.6619873046875,
-    486.1114501953125,
-    483.68890380859375
-   ],
-   "region_n_lines": 8,
-   "region_line_mapping": [
-    [
-     133,
-     24
-    ],
-    [
-     133,
-     25
-    ],
-    [
-     133,
-     26
-    ],
-    [
-     133,
-     27
-    ],
-    [
-     133,
-     28
-    ],
-    [
-     133,
-     29
-    ],
-    [
-     133,
-     30
-    ],
-    [
-     133,
-     31
-    ]
-   ],
-   "heading_index_in_region": 5,
-   "expected_adjudicated_headings": [
-    {
-     "text": "TRUST FUND"
-    }
-   ]
-  },
-  {
-   "control_kind": "N-B",
-   "variant": "XML_CORROBORATED_HEADING",
-   "schedule_index": 7,
-   "source_type": "DEVELOPMENT PDF, unmodified",
-   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",11,7,\"XML_CORROBORATED_HEADING\"]",
-   "source_document": "118-hr-8752/1",
-   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
-   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
-   "parent_sha256": null,
-   "generated_path": null,
-   "generated_sha256": null,
-   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
-   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
-   "xml_evidence": "legacy-DTD appropriations-small id=H84D3DE10957043D8AC503C0E976A7FD4 at bill/legis-body/title/appropriations-small; printed line agrees with the XML header under case folding alone",
-   "source_canonical_identity": "[\"xml-account\",\"e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d\",\"H84D3DE10957043D8AC503C0E976A7FD4\",6,11]",
-   "element": "appropriations-small",
-   "element_id": "H84D3DE10957043D8AC503C0E976A7FD4",
-   "ancestor_path": "bill/legis-body/title/appropriations-small",
-   "xml_document_ordinal": 6,
-   "xml_source_text": "OPERATIONS AND SUPPORT",
-   "expected_rendered_heading": "OPERATIONS AND SUPPORT",
-   "page_number": 11,
-   "page_height": 792.0,
-   "physical_line_index": 598,
-   "heading_index_in_page": 14,
-   "heading_bbox_pdf_points": [
-    239.13999938964844,
-    547.6614074707031,
-    400.4857177734375,
-    561.6614074707031
-   ],
-   "region_ordinal": 1,
-   "region_size_rule": "build_frames.REGION_SIZE=8, non-overlapping, ordinal=start//size",
-   "region_bbox_pdf_points": [
-    132.99951171875,
-    521.6835327148438,
-    445.20111083984375,
-    639.6631164550781
-   ],
-   "region_n_lines": 8,
-   "region_line_mapping": [
-    [
-     11,
-     8
-    ],
-    [
-     11,
-     9
-    ],
-    [
-     11,
-     10
-    ],
-    [
-     11,
-     11
-    ],
-    [
-     11,
-     12
-    ],
-    [
-     11,
-     13
-    ],
-    [
-     11,
-     14
-    ],
-    [
-     11,
-     15
-    ]
-   ],
-   "heading_index_in_region": 6,
-   "expected_adjudicated_headings": [
-    {
-     "text": "OPERATIONS AND SUPPORT"
     }
    ]
   },

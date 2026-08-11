@@ -20,9 +20,9 @@
    "SPLIT_ONE_WORD": 2
   },
   "eligible_population": {
-   "admitted_account_sources": 79,
-   "na_eligible": 66,
-   "nb_eligible": 79,
+   "admitted_account_sources": 96,
+   "na_eligible": 83,
+   "nb_eligible": 96,
    "per_document": {
     "114-hr-2029/4": {
      "xml_account_records": 105,
@@ -33,8 +33,7 @@
       "UNDISCRIMINATED_GROUP": 2,
       "NO_PHYSICAL_OCCURRENCE": 3
      },
-     "refused_not_account_position": 17,
-     "admitted_sources": 38
+     "admitted_sources": 55
     },
     "118-hr-8752/1": {
      "xml_account_records": 41,
@@ -42,7 +41,6 @@
      "anchor_inversions": 0,
      "bridge_paired": 41,
      "bridge_refusals": {},
-     "refused_not_account_position": 0,
      "admitted_sources": 41
     }
    }
@@ -62,10 +60,10 @@
    {
     "index": 1,
     "variant": "WELD_TWO_WORDS",
-    "source": "118-hr-8752/1",
-    "page": 58,
-    "before": "OPERATIONS AND SUPPORT",
-    "after": "OPERATIONSAND SUPPORT",
+    "source": "114-hr-2029/4",
+    "page": 126,
+    "before": "(RESCISSIONS OF FUNDS)",
+    "after": "(RESCISSIONSOF FUNDS)",
     "boundary_transitions": [
      [
       1,
@@ -73,15 +71,15 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "a4f7a162467730c3"
+    "generated_sha256": "6ec883aa5014ffcb"
    },
    {
     "index": 2,
     "variant": "SPLIT_ONE_WORD",
     "source": "114-hr-2029/4",
-    "page": 25,
-    "before": "VETERANS INSURANCE AND INDEMNITIES",
-    "after": "VETERANS INSURANCE AND INDEM NITIES",
+    "page": 21,
+    "before": "(RESCISSION OF FUNDS)",
+    "after": "(RESCI SSION OF FUNDS)",
     "boundary_transitions": [
      [
       0,
@@ -89,26 +87,26 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "fd02faf891955c2c"
+    "generated_sha256": "386c998560b29542"
    },
    {
     "index": 3,
     "variant": "DELETE_ONE_WORD",
     "source": "118-hr-8752/1",
-    "page": 56,
+    "page": 58,
     "before": "OPERATIONS AND SUPPORT",
     "after": "AND SUPPORT",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "a247f68b6cdadd75"
+    "generated_sha256": "f579a30836144ea3"
    },
    {
     "index": 4,
     "variant": "WELD_TWO_WORDS",
     "source": "114-hr-2029/4",
-    "page": 23,
-    "before": "COMPENSATION AND PENSIONS",
-    "after": "COMPENSATIONAND PENSIONS",
+    "page": 25,
+    "before": "VETERANS INSURANCE AND INDEMNITIES",
+    "after": "VETERANSINSURANCE AND INDEMNITIES",
     "boundary_transitions": [
      [
       1,
@@ -116,13 +114,13 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "f09f0fd5bdd5a412"
+    "generated_sha256": "e2f8f9cb69567553"
    },
    {
     "index": 5,
     "variant": "SPLIT_ONE_WORD",
     "source": "118-hr-8752/1",
-    "page": 44,
+    "page": 56,
     "before": "OPERATIONS AND SUPPORT",
     "after": "OPERA TIONS AND SUPPORT",
     "boundary_transitions": [
@@ -132,26 +130,26 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "8895c0c2cf601f16"
+    "generated_sha256": "5678f874dde8e43f"
    },
    {
     "index": 6,
     "variant": "DELETE_ONE_WORD",
     "source": "114-hr-2029/4",
-    "page": 132,
-    "before": "FOREIGN CURRENCY FLUCTUATIONS ACCOUNT",
-    "after": "FOREIGN CURRENCY ACCOUNT",
+    "page": 23,
+    "before": "COMPENSATION AND PENSIONS",
+    "after": "AND PENSIONS",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "ae62a84a35e6963f"
+    "generated_sha256": "7aecd1f8fe6033d9"
    },
    {
     "index": 7,
     "variant": "WELD_TWO_WORDS",
-    "source": "114-hr-2029/4",
-    "page": 101,
-    "before": "INFORMATION TECHNOLOGY SYSTEMS",
-    "after": "INFORMATIONTECHNOLOGY SYSTEMS",
+    "source": "118-hr-8752/1",
+    "page": 44,
+    "before": "OPERATIONS AND SUPPORT",
+    "after": "OPERATIONSAND SUPPORT",
     "boundary_transitions": [
      [
       1,
@@ -159,12 +157,20 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "1a19bb6683a37337"
+    "generated_sha256": "1256da1ca1585c33"
    }
   ],
   "nb": [
    {
     "index": 0,
+    "source": "114-hr-2029/4",
+    "page": 57,
+    "expected_text": "(RESCISSIONS OF FUNDS)",
+    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+    "xml_sha256": "68e98a6b0b204cfe"
+   },
+   {
+    "index": 1,
     "source": "118-hr-8752/1",
     "page": 49,
     "expected_text": "NATIONAL FLOOD INSURANCE FUND",
@@ -172,7 +178,7 @@
     "xml_sha256": "e4bc6b90eeff87d0"
    },
    {
-    "index": 1,
+    "index": 2,
     "source": "114-hr-2029/4",
     "page": 60,
     "expected_text": "FOREIGN CURRENCY FLUCTUATIONS ACCOUNT",
@@ -180,7 +186,15 @@
     "xml_sha256": "68e98a6b0b204cfe"
    },
    {
-    "index": 2,
+    "index": 3,
+    "source": "114-hr-2029/4",
+    "page": 21,
+    "expected_text": "(RESCISSION OF FUNDS)",
+    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+    "xml_sha256": "68e98a6b0b204cfe"
+   },
+   {
+    "index": 4,
     "source": "118-hr-8752/1",
     "page": 57,
     "expected_text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
@@ -188,7 +202,7 @@
     "xml_sha256": "e4bc6b90eeff87d0"
    },
    {
-    "index": 3,
+    "index": 5,
     "source": "118-hr-8752/1",
     "page": 15,
     "expected_text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
@@ -196,7 +210,7 @@
     "xml_sha256": "e4bc6b90eeff87d0"
    },
    {
-    "index": 4,
+    "index": 6,
     "source": "114-hr-2029/4",
     "page": 94,
     "expected_text": "VETERANS HOUSING BENEFIT PROGRAM FUND",
@@ -204,26 +218,10 @@
     "xml_sha256": "68e98a6b0b204cfe"
    },
    {
-    "index": 5,
-    "source": "118-hr-8752/1",
-    "page": 11,
-    "expected_text": "(INCLUDING TRANSFER OF FUNDS)",
-    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
-    "xml_sha256": "e4bc6b90eeff87d0"
-   },
-   {
-    "index": 6,
-    "source": "114-hr-2029/4",
-    "page": 133,
-    "expected_text": "TRUST FUND",
-    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
-    "xml_sha256": "68e98a6b0b204cfe"
-   },
-   {
     "index": 7,
     "source": "118-hr-8752/1",
     "page": 11,
-    "expected_text": "OPERATIONS AND SUPPORT",
+    "expected_text": "(INCLUDING TRANSFER OF FUNDS)",
     "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
     "xml_sha256": "e4bc6b90eeff87d0"
    }
@@ -273,6 +271,8 @@
   "n_holdout_source_sha256": 17,
   "counterfactual_reasons": [
    "HOLDOUT_SOURCE_IDENTITY",
+   "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED",
+   "SOURCE_REPLAY_NOT_IMPLEMENTED",
    "STALE_SHA256"
   ]
  },
@@ -591,9 +591,9 @@
    ],
    "observed": [
     8,
-    true
+    false
    ],
-   "pass": true,
+   "pass": false,
    "fails_when": "the unmutated heading survives alongside the mutation, so the region shows both and the control cannot distinguish an oracle that saw the alteration"
   },
   {
@@ -627,13 +627,13 @@
    "test": "a clean rebuild reproduces IDENTICAL bytes for every generated fixture",
    "expected": {
     "na_00_delete_one_word.pdf": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
-    "na_01_weld_two_words.pdf": "a4f7a162467730c3d24284185d6245e2048d25c8cd396d516dc32c993c76cc90",
-    "na_02_split_one_word.pdf": "fd02faf891955c2ca001c9e6201cff8e15da59b467e248208a48c2d90463e851",
-    "na_03_delete_one_word.pdf": "a247f68b6cdadd752ce0bddbe0bffc9137859c5729005559931374df3275b639",
-    "na_04_weld_two_words.pdf": "f09f0fd5bdd5a4127adcb0e1cef249d648c349d6833be69da1b8aa20be5a985b",
-    "na_05_split_one_word.pdf": "8895c0c2cf601f16e50bf35128766dc51164792e0aa34919ef25392ad24a915a",
-    "na_06_delete_one_word.pdf": "ae62a84a35e6963f707997152aff1cef8fe9aea0cf55d80205c6ad780ad6278e",
-    "na_07_weld_two_words.pdf": "1a19bb6683a373370d8df616196b6db435ea7c54d0834aa6c82d4ad1608438f2",
+    "na_01_weld_two_words.pdf": "6ec883aa5014ffcbadb3f1e92cdfe19b5820b3a39a715b5ba82b0a3951a095b2",
+    "na_02_split_one_word.pdf": "386c998560b295426a18ca89d482e2a98d635e884211b4001f63b5d0c73227eb",
+    "na_03_delete_one_word.pdf": "f579a30836144ea3189c4846f7d8118e9a2253396db4c38db04ec27e60397231",
+    "na_04_weld_two_words.pdf": "e2f8f9cb69567553fee1aae400962a4deaa15b944a785a5bd20491c69e5ca89f",
+    "na_05_split_one_word.pdf": "5678f874dde8e43f2bb3f2783818df42e70b74bf46df4223817d7b8111209c09",
+    "na_06_delete_one_word.pdf": "7aecd1f8fe6033d926b3fce5c1b3847675b1fcc7a8d3aa93047a40d4b39fd42f",
+    "na_07_weld_two_words.pdf": "1256da1ca1585c3321ebef54b91545c44088d26dc021b2172fffae122297da69",
     "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
     "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
     "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
@@ -641,13 +641,13 @@
    },
    "observed": {
     "na_00_delete_one_word.pdf": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
-    "na_01_weld_two_words.pdf": "a4f7a162467730c3d24284185d6245e2048d25c8cd396d516dc32c993c76cc90",
-    "na_02_split_one_word.pdf": "fd02faf891955c2ca001c9e6201cff8e15da59b467e248208a48c2d90463e851",
-    "na_03_delete_one_word.pdf": "a247f68b6cdadd752ce0bddbe0bffc9137859c5729005559931374df3275b639",
-    "na_04_weld_two_words.pdf": "f09f0fd5bdd5a4127adcb0e1cef249d648c349d6833be69da1b8aa20be5a985b",
-    "na_05_split_one_word.pdf": "8895c0c2cf601f16e50bf35128766dc51164792e0aa34919ef25392ad24a915a",
-    "na_06_delete_one_word.pdf": "ae62a84a35e6963f707997152aff1cef8fe9aea0cf55d80205c6ad780ad6278e",
-    "na_07_weld_two_words.pdf": "1a19bb6683a373370d8df616196b6db435ea7c54d0834aa6c82d4ad1608438f2",
+    "na_01_weld_two_words.pdf": "6ec883aa5014ffcbadb3f1e92cdfe19b5820b3a39a715b5ba82b0a3951a095b2",
+    "na_02_split_one_word.pdf": "386c998560b295426a18ca89d482e2a98d635e884211b4001f63b5d0c73227eb",
+    "na_03_delete_one_word.pdf": "f579a30836144ea3189c4846f7d8118e9a2253396db4c38db04ec27e60397231",
+    "na_04_weld_two_words.pdf": "e2f8f9cb69567553fee1aae400962a4deaa15b944a785a5bd20491c69e5ca89f",
+    "na_05_split_one_word.pdf": "5678f874dde8e43f2bb3f2783818df42e70b74bf46df4223817d7b8111209c09",
+    "na_06_delete_one_word.pdf": "7aecd1f8fe6033d926b3fce5c1b3847675b1fcc7a8d3aa93047a40d4b39fd42f",
+    "na_07_weld_two_words.pdf": "1256da1ca1585c3321ebef54b91545c44088d26dc021b2172fffae122297da69",
     "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
     "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
     "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
@@ -698,11 +698,24 @@
    "fails_when": "the name scan happens to catch this case, so the identity check is not what is being demonstrated and the control proves less than it claims"
   },
   {
-   "test": "G6 PASSES on the realized manifest",
-   "expected": [],
-   "observed": [],
+   "test": "the realized manifest carries NO defect except the declared-outstanding replays",
+   "expected": [
+    "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED",
+    "SOURCE_REPLAY_NOT_IMPLEMENTED"
+   ],
+   "observed": [
+    "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED",
+    "SOURCE_REPLAY_NOT_IMPLEMENTED"
+   ],
    "pass": true,
-   "fails_when": "the validator rejects a correctly built fixture set, so it could never authorize one"
+   "fails_when": "either the validator rejects a correctly built fixture set, or a real defect is hiding among the outstanding-replay markers"
+  },
+  {
+   "test": "G6 is NOT green while its section-12 meaning is incomplete",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "G6 reports PASS without the independent source-selection and mutation-target replays, which is the semantic false green A40.12 exists to remove"
   },
   {
    "test": "EVERY injected defect makes G6 FAIL with its own reason",
@@ -757,12 +770,20 @@
    "fails_when": "the validator compares recorded strings rather than recomputing from the file, so a silently edited fixture would keep certifying"
   },
   {
-   "test": "...and restoring the bytes makes G6 pass again",
-   "expected": [],
-   "observed": [],
+   "test": "...and restoring the bytes clears the byte defect (only the outstanding replays remain)",
+   "expected": [
+    "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED",
+    "SOURCE_REPLAY_NOT_IMPLEMENTED"
+   ],
+   "observed": [
+    "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED",
+    "SOURCE_REPLAY_NOT_IMPLEMENTED"
+   ],
    "pass": true,
    "fails_when": "the byte-level control left the fixture set permanently invalid"
   }
  ],
- "failures": []
+ "failures": [
+  "...and the ORIGINAL heading is gone from that page"
+ ]
 }

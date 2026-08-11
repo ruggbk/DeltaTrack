@@ -90,6 +90,22 @@ class ControlFixtureError(Exception):
 INSUFFICIENT_ELIGIBLE_SOURCES = "INSUFFICIENT_ELIGIBLE_SOURCES"
 DEAD_MUTATION = "DEAD_MUTATION"
 
+#: A40.12 -- F3 and F4 ARE NOT IMPLEMENTED, so G6 reports them as defects and is RED.
+#:
+#: A machine gate that reports PASS while the meaning it is supposed to carry is absent is
+#: exactly the false green this study exists to prevent, and a ledger caveat is not a substitute:
+#: the caveat is read by a person once, the gate is read by every later slice. G6's contract
+#: (A40 section 12) requires an INDEPENDENT REPLAY of source selection and of the deterministic
+#: mutation target; `validate_manifest` currently checks only that the manifest is
+#: self-consistent. These flags flip to True in the slice that lands the replays.
+SOURCE_SELECTION_REPLAY_IMPLEMENTED = False
+MUTATION_TARGET_REPLAY_IMPLEMENTED = False
+SOURCE_REPLAY_NOT_IMPLEMENTED = "SOURCE_REPLAY_NOT_IMPLEMENTED"
+MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED = "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED"
+#: The defects that are OUTSTANDING WORK rather than a broken manifest. `x23` asserts exactly
+#: this set on the realized manifest, so a real defect can never hide among them.
+OUTSTANDING_REPLAY_DEFECTS = (SOURCE_REPLAY_NOT_IMPLEMENTED, MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED)
+
 
 # --------------------------------------------------------------------- pure helpers
 
@@ -359,12 +375,10 @@ def source_population(page_limit: int = SOURCE_PAGE_LIMIT) -> dict:
         records = XS.account_records(xml_path)
         bridged = XS.bridge(pdf_path, records, anchors=anchors["anchors"], lines=lines)
         pdf_sha, xml_sha = sha256_file(pdf_path), sha256_file(xml_path)
-        refused_position = 0
         for p in bridged["paired"]:
-            admitted, _refusal = XS.is_admitted_account_source(p)
-            if not admitted:
-                refused_position += 1
-                continue  # A40.10 -- structural position, never typography
+            # A40.12 -- NO position filter. The parent-based rule was falsified against the DTD
+            # content model and GPO's own `ancestor::appropriations-small` template; see the note
+            # in `xml_sources`. Every bridged record is an account source.
             height = p["page_height"]
             tl = p["bbox_topleft"]
             rows.append(
@@ -403,7 +417,6 @@ def source_population(page_limit: int = SOURCE_PAGE_LIMIT) -> dict:
             "anchor_inversions": anchors["monotonicity"]["n_inversions"],
             "bridge_paired": bridged["n_paired"],
             "bridge_refusals": by_reason,
-            "refused_not_account_position": refused_position,
             "admitted_sources": sum(1 for r in rows if r["document"] == document),
         }
     return {"rows": rows, "diagnostics": diagnostics}
@@ -713,9 +726,13 @@ def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | No
             "independently observed printed line. No run_hybrid, run_extended or extract_anchors."
         ),
         "account_position_rule": {
-            "parent_element": XS.ACCOUNT_PARENT_ELEMENT,
-            "refusal": XS.NOT_ACCOUNT_POSITION,
-            "note": "structural position only -- no lexical or typographic test of the heading text",
+            "rule": "NONE -- the account role is keyed on the TAG, not on the parent element",
+            "authority": (
+                "bill DTD gives appropriations-major/intermediate/small identical content models "
+                "(docs/bill-structure.md); billres-details.xsl convertToNeededCase branches on "
+                "ancestor::appropriations-small with no parent predicate"
+            ),
+            "withdrawn": "A40.10's ACCOUNT_PARENT_ELEMENT was falsified and removed in A40.12",
         },
         "eligible_population": {
             "admitted_account_sources": len(sources),
@@ -772,6 +789,17 @@ def validate_manifest(manifest: dict, holdout_guard=None, holdout_shas=None) -> 
 
     def defect(reason, **detail):
         defects.append({"reason": reason, **detail})
+
+    # A40.12 -- G6 is RED while its section-12 meaning is incomplete. Reported FIRST so the
+    # reason is the first thing a reader sees, and never suppressed by a passing manifest.
+    if not SOURCE_SELECTION_REPLAY_IMPLEMENTED:
+        defect(SOURCE_REPLAY_NOT_IMPLEMENTED, contract="A40 F3", detail="G6 does not replay source selection")
+    if not MUTATION_TARGET_REPLAY_IMPLEMENTED:
+        defect(
+            MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED,
+            contract="A40 F4",
+            detail="G6 does not recompute MUTATORS[variant](expected_before)",
+        )
 
     fixtures = manifest.get("fixtures", [])
     by_kind = {k: [f for f in fixtures if f.get("control_kind") == k] for k in ("N-A", "N-B", "N-C")}

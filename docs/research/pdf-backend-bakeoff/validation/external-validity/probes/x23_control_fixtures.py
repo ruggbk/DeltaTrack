@@ -370,11 +370,22 @@ def part_holdout_identity(manifest: dict) -> dict:
 def part_g6(manifest: dict) -> dict:
     """A39.4 -- G6's validator, with every required negative independently injected."""
     print("\n== A39.4: G6 validation, positive and negative ==")
+    # A40.12 -- G6 is deliberately RED until F3/F4 land, so the assertion is that the ONLY
+    # defects are the two declared-outstanding replay flags. Asserting the exact set rather than
+    # "at least these" is what stops a real defect hiding behind the known-outstanding ones.
     check(
-        "G6 PASSES on the realized manifest",
-        [],
-        CF.validate_manifest(manifest),
-        "the validator rejects a correctly built fixture set, so it could never authorize one",
+        "the realized manifest carries NO defect except the declared-outstanding replays",
+        sorted(CF.OUTSTANDING_REPLAY_DEFECTS),
+        sorted({d["reason"] for d in CF.validate_manifest(manifest)}),
+        "either the validator rejects a correctly built fixture set, or a real defect is hiding "
+        "among the outstanding-replay markers",
+    )
+    check(
+        "G6 is NOT green while its section-12 meaning is incomplete",
+        False,
+        CF.validate_manifest(manifest) == [],
+        "G6 reports PASS without the independent source-selection and mutation-target replays, "
+        "which is the semantic false green A40.12 exists to remove",
     )
 
     def injected(mutate) -> list[str]:
@@ -488,9 +499,9 @@ def part_g6(manifest: dict) -> dict:
         "silently edited fixture would keep certifying",
     )
     check(
-        "...and restoring the bytes makes G6 pass again",
-        [],
-        CF.validate_manifest(on_disk),
+        "...and restoring the bytes clears the byte defect (only the outstanding replays remain)",
+        sorted(CF.OUTSTANDING_REPLAY_DEFECTS),
+        sorted({d["reason"] for d in CF.validate_manifest(on_disk)}),
         "the byte-level control left the fixture set permanently invalid",
     )
     return {"negatives": {k: {"expected": v["expected"], "fired": v["fired"]} for k, v in results.items()}}
