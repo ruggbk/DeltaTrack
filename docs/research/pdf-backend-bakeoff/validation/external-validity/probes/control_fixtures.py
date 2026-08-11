@@ -90,21 +90,30 @@ class ControlFixtureError(Exception):
 INSUFFICIENT_ELIGIBLE_SOURCES = "INSUFFICIENT_ELIGIBLE_SOURCES"
 DEAD_MUTATION = "DEAD_MUTATION"
 
-#: A40.12 -- F3 and F4 ARE NOT IMPLEMENTED, so G6 reports them as defects and is RED.
-#:
-#: A machine gate that reports PASS while the meaning it is supposed to carry is absent is
-#: exactly the false green this study exists to prevent, and a ledger caveat is not a substitute:
-#: the caveat is read by a person once, the gate is read by every later slice. G6's contract
-#: (A40 section 12) requires an INDEPENDENT REPLAY of source selection and of the deterministic
-#: mutation target; `validate_manifest` currently checks only that the manifest is
-#: self-consistent. These flags flip to True in the slice that lands the replays.
-SOURCE_SELECTION_REPLAY_IMPLEMENTED = False
-MUTATION_TARGET_REPLAY_IMPLEMENTED = False
+#: A40.15 -- F3 and F4 ARE NOW IMPLEMENTED, so these are True and G6 no longer reports them.
+#: They remain as named switches because a future slice that has to disable a replay must make
+#: G6 go RED for that reason rather than quietly skipping the check.
+SOURCE_SELECTION_REPLAY_IMPLEMENTED = True
+MUTATION_TARGET_REPLAY_IMPLEMENTED = True
 SOURCE_REPLAY_NOT_IMPLEMENTED = "SOURCE_REPLAY_NOT_IMPLEMENTED"
 MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED = "MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED"
-#: The defects that are OUTSTANDING WORK rather than a broken manifest. `x23` asserts exactly
-#: this set on the realized manifest, so a real defect can never hide among them.
-OUTSTANDING_REPLAY_DEFECTS = (SOURCE_REPLAY_NOT_IMPLEMENTED, MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED)
+#: Nothing is outstanding now. `x23` asserts this set is EMPTY on the realized manifest, so the
+#: constant keeps its meaning ("declared-outstanding work") instead of being deleted and silently
+#: reappearing as an untested tuple later.
+OUTSTANDING_REPLAY_DEFECTS = ()
+
+# F3/F4 replay disagreements. Each names WHICH deterministic reconstruction the manifest failed,
+# so a green G6 cannot be produced by a coherent-but-wrong manifest.
+SOURCE_SELECTION_MISMATCH = "SOURCE_SELECTION_MISMATCH"
+SOURCE_SELECTION_ORDER_MISMATCH = "SOURCE_SELECTION_ORDER_MISMATCH"
+SOURCE_IDENTITY_MISMATCH = "SOURCE_IDENTITY_MISMATCH"
+PHYSICAL_SOURCE_MISMATCH = "PHYSICAL_SOURCE_MISMATCH"
+SOURCE_POPULATION_MISMATCH = "SOURCE_POPULATION_MISMATCH"
+MUTATION_INPUT_MISMATCH = "MUTATION_INPUT_MISMATCH"
+MUTATION_VARIANT_MISMATCH = "MUTATION_VARIANT_MISMATCH"
+MUTATION_TARGET_MISMATCH = "MUTATION_TARGET_MISMATCH"
+MUTATION_RECIPE_MISMATCH = "MUTATION_RECIPE_MISMATCH"
+REGION_REALIZATION_MISMATCH = "REGION_REALIZATION_MISMATCH"
 
 
 # --------------------------------------------------------------------- pure helpers
@@ -155,6 +164,7 @@ def deterministic_pdf_id(name: str) -> str:
     """
     digest = hashlib.sha256(name.encode()).hexdigest()[:32].upper()
     return f"[<{digest}><{digest}>]"
+
 
 def normalize_text(s: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", s)).strip()
@@ -681,6 +691,211 @@ def generate_nc_pdf(index: int, out_path: Path) -> dict:
 # ------------------------------------------------------------------- the manifest
 
 
+_REPLAY_CACHE: dict = {}
+
+
+def replay_source_selection(page_limit: int = SOURCE_PAGE_LIMIT) -> dict:
+    """A40 F3 -- rebuild the ENTIRE selected source population from committed primary inputs.
+
+    THE MANIFEST IS THE OBJECT UNDER TEST, NEVER AN INPUT. Nothing here reads
+    `control_fixtures.json`, a generated N-A PDF, the oracle key, or any H/X output: the only
+    authorities are the committed XML, the committed DEVELOPMENT PDF and the frozen methodology
+    constants. That is what makes a coherent-but-wrong manifest detectable -- a validator that
+    re-derived its expectations FROM the rows it is checking can only find self-inconsistency.
+
+    Counts are deliberately NOT hardcoded. The replay recomputes the population and the draws, so
+    a future change in the source corpus shows up as a manifest disagreement rather than as a
+    constant nobody updated.
+    """
+    key = ("replay", page_limit)
+    if key not in _REPLAY_CACHE:
+        population = source_population(page_limit)
+        rows = population["rows"]
+        eligible = na_eligible(rows)
+        _REPLAY_CACHE[key] = {
+            "population": rows,
+            "diagnostics": population["diagnostics"],
+            "na_eligible": eligible,
+            "nb_eligible": rows,
+            "na_selected": select_na_sources(eligible),
+            "nb_selected": select_nb_sources(rows),
+        }
+    return _REPLAY_CACHE[key]
+
+
+def replay_na_expectations(page_limit: int = SOURCE_PAGE_LIMIT) -> list[dict]:
+    """A40 F4 -- derive every N-A expectation from the REPLAYED source, not from the manifest.
+
+    The chain is deliberately end-to-end:
+
+        F3-replayed selected source -> independently observed rendered heading
+        -> frozen index-derived variant -> frozen deterministic target -> after + recipe
+
+    `expected_before` comes from the replayed physical observation and `variant` from the frozen
+    `index mod 3` schedule -- NOT from the manifest's own fields. Taking either from the manifest
+    is what would let a tampered record rewrite `expected_before`, `expected_after` and
+    `mutation_recipe` *together* and still validate: internally consistent, deterministically
+    wrong, and invisible.
+    """
+    out = []
+    for index, row in enumerate(replay_source_selection(page_limit)["na_selected"]):
+        variant = NA_SCHEDULE[index % 3]
+        before = row["expected_text"]
+        after, recipe = MUTATORS[variant](before)
+        out.append(
+            {
+                "schedule_index": index,
+                "source_canonical_identity": MC.canonical(source_identity(row)),
+                "element_id": row["element_id"],
+                "physical_line_index": row["line_index"],
+                "variant": variant,
+                "expected_before": before,
+                "expected_after": after,
+                "mutation_recipe": recipe,
+                "region_bbox_pdf_points": row["region_bbox_pdf_points"],
+            }
+        )
+    return out
+
+
+def _replay_defects(manifest: dict, defect) -> None:
+    """F3 + F4, reported through `defect`. Field-by-field so each failure names its own invariant."""
+    replay = replay_source_selection()
+    expectations = replay_na_expectations()
+
+    for kind, replayed in (("N-A", replay["na_selected"]), ("N-B", replay["nb_selected"])):
+        rows = sorted(
+            (f for f in manifest.get("fixtures", []) if f.get("control_kind") == kind),
+            key=lambda f: f.get("schedule_index", -1),
+        )
+        want = [MC.canonical(source_identity(r)) for r in replayed]
+        got = [f.get("source_canonical_identity") for f in rows]
+        if len(got) == len(want) and got != want and sorted(got) == sorted(want):
+            # exactly the right members in the wrong deterministic order
+            defect(SOURCE_SELECTION_ORDER_MISMATCH, control=kind, expected=want[:3], found=got[:3])
+        for i, (f, r) in enumerate(zip(rows, replayed)):
+            if f.get("element_id") != r["element_id"]:
+                defect(
+                    SOURCE_IDENTITY_MISMATCH, control=kind, index=i, expected=r["element_id"], found=f.get("element_id")
+                )
+            if f.get("physical_line_index") != r["line_index"]:
+                defect(
+                    PHYSICAL_SOURCE_MISMATCH,
+                    control=kind,
+                    index=i,
+                    expected=r["line_index"],
+                    found=f.get("physical_line_index"),
+                )
+            if f.get("source_canonical_identity") != MC.canonical(source_identity(r)):
+                defect(
+                    SOURCE_SELECTION_MISMATCH,
+                    control=kind,
+                    index=i,
+                    expected=MC.canonical(source_identity(r)),
+                    found=f.get("source_canonical_identity"),
+                )
+        if len(rows) != len(replayed):
+            defect(SOURCE_POPULATION_MISMATCH, control=kind, expected=len(replayed), found=len(rows))
+
+    by_index = {f.get("schedule_index"): f for f in manifest.get("fixtures", []) if f.get("control_kind") == "N-A"}
+    for exp in expectations:
+        f = by_index.get(exp["schedule_index"])
+        if f is None:
+            defect(SOURCE_POPULATION_MISMATCH, control="N-A", index=exp["schedule_index"], found=None)
+            continue
+        if f.get("variant") != exp["variant"]:
+            defect(
+                MUTATION_VARIANT_MISMATCH, index=exp["schedule_index"], expected=exp["variant"], found=f.get("variant")
+            )
+        if f.get("expected_before") != exp["expected_before"]:
+            defect(
+                MUTATION_INPUT_MISMATCH,
+                index=exp["schedule_index"],
+                expected=exp["expected_before"],
+                found=f.get("expected_before"),
+            )
+        if f.get("expected_after") != exp["expected_after"]:
+            defect(
+                MUTATION_TARGET_MISMATCH,
+                index=exp["schedule_index"],
+                expected=exp["expected_after"],
+                found=f.get("expected_after"),
+            )
+        if f.get("mutation_recipe") != exp["mutation_recipe"]:
+            defect(
+                MUTATION_RECIPE_MISMATCH,
+                index=exp["schedule_index"],
+                expected=exp["mutation_recipe"],
+                found=f.get("mutation_recipe"),
+            )
+        evidence = mutation_evidence(exp["expected_before"], exp["expected_after"], exp["variant"])
+        if not evidence["live"]:
+            defect("REPLAYED_MUTATION_NOT_LIVE", index=exp["schedule_index"], evidence=evidence)
+
+
+ORACLE_INTEGRATION_EVIDENCE = EV / "results" / "x26_control_oracle.json"
+ORACLE_INTEGRATION_NOT_VERIFIED = "ORACLE_INTEGRATION_NOT_VERIFIED"
+
+
+def _oracle_integration_defects(defect) -> None:
+    """A40 section 13 -- G6 may not go green on the manifest half of its contract alone.
+
+    A manifest that DESCRIBES 20 controls is not evidence that 20 controls can be adjudicated:
+    routes, blinding, leakage and the private truth binding are properties of the oracle path, not
+    of the JSON. G6 therefore requires `x26`'s committed evidence to exist and to report zero
+    failures, the same shape G2 uses for the X2 evidence. Without this, G6 would be green while
+    half of section 13 was unverified -- the exact false green A40.12 was opened to remove.
+    """
+    if not ORACLE_INTEGRATION_EVIDENCE.exists():
+        defect(ORACLE_INTEGRATION_NOT_VERIFIED, why="x26 evidence absent", path=str(ORACLE_INTEGRATION_EVIDENCE.name))
+        return
+    try:
+        evidence = json.loads(ORACLE_INTEGRATION_EVIDENCE.read_text())
+    except json.JSONDecodeError as exc:
+        defect(ORACLE_INTEGRATION_NOT_VERIFIED, why="x26 evidence unreadable", detail=str(exc))
+        return
+    failures = evidence.get("failures") or []
+    counts = evidence.get("counts") or {}
+    if failures:
+        defect(ORACLE_INTEGRATION_NOT_VERIFIED, why="x26 reported failures", failures=failures[:4])
+    if evidence.get("n_controls") != NA_TOTAL + NB_TOTAL + NC_TOTAL:
+        defect(
+            ORACLE_INTEGRATION_NOT_VERIFIED, why="x26 did not execute all 20 controls", found=evidence.get("n_controls")
+        )
+    if counts != {"N-A": NA_TOTAL, "N-B": NB_TOTAL, "N-C": NC_TOTAL}:
+        defect(ORACLE_INTEGRATION_NOT_VERIFIED, why="x26 control mix disagrees with the frozen 8/8/4", found=counts)
+
+
+def region_realization(manifest: dict, defect) -> None:
+    """A40 section 6 -- the PHYSICAL realization, checked separately from the logical replay.
+
+    Occurrence-scoped, per A40.13: a duplicate of the original elsewhere on the page is a
+    different occurrence the adjudicator never sees, so it is not a defect.
+    """
+    for f in manifest.get("fixtures", []):
+        if f.get("control_kind") != "N-A" or not f.get("generated_path"):
+            continue
+        path = EV / f["generated_path"]
+        if not path.exists():
+            continue
+        lines = [ln for ln in XS.physical_lines(path) if ln["page_number"] == f["page_number"]]
+        rb, height = f["region_bbox_pdf_points"], f["page_height"]
+
+        def inside(ln, rb=rb, height=height):
+            y0, y1 = height - ln["bbox_topleft"][3], height - ln["bbox_topleft"][1]
+            return y0 >= rb[1] - 0.5 and y1 <= rb[3] + 0.5
+
+        after_in = sum(1 for ln in lines if XS.stripped_line(ln) == f["expected_after"].upper() and inside(ln))
+        before_in = sum(1 for ln in lines if XS.stripped_line(ln) == f["expected_before"].upper() and inside(ln))
+        if after_in != 1 or before_in != 0:
+            defect(
+                REGION_REALIZATION_MISMATCH,
+                index=f.get("schedule_index"),
+                after_in_region=after_in,
+                before_in_region=before_in,
+            )
+
+
 def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | None = None) -> dict:
     """Build all 20 control fixtures and the manifest. DEVELOPMENT + SYNTHETIC only."""
     generated_dir = Path(generated_dir) if generated_dir else GENERATED_DIR
@@ -861,16 +1076,18 @@ def validate_manifest(manifest: dict, holdout_guard=None, holdout_shas=None) -> 
     def defect(reason, **detail):
         defects.append({"reason": reason, **detail})
 
-    # A40.12 -- G6 is RED while its section-12 meaning is incomplete. Reported FIRST so the
-    # reason is the first thing a reader sees, and never suppressed by a passing manifest.
-    if not SOURCE_SELECTION_REPLAY_IMPLEMENTED:
-        defect(SOURCE_REPLAY_NOT_IMPLEMENTED, contract="A40 F3", detail="G6 does not replay source selection")
-    if not MUTATION_TARGET_REPLAY_IMPLEMENTED:
-        defect(
-            MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED,
-            contract="A40 F4",
-            detail="G6 does not recompute MUTATORS[variant](expected_before)",
-        )
+    # A40.15 -- F3 and F4. The manifest's own rows are NOT consulted to build the expectation;
+    # everything is re-derived from the committed XML/PDF and the frozen constants. A disabled
+    # replay makes G6 RED for that reason rather than silently skipping the strongest check.
+    if SOURCE_SELECTION_REPLAY_IMPLEMENTED and MUTATION_TARGET_REPLAY_IMPLEMENTED:
+        _replay_defects(manifest, defect)
+        region_realization(manifest, defect)
+        _oracle_integration_defects(defect)
+    else:
+        if not SOURCE_SELECTION_REPLAY_IMPLEMENTED:
+            defect(SOURCE_REPLAY_NOT_IMPLEMENTED, contract="A40 F3")
+        if not MUTATION_TARGET_REPLAY_IMPLEMENTED:
+            defect(MUTATION_TARGET_REPLAY_NOT_IMPLEMENTED, contract="A40 F4")
 
     fixtures = manifest.get("fixtures", [])
     by_kind = {k: [f for f in fixtures if f.get("control_kind") == k] for k in ("N-A", "N-B", "N-C")}

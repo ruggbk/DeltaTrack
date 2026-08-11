@@ -271,6 +271,66 @@ def part_negatives(state) -> dict:
     return evidence
 
 
+def part_anchor_uniqueness(state) -> dict:
+    """A40.9 -- the PDF-side uniqueness branches, which never fire on real material.
+
+    Every one of these counts ZERO on the committed corpus, and a zero that has never been
+    produced any other way is indistinguishable from a branch that cannot fire. Each negative
+    injects the exact duplication its branch exists to refuse and requires the anchor to be
+    dropped -- so the zeros above are measured absence rather than an untested code path.
+    """
+    print("\n== A40.9 -- the class-A/class-C uniqueness branches can actually refuse ==")
+    name = "118-hr-8752/1"
+    _lines, anchors, _records, _result = state[name]
+    pdf, xml = DOCS[1][1], DOCS[1][2]
+    base_lines = XS.physical_lines(pdf)
+    base_keys = {tuple(a["key"]) for a in anchors["anchors"]}
+    money = next(a for a in anchors["anchors"] if a["anchor_class"] == "C")
+    header = next(a for a in anchors["anchors"] if a["anchor_class"] == "A")
+    last = base_lines[-1]
+
+    def synthetic(text, y):
+        return {
+            "page_number": last["page_number"],
+            "bbox_topleft": [0.0, y, 10.0, y + 10.0],
+            "printed_text": text,
+            "page_height": last["page_height"],
+            "line_index": len(base_lines),
+            "span_origin": [0.0, y + 8.0],
+            "span_size": 10.0,
+            "span_font": "synthetic",
+            "n_spans": 1,
+        }
+
+    cases = {
+        "duplicate class-C money literal elsewhere in the PDF": (
+            synthetic(f"AND ALSO {money['text']} MORE", 0.0),
+            ("C", money["text"]),
+        ),
+        "two class-C occurrences on ONE printed line": (
+            synthetic(f"{money['text']} AND {money['text']}", 20.0),
+            ("C", money["text"]),
+        ),
+        "duplicate class-A printed header": (
+            synthetic(header["text"].upper(), 40.0),
+            ("A", header["xml_offset"]),
+        ),
+    }
+    observed = {}
+    for label, (line, key) in cases.items():
+        injected = XS.independent_anchors(xml, pdf, lines=base_lines + [line])
+        surviving = {tuple(a["key"]) for a in injected["anchors"]}
+        observed[label] = key in base_keys and key not in surviving
+    check(
+        "NEGATIVES -- each injected duplication REMOVES the anchor it makes ambiguous",
+        {k: True for k in cases},
+        observed,
+        "an anchor survives a duplication that destroys its unique identity, so the zero "
+        "duplicate counts on the real corpus prove nothing about the filter",
+    )
+    return {"cases": observed, "base_anchor_count": anchors["n"]}
+
+
 # ------------------------------------------------------------------ 2: three objects, never collapsed
 
 
@@ -420,6 +480,7 @@ def main() -> int:
     anchors = part_anchors(state)
     brackets = part_brackets(state)
     negatives = part_negatives(state)
+    uniqueness = part_anchor_uniqueness(state)
     provenance = part_provenance(state)
     findings = part_findings(state)
 
@@ -429,6 +490,7 @@ def main() -> int:
         "anchors": anchors,
         "brackets": brackets,
         "negatives": negatives,
+        "anchor_uniqueness_negatives": uniqueness,
         "provenance": provenance,
         "findings_for_ruling": findings,
         "stop_conditions": STOPS,

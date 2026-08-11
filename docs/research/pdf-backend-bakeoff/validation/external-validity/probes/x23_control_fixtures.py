@@ -28,6 +28,7 @@ sys.path.insert(0, str(BAKE / "probes"))
 sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 import control_fixtures as CF  # noqa: E402
+import methodology_contracts as MC  # noqa: E402
 
 OUT = EV / "results" / "x23_control_fixtures.json"
 ROWS: list[dict] = []
@@ -144,6 +145,271 @@ def part_mutations() -> dict:
         "a split leaves a 1-2 character fragment, which is a different failure mode",
     )
     return {"before": before, "delete": d_after, "weld": w_after, "split": s_after}
+
+
+def _alt_delete(text):
+    """A DIFFERENT valid deletion: the first token the FROZEN rule would NOT have chosen.
+
+    Picking "the last token" is not enough -- in `RESEARCH AND DEVELOPMENT` the longest token IS
+    the last one, so the "alternative" reproduced the canonical target exactly and the negative
+    silently tested nothing. Selecting relative to the frozen target keeps it a real alternative
+    whatever the heading looks like.
+    """
+    spans = CF._token_spans(text)
+    canonical = max(spans, key=lambda sp: (len(sp[2]), -sp[0]))
+    other = next((sp for sp in reversed(spans) if sp != canonical), None)
+    if other is None:
+        return None, None
+    start, end, token = other
+    after = CF.normalize_text(text[:start] + " " + text[end:])
+    return after, {"variant": CF.DELETE_ONE_WORD, "target_token": token, "target_span": [start, end]}
+
+
+def _alt_weld(text):
+    """A DIFFERENT valid weld: the LAST adjacent whitespace-separated pair rather than the first."""
+    spans = CF._token_spans(text)
+    for (s0, e0, t0), (s1, _e1, t1) in reversed(list(zip(spans, spans[1:]))):
+        gap = text[e0:s1]
+        if gap and gap.isspace():
+            return text[:e0] + text[s1:], {
+                "variant": CF.WELD_TWO_WORDS,
+                "target_pair": [t0, t1],
+                "removed_gap_span": [e0, s1],
+            }
+    return None, None
+
+
+def _alt_split(text):
+    """A DIFFERENT valid split: another eligible token, or another legal cut in the same one."""
+    spans = [sp for sp in CF._token_spans(text) if len(sp[2]) >= CF.MIN_SPLIT_TOKEN]
+    chosen, cut = None, None
+    if len(spans) > 1:
+        chosen = spans[-1]
+        cut = len(chosen[2]) // 2
+    else:
+        chosen = spans[0]
+        for candidate in range(len(chosen[2]) // 2 + 1, len(chosen[2]) - CF.MIN_SPLIT_PIECE + 1):
+            if candidate >= CF.MIN_SPLIT_PIECE:
+                cut = candidate
+                break
+    if chosen is None or cut is None:
+        return None, None
+    start, _end, token = chosen
+    after = text[: start + cut] + " " + text[start + cut :]
+    return after, {
+        "variant": CF.SPLIT_ONE_WORD,
+        "target_token": token,
+        "split_after_chars": cut,
+        "pieces": [token[:cut], token[cut:]],
+    }
+
+
+def part_pdf_id(manifest: dict) -> dict:
+    """A40.14 section 1 -- the trailer /ID is deterministic, unique, and NON-SEMANTIC.
+
+    Deterministic and unique matter for byte stability. Non-semantic matters more: a value that
+    nothing consumes cannot silently become an identity. The check is a real counterfactual --
+    the same PDF bytes under a different NAME get a different /ID by construction, and the
+    independently replayed source selection must not move.
+    """
+    print("\n== A40.14: the deterministic trailer /ID is non-semantic ==")
+    import pymupdf
+
+    ids = {}
+    for f in manifest["fixtures"]:
+        if not f.get("generated_path"):
+            continue
+        doc = pymupdf.open(str(EV / f["generated_path"]))
+        try:
+            ids[Path(f["generated_path"]).name] = doc.xref_get_key(-1, "ID")[1]
+        finally:
+            doc.close()
+    check(
+        "every generated fixture carries the id its own basename determines",
+        {n: CF.deterministic_pdf_id(n) for n in ids},
+        ids,
+        "a generated fixture's trailer id is not the deterministic one, so its bytes are not "
+        "reproducible from the committed inputs",
+    )
+    check(
+        "all generated trailer ids are DISTINCT",
+        len(ids),
+        len(set(ids.values())),
+        "two fixtures share a PDF identity",
+    )
+
+    # THE COUNTERFACTUAL: identical bytes, different name -> different /ID. Source selection and
+    # the control identities must not notice, because neither consumes the trailer.
+    before = [MC.canonical(CF.source_identity(r)) for r in CF.replay_source_selection()["na_selected"]]
+    identities_before = sorted(f["canonical_identity"] for f in manifest["fixtures"])
+    scratch = EV / "control_fixtures" / "_idprobe_renamed.pdf"
+    victim = next(f for f in manifest["fixtures"] if f.get("generated_path"))
+    try:
+        shutil.copyfile(EV / victim["generated_path"], scratch)
+        renamed_id = CF.deterministic_pdf_id(scratch.name)
+        CF._REPLAY_CACHE.clear()
+        after = [MC.canonical(CF.source_identity(r)) for r in CF.replay_source_selection()["na_selected"]]
+    finally:
+        scratch.unlink(missing_ok=True)
+        CF._REPLAY_CACHE.clear()
+    check(
+        "a renamed copy would carry a DIFFERENT id (so the counterfactual is real)",
+        True,
+        renamed_id != CF.deterministic_pdf_id(Path(victim["generated_path"]).name),
+        "the rename does not change the id, so this proves nothing about /ID being ignored",
+    )
+    check(
+        "...and neither source selection nor control identity moves",
+        (before, identities_before),
+        (after, sorted(f["canonical_identity"] for f in manifest["fixtures"])),
+        "a PDF trailer id reached source selection or control identity, which would make "
+        "provenance depend on a filename rather than on committed source/SHA identity",
+    )
+    return {"ids": ids, "selection_stable_under_rename": before == after}
+
+
+def part_replay(manifest: dict) -> dict:
+    """A40 F3/F4 -- the manifest cannot be coherent-but-wrong and still pass."""
+    print("\n== A40 F3/F4: independent replay, and what defeats it ==")
+    replay = CF.replay_source_selection()
+    expectations = CF.replay_na_expectations()
+
+    check(
+        "F3 -- the committed manifest AGREES with a full independent source replay",
+        [],
+        [d["reason"] for d in CF.validate_manifest(manifest)],
+        "the committed selection cannot be reproduced from the committed XML/PDF and the frozen "
+        "constants, so either the manifest or the deterministic chain is wrong",
+    )
+    check(
+        "F4 -- every N-A variant is derived from the frozen schedule, not read from the manifest",
+        [CF.NA_SCHEDULE[i % 3] for i in range(CF.NA_TOTAL)],
+        [e["variant"] for e in expectations],
+        "the replay takes the variant from the record it is checking, so a re-scheduled manifest "
+        "would validate against itself",
+    )
+
+    def injected_reasons(mutate) -> list[str]:
+        broken = copy.deepcopy(manifest)
+        mutate(broken)
+        return reasons(CF.validate_manifest(broken))
+
+    selected_na = {MC.canonical(CF.source_identity(r)) for r in replay["na_selected"]}
+    selected_nb = {MC.canonical(CF.source_identity(r)) for r in replay["nb_selected"]}
+    spare_na = next(r for r in replay["na_eligible"] if MC.canonical(CF.source_identity(r)) not in selected_na)
+    spare_nb = next(r for r in replay["nb_eligible"] if MC.canonical(CF.source_identity(r)) not in selected_nb)
+
+    def swap_source(f, row):
+        f["source_canonical_identity"] = MC.canonical(CF.source_identity(row))
+        f["element_id"] = row["element_id"]
+        f["physical_line_index"] = row["line_index"]
+
+    def sub_na(m):
+        swap_source(next(f for f in m["fixtures"] if f["control_kind"] == "N-A" and f["schedule_index"] == 0), spare_na)
+
+    def sub_nb(m):
+        swap_source(next(f for f in m["fixtures"] if f["control_kind"] == "N-B" and f["schedule_index"] == 0), spare_nb)
+
+    def wrong_xml_identity(m):
+        f = next(f for f in m["fixtures"] if f["control_kind"] == "N-A" and f["schedule_index"] == 0)
+        f["element_id"] = "H" + "0" * 31
+
+    def wrong_physical(m):
+        f = next(f for f in m["fixtures"] if f["control_kind"] == "N-A" and f["schedule_index"] == 0)
+        f["physical_line_index"] = int(f["physical_line_index"]) + 1
+
+    def reordered(m):
+        rows = sorted([f for f in m["fixtures"] if f["control_kind"] == "N-A"], key=lambda f: f["schedule_index"])
+        a, b = rows[0], rows[1]
+        for k in ("source_canonical_identity", "element_id", "physical_line_index"):
+            a[k], b[k] = b[k], a[k]
+
+    f3 = {
+        "A selected N-A replaced by another ELIGIBLE N-A": (sub_na, CF.SOURCE_SELECTION_MISMATCH),
+        "B selected N-B replaced by another ELIGIBLE N-B": (sub_nb, CF.SOURCE_SELECTION_MISMATCH),
+        "C same text, wrong XML structural identity": (wrong_xml_identity, CF.SOURCE_IDENTITY_MISMATCH),
+        "D same text, wrong physical occurrence": (wrong_physical, CF.PHYSICAL_SOURCE_MISMATCH),
+        "E 8/8 counts kept, one source substituted": (sub_na, CF.SOURCE_SELECTION_MISMATCH),
+        "F right members, deterministic order broken": (reordered, CF.SOURCE_SELECTION_ORDER_MISMATCH),
+    }
+    got = {k: (v[1] in injected_reasons(v[0])) for k, v in f3.items()}
+    check(
+        "F3 NEGATIVES -- every deterministically wrong manifest FAILS with its own reason",
+        {k: True for k in f3},
+        got,
+        "a coherent but deterministically wrong manifest validates, which is exactly the "
+        "false green F3 exists to remove",
+    )
+
+    # ---- F4 alternative-live negatives. Each alternative must itself be a LIVE mutation, or the
+    # negative proves nothing: rejecting a DEAD mutation is already covered elsewhere.
+    alt = {CF.DELETE_ONE_WORD: _alt_delete, CF.WELD_TWO_WORDS: _alt_weld, CF.SPLIT_ONE_WORD: _alt_split}
+    liveness, rejected = {}, {}
+    for variant, builder in alt.items():
+        src = next(e for e in expectations if e["variant"] == variant)
+        after, recipe = builder(src["expected_before"])
+        evidence = CF.mutation_evidence(src["expected_before"], after, variant)
+        liveness[variant] = bool(after) and evidence["live"] and after != src["expected_after"]
+
+        def mutate(m, idx=src["schedule_index"], after=after, recipe=recipe):
+            f = next(f for f in m["fixtures"] if f["control_kind"] == "N-A" and f["schedule_index"] == idx)
+            f["expected_after"] = after
+            f["mutation_recipe"] = recipe
+            f["mutation_evidence"] = CF.mutation_evidence(f["expected_before"], after, f["variant"])
+
+        rejected[variant] = CF.MUTATION_TARGET_MISMATCH in injected_reasons(mutate)
+    check(
+        "each ALTERNATIVE mutation is itself LIVE (else the negative proves nothing)",
+        {v: True for v in alt},
+        liveness,
+        "the alternative is dead, so its rejection shows only that dead mutations fail -- which is a different control",
+    )
+    check(
+        "F4 NEGATIVES -- a live but non-deterministic target is REJECTED",
+        {v: True for v in alt},
+        rejected,
+        "a different-but-live mutation passes, so the deterministic target rule is not enforced",
+    )
+
+    def recipe_only(m):
+        f = next(f for f in m["fixtures"] if f["control_kind"] == "N-A" and f["schedule_index"] == 0)
+        f["mutation_recipe"] = {**f["mutation_recipe"], "target_token": "TAMPERED"}
+
+    def rewritten_before(m):
+        """The decisive one: before/after/recipe all rewritten CONSISTENTLY with each other."""
+        f = next(f for f in m["fixtures"] if f["control_kind"] == "N-A" and f["schedule_index"] == 0)
+        forged = "TOTALLY DIFFERENT HEADING TEXT"
+        after, recipe = CF.MUTATORS[f["variant"]](forged)
+        f["expected_before"] = forged
+        f["expected_after"] = after
+        f["mutation_recipe"] = recipe
+        f["mutation_evidence"] = CF.mutation_evidence(forged, after, f["variant"])
+
+    check(
+        "F4 NEGATIVE -- recipe metadata altered while expected_after stays correct is REJECTED",
+        True,
+        CF.MUTATION_RECIPE_MISMATCH in injected_reasons(recipe_only),
+        "the recipe is not compared, so the committed target rule is unverifiable",
+    )
+    check(
+        "F4 NEGATIVE -- a SELF-CONSISTENT rewrite of before/after/recipe is REJECTED",
+        True,
+        CF.MUTATION_INPUT_MISMATCH in injected_reasons(rewritten_before),
+        "the replay takes expected_before from the manifest, so a record that rewrites its own "
+        "input and recomputes everything from it validates against itself -- F4 would be "
+        "self-validating rather than independent",
+    )
+    return {
+        "population": len(replay["population"]),
+        "na_eligible": len(replay["na_eligible"]),
+        "nb_eligible": len(replay["nb_eligible"]),
+        "expectations": [
+            {k: e[k] for k in ("schedule_index", "variant", "expected_before", "expected_after")} for e in expectations
+        ],
+        "f3_negatives": got,
+        "f4_alternative_live": liveness,
+        "f4_rejected": rejected,
+    }
 
 
 def part_manifest(manifest: dict) -> dict:
@@ -435,11 +701,15 @@ def part_g6(manifest: dict) -> dict:
         "among the outstanding-replay markers",
     )
     check(
-        "G6 is NOT green while its section-12 meaning is incomplete",
-        False,
-        CF.validate_manifest(manifest) == [],
-        "G6 reports PASS without the independent source-selection and mutation-target replays, "
-        "which is the semantic false green A40.12 exists to remove",
+        "G6 is green ONLY because both replays are actually implemented and pass",
+        (True, True, True),
+        (
+            CF.SOURCE_SELECTION_REPLAY_IMPLEMENTED,
+            CF.MUTATION_TARGET_REPLAY_IMPLEMENTED,
+            CF.validate_manifest(manifest) == [],
+        ),
+        "either a replay is switched off while G6 still reports PASS -- the semantic false green "
+        "A40.12 removed -- or the manifest no longer satisfies a replay that is switched on",
     )
 
     def injected(mutate) -> list[str]:
@@ -574,6 +844,8 @@ def main() -> int:
     manifest = CF.build_manifest()
     CF.write_manifest(manifest)
     realized = part_manifest(manifest)
+    pdf_id = part_pdf_id(manifest)
+    replay = part_replay(manifest)
     nc_rendered = part_nc_rendered(manifest)
     reproducible = part_reproducible(manifest)
     holdout = part_holdout_identity(manifest)
@@ -585,6 +857,8 @@ def main() -> int:
         "manifest": str(CF.MANIFEST_PATH.relative_to(EV)),
         "mutation_classes": mutations,
         "realized": realized,
+        "pdf_id": pdf_id,
+        "f3_f4_replay": replay,
         "nc_rendered_distinctness": nc_rendered,
         "reproducibility": reproducible,
         "holdout_identity_guard": holdout,

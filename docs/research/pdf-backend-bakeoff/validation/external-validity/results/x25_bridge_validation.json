@@ -1524,6 +1524,14 @@
    "CROSSES_INDEPENDENT_ANCHOR": 4
   }
  },
+ "anchor_uniqueness_negatives": {
+  "cases": {
+   "duplicate class-C money literal elsewhere in the PDF": true,
+   "two class-C occurrences on ONE printed line": true,
+   "duplicate class-A printed header": true
+  },
+  "base_anchor_count": 111
+ },
  "provenance": {
   "provenance": {
    "text_content": "SOURCE-DETERMINED",
@@ -1706,6 +1714,21 @@
    "observed": true,
    "pass": true,
    "fails_when": "corrupted anchors change only a summary field and never refuse a group, so the bracketing rule is not actually consuming the anchors it claims to"
+  },
+  {
+   "test": "NEGATIVES -- each injected duplication REMOVES the anchor it makes ambiguous",
+   "expected": {
+    "duplicate class-C money literal elsewhere in the PDF": true,
+    "two class-C occurrences on ONE printed line": true,
+    "duplicate class-A printed header": true
+   },
+   "observed": {
+    "duplicate class-C money literal elsewhere in the PDF": true,
+    "two class-C occurrences on ONE printed line": true,
+    "duplicate class-A printed header": true
+   },
+   "pass": true,
+   "fails_when": "an anchor survives a duplication that destroys its unique identity, so the zero duplicate counts on the real corpus prove nothing about the filter"
   },
   {
    "test": "the per-dimension provenance rule is committed, not implicit",
