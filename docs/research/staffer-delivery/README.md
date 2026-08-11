@@ -5,6 +5,9 @@
 - Date: 2026-08-05
 - Prototypes and reproduction commands: [`probes/`](probes/) and
   [Findings from prototypes](#findings-from-prototypes)
+- Landed on `develop` 2026-08-11, salvaged from the unmerged #549. Read
+  [What has moved since 2026-08-05](#what-has-moved-since-2026-08-05) first: the study
+  below is unedited, and some of what it says about the repository has since changed.
 
 > **Environment caveat, and it is load-bearing for every measured number below.**
 > Every measurement in this document was taken on **macOS 15 / arm64**, with Chrome
@@ -15,6 +18,46 @@
 > rights, Edge behaviour) do **not**, and are labelled as inference wherever they
 > appear. Re-running [`probes/`](probes/) on a managed Windows machine is the single
 > highest-value follow-up in this document.
+
+---
+
+## What has moved since 2026-08-05
+
+Added when the study was restored, and the only part of this file not written on
+2026-08-05. Everything below is unedited: same numbers, same open questions, same
+recommendations. This section re-measures nothing. It says only which of the study's
+**repository-state** claims to re-check, and where the work it hands off to now lives.
+
+| The study says | State on 2026-08-11 |
+|---|---|
+| "roughly 9,300 lines of Python across 20 modules", and an import matrix over 17 targets | 21 modules, about 9,900 lines. `src/deltatrack/matching.py` landed 2026-08-07 (`b3e068a`, the ADR 0020 stage contracts, wired to nothing) and is 626 lines. The study's count was right when taken; the matrix was not re-run and would now have 18 targets. |
+| The whole technical blocker is the module-level `import pypdfium2` in `parsers/pdf_text.py` | **Still true.** The import is still at module scope. Recommendation 5 and next-experiment 2 are open, not superseded. |
+| `tomlkit` is declared in `[project.dependencies]` but imported only by `scripts/update_manifest_with_reports.py` | **Still true.** |
+| The probes are excluded from lint by the `docs/research/**/probes` rule | Still true. `docs/research/**/*.md` was added beside it since, so this write-up is no longer reformatted either. |
+
+**The PDF-specific open questions were taken up, and are not settled.** Next experiments
+3 (PDF.js geometry parity) and 4 (WASM PDFium feasibility), and the PDFium-to-WASM lead
+this document calls its highest-value speculative one under Option I, all became
+[`../pdf-backend-bakeoff/`](../pdf-backend-bakeoff/), which ran from 2026-08-05 and
+merged 2026-08-07. That directory already names this file as its predecessor. Enter it
+at [`../pdf-backend-bakeoff/validation/README.md`](../pdf-backend-bakeoff/validation/README.md),
+which carries the current state of the argument including where the earlier bake-off
+documents are wrong. **The engine/DeltaTrack seam question is still open and that work is
+still running**, so nothing below has been closed by it, and the bake-off has not closed
+itself either.
+
+**The delivery channel is still undecided.** [#112](https://github.com/AgoraDMV/DeltaTrack/issues/112)
+is open and no delivery-channel ADR exists. This study is evidence for that decision and
+does not make it. The record is: this study, then the PDF seam research, then eventually
+a channel decision.
+
+**Nothing was re-run on restore.** No probe in [`probes/`](probes/) was executed, so every
+number below remains the study's own, taken on macOS 15 / arm64 on 2026-08-05, and the
+environment caveat above stands in full. The probes are committed exactly as #549 carried
+them, which includes three harnesses that hardcode absolute paths from the machine they
+ran on (`native_baseline.py`, `exp1_imports.mjs`, `exp1_xml_e2e.mjs`) and two docstrings
+that still spell the probe directory `spike/`, its name before this study was filed under
+`docs/research/`. Correct those when re-running rather than reading them as live paths.
 
 ---
 
