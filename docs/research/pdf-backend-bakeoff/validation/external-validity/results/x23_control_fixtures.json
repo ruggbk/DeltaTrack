@@ -1,0 +1,618 @@
+{
+ "population": "DEVELOPMENT + SYNTHETIC -- no confirmatory holdout material anywhere",
+ "contract": "A39.3 (control sources) as amended by A40 (live boundary control)",
+ "manifest": "results/control_fixtures.json",
+ "mutation_classes": {
+  "before": "SALARIES AND EXPENSES",
+  "delete": "AND EXPENSES",
+  "weld": "SALARIESAND EXPENSES",
+  "split": "SALA RIES AND EXPENSES"
+ },
+ "realized": {
+  "counts": {
+   "N-A": 8,
+   "N-B": 8,
+   "N-C": 4
+  },
+  "allocation": {
+   "DELETE_ONE_WORD": 3,
+   "WELD_TWO_WORDS": 3,
+   "SPLIT_ONE_WORD": 2
+  },
+  "eligible_population": {
+   "account_headings_xml_corroborated": 58,
+   "na_eligible": 46
+  },
+  "na": [
+   {
+    "index": 0,
+    "variant": "DELETE_ONE_WORD",
+    "source": "118-hr-8752/1",
+    "page": 4,
+    "before": "OPERATIONS AND SUPPORT",
+    "after": "AND SUPPORT",
+    "boundary_transitions": [],
+    "non_space_unchanged": false,
+    "generated_sha256": "bbf16b0f57a10fe2"
+   },
+   {
+    "index": 1,
+    "variant": "WELD_TWO_WORDS",
+    "source": "114-hr-2029/4",
+    "page": 11,
+    "before": "DEPARTMENT OF DEFENSE BASE CLOSURE ACCOUNT",
+    "after": "DEPARTMENTOF DEFENSE BASE CLOSURE ACCOUNT",
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "non_space_unchanged": true,
+    "generated_sha256": "af6cc63e6ad1ea9e"
+   },
+   {
+    "index": 2,
+    "variant": "SPLIT_ONE_WORD",
+    "source": "118-hr-8752/1",
+    "page": 17,
+    "before": "RESEARCH AND DEVELOPMENT",
+    "after": "RESEARCH AND DEVEL OPMENT",
+    "boundary_transitions": [
+     [
+      0,
+      1
+     ]
+    ],
+    "non_space_unchanged": true,
+    "generated_sha256": "df6c7e919e88e0ae"
+   },
+   {
+    "index": 3,
+    "variant": "DELETE_ONE_WORD",
+    "source": "118-hr-8752/1",
+    "page": 14,
+    "before": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
+    "after": "PROCUREMENT, , AND IMPROVEMENTS",
+    "boundary_transitions": [],
+    "non_space_unchanged": false,
+    "generated_sha256": "7b0216337b3aff77"
+   },
+   {
+    "index": 4,
+    "variant": "WELD_TWO_WORDS",
+    "source": "118-hr-8752/1",
+    "page": 20,
+    "before": "RESEARCH AND DEVELOPMENT",
+    "after": "RESEARCHAND DEVELOPMENT",
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "non_space_unchanged": true,
+    "generated_sha256": "ee0dfe3453ff2fb2"
+   },
+   {
+    "index": 5,
+    "variant": "SPLIT_ONE_WORD",
+    "source": "114-hr-2029/4",
+    "page": 2,
+    "before": "MILITARY CONSTRUCTION, ARMY",
+    "after": "MILITARY CONSTR UCTION, ARMY",
+    "boundary_transitions": [
+     [
+      0,
+      1
+     ]
+    ],
+    "non_space_unchanged": true,
+    "generated_sha256": "f985c267ec568362"
+   },
+   {
+    "index": 6,
+    "variant": "DELETE_ONE_WORD",
+    "source": "114-hr-2029/4",
+    "page": 32,
+    "before": "INFORMATION TECHNOLOGY SYSTEMS",
+    "after": "TECHNOLOGY SYSTEMS",
+    "boundary_transitions": [],
+    "non_space_unchanged": false,
+    "generated_sha256": "57967e9044cf4398"
+   },
+   {
+    "index": 7,
+    "variant": "WELD_TWO_WORDS",
+    "source": "114-hr-2029/4",
+    "page": 6,
+    "before": "MILITARY CONSTRUCTION, ARMY NATIONAL GUARD",
+    "after": "MILITARYCONSTRUCTION, ARMY NATIONAL GUARD",
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "non_space_unchanged": true,
+    "generated_sha256": "4d4b73e204b1da8c"
+   }
+  ],
+  "nb": [
+   {
+    "index": 0,
+    "source": "118-hr-8752/1",
+    "page": 16,
+    "expected_text": "RESEARCH AND DEVELOPMENT",
+    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+    "xml_sha256": "e4bc6b90eeff87d0"
+   },
+   {
+    "index": 1,
+    "source": "114-hr-2029/4",
+    "page": 28,
+    "expected_text": "MEDICAL FACILITIES",
+    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+    "xml_sha256": "68e98a6b0b204cfe"
+   },
+   {
+    "index": 2,
+    "source": "118-hr-8752/1",
+    "page": 14,
+    "expected_text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
+    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+    "xml_sha256": "e4bc6b90eeff87d0"
+   },
+   {
+    "index": 3,
+    "source": "118-hr-8752/1",
+    "page": 3,
+    "expected_text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
+    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+    "xml_sha256": "e4bc6b90eeff87d0"
+   },
+   {
+    "index": 4,
+    "source": "114-hr-2029/4",
+    "page": 3,
+    "expected_text": "MILITARY CONSTRUCTION, NAVY AND MARINE CORPS",
+    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+    "xml_sha256": "68e98a6b0b204cfe"
+   },
+   {
+    "index": 5,
+    "source": "118-hr-8752/1",
+    "page": 2,
+    "expected_text": "OPERATIONS AND SUPPORT",
+    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+    "xml_sha256": "e4bc6b90eeff87d0"
+   },
+   {
+    "index": 6,
+    "source": "118-hr-8752/1",
+    "page": 20,
+    "expected_text": "RESEARCH AND DEVELOPMENT",
+    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+    "xml_sha256": "e4bc6b90eeff87d0"
+   },
+   {
+    "index": 7,
+    "source": "114-hr-2029/4",
+    "page": 6,
+    "expected_text": "MILITARY CONSTRUCTION, AIR NATIONAL GUARD",
+    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+    "xml_sha256": "68e98a6b0b204cfe"
+   }
+  ],
+  "nc": [
+   {
+    "index": 0,
+    "generated_sha256": "84a01be4f9c8a8a6",
+    "expected": []
+   },
+   {
+    "index": 1,
+    "generated_sha256": "d9049dd6713f8ea4",
+    "expected": []
+   },
+   {
+    "index": 2,
+    "generated_sha256": "2c910018485b4a77",
+    "expected": []
+   },
+   {
+    "index": 3,
+    "generated_sha256": "07add5ead98b2c9b",
+    "expected": []
+   }
+  ]
+ },
+ "g6": {
+  "negatives": {
+   "N-A count wrong": {
+    "expected": "WRONG_CONTROL_COUNT",
+    "fired": true
+   },
+   "N-B count wrong": {
+    "expected": "WRONG_CONTROL_COUNT",
+    "fired": true
+   },
+   "N-C count wrong": {
+    "expected": "WRONG_CONTROL_COUNT",
+    "fired": true
+   },
+   "N-A allocation wrong": {
+    "expected": "WRONG_NA_ALLOCATION",
+    "fired": true
+   },
+   "RETIRED size variant reintroduced": {
+    "expected": "RETIRED_VARIANT_PRESENT",
+    "fired": true
+   },
+   "N-A mutation before == after": {
+    "expected": "DEAD_OR_MISCLASSIFIED_MUTATION",
+    "fired": true
+   },
+   "WELD changes non-space characters": {
+    "expected": "DEAD_OR_MISCLASSIFIED_MUTATION",
+    "fired": true
+   },
+   "SPLIT changes non-space characters": {
+    "expected": "DEAD_OR_MISCLASSIFIED_MUTATION",
+    "fired": true
+   },
+   "WELD moves more than one boundary": {
+    "expected": "DEAD_OR_MISCLASSIFIED_MUTATION",
+    "fired": true
+   },
+   "SPLIT moves a boundary the wrong way": {
+    "expected": "DEAD_OR_MISCLASSIFIED_MUTATION",
+    "fired": true
+   },
+   "stale source SHA": {
+    "expected": "STALE_SHA256",
+    "fired": true
+   },
+   "stale generated PDF SHA": {
+    "expected": "STALE_SHA256",
+    "fired": true
+   },
+   "duplicate control identity": {
+    "expected": "DUPLICATE_CONTROL_IDENTITY",
+    "fired": true
+   },
+   "missing expected truth": {
+    "expected": "MISSING_EXPECTED_TRUTH",
+    "fired": true
+   },
+   "N-B missing XML corroboration": {
+    "expected": "MISSING_XML_CORROBORATION",
+    "fired": true
+   },
+   "N-C expected headings non-empty": {
+    "expected": "NC_EXPECTED_HEADINGS_NOT_EMPTY",
+    "fired": true
+   },
+   "holdout provenance in the chain": {
+    "expected": "HOLDOUT_PROVENANCE",
+    "fired": true
+   },
+   "mutation recipe disagrees with variant": {
+    "expected": "MUTATION_RECIPE_VARIANT_MISMATCH",
+    "fired": true
+   }
+  }
+ },
+ "tests": [
+  {
+   "test": "DELETE changes the NON-SPACE character sequence",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "fails_when": "deleting a word leaves the non-space sequence intact, i.e. nothing was removed"
+  },
+  {
+   "test": "WELD leaves non-space identical and removes exactly ONE boundary (1 -> 0)",
+   "expected": [
+    true,
+    true,
+    [
+     [
+      1,
+      0
+     ]
+    ]
+   ],
+   "observed": [
+    true,
+    true,
+    [
+     [
+      1,
+      0
+     ]
+    ]
+   ],
+   "pass": true,
+   "fails_when": "weld changed a character, or moved more than one boundary -- it would then be a content corruption rather than the missing-boundary class M3 distinguishes"
+  },
+  {
+   "test": "SPLIT leaves non-space identical and inserts exactly ONE boundary (0 -> 1)",
+   "expected": [
+    true,
+    true,
+    [
+     [
+      0,
+      1
+     ]
+    ]
+   ],
+   "observed": [
+    true,
+    true,
+    [
+     [
+      0,
+      1
+     ]
+    ]
+   ],
+   "pass": true,
+   "fails_when": "split changed a character, or moved more than one boundary"
+  },
+  {
+   "test": "SPLIT is the exact complement of WELD",
+   "expected": [
+    [
+     [
+      0,
+      1
+     ]
+    ],
+    [
+     [
+      1,
+      0
+     ]
+    ]
+   ],
+   "observed": [
+    [
+     [
+      0,
+      1
+     ]
+    ],
+    [
+     [
+      1,
+      0
+     ]
+    ]
+   ],
+   "pass": true,
+   "fails_when": "the two classes are not complementary, so N-A no longer spans both M3 directions"
+  },
+  {
+   "test": "the SPLIT example matches the A40.2 illustration",
+   "expected": "SALA RIES AND EXPENSES",
+   "observed": "SALA RIES AND EXPENSES",
+   "pass": true,
+   "fails_when": "the frozen floor(len/2) target produces a different string than A40.2 specifies"
+  },
+  {
+   "test": "NEGATIVE -- a DEAD mutation (before == after) is not live",
+   "expected": [
+    false,
+    false
+   ],
+   "observed": [
+    false,
+    false
+   ],
+   "pass": true,
+   "fails_when": "an unchanged string is accepted as a mutation, which is exactly the A39.3 failure the size control was retired for"
+  },
+  {
+   "test": "NEGATIVE -- the RETIRED size variant can never be live",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "PULL_HEADING_TO_BODY_SIZE is still treated as a valid mutation class"
+  },
+  {
+   "test": "both SPLIT pieces are at least 3 characters",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "a split leaves a 1-2 character fragment, which is a different failure mode"
+  },
+  {
+   "test": "the manifest holds exactly 8 N-A, 8 N-B, 4 N-C",
+   "expected": {
+    "N-A": 8,
+    "N-B": 8,
+    "N-C": 4
+   },
+   "observed": {
+    "N-A": 8,
+    "N-B": 8,
+    "N-C": 4
+   },
+   "pass": true,
+   "fails_when": "a control class is under- or over-populated, so a Rule 3 blocker is not satisfied"
+  },
+  {
+   "test": "N-A realizes the frozen 3 / 3 / 2 allocation",
+   "expected": {
+    "DELETE_ONE_WORD": 3,
+    "WELD_TWO_WORDS": 3,
+    "SPLIT_ONE_WORD": 2
+   },
+   "observed": {
+    "DELETE_ONE_WORD": 3,
+    "WELD_TWO_WORDS": 3,
+    "SPLIT_ONE_WORD": 2
+   },
+   "pass": true,
+   "fails_when": "the index-mod-3 schedule was not applied, so the three M3 directions are not balanced as A40.1 freezes them"
+  },
+  {
+   "test": "every N-A mutation is LIVE on the realized fixtures",
+   "expected": [
+    8,
+    true
+   ],
+   "observed": [
+    8,
+    true
+   ],
+   "pass": true,
+   "fails_when": "a realized control cannot fire, so it reports coverage the study does not have"
+  },
+  {
+   "test": "the RETIRED variant appears nowhere in the realized set",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "PULL_HEADING_TO_BODY_SIZE survived the A40 retirement"
+  },
+  {
+   "test": "every N-C expects EXACTLY no headings",
+   "expected": [
+    [],
+    [],
+    [],
+    []
+   ],
+   "observed": [
+    [],
+    [],
+    [],
+    []
+   ],
+   "pass": true,
+   "fails_when": "a constructionally heading-free region expects a heading, so the over-triggering control could never fail"
+  },
+  {
+   "test": "every N-A and N-B carries paired GPO XML corroboration",
+   "expected": [
+    16,
+    16
+   ],
+   "observed": [
+    16,
+    16
+   ],
+   "pass": true,
+   "fails_when": "a control's truth rests on something other than the independent source -- in the worst case on H or X's own output"
+  },
+  {
+   "test": "all 20 control identities are unique",
+   "expected": 20,
+   "observed": 20,
+   "pass": true,
+   "fails_when": "two controls share an identity, so one would silently overwrite the other"
+  },
+  {
+   "test": "every generated N-A PDF actually PRINTS the mutated heading",
+   "expected": [
+    8,
+    true
+   ],
+   "observed": [
+    8,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the mutation did not reach the page, so the adjudicator would transcribe something other than the committed truth"
+  },
+  {
+   "test": "...and the ORIGINAL heading is gone from that page",
+   "expected": [
+    8,
+    true
+   ],
+   "observed": [
+    8,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the unmutated heading survives alongside the mutation, so the region shows both and the control cannot distinguish an oracle that saw the alteration"
+  },
+  {
+   "test": "G6 PASSES on the realized manifest",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the validator rejects a correctly built fixture set, so it could never authorize one"
+  },
+  {
+   "test": "EVERY injected defect makes G6 FAIL with its own reason",
+   "expected": {
+    "N-A count wrong": true,
+    "N-B count wrong": true,
+    "N-C count wrong": true,
+    "N-A allocation wrong": true,
+    "RETIRED size variant reintroduced": true,
+    "N-A mutation before == after": true,
+    "WELD changes non-space characters": true,
+    "SPLIT changes non-space characters": true,
+    "WELD moves more than one boundary": true,
+    "SPLIT moves a boundary the wrong way": true,
+    "stale source SHA": true,
+    "stale generated PDF SHA": true,
+    "duplicate control identity": true,
+    "missing expected truth": true,
+    "N-B missing XML corroboration": true,
+    "N-C expected headings non-empty": true,
+    "holdout provenance in the chain": true,
+    "mutation recipe disagrees with variant": true
+   },
+   "observed": {
+    "N-A count wrong": true,
+    "N-B count wrong": true,
+    "N-C count wrong": true,
+    "N-A allocation wrong": true,
+    "RETIRED size variant reintroduced": true,
+    "N-A mutation before == after": true,
+    "WELD changes non-space characters": true,
+    "SPLIT changes non-space characters": true,
+    "WELD moves more than one boundary": true,
+    "SPLIT moves a boundary the wrong way": true,
+    "stale source SHA": true,
+    "stale generated PDF SHA": true,
+    "duplicate control identity": true,
+    "missing expected truth": true,
+    "N-B missing XML corroboration": true,
+    "N-C expected headings non-empty": true,
+    "holdout provenance in the chain": true,
+    "mutation recipe disagrees with variant": true
+   },
+   "pass": true,
+   "fails_when": "an injected defect passes validation -- a green G6 would then certify a fixture set that cannot satisfy its Rule 3 blockers"
+  },
+  {
+   "test": "NEGATIVE -- changing the generated PDF BYTES with a stale manifest hash FAILS",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the validator compares recorded strings rather than recomputing from the file, so a silently edited fixture would keep certifying"
+  },
+  {
+   "test": "...and restoring the bytes makes G6 pass again",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the byte-level control left the fixture set permanently invalid"
+  }
+ ],
+ "failures": []
+}

@@ -24,6 +24,9 @@ EXECUTION READINESS
   G2  their X2-a / X2-b assertion evidence exists, is committed, and PASSES -- recorded
       on DEVELOPMENT documents, never on the holdout
   G3  the adjudicator prompt exists and is committed
+  G6  the committed control-fixture manifest exists and VALIDATES -- N-A/N-B/N-C are Rule 3
+      blockers, so a missing or malformed control set keeps execution forbidden even when
+      every producer file is present (A39.4)
   G4  the design-exposure list exists and is non-empty
 
 --self-test drives every gate that has a constructible known-bad case and requires each
@@ -99,6 +102,7 @@ METHODOLOGY_SURFACE = {
     # point of G5 is truthful completeness, not a stable numerator.
     "probes/s1_control.py": "the S1 liveness gate input (A27.6 decision-blocking)",
     "probes/cross_engine_control.py": "the confirmatory PDFIUM-CONDITIONED FRAME qualification",
+    "probes/control_fixtures.py": "the N-A/N-B/N-C control truth (A27.6 Rule 3 blockers)",
 }
 
 # Files whose post-freeze modification is a methodological change and must be declared
@@ -757,7 +761,36 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
             else f"all {len(METHODOLOGY_SURFACE)} result-bearing files committed",
         )
     )
+
+    # G6 -- A39.4. DELIBERATELY NOT folded into G5's file-existence check: G5 asks whether the
+    # producers exist, G6 asks whether the CONTROL SET they will consume is real. N-A/N-B/N-C
+    # are Rule 3 blockers (A27.6), so a missing or malformed control set must keep execution
+    # forbidden even when every producer file is present and committed.
+    results.append(g6_control_fixtures())
     return results
+
+
+CONTROL_FIXTURES = EV / "results" / "control_fixtures.json"
+
+
+def g6_control_fixtures() -> tuple[str, bool, str]:
+    """G6 -- the committed control-fixture manifest exists, is committed, and VALIDATES."""
+    name = "G6 control-fixture manifest exists, is committed and validates"
+    if not CONTROL_FIXTURES.exists():
+        return (name, False, "results/control_fixtures.json is absent")
+    if not committed(CONTROL_FIXTURES):
+        return (name, False, "manifest exists on disk but is not committed unmodified")
+    try:
+        import control_fixtures as CF
+
+        manifest = json.loads(CONTROL_FIXTURES.read_text())
+        defects = CF.validate_manifest(manifest)
+    except Exception as exc:  # a manifest that cannot even be validated is not a valid one
+        return (name, False, f"validation raised {type(exc).__name__}: {exc}")
+    if defects:
+        return (name, False, f"{len(defects)} defect(s): " + ", ".join(sorted({d["reason"] for d in defects})[:4]))
+    counts = manifest.get("counts", {})
+    return (name, True, f"N-A {counts.get('N-A')} / N-B {counts.get('N-B')} / N-C {counts.get('N-C')}, 0 defects")
 
 
 def render(title: str, results: list[tuple[str, bool, str]]) -> list[str]:

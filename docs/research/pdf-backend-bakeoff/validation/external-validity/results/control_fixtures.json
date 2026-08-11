@@ -1,0 +1,766 @@
+{
+ "schema": "control_fixtures/1",
+ "population": "DEVELOPMENT + SYNTHETIC -- no confirmatory holdout material anywhere",
+ "na_namespace": "na-source",
+ "nb_namespace": "nb-source",
+ "seed": 20260807,
+ "na_schedule": {
+  "0": "DELETE_ONE_WORD",
+  "1": "WELD_TWO_WORDS",
+  "2": "SPLIT_ONE_WORD"
+ },
+ "retired_variant": "PULL_HEADING_TO_BODY_SIZE",
+ "counts": {
+  "N-A": 8,
+  "N-B": 8,
+  "N-C": 4
+ },
+ "eligible_population": {
+  "account_headings_xml_corroborated": 58,
+  "na_eligible": 46
+ },
+ "fixtures": [
+  {
+   "control_kind": "N-A",
+   "variant": "DELETE_ONE_WORD",
+   "schedule_index": 0,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",4,0,\"DELETE_ONE_WORD\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 4,
+   "line_number": 7,
+   "expected_before": "OPERATIONS AND SUPPORT",
+   "expected_after": "AND SUPPORT",
+   "mutation_recipe": {
+    "variant": "DELETE_ONE_WORD",
+    "target_token": "OPERATIONS",
+    "target_span": [
+     0,
+     10
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "DELETE_ONE_WORD",
+    "expected_before": "OPERATIONS AND SUPPORT",
+    "expected_after": "AND SUPPORT",
+    "changed": true,
+    "non_space_before": "OPERATIONSANDSUPPORT",
+    "non_space_after": "ANDSUPPORT",
+    "non_space_unchanged": false,
+    "boundary_len_before": 19,
+    "boundary_len_after": 9,
+    "boundary_diff_positions": [],
+    "boundary_transitions": [],
+    "live": true,
+    "class_rule": "non-space sequence must CHANGE"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "AND SUPPORT"
+    }
+   ],
+   "generated_path": "control_fixtures/na_00_delete_one_word.pdf",
+   "generated_sha256": "bbf16b0f57a10fe258656d6f0d4b040fcf5a09c91ac98c5ac13962a5252b782e",
+   "source_bbox": [
+    133.2803,
+    231.7319,
+    396.2648,
+    241.2319
+   ],
+   "drawn_fontsize": 9.5
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "WELD_TWO_WORDS",
+   "schedule_index": 1,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",11,1,\"WELD_TWO_WORDS\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 11,
+   "line_number": 15,
+   "expected_before": "DEPARTMENT OF DEFENSE BASE CLOSURE ACCOUNT",
+   "expected_after": "DEPARTMENTOF DEFENSE BASE CLOSURE ACCOUNT",
+   "mutation_recipe": {
+    "variant": "WELD_TWO_WORDS",
+    "target_pair": [
+     "DEPARTMENT",
+     "OF"
+    ],
+    "removed_gap_span": [
+     10,
+     11
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "WELD_TWO_WORDS",
+    "expected_before": "DEPARTMENT OF DEFENSE BASE CLOSURE ACCOUNT",
+    "expected_after": "DEPARTMENTOF DEFENSE BASE CLOSURE ACCOUNT",
+    "changed": true,
+    "non_space_before": "DEPARTMENTOFDEFENSEBASECLOSUREACCOUNT",
+    "non_space_after": "DEPARTMENTOFDEFENSEBASECLOSUREACCOUNT",
+    "non_space_unchanged": true,
+    "boundary_len_before": 36,
+    "boundary_len_after": 36,
+    "boundary_diff_positions": [
+     9
+    ],
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "DEPARTMENTOF DEFENSE BASE CLOSURE ACCOUNT"
+    }
+   ],
+   "generated_path": "control_fixtures/na_01_weld_two_words.pdf",
+   "generated_sha256": "af6cc63e6ad1ea9e5cd8c62a6d38d043c6ae04e8b1ea5f2892eda6e94edd1e33",
+   "source_bbox": [
+    127.5535,
+    439.3679,
+    475.9011,
+    449.3079
+   ],
+   "drawn_fontsize": 9.94
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "SPLIT_ONE_WORD",
+   "schedule_index": 2,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",17,2,\"SPLIT_ONE_WORD\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 17,
+   "line_number": 18,
+   "expected_before": "RESEARCH AND DEVELOPMENT",
+   "expected_after": "RESEARCH AND DEVEL OPMENT",
+   "mutation_recipe": {
+    "variant": "SPLIT_ONE_WORD",
+    "target_token": "DEVELOPMENT",
+    "split_after_chars": 5,
+    "pieces": [
+     "DEVEL",
+     "OPMENT"
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "SPLIT_ONE_WORD",
+    "expected_before": "RESEARCH AND DEVELOPMENT",
+    "expected_after": "RESEARCH AND DEVEL OPMENT",
+    "changed": true,
+    "non_space_before": "RESEARCHANDDEVELOPMENT",
+    "non_space_after": "RESEARCHANDDEVELOPMENT",
+    "non_space_unchanged": true,
+    "boundary_len_before": 21,
+    "boundary_len_after": 21,
+    "boundary_diff_positions": [
+     15
+    ],
+    "boundary_transitions": [
+     [
+      0,
+      1
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 0 -> 1"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "RESEARCH AND DEVEL OPMENT"
+    }
+   ],
+   "generated_path": "control_fixtures/na_02_split_one_word.pdf",
+   "generated_sha256": "df6c7e919e88e0ae49205ccd2ca84c7979f87bf2829fd289c210f96b6b77c6f3",
+   "source_bbox": [
+    127.5534,
+    517.5359000000001,
+    407.808,
+    527.2319
+   ],
+   "drawn_fontsize": 9.7
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "DELETE_ONE_WORD",
+   "schedule_index": 3,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",14,3,\"DELETE_ONE_WORD\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 14,
+   "line_number": 21,
+   "expected_before": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
+   "expected_after": "PROCUREMENT, , AND IMPROVEMENTS",
+   "mutation_recipe": {
+    "variant": "DELETE_ONE_WORD",
+    "target_token": "CONSTRUCTION",
+    "target_span": [
+     13,
+     25
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "DELETE_ONE_WORD",
+    "expected_before": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
+    "expected_after": "PROCUREMENT, , AND IMPROVEMENTS",
+    "changed": true,
+    "non_space_before": "PROCUREMENT,CONSTRUCTION,ANDIMPROVEMENTS",
+    "non_space_after": "PROCUREMENT,,ANDIMPROVEMENTS",
+    "non_space_unchanged": false,
+    "boundary_len_before": 39,
+    "boundary_len_after": 27,
+    "boundary_diff_positions": [],
+    "boundary_transitions": [],
+    "live": true,
+    "class_rule": "non-space sequence must CHANGE"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "PROCUREMENT, , AND IMPROVEMENTS"
+    }
+   ],
+   "generated_path": "control_fixtures/na_03_delete_one_word.pdf",
+   "generated_sha256": "7b0216337b3aff778f8de93720d86da606285ed88c4d709fc1116c8fa1e44719",
+   "source_bbox": [
+    126.4194,
+    595.5359,
+    473.1493,
+    607.7719
+   ],
+   "drawn_fontsize": 12.24
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "WELD_TWO_WORDS",
+   "schedule_index": 4,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",20,4,\"WELD_TWO_WORDS\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 20,
+   "line_number": 9,
+   "expected_before": "RESEARCH AND DEVELOPMENT",
+   "expected_after": "RESEARCHAND DEVELOPMENT",
+   "mutation_recipe": {
+    "variant": "WELD_TWO_WORDS",
+    "target_pair": [
+     "RESEARCH",
+     "AND"
+    ],
+    "removed_gap_span": [
+     8,
+     9
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "WELD_TWO_WORDS",
+    "expected_before": "RESEARCH AND DEVELOPMENT",
+    "expected_after": "RESEARCHAND DEVELOPMENT",
+    "changed": true,
+    "non_space_before": "RESEARCHANDDEVELOPMENT",
+    "non_space_after": "RESEARCHANDDEVELOPMENT",
+    "non_space_unchanged": true,
+    "boundary_len_before": 21,
+    "boundary_len_after": 21,
+    "boundary_diff_positions": [
+     7
+    ],
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "RESEARCHAND DEVELOPMENT"
+    }
+   ],
+   "generated_path": "control_fixtures/na_04_weld_two_words.pdf",
+   "generated_sha256": "ee0dfe3453ff2fb273d107bab030e9d04f21ea74cc39bb922a2d94225312d85c",
+   "source_bbox": [
+    133.4194,
+    283.5359,
+    407.808,
+    293.2939
+   ],
+   "drawn_fontsize": 9.76
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "SPLIT_ONE_WORD",
+   "schedule_index": 5,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",2,5,\"SPLIT_ONE_WORD\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 2,
+   "line_number": 10,
+   "expected_before": "MILITARY CONSTRUCTION, ARMY",
+   "expected_after": "MILITARY CONSTR UCTION, ARMY",
+   "mutation_recipe": {
+    "variant": "SPLIT_ONE_WORD",
+    "target_token": "CONSTRUCTION",
+    "split_after_chars": 6,
+    "pieces": [
+     "CONSTR",
+     "UCTION"
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "SPLIT_ONE_WORD",
+    "expected_before": "MILITARY CONSTRUCTION, ARMY",
+    "expected_after": "MILITARY CONSTR UCTION, ARMY",
+    "changed": true,
+    "non_space_before": "MILITARYCONSTRUCTION,ARMY",
+    "non_space_after": "MILITARYCONSTRUCTION,ARMY",
+    "non_space_unchanged": true,
+    "boundary_len_before": 24,
+    "boundary_len_after": 24,
+    "boundary_diff_positions": [
+     13
+    ],
+    "boundary_transitions": [
+     [
+      0,
+      1
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 0 -> 1"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "MILITARY CONSTR UCTION, ARMY"
+    }
+   ],
+   "generated_path": "control_fixtures/na_05_split_one_word.pdf",
+   "generated_sha256": "f985c267ec568362878fec7600973597d7342b0833f6568e741e3eb4a675a8a8",
+   "source_bbox": [
+    127.5533,
+    309.4099,
+    414.9675,
+    321.7719
+   ],
+   "drawn_fontsize": 12.36
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "DELETE_ONE_WORD",
+   "schedule_index": 6,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",32,6,\"DELETE_ONE_WORD\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 32,
+   "line_number": 1,
+   "expected_before": "INFORMATION TECHNOLOGY SYSTEMS",
+   "expected_after": "TECHNOLOGY SYSTEMS",
+   "mutation_recipe": {
+    "variant": "DELETE_ONE_WORD",
+    "target_token": "INFORMATION",
+    "target_span": [
+     0,
+     11
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "DELETE_ONE_WORD",
+    "expected_before": "INFORMATION TECHNOLOGY SYSTEMS",
+    "expected_after": "TECHNOLOGY SYSTEMS",
+    "changed": true,
+    "non_space_before": "INFORMATIONTECHNOLOGYSYSTEMS",
+    "non_space_after": "TECHNOLOGYSYSTEMS",
+    "non_space_unchanged": false,
+    "boundary_len_before": 27,
+    "boundary_len_after": 16,
+    "boundary_diff_positions": [],
+    "boundary_transitions": [],
+    "live": true,
+    "class_rule": "non-space sequence must CHANGE"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "TECHNOLOGY SYSTEMS"
+    }
+   ],
+   "generated_path": "control_fixtures/na_06_delete_one_word.pdf",
+   "generated_sha256": "57967e9044cf43981a2743de64293125e478a66dcbb08706ac8d3a9356e34c58",
+   "source_bbox": [
+    134.5545,
+    75.53599999999994,
+    426.9286,
+    85.23199999999997
+   ],
+   "drawn_fontsize": 9.7
+  },
+  {
+   "control_kind": "N-A",
+   "variant": "WELD_TWO_WORDS",
+   "schedule_index": 7,
+   "source_type": "DEVELOPMENT PDF, mutated",
+   "canonical_identity": "[\"control\",\"N-A\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",6,7,\"WELD_TWO_WORDS\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 6,
+   "line_number": 7,
+   "expected_before": "MILITARY CONSTRUCTION, ARMY NATIONAL GUARD",
+   "expected_after": "MILITARYCONSTRUCTION, ARMY NATIONAL GUARD",
+   "mutation_recipe": {
+    "variant": "WELD_TWO_WORDS",
+    "target_pair": [
+     "MILITARY",
+     "CONSTRUCTION"
+    ],
+    "removed_gap_span": [
+     8,
+     9
+    ]
+   },
+   "mutation_evidence": {
+    "variant": "WELD_TWO_WORDS",
+    "expected_before": "MILITARY CONSTRUCTION, ARMY NATIONAL GUARD",
+    "expected_after": "MILITARYCONSTRUCTION, ARMY NATIONAL GUARD",
+    "changed": true,
+    "non_space_before": "MILITARYCONSTRUCTION,ARMYNATIONALGUARD",
+    "non_space_after": "MILITARYCONSTRUCTION,ARMYNATIONALGUARD",
+    "non_space_unchanged": true,
+    "boundary_len_before": 37,
+    "boundary_len_after": 37,
+    "boundary_diff_positions": [
+     7
+    ],
+    "boundary_transitions": [
+     [
+      1,
+      0
+     ]
+    ],
+    "live": true,
+    "class_rule": "non-space unchanged, exactly one boundary 1 -> 0"
+   },
+   "expected_adjudicated_headings": [
+    {
+     "text": "MILITARYCONSTRUCTION, ARMY NATIONAL GUARD"
+    }
+   ],
+   "generated_path": "control_fixtures/na_07_weld_two_words.pdf",
+   "generated_sha256": "4d4b73e204b1da8ca51f571f89730c01c240300396119b2afaaa1939c4541548",
+   "source_bbox": [
+    133.2801,
+    231.4099,
+    469.9518,
+    243.77189999999996
+   ],
+   "drawn_fontsize": 12.36
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 0,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",16,0,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 16,
+   "line_number": 1,
+   "expected_adjudicated_headings": [
+    {
+     "text": "RESEARCH AND DEVELOPMENT"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 1,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",28,1,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 28,
+   "line_number": 19,
+   "expected_adjudicated_headings": [
+    {
+     "text": "MEDICAL FACILITIES"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 2,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",14,2,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 14,
+   "line_number": 21,
+   "expected_adjudicated_headings": [
+    {
+     "text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 3,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",3,3,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 3,
+   "line_number": 7,
+   "expected_adjudicated_headings": [
+    {
+     "text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 4,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",3,4,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 3,
+   "line_number": 3,
+   "expected_adjudicated_headings": [
+    {
+     "text": "MILITARY CONSTRUCTION, NAVY AND MARINE CORPS"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 5,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",2,5,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 2,
+   "line_number": 13,
+   "expected_adjudicated_headings": [
+    {
+     "text": "OPERATIONS AND SUPPORT"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 6,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0\",20,6,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "118-hr-8752/1",
+   "source_path": "tests/corpus/118-hr-8752/1_reported-in-house.pdf",
+   "source_sha256": "d0751bfbe0e53cd89a1906fb5a720035eb4cb6fa69c0bbfbab024f801bc24ae0",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+   "xml_sha256": "e4bc6b90eeff87d05eaa5ba61792c8a3b24aebcb86e5d6c98bb03de839be536d",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 20,
+   "line_number": 9,
+   "expected_adjudicated_headings": [
+    {
+     "text": "RESEARCH AND DEVELOPMENT"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-B",
+   "variant": "XML_CORROBORATED_HEADING",
+   "schedule_index": 7,
+   "source_type": "DEVELOPMENT PDF, unmodified",
+   "canonical_identity": "[\"control\",\"N-B\",\"7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2\",6,7,\"XML_CORROBORATED_HEADING\"]",
+   "source_document": "114-hr-2029/4",
+   "source_path": "tests/corpus/114-hr-2029/4_reported-in-senate.pdf",
+   "source_sha256": "7e3786d7abb1c54c030903d5ea58471e7827877f4d3c92cae858a79972b56df2",
+   "parent_sha256": null,
+   "generated_path": null,
+   "generated_sha256": null,
+   "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+   "xml_sha256": "68e98a6b0b204cfec7b0d79fdd8e42184fd72cc2872ce93facf6907c1bcbb1a8",
+   "xml_evidence": "exact normalized heading string present in paired GPO XML",
+   "page_number": 6,
+   "line_number": 22,
+   "expected_adjudicated_headings": [
+    {
+     "text": "MILITARY CONSTRUCTION, AIR NATIONAL GUARD"
+    }
+   ]
+  },
+  {
+   "control_kind": "N-C",
+   "variant": "SYNTHETIC_HEADING_FREE",
+   "schedule_index": 0,
+   "source_type": "SYNTHETIC, generated",
+   "canonical_identity": "[\"control\",\"N-C\",\"84a01be4f9c8a8a630f2c9c831cdaf9b01a4f2bbf837ff374305b65b6dde4e90\",1,0,\"SYNTHETIC_HEADING_FREE\"]",
+   "source_document": "SYNTHETIC/heading-free/0",
+   "source_path": null,
+   "source_sha256": "84a01be4f9c8a8a630f2c9c831cdaf9b01a4f2bbf837ff374305b65b6dde4e90",
+   "parent_sha256": null,
+   "page_number": 1,
+   "line_number": null,
+   "expected_adjudicated_headings": [],
+   "generated_path": "control_fixtures/nc_00_heading_free.pdf",
+   "generated_sha256": "84a01be4f9c8a8a630f2c9c831cdaf9b01a4f2bbf837ff374305b65b6dde4e90",
+   "n_lines": 8,
+   "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered"
+  },
+  {
+   "control_kind": "N-C",
+   "variant": "SYNTHETIC_HEADING_FREE",
+   "schedule_index": 1,
+   "source_type": "SYNTHETIC, generated",
+   "canonical_identity": "[\"control\",\"N-C\",\"d9049dd6713f8ea4d8f6c7365b0c12107d607d45089aa035f275b0798191da97\",1,1,\"SYNTHETIC_HEADING_FREE\"]",
+   "source_document": "SYNTHETIC/heading-free/1",
+   "source_path": null,
+   "source_sha256": "d9049dd6713f8ea4d8f6c7365b0c12107d607d45089aa035f275b0798191da97",
+   "parent_sha256": null,
+   "page_number": 1,
+   "line_number": null,
+   "expected_adjudicated_headings": [],
+   "generated_path": "control_fixtures/nc_01_heading_free.pdf",
+   "generated_sha256": "d9049dd6713f8ea4d8f6c7365b0c12107d607d45089aa035f275b0798191da97",
+   "n_lines": 8,
+   "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered"
+  },
+  {
+   "control_kind": "N-C",
+   "variant": "SYNTHETIC_HEADING_FREE",
+   "schedule_index": 2,
+   "source_type": "SYNTHETIC, generated",
+   "canonical_identity": "[\"control\",\"N-C\",\"2c910018485b4a776e17abee1d9ad03627a4ccd611144bbe24ef4a3f70cc213f\",1,2,\"SYNTHETIC_HEADING_FREE\"]",
+   "source_document": "SYNTHETIC/heading-free/2",
+   "source_path": null,
+   "source_sha256": "2c910018485b4a776e17abee1d9ad03627a4ccd611144bbe24ef4a3f70cc213f",
+   "parent_sha256": null,
+   "page_number": 1,
+   "line_number": null,
+   "expected_adjudicated_headings": [],
+   "generated_path": "control_fixtures/nc_02_heading_free.pdf",
+   "generated_sha256": "2c910018485b4a776e17abee1d9ad03627a4ccd611144bbe24ef4a3f70cc213f",
+   "n_lines": 8,
+   "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered"
+  },
+  {
+   "control_kind": "N-C",
+   "variant": "SYNTHETIC_HEADING_FREE",
+   "schedule_index": 3,
+   "source_type": "SYNTHETIC, generated",
+   "canonical_identity": "[\"control\",\"N-C\",\"07add5ead98b2c9b2304fdeb78f2aee3180f2dd51337e3f190824c1dccd7c04f\",1,3,\"SYNTHETIC_HEADING_FREE\"]",
+   "source_document": "SYNTHETIC/heading-free/3",
+   "source_path": null,
+   "source_sha256": "07add5ead98b2c9b2304fdeb78f2aee3180f2dd51337e3f190824c1dccd7c04f",
+   "parent_sha256": null,
+   "page_number": 1,
+   "line_number": null,
+   "expected_adjudicated_headings": [],
+   "generated_path": "control_fixtures/nc_03_heading_free.pdf",
+   "generated_sha256": "07add5ead98b2c9b2304fdeb78f2aee3180f2dd51337e3f190824c1dccd7c04f",
+   "n_lines": 8,
+   "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered"
+  }
+ ]
+}
