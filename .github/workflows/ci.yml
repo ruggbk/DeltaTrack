@@ -176,6 +176,13 @@ jobs:
         # corpus measurement its exclusivity rule rests on -- that the current XML
         # assigner claims every observation exactly once. A rule argued from a corpus
         # measurement needs that measurement gated, or the argument is prose.
+        #
+        # test_assignment_classification_boundary is the tenth, and split the same way: its
+        # checker self-tests are fast and run above, while the two corpus gates run here --
+        # that the extracted similarity rule agrees with the pre-refactor one on every
+        # path-matched pairing, and that classification returns the correspondence shape it
+        # was handed. Both are the kind of gate this job exists for: a property argued from
+        # the committed manifest, which reports green by absence if no step names it.
         run: >
           uv run pytest -v -m slow
           tests/test_corpus_properties.py
@@ -188,6 +195,7 @@ jobs:
           tests/test_financial_callout_whole_item.py
           tests/test_canonical_baseline.py
           tests/test_matching_contracts.py
+          tests/test_assignment_classification_boundary.py
 
       - name: Run the packaging gate (build, install, diff from outside the checkout)
         if: ${{ !cancelled() }}
