@@ -129,7 +129,10 @@ jobs:
 
       - name: Run browser tests
         if: ${{ !cancelled() }}
-        run: uv run pytest -m browser -v
+        # --run-browser: this step runs on dedicated hardware where Chromium is
+        # guaranteed, so a launch failure must fail the run rather than skip every
+        # test into a green no-op (#599).
+        run: uv run pytest -m browser --run-browser -v
 
       - name: Run external-validation suite
         if: ${{ !cancelled() }}

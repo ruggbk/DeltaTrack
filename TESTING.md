@@ -221,6 +221,13 @@ or `-m "not network"` to deselect it outright. It replaced the `REQUIRE_CORPUS=1
 environment variable in #278, whose name described neither of the two unrelated things
 it had come to gate.
 
+`browser` skips when Chromium can't launch, which is right for the default tier (a
+contributor's machine may lack Playwright) but a silent no-op under CI's dedicated
+`-m browser` step, which exists to run these tests with Chromium guaranteed. CI passes
+`--run-browser` there, turning a launch failure into a test failure instead of a skip,
+so a drifted or uninstallable browser reddens CI rather than passing green while
+asserting nothing (#599).
+
 ### Reading test counts
 
 The corpus correctness gates parametrize over the committed manifest, so **their

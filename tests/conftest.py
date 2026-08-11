@@ -780,12 +780,36 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 # committed fixtures, where a failure is real news rather than a merge blocker.
 
 
+# --- Browser-tier strictness (#599) --------------------------------------------
+# CI runs the `browser` tier on dedicated hardware with Chromium guaranteed. Its
+# launch helper (the module-scoped `chromium` fixture in both browser modules) skips
+# when the browser cannot start — the right behavior for the default tier, where a
+# contributor's machine may lack Playwright, but under that CI step a skip is a
+# silent no-op: every test "passes" by skipping and the step reports green while
+# asserting nothing. `--run-browser` is the CI step's signal to treat a launch
+# failure as a test failure instead. A flag rather than an env var, mirroring
+# `--run-network`: the distinction is an invocation, not an environment.
+#
+# The Python-package channel needs no guard: `importorskip("playwright")` skips the
+# whole module at collection if the package is missing, but CI's preceding
+# `playwright install chromium` step would already fail loudly if the package were
+# absent from the environment, so that channel cannot silently no-op.
 def pytest_addoption(parser):
     parser.addoption(
         "--run-network",
         action="store_true",
         default=False,
         help="Run tests marked `network` (live external fetches). They are skipped by default.",
+    )
+    parser.addoption(
+        "--run-browser",
+        action="store_true",
+        default=False,
+        help=(
+            "Treat a Chromium launch failure in the `browser` tier as a test failure "
+            "instead of a skip. The default tier skips; CI's dedicated browser step "
+            "passes this so a broken browser cannot pass green while asserting nothing."
+        ),
     )
 
 
