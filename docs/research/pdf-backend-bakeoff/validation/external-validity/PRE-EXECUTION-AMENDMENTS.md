@@ -4069,7 +4069,7 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
 ```json
 {"id": "A40", "class": "SUBSTANTIVE",
  "commits": ["31b19c7", "c6ccd4e", "c8df8cf", "d2f7eea", "a071216", "3c072a5", "fcc88d0",
-             "9606a6e"],
+             "9606a6e", "767abe9"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/build_oracle.py", "probes/control_fixtures.py",
@@ -4476,7 +4476,71 @@ ORIGINAL page lines while `generate_na_pdf` redacts and redraws at `(rect.x0, re
 `fontsize = rect.height`, so where the heading is the last line of its 8-line window the redrawn
 descender can fall below the region's lower bound. **It must not be repaired by loosening the
 region or re-selecting a more convenient source** — either would be choosing the population that
-gives nicer fixtures, which A40.12 has just finished removing.
+gives nicer fixtures, which A40.12 has just finished removing. **CLEARED by A40.13.**
+
+### A40.13 — the fixture-placement repair (STOP A40.12.1 CLEARED)
+
+**The frozen population, ranking, region and `REGION_SIZE` were not touched.** The defect was in
+`generate_na_pdf`, which took BOTH placement facts off the line's bounding box:
+
+| | box-derived (old) | independently observed | error |
+|---|---|---|---|
+| baseline | `rect.y1` = 166.339 | span origin y = **163.000** | **+3.339 pt low** |
+| font size | `rect.height` = 14.0 | span size = **10.8671** | **~29 % oversized** |
+
+The 14.0 comes from a **trailing whitespace span at a different size** which inflates the line box
+without inking anything (6 spans on that line; five inked at 10.8671, one space at 14.0). N-A #6 is
+line **0** of its window, so the region's top edge *is* the line's top edge and the oversized glyphs
+escaped **upward** by 0.742 pt — not the descender originally suspected.
+
+**Preserving the baseline alone was measured insufficient** (+0.782 pt): Times-Roman's ascender is
+**1.0530**, so 1.0530 × 10.8671 = 11.44 pt against 10.661 pt of room. The rule is therefore
+arithmetic over measured facts, identical for every control:
+
+```
+size = min(source span size, above / font.ascender, below / -font.descender)
+```
+
+drawn at the observed span origin and fitted inside the **source line box** — a subset of the
+region, so it holds at any position in the window. No per-heading constant, no search, no
+reselection. All eight N-A satisfy `after_in_region == 1`, `before_in_region == 0`, each on its
+intended physical line.
+
+### A40.14 — PDF byte determinism: root cause found, and the /ID-only claim falsified first
+
+**ROOT CAUSE: save-time `/ID` handling, and nothing else.** Masking `/ID` alone made two differing
+outputs **byte-identical across their whole 537 KB**, so the explanation was falsified before being
+acted on. Two save behaviours combined, and only both together explain what was seen:
+
+| behaviour | consequence |
+|---|---|
+| pymupdf writes a **random** `/ID` whose serialized length is **not constant** — measured spans of **69 and 73** bytes on one fixture | `canonicalise_pdf_id` padded to whatever span it found, so file length followed the random id (537524 vs 537528). This is the intermittent, arbitrary-fixture difference. |
+| setting the trailer id **without `no_new_id=True`** is silently half-undone — the save replaces the SECOND element | the earlier `xref_set_key`-only attempt looked correct and was not |
+
+Measured, 40 builds per variant: old path **2** distinct SHAs · `no_new_id` alone **1** · fixed id
+alone **40** · **fixed id + `no_new_id=True` → 1**.
+
+**The repair is native and structural**: derive a deterministic `/ID` from the output basename, save
+with `no_new_id=True`, and **delete `canonicalise_pdf_id`** rather than keep post-save byte surgery
+beside it. Nothing rewrites a saved PDF.
+
+Falsified across **12 conditions × 12 fixtures** — same-process repeats, read-only opens of every
+fixture interleaved, randomized build order, fresh subprocesses — **one SHA per fixture**. The
+earlier "opening a PDF perturbs the next build" note was a **misattribution**; the variable was
+always the random `/ID`.
+
+### A40.14.1 — the x23 occurrence-scope correction
+
+The page-wide `expected_before` assertion was **stricter than the frozen region-scoped contract**
+and failed fixtures that are correct, because GPO legitimately repeats a heading elsewhere on the
+same page and such a duplicate is a different occurrence the adjudicator never sees. It is now
+gated on the target region, with three live controls: **NEGATIVE A** (an original inside the region
+is detected), **NEGATIVE B** (a mutation absent from the region is detected), **POSITIVE** (a
+fixture whose original repeats elsewhere still passes), plus a diagnostic proving the
+duplicate-elsewhere case is actually exercised rather than hypothetical.
+
+**Still outstanding, and G6 stays RED for exactly this**: F3 and F4. `x23` **35/35**, `x24`
+**16/16**, `x25` **18/18**; a double run over **39 artifacts changed 0 bytes**.
 
 ### Population and boundary
 
