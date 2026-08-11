@@ -3675,7 +3675,7 @@ touched it.
                    "probes/s1_control.py", "probes/x21_build_oracle.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is introduced or changed",
- "status": "IMPLEMENTED + REPAIRED -- not frozen; control-fixture scorer/adjudication input path still under A40 review"}
+ "status": "FROZEN -- approved by external review after the A40 freeze verification; the control-fixture scorer/adjudication input path it was held for is settled by A40.15/A40.16"}
 ```
 
 **`affects_scoring_rule` is false and A38 must keep it so.** It introduces **no** new metric,
@@ -3735,7 +3735,13 @@ rather than reimplementing the `max(pdfium, pymupdf)` denominator or either thre
 and holdout exclusion now enforced by **source identity** (A40.7 / F7). But the A40.7
 falsification established that the controls are **not executable through `build_oracle`**
 (F5) and that the manifest does **not** commit the adjudication region for N-A/N-B (F6), so
-this row is **owned but incomplete**. **A38 is therefore not frozen.**
+this row was **owned but incomplete**, and A38 was held unfrozen for exactly that reason.
+
+> **RESOLVED, and A38 is now FROZEN.** F5 landed in A40.11 and is committed executable evidence
+> in A40.15 (`x26`: 20 controls through the real `build_oracle`, both routes, none in C/D/C-audit/
+> R1, leakage and join clean); F6 committed the exact adjudication region per control in A40.11.
+> The row is a complete input path, so the condition this paragraph records is discharged rather
+> than deleted — it is kept as the historical reason the freeze waited.
 
 ### A38.2 — persist the A30 identity candidates
 
@@ -3907,7 +3913,7 @@ obviously synthetic placeholders, which removes both the collision and an anchor
                    "probes/x04_freeze_check.py", "probes/x15_methodology_contracts.py",
                    "probes/x22_score_input_contract.py"],
  "supersedes_text_in": "none -- A38.8's forward ambiguity is RULED, not reversed; no frozen threshold is changed",
- "status": "A39.1 APPROVED; A39.2 APPROVED; A39.3/A39.4 PENDING successful A40 fixture integration; A39.5 APPROVED"}
+ "status": "FROZEN -- A39.1 APPROVED; A39.2 APPROVED; A39.3 and A39.4 APPROVED + FROZEN on the A40 fixture integration they were held for (A40.15/A40.16); A39.5 APPROVED"}
 ```
 
 `affects_scoring_rule` is **true**: A39 makes the previously unspecified Rule 0 margin-line
@@ -4077,7 +4083,7 @@ producer), A39.5 (G5 corrected 11 → 13). `x15` **67/67**.
                    "probes/x24_xml_source_bridge.py", "probes/x25_bridge_validation.py",
                    "probes/x26_control_oracle.py", "probes/xml_sources.py"],
  "supersedes_text_in": "PRE-REGISTRATION 5.6 N-A's 'one heading's size pulled into the body band' ONLY; A39.3's PULL_HEADING_TO_BODY_SIZE and its two scheduled slots; and the M1 control mapping insofar as it names N-A",
- "status": "CONTRACT APPROVED; IMPLEMENTATION COMPLETE, NOT FROZEN -- awaiting reviewer ruling. F1-F8 all implemented and falsified: bridge independently validated (A40.9), parenthetical ruled structurally then WITHDRAWN on source authority (A40.10/A40.12), F1/F2/F5/F6 (A40.11), placement repaired (A40.13), PDF bytes deterministic (A40.14), F3/F4 replay + committed 20-control oracle probe (A40.15). G6 PASS now carries its full section-13 meaning. Freeze is the reviewer's call; nothing here is self-frozen"}
+ "status": "IMPLEMENTATION COMPLETE + FROZEN -- approved by external review. F1-F8 all implemented and falsified: bridge independently validated (A40.9), parenthetical ruled structurally then WITHDRAWN on source authority (A40.10/A40.12), F1/F2/F5/F6 (A40.11), placement repaired (A40.13), PDF bytes deterministic (A40.14), F3/F4 replay + committed 20-control oracle probe (A40.15), G6's own two gaps closed under freeze verification (A40.16). G6 PASS carries its full section-13 meaning"}
 ```
 
 `affects_scoring_rule` is **true**: N-A is part of the frozen negative-control / Rule-3
