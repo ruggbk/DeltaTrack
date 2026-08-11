@@ -219,9 +219,9 @@ def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(in
     This used to probe three hardcoded names (`fastapi`, `uvicorn`, `httpx`), which
     covered only the `web` group -- #533 found `tomlkit`, a `dev`-group package, declared
     in `[project.dependencies]` too, and the hardcoded probe had no way to catch it
-    (#593). It now derives the forbidden set from the `web`, `fetch`, and `dev` groups
-    themselves, so a package added to any of them is covered without anyone remembering
-    to extend a list here.
+    (#593). It now derives BOTH which groups to check and what each one forbids from
+    `pyproject.toml` itself, so a package -- or a whole group -- added later is covered
+    without anyone remembering to extend a list here.
 
     Asserted as an ABSENCE, which is the vacuous-pass shape: a probe that could never
     import anything would pass this while proving nothing. The dependency test above is
@@ -229,15 +229,27 @@ def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(in
     resolver's own assertion above rejects a group package it cannot map to an import
     name, rather than silently excluding it from this set.
     """
-    forbidden = set()
-    for group in ("web", "fetch", "dev"):
-        forbidden |= _group_import_names(group)
-    # A regression floor on the derivation itself: the hardcoded version this replaced
-    # checked 3 names, all from `web` alone. If the resolver ever collapsed back down to
-    # that scope, the assertions below would still pass -- vacuously, on a narrower set
-    # than the config actually declares -- so check the derivation grew, not just that it
-    # is non-empty.
-    assert len(forbidden) > 3, f"resolved suspiciously few forbidden imports: {sorted(forbidden)}"
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    groups = sorted(pyproject["dependency-groups"])
+    assert groups, "pyproject.toml declares no [dependency-groups] -- nothing for this probe to check"
+
+    # Per-group, not on the combined total: a single `len(forbidden) > N` floor on the
+    # union is foolable by one large group growing past N while another gets dropped from
+    # the loop entirely -- `web` alone already clears any small threshold, so a silent
+    # narrowing back to "web only" (the exact scope of the hardcoded probe this replaced)
+    # would still pass a combined-cardinality check. Asserting each group individually
+    # produced names proves every group pyproject.toml declares was actually evaluated,
+    # regardless of how big any one of them is.
+    forbidden_by_group = {group: _group_import_names(group) for group in groups}
+    for group, names in forbidden_by_group.items():
+        assert names, (
+            f"the {group!r} dependency-group is declared in pyproject.toml but this probe "
+            "resolved no forbidden import names for it. _group_import_names() already "
+            "fails loudly on a single unresolvable package, so an empty result here means "
+            f"{group!r} has become empty in pyproject.toml -- if that's not intentional, "
+            "the group (and this check's coverage of it) needs a look."
+        )
+    forbidden = set().union(*forbidden_by_group.values())
 
     for absent in sorted(forbidden):
         result = subprocess.run(
@@ -245,10 +257,20 @@ def test_the_engine_install_does_not_drag_in_a_delivery_or_tooling_dependency(in
             capture_output=True,
             text=True,
         )
+        owning_groups = [group for group, names in forbidden_by_group.items() if absent in names]
+        # Deliberately not phrased as "has re-acquired a dependency": importability alone
+        # cannot distinguish a leak in [project.dependencies] from `absent` having become
+        # a genuine transitive dependency of pypdfium2 (the engine's one real dependency).
+        # Either way this probe cannot resolve that ambiguity, and shouldn't try to -- it
+        # should fail closed and force whoever sees it to make the packaging-boundary call
+        # consciously, rather than staying silently green either way.
         assert result.returncode != 0, (
-            f"{absent!r} is importable in an engine-only install. The engine's "
-            "[project.dependencies] has re-acquired a delivery-channel or tooling "
-            "dependency; it belongs in a dependency-group instead (ADR 0016)."
+            f"{absent!r} (declared in the {'/'.join(owning_groups)!r} dependency-group) is "
+            "importable in an engine-only install. Either a delivery-channel or tooling "
+            "dependency has leaked into [project.dependencies] (ADR 0016), or it has "
+            "newly arrived as a legitimate transitive dependency of a real runtime "
+            "dependency -- this probe can't tell which. Either way, the packaging "
+            "boundary needs a conscious decision here, not a silent pass."
         )
         assert "ModuleNotFoundError" in result.stderr, (
             f"importing {absent!r} failed for an unexpected reason, so this assertion is "
