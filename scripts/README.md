@@ -16,6 +16,34 @@ root.
 | `probe_observation_identity.py [root]` | Measure what can serve as an observation address: duplicated body texts, duplicated `match_path`s, emission determinism, and how much of `element_id` is recoverable from the source rather than synthesized. Read-only; the evidence behind [ADR 0019](../docs/decisions/0019-observation-identity.md). Defaults to the committed `tests/corpus`, so it needs no downloads. Re-run under a different `PYTHONHASHSEED` to check the determinism digest does not move. |
 | `probe_matching_stages.py [root]` | Size what the fused matching decision costs: pairs split by the similarity cutoff that carry amounts on both sides (#368), changes recovered by the post-classification move pass, and match paths whose output is not a one-to-one relation. Read-only; the evidence behind [ADR 0020](../docs/decisions/0020-matching-stages.md). Defaults to the committed `tests/corpus`, so it needs no downloads. |
 
+### ADR 0020 slice-2 evidence
+
+Whether the move-assignment pass can be extracted as its own [ADR 0020](../docs/decisions/0020-matching-stages.md)
+stage turns on what the current code measurably does. These are the probes behind that.
+All are read-only,
+all run against the committed corpus via `tests.test_canonical_baseline.baseline_pairs`
+so the probe and the byte-identity gate always describe the same population, and all
+instrument production by *wrapping* it rather than reimplementing it.
+
+Where a greedy loop has to be duplicated to see inside it, the duplicate resolves every
+selection back to the same `(element_id_old, element_id_new)` identity production records,
+and asserts **exact agreement with production on both the selected set and the selected
+order**, per corpus pair, before any number is reported. Comparing selection *counts* is
+not sufficient and the gap is the very phenomenon these probes measure: a tie-policy
+difference changes which pair wins while leaving the count identical, so a count-only
+check passes straight through it. On disagreement the run stops and names the differing
+pair rather than reporting a figure derived from a drifted duplicate.
+
+| Script | What it does |
+|--------|--------------|
+| `probe_move_assignment.py [--dump OUT.json]` | The candidate population `reconcile_moves` forms, how much of it ties on similarity, and how many selections are decided only by the `(ri, ai)` index tiebreak rather than by any property of the two sections. `--dump` records the selected correspondences keyed by element id, so two builds can be compared without re-deriving anything. |
+| `compare_selected.py A.json B.json` | Diff two `--dump` files, separating *a different correspondence was chosen* from *the same ones in another order*. The canonical digest is sensitive to both, so it cannot distinguish them on its own. |
+| `probe_splits.py` | Sizes the removal/addition **input population that exists only because classification has already run**: the pairs the similarity cutoff splits into a removal plus an addition (#368). Scope limit, stated in the script and its output: it does *not* measure overlap with the move-candidate population or the selected moves, so on its own it bounds rather than answers what moving retrieval before classification would change. |
+| `probe_provenance.py` | Whether `element_id` could stand in for a complete parser-sequence ordinal: how many tree nodes carry an empty or duplicated one. |
+| `probe_slice2.py [OUT.json]` | The same population and tie counts, plus the order-perturbation negative control: reverse and three seeded shuffles of the candidate list, checking whether the selected correspondences move. Prints how many pairs the perturbation *actually reordered*, because a perturbation that changed nothing would prove nothing. |
+| `probe_ordinal_loss.py` | Whether the engine still carries a complete parser-sequence ordinal where assignment runs: is `element_id` a unique address, and does `match_nodes` emit nodes in parser order? Sizes how far its output departs from document sequence, which is what the `(ri, ai)` tiebreak actually sorts on. |
+| `probe_correspondence_revision.py` | Demonstrates against the real types that a `CorrespondenceSet` which has already settled 1:0 and 0:1 records **cannot subsequently revise those same observations in place** into a later 1:1 move correspondence: the populated set has no remove or replace operation. It also shows the final 1:1 state *is* representable, by building a new set that holds it, so the finding is not read as a missing capability. A migration must therefore either delay settlement until later retrieval rounds finish, or build a new final set from the ultimate correspondence. A constraint on migration order; this chooses between neither design and changes no contract. |
+
 ### Refreshing the validation evidence
 
 [docs/parser-validation.md](../docs/parser-validation.md) is the home for *why* this
