@@ -35,6 +35,7 @@ sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 import m3_boundaries as M3  # noqa: E402
 import methodology_contracts as MC  # noqa: E402
+import xml_sources as XS  # noqa: E402
 
 # ------------------------------------------------------------------ frozen constants
 
@@ -258,48 +259,114 @@ def mutation_evidence(before: str, after: str, variant: str) -> dict:
 # ------------------------------------------------------- A40.3 eligibility + ranking
 
 
-def development_account_sources(page_limit: int = SOURCE_PAGE_LIMIT) -> list[dict]:
-    """Every XML-corroborated DEVELOPMENT `account` heading. The COMPLETE eligible population.
+def _page_lines(lines: list[dict], page_number: int) -> list[dict]:
+    """The page's printed lines in physical print order. `physical_lines` is already sorted."""
+    return [ln for ln in lines if ln["page_number"] == page_number]
 
-    Corroboration is the paired GPO XML -- the same independent source N-B uses -- so N-A's
-    source truth never comes from H or X. Built in full BEFORE any ranking or mutation, so no
-    variant-specific convenient source can be chosen afterwards (A40.3).
+
+def oracle_region(lines: list[dict], hit: dict) -> dict:
+    """F6 -- the EXACT adjudication region, under the already-frozen 8-line rule.
+
+    `build_frames.REGION_SIZE` is reused rather than restated: A19's rule is non-overlapping
+    windows of that many consecutive lines with `ordinal = start // size`, and the region bbox
+    is A33's minimal union of its member line bboxes with ZERO padding. Applying the frozen rule
+    to the independently observed lines keeps the crop size frozen while keeping H and X out of
+    the geometry; nothing here invents a crop.
+
+    Everything a future caller needs is returned, so `build_oracle.render_region` is handed the
+    committed bbox verbatim and no later code re-derives a boundary or text-searches for a crop.
     """
     import build_frames as BF
-    import run_hybrid
-    from neutral_identity import build_owner
 
-    from deltatrack.parsers import pdf_anchors as PA
+    page_lines = _page_lines(lines, hit["page_number"])
+    index_in_page = next(i for i, ln in enumerate(page_lines) if ln["line_index"] == hit["line_index"])
+    ordinal = index_in_page // BF.REGION_SIZE
+    window = page_lines[ordinal * BF.REGION_SIZE : (ordinal + 1) * BF.REGION_SIZE]
+    height = hit["page_height"]
+    # pymupdf line bboxes are top-left origin; the committed form is PDF points (y grows up)
+    x0 = min(ln["bbox_topleft"][0] for ln in window)
+    x1 = max(ln["bbox_topleft"][2] for ln in window)
+    y0 = height - max(ln["bbox_topleft"][3] for ln in window)
+    y1 = height - min(ln["bbox_topleft"][1] for ln in window)
+    return {
+        "region_ordinal": ordinal,
+        "region_size_rule": f"build_frames.REGION_SIZE={BF.REGION_SIZE}, non-overlapping, ordinal=start//size",
+        "region_bbox_pdf_points": [x0, y0, x1, y1],
+        "region_n_lines": len(window),
+        # index i (0-based) is the adjudicator's `start_physical_line` i+1
+        "region_line_mapping": [[hit["page_number"], ordinal * BF.REGION_SIZE + i] for i in range(len(window))],
+        "heading_index_in_region": index_in_page - ordinal * BF.REGION_SIZE,
+        "heading_index_in_page": index_in_page,
+    }
 
-    rows = []
+
+def _source_provenance(row: dict) -> dict:
+    """F6 -- everything a later caller needs so nothing re-decides what to crop.
+
+    The three objects stay separately named: `xml_source_text` (semantic source truth),
+    `expected_rendered_heading` (source-determined expectation) and `expected_before` /
+    `expected_text` (the physical observation) are never collapsed into one field.
+    """
+    return {
+        "element": row["element"],
+        "element_id": row["element_id"],
+        "ancestor_path": row["ancestor_path"],
+        "xml_document_ordinal": row["xml_document_ordinal"],
+        "xml_source_text": row["xml_source_text"],
+        "expected_rendered_heading": row["expected_rendered"],
+        "page_number": row["page_number"],
+        "page_height": row["page_height"],
+        "physical_line_index": row["line_index"],
+        "heading_index_in_page": row["heading_index_in_page"],
+        "heading_bbox_pdf_points": row["line_bbox_pdf"],
+        "region_ordinal": row["region_ordinal"],
+        "region_size_rule": row["region_size_rule"],
+        "region_bbox_pdf_points": row["region_bbox_pdf_points"],
+        "region_n_lines": row["region_n_lines"],
+        "region_line_mapping": row["region_line_mapping"],
+        "heading_index_in_region": row["heading_index_in_region"],
+    }
+
+
+def development_account_sources(page_limit: int = SOURCE_PAGE_LIMIT) -> list[dict]:
+    """A40 F1/F2 -- the COMPLETE independent source population, from the committed XML.
+
+    NO ARCHITECTURE OUTPUT PARTICIPATES. There is no `run_hybrid`, no `run_extended` and no
+    `pdf_anchors.extract_anchors` on this path: the account level is read from GPO's own legacy
+    DTD structure, the printed occurrence is located by the approved XML->PDF bridge, and the
+    physical observation comes from the independent renderer. `x24` proves it by making all three
+    architecture entrypoints raise and requiring this population to come out byte-identical.
+
+    THE THREE OBJECTS STAY SEPARATE on every row:
+      * `xml_source_text`   semantic source truth -- what the XML says the heading IS
+      * `expected_rendered` the source-determined expectation (content/punctuation/whitespace)
+      * `expected_text`     the PHYSICALLY OBSERVED printed characters, which is what an
+                            adjudicator transcribes and what every mutation is computed from
+
+    `page_limit` is accepted for signature compatibility and deliberately UNUSED: the old H path
+    needed it to bound extraction cost, while the bridge is whole-document and truncating it
+    would silently shrink the population that eligibility is computed over.
+    """
+    return source_population(page_limit)["rows"]
+
+
+def source_population(page_limit: int = SOURCE_PAGE_LIMIT) -> dict:
+    """The population above, plus the refusal accounting G6 replays and the manifest reports."""
+    rows, diagnostics = [], {}
     for document, pdf_path, xml_path in DEVELOPMENT_SOURCES:
-        pages_data = run_hybrid.run(pdf_path, limit=page_limit)
-        by_page = {d["page_number"]: d for d in pages_data}
-        pages = [d["page"] for d in sorted(pages_data, key=lambda d: d["page_number"])]
-        xml_text = normalize_text(Path(xml_path).read_text(errors="replace")).upper()
+        lines = XS.physical_lines(pdf_path)
+        anchors = XS.independent_anchors(xml_path, pdf_path, lines=lines)
+        records = XS.account_records(xml_path)
+        bridged = XS.bridge(pdf_path, records, anchors=anchors["anchors"], lines=lines)
         pdf_sha, xml_sha = sha256_file(pdf_path), sha256_file(xml_path)
-        for anchor in PA.extract_anchors(pages):
-            if anchor.kind != "account":
-                continue
-            text = normalize_text(anchor.text)
-            if not text or text.upper() not in xml_text:
-                continue  # not independently corroborated -> not eligible
-            data = by_page.get(anchor.page_number)
-            if data is None:
-                continue
-            # THE A28.5 BRIDGE, reused. `search_for(text)` is ambiguous here -- GPO repeats
-            # headings like "OPERATIONS AND SUPPORT" several times on one page -- and picking
-            # among its hits would be inventing a text-matching rule. The frozen bridge names
-            # the exact physical line, so the source region is unambiguous by construction.
-            owner = build_owner(data["neutral"])
-            ordinal_by_key = {ln.key: ln.ordinal for ln in data["neutral"]}
-            placed, refusal = BF.place_anchor(anchor, data["page"].print_lines, data["emitted"], owner, ordinal_by_key)
-            if refusal:
-                continue  # not renderable through the existing control path -> not eligible
-            _region_ordinal, line_key = placed
-            line = next((ln for ln in data["neutral"] if ln.key == line_key), None)
-            if line is None:
-                continue
+        refused_position = 0
+        for p in bridged["paired"]:
+            admitted, _refusal = XS.is_admitted_account_source(p)
+            if not admitted:
+                refused_position += 1
+                continue  # A40.10 -- structural position, never typography
+            height = p["page_height"]
+            tl = p["bbox_topleft"]
             rows.append(
                 {
                     "document": document,
@@ -307,16 +374,39 @@ def development_account_sources(page_limit: int = SOURCE_PAGE_LIMIT) -> list[dic
                     "source_sha256": pdf_sha,
                     "xml_path": str(xml_path),
                     "xml_sha256": xml_sha,
-                    "page_number": anchor.page_number,
-                    "line_number": anchor.line_number,
-                    "neutral_line_key": list(line_key),
-                    "line_bbox_pdf": [line.x0, line.y0, line.x1, line.y1],
-                    "kind": anchor.kind,
-                    "expected_text": text,
-                    "xml_evidence": "exact normalized heading string present in paired GPO XML",
+                    "element": p["element"],
+                    "element_id": p["element_id"],
+                    "ancestor_path": p["ancestor_path"],
+                    "xml_document_ordinal": p["xml_document_ordinal"],
+                    "xml_offset": p["xml_offset"],
+                    "xml_source_text": p["xml_source_text"],
+                    "expected_rendered": p["rendering"]["expected_rendered"],
+                    "page_number": p["page_number"],
+                    "line_index": p["line_index"],
+                    "line_bbox_pdf": [tl[0], height - tl[3], tl[2], height - tl[1]],
+                    "page_height": height,
+                    "kind": "account",
+                    "expected_text": p["printed_text"],
+                    "xml_evidence": (
+                        f"legacy-DTD {p['element']} id={p['element_id']} at {p['ancestor_path']}; "
+                        "printed line agrees with the XML header under case folding alone"
+                    ),
+                    **oracle_region(lines, p),
                 }
             )
-    return rows
+        by_reason: dict = {}
+        for r in bridged["refusals"]:
+            by_reason[r["reason"]] = by_reason.get(r["reason"], 0) + 1
+        diagnostics[document] = {
+            "xml_account_records": len(records),
+            "independent_anchors": anchors["n"],
+            "anchor_inversions": anchors["monotonicity"]["n_inversions"],
+            "bridge_paired": bridged["n_paired"],
+            "bridge_refusals": by_reason,
+            "refused_not_account_position": refused_position,
+            "admitted_sources": sum(1 for r in rows if r["document"] == document),
+        }
+    return {"rows": rows, "diagnostics": diagnostics}
 
 
 def na_eligible(sources: list[dict]) -> list[dict]:
@@ -338,8 +428,20 @@ def na_eligible(sources: list[dict]) -> list[dict]:
 
 
 def source_identity(row: dict):
-    """Canonical, pre-mutation, and unique per physical heading occurrence."""
-    return ("na-source", row["source_sha256"], row["page_number"], row["line_number"])
+    """Canonical, pre-mutation, and unique per physical heading occurrence.
+
+    XML-ANCHORED and content-addressed. The element id is GPO's own stable identifier and the
+    XML digest pins the file it came from, so the identity survives a path move and carries no
+    architecture-derived component. `MC.select` supplies the namespace, so N-A and N-B rank the
+    SAME identity under different namespaces rather than two differently-shaped tuples.
+    """
+    return (
+        "xml-account",
+        row["xml_sha256"],
+        row["element_id"],
+        row["xml_document_ordinal"],
+        row["page_number"],
+    )
 
 
 def select_na_sources(eligible: list[dict]) -> list[dict]:
@@ -359,9 +461,8 @@ def select_nb_sources(eligible: list[dict]) -> list[dict]:
         raise ControlFixtureError(
             INSUFFICIENT_ELIGIBLE_SOURCES, {"control": "N-B", "eligible": len(eligible), "required": NB_TOTAL}
         )
-    identities = [("nb-source", r["source_sha256"], r["page_number"], r["line_number"]) for r in eligible]
-    by_identity = {MC.canonical(i): r for i, r in zip(identities, eligible)}
-    ranked = MC.select(NB_NAMESPACE, identities, NB_TOTAL)
+    by_identity = {MC.canonical(source_identity(r)): r for r in eligible}
+    ranked = MC.select(NB_NAMESPACE, [source_identity(r) for r in eligible], NB_TOTAL)
     return [by_identity[MC.canonical(i)] for i in ranked]
 
 
@@ -499,7 +600,8 @@ def generate_nc_pdf(index: int, out_path: Path) -> dict:
 def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | None = None) -> dict:
     """Build all 20 control fixtures and the manifest. DEVELOPMENT + SYNTHETIC only."""
     generated_dir = Path(generated_dir) if generated_dir else GENERATED_DIR
-    sources = development_account_sources(page_limit)
+    population = source_population(page_limit)
+    sources = population["rows"]
     eligible = na_eligible(sources)
     na_sources = select_na_sources(eligible)
 
@@ -530,8 +632,8 @@ def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | No
                 "xml_path": str(Path(row["xml_path"]).relative_to(REPO)),
                 "xml_sha256": row["xml_sha256"],
                 "xml_evidence": row["xml_evidence"],
-                "page_number": row["page_number"],
-                "line_number": row["line_number"],
+                "source_canonical_identity": MC.canonical(source_identity(row)),
+                **_source_provenance(row),
                 "expected_before": row["expected_text"],
                 "expected_after": after,
                 "mutation_recipe": recipe,
@@ -563,8 +665,8 @@ def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | No
                 "xml_path": str(Path(row["xml_path"]).relative_to(REPO)),
                 "xml_sha256": row["xml_sha256"],
                 "xml_evidence": row["xml_evidence"],
-                "page_number": row["page_number"],
-                "line_number": row["line_number"],
+                "source_canonical_identity": MC.canonical(source_identity(row)),
+                **_source_provenance(row),
                 "expected_adjudicated_headings": [{"text": row["expected_text"]}],
             }
         )
@@ -588,7 +690,10 @@ def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | No
                 "source_sha256": generated["generated_sha256"],
                 "parent_sha256": None,
                 "page_number": 1,
-                "line_number": None,
+                # F6 -- N-C's already-repaired region, carried in the SAME shape as N-A/N-B so
+                # one adapter serves all three kinds and no caller special-cases a control.
+                "region_ordinal": index,
+                "region_line_mapping": [[1, i] for i in range(generated["n_lines"])],
                 "expected_adjudicated_headings": [],
                 **generated,
             }
@@ -603,7 +708,21 @@ def build_manifest(page_limit: int = SOURCE_PAGE_LIMIT, generated_dir: Path | No
         "na_schedule": {str(k): v for k, v in NA_SCHEDULE.items()},
         "retired_variant": RETIRED_VARIANT,
         "counts": {"N-A": len(na), "N-B": len(nb), "N-C": len(nc)},
-        "eligible_population": {"account_headings_xml_corroborated": len(sources), "na_eligible": len(eligible)},
+        "source_truth": (
+            "legacy-DTD appropriations-small under <title> -> approved XML->PDF bridge -> "
+            "independently observed printed line. No run_hybrid, run_extended or extract_anchors."
+        ),
+        "account_position_rule": {
+            "parent_element": XS.ACCOUNT_PARENT_ELEMENT,
+            "refusal": XS.NOT_ACCOUNT_POSITION,
+            "note": "structural position only -- no lexical or typographic test of the heading text",
+        },
+        "eligible_population": {
+            "admitted_account_sources": len(sources),
+            "na_eligible": len(eligible),
+            "nb_eligible": len(sources),
+            "per_document": population["diagnostics"],
+        },
         "fixtures": na + nb + nc,
     }
 

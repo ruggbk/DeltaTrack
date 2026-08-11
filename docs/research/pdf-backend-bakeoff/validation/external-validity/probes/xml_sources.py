@@ -104,6 +104,40 @@ UNDISCRIMINATED_GROUP = "UNDISCRIMINATED_GROUP"
 RENDERED_TEXT_DISAGREEMENT = "RENDERED_TEXT_DISAGREEMENT"
 UNEXPECTED_SCHEMA = "UNEXPECTED_SCHEMA"
 
+#: A40.10 -- THE ACCOUNT POSITION, ruled structurally rather than lexically.
+#:
+#: The legacy DTD models the appropriations hierarchy as flat siblings under `<title>`
+#: (`docs/bill-structure.md`). An `appropriations-small` whose parent is NOT that container sits
+#: somewhere else in the source structure. Measured on the committed corpus, exactly two parents
+#: occur -- `title` and `section` -- and `title/section/appropriations-small` holds **17 paired
+#: records and NOT ONE admitted account record**, so it is a different source-defined structural
+#: role rather than a different way of spelling an account.
+#:
+#: THIS IS NOT A PARENTHETICAL RULE, and the corpus proves it: 5 parenthetical-headed records
+#: sit at the admitted `title` position and REMAIN ELIGIBLE, including 118-hr-8752/1's own
+#: `(RESCISSIONS OF FUNDS)`. Nothing here reads the text -- not its first character, not its
+#: words, not what it looks like to a human.
+#:
+#: It is applied AFTER the bridge, never before. Two 114-hr-2029/4 groups mix `section`- and
+#: `title`-parented records, so filtering the enumeration would drop XML occurrences whose lines
+#: are still printed on the page, break the equal-count test, and refuse the whole group.
+ACCOUNT_PARENT_ELEMENT = "title"
+NOT_ACCOUNT_POSITION = "NOT_ACCOUNT_POSITION"
+
+
+def account_parent_element(record: dict) -> str:
+    """The element the `appropriations-small` block actually hangs from."""
+    parts = record["ancestor_path"].split("/")
+    return parts[-2] if len(parts) >= 2 else ""
+
+
+def is_admitted_account_source(record: dict) -> tuple[bool, str | None]:
+    """A40.10 -- structural admission. Returns (admitted, refusal_reason)."""
+    if account_parent_element(record) != ACCOUNT_PARENT_ELEMENT:
+        return False, NOT_ACCOUNT_POSITION
+    return True, None
+
+
 #: A40 section 2 -- which authority decides each dimension of the printed heading.
 RENDERED_TEXT_PROVENANCE = {
     "text_content": "SOURCE-DETERMINED",

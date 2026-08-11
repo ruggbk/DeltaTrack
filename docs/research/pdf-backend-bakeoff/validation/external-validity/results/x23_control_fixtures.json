@@ -20,28 +20,52 @@
    "SPLIT_ONE_WORD": 2
   },
   "eligible_population": {
-   "account_headings_xml_corroborated": 58,
-   "na_eligible": 46
+   "admitted_account_sources": 79,
+   "na_eligible": 66,
+   "nb_eligible": 79,
+   "per_document": {
+    "114-hr-2029/4": {
+     "xml_account_records": 105,
+     "independent_anchors": 85,
+     "anchor_inversions": 0,
+     "bridge_paired": 55,
+     "bridge_refusals": {
+      "UNDISCRIMINATED_GROUP": 2,
+      "NO_PHYSICAL_OCCURRENCE": 3
+     },
+     "refused_not_account_position": 17,
+     "admitted_sources": 38
+    },
+    "118-hr-8752/1": {
+     "xml_account_records": 41,
+     "independent_anchors": 111,
+     "anchor_inversions": 0,
+     "bridge_paired": 41,
+     "bridge_refusals": {},
+     "refused_not_account_position": 0,
+     "admitted_sources": 41
+    }
+   }
   },
   "na": [
    {
     "index": 0,
     "variant": "DELETE_ONE_WORD",
     "source": "118-hr-8752/1",
-    "page": 4,
-    "before": "OPERATIONS AND SUPPORT",
-    "after": "AND SUPPORT",
+    "page": 20,
+    "before": "RESEARCH AND DEVELOPMENT",
+    "after": "RESEARCH AND",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "4695eda3149cdd76"
+    "generated_sha256": "730b5e29c265502d"
    },
    {
     "index": 1,
     "variant": "WELD_TWO_WORDS",
-    "source": "114-hr-2029/4",
-    "page": 11,
-    "before": "DEPARTMENT OF DEFENSE BASE CLOSURE ACCOUNT",
-    "after": "DEPARTMENTOF DEFENSE BASE CLOSURE ACCOUNT",
+    "source": "118-hr-8752/1",
+    "page": 58,
+    "before": "OPERATIONS AND SUPPORT",
+    "after": "OPERATIONSAND SUPPORT",
     "boundary_transitions": [
      [
       1,
@@ -49,15 +73,15 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "74583d3fb1d91d3e"
+    "generated_sha256": "a4f7a162467730c3"
    },
    {
     "index": 2,
     "variant": "SPLIT_ONE_WORD",
-    "source": "118-hr-8752/1",
-    "page": 17,
-    "before": "RESEARCH AND DEVELOPMENT",
-    "after": "RESEARCH AND DEVEL OPMENT",
+    "source": "114-hr-2029/4",
+    "page": 25,
+    "before": "VETERANS INSURANCE AND INDEMNITIES",
+    "after": "VETERANS INSURANCE AND INDEM NITIES",
     "boundary_transitions": [
      [
       0,
@@ -65,26 +89,26 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "c1f69f2396f48bb4"
+    "generated_sha256": "fd02faf891955c2c"
    },
    {
     "index": 3,
     "variant": "DELETE_ONE_WORD",
     "source": "118-hr-8752/1",
-    "page": 14,
-    "before": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
-    "after": "PROCUREMENT, , AND IMPROVEMENTS",
+    "page": 56,
+    "before": "OPERATIONS AND SUPPORT",
+    "after": "AND SUPPORT",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "9a520c6ecd9b5cf0"
+    "generated_sha256": "a247f68b6cdadd75"
    },
    {
     "index": 4,
     "variant": "WELD_TWO_WORDS",
-    "source": "118-hr-8752/1",
-    "page": 20,
-    "before": "RESEARCH AND DEVELOPMENT",
-    "after": "RESEARCHAND DEVELOPMENT",
+    "source": "114-hr-2029/4",
+    "page": 23,
+    "before": "COMPENSATION AND PENSIONS",
+    "after": "COMPENSATIONAND PENSIONS",
     "boundary_transitions": [
      [
       1,
@@ -92,15 +116,15 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "c7c711cc52359e8d"
+    "generated_sha256": "f09f0fd5bdd5a412"
    },
    {
     "index": 5,
     "variant": "SPLIT_ONE_WORD",
-    "source": "114-hr-2029/4",
-    "page": 2,
-    "before": "MILITARY CONSTRUCTION, ARMY",
-    "after": "MILITARY CONSTR UCTION, ARMY",
+    "source": "118-hr-8752/1",
+    "page": 44,
+    "before": "OPERATIONS AND SUPPORT",
+    "after": "OPERA TIONS AND SUPPORT",
     "boundary_transitions": [
      [
       0,
@@ -108,26 +132,26 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "0dd652704c068480"
+    "generated_sha256": "8895c0c2cf601f16"
    },
    {
     "index": 6,
     "variant": "DELETE_ONE_WORD",
     "source": "114-hr-2029/4",
-    "page": 32,
-    "before": "INFORMATION TECHNOLOGY SYSTEMS",
-    "after": "TECHNOLOGY SYSTEMS",
+    "page": 132,
+    "before": "FOREIGN CURRENCY FLUCTUATIONS ACCOUNT",
+    "after": "FOREIGN CURRENCY ACCOUNT",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "c92089b69d4d1bd5"
+    "generated_sha256": "ae62a84a35e6963f"
    },
    {
     "index": 7,
     "variant": "WELD_TWO_WORDS",
     "source": "114-hr-2029/4",
-    "page": 6,
-    "before": "MILITARY CONSTRUCTION, ARMY NATIONAL GUARD",
-    "after": "MILITARYCONSTRUCTION, ARMY NATIONAL GUARD",
+    "page": 101,
+    "before": "INFORMATION TECHNOLOGY SYSTEMS",
+    "after": "INFORMATIONTECHNOLOGY SYSTEMS",
     "boundary_transitions": [
      [
       1,
@@ -135,30 +159,30 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "90f393f061cebade"
+    "generated_sha256": "1a19bb6683a37337"
    }
   ],
   "nb": [
    {
     "index": 0,
     "source": "118-hr-8752/1",
-    "page": 16,
-    "expected_text": "RESEARCH AND DEVELOPMENT",
+    "page": 49,
+    "expected_text": "NATIONAL FLOOD INSURANCE FUND",
     "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
     "xml_sha256": "e4bc6b90eeff87d0"
    },
    {
     "index": 1,
     "source": "114-hr-2029/4",
-    "page": 28,
-    "expected_text": "MEDICAL FACILITIES",
+    "page": 60,
+    "expected_text": "FOREIGN CURRENCY FLUCTUATIONS ACCOUNT",
     "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
     "xml_sha256": "68e98a6b0b204cfe"
    },
    {
     "index": 2,
     "source": "118-hr-8752/1",
-    "page": 14,
+    "page": 57,
     "expected_text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
     "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
     "xml_sha256": "e4bc6b90eeff87d0"
@@ -166,7 +190,7 @@
    {
     "index": 3,
     "source": "118-hr-8752/1",
-    "page": 3,
+    "page": 15,
     "expected_text": "PROCUREMENT, CONSTRUCTION, AND IMPROVEMENTS",
     "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
     "xml_sha256": "e4bc6b90eeff87d0"
@@ -174,34 +198,34 @@
    {
     "index": 4,
     "source": "114-hr-2029/4",
-    "page": 3,
-    "expected_text": "MILITARY CONSTRUCTION, NAVY AND MARINE CORPS",
+    "page": 94,
+    "expected_text": "VETERANS HOUSING BENEFIT PROGRAM FUND",
     "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
     "xml_sha256": "68e98a6b0b204cfe"
    },
    {
     "index": 5,
     "source": "118-hr-8752/1",
-    "page": 2,
-    "expected_text": "OPERATIONS AND SUPPORT",
+    "page": 11,
+    "expected_text": "(INCLUDING TRANSFER OF FUNDS)",
     "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
     "xml_sha256": "e4bc6b90eeff87d0"
    },
    {
     "index": 6,
-    "source": "118-hr-8752/1",
-    "page": 20,
-    "expected_text": "RESEARCH AND DEVELOPMENT",
-    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
-    "xml_sha256": "e4bc6b90eeff87d0"
+    "source": "114-hr-2029/4",
+    "page": 133,
+    "expected_text": "TRUST FUND",
+    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
+    "xml_sha256": "68e98a6b0b204cfe"
    },
    {
     "index": 7,
-    "source": "114-hr-2029/4",
-    "page": 6,
-    "expected_text": "MILITARY CONSTRUCTION, AIR NATIONAL GUARD",
-    "xml_path": "tests/corpus/114-hr-2029/4_reported-in-senate.xml",
-    "xml_sha256": "68e98a6b0b204cfe"
+    "source": "118-hr-8752/1",
+    "page": 11,
+    "expected_text": "OPERATIONS AND SUPPORT",
+    "xml_path": "tests/corpus/118-hr-8752/1_reported-in-house.xml",
+    "xml_sha256": "e4bc6b90eeff87d0"
    }
   ],
   "nc": [
@@ -602,28 +626,28 @@
   {
    "test": "a clean rebuild reproduces IDENTICAL bytes for every generated fixture",
    "expected": {
-    "na_00_delete_one_word.pdf": "4695eda3149cdd762cc65152b1e9e94475a549d4544c98eda085057bcc1d0263",
-    "na_01_weld_two_words.pdf": "74583d3fb1d91d3e0590f5de62a2c099f0f5df38a8708692928aff98cc3ed8e5",
-    "na_02_split_one_word.pdf": "c1f69f2396f48bb4f578be29d9a985c2cd7d69e516460238ed306e84698d9eee",
-    "na_03_delete_one_word.pdf": "9a520c6ecd9b5cf0e08f4b977bf86f23596ad7bc61db9084617d4d0c62df19de",
-    "na_04_weld_two_words.pdf": "c7c711cc52359e8d3c8604e6240aa07621cfb7d04a3414e3cd063956ca31a001",
-    "na_05_split_one_word.pdf": "0dd652704c068480d749f2c096d7e811e5d92f2b24a0176b1234cbcdbf6fcaf6",
-    "na_06_delete_one_word.pdf": "c92089b69d4d1bd5db8a6bc51afa3972a82ff0e51f962c13a42d1e3219782731",
-    "na_07_weld_two_words.pdf": "90f393f061cebade6a45cb749bd043c92c75bc7b6a401eb7b04435ad8d7ff8f1",
+    "na_00_delete_one_word.pdf": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
+    "na_01_weld_two_words.pdf": "a4f7a162467730c3d24284185d6245e2048d25c8cd396d516dc32c993c76cc90",
+    "na_02_split_one_word.pdf": "fd02faf891955c2ca001c9e6201cff8e15da59b467e248208a48c2d90463e851",
+    "na_03_delete_one_word.pdf": "a247f68b6cdadd752ce0bddbe0bffc9137859c5729005559931374df3275b639",
+    "na_04_weld_two_words.pdf": "f09f0fd5bdd5a4127adcb0e1cef249d648c349d6833be69da1b8aa20be5a985b",
+    "na_05_split_one_word.pdf": "8895c0c2cf601f16e50bf35128766dc51164792e0aa34919ef25392ad24a915a",
+    "na_06_delete_one_word.pdf": "ae62a84a35e6963f707997152aff1cef8fe9aea0cf55d80205c6ad780ad6278e",
+    "na_07_weld_two_words.pdf": "1a19bb6683a373370d8df616196b6db435ea7c54d0834aa6c82d4ad1608438f2",
     "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
     "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
     "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",
     "nc_03_heading_free.pdf": "19f6939bd4f00c1eace0df6c7499c38367bd941d4c53675f69327615f64a7db6"
    },
    "observed": {
-    "na_00_delete_one_word.pdf": "4695eda3149cdd762cc65152b1e9e94475a549d4544c98eda085057bcc1d0263",
-    "na_01_weld_two_words.pdf": "74583d3fb1d91d3e0590f5de62a2c099f0f5df38a8708692928aff98cc3ed8e5",
-    "na_02_split_one_word.pdf": "c1f69f2396f48bb4f578be29d9a985c2cd7d69e516460238ed306e84698d9eee",
-    "na_03_delete_one_word.pdf": "9a520c6ecd9b5cf0e08f4b977bf86f23596ad7bc61db9084617d4d0c62df19de",
-    "na_04_weld_two_words.pdf": "c7c711cc52359e8d3c8604e6240aa07621cfb7d04a3414e3cd063956ca31a001",
-    "na_05_split_one_word.pdf": "0dd652704c068480d749f2c096d7e811e5d92f2b24a0176b1234cbcdbf6fcaf6",
-    "na_06_delete_one_word.pdf": "c92089b69d4d1bd5db8a6bc51afa3972a82ff0e51f962c13a42d1e3219782731",
-    "na_07_weld_two_words.pdf": "90f393f061cebade6a45cb749bd043c92c75bc7b6a401eb7b04435ad8d7ff8f1",
+    "na_00_delete_one_word.pdf": "730b5e29c265502d4eba19ccfd4c6d9f1ccbba63bfddd20a8fbfa28fbb66c049",
+    "na_01_weld_two_words.pdf": "a4f7a162467730c3d24284185d6245e2048d25c8cd396d516dc32c993c76cc90",
+    "na_02_split_one_word.pdf": "fd02faf891955c2ca001c9e6201cff8e15da59b467e248208a48c2d90463e851",
+    "na_03_delete_one_word.pdf": "a247f68b6cdadd752ce0bddbe0bffc9137859c5729005559931374df3275b639",
+    "na_04_weld_two_words.pdf": "f09f0fd5bdd5a4127adcb0e1cef249d648c349d6833be69da1b8aa20be5a985b",
+    "na_05_split_one_word.pdf": "8895c0c2cf601f16e50bf35128766dc51164792e0aa34919ef25392ad24a915a",
+    "na_06_delete_one_word.pdf": "ae62a84a35e6963f707997152aff1cef8fe9aea0cf55d80205c6ad780ad6278e",
+    "na_07_weld_two_words.pdf": "1a19bb6683a373370d8df616196b6db435ea7c54d0834aa6c82d4ad1608438f2",
     "nc_00_heading_free.pdf": "35339e49d5410943060158e9614216522fd5c3326e0a2c67d1fe9bce2dbd6a3d",
     "nc_01_heading_free.pdf": "50355822f5277fc9ada53140d65fa0ec8bcb0b6f1b312fb60db8f7c2c7ce5e63",
     "nc_02_heading_free.pdf": "995558d2e1080158da5ae9575be136d08f96fbdc5034d2afa52550bb53250e26",

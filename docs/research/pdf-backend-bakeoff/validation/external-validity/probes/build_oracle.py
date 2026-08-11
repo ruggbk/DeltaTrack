@@ -104,6 +104,17 @@ PURPOSE_C_METRICS = "c_metrics"
 PURPOSE_D_DECISION = "d_decision"
 PURPOSE_C_AUDIT = "c_audit"
 
+# A40 F5 -- a CONTROL is answered on both result-bearing routes (A36.6 requires every control
+# class on every answer route) while belonging to NEITHER estimand. Two purposes rather than one
+# because `PURPOSE_ROUTE` is a purpose->route function: a single "control" purpose could only
+# name one route, and the control would silently be answered on half of them.
+#
+# ADDITIVE ONLY. No ordinary purpose, route, frame or denominator changes: a control has
+# `frames == ()`, so `frame_routes` stays empty, `frame_counts` already filters controls out of
+# C, D and the audit, and `select_c_audit`/`plan_r1_repeats` already exclude `control_kind`.
+PURPOSE_CONTROL_AI = "control_ai"
+PURPOSE_CONTROL_HUMAN = "control_human"
+
 # A36.4's CRITICAL PROHIBITION, as a table rather than as prose a caller might not read.
 # C metrics read the AI answer even where a human answer exists, because D membership is
 # CONDITIONAL ON ARCHITECTURE DISAGREEMENT -- taking human truth only on C-and-D regions would
@@ -113,7 +124,13 @@ PURPOSE_ROUTE = {
     PURPOSE_C_METRICS: ROUTE_AI,
     PURPOSE_D_DECISION: ROUTE_HUMAN,
     PURPOSE_C_AUDIT: ROUTE_HUMAN,
+    PURPOSE_CONTROL_AI: ROUTE_AI,
+    PURPOSE_CONTROL_HUMAN: ROUTE_HUMAN,
 }
+#: The purposes that read an ESTIMAND's answer. Controls are deliberately absent: a control must
+#: never enter a C or D denominator, and naming the set explicitly means a later scorer cannot
+#: acquire one by iterating `PURPOSE_ROUTE`.
+ESTIMAND_PURPOSES = (PURPOSE_C_METRICS, PURPOSE_D_DECISION, PURPOSE_C_AUDIT)
 
 # A36.4 -- the adjudication artifact must carry two separately namespaced answer sets keyed by
 # the SAME blind id. The schema requirement is frozen now; the artifact is not built here.
@@ -364,6 +381,18 @@ class StimulusSpec:
     control_kind: str | None = None
     control_variant: str | None = None
     source_fixture_sha256: str | None = None
+    # A40 F5 -- a control carries its OWN committed geometry, because it has no frame to read it
+    # from. These come straight from the control manifest and are never re-derived: the bbox
+    # handed to `render_region` is the one `control_fixtures` committed, so no later code decides
+    # what to crop and no text search recovers a region.
+    control_pdf_path: str | None = None
+    control_bbox: tuple[float, ...] | None = None
+    control_line_mapping: tuple[tuple[int, ...], ...] = ()
+    #: A40 section 6 -- the private binding. Carried as JSON strings so the spec stays a frozen
+    #: dataclass of hashable fields; they are written to the PRIVATE key only and are covered by
+    #: `LEAKY_KEY_FIELDS`, so a leak into the blind artifact is a reported defect.
+    control_record_digest: str | None = None
+    control_expected_json: str | None = None
 
     @property
     def frame_routes(self) -> tuple[str, ...]:
@@ -380,8 +409,20 @@ class StimulusSpec:
         return tuple(r for r in ROUTE_ORDER if r in routes)
 
     @property
+    def is_control(self) -> bool:
+        return self.control_kind is not None
+
+    @property
     def adjudication_routes(self) -> tuple[str, ...]:
-        """Every route this stimulus must actually be answered on."""
+        """Every route this stimulus must actually be answered on.
+
+        A36.6 -- a CONTROL takes BOTH result-bearing routes while sitting in neither frame. It
+        cannot inherit them from `frame_routes`, which is frame membership and would be empty;
+        stating them here is what keeps a control outside C and D without giving it a frame it
+        does not belong to.
+        """
+        if self.is_control:
+            return ROUTE_ORDER
         routes = set(self.frame_routes)
         if self.is_c_audit_selected:
             routes.add(ROUTE_HUMAN)
@@ -395,6 +436,8 @@ class StimulusSpec:
         selections only: a C-and-D human answer that was NOT independently drawn must never
         enlarge the audit.
         """
+        if self.is_control:
+            return (PURPOSE_CONTROL_HUMAN,)
         purposes = []
         if D_FRAME in self.frames:
             purposes.append(PURPOSE_D_DECISION)
@@ -457,6 +500,52 @@ def plan_document_stimuli(frame: dict, stratum: str) -> list[StimulusSpec]:
                     stratum=stratum,
                 )
             )
+    return specs
+
+
+CONTROL_STRATUM = "CONTROL"
+CONTROL_MANIFEST_INCOMPLETE = "CONTROL_MANIFEST_INCOMPLETE"
+
+
+def control_specs(manifest: dict, fixtures_root: Path, repo_root: Path) -> list[StimulusSpec]:
+    """A40 F5 -- the manifest->spec adapter that was missing, and whose absence WAS F5.
+
+    Every field comes from the committed manifest. Nothing is re-derived, nothing is searched
+    for, and no parallel renderer or blind pipeline exists: the specs returned here go through
+    the same `build()` as ordinary stimuli and are rendered by the same `render_region`.
+
+    A control is `frames=()`, so it is in neither estimand; `select_c_audit` and
+    `plan_r1_repeats` already exclude `control_kind`, so it can be neither audited nor repeated.
+    """
+    specs = []
+    for f in manifest.get("fixtures", []):
+        kind = f.get("control_kind")
+        rel = f.get("generated_path") or f.get("source_path")
+        bbox = f.get("region_bbox_pdf_points")
+        if not kind or not rel or not bbox:
+            raise OracleBuildError(
+                CONTROL_MANIFEST_INCOMPLETE,
+                {"identity": f.get("canonical_identity"), "kind": kind, "path": rel, "bbox": bbox},
+            )
+        root = fixtures_root if f.get("generated_path") else repo_root
+        specs.append(
+            StimulusSpec(
+                document_id=f"CONTROL/{kind}/{f['schedule_index']}",
+                document_sha256=f["source_sha256"],
+                page_number=f["page_number"],
+                region_ordinal=f["schedule_index"],
+                frames=(),
+                stratum=CONTROL_STRATUM,
+                control_kind=kind,
+                control_variant=f.get("variant"),
+                source_fixture_sha256=f["source_sha256"],
+                control_pdf_path=str(root / rel),
+                control_bbox=tuple(float(v) for v in bbox),
+                control_line_mapping=tuple(tuple(m) for m in (f.get("region_line_mapping") or ())),
+                control_record_digest=control_record_digest(f),
+                control_expected_json=json.dumps(f.get("expected_adjudicated_headings"), sort_keys=True),
+            )
+        )
     return specs
 
 
@@ -681,6 +770,13 @@ LEAKY_KEY_FIELDS = (
     "architecture_occurrences",
     "identity_candidates",
     "region_line_bijection",
+    # A40 section 6 -- the control binding is private too. The expected heading text is the one
+    # value whose leak would tell an adjudicator the answer, so it is checked by VALUE here as
+    # well as being structurally excluded by the blind allowlist.
+    "control_source_fixture_sha256",
+    "control_record_digest",
+    "control_pdf_path",
+    "control_expected_truth",
 )
 
 
@@ -795,14 +891,28 @@ def build(
     open_docs: dict = {}
     try:
         for rank, spec in enumerate(ordered):
-            doc = frames_by_doc[spec.document_id]
-            frame = doc["frame"]
-            page_frame = next(p for p in frame["pages"] if p["page_number"] == spec.page_number)
+            if spec.is_control:
+                # A40 F5 -- a control has no frame, so its geometry comes from the CONTROL
+                # MANIFEST. Same renderer, same DPI rule, same blinding; only the provenance of
+                # the bbox differs, and it is committed rather than derived. The three
+                # frame-only join fields stay None: faking an architecture occurrence for a
+                # control would invent the very evidence the control exists to bound.
+                bbox = tuple(float(v) for v in spec.control_bbox)
+                path = spec.control_pdf_path
+                bijection = [list(m) for m in spec.control_line_mapping]
+                candidates, occurrences = None, None
+            else:
+                doc = frames_by_doc[spec.document_id]
+                frame = doc["frame"]
+                page_frame = next(p for p in frame["pages"] if p["page_number"] == spec.page_number)
 
-            # A33.1/A33.2 -- geometry from the COMMITTED frame, never re-derived from the PDF
-            bbox = OG.region_bbox(page_frame, spec.region_ordinal)
+                # A33.1/A33.2 -- geometry from the COMMITTED frame, never re-derived from the PDF
+                bbox = OG.region_bbox(page_frame, spec.region_ordinal)
+                path = str(doc["pdf_path"])
+                bijection = region_line_bijection(page_frame, spec.region_ordinal)
+                candidates = region_identity_candidates(page_frame, spec.region_ordinal)
+                occurrences = region_architecture_occurrences(frame, spec.page_number, spec.region_ordinal)
 
-            path = str(doc["pdf_path"])
             if path not in open_docs:
                 open_docs[path] = pymupdf.open(path)
             page = open_docs[path][spec.page_number - 1]
@@ -843,12 +953,18 @@ def build(
                 "image": image_name,
                 "png_sha256": hashlib.sha256(png).hexdigest(),
                 # A35.2 -- the printed-line index the adjudicator reports maps through this
-                "region_line_bijection": region_line_bijection(page_frame, spec.region_ordinal),
+                "region_line_bijection": bijection,
                 # A38.6 -- the occurrence-level scoring join, from the COMMITTED FRAME and
                 # from nowhere else. There is no caller-provided alternative to disagree with.
-                "identity_candidates": region_identity_candidates(page_frame, spec.region_ordinal),
-                "architecture_occurrences": region_architecture_occurrences(
-                    frame, spec.page_number, spec.region_ordinal
+                # None for a control, which has no architecture occurrence to join to.
+                "identity_candidates": candidates,
+                "architecture_occurrences": occurrences,
+                # A40 section 6 -- the private control binding, absent on ordinary stimuli.
+                "control_source_fixture_sha256": spec.source_fixture_sha256,
+                "control_record_digest": spec.control_record_digest,
+                "control_pdf_path": spec.control_pdf_path,
+                "control_expected_truth": (
+                    json.loads(spec.control_expected_json) if spec.control_expected_json else None
                 ),
             }
             blind_items.append({"id": bid, "image": image_name, "question": question})
@@ -944,8 +1060,50 @@ REQUIRED_JOIN_FIELDS = (
     "architecture_occurrences",
 )
 
+#: A40 section 6 -- what a CONTROL join needs instead. `identity_candidates` and
+#: `architecture_occurrences` are deliberately absent rather than stubbed: a control has no
+#: architecture occurrence, and inventing one would fabricate the evidence it exists to bound.
+#: Everything that binds the control to its fixture and its private truth IS required.
+CONTROL_JOIN_FIELDS = (
+    "canonical_identity",
+    "control_kind",
+    "control_variant",
+    "control_source_fixture_sha256",
+    "control_record_digest",
+    "control_pdf_path",
+    "control_expected_truth",
+    "adjudication_routes",
+    "dpi",
+    "bbox_pdf_points",
+    "png_sha256",
+    "region_line_bijection",
+)
+JOIN_CONTROL_TRUTH_MISMATCH = "JOIN_CONTROL_TRUTH_MISMATCH"
 
-def verify_join(result: BuildResult) -> list[dict]:
+#: Fields of a control manifest record that the private binding is taken over. Deliberately the
+#: TRUTH-BEARING ones: a digest over the whole record would change whenever an unrelated
+#: descriptive field moved, and a gate nobody can keep green stops being read.
+CONTROL_DIGEST_FIELDS = (
+    "canonical_identity",
+    "control_kind",
+    "variant",
+    "source_sha256",
+    "generated_sha256",
+    "expected_adjudicated_headings",
+    "expected_before",
+    "expected_after",
+    "mutation_recipe",
+    "region_bbox_pdf_points",
+)
+
+
+def control_record_digest(record: dict) -> str:
+    """A stable digest of one control manifest record's truth-bearing fields."""
+    payload = {k: record.get(k) for k in CONTROL_DIGEST_FIELDS}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def verify_join(result: BuildResult, control_manifest: dict | None = None) -> list[dict]:
     """I7 -- is every blind id still bound to the image and region the key says it is?
 
     Returns the list of defects, empty when the join is sound. This is what makes the key
@@ -959,9 +1117,35 @@ def verify_join(result: BuildResult) -> list[dict]:
         if record is None:
             defects.append({"reason": JOIN_BLIND_ID_UNKNOWN, "blind_id": bid})
             continue
-        for fname in REQUIRED_JOIN_FIELDS:
+        is_control = record.get("control_kind") is not None
+        for fname in CONTROL_JOIN_FIELDS if is_control else REQUIRED_JOIN_FIELDS:
             if record.get(fname) in (None, ""):
                 defects.append({"reason": JOIN_FIELD_MISSING, "blind_id": bid, "field": fname})
+        if is_control and control_manifest is not None:
+            # The binding is re-derived from the MANIFEST by canonical identity, so shuffling
+            # private truth or fixture identity between two otherwise-valid control blind ids is
+            # a reported defect rather than an invisible swap.
+            expected = next(
+                (
+                    f
+                    for f in control_manifest.get("fixtures", [])
+                    if f.get("canonical_identity") == record.get("canonical_identity")
+                ),
+                None,
+            )
+            if expected is None:
+                defects.append({"reason": JOIN_CONTROL_TRUTH_MISMATCH, "blind_id": bid, "field": "canonical_identity"})
+            else:
+                for kf, mf in (
+                    ("control_record_digest", None),
+                    ("control_expected_truth", "expected_adjudicated_headings"),
+                    ("control_source_fixture_sha256", "source_sha256"),
+                    ("control_variant", "variant"),
+                    ("control_kind", "control_kind"),
+                ):
+                    want = control_record_digest(expected) if mf is None else expected.get(mf)
+                    if record.get(kf) != want:
+                        defects.append({"reason": JOIN_CONTROL_TRUTH_MISMATCH, "blind_id": bid, "field": kf})
         png = result.images.get(item["image"])
         if png is None:
             defects.append({"reason": JOIN_IMAGE_MISSING, "blind_id": bid, "image": item["image"]})
