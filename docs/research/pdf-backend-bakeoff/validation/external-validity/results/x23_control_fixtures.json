@@ -33,7 +33,7 @@
     "after": "AND SUPPORT",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "bbf16b0f57a10fe2"
+    "generated_sha256": "f6a4cf3982a5391d"
    },
    {
     "index": 1,
@@ -49,7 +49,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "af6cc63e6ad1ea9e"
+    "generated_sha256": "e0671872f7153293"
    },
    {
     "index": 2,
@@ -65,7 +65,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "df6c7e919e88e0ae"
+    "generated_sha256": "6eaca9dbf1b05bb2"
    },
    {
     "index": 3,
@@ -76,7 +76,7 @@
     "after": "PROCUREMENT, , AND IMPROVEMENTS",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "7b0216337b3aff77"
+    "generated_sha256": "55c13db003ac088a"
    },
    {
     "index": 4,
@@ -92,7 +92,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "ee0dfe3453ff2fb2"
+    "generated_sha256": "7b9a613d1df99e5d"
    },
    {
     "index": 5,
@@ -108,7 +108,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "f985c267ec568362"
+    "generated_sha256": "31c48152cab17ff3"
    },
    {
     "index": 6,
@@ -119,7 +119,7 @@
     "after": "TECHNOLOGY SYSTEMS",
     "boundary_transitions": [],
     "non_space_unchanged": false,
-    "generated_sha256": "57967e9044cf4398"
+    "generated_sha256": "be2cf0fa39bfcb60"
    },
    {
     "index": 7,
@@ -135,7 +135,7 @@
      ]
     ],
     "non_space_unchanged": true,
-    "generated_sha256": "4d4b73e204b1da8c"
+    "generated_sha256": "d3b634252851f954"
    }
   ],
   "nb": [
@@ -207,24 +207,46 @@
   "nc": [
    {
     "index": 0,
-    "generated_sha256": "84a01be4f9c8a8a6",
+    "generated_sha256": "69c03bcd7431c591",
     "expected": []
    },
    {
     "index": 1,
-    "generated_sha256": "d9049dd6713f8ea4",
+    "generated_sha256": "117b7b60869ffbdd",
     "expected": []
    },
    {
     "index": 2,
-    "generated_sha256": "2c910018485b4a77",
+    "generated_sha256": "83158525536d7211",
     "expected": []
    },
    {
     "index": 3,
-    "generated_sha256": "07add5ead98b2c9b",
+    "generated_sha256": "d320a8a920375f94",
     "expected": []
    }
+  ]
+ },
+ "nc_rendered_distinctness": {
+  "rendered_png_sha256": [
+   "ce7aefae40978180bfe7e81310238808657ec42b8845b0d6c81160fdcc309596",
+   "ebd2572ef7032604dd88ab13cc8aef6364517ff9c97f7a1062172d37f107e2d3",
+   "bb14d96a3c6ddc9a40a7b88bac2f4323b8da4c187bacd335d6f960e36b243b23",
+   "d62985083b9d7b5757d52bb1750b0db40aeb0afd402ad4865c8393fcc974faa2"
+  ],
+  "container_sha256": [
+   "69c03bcd7431c591",
+   "117b7b60869ffbdd",
+   "83158525536d7211",
+   "d320a8a920375f94"
+  ],
+  "distinct_rendered": 4
+ },
+ "holdout_identity_guard": {
+  "n_holdout_source_sha256": 17,
+  "counterfactual_reasons": [
+   "HOLDOUT_SOURCE_IDENTITY",
+   "STALE_SHA256"
   ]
  },
  "g6": {
@@ -546,6 +568,61 @@
    ],
    "pass": true,
    "fails_when": "the unmutated heading survives alongside the mutation, so the region shows both and the control cannot distinguish an oracle that saw the alteration"
+  },
+  {
+   "test": "the four N-C controls render to FOUR DISTINCT PNG hashes",
+   "expected": 4,
+   "observed": 4,
+   "pass": true,
+   "fails_when": "two heading-free controls are the same image, so the four-item N-C denominator is really fewer -- and container SHA uniqueness would have hidden it"
+  },
+  {
+   "test": "...through the REAL build_oracle.render_region at the frozen primary DPI",
+   "expected": [
+    4,
+    true
+   ],
+   "observed": [
+    4,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the distinctness was measured by some other path than the one that will render the actual stimulus"
+  },
+  {
+   "test": "container SHAs are distinct too, but are NOT the evidence",
+   "expected": 4,
+   "observed": 4,
+   "pass": true,
+   "fails_when": "the generated files are byte-identical, which is a different defect"
+  },
+  {
+   "test": "the authoritative holdout SHA set is non-empty",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "the membership manifest yielded no source hashes, so the identity guard would be vacuous and every control would pass it trivially"
+  },
+  {
+   "test": "no committed control carries a holdout source identity",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "a control's bytes are a confirmatory source"
+  },
+  {
+   "test": "NEGATIVE -- a DEVELOPMENT-looking record carrying a holdout SHA is REJECTED",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "confirmatory bytes copied in under an innocuous document id and path pass the gate, because nothing about the bytes has to change to defeat a name-based scan"
+  },
+  {
+   "test": "...and the name-based scan alone would NOT have caught it",
+   "expected": false,
+   "observed": false,
+   "pass": true,
+   "fails_when": "the name scan happens to catch this case, so the identity check is not what is being demonstrated and the control proves less than it claims"
   },
   {
    "test": "G6 PASSES on the realized manifest",

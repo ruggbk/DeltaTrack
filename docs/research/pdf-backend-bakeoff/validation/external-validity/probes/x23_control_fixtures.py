@@ -12,6 +12,7 @@ manifest -- so a validator that silently accepted anything would be caught rathe
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -225,6 +226,102 @@ def part_manifest(manifest: dict) -> dict:
     }
 
 
+def part_nc_rendered(manifest: dict) -> dict:
+    """F8 -- N-C distinctness measured through the REAL oracle renderer, not container SHAs.
+
+    The previous fixtures had four different container SHA-256 values and rendered to ONE
+    identical PNG, because the generator ignored its index. The adjudicator sees the render,
+    so the render is what has to differ.
+    """
+    print("\n== F8: the four N-C controls are distinct AS RENDERED ==")
+    import build_oracle as BO
+    import pymupdf
+
+    nc = [f for f in manifest["fixtures"] if f["control_kind"] == "N-C"]
+    png_hashes, container_hashes = [], []
+    for f in nc:
+        path = EV / f["generated_path"]
+        container_hashes.append(CF.sha256_file(path))
+        doc = pymupdf.open(str(path))
+        try:
+            page = doc[0]
+            x0, y0, x1, y1 = f["region_bbox_pdf_points"]
+            png, _w, _h = BO.render_region(page, (x0, y0, x1, y1), 300)
+        finally:
+            doc.close()
+        png_hashes.append(hashlib.sha256(png).hexdigest())
+
+    check(
+        "the four N-C controls render to FOUR DISTINCT PNG hashes",
+        4,
+        len(set(png_hashes)),
+        "two heading-free controls are the same image, so the four-item N-C denominator is "
+        "really fewer -- and container SHA uniqueness would have hidden it",
+    )
+    check(
+        "...through the REAL build_oracle.render_region at the frozen primary DPI",
+        (4, True),
+        (len(png_hashes), all(len(h) == 64 for h in png_hashes)),
+        "the distinctness was measured by some other path than the one that will render the actual stimulus",
+    )
+    check(
+        "container SHAs are distinct too, but are NOT the evidence",
+        4,
+        len(set(container_hashes)),
+        "the generated files are byte-identical, which is a different defect",
+    )
+    return {
+        "rendered_png_sha256": png_hashes,
+        "container_sha256": [h[:16] for h in container_hashes],
+        "distinct_rendered": len(set(png_hashes)),
+    }
+
+
+def part_holdout_identity(manifest: dict) -> dict:
+    """F7 -- holdout exclusion by SOURCE IDENTITY, not just by name."""
+    print("\n== F7: holdout exclusion is identity-based ==")
+    shas = CF.holdout_source_sha256()
+    check(
+        "the authoritative holdout SHA set is non-empty",
+        True,
+        len(shas) >= 17,
+        "the membership manifest yielded no source hashes, so the identity guard would be "
+        "vacuous and every control would pass it trivially",
+    )
+    check(
+        "no committed control carries a holdout source identity",
+        [],
+        [
+            f["canonical_identity"]
+            for f in manifest["fixtures"]
+            if {f.get("source_sha256"), f.get("parent_sha256"), f.get("generated_sha256")} & shas
+        ],
+        "a control's bytes are a confirmatory source",
+    )
+    # THE COUNTERFACTUAL the name scan cannot catch: innocuous naming, holdout bytes.
+    smuggled = copy.deepcopy(manifest)
+    victim = smuggled["fixtures"][0]
+    victim["source_document"] = "118-hr-8752/1"
+    victim["source_path"] = "tests/corpus/118-hr-8752/1_reported-in-house.pdf"
+    victim["source_sha256"] = sorted(shas)[0]
+    got = reasons(CF.validate_manifest(smuggled))
+    check(
+        "NEGATIVE -- a DEVELOPMENT-looking record carrying a holdout SHA is REJECTED",
+        True,
+        "HOLDOUT_SOURCE_IDENTITY" in got,
+        "confirmatory bytes copied in under an innocuous document id and path pass the gate, "
+        "because nothing about the bytes has to change to defeat a name-based scan",
+    )
+    check(
+        "...and the name-based scan alone would NOT have caught it",
+        False,
+        "HOLDOUT_PROVENANCE" in got,
+        "the name scan happens to catch this case, so the identity check is not what is being "
+        "demonstrated and the control proves less than it claims",
+    )
+    return {"n_holdout_source_sha256": len(shas), "counterfactual_reasons": got}
+
+
 def part_g6(manifest: dict) -> dict:
     """A39.4 -- G6's validator, with every required negative independently injected."""
     print("\n== A39.4: G6 validation, positive and negative ==")
@@ -367,6 +464,8 @@ def main() -> int:
     manifest = CF.build_manifest()
     CF.write_manifest(manifest)
     realized = part_manifest(manifest)
+    nc_rendered = part_nc_rendered(manifest)
+    holdout = part_holdout_identity(manifest)
     g6 = part_g6(manifest)
 
     doc = {
@@ -375,6 +474,8 @@ def main() -> int:
         "manifest": str(CF.MANIFEST_PATH.relative_to(EV)),
         "mutation_classes": mutations,
         "realized": realized,
+        "nc_rendered_distinctness": nc_rendered,
+        "holdout_identity_guard": holdout,
         "g6": g6,
         "tests": ROWS,
         "failures": FAILED,

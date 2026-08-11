@@ -377,28 +377,76 @@ def generate_nc_pdf(index: int, out_path: Path) -> dict:
     """
     import pymupdf
 
-    body = [
-        "of the funds appropriated under this heading in the preceding fiscal year, the",
-        "amounts made available shall remain available until expended, and shall be subject",
-        "to the reporting requirements described in the accompanying statement, except that",
-        "no such amount may be obligated before the date on which the plan is submitted to",
-        "the committees, and any reprogramming shall follow the ordinary procedures that",
-        "apply to accounts of a similar character under prior appropriations acts, provided",
-        "that the limitation in this paragraph shall not apply to amounts transferred for",
-        "administrative expenses within the same account during the period of availability.",
+    # F8 -- FOUR DISTINCT bodies, one per index. The previous generator ignored `index` and
+    # wrote the same eight lines every time: the four PDFs differed only in container bytes,
+    # and all four rendered to the IDENTICAL PNG through the real oracle renderer. Container
+    # SHA uniqueness is not rendered uniqueness, and the adjudicator sees the render.
+    bodies = [
+        [
+            "of the funds appropriated under this heading in the preceding fiscal year, the",
+            "amounts made available shall remain available until expended, and shall be subject",
+            "to the reporting requirements described in the accompanying statement, except that",
+            "no such amount may be obligated before the date on which the plan is submitted to",
+            "the committees, and any reprogramming shall follow the ordinary procedures that",
+            "apply to accounts of a similar character under prior appropriations acts, provided",
+            "that the limitation in this paragraph shall not apply to amounts transferred for",
+            "administrative expenses within the same account during the period of availability.",
+        ],
+        [
+            "notwithstanding any other provision of law, the amounts withheld under the terms",
+            "of the preceding paragraph shall be released upon submission of the spending plan",
+            "required by the accompanying report, and shall thereafter be available for the",
+            "purposes described therein, except that not more than five percent may be used",
+            "for administrative costs, and the head of the agency shall notify the committees",
+            "not later than fifteen days before any obligation is incurred in excess of that",
+            "limit, together with a written justification setting out the basis for the excess",
+            "and the expected effect on the balance of the account for the fiscal year.",
+        ],
+        [
+            "amounts provided under this heading shall be allocated in accordance with the",
+            "table included in the explanatory statement accompanying this act, and no funds",
+            "may be reprogrammed between the activities shown in that table without prior",
+            "written approval, which shall be sought at least thirty days in advance of the",
+            "proposed action, and shall describe the amounts involved, the activities that",
+            "would be reduced, and the reasons that the original allocation is no longer",
+            "adequate, provided that this requirement shall not apply to a transfer of less",
+            "than one hundred thousand dollars within a single program element.",
+        ],
+        [
+            "in addition to amounts otherwise made available under this heading, there are",
+            "appropriated such sums as may be necessary to carry out the responsibilities",
+            "described in the preceding subsection, to remain available through the end of",
+            "the following fiscal year, of which a portion shall be transferred to the",
+            "working capital fund for centrally provided services, and the remainder shall",
+            "be apportioned among the offices in the manner determined by the secretary,",
+            "who shall report the resulting distribution to the committees not later than",
+            "sixty days after the date of enactment of this act.",
+        ],
     ]
+    body = bodies[index % len(bodies)]
     doc = pymupdf.open()
     page = doc.new_page(width=612, height=792)
     for i, line in enumerate(body):
         page.insert_text((90.0, 120.0 + i * 24.0), f"{i + 1}  {line}", fontname="tiro", fontsize=14)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path), garbage=0, deflate=True)
+    # The committed region is DERIVED from the drawn page, not from the layout constants
+    # above: a constant that drifted from what was actually drawn would commit a bbox that
+    # crops the stimulus, and the mismatch would be invisible until adjudication.
+    blocks = [b[:4] for b in page.get_text("blocks")]
+    height = page.rect.height
+    top = min(b[1] for b in blocks)
+    bottom = max(b[3] for b in blocks)
+    left = min(b[0] for b in blocks)
+    right = max(b[2] for b in blocks)
     doc.close()
     return {
         "generated_path": str(out_path.relative_to(EV)),
         "generated_sha256": sha256_file(out_path),
         "n_lines": len(body),
         "composition": "lower-case running prose, body size 14.0, left-aligned, margin-numbered",
+        # PDF coordinates (y up), the form build_oracle.render_region consumes
+        "region_bbox_pdf_points": [left, height - bottom, right, height - top],
     }
 
 
@@ -527,7 +575,25 @@ def write_manifest(manifest: dict, out_path: Path | None = None) -> Path:
 # ------------------------------------------------------------- A39.4 / G6 validation
 
 
-def validate_manifest(manifest: dict, holdout_guard=None) -> list[dict]:
+HOLDOUT_MEMBERSHIP = EV / "results" / "holdout_membership.json"
+
+
+def holdout_source_sha256(path: Path | None = None) -> set[str]:
+    """F7 -- the AUTHORITATIVE confirmatory source identities, read from the frozen manifest.
+
+    Reads `holdout_membership.json` only; no holdout PDF is opened. Identity beats naming: a
+    confirmatory file copied in under an innocuous document id and path would pass a
+    name-based guard entirely, because nothing about the bytes has to change to defeat one.
+    The recorded SHA-256 is what actually identifies the material.
+    """
+    p = Path(path) if path else HOLDOUT_MEMBERSHIP
+    if not p.exists():
+        return set()
+    members = json.loads(p.read_text()).get("members", [])
+    return {f["sha256"] for m in members for f in m.get("files", []) if f.get("sha256")}
+
+
+def validate_manifest(manifest: dict, holdout_guard=None, holdout_shas=None) -> list[dict]:
     """A39.4 -- what G6 calls. Returns the list of defects; empty means valid.
 
     VERIFIES rather than records: every source and generated SHA is recomputed from the bytes
@@ -538,6 +604,8 @@ def validate_manifest(manifest: dict, holdout_guard=None) -> list[dict]:
         import build_oracle as BO
 
         holdout_guard = BO.HOLDOUT_GUARD
+    if holdout_shas is None:
+        holdout_shas = holdout_source_sha256()
     defects: list[dict] = []
 
     def defect(reason, **detail):
@@ -603,6 +671,15 @@ def validate_manifest(manifest: dict, holdout_guard=None) -> list[dict]:
             if xml_abs.exists() and f.get("xml_sha256") and sha256_file(xml_abs) != f["xml_sha256"]:
                 defect("STALE_SHA256", field="xml_path", path=f["xml_path"])
 
+        # F7 -- IDENTITY first. A confirmatory file copied in under an innocuous name defeats
+        # the string scan entirely, so every recorded source/parent hash is checked against the
+        # authoritative SHA set from the frozen membership manifest.
+        for field in ("source_sha256", "parent_sha256", "generated_sha256"):
+            value = f.get(field)
+            if value and value in holdout_shas:
+                defect("HOLDOUT_SOURCE_IDENTITY", field=field, sha256=value, identity=f.get("canonical_identity"))
+
+        # the name/path scan is kept as additional defence, not as the primary guard
         provenance = " ".join(
             str(f.get(k) or "")
             for k in ("source_document", "source_path", "generated_path", "xml_path", "canonical_identity")
