@@ -81,6 +81,12 @@ attributable.
    `pip-audit (production deps)` is a required check on `main`. Skipping them here means
    the largest merge the project performs is the one merge nothing verifies as landed.
 
+   Two of these claims — that `main` has no queue, and that `pip-audit (production
+   deps)` is a required status check on `main` — are GitHub **branch-protection
+   settings**, not repository files. They are not derivable from the workflows and are
+   not covered by the repository consistency gate, so nothing here goes red if they
+   change. Rely on them knowing they could drift with no test signalling it.
+
    The Pages run is the release gate for the published demo, and step 2 decides how
    closely to watch it: the publishing steps run only on `main` and only in the Pages
    environment, so when the action versions have moved, this run is the first evidence
