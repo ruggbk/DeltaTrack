@@ -6,8 +6,8 @@ thresholding the ratio. Two numbers make that call:
 
 ``SIMILARITY_THRESHOLD`` (0.4)
     Below this, a pair matched by path is treated as unrelated and split into a removal
-    plus an addition. It is also the cutoff the HTML renderer uses to decide whether an
-    inline word-diff is legible or whether the two texts should be stacked.
+    plus an addition. **A correspondence cutoff, and nothing else.** It used to double as
+    the renderer's legibility cutoff; that consumer now owns its own number (see below).
 ``MOVE_THRESHOLD`` (0.6)
     Above this, a removed/added pair is reconciled as a move rather than left as two
     independent changes.
@@ -30,10 +30,20 @@ passing it; the site that decides how the inline word-diff reaches the reader wa
 by nothing. It was confirmed live before being rewired (a pair scoring 0.429 renders
 inline at 0.4 and stacked at 0.6), so it is a real consumer rather than dead code.
 
+**That consumer has since been given its own cutoff, and no longer reads anything here.**
+Naming the number fixed its invisibility but pointed the rendering layer at the differ's
+correspondence policy, so changing what "the same provision" means also changed what a
+reader sees, in the same edit, with no way to test the two apart. ADR 0020 names that
+coupling and requires its removal; ``formatters/_text.LEGIBILITY_THRESHOLD`` is where the
+renderer's number lives now. The two carry the same value and are free to diverge.
+Nothing asserts they are equal, deliberately: such a test would restore the coupling in
+the suite and would redden the moment this cutoff is legitimately retuned.
+
 A module rather than a constants file, for two reasons. It is cohesive around one real
-concept instead of a bag of unrelated numbers. And it fixes a layering problem:
-``formatters/_text`` needs the lower cutoff, and importing it from ``diff_bill`` would
-make the rendering layer depend on the differ. Both depend on this instead.
+concept instead of a bag of unrelated numbers. And it fixed a layering problem: the
+rendering layer needed a cutoff, and importing one from ``diff_bill`` would have made it
+depend on the differ. That second reason has now been answered better still, by the
+renderer not needing a cutoff from the engine at all.
 
 Deliberately NOT a general ``constants.py``. The other numeric constants in the codebase
 (``_SPACE_FACTOR``, ``_BASELINE_TOL_FACTOR``, ``_SIZE_EPS``, ``_COVERAGE_MIN``,
@@ -57,7 +67,9 @@ from __future__ import annotations
 import difflib
 
 #: Below this word-level ratio, a path-matched pair is not the same provision: it is split
-#: into a removal plus an addition. Also the legibility cutoff for the inline word-diff.
+#: into a removal plus an addition. A correspondence cutoff only -- the renderer's
+#: legibility cutoff is ``formatters/_text.LEGIBILITY_THRESHOLD``, which is a separate
+#: number that happens to share this value.
 SIMILARITY_THRESHOLD = 0.4
 
 #: At or above this ratio, a removed/added pair is reconciled as a move.
