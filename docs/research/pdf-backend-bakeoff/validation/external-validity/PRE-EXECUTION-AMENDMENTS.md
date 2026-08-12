@@ -4675,7 +4675,7 @@ decision, no confirmatory or scoring artifact, and no execution marker.
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
  "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is changed",
- "status": "IMPLEMENTATION COMPLETE, OPEN FOR REVIEW -- five readings are recorded below for ruling, two of them result-changing. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
+ "status": "IMPLEMENTATION COMPLETE; R1-R8 ALL RULED AND IMPLEMENTED -- no reading remains open and no result-bearing factual gate is unowned. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
 ```
 
 **Why `affects_scoring_rule` is `true` while `supersedes_text_in` is `none`.** These are different
@@ -4724,9 +4724,22 @@ alternative — skipping the record — moves a denominator with nothing to show
 also **recomputes** the committed line-level predicates from `neutral_identity`'s own rules and
 refuses on drift, and refuses a frame whose committed coverage floor is not production's 0.85.
 
-### A41.2 — the five readings, recorded for ruling
+### A41.2 — R1–R8, every one ruled
 
-**Two are result-changing (R1, R2). Three are reporting shape (R3–R5).** None invents a threshold.
+**All eight are settled. Nothing here is open.** R1, R2 and R7 are approved as implemented; R3 and
+R4 are reporting shape; R5 is closed as a channel; **R6 and R8 were STOPs and are now RULED and
+implemented**. None invents a threshold: every number is §5.6's, §6's or §8's.
+
+| ruling | subject | state |
+|---|---|---|
+| R1 | §8's event evidence | APPROVED — `ANCHOR_DISCORDANCE` |
+| R2 | M7's threshold | APPROVED — §6's ≥ 3, not an open choice |
+| R3 | recall's denominator on an A30 refusal | reading — stays in, sensitivity secondary |
+| R4 | C / D reported separately | reading — never pooled (A36.3) |
+| R5 | the R1 scalar channel | CLOSED — parameter removed |
+| **R6** | **R1's computation** | **RULED — union denominator, exact text, fine role, per-route micro-average** |
+| R7 | the M4 parent sentinels | APPROVED as repaired |
+| **R8** | **the N-A/N-B/N-C verdicts** | **RULED and IMPLEMENTED in the scorer** |
 
 | # | where the frozen text stops | reading taken | rejected, and why |
 |---|---|---|---|
@@ -4749,68 +4762,77 @@ refuses on drift, and refuses a frame whose committed coverage floor is not prod
 > no executable test.
 | **R3** | I10 fixes recall's denominator as the adjudicated enumeration, but not what to do with an adjudicated heading whose A30 geometric identity **refuses** | it **stays in the denominator** and counts as a miss — it was printed — and `n_adjudicated_unresolvable` is reported beside it. A recall figure excluding them is emitted as an explicitly **SECONDARY** sensitivity value | dropping them, which shrinks a denominator invisibly; and headlining the sensitivity figure, which would report the number the design does not license |
 | **R4** | §6 fires M1 on C-regions; A36.3 makes C and D separate estimands; neither says how to lay the rows out | every heading metric is reported **per frame, per document, and pooled**, and never summed across frames. Each row carries its own denominator | pooling C and D into one denominator, which A36.3 forbids |
-| **R5** | §6 gates M5 on *"R1 role ≥ 0.80"*, and **A38.1's ownership table assigns the R1 answers a producer but assigns the R1 agreement computation to nobody** | the gate is a **supplied fact**. Absent, M5 carries `status: NOT_SUPPLIED` and `m5_void: false` explicitly, rather than being reported as though its gate had been checked | computing an R1 pairing rule here, which would be new methodology in the scorer; and reporting M5 silently ungated, which is the "green because nothing measured it" failure |
+| **R5** | §6 gates M5 on *"R1 role ≥ 0.80"*, and A38.1 assigned the R1 agreement computation to nobody | **the channel is CLOSED**: `r1_role_agreement` is removed and §5.6's reliability is computed from the committed key and adjudications by `score_metrics.r1_reliability` | a caller-supplied float, which can assert PASS with nothing behind it |
 
-> **R5 is CLOSED as a scalar channel.** The reviewer refused a caller-supplied float as evidence
-> for a result-bearing gate, and correctly: it can assert PASS with nothing behind it. The
-> `r1_role_agreement` parameter is **removed**, and §5.6's reliability is now **computed from the
-> committed key and the committed adjudications** by `score_metrics.r1_reliability`. `x27` asserts
-> that no such field or parameter exists, so the channel cannot come back unnoticed. What remains
-> open is not ownership but two computation choices — **R6**.
+> **R5 is CLOSED.** A caller scalar is not evidence for a result-bearing gate. `x27` asserts that
+> no such field or parameter exists, so the channel cannot return unnoticed. **Ownership now sits
+> with the scorer, and R6 fixes what it computes.**
 
-### R6 — STOP, OPEN FOR RULING. R1's computation is not determined by the frozen sources
+### R6 — RULED. R1's computation, and why it was a STOP first
 
 **Audited:** §5.6, §6 (M5's gate), §7.2 rule 3, A28.3, A28.4, A30.3, A36.4, A36.6, A36.7, A37,
-A38.1, A38.7, `build_oracle`, `methodology_contracts`. **What IS frozen:** both thresholds (text
-≥ 0.90, role ≥ 0.80) and their consequences; the repeat's canonical identity, its 330 DPI, its
-identical committed bbox, its inherited routes, its separately namespaced answers, and that it
-resolves its **own** `start_x_px` independently (A30.3). **What is NOT frozen anywhere:** the
-computation itself. Two of its choices change gate results.
+A38.1, A38.7, `build_oracle`, `methodology_contracts`. **Frozen:** both thresholds (text ≥ 0.90,
+role ≥ 0.80) and their consequences; the repeat's canonical identity, its 330 DPI, its identical
+committed bbox, its inherited routes, its separately namespaced answers, and that it resolves its
+**own** `start_x_px` independently (A30.3). **Not frozen anywhere:** the computation. Two of its
+choices changed gate results, which is why this was raised as a STOP rather than implemented:
 
-**R6.1 — the denominator when the two answers enumerate different numbers of headings.**
+- **the denominator when the two answers enumerate different numbers of headings.** On the fixture
+  below, `intersection` gave **1.000 (PASS)** and `union` / `primary` / `max` gave **0.667 (FAIL)**.
+  R1 is a Rule 3 gate, so that is the difference between a valid comparative study and
+  **`INSUFFICIENT_COMPARATIVE_EVIDENCE`**. The same fixture does the same to M5's void at 0.80.
+- **per route or pooled.** A C∩D repeat is answered on **both** routes (A36.6), so one physical
+  repeat yields two pairs, and pooling an AI pair with a human pair measures **inter-source**
+  disagreement rather than repeat reliability — masking a failing route behind a passing one.
 
-| interpretation | ratio on the fixture below | gate at 0.90 |
-|---|---|---|
-| `intersection` — score only headings BOTH answers enumerated | 2/2 = **1.000** | **PASS** |
-| `union` — every heading either answer enumerated | 2/3 = **0.667** | **FAIL** |
-| `primary` — the primary's enumeration | 2/3 = **0.667** | **FAIL** |
-| `max(primary, repeat)` | 2/3 = **0.667** | **FAIL** |
+**The reviewer ruled both.** The ruling is recorded and implemented below; the STOP is discharged
+rather than deleted, because the reason the choice needed a ruling is part of the record.
 
-**Minimal SYNTHETIC fixture** (`x27.part_r1`, built through the real `build_oracle` and the real
-A38.7 join): one region carrying three headings, presented twice; the primary answer enumerates
-all three, the repeat enumerates two, and **both shared headings agree exactly**. Realized:
-`n_primary_resolved 3 · n_repeat_resolved 2 · n_shared 2 · n_text_agree 2`.
+### THE RULING, as implemented
 
-**Which Rule-3 result could change:** R1 is a Rule 3 gate, so `intersection` yields a valid study
-and the other three yield **`INSUFFICIENT_COMPARATIVE_EVIDENCE`** — the difference between a
-comparative conclusion and none. The same fixture at 0.80 does the same to M5's void.
+**R6.1 — denominator and matching.** The **symmetric union of the COMPLETE primary and repeat
+enumerations**, under **one-to-one matching on uniquely resolved A30 occurrence keys**. It is
+`|P| + |R| − matched`, never `|set(resolved keys)|`. Chosen because it is the only candidate that
+counts a heading the repeat *failed to enumerate* against agreement, and enumeration instability
+is exactly what §5.6 exists to detect; `intersection` is the one reading that makes an adjudicator
+who silently drops headings look perfectly reliable.
 
-**R6.2 — per route, or pooled across routes.** A C∩D repeat is answered on **both** routes
-(A36.6), so one physical repeat yields two pairs. Nothing says whether agreement is computed per
-route or pooled. Pooling an AI pair with a human pair measures **inter-source** disagreement
-rather than repeat reliability, and can mask a failing route behind a passing one.
+| case | treatment |
+|---|---|
+| a uniquely resolved key appearing once on each side | one matched pair |
+| a heading on one side only | denominator, no numerator |
+| an UNRESOLVED adjudicated heading | denominator, no numerator |
+| the same resolved key more than once on either answer | **not pairable** — those rows stay denominator-bearing disagreement evidence, and are never collapsed through a dict or matched by choosing a duplicate |
 
-**Recommended minimal ruling** — two sentences, no new machinery:
+**R6.2 — text agreement is EXACT equality of the values as returned.** No `m2_normalize`, no NFKC,
+no whitespace collapse, no case folding: §5.3 and the prompt require exact transcription with case
+and internal spacing preserved, and M2's normalisation belongs to M2's accuracy claim. Using it
+here would hide precisely the spacing instability the repeat records. `UNREADABLE` on either side is
+denominator-bearing and earns no numerator.
 
-> **R6.1: `union`.** It is the only candidate that counts a heading the repeat *failed to
-> enumerate* against agreement, and enumeration instability is precisely what R1 exists to
-> detect (§5.6's own motivation: six identical stimuli answered 3 BOUNDARY / 3 NO_BOUNDARY).
-> `intersection` is the one reading that makes an adjudicator who silently drops headings look
-> perfectly reliable.
->
-> **R6.2: per route, never pooled**, with the gate taking the **worst** route. R1 measures whether
-> a given adjudication source repeats itself; pooling changes the question, and A36.6 already
-> keeps the two namespaces apart.
+**R6.3 — role agreement is the exact fine §5.3 role** (A36.7: *"M5 **alone** coarsens it"*).
+`UNREADABLE` never agrees, **including `UNREADABLE` against `UNREADABLE`**: repeated unreadability
+is an absence of evidence, and it is the one answer an adjudicator can always produce.
 
-**Until ruled, the scorer ABSTAINS rather than choosing.** `r1_reliability` computes all four
-denominators, reports every ratio, and emits `AMBIGUOUS_PENDING_A41_RULING` **exactly when the
-candidates straddle a threshold** — so an unruled choice can never silently decide a gate, and
-where the candidates agree there is nothing to rule. `AMBIGUOUS` is neither a PASS nor a void:
-applying a consequence would be choosing Rule 3's sensitivity. Two readings inside the
-computation are taken with textual support rather than left open, and are stated so a reviewer can
-overturn them: pairing by **resolved A30 occurrence key** (A30.3 requires independent resolution
-and already speaks of an `R1_start_identity_agreement`, which presupposes comparing the two
-resolutions), and comparing the **fine §5.3 role** (A36.7: *"M5 **alone** coarsens it"*).
+**R6.4 — aggregation.** A **heading-occurrence micro-average** within each route: numerator and
+denominator summed across that route's R1 pairs, never a mean of per-region rates. Each required
+route is evaluated **separately and never pooled**. The gate is the **worst** required route — any
+`FAIL` → FAIL; else any non-evaluable route → `NOT_EVALUABLE`; else PASS. Thresholds unchanged:
+text **≥ 0.90**, role **≥ 0.80**.
+
+**The abstention machinery is DELETED**, not deprecated: the four candidate rules and
+`AMBIGUOUS_PENDING_A41_RULING` are gone, so no consumer can read a status the protocol no longer
+defines. Pair-level and route-level raw counts stay in the output, so the gate is inspectable.
+
+**Realized on the ruling's own fixture** (`x27.part_r1`, real `build_oracle`, real A38.7 join):
+
+```
+one-sided     P 3 · R 2 · matched 2 · agree 2 · denominator 3 · 0.667 -> FAIL
+unresolved    P 3 · R 3 (1 unresolved) · matched 2 · agree 2 · denominator 4 · 0.500 -> FAIL
+duplicated    P 3 · R 3 (2 non-unique) · matched 1 · denominator 5 · FAIL
+whitespace    identical but for one doubled space · 0.000 -> FAIL (M2 would call them EQUAL)
+UNREADABLE    role UNREADABLE on both sides · 0.000 -> FAIL, text unaffected
+```
 
 ### R7 — the M4 parent encoding, repaired
 
@@ -4833,29 +4855,41 @@ parent from an architecture's own document-scope hierarchy — the very quantity
 is excluded and **counted** (`excluded_off_region`), never scored and never charged to an arm. No
 resolver was invented, and the prompt was **not** edited to suit the implementation.
 
-### R8 — REPORTED, not implemented: the N-A / N-B / N-C **verdict** computation is unowned
+### R8 — RULED and IMPLEMENTED: the N-A / N-B / N-C factual verdicts
 
-The reviewer asked whether any factual Rule-3 gate besides R1 is unowned. **One is.** The control
-*fixtures* are owned (`control_fixtures.py`, G6-gated, 8/8/4 with every hash verified) and their
-*binding* is owned (`build_oracle.verify_join` checks the key's carried truth against the
-manifest, and `x26` drives all 20 through the real oracle path). **Nothing computes the verdict.**
-No component compares an adjudicated control answer — `oracle_adjudicated[route][control_bid]` —
-against the committed `control_expected_truth`, so nothing yet decides "did the adjudicator report
-the alteration (N-A)?", "did it agree on the corroborated heading (N-B)?", "did it report no
-heading (N-C)?". `grep` for an adjudication input to `control_fixtures.py` / `x23` returns zero.
+**The gap, as reported.** The control *fixtures* were owned (`control_fixtures.py`, G6-gated, 8/8/4
+with every hash verified) and their *binding* was owned (`build_oracle.verify_join` checks the key's
+carried truth against the manifest; `x26` drives all 20 through the real oracle path) — but
+**nothing computed the verdict.** No component compared an adjudicated control answer against the
+committed `control_expected_truth`, so nothing decided "did the adjudicator report the alteration
+(N-A)?", "did it agree on the corroborated heading (N-B)?", "did it report no heading (N-C)?".
+Three Rule 3 blockers had no factual owner, and Phase 2 would have had to derive control truth on
+its own authority.
 
-**Why it is not implemented here.** The verdict rule is per-variant methodology that the frozen
-sources do not spell out: A40.1–A40.4 fix what each mutation DOES (`DELETE_ONE_WORD`,
-`WELD_TWO_WORDS`, `SPLIT_ONE_WORD`) and A40.5 proves the fixtures are live using
-`m3_boundaries.decompose`, but no source says how an adjudicated transcription is compared to
-`expected_after` — exact string, the frozen §6.2 normalisation, or a boundary-level assertion per
-variant — and those differ on a real answer. Choosing one would be inventing the very thing this
-amendment declines to invent, and it is a **Rule 3 blocker**, so the choice can decide the study.
+**The ruling, implemented in `score_metrics.control_verdicts`.** The committed chain is reused, not
+rebuilt: `control_fixtures.json` → `build_oracle.control_expected_truth` → committed key, joined to
+the committed adjudications. Nothing reruns `control_fixtures`, source enumeration, XML/PDF truth
+construction, H, X, `x01`, or any oracle generation.
 
-**Left as a named gap rather than a silent one**, so Phase 2 cannot quietly derive control truth
-from the oracle and manifest artifacts on its own authority. Recommended: rule it beside R6, and
-give it the same owner treatment R1 just received — computed from committed artifacts, per
-variant, with the comparison rule stated.
+| kind | rule, on EVERY required route |
+|---|---|
+| **N-A** | the single committed mutated expected heading text occurs **exactly once** in `headings[].text`, by **exact raw string equality**. Absent, duplicated or `UNREADABLE` → FAIL |
+| **N-B** | the single committed corroborated expected heading text occurs **exactly once**, same comparison, same failure conditions |
+| **N-C** | `headings` is **exactly empty**. Any reported heading → FAIL |
+
+**No normalisation, deliberately.** A `WELD_TWO_WORDS` or `SPLIT_ONE_WORD` control differs from its
+source **only in whitespace**, so normalising the comparison would make the control incapable of
+detecting the mutation it exists to test — it would pass whether or not the adjudicator saw the
+alteration. **Other headings in the crop do not by themselves fail N-A or N-B:** the committed truth
+establishes the *target* occurrence, not a complete oracle for every heading the region may contain,
+and failing on an extra heading would charge the control for correct enumeration.
+
+**Aggregation:** per control, per route, with observed texts recorded; per-kind status; counts by
+route and kind. A kind PASSES only if **every** fixture passes on **every** required route — no
+tolerance, no percentage. The three statuses are Rule 3 **inputs**; no consequence is applied here.
+
+**Realized** on the committed manifest, against its own committed truth: **N-A 16/16 · N-B 16/16 ·
+N-C 8/8** across 20 controls × both routes.
 
 ### A41.3 — the controls, and that each can go RED
 

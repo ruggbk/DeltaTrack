@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import math
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -87,6 +88,9 @@ CROSS_ENGINE_DOCUMENT_MISSING = "CROSS_ENGINE_DOCUMENT_MISSING"
 #: denominator and must equal the scored set exactly -- see `validate_inputs`.
 CROSS_ENGINE_EXTRA_DOCUMENT = "CROSS_ENGINE_EXTRA_DOCUMENT"
 CROSS_ENGINE_DUPLICATE_DOCUMENT = "CROSS_ENGINE_DUPLICATE_DOCUMENT"
+#: A row without `document` or `passed` is not a verdict about anything. Refused structurally so it
+#: cannot reach `qualification` and become an invented one.
+CROSS_ENGINE_ROW_MALFORMED = "CROSS_ENGINE_ROW_MALFORMED"
 #: An R1 repeat whose primary is not in the key. The repeat would then have nothing to be a
 #: repeat OF, and silently skipping it would shrink the reliability population -- the population
 #: whose whole job is to be large enough to detect an unreliable adjudicator.
@@ -141,8 +145,9 @@ R1_ROLE_THRESHOLD = 0.80
 #: The four denominators a reader could reasonably take from "heading-text agreement", none of
 #: which the frozen sources choose. `r1_reliability` computes ALL of them and refuses to collapse
 #: them when they straddle a threshold -- see its docstring and A41.2 R6.
-R1_DENOMINATOR_RULES = ("union", "intersection", "primary", "max")
-R1_AMBIGUOUS = "AMBIGUOUS_PENDING_A41_RULING"
+#: R6 is RULED (A41.2): one denominator, no candidate set, and no abstention status. The four
+#: candidate rules and `AMBIGUOUS_PENDING_A41_RULING` are deleted rather than deprecated, so a
+#: consumer cannot read a status the protocol no longer defines.
 R1_NOT_EVALUABLE = "NOT_EVALUABLE_NO_R1_PAIRS"
 
 #: A27.5 / section 8.3. One-sided, 95 %.
@@ -296,6 +301,15 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
     # result depend on row order. None of those is detectable downstream, because the qualification
     # is reported as a property of the run rather than of a population a reader can re-derive.
     rows = inputs.cross_engine["per_document"]
+    for index, row in enumerate(rows):
+        # STRUCTURAL, before anything reads a verdict. A row missing `passed` would otherwise reach
+        # `qualification`, where `not row["passed"]` on an absent key raises far from the cause --
+        # or, worse, a `.get` default would silently invent a verdict for a document.
+        missing = [f for f in ("document", "passed") if f not in row]
+        if missing:
+            raise ScoreInputError(
+                CROSS_ENGINE_ROW_MALFORMED, {"index": index, "missing": missing, "row_keys": sorted(row)}
+            )
     documents = [row["document"] for row in rows]
     duplicates = sorted({d for d in documents if documents.count(d) > 1})
     if duplicates:
@@ -306,8 +320,12 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
     for doc in sorted(known_docs):
         if doc not in set(documents):
             raise ScoreInputError(CROSS_ENGINE_DOCUMENT_MISSING, {"document": doc})
-        if inputs.document_strata and doc not in inputs.document_strata:
-            raise ScoreInputError(STRATUM_MISSING, {"document": doc})
+        # UNCONDITIONAL. The old `if inputs.document_strata and ...` guard meant an EMPTY mapping
+        # bypassed the check entirely, and section 4.5 then counted zero strata filled -- turning
+        # missing input into an apparently real INADEQUATE verdict about the holdout. A population
+        # fact the caller failed to supply is not a finding about the population.
+        if doc not in inputs.document_strata:
+            raise ScoreInputError(STRATUM_MISSING, {"document": doc, "n_supplied": len(inputs.document_strata)})
     return {
         "n_documents": len(known_docs),
         "documents": sorted(known_docs),
@@ -822,7 +840,7 @@ def _heading_metrics_from_counts(counts: dict, r1: dict) -> dict:
     metrics["r1_text_gate"] = {
         "status": r1["text"]["status"],
         "threshold": R1_TEXT_THRESHOLD,
-        "observed_by_denominator_rule": r1["text"]["ratios"],
+        "observed_by_route": r1["text"]["by_route"],
         "voids_text_metrics_if_FAIL": ["M2", "M3"],
         "owner": "Rule 3 gate vector (A27.6); this module reports the FACTS only",
     }
@@ -844,79 +862,101 @@ def _r1_pair_facts(key: dict, adjudicated: dict, primary_bid: str, repeat_bid: s
     coarsening here would make R1 agree wherever two different fine roles collapse to the same
     M5 class -- a reliability measure that hides the disagreement it exists to find.
     """
-    primary = {
-        a["occurrence_key"]: a["heading"]
-        for a in _adjudicated_occurrences(key["stimuli"][primary_bid], adjudicated[route][primary_bid])
-        if a["resolved"]
-    }
-    repeat = {
-        a["occurrence_key"]: a["heading"]
-        for a in _adjudicated_occurrences(key["stimuli"][repeat_bid], adjudicated[route][repeat_bid])
-        if a["resolved"]
-    }
-    shared = sorted(set(primary) & set(repeat), key=lambda k: MC.canonical(list(k)))
+    p_rows = _adjudicated_occurrences(key["stimuli"][primary_bid], adjudicated[route][primary_bid])
+    r_rows = _adjudicated_occurrences(key["stimuli"][repeat_bid], adjudicated[route][repeat_bid])
+
+    # ONE-TO-ONE ON UNIQUELY RESOLVED KEYS (R6.1). A key resolved more than once on either side is
+    # NOT pairable: collapsing the rows through a dict would silently keep the last one, and
+    # choosing among duplicates would invent a pairing. Those rows stay denominator-bearing.
+    p_counts = Counter(r["occurrence_key"] for r in p_rows if r["resolved"])
+    r_counts = Counter(r["occurrence_key"] for r in r_rows if r["resolved"])
+    p_unique = {k for k, n in p_counts.items() if n == 1}
+    r_unique = {k for k, n in r_counts.items() if n == 1}
+    pairable = sorted(p_unique & r_unique, key=lambda k: MC.canonical(list(k)))
+
+    p_by_key = {r["occurrence_key"]: r["heading"] for r in p_rows if r["resolved"] and r["occurrence_key"] in p_unique}
+    r_by_key = {r["occurrence_key"]: r["heading"] for r in r_rows if r["resolved"] and r["occurrence_key"] in r_unique}
+
+    # R6.2 -- EXACT equality of the values as returned. No `m2_normalize`, no NFKC, no whitespace
+    # collapse, no case folding: section 5.3 asks for exact transcription with case and internal
+    # spacing preserved, and M2's normalisation would hide precisely the spacing instability the
+    # repeat exists to detect. UNREADABLE is denominator-bearing and earns no numerator.
     text_agree = sum(
         1
-        for k in shared
-        if _readable(primary[k].get("text"))
-        and m2_normalize(primary[k]["text"]) == m2_normalize(repeat[k].get("text") or "")
+        for k in pairable
+        if _readable(p_by_key[k].get("text"))
+        and _readable(r_by_key[k].get("text"))
+        and p_by_key[k]["text"] == r_by_key[k]["text"]
     )
-    role_agree = sum(1 for k in shared if primary[k].get("role") == repeat[k].get("role"))
+    # R6.3 -- the exact FINE section 5.3 role (A36.7: "M5 alone coarsens it"). UNREADABLE never
+    # agrees, including against itself: two illegible answers are an absence of evidence, and
+    # counting them as reliability would let repeated unreadability manufacture a PASS.
+    role_agree = sum(
+        1
+        for k in pairable
+        if _readable(p_by_key[k].get("role"))
+        and _readable(r_by_key[k].get("role"))
+        and p_by_key[k]["role"] == r_by_key[k]["role"]
+    )
+
+    matched = len(pairable)
+    # THE SYMMETRIC UNION over COMPLETE enumerations: every matched pair once, plus every
+    # occurrence on either side that did not pair -- unresolved, one-sided, or non-uniquely
+    # resolved. It is |P| + |R| - matched, never |set(resolved keys)|.
+    denominator = len(p_rows) + len(r_rows) - matched
     return {
         "route": route,
         "primary_blind_id": primary_bid,
         "repeat_blind_id": repeat_bid,
-        "n_primary_resolved": len(primary),
-        "n_repeat_resolved": len(repeat),
-        "n_shared": len(shared),
+        "n_primary_headings": len(p_rows),
+        "n_repeat_headings": len(r_rows),
+        "n_primary_unresolved": sum(1 for r in p_rows if not r["resolved"]),
+        "n_repeat_unresolved": sum(1 for r in r_rows if not r["resolved"]),
+        "n_primary_non_unique": sum(n for n in p_counts.values() if n > 1),
+        "n_repeat_non_unique": sum(n for n in r_counts.values() if n > 1),
+        "n_matched_pairs": matched,
         "n_text_agree": text_agree,
         "n_role_agree": role_agree,
-        "denominators": {
-            "union": len(set(primary) | set(repeat)),
-            "intersection": len(shared),
-            "primary": len(primary),
-            "max": max(len(primary), len(repeat)),
-        },
+        "denominator": denominator,
     }
 
 
-def _r1_status(numerators: int, denominators: dict, threshold: float) -> dict:
-    """PASS / FAIL only where EVERY candidate denominator agrees; otherwise abstain.
+def _r1_status(numerator: int, denominator: int, threshold: float) -> dict:
+    """R6.4 -- the heading-occurrence MICRO-AVERAGE within one route, against a frozen threshold.
 
-    This is the whole point of computing all four. If they agree, the unruled choice cannot change
-    the gate and there is nothing to rule on. If they straddle the threshold, the gate result is a
-    function of an interpretation the frozen text does not make, and reporting either verdict would
-    be choosing the sensitivity of Rule 3.
+    Numerator and denominator are summed over heading occurrences across the route's R1 pairs, not
+    averaged over per-region rates: a region with one heading and a region with forty are not equal
+    evidence about an adjudicator's consistency.
     """
-    ratios = {rule: (numerators / total if total else None) for rule, total in sorted(denominators.items())}
-    decided = [value for value in ratios.values() if value is not None]
-    if not decided:
-        return {"status": R1_NOT_EVALUABLE, "ratios": ratios, "threshold": threshold}
-    if all(value >= threshold for value in decided):
-        status = "PASS"
-    elif all(value < threshold for value in decided):
-        status = "FAIL"
-    else:
-        status = R1_AMBIGUOUS
-    return {"status": status, "ratios": ratios, "threshold": threshold}
+    if denominator == 0:
+        return {"status": R1_NOT_EVALUABLE, "ratio": None, "numerator": 0, "denominator": 0, "threshold": threshold}
+    ratio = numerator / denominator
+    return {
+        "status": "PASS" if ratio >= threshold else "FAIL",
+        "ratio": ratio,
+        "numerator": numerator,
+        "denominator": denominator,
+        "threshold": threshold,
+    }
 
 
 def r1_reliability(key: dict, adjudicated: dict) -> dict:
     """Section 5.6's R1 reliability, computed from committed artifacts. NOT a supplied scalar.
 
-    WHAT IS FROZEN, and what is not. Section 5.6 fixes the two thresholds (text >= 0.90, role
-    >= 0.80) and their consequences; A28.3/A28.4/A36.6 fix the repeat's identity, its 330 DPI, its
-    inherited routes and its separately namespaced answers. **The computation is nowhere frozen.**
-    Two of its choices can move the gate and are recorded as A41.2 **R6** for ruling:
+    RULED BY A41.2 R6. Section 5.6 froze the thresholds (text >= 0.90, role >= 0.80) and their
+    consequences; A28.3/A28.4/A36.6 froze the repeat's identity, its 330 DPI, its inherited routes
+    and its separately namespaced answers. R6 now fixes the computation:
 
-        the DENOMINATOR when the two answers enumerate different numbers of headings
-        whether agreement is evaluated PER ROUTE or POOLED across routes
+        R6.1  denominator = the SYMMETRIC UNION of the complete primary and repeat enumerations,
+              under ONE-TO-ONE matching on uniquely resolved A30 occurrence keys. An unresolved,
+              one-sided or non-uniquely-resolved heading stays in the denominator and earns no
+              numerator.
+        R6.2  text agreement = EXACT equality of the values as returned. No normalisation.
+        R6.3  role agreement = exact FINE section 5.3 role. UNREADABLE never agrees.
+        R6.4  micro-average over heading occurrences within each required route; routes are
+              evaluated separately and NEVER pooled; the gate is the WORST required route.
 
-    This function therefore reports the per-pair facts, and every candidate denominator's ratio,
-    and abstains (`AMBIGUOUS_PENDING_A41_RULING`) exactly when the candidates straddle a
-    threshold. It is computed PER ROUTE and never pooled -- pooling an AI pair with a human pair
-    would measure inter-source disagreement rather than repeat reliability, and A36.6 keeps the
-    two namespaces apart -- but that reading is itself part of R6 rather than a settled rule.
+    No abstention status remains: R6 is ruled, so there is nothing left to defer.
 
     NO SCALAR INPUT EXISTS. A PASS requires committed pair-level evidence, which is why the
     `r1_role_agreement` parameter was removed rather than defaulted.
@@ -944,29 +984,26 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
     per_route = {}
     for route in sorted({p["route"] for p in pairs}):
         rows = [p for p in pairs if p["route"] == route]
-        totals = {rule: sum(p["denominators"][rule] for p in rows) for rule in R1_DENOMINATOR_RULES}
+        total = sum(p["denominator"] for p in rows)
         per_route[route] = {
             "n_pairs": len(rows),
-            "text": _r1_status(sum(p["n_text_agree"] for p in rows), totals, R1_TEXT_THRESHOLD),
-            "role": _r1_status(sum(p["n_role_agree"] for p in rows), totals, R1_ROLE_THRESHOLD),
+            "text": _r1_status(sum(p["n_text_agree"] for p in rows), total, R1_TEXT_THRESHOLD),
+            "role": _r1_status(sum(p["n_role_agree"] for p in rows), total, R1_ROLE_THRESHOLD),
         }
 
     def worst(dimension: str, threshold: float) -> dict:
-        statuses = [per_route[r][dimension]["status"] for r in per_route]
-        if not statuses:
-            return {"status": R1_NOT_EVALUABLE, "ratios": {}, "threshold": threshold}
-        for candidate in ("FAIL", R1_AMBIGUOUS, R1_NOT_EVALUABLE):
-            if candidate in statuses:
-                return {
-                    "status": candidate,
-                    "ratios": {r: per_route[r][dimension]["ratios"] for r in per_route},
-                    "threshold": threshold,
-                }
-        return {
-            "status": "PASS",
-            "ratios": {r: per_route[r][dimension]["ratios"] for r in per_route},
-            "threshold": threshold,
-        }
+        """R6.4 -- any FAIL wins; else any NOT_EVALUABLE; else PASS.
+
+        FAIL takes precedence over NOT_EVALUABLE deliberately: a route that demonstrably failed
+        its reliability gate is evidence, and letting an unevaluable sibling route soften it would
+        be the "one route masks the other" failure this ordering exists to prevent.
+        """
+        rows = {r: per_route[r][dimension] for r in per_route}
+        if not rows:
+            return {"status": R1_NOT_EVALUABLE, "by_route": {}, "threshold": threshold}
+        statuses = [row["status"] for row in rows.values()]
+        status = next((c for c in ("FAIL", R1_NOT_EVALUABLE) if c in statuses), "PASS")
+        return {"status": status, "by_route": rows, "threshold": threshold}
 
     return {
         "n_pairs": len(pairs),
@@ -975,9 +1012,132 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
         "pooled_across_routes": False,
         "text": worst("text", R1_TEXT_THRESHOLD),
         "role": worst("role", R1_ROLE_THRESHOLD),
-        "denominator_rules_reported": list(R1_DENOMINATOR_RULES),
-        "open_ruling": "A41.2 R6 -- the denominator on unequal enumerations, and per-route vs pooled",
+        "matching": "one-to-one on uniquely resolved A30 occurrence keys; symmetric union denominator (R6.1)",
+        "text_comparison": "EXACT equality of the values as returned -- no normalisation (R6.2)",
+        "role_comparison": "exact fine section 5.3 role; UNREADABLE never agrees (R6.3)",
+        "aggregation": "heading-occurrence micro-average per route; worst required route (R6.4)",
+        "ruled_by": "A41.2 R6",
         "decision_owner": "Rule 3 gate vector (A27.6); no consequence is applied here",
+    }
+
+
+#: A40's three control kinds, and the R8 verdict vocabulary.
+CONTROL_KINDS = ("N-A", "N-B", "N-C")
+CONTROL_TARGET_ABSENT = "EXPECTED_TARGET_ABSENT"
+CONTROL_TARGET_DUPLICATED = "EXPECTED_TARGET_DUPLICATED"
+CONTROL_TARGET_UNREADABLE = "EXPECTED_TARGET_UNREADABLE"
+CONTROL_HEADING_REPORTED = "HEADING_REPORTED_IN_HEADING_FREE_REGION"
+CONTROL_TRUTH_MALFORMED = "CONTROL_TRUTH_MALFORMED"
+
+
+def _control_verdict(kind: str, expected, answer: dict) -> dict:
+    """One control fixture on ONE route: PASS/FAIL against its COMMITTED expected truth.
+
+    RULED BY A41.2 R8. Comparison is **exact raw string equality**, never `m2_normalize`: a
+    `WELD_TWO_WORDS` or `SPLIT_ONE_WORD` control differs from its source only in whitespace, so
+    normalising here would make the control incapable of detecting the mutation it exists to test
+    -- the fixture would pass whether or not the adjudicator saw the alteration.
+
+    Other headings in the crop do NOT by themselves fail N-A or N-B. The committed truth
+    establishes the TARGET occurrence, not a complete oracle for every heading the region may
+    contain, and treating an extra heading as a failure would charge the control for the
+    adjudicator's own correct enumeration.
+    """
+    texts = [h.get("text") for h in answer.get("headings", [])]
+    if kind == "N-C":
+        # Constructionally heading-free (A40): the answer must be exactly empty.
+        reported = [t for t in texts]
+        return {
+            "pass": not answer.get("headings", []),
+            "reason": None if not answer.get("headings", []) else CONTROL_HEADING_REPORTED,
+            "observed_texts": reported,
+            "expected": [],
+        }
+
+    if not isinstance(expected, list) or len(expected) != 1 or "text" not in (expected[0] or {}):
+        raise ScoreInputError(CONTROL_TRUTH_MALFORMED, {"kind": kind, "expected": expected})
+    target = expected[0]["text"]
+    occurrences = sum(1 for t in texts if t == target)
+    if occurrences == 1:
+        return {"pass": True, "reason": None, "observed_texts": texts, "expected": [target]}
+    if occurrences > 1:
+        reason = CONTROL_TARGET_DUPLICATED
+    elif BO.UNREADABLE in texts:
+        # Reported as its own reason rather than folded into "absent": an illegible stimulus is a
+        # different finding from an adjudicator who read it and transcribed something else.
+        reason = CONTROL_TARGET_UNREADABLE
+    else:
+        reason = CONTROL_TARGET_ABSENT
+    return {"pass": False, "reason": reason, "observed_texts": texts, "expected": [target]}
+
+
+def control_verdicts(key: dict, adjudicated: dict) -> dict:
+    """A41.2 R8 -- the N-A / N-B / N-C factual verdicts, from committed artifacts only.
+
+    THE GAP THIS CLOSES. `control_fixtures.py` owns the fixtures (G6-gated) and
+    `build_oracle.verify_join` binds each key record's carried truth to the manifest, but nothing
+    compared an ADJUDICATED ANSWER to that truth -- so the three Rule 3 blockers had no factual
+    verdict, and Phase 2 would have had to derive control truth on its own authority.
+
+    Nothing is regenerated here: the chain is `control_fixtures.json` ->
+    `build_oracle.control_expected_truth` -> committed key, joined to the committed adjudications.
+    The G6 / `x26` binding is what makes the key's truth trustworthy, and is NOT reimplemented.
+
+    EVERY REQUIRED ROUTE, separately (A36.6 gives a control both result-bearing routes). A kind
+    PASSES only if EVERY fixture passes on EVERY required route -- no tolerance, no percentage.
+    """
+    per_control = []
+    for bid, record in sorted(key["stimuli"].items()):
+        kind = record.get("control_kind")
+        if kind is None:
+            continue
+        if kind not in CONTROL_KINDS:
+            raise ScoreInputError(CONTROL_TRUTH_MALFORMED, {"blind_id": bid, "control_kind": kind})
+        for route in record["adjudication_routes"]:
+            answer = adjudicated.get(route, {}).get(bid)
+            if answer is None:
+                raise ScoreInputError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
+            verdict = _control_verdict(kind, record.get("control_expected_truth"), answer)
+            per_control.append(
+                {
+                    "blind_id": bid,
+                    "control_kind": kind,
+                    "control_variant": record.get("control_variant"),
+                    "route": route,
+                    **verdict,
+                }
+            )
+
+    by_kind = {}
+    for kind in CONTROL_KINDS:
+        rows = [r for r in per_control if r["control_kind"] == kind]
+        passed = [r for r in rows if r["pass"]]
+        by_kind[kind] = {
+            "status": ("NOT_EVALUABLE" if not rows else ("PASS" if len(passed) == len(rows) else "FAIL")),
+            "n_passed": len(passed),
+            "n_total": len(rows),
+            "by_route": {
+                route: {
+                    "n_passed": sum(1 for r in rows if r["route"] == route and r["pass"]),
+                    "n_total": sum(1 for r in rows if r["route"] == route),
+                }
+                for route in sorted({r["route"] for r in rows})
+            },
+            "failures": [
+                {k: r[k] for k in ("blind_id", "route", "control_variant", "reason", "observed_texts", "expected")}
+                for r in rows
+                if not r["pass"]
+            ],
+        }
+    return {
+        "per_control": per_control,
+        "by_kind": by_kind,
+        "n_controls": len({r["blind_id"] for r in per_control}),
+        "comparison": "exact raw string equality; NO normalisation (R8)",
+        "aggregation": "a kind PASSES only if every fixture passes on every required route; no tolerance",
+        "ruled_by": "A41.2 R8",
+        "decision_owner": "decide_architecture -- Rule 3's gate vector (A27.6) consumes these three "
+        "statuses; they are the FACTS, not the decision",
     }
 
 
@@ -986,10 +1146,10 @@ def _r1_role_gate(r1: dict) -> dict:
     return {
         "status": r1["role"]["status"],
         "threshold": R1_ROLE_THRESHOLD,
-        "observed_by_denominator_rule": r1["role"]["ratios"],
-        # AMBIGUOUS is NOT void and NOT a pass. Voiding M5 on an unruled denominator would apply
-        # a consequence the protocol has not chosen; calling it a pass would claim a gate was
-        # checked when the frozen text does not yet decide what it checks.
+        "observed_by_route": r1["role"]["by_route"],
+        # NOT_EVALUABLE is not a void either: section 6 voids M5 when role reliability falls BELOW
+        # 0.80, which is a measurement, and an absent measurement is not one. Rule 3 owns what an
+        # unevaluable gate does to the decision.
         "m5_void": r1["role"]["status"] == "FAIL",
         "owner": "Rule 3 gate vector (A27.6); this module reports the FACTS only",
         "evidence": "computed from the committed oracle key + adjudications, never supplied",
@@ -1392,6 +1552,9 @@ def score(inputs: ScoreInputs) -> dict:
         # Section 5.6's reliability facts, computed from the committed artifacts. A Rule 3 gate
         # INPUT, never a Rule 3 verdict -- and no caller scalar can reach it.
         "r1_reliability": headings["r1"],
+        # A41.2 R8 -- the N-A / N-B / N-C factual verdicts. Three more Rule 3 gate INPUTS; the
+        # decider consumes the statuses, and no consequence is applied here.
+        "control_verdicts": control_verdicts(inputs.oracle_key, inputs.oracle_adjudicated),
     }
 
 

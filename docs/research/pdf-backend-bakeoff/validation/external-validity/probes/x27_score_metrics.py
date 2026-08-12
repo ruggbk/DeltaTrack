@@ -99,6 +99,31 @@ def refusal(fn) -> str | None:
     return refusal_detail(fn)[1]
 
 
+def first_failure(kind_block: dict) -> tuple:
+    """`(status, first failure reason or None)` for one control kind.
+
+    Indexing `failures[0]` directly makes a control CRASH when an injected fault turns the
+    expected failure into a pass -- the fault is still detected, but by a traceback rather than by
+    the named check, which is weaker evidence: a crash cannot distinguish "the rule broke" from
+    "the probe has a bug". Returning None keeps the red inside `check`.
+    """
+    failures = kind_block.get("failures") or []
+    return (kind_block.get("status"), failures[0]["reason"] if failures else None)
+
+
+def refusal_any(fn) -> tuple:
+    """`(exception type, reason or None)` for ANY exception -- used where a fault would otherwise
+    escape as an unrelated crash (a KeyError deep inside `qualification`, say) and the control
+    needs to distinguish a DETERMINISTIC refusal from an accidental one."""
+    try:
+        fn()
+    except SM.ScoreInputError as exc:
+        return (type(exc).__name__, exc.reason)
+    except Exception as exc:  # noqa: BLE001 -- the point is to name whatever came out
+        return (type(exc).__name__, None)
+    return (None, None)
+
+
 def refusal_detail(fn) -> tuple:
     """`(exception type name, reason)` -- WHICH LAYER refused, not only that something did.
 
@@ -1258,8 +1283,8 @@ def part_r1(tmp: Path) -> dict:
     for heading in human_only[BO.ROUTE_HUMAN][repeat_bid]["headings"]:
         heading["text"] = "ONLY THE HUMAN REPEAT DISAGREES"
     asymmetric = SM.r1_reliability(built.key, human_only)
-    ai_ratio = asymmetric["per_route"][BO.ROUTE_AI]["text"]["ratios"]["union"]
-    human_ratio = asymmetric["per_route"][BO.ROUTE_HUMAN]["text"]["ratios"]["union"]
+    ai_ratio = asymmetric["per_route"][BO.ROUTE_AI]["text"]["ratio"]
+    human_ratio = asymmetric["per_route"][BO.ROUTE_HUMAN]["text"]["ratio"]
     check(
         "R1 is computed PER ROUTE: a human-only disagreement leaves the AI route untouched",
         ("PASS", "FAIL", 1.0, 0.0, False),
@@ -1324,50 +1349,178 @@ def part_r1(tmp: Path) -> dict:
         "...and the coarse-blind fixture leaves TEXT agreement untouched, so only the role moved",
         (1.0, "PASS"),
         (
-            coarse_blind["per_route"][BO.ROUTE_AI]["text"]["ratios"]["union"],
+            coarse_blind["per_route"][BO.ROUTE_AI]["text"]["ratio"],
             coarse_blind["per_route"][BO.ROUTE_AI]["text"]["status"],
         ),
         "the fixture perturbed the text as well, so a role-only claim cannot be attributed to the role comparison",
     )
 
-    # --- THE AMBIGUITY, exhibited. The repeat enumerates FEWER headings than the primary, and the
-    # shared ones agree. Intersection says 1.0 (PASS); union / primary / max say 0.667 (FAIL).
-    # There is no frozen rule that chooses, and the two verdicts differ across the threshold.
+    # ================= R6.1 the SYMMETRIC UNION denominator, under one-to-one identity matching
+    # The fixture that used to exhibit the ambiguity is now the fixture that pins the RULED
+    # answer: 3 primary headings, 2 repeat, both shared agreeing -> 2/3, which FAILS 0.90.
     fewer = copy.deepcopy(identical)
     for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
-        if repeat_bid in fewer.get(route, {}):
-            fewer[route][repeat_bid]["headings"] = fewer[route][repeat_bid]["headings"][:2]
-    straddling = SM.r1_reliability(built.key, fewer)
-    pair = straddling["pairs"][0]
+        fewer[route][repeat_bid]["headings"] = fewer[route][repeat_bid]["headings"][:2]
+    one_sided = SM.r1_reliability(built.key, fewer)
+    pair = one_sided["pairs"][0]
     check(
-        "the ambiguity fixture really is 3 primary vs 2 repeat headings, both shared ones agreeing",
-        (3, 2, 2, 2),
-        (pair["n_primary_resolved"], pair["n_repeat_resolved"], pair["n_shared"], pair["n_text_agree"]),
-        "the fixture is not the unequal-enumeration shape, so it cannot exhibit the disagreement",
-    )
-    ratios = straddling["text"]["ratios"][pair["route"]]
-    check(
-        "THE OPEN RULING -- the candidate denominators STRADDLE the 0.90 threshold, so R1 abstains",
-        (SM.R1_AMBIGUOUS, 1.0, 2 / 3, 2 / 3, 2 / 3),
+        "R6.1 -- a heading present on ONE side stays in the denominator and earns no numerator",
+        (3, 2, 2, 2, 3, 2 / 3, "FAIL"),
         (
-            straddling["text"]["status"],
-            ratios["intersection"],
-            ratios["union"],
-            ratios["primary"],
-            ratios["max"],
+            pair["n_primary_headings"],
+            pair["n_repeat_headings"],
+            pair["n_matched_pairs"],
+            pair["n_text_agree"],
+            pair["denominator"],
+            one_sided["per_route"][pair["route"]]["text"]["ratio"],
+            one_sided["text"]["status"],
         ),
-        "the candidate denominators agree on this fixture, so the ambiguity A41.2 R6 records "
-        "would not actually change a gate result and should be closed rather than ruled",
+        "the denominator is the INTERSECTION, so an adjudicator who silently drops a heading scores "
+        "perfectly reliable -- the enumeration instability section 5.6 exists to detect",
+    )
+
+    # --- NEGATIVE 1: an UNRESOLVED repeat heading cannot disappear from the denominator. Induced
+    # through the REAL resolver by removing one line's identity candidates from the repeat's key
+    # record, so `resolve_adjudicated_occurrence` refuses with MISSING_IDENTITY_CANDIDATES.
+    def strip_candidates(bids):
+        mutated = copy.deepcopy(built.key)
+        for target in bids:
+            line = mutated["stimuli"][target]["region_line_bijection"][2]
+            mutated["stimuli"][target]["identity_candidates"].pop(f"{line[0]}:{line[1]}", None)
+        return mutated
+
+    repeat_unresolved = SM.r1_reliability(strip_candidates([repeat_bid]), identical)
+    u_pair = repeat_unresolved["pairs"][0]
+    check(
+        "R6.1 NEGATIVE -- one UNRESOLVED repeat heading stays in the denominator, agreement falls",
+        (3, 3, 1, 2, 2, 4, 0.5),
+        (
+            u_pair["n_primary_headings"],
+            u_pair["n_repeat_headings"],
+            u_pair["n_repeat_unresolved"],
+            u_pair["n_matched_pairs"],
+            u_pair["n_text_agree"],
+            u_pair["denominator"],
+            repeat_unresolved["per_route"][u_pair["route"]]["text"]["ratio"],
+        ),
+        "an unresolved heading vanishes from the denominator, so a geometric refusal quietly "
+        "IMPROVES the measured reliability of the adjudicator that produced it",
+    )
+
+    # --- NEGATIVE 2: BOTH sides unresolved must not become vacuous or perfect.
+    both_unresolved = SM.r1_reliability(strip_candidates([primary_bid, repeat_bid]), identical)
+    b_pair = both_unresolved["pairs"][0]
+    check(
+        "R6.1 NEGATIVE -- BOTH sides unresolved is denominator-bearing, never vacuous or perfect",
+        (1, 1, 2, 2, 4, 0.5, "FAIL"),
+        (
+            b_pair["n_primary_unresolved"],
+            b_pair["n_repeat_unresolved"],
+            b_pair["n_matched_pairs"],
+            b_pair["n_text_agree"],
+            b_pair["denominator"],
+            both_unresolved["per_route"][b_pair["route"]]["text"]["ratio"],
+            both_unresolved["text"]["status"],
+        ),
+        "two unresolved headings cancel into a vacuous or perfect result, so an adjudication the "
+        "join could not read at all would satisfy the reliability gate",
+    )
+
+    # --- NEGATIVE 3: a DUPLICATED resolved key must not be collapsed into a perfect match. Two
+    # repeat headings are given the SAME (line, x), so both resolve to one identity.
+    duplicated = copy.deepcopy(identical)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        rows = duplicated[route][repeat_bid]["headings"]
+        rows[1]["start_physical_line"] = rows[0]["start_physical_line"]
+        rows[1]["start_x_px"] = rows[0]["start_x_px"]
+        rows[1]["text"] = rows[0]["text"]
+    dup = SM.r1_reliability(built.key, duplicated)
+    d_pair = dup["pairs"][0]
+    check(
+        "R6.1 NEGATIVE -- a duplicated occurrence key is NOT pairable and cannot be overwritten",
+        (2, 3, 3, 1, 5, "FAIL"),
+        (
+            d_pair["n_repeat_non_unique"],
+            d_pair["n_repeat_headings"],
+            d_pair["n_primary_headings"],
+            d_pair["n_matched_pairs"],
+            d_pair["denominator"],
+            dup["text"]["status"],
+        ),
+        "the duplicate is collapsed through a dict -- last write wins -- so two answers for one "
+        "identity become a single perfect match instead of the disagreement evidence they are",
+    )
+
+    # ================= R6.2 EXACT text equality: no normalizer may hide a spacing difference
+    whitespace = copy.deepcopy(identical)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        for heading in whitespace[route][repeat_bid]["headings"]:
+            heading["text"] = heading["text"].replace(" ", "  ", 1)
+    spaced = SM.r1_reliability(built.key, whitespace)
+    sample = whitespace[BO.ROUTE_AI][repeat_bid]["headings"][0]["text"]
+    primary_sample = identical[BO.ROUTE_AI][repeat_bid]["headings"][0]["text"]
+    check(
+        "R6.2 -- a whitespace-run difference that M2 would call EQUAL makes R1 text agreement fall",
+        ("FAIL", 0.0, True, True),
+        (
+            spaced["text"]["status"],
+            spaced["per_route"][BO.ROUTE_AI]["text"]["ratio"],
+            # the discriminator: M2's normalisation really does equate these two strings
+            SM.m2_normalize(sample) == SM.m2_normalize(primary_sample),
+            sample != primary_sample,
+        ),
+        "R1 normalises the text before comparing, so an adjudicator whose spacing wanders reads as "
+        "perfectly reliable -- and spacing instability is exactly what the repeat records",
     )
     check(
-        "...and ABSTAINING is neither a pass nor a void: no consequence follows an unruled choice",
+        "...and the ROLE gate is untouched by the spacing change, so the two dimensions are separate",
+        "PASS",
+        spaced["role"]["status"],
+        "a text-only perturbation moved the role gate, so the two agreements are not independent",
+    )
+
+    # ================= R6.3 UNREADABLE never agrees, including against itself
+    unreadable = copy.deepcopy(identical)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        for bid in (primary_bid, repeat_bid):
+            for heading in unreadable[route][bid]["headings"]:
+                heading["role"] = BO.UNREADABLE
+    unread = SM.r1_reliability(built.key, unreadable)
+    check(
+        "R6.3 NEGATIVE -- UNREADABLE vs UNREADABLE is NOT role agreement",
+        ("FAIL", 0.0, "PASS"),
+        (
+            unread["role"]["status"],
+            unread["per_route"][BO.ROUTE_AI]["role"]["ratio"],
+            unread["text"]["status"],
+        ),
+        "repeated unreadability manufactures role reliability -- an absence of evidence counted as "
+        "evidence of consistency, and the one input an adjudicator can always produce",
+    )
+
+    # ================= R6.4 micro-average over occurrences, not a mean of per-region rates
+    check(
+        "R6.4 -- the route ratio is a heading-occurrence micro-average of the summed counts",
+        (True, 2, 3),
+        (
+            one_sided["per_route"][pair["route"]]["text"]["ratio"]
+            == one_sided["per_route"][pair["route"]]["text"]["numerator"]
+            / one_sided["per_route"][pair["route"]]["text"]["denominator"],
+            one_sided["per_route"][pair["route"]]["text"]["numerator"],
+            one_sided["per_route"][pair["route"]]["text"]["denominator"],
+        ),
+        "the ratio is not numerator/denominator over occurrences, so a one-heading region and a "
+        "forty-heading region carry the same weight in the reliability figure",
+    )
+    check(
+        "...and no abstention status survives the ruling",
         (False, False),
         (
-            SM._r1_role_gate(straddling)["m5_void"],
-            SM._r1_role_gate(straddling)["status"] == "PASS",
+            hasattr(SM, "R1_AMBIGUOUS"),
+            hasattr(SM, "R1_DENOMINATOR_RULES"),
         ),
-        "the scorer resolves the open denominator question itself, choosing the sensitivity of a "
-        "Rule 3 gate the frozen text has not decided",
+        "the candidate-denominator machinery or the AMBIGUOUS status is still reachable, so a "
+        "consumer can read a status the protocol no longer defines",
     )
 
     # --- an orphaned repeat REFUSES rather than shrinking the reliability population.
@@ -1384,8 +1537,208 @@ def part_r1(tmp: Path) -> dict:
         "n_pairs": agree["n_pairs"],
         "identical": {"text": agree["text"]["status"], "role": agree["role"]["status"]},
         "disagreeing": {"text": disagree["text"]["status"], "role": disagree["role"]["status"]},
-        "straddling_fixture": {"pair": pair, "text": straddling["text"]},
-        "open_ruling": agree["open_ruling"],
+        "one_sided_pair": pair,
+        "unresolved_pair": u_pair,
+        "duplicate_pair": d_pair,
+        "whitespace": spaced["per_route"][BO.ROUTE_AI]["text"],
+        "unreadable_role": unread["per_route"][BO.ROUTE_AI]["role"],
+        "ruled_by": agree["ruled_by"],
+    }
+
+
+def part_r8(tmp: Path) -> dict:
+    """A41.2 R8 -- the N-A / N-B / N-C factual verdicts, on the REAL committed control manifest.
+
+    The chain is not rebuilt: `control_fixtures.json` -> `BO.control_specs` -> committed key ->
+    committed adjudications -> scorer verdicts. G6 and `x26` own the binding that makes the key's
+    carried truth trustworthy, and nothing here reimplements source replay.
+    """
+    print("\n== A41.2 R8: the N-A / N-B / N-C factual verdicts ==")
+    manifest = json.loads(CF.MANIFEST_PATH.read_text())
+    built = BO.build([], controls=BO.control_specs(manifest, EV, REPO))
+    truthful = synthesize_adjudication(built.key)
+
+    verdicts = SM.control_verdicts(built.key, truthful)
+    by_kind = verdicts["by_kind"]
+    check(
+        "the committed 8 / 8 / 4 controls all PASS against their own committed truth, on BOTH routes",
+        ({"N-A": "PASS", "N-B": "PASS", "N-C": "PASS"}, {"N-A": 16, "N-B": 16, "N-C": 8}, 20),
+        (
+            {k: by_kind[k]["status"] for k in SM.CONTROL_KINDS},
+            {k: by_kind[k]["n_total"] for k in SM.CONTROL_KINDS},
+            verdicts["n_controls"],
+        ),
+        "the verdicts cannot even reproduce the manifest's own expected answers, so every negative "
+        "below would be measuring the fixture rather than the rule",
+    )
+    check(
+        "...and every fixture is evaluated on EVERY required route (A36.6), 2 per control",
+        {"N-A": {"ai": 8, "human": 8}, "N-B": {"ai": 8, "human": 8}, "N-C": {"ai": 4, "human": 4}},
+        {k: {r: v["n_total"] for r, v in by_kind[k]["by_route"].items()} for k in SM.CONTROL_KINDS},
+        "a control class is missing from an answer route, so it cannot bound that route -- and a "
+        "route-specific failure would be invisible",
+    )
+
+    def mutate(fn) -> dict:
+        answers = copy.deepcopy(truthful)
+        fn(answers)
+        return SM.control_verdicts(built.key, answers)
+
+    def first_of(kind: str) -> str:
+        return next(b for b, r in sorted(built.key["stimuli"].items()) if r["control_kind"] == kind)
+
+    na_bid, nb_bid, nc_bid = first_of("N-A"), first_of("N-B"), first_of("N-C")
+
+    # --- 1. N-A: the expected text differs only by a WHITESPACE RUN. No normalizer may hide it --
+    # a WELD/SPLIT control differs from its source only in spacing, so normalising here would make
+    # the control incapable of detecting the very mutation it exists to test.
+    def widen_space(answers):
+        for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+            head = answers[route][na_bid]["headings"][0]
+            head["text"] = head["text"].replace(" ", "  ", 1)
+
+    spaced = mutate(widen_space)
+    original = truthful[BO.ROUTE_AI][na_bid]["headings"][0]["text"]
+    widened = original.replace(" ", "  ", 1)
+    check(
+        "R8 NEGATIVE -- an N-A answer differing only by a whitespace run FAILS as ABSENT",
+        ("FAIL", SM.CONTROL_TARGET_ABSENT, True, True),
+        (
+            *first_failure(spaced["by_kind"]["N-A"]),
+            SM.m2_normalize(widened) == SM.m2_normalize(original),  # M2 would call these EQUAL
+            widened != original,
+        ),
+        "the comparison normalises whitespace, so a WELD or SPLIT control passes whether or not the "
+        "adjudicator saw the alteration -- the control becomes decoration",
+    )
+
+    # --- 2. N-A: the expected target absent entirely.
+    absent = mutate(
+        lambda a: [a[r][na_bid].__setitem__("headings", [{"text": "SOMETHING ELSE ENTIRELY"}]) for r in ("ai", "human")]
+    )
+    check(
+        "R8 NEGATIVE -- an absent N-A target FAILS",
+        ("FAIL", SM.CONTROL_TARGET_ABSENT),
+        first_failure(absent["by_kind"]["N-A"]),
+        "a control whose mutated heading was never transcribed still passes, so M2/M3 keep their "
+        "licence on an oracle that cannot see the failure class",
+    )
+
+    # --- 3. N-B: target absent while ANOTHER plausible heading remains, so the failure is not
+    # merely "the answer was empty".
+    def swap_nb(answers):
+        for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+            answers[route][nb_bid]["headings"] = [{"text": "A PLAUSIBLE BUT WRONG ACCOUNT HEADING"}]
+
+    nb_absent = mutate(swap_nb)
+    check(
+        "R8 NEGATIVE -- an absent N-B target FAILS even though a plausible heading is present",
+        ("FAIL", SM.CONTROL_TARGET_ABSENT, 1),
+        (
+            *first_failure(nb_absent["by_kind"]["N-B"]),
+            len((nb_absent["by_kind"]["N-B"]["failures"] or [{"observed_texts": []}])[0]["observed_texts"]),
+        ),
+        "N-B passes on any non-empty answer, so the corroborated heading is not actually being "
+        "checked -- and N-B is what establishes the adjudicator is reliable at all",
+    )
+
+    # --- 4. a DUPLICATED expected target is a failure, not a match.
+    def duplicate_target(answers):
+        for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+            rows = answers[route][na_bid]["headings"]
+            answers[route][na_bid]["headings"] = rows + [dict(rows[0])]
+
+    duplicated = mutate(duplicate_target)
+    check(
+        "R8 NEGATIVE -- a DUPLICATED N-A target FAILS rather than counting as found",
+        ("FAIL", SM.CONTROL_TARGET_DUPLICATED),
+        first_failure(duplicated["by_kind"]["N-A"]),
+        "'at least once' is accepted, so an adjudicator reporting the same heading twice satisfies "
+        "a control whose truth names exactly one occurrence",
+    )
+
+    # --- 5. N-C: one fabricated heading in a constructionally heading-free region.
+    def fabricate(answers):
+        for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+            answers[route][nc_bid]["headings"] = [{"text": "A HEADING THAT IS NOT PRINTED"}]
+
+    fabricated = mutate(fabricate)
+    check(
+        "R8 NEGATIVE -- ONE fabricated heading FAILS N-C",
+        ("FAIL", SM.CONTROL_HEADING_REPORTED),
+        first_failure(fabricated["by_kind"]["N-C"]),
+        "over-triggering passes, so every precision claim keeps its licence while the oracle "
+        "invents headings -- the exact condition section 5.6 voids precision for",
+    )
+
+    # --- 6. ROUTE ASYMMETRY: the AI route answers correctly, the human route does not.
+    def human_only(answers):
+        answers[BO.ROUTE_HUMAN][na_bid]["headings"] = [{"text": "ONLY THE HUMAN ROUTE IS WRONG"}]
+
+    asymmetric = mutate(human_only)
+    routes = asymmetric["by_kind"]["N-A"]["by_route"]
+    check(
+        "R8 -- one route cannot mask the other: AI passes, human fails, the KIND fails",
+        ("FAIL", 8, 7, [BO.ROUTE_HUMAN]),
+        (
+            asymmetric["by_kind"]["N-A"]["status"],
+            routes[BO.ROUTE_AI]["n_passed"],
+            routes[BO.ROUTE_HUMAN]["n_passed"],
+            sorted({f["route"] for f in asymmetric["by_kind"]["N-A"]["failures"]}),
+        ),
+        "a passing route averages away a failing one, so a control that failed on the route whose "
+        "labels are actually consumed still reads PASS",
+    )
+    check(
+        "...and a kind PASS requires EVERY fixture on EVERY route -- no tolerance, no percentage",
+        (True, "no tolerance"),
+        ("every fixture passes on every required route" in verdicts["aggregation"], "no tolerance"),
+        "the aggregation admits a threshold or a percentage, which the frozen Rule 3 blockers do not",
+    )
+
+    # --- 7. SELF-CERTIFICATION is impossible: swapping two controls' expected truths in the
+    # SCORER INPUT must not silently produce a pass. The G6 / x26 binding is preserved, not
+    # reimplemented -- this only proves the scorer cannot be fed a self-consistent lie.
+    swapped_key = copy.deepcopy(built.key)
+    a_truth = swapped_key["stimuli"][na_bid]["control_expected_truth"]
+    b_truth = swapped_key["stimuli"][nb_bid]["control_expected_truth"]
+    swapped_key["stimuli"][na_bid]["control_expected_truth"] = b_truth
+    swapped_key["stimuli"][nb_bid]["control_expected_truth"] = a_truth
+    swapped = SM.control_verdicts(swapped_key, truthful)
+    check(
+        "R8 NEGATIVE -- swapping two controls' expected truths cannot self-certify",
+        ("FAIL", "FAIL"),
+        (swapped["by_kind"]["N-A"]["status"], swapped["by_kind"]["N-B"]["status"]),
+        "truth attached to the wrong control still passes, which would mean the verdict is not "
+        "reading the committed truth at all",
+    )
+    check(
+        "...and nothing here is malformed, so the failure is about BINDING rather than shape",
+        (True, True),
+        (isinstance(a_truth, list) and bool(a_truth), isinstance(b_truth, list) and bool(b_truth)),
+        "the swap produced a malformed record, so the control would fail for the wrong reason",
+    )
+
+    # --- malformed committed truth REFUSES rather than silently passing or failing.
+    broken = copy.deepcopy(built.key)
+    broken["stimuli"][na_bid]["control_expected_truth"] = []
+    check(
+        "NEGATIVE -- an N-A record with no committed expected heading REFUSES",
+        SM.CONTROL_TRUTH_MALFORMED,
+        refusal(lambda: SM.control_verdicts(broken, truthful)),
+        "a control with no truth to check against is silently scored, so a manifest defect becomes a PASS",
+    )
+    check(
+        "no architecture decision is taken here -- statuses only",
+        (True, True),
+        ("decide_architecture" in verdicts["decision_owner"], "FACTS" in verdicts["decision_owner"]),
+        "the scorer applies a Rule 3 consequence to a control status, taking a decision section 7 owns",
+    )
+    return {
+        "by_kind": {k: {m: by_kind[k][m] for m in ("status", "n_passed", "n_total")} for k in SM.CONTROL_KINDS},
+        "n_controls": verdicts["n_controls"],
+        "whitespace_reason": first_failure(spaced["by_kind"]["N-A"])[1],
+        "route_asymmetry": routes,
     }
 
 
@@ -1842,6 +2195,31 @@ def part_adequacy() -> dict:
         "a P-robust document inflates the adequacy count, and a larger count reads as MORE "
         "adequate -- the caller-obligation hole A30.4 closed",
     )
+    # --- THE EMPTY-MAPPING ESCAPE HATCH. An absent stratum is missing INPUT, not a thin holdout;
+    # letting it through produced "0 strata filled" and therefore a real-looking INADEQUATE verdict
+    # about the population, which is the worst possible way to fail closed.
+    one_doc = frame([page_input(1)], document="SYNTHETIC/1")
+    two_docs = [one_doc, frame([page_input(1)], document="SYNTHETIC/2", sha=DOC_SHA_B)]
+    check(
+        "NEGATIVE -- an EMPTY strata mapping REFUSES instead of reporting a false INADEQUATE",
+        SM.STRATUM_MISSING,
+        refusal(lambda: SM.score(inputs([one_doc], strata={}))),
+        "an empty mapping bypasses the check, so section 4.5 counts zero strata filled and prints "
+        "INADEQUATE -- turning input the caller never supplied into a finding about the holdout",
+    )
+    check(
+        "NEGATIVE -- ONE missing document in a multi-document set REFUSES",
+        SM.STRATUM_MISSING,
+        refusal(lambda: SM.score(inputs(two_docs, strata={"SYNTHETIC/1": 1}))),
+        "a partially supplied mapping is accepted, so the strata-filled count silently undercounts "
+        "and the adequacy verdict is computed on a population that was never fully described",
+    )
+    check(
+        "...and a COMPLETE mapping scores, so the refusals are not refusing everything",
+        None,
+        refusal(lambda: SM.score(inputs(two_docs, strata={"SYNTHETIC/1": 1, "SYNTHETIC/2": 2}))),
+        "a complete mapping is refused too, so the two negatives prove nothing about completeness",
+    )
     check(
         "the A28.2 state machine's verdict is reported as a fact, with its owner named",
         ("INADEQUATE", True),
@@ -1960,6 +2338,23 @@ def part_qualification() -> dict:
     )
     # The refusal must precede qualification: a `qualification()` computed on the extra row would
     # be a REPORTED number, and this proves none is ever produced from a wrong population.
+    # `refusal_any` rather than `refusal`: without the structural check these inputs escape as a
+    # bare KeyError from deep inside the scorer, and a control that only asserts "something raised"
+    # cannot tell a deterministic refusal from an accidental crash.
+    check(
+        "NEGATIVE -- a row missing `passed` REFUSES structurally, before any verdict is read",
+        ("ScoreInputError", SM.CROSS_ENGINE_ROW_MALFORMED),
+        refusal_any(lambda: with_rows([{"document": "SYNTHETIC/1", "qualification": None}])),
+        "a row with no verdict reaches `qualification`, where an absent key either raises far from "
+        "the cause or -- with a `.get` default -- invents a verdict for a real document",
+    )
+    check(
+        "NEGATIVE -- a row missing `document` REFUSES too, deterministically and not as a KeyError",
+        ("ScoreInputError", SM.CROSS_ENGINE_ROW_MALFORMED),
+        refusal_any(lambda: with_rows([ok_row, {"passed": False}])),
+        "an anonymous row is counted into I13's denominator, so a verdict about nothing changes the "
+        "both-headlines qualification",
+    )
     check(
         "the refusal happens at INPUT VALIDATION, before any qualification is computed",
         (SM.CROSS_ENGINE_EXTRA_DOCUMENT, "validate_inputs"),
@@ -2323,6 +2718,7 @@ def part_boundary(tmp: Path) -> dict:
             imported.add(node.module.split(".")[0])
     permitted = {
         "__future__",
+        "collections",
         "math",
         "sys",
         "json",
@@ -2517,6 +2913,7 @@ def main() -> int:
             "m4": part_m4(tmp),
             "m5": part_m5(tmp),
             "r1": part_r1(tmp),
+            "r8_controls": part_r8(tmp),
             "m7": part_m7(),
             "rule0": part_rule0(),
             "section8": part_section8(),
