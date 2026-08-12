@@ -161,6 +161,21 @@ def test_required_test_context_is_an_aggregator_over_all_jobs() -> None:
             "reports 'skipped'/'failure', not 'success', and an aggregator that never "
             "reads the result passes regardless"
         )
+    # CRITICAL: Each env binding variable (e.g., $FAST_TESTS_RESULT) must actually appear
+    # in the `for result in` list that feeds the gating comparison. Merely binding the
+    # env var is not enough -- if it's omitted from the loop, that job's result is ignored
+    # and the aggregator becomes a rubber stamp for that job.
+    # Extract the variable names from the for-loop list.
+    loop_vars = re.findall(r"\$(\w+_RESULT)", normalised)
+    # The pattern matches $LINT_FORMAT_RESULT, $FAST_TESTS_RESULT, etc. inside the loop.
+    # We need to ensure every expected env binding variable appears in that list.
+    expected_vars = {f"{job_name.upper().replace('-', '_')}_RESULT" for job_name in needs}
+    missing_in_loop = expected_vars - set(loop_vars)
+    assert not missing_in_loop, (
+        f"the 'test' aggregator's for-loop is missing these job result variables: {sorted(missing_in_loop)}. "
+        "Each needs.<job>.result must be bound to an env var AND that env var must appear in the "
+        "`for result in` list, otherwise that job's failure is silently ignored."
+    )
     # All result expressions must be compared against "success" and exit non-zero on mismatch
     # The current implementation loops over all results in a shell for-loop and exits 1 on any mismatch
     assert "for result in" in normalised, "the 'test' aggregator must iterate over all job results"
@@ -237,6 +252,39 @@ def test_ci_matrix_jobs_pin_the_interpreter_they_claim_to_test() -> None:
             "uv call in the job, including ones made from inside a test, falls back to "
             "`.python-version` -- so every non-3.12 leg silently tests 3.12 and passes."
         )
+
+
+def test_leaf_jobs_have_no_inter_job_dependencies() -> None:
+    """The seven leaf jobs must not depend on each other.
+
+    Issue #364 exists because independent checks were serialized in a single job.
+    The parallel architecture requires that each leaf job runs independently --
+    only the final `test` aggregator should have `needs:` pointing at them.
+    A `needs:` edge between leaf jobs would reintroduce the serialization #364 fixed.
+
+    This guard is deliberately narrow: it does not forbid `needs:` globally (the
+    aggregator legitimately uses it). It only forbids `needs:` on the seven leaf jobs.
+    """
+    workflow = _workflow()
+    leaf_jobs = {
+        "lint-format",
+        "fast-tests",
+        "browser-tests",
+        "external-validation",
+        "corpus-gates",
+        "packaging-gate",
+        "remaining-slow",
+    }
+    for job_name in leaf_jobs:
+        job = workflow["jobs"][job_name]
+        needs = job.get("needs")
+        if needs:
+            needs_list = [needs] if isinstance(needs, str) else list(needs)
+            assert not needs_list, (
+                f"leaf job '{job_name}' must not have `needs:` dependencies (found: {needs_list}). "
+                "Only the `test` aggregator should depend on leaf jobs. An inter-leaf dependency "
+                "re-serializes independent checks, undoing the parallelism from #364."
+            )
 
 
 def test_ci_runs_on_pushes_to_develop() -> None:
