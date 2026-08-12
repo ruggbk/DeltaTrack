@@ -56,7 +56,12 @@ def reconciled(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> list[Nod
     population = unmatched_population(pairs, registry)
     evidence = move_correspondence_evidence(retrieve_move_candidates(population, bound=MOVE_THRESHOLD))
     moves = assign_moves(population, evidence, threshold=MOVE_THRESHOLD)
-    return classify(settle_correspondences(pairs, registry, moves), registry)
+    # `round1_evidence=()` is deliberate rather than a stub: this stream is every unmatched old
+    # observation followed by every unmatched new one, so it holds no 1:1 pairing for the
+    # similarity rule to have decided and there is no round-1 evidence to carry. Settlement
+    # raises if a surviving 1:1 ever appears here without its evidence, which is what makes
+    # passing `()` safe to state rather than something to check by hand.
+    return classify(settle_correspondences(pairs, registry, moves, round1_evidence=()), registry)
 
 
 class TestReconcileMoves:
