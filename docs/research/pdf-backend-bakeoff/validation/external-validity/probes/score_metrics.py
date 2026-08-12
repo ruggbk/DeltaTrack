@@ -77,6 +77,11 @@ UNKNOWN_LINE_STATE = "UNKNOWN_LINE_STATE"
 LINE_STATE_PREDICATE_DRIFT = "LINE_STATE_PREDICATE_DRIFT"
 ANCHOR_EVIDENCE_DRIFT = "ANCHOR_EVIDENCE_DRIFT"
 D_FRAME_ELIGIBILITY_DRIFT = "D_FRAME_ELIGIBILITY_DRIFT"
+#: `build_frames` emits `d_frame = bool(reasons)` from the same expression that builds `d_reasons`,
+#: so the two can only disagree if something rewrote one of them. Checked exactly, because the
+#: line-level and anchor checks each look at ONE predicate and cannot see a broken relationship
+#: between the flag and the reason list as a whole.
+D_FRAME_FLAG_DRIFT = "D_FRAME_FLAG_DRIFT"
 COVERAGE_FLOOR_DRIFT = "COVERAGE_FLOOR_DRIFT"
 OCCURRENCE_RECORD_INCOMPLETE = "OCCURRENCE_RECORD_INCOMPLETE"
 DUPLICATE_OCCURRENCE_KEY = "DUPLICATE_OCCURRENCE_KEY"
@@ -380,6 +385,21 @@ def _validate_frame_internals(frame: dict) -> None:
                 ("region_ordinal", "neutral_line_keys", "d_frame", "d_reasons", "anchor_evidence"),
                 f"region in {doc}",
             )
+            # THE EXACT PRODUCER INVARIANT: `build_frames` writes `d_frame = bool(reasons)` from the
+            # same expression that builds `d_reasons`. The per-predicate checks below each inspect
+            # ONE predicate, so they cannot see the flag and the reason list disagreeing as a whole
+            # -- e.g. a concordant region carrying a reason with `d_frame` false satisfies every one
+            # of them.
+            if bool(region["d_frame"]) != bool(region["d_reasons"]):
+                raise ScoreInputError(
+                    D_FRAME_FLAG_DRIFT,
+                    {
+                        "document": doc,
+                        "region": region["region_ordinal"],
+                        "d_frame": region["d_frame"],
+                        "d_reasons": region["d_reasons"],
+                    },
+                )
             evidence = region["anchor_evidence"]
             differs = set(map(tuple, evidence["H"])) != set(map(tuple, evidence["X"]))
             if bool(evidence["differ"]) != differs or (BF.ANCHOR_DISCORDANCE in region["d_reasons"]) != differs:
@@ -1441,7 +1461,7 @@ def document_discordance_event(frame: dict) -> dict:
     }
 
 
-def section8(frames, paired_metrics: dict) -> dict:
+def section8(frames, paired_metrics: dict, qualification_by_document: dict) -> dict:
     """The section 8 block: the estimand, the exact bound, the bootstrap, and the pairing.
 
     P-HEAD ONLY. `SECTION8_DOCUMENT_DISCORDANCE` carries the population in the statistic's own
@@ -1457,7 +1477,15 @@ def section8(frames, paired_metrics: dict) -> dict:
     # order must not reach the artifact. An input-ordered list means two runs over the same
     # population print different per-document detail, and a reader comparing them sees a
     # difference where there is none.
-    events = sorted((document_discordance_event(f) for f in frames), key=lambda e: MC.canonical(e["document"]))
+    events = sorted(
+        (
+            # I13 -- every RQ1/RQ2 result computed on a cross-engine-failing document carries the
+            # qualification, including this per-document event row.
+            {**document_discordance_event(f), "qualification": qualification_by_document.get(f["document"])}
+            for f in frames
+        ),
+        key=lambda e: MC.canonical(e["document"]),
+    )
     p_head = [e for e in events if e["population"] == MC.P_HEAD]
     excluded = [e["document"] for e in events if e["population"] != MC.P_HEAD]
     n = len(p_head)
@@ -1514,60 +1542,76 @@ def section8(frames, paired_metrics: dict) -> dict:
 
 #: Per-arm scalars the paired comparison is defined over. Each is (metric path, arm subkey), so
 #: adding one cannot silently change how the mean is weighted.
-PAIRED_METRICS = (
-    ("M1_recall", ("M1", "{arm}", "recall")),
-    ("M1_precision", ("M1", "{arm}", "precision")),
-    ("M2", ("M2", "{arm}")),
-    ("M3_clean", ("M3", "clean_rate", "{arm}")),
-    ("M4", ("M4", "{arm}")),
-    ("M5", ("M5", "{arm}", "agreement")),
-)
+#: A41.2 **R9** -- the paired quantities, ruled. §8.3 requires per-document paired differences, an
+#: unweighted mean over documents, and mandatory per-document detail, but never enumerates WHICH
+#: quantities are paired. R9 fixes them as the two non-constant numeric M9 basis quantities.
+#:
+#: Both are defined on EVERY document for BOTH arms, so no missingness or vacuity policy has to be
+#: invented -- which is exactly why M1-M5 and M7 are excluded: they can be VACUOUS, and pairing them
+#: would need a new rule for which documents enter each mean. Also excluded, deliberately:
+#: `derive_size_bands_returns_a_band` and `coverage_meets_floor` (booleans Rule 0 consumes, not
+#: numeric differences), `coverage_floor` (a frozen constant), `n_margin_numbered_with_glyph_size`
+#: (a diagnostic, not A39.1's quantity), and internal support counts that are not frozen result
+#: quantities.
+PAIRED_M9_QUANTITIES = ("n_margin_numbered_lines", "coverage")
 
 
-def _dig(tree: dict, path, arm: str):
-    node = tree
-    for step in path:
-        node = node.get(step.replace("{arm}", arm)) if isinstance(node, dict) else None
-        if node is None:
-            return None
-    return node
+def paired_differences(frames, qualification_by_document: dict) -> dict:
+    """§8.3's paired comparison, over R9's two M9 basis quantities. Populations NEVER pooled.
 
+    M9 is valid on P-head AND P-robust (§4.4.1 claims M0 and M9 on both), but the two populations
+    are never pooled: a combined 17-document mean would mix a heading-bearing population with one
+    the study claims no heading metric on. Each quantity is therefore reported per population, with
+    its own per-document detail and its own unweighted mean, and there is no combined figure.
 
-def paired_differences(per_document_metrics: dict) -> dict:
-    """Section 8.3 -- per-document paired differences, UNWEIGHTED mean over documents.
-
-    Never weighted by heading count: a bill with 40 headings and one with 2 are one document
-    each, and weighting would make the comparison a function of document length. Per-document
-    detail is mandatory and is never collapsed to the mean alone.
+    UNWEIGHTED over documents, never by heading count: a bill with 40 headings and one with 2 are
+    one document each. Per-document detail is mandatory and is never collapsed to the mean alone.
     """
     out = {
-        "weighting": "UNWEIGHTED mean over documents (section 8.3); never weighted by heading count",
+        "ruled_by": "A41.2 R9",
+        "quantities": list(PAIRED_M9_QUANTITIES),
+        "quantity_source": "frames.m9.{H,X} -- the numeric M9 bases (A38.8/A39.1)",
+        "weighting": "UNWEIGHTED mean over documents (§8.3); never weighted by heading count",
         "difference": "X - H",
-        "by_frame": {},
+        "populations_never_pooled": True,
+        "no_combined_mean": "P-head and P-robust are reported separately; no 17-document mean exists",
+        "excluded_quantities": {
+            "M1-M5, M7": "can be VACUOUS -- pairing them would require an unruled missingness policy",
+            "derive_size_bands_returns_a_band, coverage_meets_floor": "booleans consumed by Rule 0, not numeric",
+            "coverage_floor": "a frozen constant, so its difference is always zero",
+            "n_margin_numbered_with_glyph_size": "a diagnostic; A39.1's quantity is the margin-line count",
+        },
+        "by_population": {},
     }
-    frames = sorted({frame for by_frame in per_document_metrics.values() for frame in by_frame})
-    for frame_name in frames:
+    for population in sorted({f["population"] for f in frames}):
+        members = sorted(
+            (f for f in frames if f["population"] == population), key=lambda f: MC.canonical(f["document"])
+        )
         rows = {}
-        for name, path in PAIRED_METRICS:
+        for quantity in PAIRED_M9_QUANTITIES:
             details, values = [], []
-            for document, by_frame in sorted(per_document_metrics.items()):
-                metrics = by_frame.get(frame_name)
-                if metrics is None:
-                    continue
-                h, x = _dig(metrics, path, "H"), _dig(metrics, path, "X")
-                if h is None or x is None or h.get("value") is None or x.get("value") is None:
-                    details.append({"document": document, "difference": None, "status": VACUOUS})
-                    continue
-                difference = x["value"] - h["value"]
-                details.append({"document": document, "H": h["value"], "X": x["value"], "difference": difference})
+            for frame in members:
+                h, x = frame["m9"]["H"][quantity], frame["m9"]["X"][quantity]
+                difference = x - h
+                details.append(
+                    {
+                        "document": frame["document"],
+                        "population": population,
+                        "H": h,
+                        "X": x,
+                        "difference": difference,
+                        # I13 -- the qualification travels with every result row it applies to.
+                        "qualification": qualification_by_document.get(frame["document"]),
+                    }
+                )
                 values.append(difference)
-            rows[name] = {
+            rows[quantity] = {
                 "per_document": details,
-                "n_documents_contributing": len(values),
+                "n_documents": len(values),
                 "unweighted_mean_difference": (sum(values) / len(values)) if values else None,
                 "status": "REPORTED" if values else VACUOUS,
             }
-        out["by_frame"][frame_name] = rows
+        out["by_population"][population] = rows
     return out
 
 
@@ -1624,6 +1668,12 @@ def qualification(cross_engine: dict) -> dict:
         "failed_documents": sorted(failed),
         # strictly MORE than one third, as x09's own consequence text states
         "both_headlines_qualified": len(failed) * 3 > len(rows),
+        # BOTH headline qualifications, emitted explicitly rather than left to a reader to derive
+        # from the boolean above. `None` on a headline means "not conditioned", not "unknown".
+        "headline_qualifications": {
+            "RQ1": PDFIUM_CONDITIONED_FRAME if len(failed) * 3 > len(rows) else None,
+            "RQ2": PDFIUM_CONDITIONED_FRAME if len(failed) * 3 > len(rows) else None,
+        },
         "decision_blocking": False,
         "threshold_owner": "x09_skeleton_cross_engine.gate (document 0.95 / page 0.75)",
     }
@@ -1663,26 +1713,42 @@ def score(inputs: ScoreInputs) -> dict:
             # raw counts stay: withholding evidence would be worse than withholding a rate.
             for name in ("M0a_text_rate", "M0b_segmentation_rate", "M0_any_rate", "M0b_rate_on_defined", "M0c_rate"):
                 block[name] = {**block[name], "value": None, "status": NOT_REPORTABLE_S1_DEAD}
+        # I13 -- the qualification is attached to EVERY applicable result surface, not only to a
+        # parent block a consumer would have to remember to look up. A passing document carries an
+        # explicit `None` rather than an absent field, so "not conditioned" and "nobody labelled
+        # this" are distinguishable. It never reaches a decision input: cross-engine qualifies
+        # REPORTING only (A27.6), which is why `decision_blocking` stays false and no gate or status
+        # in this payload is derived from it.
+        conditioned = label["per_document"].get(document)
         per_document[document] = {
             "population": frame["population"],
             "stratum": inputs.document_strata.get(document),
-            "qualification": label["per_document"].get(document),
-            "M0": block,
-            "M7": m7_block(frame),
-            "M9": rule0_facts(frame),
+            "qualification": conditioned,
+            "M0": {**block, "qualification": conditioned},
+            "M7": {**m7_block(frame), "qualification": conditioned},
+            "M9": {**rule0_facts(frame), "qualification": conditioned},
         }
 
     headings = heading_metrics(inputs)
     for document, metrics in headings["per_document"].items():
-        per_document[document]["headings_by_frame"] = metrics
-    paired = paired_differences(headings["per_document"])
+        conditioned = label["per_document"].get(document)
+        per_document[document]["headings_by_frame"] = {
+            frame_name: {**block, "qualification": conditioned} for frame_name, block in metrics.items()
+        }
+    paired = paired_differences(inputs.frames, label["per_document"])
 
     return {
         "schema": SCHEMA,
-        "owns": "PRE-REGISTRATION section 6 (M0-M9 minus M6) and section 8; HARNESS-PLAN section 5",
+        # ENUMERATED, not described by subtraction: "M0-M9 minus M6" names the deferred metric, and
+        # the schema must not contain its name at all -- see the note on its absence below.
+        "owns": "PRE-REGISTRATION section 6 metrics M0, M1, M2, M3, M4, M5, M7 and M9; section 8; "
+        "HARNESS-PLAN section 5",
         "decision_taken_here": False,
         "decision_owner": "decide_architecture (section 7) -- no Rule 0/1/3 outcome appears here",
-        "m6": "DEFERRED by A20; not computed, not reported, and not asked of the adjudicator",
+        # M6 IS ABSENT FROM THIS SCHEMA, not present-and-annotated. §5 owns "M0-M9 minus M6", so a
+        # key named for it -- even one whose value says DEFERRED -- puts a deferred metric in a
+        # result-bearing artifact and invites a consumer to read or reserve it. The explanation
+        # lives in A41 and this module's prose, where it cannot be mistaken for a result.
         "documents_scored": checked["documents"],
         "s1": s1,
         "cross_engine_qualification": label,
@@ -1694,7 +1760,7 @@ def score(inputs: ScoreInputs) -> dict:
             "estimand_purposes": headings["estimand_purposes"],
             "pooling_rule": headings["pooling_rule"],
         },
-        "section8": section8(inputs.frames, paired),
+        "section8": section8(inputs.frames, paired, label["per_document"]),
         "adequacy_4_5": adequacy_facts(inputs.frames, inputs.document_strata),
         # Section 5.6's reliability facts, computed from the committed artifacts. A Rule 3 gate
         # INPUT, never a Rule 3 verdict -- and no caller scalar can reach it.

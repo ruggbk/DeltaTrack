@@ -4674,20 +4674,31 @@ decision, no confirmatory or scoring artifact, and no execution marker.
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
- "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is changed",
+ "supersedes_text_in": "none -- NO PREVIOUSLY FROZEN rule is changed. A41 makes previously UNSPECIFIED scorer ranges and operationalizations executable, before any confirmatory execution exists",
  "status": "IMPLEMENTATION COMPLETE; R1-R8 ALL RULED AND IMPLEMENTED -- no reading remains open and no result-bearing factual gate is unowned. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
 ```
 
 **Why `affects_scoring_rule` is `true` while `supersedes_text_in` is `none`.** These are different
-questions and this amendment keeps them apart, as A31 did. No frozen sentence is amended: every
-metric, denominator, threshold and normalisation the scorer applies was fixed by §6, §8, A19–A24,
-A27, A28, A36–A39 before this component existed. But the frozen text does not determine **every**
-quantity the scorer must produce, and **A41.2 records all eight places where it had to be read or
-ruled — R1 through R8.** Three of them move a reported number: R1's §8 event evidence, R2's M7
-threshold, and **R6's R1 computation, which was raised as a STOP and ruled by the reviewer rather
-than chosen here**. R8 was reported as an unowned factual gate and is likewise now ruled and
-implemented. Filing this as `false` would understate what a reviewer approved. **Nothing was
-smuggled: every reading is recorded, and the two that could decide a gate were escalated first.**
+questions and this amendment keeps them apart, as A31 did — but the distinction is **not** "no
+scoring or statistical rule is introduced". It is:
+
+> **No PREVIOUSLY FROZEN rule is changed.** Every metric, denominator, threshold and normalisation
+> the scorer applies was fixed by §6, §8, A19–A24, A27, A28 and A36–A39 before this component
+> existed, and none of them is amended, reinterpreted or relaxed here.
+>
+> **A41 DOES make previously UNSPECIFIED scorer ranges and operationalizations executable** — and
+> pins result-bearing behaviour the frozen text left open. R6 fixes how R1's agreement is computed;
+> R8 fixes how a control verdict is decided; R9 fixes which quantities §8's pairing covers. Those
+> are new *operationalizations*, not new *rules*, and the distinction only holds because every one
+> was settled **before any confirmatory output existed**, which is the condition that makes
+> pre-execution amendment legitimate at all.
+
+**A41.2 records all nine places the frozen text had to be read or ruled — R1 through R9.** Four
+move a reported number: R1's §8 event evidence, R2's M7 threshold, and **R6 and R9, which were
+raised as STOPs and ruled by review rather than chosen here**. R8 was reported as an unowned factual
+gate and is likewise now ruled and implemented. Filing `affects_scoring_rule: false` would
+understate what a reviewer approved. **Nothing was smuggled: every reading is recorded, and the ones
+that could decide a gate were escalated first.**
 
 ### A41.1 — what was implemented, and what it calls rather than restates
 
@@ -4727,11 +4738,11 @@ alternative — skipping the record — moves a denominator with nothing to show
 also **recomputes** the committed line-level predicates from `neutral_identity`'s own rules and
 refuses on drift, and refuses a frame whose committed coverage floor is not production's 0.85.
 
-### A41.2 — R1–R8, every one ruled
+### A41.2 — R1–R9, every one ruled
 
-**All eight are settled. Nothing here is open.** R1, R2 and R7 are approved as implemented; R3 and
-R4 are reporting shape; R5 is closed as a channel; **R6 and R8 were STOPs and are now RULED and
-implemented**. None invents a threshold: every number is §5.6's, §6's or §8's.
+**All nine are settled. Nothing here is open.** R1, R2 and R7 are approved as implemented; R3 and
+R4 are reporting shape; R5 is closed as a channel; **R6, R8 and R9 were STOPs or reported gaps and
+are now RULED and implemented**. None invents a threshold: every number is §5.6's, §6's or §8's.
 
 | ruling | subject | state |
 |---|---|---|
@@ -4743,6 +4754,7 @@ implemented**. None invents a threshold: every number is §5.6's, §6's or §8's
 | **R6** | **R1's computation** | **RULED — union denominator, exact text, fine role, per-route micro-average** |
 | R7 | the M4 parent sentinels | APPROVED as repaired |
 | **R8** | **the N-A/N-B/N-C verdicts** | **RULED and IMPLEMENTED in the scorer** |
+| **R9** | **§8's paired-quantity scope** | **RULED — the two numeric M9 bases, per population, never pooled** |
 
 | # | where the frozen text stops | reading taken | rejected, and why |
 |---|---|---|---|
@@ -4935,9 +4947,72 @@ source selection, no XML/PDF truth, no G6, no `x26`.
 > real-producer end-to-end check. `population_present` is reported so the two cases are
 > distinguishable, and the confirmatory key carries all 20 by construction.
 
+### R9 — RULED. §8's paired-quantity scope
+
+**The gap.** §8.3 requires per-document paired differences, an unweighted mean over documents and
+mandatory per-document detail, but **never enumerates which quantities are paired**. The first
+implementation chose M1 recall/precision, M2, M3-clean, M4 and M5 — not frozen anywhere — and
+silently dropped `VACUOUS` documents from each mean, which is an **unruled missingness policy** on
+top of an unruled quantity list.
+
+**The ruling: pair exactly the two non-constant numeric M9 basis quantities.**
+
+```
+n_margin_numbered_lines        A39.1's own quantity
+coverage                       production _coverage, against the frozen 0.85 floor
+```
+
+Both are defined on **every** document for **both** arms, so no missingness or vacuity policy has
+to be invented — which is precisely why the alternatives are excluded:
+
+| excluded | why |
+|---|---|
+| M1–M5, M7 | can be `VACUOUS`; pairing them needs a new rule for which documents enter each mean |
+| `derive_size_bands_returns_a_band`, `coverage_meets_floor` | booleans Rule 0 consumes, not numeric differences |
+| `coverage_floor` | a frozen constant — its difference is always zero |
+| `n_margin_numbered_with_glyph_size` | a diagnostic; A39.1's quantity is the margin-line count |
+| internal support counts | not themselves frozen result quantities |
+
+**POPULATION RULE.** M9 is valid on **both** P-head and P-robust (§4.4.1 claims M0 and M9 on
+both), and the two are **never pooled**: each quantity is reported per population with its own
+per-document detail and its own unweighted mean, and **no combined 17-document mean exists**. A
+control asserts the pooled figure appears nowhere in the payload.
+
+**§8's heading-discordance statistic stays P-head ONLY** — unchanged, and deliberately not
+broadened: a heading-level statistic may not take a population §4.4.1 claims no heading metric on.
+
+### A41.2.2 — three schema/reporting repairs, from a parallel implementation's review
+
+Found by comparing against an independent implementation. **No methodology changes; all three make
+the artifact say what the frozen rules already require.**
+
+**M6 is ABSENT from the schema, not present-and-annotated.** The payload carried
+`"m6": "DEFERRED by A20 …"`. §5 owns "M0–M9 minus M6", so a key named for it — even one whose value
+says DEFERRED — puts a deferred metric in a result-bearing artifact and invites a consumer to
+reserve, look up or later fill it. The key is gone, the explanation lives in module prose and here,
+and `owns` now **enumerates** the metrics owned rather than describing them by subtraction (which
+named M6 in passing). The control **recursively walks the finished payload** for any key or string
+naming M6 at any depth, and is proven non-vacuous by planting one.
+
+**I13 labels every applicable result surface, not a parent block.** The qualification now travels
+with M0, M7, M9, each per-document C/D heading estimand, the §8 event vector and **every** §8
+paired-difference detail row. A passing document carries an explicit `None`, so "not conditioned" is
+distinguishable from "nobody labelled this", and both headline qualifications are emitted explicitly
+from the >⅓ rule. It reaches **no** decision input: cross-engine qualifies reporting only (A27.6).
+The control **discovers** per-document result surfaces from the finished payload by content marker,
+not from the production list of paths, so a labelling path nobody enumerated is still covered.
+
+**The exact `d_frame == bool(d_reasons)` invariant.** `build_frames` emits the flag from the same
+expression that builds the reason list, so the two can only disagree if something rewrote one. The
+existing line-level and anchor checks each inspect **one** predicate and cannot see a broken
+relationship between the flag and the list as a whole — a concordant region carrying a reason with
+`d_frame` false satisfies every one of them. `D_FRAME_FLAG_DRIFT`, with a fixture chosen so no other
+check can fire first. #618's independent recomputation of anchor-set discordance from the serialized
+H/X evidence is **unchanged** and predates this.
+
 ### A41.3 — the controls, and that each can go RED
 
-`x27_score_metrics.py`, **169/169**, on SYNTHETIC + DEVELOPMENT material only. It covers all
+`x27_score_metrics.py`, **187/187**, on SYNTHETIC + DEVELOPMENT material only. It covers all
 **eleven** current §5 control rows (the row list is enumerated in the evidence file and a final
 check fails if any row has no executable test), the twelve explicit negatives, the false-green
 attacks, and the refusals.
@@ -5017,7 +5092,7 @@ cross-engine writers use, and a control proves it refuses today and would write 
 
 ### Realized
 
-`x27` **169/169**, **42/42** injected faults caught — each failing a NAMED control rather than
+`x27` **187/187**, **54/54** injected faults caught — each failing a NAMED control rather than
 crashing — `contamination.json` byte-identical.
 
 **Round 3 added a fourth class of control defect worth recording: a control that detects a fault

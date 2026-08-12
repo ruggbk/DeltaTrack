@@ -32,6 +32,7 @@ import dataclasses
 import hashlib
 import inspect
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -489,8 +490,12 @@ def part_i9() -> dict:
         "would exclude regions M0 counted as discordant",
     )
 
+    # COHERENT with the flag invariant (`d_frame == bool(d_reasons)` holds), so that check cannot
+    # fire first and this control still measures what it names: a region claiming D membership with
+    # no predicate actually satisfied.
     invented = copy.deepcopy(frame([page_input(1)]))
     invented["pages"][0]["regions"][0]["d_frame"] = True
+    invented["pages"][0]["regions"][0]["d_reasons"] = [BF.TEXT_DISCORDANCE]
     check(
         "NEGATIVE -- a D-frame region with NO qualifying predicate REFUSES",
         SM.D_FRAME_ELIGIBILITY_DRIFT,
@@ -516,6 +521,48 @@ def part_i9() -> dict:
         SM.UNKNOWN_LINE_STATE,
         refusal(lambda: SM.score(inputs([unknown]))),
         "an unrecognised state falls through to 'not BOTH_ABSENT' and silently enlarges the M0 denominator",
+    )
+
+    # --- THE EXACT FLAG INVARIANT, with a fixture chosen so no OTHER check can catch it first.
+    # A CONCORDANT region given a reason while `d_frame` stays False satisfies every per-predicate
+    # check: there is no discordant line (so the line-level rule is silent), `d_frame` is False (so
+    # the "D with no predicate" rule is silent), and ANCHOR_DISCORDANCE is absent from both the
+    # reasons and the evidence (so the anchor rule agrees). Only `d_frame == bool(d_reasons)` sees it.
+    flag_drift = copy.deepcopy(frame([page_input(1)]))
+    region = flag_drift["pages"][0]["regions"][0]
+    region["d_reasons"] = [BF.TEXT_DISCORDANCE]
+    region["d_frame"] = False
+    check(
+        "NEGATIVE -- a region whose d_frame contradicts its own d_reasons REFUSES",
+        SM.D_FRAME_FLAG_DRIFT,
+        refusal(lambda: SM.score(inputs([flag_drift]))),
+        "`d_frame` and `d_reasons` can disagree, so a region carrying a recorded reason can sit "
+        "outside the census that reason exists to put it in -- and every per-predicate check above "
+        "passes on this fixture, which is why the exact invariant is needed",
+    )
+    check(
+        "...and the fixture really is invisible to the other checks, so this is not a duplicate",
+        (False, False, False),
+        (
+            any(ln["line_state"]["text_discordance"] for ln in flag_drift["pages"][0]["neutral_lines"]),
+            any(ln["line_state"]["segmentation_discordance"] for ln in flag_drift["pages"][0]["neutral_lines"]),
+            region["anchor_evidence"]["differ"],
+        ),
+        "the fixture also carries a line-level or anchor discordance, so an existing check would "
+        "have caught it and the new invariant is unproven",
+    )
+    check(
+        "the producer really does emit d_frame == bool(d_reasons), so the invariant is its own",
+        [(True, True), (False, False)],
+        [
+            (bool(r["d_frame"]), bool(r["d_reasons"]))
+            for r in (
+                frame([page_input(1, text_differs={0})])["pages"][0]["regions"][0],
+                frame([page_input(1)])["pages"][0]["regions"][0],
+            )
+        ],
+        "`build_frames` does not maintain the relationship this check enforces, so the check would "
+        "be asserting something the producer never promised",
     )
     return {"d_reasons": good["pages"][0]["regions"][0]["d_reasons"]}
 
@@ -1863,6 +1910,255 @@ def part_r8(tmp: Path) -> dict:
     }
 
 
+def _row_field(rows, index: int, field: str):
+    """`rows[index][field]`, or a marker. A control that IndexErrors on an emptied detail list
+    detects its fault by crashing, which cannot distinguish a broken rule from a broken probe."""
+    if not isinstance(rows, list) or index >= len(rows):
+        return "<NO ROW>"
+    return rows[index].get(field, "<ABSENT>")
+
+
+def _walk(node, path=()):
+    """Every (path, node) in a finished payload, at any depth. Dicts and lists alike."""
+    yield path, node
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield from _walk(value, path + (str(key),))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _walk(value, path + (f"[{index}]",))
+
+
+M6_PATTERN = re.compile(r"(?i)(^|[^a-z0-9])m6([^a-z0-9]|$)")
+
+
+def m6_surfaces(payload) -> list:
+    """Every place in a FINISHED payload that names M6, at any depth. Keys and string values.
+
+    A source grep would pass while the schema still carried the key -- and the schema is what a
+    consumer reads. This walks the built result instead.
+    """
+    hits = []
+    for path, node in _walk(payload):
+        if path and M6_PATTERN.search(path[-1]):
+            hits.append({"path": "/".join(path), "kind": "KEY"})
+        if isinstance(node, str) and M6_PATTERN.search(node):
+            hits.append({"path": "/".join(path) or "<root>", "kind": "VALUE", "text": node[:80]})
+    return hits
+
+
+#: A per-document result surface is recognised by its CONTENT, not by a list of paths copied from
+#: the production code: any dict carrying one of these marker keys is a result the I13 label must
+#: travel with. Discovering surfaces this way is what makes the control able to notice a labelling
+#: path the production code forgot -- including one nobody thought to enumerate here.
+RESULT_SURFACE_MARKERS = (
+    "M0a_text",
+    # The M7 BLOCK's own marker. Without it only the per-arm sub-blocks are discovered, and a
+    # missing label on the M7 block itself would be inherited-away by the arms' parent lookup.
+    "threshold_single_char_tokens",
+    "n_display_split",
+    "coverage_floor",
+    "M1",
+    "n_anchor_discordant_regions",
+    "difference",
+)
+
+
+def per_document_result_surfaces(payload: dict) -> list:
+    """Every per-document result surface in a finished payload, discovered from its content.
+
+    "Per-document" is established structurally: either the surface's path passes through a scored
+    document identity, or the surface itself carries a `document` field naming one. Pooled rows have
+    neither and are deliberately not required to carry a per-document label -- the >1/3 headline
+    qualifications cover them.
+
+    A surface counts as labelled when it carries `qualification` ITSELF or inherits one from an
+    ANCESTOR: the label travels with the result, so a per-arm sub-block inside an already-labelled
+    M7 or M9 block is covered. Removing a production labelling path still reddens, because then
+    neither the block nor any ancestor carries it.
+    """
+    documents = set(payload.get("documents_scored") or [])
+    found = []
+    for path, node in _walk(payload):
+        if not isinstance(node, dict):
+            continue
+        if not any(marker in node for marker in RESULT_SURFACE_MARKERS):
+            continue
+        if not (any(step in documents for step in path) or node.get("document") in documents):
+            continue
+        labelled = "qualification" in node
+        for depth in range(len(path) - 1, -1, -1):
+            if labelled:
+                break
+            ancestor = payload
+            for step in path[:depth]:
+                ancestor = ancestor[int(step[1:-1])] if step.startswith("[") else ancestor[step]
+            # INHERIT ONLY FROM A RESULT SURFACE, never from any labelled ancestor. The purpose of
+            # inheritance is to spare per-ARM sub-blocks inside an already-labelled metric block
+            # (M7/H, M9/X) -- not to let the DOCUMENT-level label cover a metric block whose own
+            # labelling path was removed. Accepting any labelled ancestor made exactly that hole:
+            # deleting the per-frame heading label left the suite green, because `per_document/<doc>`
+            # carries a qualification of its own.
+            labelled = (
+                isinstance(ancestor, dict)
+                and "qualification" in ancestor
+                and any(marker in ancestor for marker in RESULT_SURFACE_MARKERS)
+            )
+        found.append({"path": "/".join(path), "labelled": labelled})
+    return found
+
+
+def part_m6_and_i13(tmp: Path) -> dict:
+    """M6 must be ABSENT from the schema, and I13 must label every applicable result surface."""
+    print("\n== M6 absence, and I13 labelling of every per-document result surface ==")
+    pages = [page_input(1), page_input(2, start_gid=100)]
+    occ = {arm: [occurrence(p + 1, 2, p * 100 + 4) for p in range(2)] for arm in ("H", "X")}
+    a = frame(pages, document="COND/1", occurrences=occ)
+    b = frame([page_input(1)], document="CLEAN/1", sha=DOC_SHA_B)
+    pdf = synthetic_pdf(tmp, 2)
+    built = BO.build(
+        [{"frame": a, "pdf_path": pdf, "stratum": "SYNTHETIC"}, {"frame": b, "pdf_path": pdf, "stratum": "SYNTHETIC"}]
+    )
+    adjudicated = synthesize_adjudication(built.key)
+    scored = SM.score(
+        inputs(
+            [a, b],
+            key=built.key,
+            adjudicated=adjudicated,
+            cross_engine=cross_engine_artifact(["COND/1", "CLEAN/1"], failed={"COND/1"}),
+        )
+    )
+
+    # ---- M6 is absent from the finished payload, at any depth.
+    check(
+        "M6 appears NOWHERE in the finished payload -- no key, no string, at any depth",
+        [],
+        SM.__dict__ and m6_surfaces(scored),
+        "a key or value naming M6 is in the result-bearing schema. Section 5 owns 'M0-M9 minus M6', "
+        "so even a value that says DEFERRED puts a deferred metric in an artifact a consumer reads "
+        "-- and invites it to be reserved, looked up, or filled in later",
+    )
+    planted = copy.deepcopy(scored)
+    planted["m6"] = "DEFERRED by A20"
+    planted["per_document"]["COND/1"]["M6_attribution"] = {"value": None}
+    check(
+        "...and the scanner FINDS a planted M6 key, so the emptiness above is not vacuous",
+        (2, ["KEY", "KEY"]),
+        (len(m6_surfaces(planted)), [h["kind"] for h in m6_surfaces(planted)]),
+        "the scanner cannot see an M6 surface even when one is planted in a finished payload, so "
+        "its clean result proves nothing",
+    )
+    check(
+        "...and it finds one hidden in a nested VALUE too, not only in a key",
+        True,
+        any(h["kind"] == "VALUE" for h in m6_surfaces({"note": "M6 is deferred", "deep": [{"x": "see m6"}]})),
+        "only keys are scanned, so prose reintroducing M6 into the schema would pass",
+    )
+
+    # ---- I13 labels every per-document result surface, discovered from the payload's content.
+    surfaces = per_document_result_surfaces(scored)
+    unlabelled = sorted(s["path"] for s in surfaces if not s["labelled"])
+    check(
+        "EVERY per-document result surface carries an explicit I13 qualification field",
+        [],
+        unlabelled,
+        "a per-document result is reported with no qualification field, so a reader cannot tell "
+        "whether it was computed on a PDFIUM-conditioned frame -- and I13 requires the label on "
+        "EVERY RQ1/RQ2 result computed on a failing document, not on a parent block alone",
+    )
+    check(
+        "...and the discovery really found the M0 / M7 / M9 / heading / event / paired surfaces",
+        (True, True, True, True, True, True),
+        (
+            any(s["path"].endswith("/M0") for s in surfaces),
+            any(s["path"].endswith("/M7") for s in surfaces),
+            any(s["path"].endswith("/M9") for s in surfaces),
+            any("headings_by_frame" in s["path"] for s in surfaces),
+            any("section8/per_document" in s["path"] for s in surfaces),
+            any("paired" in s["path"] and "per_document" in s["path"] for s in surfaces),
+        ),
+        "the content-based discovery missed a surface class, so 'everything is labelled' was "
+        "asserted over an incomplete set",
+    )
+    conditioned = scored["per_document"]["COND/1"]
+    clean = scored["per_document"]["CLEAN/1"]
+    check(
+        "a FAILING document is labelled on each surface; a PASSING one carries explicit None",
+        (
+            SM.PDFIUM_CONDITIONED_FRAME,
+            SM.PDFIUM_CONDITIONED_FRAME,
+            SM.PDFIUM_CONDITIONED_FRAME,
+            None,
+            None,
+            None,
+        ),
+        (
+            conditioned["M0"].get("qualification", "<ABSENT>"),
+            conditioned["M7"].get("qualification", "<ABSENT>"),
+            conditioned["M9"].get("qualification", "<ABSENT>"),
+            clean["M0"].get("qualification", "<ABSENT>"),
+            clean["M7"].get("qualification", "<ABSENT>"),
+            clean["M9"].get("qualification", "<ABSENT>"),
+        ),
+        "a passing document has an ABSENT field rather than an explicit null, so 'not conditioned' "
+        "is indistinguishable from 'nobody labelled this'",
+    )
+    events = {e["document"]: e.get("qualification", "<ABSENT>") for e in scored["section8"]["per_document"]}
+    paired_rows = [
+        row
+        for quantity in scored["section8"]["paired"]["by_population"].values()
+        for block in quantity.values()
+        for row in block["per_document"]
+    ]
+    check(
+        "the section 8 event vector and EVERY paired-difference detail row carry the label too",
+        ({"COND/1": SM.PDFIUM_CONDITIONED_FRAME, "CLEAN/1": None}, True, 4),
+        (
+            events,
+            all("qualification" in row for row in paired_rows),
+            len(paired_rows),
+        ),
+        "a section 8 row is reported without its qualification, so the statistic's own per-document "
+        "detail hides which documents were frame-conditioned",
+    )
+    check(
+        "BOTH headline qualifications are emitted from the >1/3 rule, explicitly",
+        ({"RQ1": SM.PDFIUM_CONDITIONED_FRAME, "RQ2": SM.PDFIUM_CONDITIONED_FRAME}, True),
+        (
+            scored["cross_engine_qualification"]["headline_qualifications"],
+            scored["cross_engine_qualification"]["both_headlines_qualified"],
+        ),
+        "the headline qualifications are left for a reader to derive from a boolean, so a report can "
+        "omit them without contradicting the artifact",
+    )
+    check(
+        "...and 1 of 2 failing really is MORE than a third, so the fixture exercises the rule",
+        True,
+        1 * 3 > 2,
+        "the fixture does not cross the one-third boundary, so the headline check passed by accident",
+    )
+    check(
+        "cross-engine remains REPORTING-ONLY -- it reaches no decision input",
+        (False, False, False),
+        (
+            scored["cross_engine_qualification"]["decision_blocking"],
+            scored["decision_taken_here"],
+            any(
+                isinstance(node, dict) and "qualification" in node and node.get("m5_void") is True
+                for _p, node in _walk(scored)
+            ),
+        ),
+        "a qualification field reaches a gate or a decision input, which A27.6 forbids: x09 "
+        "qualifies reporting and blocks nothing",
+    )
+    return {
+        "m6_surfaces": m6_surfaces(scored),
+        "n_labelled_surfaces": len(surfaces),
+        "unlabelled": unlabelled,
+        "headline_qualifications": scored["cross_engine_qualification"]["headline_qualifications"],
+    }
+
+
 def part_m7() -> dict:
     print("\n== section 5 row: inject an `R E P O R T` page, and M7's own failure mode ==")
     injected = frame(
@@ -2032,7 +2328,7 @@ def part_section8() -> dict:
     )
 
     docs = [frame([page_input(1)], document=f"DOC/{i}", sha=DOC_SHA) for i in range(14)]
-    block = SM.section8(docs, {})
+    block = SM.section8(docs, {}, {})
     check(
         "N is the number of DOCUMENTS scored, and the bound is the document-unit one",
         (14, 0, "document", round(doc_bound, 10)),
@@ -2112,8 +2408,8 @@ def part_section8() -> dict:
             document="DOC/0",
         )
     ] + [frame([page_input(1)], document=f"DOC/{i}") for i in range(1, 14)]
-    nonzero = SM.section8(with_event, {})
-    again = SM.section8(with_event, {})
+    nonzero = SM.section8(with_event, {}, {})
+    again = SM.section8(with_event, {}, {})
     check(
         "one discordant document gives 1/14, a REPORTED non-gating bootstrap, and a wider bound",
         (1, 14, True, False, True),
@@ -2146,7 +2442,7 @@ def part_section8() -> dict:
         document="ROBUST/1",
         population="P-robust",
     )
-    mixed = SM.section8(docs + [robust], {})
+    mixed = SM.section8(docs + [robust], {}, {})
     check(
         "a P-robust document is EXCLUDED from the section 8 statistic and named",
         (14, 0, ["ROBUST/1"]),
@@ -2196,7 +2492,7 @@ def part_section8() -> dict:
         ),
         "the exclusion is silent, so nothing records that a document was held out of a heading statistic at all",
     )
-    p_head_only = SM.section8([f for f in docs], {})
+    p_head_only = SM.section8([f for f in docs], {}, {})
     check(
         "...and adding it changes NO reported figure: N, events, bound and bootstrap all hold",
         (
@@ -2224,26 +2520,39 @@ def part_section8() -> dict:
 
 
 def part_pairing(tmp: Path) -> dict:
-    """Section 5 row: the paired mean is UNWEIGHTED over documents."""
-    print("\n== section 5 row: section 8 pairing is unweighted over documents ==")
-    # Document A: 1 heading, X correct and H welded  -> per-document difference +1.0
-    # Document B: 3 headings, all clean in both arms -> per-document difference  0.0
-    # DISTINCT source SHAs: A28.3's base stimulus identity is (sha, page, region), so two
-    # documents sharing a sha would collide in the realized stimulus set and `build_oracle` would
-    # refuse -- correctly, and for a reason that has nothing to do with pairing.
-    a_occ = {
-        "H": [occurrence(1, 2, 4, text="FAMILYHOUSING")],
-        "X": [occurrence(1, 2, 4, text="FAMILY HOUSING")],
-    }
-    b_occ = {
-        arm: [
-            occurrence(1, ordinal, ordinal * 2, text=f"ACCOUNT {i}", sha=DOC_SHA_B)
-            for i, ordinal in enumerate((2, 3, 4))
-        ]
-        for arm in ("H", "X")
-    }
-    a_frame = frame([page_input(1, start_gid=0)], document="DOC/A", occurrences=a_occ)
-    b_frame = frame([page_input(1, start_gid=0)], document="DOC/B", sha=DOC_SHA_B, occurrences=b_occ)
+    """Section 5 row + A41.2 R9: the paired quantities, unweighted, populations never pooled."""
+    print("\n== section 5 row: section 8 pairing (A41.2 R9 -- the two M9 basis quantities) ==")
+    # THREE documents, chosen so every negative below has something to move:
+    #   P-head A   margin 100 -> 110 (+10), coverage 0.90 -> 0.95 (+0.05), 1 heading
+    #   P-head B   margin 100 -> 120 (+20), coverage 0.90 -> 0.85 (-0.05), 3 headings
+    #   P-robust R margin 100 -> 200 (+100)  -- a deliberately large delta, so pooling it in would
+    #              visibly move a P-head mean and cannot be mistaken for rounding.
+    a_frame = frame(
+        [page_input(1, start_gid=0)],
+        document="DOC/A",
+        occurrences={arm: [occurrence(1, 2, 4)] for arm in ("H", "X")},
+        m9_h=m9_facts(margin=100, coverage=0.90),
+        m9_x=m9_facts(margin=110, coverage=0.95),
+    )
+    b_frame = frame(
+        [page_input(1, start_gid=0)],
+        document="DOC/B",
+        sha=DOC_SHA_B,
+        occurrences={
+            arm: [occurrence(1, o, o * 2, text=f"ACCOUNT {i}", sha=DOC_SHA_B) for i, o in enumerate((2, 3, 4))]
+            for arm in ("H", "X")
+        },
+        m9_h=m9_facts(margin=100, coverage=0.90),
+        m9_x=m9_facts(margin=120, coverage=0.85),
+    )
+    r_frame = frame(
+        [page_input(1, start_gid=0)],
+        document="ROBUST/R",
+        sha=hashlib.sha256(b"x27-pairing-robust").hexdigest(),
+        population="P-robust",
+        m9_h=m9_facts(margin=100, coverage=0.90),
+        m9_x=m9_facts(margin=200, coverage=0.90),
+    )
     pdf = synthetic_pdf(tmp, 1)
     built = BO.build(
         [
@@ -2252,42 +2561,116 @@ def part_pairing(tmp: Path) -> dict:
         ]
     )
     adjudicated = synthesize_adjudication(built.key, truth="X")
-    scored = SM.score(inputs([a_frame, b_frame], key=built.key, adjudicated=adjudicated))
-    rows = scored["section8"]["paired"]["by_frame"][BO.C_FRAME]["M2"]
-    by_doc = {r["document"]: r for r in rows["per_document"]}
-    weighted = sum(by_doc[d]["difference"] * n for d, n in (("DOC/A", 1), ("DOC/B", 3))) / 4
+    scored = SM.score(
+        inputs(
+            [a_frame, b_frame, r_frame],
+            key=built.key,
+            adjudicated=adjudicated,
+            strata={"DOC/A": 1, "DOC/B": 2, "ROBUST/R": 4},
+        )
+    )
+    paired = scored["section8"]["paired"]
+    head = paired["by_population"][MC.P_HEAD]
+    robust = paired["by_population"]["P-robust"]
+
     check(
-        "the per-document differences are +1.0 and 0.0, and the mean is the UNWEIGHTED 0.5",
-        (1.0, 0.0, 0.5, 2),
-        (
-            by_doc["DOC/A"]["difference"],
-            by_doc["DOC/B"]["difference"],
-            rows["unweighted_mean_difference"],
-            rows["n_documents_contributing"],
-        ),
-        "the paired mean is weighted by heading count instead of unweighted over documents, so a "
-        "long bill outvotes a short one and 40 discordances on one bill become forty findings",
+        "R9 -- exactly the two non-constant numeric M9 basis quantities are paired",
+        ["coverage", "n_margin_numbered_lines"],
+        sorted(paired["quantities"]),
+        "a quantity outside R9's ruling is paired. M1-M5 and M7 can be VACUOUS, so pairing them "
+        "needs an unruled missingness policy; the booleans are Rule 0's; coverage_floor is a "
+        "constant; and the glyph-size count is a diagnostic rather than A39.1's quantity",
         row="section 8 pairing",
     )
     check(
-        "...and the heading-WEIGHTED mean differs, so the fixture can tell them apart",
-        (0.25, True),
-        (weighted, weighted != rows["unweighted_mean_difference"]),
+        "the per-document differences and the UNWEIGHTED mean are exact, over documents",
+        (10, 20, 15.0, 2),
+        (
+            _row_field(head["n_margin_numbered_lines"]["per_document"], 0, "difference"),
+            _row_field(head["n_margin_numbered_lines"]["per_document"], 1, "difference"),
+            head["n_margin_numbered_lines"]["unweighted_mean_difference"],
+            head["n_margin_numbered_lines"]["n_documents"],
+        ),
+        "the mean is not the unweighted mean of the per-document differences",
+        row="section 8 pairing",
+    )
+    # HEADING-COUNT WEIGHTING would give a different number on this fixture: A has 1 heading and B
+    # has 3, so a weighted mean is (10*1 + 20*3)/4 = 17.5 against the unweighted 15.0.
+    weighted = (10 * 1 + 20 * 3) / 4
+    check(
+        "...and the heading-count-WEIGHTED mean differs, so the fixture can tell them apart",
+        (17.5, True),
+        (weighted, weighted != head["n_margin_numbered_lines"]["unweighted_mean_difference"]),
         "both means agree on this fixture, so 'unweighted' was never actually tested",
         row="section 8 pairing",
     )
     check(
-        "per-document detail is MANDATORY and is never collapsed to the mean",
-        (2, "UNWEIGHTED mean over documents (section 8.3); never weighted by heading count"),
-        (len(rows["per_document"]), scored["section8"]["paired"]["weighting"]),
-        "only the mean is reported, so 40 discordances on one bill cannot be distinguished from "
-        "40 documents each showing one",
+        "P-head and P-robust are reported SEPARATELY, with no combined mean anywhere",
+        ([MC.P_HEAD, "P-robust"], 15.0, 100.0, True),
+        (
+            sorted(paired["by_population"]),
+            head["n_margin_numbered_lines"]["unweighted_mean_difference"],
+            robust["n_margin_numbered_lines"]["unweighted_mean_difference"],
+            paired["populations_never_pooled"],
+        ),
+        "the two populations are pooled into one mean, mixing a heading-bearing population with one "
+        "the study claims no heading metric on -- and section 4.4.1 never pools them",
+        row="section 8 pairing",
+    )
+    pooled_mean = (10 + 20 + 100) / 3
+    check(
+        "...and the POOLED mean is a different number that appears NOWHERE in the payload",
+        (43.333333333333336, False),
+        (
+            pooled_mean,
+            any(isinstance(node, float) and abs(node - pooled_mean) < 1e-9 for _p, node in _walk(scored)),
+        ),
+        "the pooled 3-document mean is reported somewhere in the artifact, so a reader can quote a "
+        "figure the population rule forbids",
+        row="section 8 pairing",
+    )
+    check(
+        "per-document detail is MANDATORY: every document in each population has a row",
+        (2, 1, 2, 1),
+        (
+            len(head["n_margin_numbered_lines"]["per_document"]),
+            len(robust["n_margin_numbered_lines"]["per_document"]),
+            len(head["coverage"]["per_document"]),
+            len(robust["coverage"]["per_document"]),
+        ),
+        "only the mean is reported, so a large single-document delta cannot be distinguished from a "
+        "population-wide shift",
+        row="section 8 pairing",
+    )
+    check(
+        "coverage pairs too, and its P-head mean is the unweighted 0.0 (+0.05 and -0.05)",
+        (0.0, 2),
+        (
+            round(head["coverage"]["unweighted_mean_difference"], 12),
+            head["coverage"]["n_documents"],
+        ),
+        "the second R9 quantity is not actually paired, or its mean is not unweighted",
+        row="section 8 pairing",
+    )
+    check(
+        "no M1-M5 or M7 quantity is present in the paired block",
+        [],
+        sorted(
+            q
+            for pop in paired["by_population"].values()
+            for q in pop
+            if q not in ("n_margin_numbered_lines", "coverage")
+        ),
+        "a potentially VACUOUS metric is paired, which requires a missingness rule R9 declined to "
+        "invent -- and the old implementation dropped VACUOUS documents silently",
         row="section 8 pairing",
     )
     return {
-        "per_document": rows["per_document"],
-        "unweighted": rows["unweighted_mean_difference"],
-        "weighted": weighted,
+        "quantities": paired["quantities"],
+        "p_head": {q: head[q]["unweighted_mean_difference"] for q in head},
+        "p_robust": {q: robust[q]["unweighted_mean_difference"] for q in robust},
+        "weighted_would_be": weighted,
+        "pooled_would_be": pooled_mean,
     }
 
 
@@ -2622,12 +3005,12 @@ def part_attacks(tmp: Path) -> dict:
         [page_input(1, h_anchors={0: {anchor(1, 3)}}, x_anchors={0: {anchor(1, 3, text="OTHER")}})], document="A/1"
     )
     b = frame([page_input(1)], document="B/1")
-    straight = SM.section8([a, b], {})
+    straight = SM.section8([a, b], {}, {})
     swapped_a = frame(
         [page_input(1, h_anchors={0: {anchor(1, 3)}}, x_anchors={0: {anchor(1, 3, text="OTHER")}})], document="B/1"
     )
     swapped_b = frame([page_input(1)], document="A/1")
-    swapped = SM.section8([swapped_a, swapped_b], {})
+    swapped = SM.section8([swapped_a, swapped_b], {}, {})
     events_straight = {e["document"]: e["event"] for e in straight["per_document"]}
     events_swapped = {e["document"]: e["event"] for e in swapped["per_document"]}
     check(
@@ -3035,6 +3418,7 @@ def main() -> int:
             "m5": part_m5(tmp),
             "r1": part_r1(tmp),
             "r8_controls": part_r8(tmp),
+            "m6_and_i13": part_m6_and_i13(tmp),
             "m7": part_m7(),
             "rule0": part_rule0(),
             "section8": part_section8(),
