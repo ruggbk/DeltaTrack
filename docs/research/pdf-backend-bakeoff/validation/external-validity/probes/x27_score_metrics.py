@@ -94,15 +94,28 @@ def check(name: str, expected, observed, fails_when: str = "", row: str = "") ->
 
 def refusal(fn) -> str | None:
     """The refusal class a callable raises, or None if it returned. Never swallows the reason."""
+    return refusal_detail(fn)[1]
+
+
+def refusal_detail(fn) -> tuple:
+    """`(exception type name, reason)` -- WHICH LAYER refused, not only that something did.
+
+    The reason alone is not always enough. `score_metrics` and `methodology_contracts` both
+    define `DUPLICATE_DOCUMENT_IDENTITY` with the SAME string, and the frozen section 8 helper
+    validates its document vector one layer below the scorer's own check. A control asserting the
+    reason alone therefore passes whether or not the scorer's guard exists -- which the injection
+    sweep found by deleting that guard and watching the suite stay green. Pinning the exception
+    CLASS distinguishes the layers, so the control can fail.
+    """
     try:
         fn()
     except SM.ScoreInputError as exc:
-        return exc.reason
+        return (type(exc).__name__, exc.reason)
     except (BO.OracleBuildError, MC.BootstrapInputError) as exc:
-        return exc.reason
+        return (type(exc).__name__, exc.reason)
     except MC.UnknownRole as exc:
-        return type(exc).__name__
-    return None
+        return (type(exc).__name__, type(exc).__name__)
+    return (None, None)
 
 
 # ============================================================ synthetic fixture material
@@ -1560,6 +1573,12 @@ def part_refusals(tmp: Path) -> dict:
 
     duplicate_doc = [copy.deepcopy(good), copy.deepcopy(good)]
     cases[SM.DUPLICATE_DOCUMENT_IDENTITY] = refusal(lambda: SM.score(inputs(duplicate_doc)))
+    # THE LAYER MATTERS HERE, and only here. `methodology_contracts` defines the same reason
+    # STRING and its frozen document-vector validator sits one layer below, so the reason alone
+    # passes whether or not the scorer's own guard exists -- found by deleting that guard and
+    # watching this suite stay green. Two independent layers refuse a duplicated document, which
+    # is good defence; this check pins the outer one so its removal is visible.
+    duplicate_layer = refusal_detail(lambda: SM.score(inputs(duplicate_doc)))
 
     bad_population = copy.deepcopy(good)
     bad_population["population"] = "P-something"
@@ -1609,12 +1628,20 @@ def part_refusals(tmp: Path) -> dict:
         "skipped record moves a denominator with nothing to show for it",
     )
     check(
+        "a duplicated document is refused by the SCORER, not only by the section 8 helper",
+        ("ScoreInputError", SM.DUPLICATE_DOCUMENT_IDENTITY),
+        duplicate_layer,
+        "the scorer's own duplicate-document guard is gone and the refusal is coming from the "
+        "frozen section 8 vector validator instead -- which shares the reason STRING, so the "
+        "check above cannot see the difference and stays green with the guard deleted",
+    )
+    check(
         "...and the equivalent WELL-FORMED input still scores, so nothing above refuses blindly",
         None,
         refusal(lambda: SM.score(inputs([good]))),
         "valid input is refused too, so the refusals prove nothing about malformedness",
     )
-    return {"refusals": cases}
+    return {"refusals": cases, "duplicate_document_layer": duplicate_layer}
 
 
 def part_attacks(tmp: Path) -> dict:
@@ -1765,6 +1792,11 @@ def part_controls_and_repeats(tmp: Path) -> dict:
         "a control contributed to an estimand it exists only to bound, which would put "
         "deliberately altered text into a correctness denominator",
     )
+    # WHICH CHECK GUARDS WHAT, measured by injection rather than assumed. Deleting the scorer's
+    # `control_kind` skip does NOT move the invariance check above: a control carries `frames == ()`
+    # (A40 F5), so the frame-membership filter refuses it a second time and no metric moves. The
+    # count below is what makes the deletion visible, and `part_refusals`' CONTROL_STIMULUS_IN_ESTIMAND
+    # covers the remaining case -- a control that somehow claims frame membership.
     check(
         "...and the exclusions are COUNTED rather than silent",
         (20, n_repeats),

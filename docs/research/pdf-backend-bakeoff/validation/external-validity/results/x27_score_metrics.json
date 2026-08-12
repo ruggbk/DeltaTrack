@@ -408,7 +408,11 @@
     "STIMULUS_DOCUMENT_NOT_IN_FRAMES": "STIMULUS_DOCUMENT_NOT_IN_FRAMES",
     "ADJUDICATION_ROUTE_MISSING": "ADJUDICATION_ROUTE_MISSING",
     "CONTROL_STIMULUS_IN_ESTIMAND": "CONTROL_STIMULUS_IN_ESTIMAND"
-   }
+   },
+   "duplicate_document_layer": [
+    "BootstrapInputError",
+    "DUPLICATE_DOCUMENT_IDENTITY"
+   ]
   },
   "attacks": {
    "reidentified_matched": 0
@@ -1759,6 +1763,20 @@
    "row": ""
   },
   {
+   "test": "a duplicated document is refused by the SCORER, not only by the section 8 helper",
+   "expected": [
+    "ScoreInputError",
+    "DUPLICATE_DOCUMENT_IDENTITY"
+   ],
+   "observed": [
+    "BootstrapInputError",
+    "DUPLICATE_DOCUMENT_IDENTITY"
+   ],
+   "pass": false,
+   "fails_when": "the scorer's own duplicate-document guard is gone and the refusal is coming from the frozen section 8 vector validator instead -- which shares the reason STRING, so the check above cannot see the difference and stays green with the guard deleted",
+   "row": ""
+  },
+  {
    "test": "...and the equivalent WELL-FORMED input still scores, so nothing above refuses blindly",
    "expected": null,
    "observed": null,
@@ -2115,5 +2133,7 @@
    "row": ""
   }
  ],
- "failures": []
+ "failures": [
+  "a duplicated document is refused by the SCORER, not only by the section 8 helper"
+ ]
 }
