@@ -1,0 +1,305 @@
+{
+ "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened by any extractor, nothing scored",
+ "amendment": "A43",
+ "canonical_frames_json_created": false,
+ "holdout_extraction_performed": false,
+ "development_documents": [
+  "113-hr-3547",
+  "118-hr-2882"
+ ],
+ "canonical_entrypoint": "execute_study.canonical_population() -> write_frames() -> load_frames()",
+ "population_authority": "results/holdout_membership.json",
+ "page_limit": null,
+ "refusal_classes": [
+  "DECLARED_COUNT_MISMATCH",
+  "DUPLICATE_MEMBER_ID",
+  "FRAMES_ARTIFACT_MALFORMED",
+  "FRAMES_ARTIFACT_MISSING",
+  "FRAMES_ARTIFACT_UNCOMMITTED",
+  "FRAME_METADATA_MISMATCH",
+  "FRAME_POPULATION_MISMATCH",
+  "INVALID_STRATUM",
+  "MEMBERSHIP_MALFORMED",
+  "MEMBERSHIP_MISSING",
+  "MEMBER_MALFORMED",
+  "POPULATION_DUPLICATED",
+  "POPULATION_HAS_EXTRA",
+  "POPULATION_INCOMPLETE",
+  "POPULATION_SUBSTITUTED",
+  "SOURCE_FILE_MISSING",
+  "SOURCE_SHA_MISMATCH",
+  "UNKNOWN_POPULATION"
+ ],
+ "guard": {
+  "n_guarded": 17,
+  "equals_membership": true
+ },
+ "boundary": {
+  "boundary_state": "ABSENT"
+ },
+ "g5": {
+  "g5_green": true,
+  "surface_size": 15
+ },
+ "population_evidence": {
+  "membership": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp1za1x2tb/pop/membership.json",
+  "docs_root": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp1za1x2tb/pop/holdout",
+  "n_members": 2
+ },
+ "frames_evidence": {
+  "frames_written": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp1za1x2tb/frames/frames.json",
+  "n_frames": 2,
+  "c_frame_selected_p_head": 9,
+  "c_frame_selected_p_robust": 0
+ },
+ "checks": [
+  {
+   "check": "a well-formed membership loads every member with its metadata",
+   "ok": true,
+   "fails_when": "the loader drops, reorders or invents a member",
+   "observed": "2 descriptors"
+  },
+  {
+   "check": "population and stratum are READ from the authority, never inferred",
+   "ok": true,
+   "fails_when": "a descriptor carries a population or stratum the membership does not state",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION omit one frozen member -> POPULATION_INCOMPLETE",
+   "ok": true,
+   "fails_when": "a 1-of-2 population is accepted",
+   "observed": "POPULATION_INCOMPLETE"
+  },
+  {
+   "check": "MUTATION append a non-member -> POPULATION_HAS_EXTRA",
+   "ok": true,
+   "fails_when": "an extra document is scored",
+   "observed": "POPULATION_HAS_EXTRA"
+  },
+  {
+   "check": "MUTATION duplicate a member -> POPULATION_DUPLICATED",
+   "ok": true,
+   "fails_when": "one document is counted twice",
+   "observed": "POPULATION_DUPLICATED"
+  },
+  {
+   "check": "MUTATION duplicate id IN the membership -> DUPLICATE_MEMBER_ID",
+   "ok": true,
+   "fails_when": "the loader accepts it",
+   "observed": "DUPLICATE_MEMBER_ID"
+  },
+  {
+   "check": "MUTATION substitute a member -> POPULATION_SUBSTITUTED, not merely INCOMPLETE",
+   "ok": true,
+   "fails_when": "a swap is reported as the same failure as an omission, hiding which happened",
+   "observed": "POPULATION_SUBSTITUTED"
+  },
+  {
+   "check": "MUTATION recorded sha256 != source bytes -> SOURCE_SHA_MISMATCH",
+   "ok": true,
+   "fails_when": "a document swapped after the freeze check is extracted anyway",
+   "observed": "SOURCE_SHA_MISMATCH"
+  },
+  {
+   "check": "MUTATION source file absent -> SOURCE_FILE_MISSING",
+   "ok": true,
+   "fails_when": "a missing document silently shrinks the study",
+   "observed": "SOURCE_FILE_MISSING"
+  },
+  {
+   "check": "MUTATION population -> 'P-heads' -> UNKNOWN_POPULATION",
+   "ok": true,
+   "fails_when": "an unknown population yields 0 C-regions",
+   "observed": "UNKNOWN_POPULATION"
+  },
+  {
+   "check": "MUTATION stratum -> 99 -> INVALID_STRATUM",
+   "ok": true,
+   "fails_when": "section 4.5's strata-filled count reads a phantom stratum",
+   "observed": "INVALID_STRATUM"
+  },
+  {
+   "check": "MUTATION n_members -> 99 -> DECLARED_COUNT_MISMATCH",
+   "ok": true,
+   "fails_when": "a corrupted authority passes as a smaller one",
+   "observed": "DECLARED_COUNT_MISMATCH"
+  },
+  {
+   "check": "MUTATION delete a member's stratum -> MEMBER_MALFORMED",
+   "ok": true,
+   "fails_when": "a member without metadata is defaulted",
+   "observed": "MEMBER_MALFORMED"
+  },
+  {
+   "check": "a stratum mutation ALTERS the downstream input (document_strata), so the guard is not vacuous",
+   "ok": true,
+   "fails_when": "document_strata returns the same map whatever the membership says",
+   "observed": "{'113-hr-3547': 1, '118-hr-2882': 2} -> {'113-hr-3547': 3, '118-hr-2882': 2}"
+  },
+  {
+   "check": "write_frames emits exactly one frame per member, in the membership's shape",
+   "ok": true,
+   "fails_when": "a member is dropped or duplicated between population and artifact",
+   "observed": "2 frames"
+  },
+  {
+   "check": "the artifact records the whole-document scope, not a prefix",
+   "ok": true,
+   "fails_when": "a page limit reaches the canonical path and shrinks every denominator",
+   "observed": ""
+  },
+  {
+   "check": "load_frames accepts the artifact it just wrote",
+   "ok": true,
+   "fails_when": "the round-trip loses a frame",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION load frames against a 1-of-2 population -> refuses",
+   "ok": true,
+   "fails_when": "a later stage reads a subset",
+   "observed": "POPULATION_INCOMPLETE"
+  },
+  {
+   "check": "MUTATION delete a frame FROM the artifact -> FRAME_POPULATION_MISMATCH",
+   "ok": true,
+   "fails_when": "a truncated frames.json is consumed as a complete study",
+   "observed": "FRAME_POPULATION_MISMATCH"
+  },
+  {
+   "check": "MUTATION consume an UNCOMMITTED frames.json -> FRAMES_ARTIFACT_UNCOMMITTED",
+   "ok": true,
+   "fails_when": "the oracle reads frames that exist only in the working tree, which no reviewer can read",
+   "observed": "FRAMES_ARTIFACT_UNCOMMITTED"
+  },
+  {
+   "check": "oracle_documents carries the membership's stratum and the real pdf_path",
+   "ok": true,
+   "fails_when": "a stratum is transcribed by hand or a path is invented",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION oracle_documents on a subset -> refuses at the handover",
+   "ok": true,
+   "fails_when": "the oracle is built on 1 of 2",
+   "observed": "POPULATION_INCOMPLETE"
+  },
+  {
+   "check": "control_documents gives S1 and cross-engine the same complete population",
+   "ok": true,
+   "fails_when": "S1 and cross-engine measure a different set than the frames",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION control_documents on a subset -> refuses at the handover",
+   "ok": true,
+   "fails_when": "S1 runs on 1 of 2",
+   "observed": "POPULATION_INCOMPLETE"
+  },
+  {
+   "check": "a population mutation ALTERS the C-frame draw, so the field is result-bearing",
+   "ok": true,
+   "fails_when": "P-head and P-robust produce the same C-frame, i.e. the population field is inert",
+   "observed": "P-head c_frame_selected=9, P-robust=0"
+  },
+  {
+   "check": "build_oracle.HOLDOUT_GUARD equals the committed membership",
+   "ok": true,
+   "fails_when": "the guard is a transcription that drifts from the authority",
+   "observed": "17 ids, symmetric difference 0"
+  },
+  {
+   "check": "every frozen member is refused pre-boundary by assert_source_permitted",
+   "ok": true,
+   "fails_when": "a frozen member is not recognised as holdout, so the source gate never fires on it",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION drop a real member and add a phantom -> HOLDOUT_GUARD_DIVERGED",
+   "ok": true,
+   "fails_when": "the guard may disagree with the committed population and nothing says so",
+   "observed": "HOLDOUT_GUARD_DIVERGED"
+  },
+  {
+   "check": "...and the divergence names BOTH directions",
+   "ok": true,
+   "fails_when": "an unguarded member is not detectable through the guard's own API",
+   "observed": "113-hr-933 unguarded while diverged"
+  },
+  {
+   "check": "MUTATION guard divergence turns G5 RED",
+   "ok": true,
+   "fails_when": "readiness stays green while the source gate is open on real members",
+   "observed": "1 problem(s)"
+  },
+  {
+   "check": "the guard is restored after fault injection",
+   "ok": true,
+   "fails_when": "debris is left behind",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION unreadable membership -> HOLDOUT_POPULATION_UNAVAILABLE, not an empty guard",
+   "ok": true,
+   "fails_when": "a missing authority disables the holdout guard entirely and looks like a clean load",
+   "observed": "HOLDOUT_POPULATION_UNAVAILABLE"
+  },
+  {
+   "check": "the execution boundary is ABSENT in this session",
+   "ok": true,
+   "fails_when": "the probe ran post-authorization",
+   "observed": "ABSENT"
+  },
+  {
+   "check": "canonical results/frames.json may not be written pre-boundary",
+   "ok": true,
+   "fails_when": "the first confirmatory artifact is the one the write guard cannot see",
+   "observed": "CONFIRMATORY_WRITE_BEFORE_EXECUTION"
+  },
+  {
+   "check": "extraction of a frozen member refuses pre-boundary, BEFORE any arm runs",
+   "ok": true,
+   "fails_when": "a frozen member is extracted while the boundary is ABSENT",
+   "observed": "HOLDOUT_BEFORE_EXECUTION_BOUNDARY"
+  },
+  {
+   "check": "G5 is GREEN on the repaired tree",
+   "ok": true,
+   "fails_when": "the repair itself does not satisfy G5",
+   "observed": "all 15 result-bearing files committed; execution path live"
+  },
+  {
+   "check": "MUTATION delete execute_study.write_frames -> G5 RED",
+   "ok": true,
+   "fails_when": "readiness stays green while the canonical writer is gone",
+   "observed": "execute_study.write_frames is missing or not callable"
+  },
+  {
+   "check": "MUTATION set a canonical PAGE_LIMIT -> G5 RED",
+   "ok": true,
+   "fails_when": "a prefix scope reaches the canonical path and silently shrinks every denominator",
+   "observed": "PAGE_LIMIT is 8; the canonical scope is the whole document"
+  },
+  {
+   "check": "MUTATION remove probes/execute_study.py -> G5 RED",
+   "ok": true,
+   "fails_when": "the surface no longer covers the component that decides which documents enter the study",
+   "observed": "MISSING 1/15: probes/execute_study.py"
+  },
+  {
+   "check": "the component file is restored byte-identically after fault injection",
+   "ok": true,
+   "fails_when": "fault injection leaves the tree modified",
+   "observed": ""
+  },
+  {
+   "check": "G5 is GREEN again after every injected fault is reverted",
+   "ok": true,
+   "fails_when": "a fault was not fully reverted",
+   "observed": ""
+  }
+ ],
+ "n_checks": 41,
+ "n_failed": 0
+}
