@@ -9,10 +9,12 @@ of them:
    recoverable there without any new field. If it reconstructs or copies, it is not.
 2. **Is the recovery a bijection?** Every node claimed exactly once, and none omitted.
 3. **Does identity survive the whole pre-classification sequence?** Since #591 that
-   sequence is two stages, not one: ``apply_similarity_revocation(match_nodes(...))``.
-   The second stage rebuilds the tuple list, which is exactly where a copy would be
-   introduced without anyone noticing. Measuring only ``match_nodes`` would leave a future
-   ObservationRef wired at a seam one stage short of classification.
+   sequence is more than one stage: ``match_nodes`` then the similarity rule, now spelled
+   ``apply_similarity_assignment_rule(...)`` over the evidence
+   ``similarity_correspondence_evidence(...)`` produced. The second stage rebuilds the tuple
+   list, which is exactly where a copy would be introduced without anyone noticing. Measuring
+   only ``match_nodes`` would leave a future ObservationRef wired at a seam one stage short of
+   classification.
 4. **Where does that mechanism stop working?** ``NodeDiff`` carries no node reference, so
    identity is available up to the end of that sequence and gone the moment classification
    emits records.
@@ -83,10 +85,16 @@ from deltatrack.bill_tree import (
     BillTree,  # noqa: E402
     normalize_bill,  # noqa: E402
 )
-from deltatrack.diff_bill import apply_similarity_revocation, match_nodes  # noqa: E402
+from deltatrack.diff_bill import (  # noqa: E402
+    apply_similarity_assignment_rule,
+    match_nodes,
+    observation_registry,
+    similarity_correspondence_evidence,
+)
+from deltatrack.similarity import SIMILARITY_THRESHOLD  # noqa: E402
 from tests.test_canonical_baseline import baseline_pairs  # noqa: E402
 
-STAGES = ("match_nodes", "after revocation")
+STAGES = ("match_nodes", "after the similarity rule")
 
 
 class IdentityFailure(RuntimeError):
@@ -168,7 +176,13 @@ def main() -> None:
                 value_collision_nodes += lost
 
         pairs = match_nodes(old_tree, new_tree)
-        decided = apply_similarity_revocation(pairs)
+        registry = observation_registry(old_tree, new_tree)
+        decided = apply_similarity_assignment_rule(
+            pairs,
+            similarity_correspondence_evidence(pairs, registry),
+            registry,
+            threshold=SIMILARITY_THRESHOLD,
+        )
         revocation_added += len(decided) - len(pairs)
 
         # PRODUCTION VALIDATION -- raises rather than accumulating a counter.

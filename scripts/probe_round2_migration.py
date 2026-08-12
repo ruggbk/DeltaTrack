@@ -41,15 +41,16 @@ filtered lists is now a test rather than a measurement.
 FAIL-CLOSED THROUGHOUT, because the numbers are void without it:
 
     - The revocation population is derived from an exact STRUCTURAL WALK of ``match_nodes`` output
-      to ``apply_similarity_revocation`` output, by object identity (:func:`revoked_pairings`).
+      to ``apply_similarity_assignment_rule`` output, by object identity (:func:`revoked_pairings`).
       Equal cardinality is not enough: the same count of the wrong pairings is a false green, so
       every input tuple must appear either unchanged or as its own two halves, in place, carrying
       the same objects.
     - That structural population is then cross-checked against production's own
-      ``pairing_survives_similarity_rule``, again by object identity rather than by count. A
-      lookalike condition -- ``old_norm != new_norm`` in place of the ``diff_text`` emptiness gate
-      -- agrees on all 15,034 corpus pairings today, and that agreement is a measurement rather
-      than a guarantee. Reading production removes the question.
+      ``_similarity_rule_keeps``, reading the evidence by ADR 0019 observation address and
+      comparing by object identity rather than by count. A lookalike condition --
+      ``old_norm != new_norm`` in place of the ``diff_text`` emptiness gate -- agrees on all
+      15,034 corpus pairings today, and that agreement is a measurement rather than a guarantee.
+      Reading production removes the question.
     - Every headline figure is PINNED (:data:`PINNED`, :data:`ORDINAL_SENSITIVE_PAIRS`). A drift
       fails the run rather than printing a new number for someone to notice.
 
@@ -69,15 +70,17 @@ import deltatrack.diff_bill as db  # noqa: E402
 from deltatrack.bill_tree import normalize_bill  # noqa: E402
 from deltatrack.diff_bill import (  # noqa: E402
     WORD_OVERLAP,
-    apply_similarity_revocation,
+    apply_similarity_assignment_rule,
     assign_moves,
     match_nodes,
     move_correspondence_evidence,
     observation_registry,
     retrieve_move_candidates,
+    similarity_correspondence_evidence,
     unmatched_population,
 )
-from deltatrack.similarity import MOVE_THRESHOLD  # noqa: E402
+from deltatrack.matching import NEW, OLD  # noqa: E402
+from deltatrack.similarity import MOVE_THRESHOLD, SIMILARITY_THRESHOLD  # noqa: E402
 from tests.test_assignment_classification_boundary import (  # noqa: E402
     legacy_change_records,
     legacy_selected_links,
@@ -166,24 +169,31 @@ def revoked_pairings(pairs: list, decided: list, key: str) -> list[tuple]:
     return revoked
 
 
-def cross_check_revocations(pairs: list, revoked: list, key: str) -> None:
-    """The structural population must be the population production's predicate names.
+def cross_check_revocations(pairs: list, revoked: list, registry, round1_evidence, key: str) -> None:
+    """The structural population must be the population production's rule names.
 
     Compared as sets of object identities, not as counts: the whole point of the
     structural walk is that a same-count/wrong-pairing result must not read as agreement.
+
+    The rule is now ``_similarity_rule_keeps`` reading a ``CorrespondenceEvidence`` rather than a
+    predicate over two nodes, so this resolves each pairing to its evidence the way production
+    does -- by ADR 0019 observation address, never by position in either list.
     """
+    by_link = {item.link: item for item in round1_evidence}
     structural = {(id(old), id(new)) for old, new in revoked}
-    predicate = {
-        (id(old), id(new))
-        for old, new in pairs
-        if old is not None and new is not None and not db.pairing_survives_similarity_rule(old, new)
-    }
+    predicate = set()
+    for old, new in pairs:
+        if old is None or new is None:
+            continue
+        link = (registry.ref(OLD, old), registry.ref(NEW, new))
+        if not db._similarity_rule_keeps(by_link[link], SIMILARITY_THRESHOLD):
+            predicate.add((id(old), id(new)))
     if structural != predicate:
         raise SystemExit(
-            f"{key}: the revocation stage and pairing_survives_similarity_rule name DIFFERENT populations. "
-            f"stage revoked {len(structural)}, predicate revoked {len(predicate)}, "
+            f"{key}: the assignment stage and the similarity rule name DIFFERENT populations. "
+            f"stage revoked {len(structural)}, rule revoked {len(predicate)}, "
             f"{len(structural - predicate)} revoked by the stage alone, "
-            f"{len(predicate - structural)} by the predicate alone"
+            f"{len(predicate - structural)} by the rule alone"
         )
 
 
@@ -251,10 +261,11 @@ def main() -> None:
 
         registry = observation_registry(old_tree, new_tree)
         pairs = match_nodes(old_tree, new_tree)
-        decided = apply_similarity_revocation(pairs)
+        round1_evidence = similarity_correspondence_evidence(pairs, registry)
+        decided = apply_similarity_assignment_rule(pairs, round1_evidence, registry, threshold=SIMILARITY_THRESHOLD)
 
         revoked = revoked_pairings(pairs, decided, key)
-        cross_check_revocations(pairs, revoked, key)
+        cross_check_revocations(pairs, revoked, registry, round1_evidence, key)
         revoked_old = {id(old) for old, _ in revoked}
         revoked_new = {id(new) for _, new in revoked}
 

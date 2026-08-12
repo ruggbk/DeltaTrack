@@ -10,7 +10,7 @@ SCOPE, stated because the number is easy to over-read:
 
     This measures the removal/addition INPUT population only. It does **not** measure
     overlap with the 1054 move candidates or the 496 selected moves reported by
-    ``probe_move_assignment.py``, and nothing here says how many of those contain a
+    ``probe_round2_migration.py``, and nothing here says how many of those contain a
     classification-created side.
 
     So it does not, on its own, establish what would change if the second retrieval pass

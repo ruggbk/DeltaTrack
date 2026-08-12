@@ -1,9 +1,16 @@
-"""Diff two ``probe_move_assignment.py --dump`` files: which correspondences changed.
+"""Diff two selected-correspondence dumps: which correspondences changed.
 
-The negative control for a selection-policy mutation. Run the assignment probe once
-against production and once against a temporarily mutated build, then compare the two
-dumps here. Because both dumps are keyed by element id rather than by list position,
-this separates three outcomes that a bare count cannot:
+**No probe in the tree currently writes these dumps.** They came from
+``probe_move_assignment.py``, which wrapped ``diff_bill.reconcile_moves``; that function was
+replaced by the round-2 stages in #612 and the probe, already broken at import, was retired
+rather than ported. This is kept because the three-way distinction below is what a
+selection-policy control needs and nothing else in the tree draws it -- a dump written by hand
+or by a future probe still compares here.
+
+The negative control for a selection-policy mutation. Produce one dump against production and
+one against a temporarily mutated build, then compare them here. Because both dumps are keyed
+by element id rather than by list position, this separates three outcomes that a bare count
+cannot:
 
   * the selected SET changed  -- a different correspondence was chosen;
   * only the ORDER changed    -- the same correspondences, emitted in another sequence;

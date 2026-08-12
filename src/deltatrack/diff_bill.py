@@ -471,97 +471,33 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.split())
 
 
-def pairing_survives_similarity_rule(old_node: BillNode, new_node: BillNode) -> bool:
-    """Whether a provisional path pairing survives the similarity rule.
-
-    **Scope, stated first because the name could be read wider than it is.** This decides
-    exactly one thing: whether the similarity rule revokes a pairing ``match_nodes``
-    proposed. It is not a verdict on correspondence across the whole matcher, and this
-    slice does not build [ADR 0020](../../docs/decisions/0020-matching-stages.md)'s
-    assignment stage. ``match_nodes`` still owns ``match_path`` grouping, division
-    subgrouping, the cross-division fallback and ``_similarity_pair``'s unthresholded
-    greedy claim; ``reconcile_moves`` still runs a second retrieval and assignment pass
-    *after* classification. Those stay fused. What changes is that the one rule capable of
-    revoking a pairing now runs before classification rather than inside it, so
-    classification classifies the shape it is handed instead of deciding it.
-
-    **The condition is transcribed, not tidied.** It is the pre-refactor expression from
-    ``diff_bills``, read in the positive:
-
-        text_changes = diff_text(old_normalized, new_normalized)
-        if not text_changes:                                        -> kept
-        elif text_similarity(...) < SIMILARITY_THRESHOLD:           -> revoked
-        else:                                                       -> kept
-
-    The gate is the emptiness of a *word-level diff*, and it stays a ``diff_text`` call
-    rather than becoming ``old_normalized == new_normalized``. The two agree on every one
-    of the corpus's path-matched pairings, and that is not a reason to substitute one for
-    the other: an agreement measured on 27 documents is not a statement about every input a
-    bill can contain, and a Phase-1 extraction that swapped in a different-looking
-    condition would be changing the rule while claiming to move it. The resulting repeated
-    call is the visible residue of the fusion this slice does not yet remove; deleting it
-    is a later change owing its own evidence.
-
-    **A ``False`` result is final for these two observations, but not for either of them.**
-    The two halves become an unmatched old and an unmatched new observation, and
-    ``reconcile_moves`` may still pair each with a *different* partner. It cannot re-pair
-    them with each other: a revoked pairing scores below ``SIMILARITY_THRESHOLD`` and the
-    move pass requires ``MOVE_THRESHOLD``, over the same normalization and the same
-    measure. That ordering is checked rather than assumed, because ``move_candidates``
-    constructs its ``SequenceMatcher`` differently and a junk-heuristic difference between
-    the two sites would not announce itself.
-    """
-    old_normalized = _normalize_text(old_node.body_text)
-    new_normalized = _normalize_text(new_node.body_text)
-    if not diff_text(old_normalized, new_normalized):
-        return True
-    return text_similarity(old_normalized, new_normalized) >= SIMILARITY_THRESHOLD
-
-
-def apply_similarity_revocation(
-    pairs: list[tuple[BillNode | None, BillNode | None]],
-) -> list[tuple[BillNode | None, BillNode | None]]:
-    """Replace each revoked pairing with the two unmatched observations it becomes.
-
-    Input is ``match_nodes`` output; output is the same shape, so no new type is
-    introduced and nothing here is an ADR 0020 ``Correspondence``. A ``(old, None)`` or
-    ``(None, new)`` in the result is an *unmatched observation*, not a settled 1:0 or 0:1:
-    the move pass may still pair it with a different partner.
-
-    **The two replacements are adjacent and in place**, and that is load-bearing rather
-    than incidental. Classification emits one record per pairing in order, so emitting the
-    removal and the addition at the position the pairing occupied is what keeps the change
-    list identical to the pre-refactor one -- which in turn keeps ``reconcile_moves``'
-    ``(ri, ai)`` positions, its candidate population, its selections and every canonical
-    ``c-XXXX`` identifier where they were. Reversing the two, or appending them elsewhere,
-    moves canonical output while leaving every change *count* untouched.
-
-    Named for the one rule it applies. A broader name would suggest this assembles ADR
-    0020's assignment stage, which it does not -- see
-    :func:`pairing_survives_similarity_rule` for what remains fused.
-    """
-    decided: list[tuple[BillNode | None, BillNode | None]] = []
-    for old_node, new_node in pairs:
-        if old_node is not None and new_node is not None and not pairing_survives_similarity_rule(old_node, new_node):
-            decided.append((old_node, None))
-            decided.append((None, new_node))
-        else:
-            decided.append((old_node, new_node))
-    return decided
-
-
 #: The assignment rounds this pipeline runs, in order. Round 1 is ``match_nodes`` followed by
-#: :func:`apply_similarity_revocation`, whose retrieval and assignment are still fused; round 2
-#: is the move pass below. These are provenance carried on a :class:`SettledCorrespondence` so
-#: classification can reproduce the legacy record order and label a move — not a ranking, and
-#: not a quality signal.
+#: :func:`apply_similarity_assignment_rule`; its retrieval and its other assignment acts (the
+#: unique-path direct selection, ``_similarity_pair``'s greedy claim) are still fused inside
+#: ``match_nodes``. Round 2 is the move pass below. These are provenance carried on a
+#: :class:`SettledCorrespondence` so classification can reproduce the legacy record order and
+#: label a move — not a ranking, and not a quality signal.
 PATH_ROUND = 1
 MOVE_ROUND = 2
 
-#: The one signal round-2 correspondence evidence carries. A retrieval score becomes evidence
-#: only by being promoted to a named signal (ADR 0020), which :func:`move_correspondence_evidence`
-#: is the sole place to do; assignment reads this and never ``Proposal.score``.
+#: Word-level overlap of two normalized bodies. Carried by BOTH rounds' correspondence evidence,
+#: because it is one quantity by one measure: ``text_similarity`` is
+#: ``SequenceMatcher(None, a.split(), b.split()).ratio()``, and ``move_candidates`` documents that
+#: its tuples are identical to computing ``text_similarity`` for every pair. One name for one
+#: signal; two names would invite a reader to think the scales differ.
+#:
+#: In round 2 it is a *promoted retrieval score*: a retrieval score is not evidence until it is
+#: named as a signal (ADR 0020), which :func:`move_correspondence_evidence` is the sole place to
+#: do, and assignment reads the signal and never ``Proposal.score``. In round 1 there is no
+#: retrieval score to promote -- the ratio is computed for the express purpose of deciding the
+#: pairing -- so it is natively evidence.
 WORD_OVERLAP = "word_overlap"
+
+#: Whether the two normalized bodies have an empty word-level diff. A description of the texts,
+#: not a verdict on them: it reports what ``diff_text`` produced, and
+#: :func:`_similarity_rule_keeps` is what reads it as grounds to keep a pairing. ADR 0020 uses the
+#: same name for the same quantity where it carves out what classification may legitimately ask.
+BODY_UNCHANGED = "body_unchanged"
 
 
 @dataclass(frozen=True)
@@ -676,6 +612,183 @@ class SettledCorrespondence:
 def observation_registry(old: BillTree, new: BillTree) -> ObservationRegistry:
     """The complete observation sequences for one comparison."""
     return ObservationRegistry(old.nodes, new.nodes)
+
+
+def _similarity_signals(old_node: BillNode, new_node: BillNode) -> dict[str, bool | float]:
+    """The two signals the similarity rule reads. Describes; decides nothing.
+
+    **The legacy short-circuit is preserved exactly, and that is the point of the shape.**
+    Production computes the word-level diff first and computes the similarity ratio ONLY when
+    that diff is non-empty. Over the committed corpus that skips the ratio on 13,866 of 15,034
+    path-matched pairings. Computing it unconditionally would be tidier, would cost a measured
+    +21% on ``diff_bills``, and would be a behaviour change dressed as a refactor: the set of
+    ``text_similarity`` calls the engine makes would differ from the set it makes today.
+
+    So ``word_overlap`` is **absent** rather than ``None`` when the bodies are unchanged.
+    :data:`~deltatrack.matching.Scalar` admits ``None``, which would make "not computed" and
+    "computed as null" indistinguishable through ``CorrespondenceEvidence.get``; omitting the
+    name keeps them distinguishable through ``.names``.
+
+    Registry-free on purpose: turning signals into addressed evidence is
+    :func:`similarity_correspondence_evidence`'s job, and keeping the measurement separable from
+    the addressing is what lets a test check one without the other.
+    """
+    old_normalized = _normalize_text(old_node.body_text)
+    new_normalized = _normalize_text(new_node.body_text)
+    if not diff_text(old_normalized, new_normalized):
+        return {BODY_UNCHANGED: True}
+    return {
+        BODY_UNCHANGED: False,
+        WORD_OVERLAP: text_similarity(old_normalized, new_normalized),
+    }
+
+
+def similarity_correspondence_evidence(
+    pairs: list[tuple[BillNode | None, BillNode | None]],
+    registry: ObservationRegistry,
+) -> tuple[CorrespondenceEvidence, ...]:
+    """CORRESPONDENCE EVIDENCE for the similarity rule: one record per 1:1 pairing.
+
+    Named for the one rule these signals feed, not for round 1. ``match_nodes`` also decides
+    correspondence -- ``_similarity_pair``'s unthresholded greedy claim and the unique-path
+    direct selection are both assignment acts under ADR 0020 invariant 6 -- and neither produces
+    evidence here. A name like ``round1_correspondence_evidence`` would claim coverage this does
+    not have.
+
+    **Every 1:1 pairing gets a record, including the ones the rule will revoke.** That is ADR
+    0020 invariant 8: evidence for candidates that reach assignment stays retained and
+    inspectable. A revoked pairing's record is not attached to any ``Correspondence`` -- no
+    correspondence was selected -- but it stays in this tuple for the life of the comparison,
+    exactly as round 2's rejected candidates stay in ``move_correspondence_evidence``'s output.
+    Retained and unattached, never discarded.
+
+    Unmatched pairings carry no record: a ``(node, None)`` names no pair, so there is nothing for
+    evidence to describe.
+    """
+    evidence: list[CorrespondenceEvidence] = []
+    for old_node, new_node in pairs:
+        if old_node is None or new_node is None:
+            continue
+        evidence.append(
+            CorrespondenceEvidence.of(
+                registry.ref(OLD, old_node),
+                registry.ref(NEW, new_node),
+                **_similarity_signals(old_node, new_node),
+            )
+        )
+    return tuple(evidence)
+
+
+def _evidence_by_link(
+    evidence: tuple[CorrespondenceEvidence, ...],
+) -> dict[tuple[ObservationRef, ObservationRef], CorrespondenceEvidence]:
+    """Evidence addressed by ADR 0019 observation pair, refusing a duplicated link.
+
+    Keyed by ``(old_ref, new_ref)`` and never by position in this tuple. The tuple is shorter
+    than the pairing stream -- only 1:1 pairings carry a record -- so a positional read would
+    misalign rather than silently mispair, and that property is worth keeping rather than
+    engineering around.
+
+    A repeated link is refused instead of resolved: two records for one pair leave no answer to
+    "which one selected it", which is the question the attached evidence exists to answer.
+    """
+    by_link: dict[tuple[ObservationRef, ObservationRef], CorrespondenceEvidence] = {}
+    for item in evidence:
+        if item.link in by_link:
+            raise ValueError(
+                f"two evidence records for the pairing {item.old}->{item.new}; the evidence that "
+                "selected a link is singular"
+            )
+        by_link[item.link] = item
+    return by_link
+
+
+def _similarity_rule_keeps(evidence: CorrespondenceEvidence, threshold: float) -> bool:
+    """ASSIGNMENT: whether the similarity rule keeps this pairing. Owns the threshold.
+
+    Reads only the evidence. The transcribed rule, in the positive:
+
+        if not diff_text(...):                        -> kept   (body_unchanged)
+        elif text_similarity(...) < THRESHOLD:        -> revoked
+        else:                                         -> kept
+
+    **Malformed evidence raises; it never silently revokes.** A missing or wrongly typed signal
+    means the evidence stage and this rule disagree about the vocabulary, and the safe-looking
+    reading of that -- treat it as "not similar enough", revoke -- would split a provision on the
+    strength of a bug and report it as a removal plus an addition. ``bool`` is checked before
+    ``float`` because ``isinstance(True, int)`` is true in Python and a bool must not be read as
+    a score. Mirrors ``move_correspondence_evidence``'s existing strictness about a
+    non-``float`` score.
+    """
+    if BODY_UNCHANGED not in evidence.names:
+        raise ValueError(f"evidence for {evidence.old}->{evidence.new} carries no {BODY_UNCHANGED} signal")
+    body_unchanged = evidence.get(BODY_UNCHANGED)
+    if not isinstance(body_unchanged, bool):
+        raise ValueError(
+            f"evidence for {evidence.old}->{evidence.new} carries a non-bool {BODY_UNCHANGED}: {body_unchanged!r}"
+        )
+    if body_unchanged:
+        return True
+    if WORD_OVERLAP not in evidence.names:
+        raise ValueError(
+            f"evidence for {evidence.old}->{evidence.new} has {BODY_UNCHANGED}=False and no "
+            f"{WORD_OVERLAP} signal; the rule cannot decide and must not guess"
+        )
+    word_overlap = evidence.get(WORD_OVERLAP)
+    if not isinstance(word_overlap, float):
+        raise ValueError(
+            f"evidence for {evidence.old}->{evidence.new} carries a non-float {WORD_OVERLAP}: {word_overlap!r}"
+        )
+    return word_overlap >= threshold
+
+
+def apply_similarity_assignment_rule(
+    pairs: list[tuple[BillNode | None, BillNode | None]],
+    evidence: tuple[CorrespondenceEvidence, ...],
+    registry: ObservationRegistry,
+    *,
+    threshold: float,
+) -> list[tuple[BillNode | None, BillNode | None]]:
+    """Replace each revoked pairing with the two unmatched observations it becomes.
+
+    Named for the one rule it applies. It is **not** the whole of round-1 assignment: ``match_nodes``
+    still selects a unique-path pairing outright and still runs ``_similarity_pair``'s greedy claim,
+    both of which decide correspondence and neither of which this slice touches.
+
+    Input is ``match_nodes`` output; output is the same shape, so no new type is introduced and
+    nothing here is an ADR 0020 ``Correspondence``. A ``(old, None)`` or ``(None, new)`` in the
+    result is an *unmatched observation*, not a settled 1:0 or 0:1: the move pass may still pair it
+    with a different partner.
+
+    **The two replacements are adjacent and in place**, and that is load-bearing rather than
+    incidental. Classification emits one record per pairing in order, so emitting the removal and
+    the addition at the position the pairing occupied is what keeps the change list identical to the
+    pre-refactor one -- which in turn keeps round 2's ``(ri, ai)`` positions, its candidate
+    population, its selections and every canonical ``c-XXXX`` identifier where they were. Reversing
+    the two, or appending them elsewhere, moves canonical output while leaving every change *count*
+    untouched.
+
+    ``threshold`` is a parameter rather than a read of ``SIMILARITY_THRESHOLD``, so a test can move
+    it and watch this stage alone respond. A 1:1 pairing with no evidence raises: it means the
+    evidence stage and this one disagree about the population, and revoking on that basis would be
+    guessing.
+    """
+    by_link = _evidence_by_link(evidence)
+    decided: list[tuple[BillNode | None, BillNode | None]] = []
+    for old_node, new_node in pairs:
+        if old_node is None or new_node is None:
+            decided.append((old_node, new_node))
+            continue
+        link = (registry.ref(OLD, old_node), registry.ref(NEW, new_node))
+        item = by_link.get(link)
+        if item is None:
+            raise ValueError(f"no correspondence evidence for the 1:1 pairing {link[0]}->{link[1]}")
+        if _similarity_rule_keeps(item, threshold):
+            decided.append((old_node, new_node))
+        else:
+            decided.append((old_node, None))
+            decided.append((None, new_node))
+    return decided
 
 
 def unmatched_population(
@@ -839,6 +952,8 @@ def settle_correspondences(
     pairs: list[tuple[BillNode | None, BillNode | None]],
     registry: ObservationRegistry,
     moves: tuple[Correspondence, ...],
+    *,
+    round1_evidence: tuple[CorrespondenceEvidence, ...],
 ) -> tuple[SettledCorrespondence, ...]:
     """Every correspondence settled for one comparison, tagged with the round that selected it.
 
@@ -855,7 +970,15 @@ def settle_correspondences(
 
     The ``CorrespondenceSet`` built here is the exclusivity invariant checked rather than assumed —
     every observation in at most one correspondence — and it is what refuses a premature settlement.
+
+    ``round1_evidence`` is keyword-only and required. It is the whole evidence collection from
+    :func:`similarity_correspondence_evidence`, rejected pairings included; this attaches the
+    subset that selected a surviving 1:1 and leaves the rest retained but unattached. Required
+    rather than defaulting to ``()`` so that every call site says what it means: a caller whose
+    pairing stream genuinely holds no 1:1 passes ``()`` deliberately, rather than omitting an
+    argument and discovering the difference at the first surviving pairing.
     """
+    evidence_by_link = _evidence_by_link(round1_evidence)
     claimed = {ref for move in moves for ref in (*move.old, *move.new)}
     settled: list[SettledCorrespondence] = []
 
@@ -863,18 +986,20 @@ def settle_correspondences(
         if old_node is not None and new_node is not None:
             old_ref = registry.ref(OLD, old_node)
             new_ref = registry.ref(NEW, new_node)
-            # One empty-signal record per surviving round-1 link. The contract requires exactly one
-            # evidence record per selected link, and round-1 evidence is NOT migrated by this slice
-            # — `match_nodes` still decides these pairings with its own fused rules. An empty signal
-            # set is explicitly valid, and inventing a score here would be this slice choosing the
-            # signal that ADR 0020 leaves to measurement.
+            # The exact record the similarity rule read to keep this pairing, carried through to
+            # the correspondence it selected. The contract requires exactly one evidence record
+            # per selected link; a missing one is refused rather than replaced by an empty record,
+            # because the empty record is what this slice exists to remove and a silent fallback
+            # would reinstate it wherever the wiring is wrong.
+            item = evidence_by_link.get((old_ref, new_ref))
+            if item is None:
+                raise ValueError(
+                    f"the surviving 1:1 pairing {old_ref}->{new_ref} carries no correspondence evidence; "
+                    "the evidence that selected a link must travel with it"
+                )
             settled.append(
                 SettledCorrespondence(
-                    Correspondence(
-                        old=(old_ref,),
-                        new=(new_ref,),
-                        evidence=(CorrespondenceEvidence.of(old_ref, new_ref),),
-                    ),
+                    Correspondence(old=(old_ref,), new=(new_ref,), evidence=(item,)),
                     PATH_ROUND,
                 )
             )
@@ -1028,26 +1153,29 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
     which is the rule this slice exists to satisfy: retrieval may run in several rounds and a
     later round may consult earlier matching state, but none of it may run after classification.
 
-    Round 2 stays after :func:`apply_similarity_revocation`, and that ordering is load-bearing
+    Round 2 stays after :func:`apply_similarity_assignment_rule`, and that ordering is load-bearing
     rather than incidental — 228 of the corpus's 496 selected moves touch an observation that
     exists only because the similarity rule revoked its pairing, and 145 have both sides so
     produced. Post-#591 that is a sequencing constraint inside matching, no longer a dependency
     on classification output.
 
-    What this slice does **not** unfuse, said plainly: round 1. ``match_nodes`` still decides both
-    what may be compared (``match_path`` grouping, division subgrouping, the cross-division
-    fallback) and what corresponds (``_similarity_pair``'s unthresholded greedy claim), in one
-    pass, and :func:`apply_similarity_revocation` still owns the rule that can revoke a pairing.
-    One real stage boundary becomes live here — round 2, and the boundary into classification —
-    not four.
+    What remains fused, said plainly: **round-1 retrieval, and the rest of round-1 assignment.**
+    ``match_nodes`` still decides what may be compared (``match_path`` grouping, division
+    subgrouping, the cross-division fallback) and still makes two assignment decisions of its own
+    in the same pass — it selects a unique-path pairing outright, and ``_similarity_pair`` runs an
+    unthresholded greedy claim. Both are assignment under ADR 0020 invariant 6 and both are
+    deferred. What this slice moves is the **one** round-1 rule that can revoke a pairing: it now
+    reads named evidence and owns its threshold, rather than recomputing both inline.
     """
     registry = observation_registry(old, new)
-    pairs = apply_similarity_revocation(match_nodes(old, new))
+    pairings = match_nodes(old, new)
+    round1_evidence = similarity_correspondence_evidence(pairings, registry)
+    pairs = apply_similarity_assignment_rule(pairings, round1_evidence, registry, threshold=SIMILARITY_THRESHOLD)
     population = unmatched_population(pairs, registry)
     candidates = retrieve_move_candidates(population, bound=MOVE_THRESHOLD)
     evidence = move_correspondence_evidence(candidates)
     moves = assign_moves(population, evidence, threshold=MOVE_THRESHOLD)
-    settled = settle_correspondences(pairs, registry, moves)
+    settled = settle_correspondences(pairs, registry, moves, round1_evidence=round1_evidence)
     changes = classify(settled, registry)
 
     return BillDiff(

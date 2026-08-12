@@ -26,7 +26,7 @@ at ``97f91ba`` (the classification loop's ``diff_text`` / ``SIMILARITY_THRESHOLD
 branch). It exists to disagree with production. An oracle that asked the extracted helper
 what the rule is could not detect that the extraction changed it, which is the one failure
 this slice can actually have -- so this must never be replaced by a call to
-``pairing_survives_similarity_rule``, and production must never import it. It composes the
+``_similarity_rule_keeps``, and production must never import it. It composes the
 same primitives (``_normalize_text``, ``diff_text``, ``text_similarity``,
 ``SIMILARITY_THRESHOLD``) deliberately: what it guards is the *composition* -- an inverted
 comparison, a dropped gate, a reordered branch, the wrong constant. The primitives have
@@ -49,6 +49,7 @@ import pytest
 from deltatrack import diff_bill
 from deltatrack.bill_tree import BillNode, amount_text, normalize_bill
 from deltatrack.diff_bill import (
+    BODY_UNCHANGED,
     MOVE_ROUND,
     PATH_ROUND,
     WORD_OVERLAP,
@@ -57,7 +58,8 @@ from deltatrack.diff_bill import (
     SettledCorrespondence,
     UnmatchedPopulation,
     _greedy_move_links,
-    apply_similarity_revocation,
+    _similarity_rule_keeps,
+    apply_similarity_assignment_rule,
     assign_moves,
     classify,
     diff_bills,
@@ -65,9 +67,9 @@ from deltatrack.diff_bill import (
     match_nodes,
     move_correspondence_evidence,
     observation_registry,
-    pairing_survives_similarity_rule,
     retrieve_move_candidates,
     settle_correspondences,
+    similarity_correspondence_evidence,
     unmatched_population,
 )
 from deltatrack.matching import (
@@ -102,7 +104,7 @@ def legacy_pairing_was_revoked(old_node: BillNode, new_node: BillNode) -> bool:
         elif text_similarity(...) < SIMILARITY_THRESHOLD:     -> removed + added (revoked)
         else:                                                 -> modified (kept)
 
-    Independent by construction: it must not call ``pairing_survives_similarity_rule``, and
+    Independent by construction: it must not call ``_similarity_rule_keeps``, and
     production must not import this. See the module docstring for why the duplication is
     the point rather than an oversight.
     """
@@ -287,7 +289,7 @@ def legacy_reconciled(changes: list[NodeDiff], threshold: float = MOVE_THRESHOLD
 
 
 def legacy_pipeline(pairs: list) -> list[NodeDiff]:
-    """Everything the pre-slice engine did after `apply_similarity_revocation`."""
+    """Everything the pre-slice engine did after the similarity rule had been applied."""
     return legacy_reconciled(legacy_change_records(pairs))
 
 
@@ -301,20 +303,37 @@ def migrated_stages(old_tree, new_tree) -> dict:
     that perturbs one of them is seen here exactly as `diff_bills` would see it.
     """
     registry = observation_registry(old_tree, new_tree)
-    pairs = apply_similarity_revocation(match_nodes(old_tree, new_tree))
+    pairings = match_nodes(old_tree, new_tree)
+    round1_evidence = similarity_correspondence_evidence(pairings, registry)
+    pairs = apply_similarity_assignment_rule(pairings, round1_evidence, registry, threshold=SIMILARITY_THRESHOLD)
     population = unmatched_population(pairs, registry)
     candidates = retrieve_move_candidates(population, bound=MOVE_THRESHOLD)
     evidence = move_correspondence_evidence(candidates)
     moves = assign_moves(population, evidence, threshold=MOVE_THRESHOLD)
     return {
         "registry": registry,
+        "pairings": pairings,
+        "round1_evidence": round1_evidence,
         "pairs": pairs,
         "population": population,
         "candidates": candidates,
         "evidence": evidence,
         "moves": moves,
-        "settled": settle_correspondences(pairs, registry, moves),
+        "settled": settle_correspondences(pairs, registry, moves, round1_evidence=round1_evidence),
     }
+
+
+def decided_pairings(old_tree, new_tree) -> list:
+    """The provisional pairing stream after the similarity rule, through the real stages.
+
+    The post-#591 seam was one call; it is now evidence-then-rule, and every place that used to
+    say `apply_similarity_revocation(match_nodes(...))` says this instead. One home for the
+    composition, so a later change to the seam does not have to be found in five places.
+    """
+    registry = observation_registry(old_tree, new_tree)
+    pairings = match_nodes(old_tree, new_tree)
+    evidence = similarity_correspondence_evidence(pairings, registry)
+    return apply_similarity_assignment_rule(pairings, evidence, registry, threshold=SIMILARITY_THRESHOLD)
 
 
 def element_ids(registry: ObservationRegistry, correspondence: Correspondence) -> tuple[str, str]:
@@ -362,17 +381,42 @@ def shape_violations(decided: list, changes: list) -> list[str]:
 
 
 def threshold_references_in(source: str, function_name: str, watched: set[str] | None = None) -> list[str]:
-    """Correspondence-cutoff names read directly inside one function's body.
+    """Correspondence-cutoff names *applied* inside one function's body.
 
     ``watched`` defaults to the round-1 cutoff and its measure. Slice 2 passes a wider set when
     checking ``classify``, which must name no cutoff at all -- including the move cutoff, whose
     only legitimate reader is the stage that decides correspondence.
+
+    **A name passed as a keyword argument is wiring, not application, and is not reported.**
+    ``diff_bills`` is the orchestrator: handing a cutoff to the stage that owns it is exactly
+    what ADR 0020 asks for, and round 2 has always done it
+    (``assign_moves(..., threshold=MOVE_THRESHOLD)``) without tripping anything, because
+    ``MOVE_THRESHOLD`` was simply not in the watched set. Slice A gives round 1 the same shape,
+    which made the asymmetry visible: the question this checker exists to ask is whether a
+    function *decides* with a cutoff, not whether it can spell one.
+
+    So a bare read still trips -- a comparison, a branch, an assignment, a positional argument --
+    and only ``name=CUTOFF`` at a call site is exempt. Both directions are pinned below, because
+    an exemption that swallowed a real re-inlining would silently retire the tripwire.
     """
     watched = {"SIMILARITY_THRESHOLD", "text_similarity"} if watched is None else watched
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == function_name:
-            return sorted({child.id for child in ast.walk(node) if isinstance(child, ast.Name) and child.id in watched})
+            wired = {
+                id(keyword.value)
+                for child in ast.walk(node)
+                if isinstance(child, ast.Call)
+                for keyword in child.keywords
+                if isinstance(keyword.value, ast.Name)
+            }
+            return sorted(
+                {
+                    child.id
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Name) and child.id in watched and id(child) not in wired
+                }
+            )
     raise AssertionError(f"no function named {function_name} in the given source")
 
 
@@ -468,15 +512,17 @@ def test_the_shape_checker_rejects_a_dropped_side():
 
 
 def test_classification_body_names_no_correspondence_cutoff():
-    """``diff_bills`` reads neither the cutoff nor the measure. A tripwire, not a proof.
+    """``diff_bills`` applies neither the cutoff nor the measure. A tripwire, not a proof.
 
-    Scoped to ``diff_bills``' own body, so the sibling ``pairing_survives_similarity_rule``
-    -- which is *supposed* to name both -- does not trip it.
+    Scoped to ``diff_bills``' own body, so the sibling stages -- which are *supposed* to name
+    both -- do not trip it. ``diff_bills`` may hand ``SIMILARITY_THRESHOLD`` to
+    ``apply_similarity_assignment_rule`` as a keyword argument, which is wiring rather than
+    deciding; see :func:`threshold_references_in`.
     """
     named = threshold_references_in(_DIFF_BILL_SOURCE.read_text(), "diff_bills")
     assert not named, (
-        f"diff_bills reads {named} directly. The correspondence decision belongs to "
-        "pairing_survives_similarity_rule; classification classifies the shape it is handed."
+        f"diff_bills applies {named} directly. The correspondence decision belongs to "
+        "apply_similarity_assignment_rule; diff_bills wires the stages and decides nothing."
     )
 
 
@@ -489,6 +535,27 @@ def test_the_source_tripwire_fires_on_a_reinlined_cutoff():
         "            pass\n"
     )
     assert threshold_references_in(doctored, "diff_bills") == ["SIMILARITY_THRESHOLD", "text_similarity"]
+
+
+def test_the_source_tripwire_ignores_a_cutoff_wired_into_a_stage():
+    """The other direction of the same exemption, so it cannot quietly widen.
+
+    Passing the cutoff to the stage that owns it is the shape ADR 0020 asks for. Applying it in
+    the same function is not, and the two must stay distinguishable -- an exemption keyed on
+    "the name appears at all" would retire the tripwire while looking like a fix.
+    """
+    wiring_only = (
+        "def diff_bills(old, new):\n"
+        "    return apply_similarity_assignment_rule(p, e, r, threshold=SIMILARITY_THRESHOLD)\n"
+    )
+    assert threshold_references_in(wiring_only, "diff_bills") == []
+
+    also_applies = (
+        "def diff_bills(old, new):\n"
+        "    x = apply_similarity_assignment_rule(p, e, r, threshold=SIMILARITY_THRESHOLD)\n"
+        "    return [y for y in x if text_similarity(y.a, y.b) >= SIMILARITY_THRESHOLD]\n"
+    )
+    assert threshold_references_in(also_applies, "diff_bills") == ["SIMILARITY_THRESHOLD", "text_similarity"]
 
 
 # --- Corpus gates ---------------------------------------------------------------------
@@ -512,11 +579,15 @@ def test_the_extracted_rule_agrees_with_the_pre_refactor_rule():
         old_tree = normalize_bill(old_path)
         new_tree = normalize_bill(new_path)
         label = f"{old_path.parent.name} {old_path.stem}->{new_path.stem}"
-        for old_node, new_node in match_nodes(old_tree, new_tree):
+        registry = observation_registry(old_tree, new_tree)
+        pairings = match_nodes(old_tree, new_tree)
+        by_link = {item.link: item for item in similarity_correspondence_evidence(pairings, registry)}
+        for old_node, new_node in pairings:
             if old_node is None or new_node is None:
                 continue
             checked += 1
-            extracted_keeps = pairing_survives_similarity_rule(old_node, new_node)
+            link = (registry.ref(OLD, old_node), registry.ref(NEW, new_node))
+            extracted_keeps = _similarity_rule_keeps(by_link[link], SIMILARITY_THRESHOLD)
             revoked += not extracted_keeps
             assert extracted_keeps == (not legacy_pairing_was_revoked(old_node, new_node)), (
                 f"{label}: the extracted rule and the pre-refactor rule disagree on "
@@ -525,6 +596,100 @@ def test_the_extracted_rule_agrees_with_the_pre_refactor_rule():
 
     assert checked, "the agreement measurement ran over zero pairings"
     assert revoked, "no pairing was revoked anywhere in the corpus, so agreement proves nothing"
+
+
+def legacy_similarity_signals(old_node: BillNode, new_node: BillNode) -> dict:
+    """The signals the PRE-SLICE rule computed, and which it skipped, transcribed.
+
+    Independent by construction, like every other ``legacy_`` helper here: it must not call
+    ``_similarity_signals``. What it pins is not only the two values but *which of them the rule
+    bothered to compute* -- the short-circuit is behaviour, and it is the one part of this slice
+    that no output can reveal.
+    """
+    old_normalized = legacy_normalize(old_node.body_text)
+    new_normalized = legacy_normalize(new_node.body_text)
+    if not diff_text(old_normalized, new_normalized):
+        return {BODY_UNCHANGED: True}
+    return {BODY_UNCHANGED: False, WORD_OVERLAP: text_similarity(old_normalized, new_normalized)}
+
+
+@pytest.mark.slow
+def test_the_evidence_records_exactly_the_signals_the_legacy_rule_computed():
+    """Values AND presence, on every path-matched pairing of the corpus.
+
+    Exact float equality, no tolerance: a tolerance would hide a changed normalization, which is
+    the one way the ratio can silently move.
+
+    The presence half is the load-bearing half. ``word_overlap`` must be **absent** when the
+    bodies are unchanged, because production skips the ratio there -- on 13,866 of the corpus's
+    15,034 pairings. Computing it anyway changes no decision, no record and no canonical byte, so
+    this assertion is the only thing standing between the short-circuit and a silent +21% on
+    ``diff_bills``.
+    """
+    from tests.conftest import manifest_version_pairs
+
+    checked = both_signals = only_body = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        label = f"{old_path.parent.name} {old_path.stem}->{new_path.stem}"
+        registry = observation_registry(old_tree, new_tree)
+        pairings = match_nodes(old_tree, new_tree)
+        by_link = {item.link: item for item in similarity_correspondence_evidence(pairings, registry)}
+
+        for old_node, new_node in pairings:
+            if old_node is None or new_node is None:
+                continue
+            checked += 1
+            item = by_link[(registry.ref(OLD, old_node), registry.ref(NEW, new_node))]
+            want = legacy_similarity_signals(old_node, new_node)
+            where = f"{label}: {old_node.element_id} -> {new_node.element_id}"
+
+            assert set(item.names) == set(want), f"{where}: recorded {item.names}, legacy computed {sorted(want)}"
+            assert item.get(BODY_UNCHANGED) == want[BODY_UNCHANGED], where
+            if WORD_OVERLAP in want:
+                both_signals += 1
+                assert item.get(WORD_OVERLAP) == want[WORD_OVERLAP], f"{where}: ratio moved"
+            else:
+                only_body += 1
+                assert WORD_OVERLAP not in item.names, (
+                    f"{where}: the bodies are unchanged, so the legacy rule never computed a ratio; "
+                    "recording one is a behaviour change the canonical gate cannot see"
+                )
+
+    assert checked, "the evidence measurement ran over zero pairings"
+    assert both_signals, "no pairing carried a ratio, so the two-signal branch was never exercised"
+    assert only_body, "no pairing took the short-circuit, so its absence assertion proves nothing"
+
+
+@pytest.mark.slow
+def test_every_surviving_round_1_link_carries_the_evidence_that_selected_it():
+    """The placeholder is gone, and what replaced it is the exact record the rule read.
+
+    Equality against the record from the evidence stage, not merely "some non-empty evidence":
+    attaching a freshly computed record would pass a non-emptiness check while breaking the
+    thing the invariant is for, which is that the evidence a reader inspects is the evidence
+    assignment acted on.
+    """
+    from tests.conftest import manifest_version_pairs
+
+    checked = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        stages = migrated_stages(old_tree, new_tree)
+        by_link = {item.link: item for item in stages["round1_evidence"]}
+
+        for settled in stages["settled"]:
+            correspondence = settled.correspondence
+            if settled.round != PATH_ROUND or not (correspondence.old and correspondence.new):
+                continue
+            checked += 1
+            link = (correspondence.old[0], correspondence.new[0])
+            assert len(correspondence.evidence) == 1, f"{link}: {len(correspondence.evidence)} evidence records"
+            attached = correspondence.evidence[0]
+            assert attached == by_link[link], f"{link}: attached evidence is not the record the rule read"
+            assert attached.names, f"{link}: still carrying an empty placeholder record"
+
+    assert checked, "no surviving round-1 link was inspected"
 
 
 def settled_sides(settled: tuple[SettledCorrespondence, ...], registry: ObservationRegistry) -> list[tuple]:
@@ -686,14 +851,20 @@ def test_the_migrated_stages_reproduce_the_pre_slice_change_records():
     """The whole slice, end to end: identical change records, field for field, in order.
 
     The left side is the frozen transcription of the pre-slice pipeline; the right is the live
-    ``diff_bills``. They share only ``match_nodes``, ``apply_similarity_revocation`` and the leaf
-    primitives -- none of which this slice touches -- so this is not two reconstructions that can
-    carry the same bug.
+    ``diff_bills``. What they share is ``match_nodes``, the round-1 similarity seam (via
+    :func:`decided_pairings`) and the leaf primitives, so for everything downstream of the
+    pairing stream this is not two reconstructions that can carry the same bug.
+
+    **What it therefore cannot see, stated rather than implied:** a change to the round-1
+    similarity seam itself, because both sides now consume its output. That was already true when
+    the seam was one call, and it is why the seam has its own independent oracles --
+    ``legacy_pairing_was_revoked`` for the decision and ``legacy_similarity_signals`` for the
+    evidence, neither of which this test uses.
     """
     moved_seen = 0
     for key, old_path, new_path in _baseline_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        expected = legacy_pipeline(apply_similarity_revocation(match_nodes(old_tree, new_tree)))
+        expected = legacy_pipeline(decided_pairings(old_tree, new_tree))
         actual = diff_bills(old_tree, new_tree).changes
 
         assert len(actual) == len(expected), f"{key}: {len(actual)} records, pre-slice produced {len(expected)}"
@@ -928,7 +1099,7 @@ def test_the_live_stages_read_the_thresholds_they_are_given():
     old_tree = normalize_bill(fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml"))
     new_tree = normalize_bill(fixture_path("118-hr-4366", "5_engrossed-amendment-house.xml"))
     registry = observation_registry(old_tree, new_tree)
-    population = unmatched_population(apply_similarity_revocation(match_nodes(old_tree, new_tree)), registry)
+    population = unmatched_population(decided_pairings(old_tree, new_tree), registry)
 
     def run(bound: float, threshold: float) -> tuple[int, int]:
         evidence = move_correspondence_evidence(retrieve_move_candidates(population, bound=bound))
@@ -1018,15 +1189,19 @@ def test_settlement_refuses_an_observation_that_already_corresponds():
     old_tree = normalize_bill(fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml"))
     new_tree = normalize_bill(fixture_path("118-hr-4366", "5_engrossed-amendment-house.xml"))
     registry = observation_registry(old_tree, new_tree)
-    pairs = apply_similarity_revocation(match_nodes(old_tree, new_tree))
+    pairings = match_nodes(old_tree, new_tree)
+    round1_evidence = similarity_correspondence_evidence(pairings, registry)
+    pairs = apply_similarity_assignment_rule(pairings, round1_evidence, registry, threshold=SIMILARITY_THRESHOLD)
 
     paired = next((o, n) for o, n in pairs if o is not None and n is not None)
     old_ref, new_ref = registry.ref(OLD, paired[0]), registry.ref(NEW, paired[1])
     intruder = Correspondence(old=(old_ref,), new=(new_ref,), evidence=(CorrespondenceEvidence.of(old_ref, new_ref),))
 
-    assert settle_correspondences(pairs, registry, ()), "the control never reached a settlement"
+    assert settle_correspondences(pairs, registry, (), round1_evidence=round1_evidence), (
+        "the control never reached a settlement"
+    )
     with pytest.raises(ValueError, match="already corresponds"):
-        settle_correspondences(pairs, registry, (intruder,))
+        settle_correspondences(pairs, registry, (intruder,), round1_evidence=round1_evidence)
 
 
 # --- Slice 2: record ORDER belongs to classification ------------------------------------
@@ -1096,13 +1271,10 @@ def test_moved_records_land_last_and_moving_them_is_visible():
 # --- Slice 2: the oracle must stay independent of the stages it checks -------------------
 
 
-def test_the_slice_2_oracle_is_independent_of_the_new_stages():
-    """An oracle that called the new stages could not detect that they changed.
-
-    Reads this module's own AST rather than trusting the convention, because the failure it
-    guards -- someone simplifying a transcription into a call -- looks like a cleanup.
-    """
-    migrated_names = {
+#: Every production stage a ``legacy_`` oracle must not call. Covers both migrated slices: the
+#: round-2 stages (#612) and the similarity-rule stages this slice extracted.
+MIGRATED_STAGE_NAMES = frozenset(
+    {
         "unmatched_population",
         "retrieve_move_candidates",
         "move_correspondence_evidence",
@@ -1110,15 +1282,62 @@ def test_the_slice_2_oracle_is_independent_of_the_new_stages():
         "settle_correspondences",
         "classify",
         "migrated_stages",
+        "decided_pairings",
+        "similarity_correspondence_evidence",
+        "apply_similarity_assignment_rule",
+        "_similarity_signals",
+        "_similarity_rule_keeps",
+        "_evidence_by_link",
     }
-    tree = ast.parse(Path(__file__).read_text())
+)
+
+
+def migrated_names_called_in(source: str) -> dict[str, set[str]]:
+    """Migrated stage names reached from any ``legacy_`` function in ``source``.
+
+    **Both spellings, and that is the point of the helper.** ``ast.Name`` catches a bare
+    ``settle_correspondences(...)``, but a module-qualified ``diff_bill.settle_correspondences(...)``
+    parses as an ``ast.Attribute`` whose ``attr`` holds the name, and the ``Name`` there is the
+    module. Scanning only ``Name`` therefore missed the qualified spelling entirely -- and that
+    spelling is in live use elsewhere in the repository, so it was a reachable hole rather than a
+    hypothetical one.
+    """
     offenders: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("legacy_"):
-            named = {c.id for c in ast.walk(node) if isinstance(c, ast.Name)} & migrated_names
-            if named:
-                offenders[node.name] = named
-    assert not offenders, f"the pre-slice oracle calls the code it is supposed to check: {offenders}"
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("legacy_")):
+            continue
+        reached = {c.id for c in ast.walk(node) if isinstance(c, ast.Name)}
+        reached |= {c.attr for c in ast.walk(node) if isinstance(c, ast.Attribute)}
+        if named := reached & MIGRATED_STAGE_NAMES:
+            offenders[node.name] = named
+    return offenders
+
+
+def test_the_legacy_oracles_are_independent_of_the_stages_they_check():
+    """An oracle that called the stages could not detect that they changed.
+
+    Reads this module's own AST rather than trusting the convention, because the failure it
+    guards -- someone simplifying a transcription into a call -- looks like a cleanup.
+    """
+    offenders = migrated_names_called_in(Path(__file__).read_text())
+    assert not offenders, f"a legacy oracle calls the code it is supposed to check: {offenders}"
+
+
+def test_the_independence_guard_catches_both_call_spellings():
+    """Proven able to fail, in both spellings, because it silently missed one of them before.
+
+    The attribute case is the one that mattered: the guard scanned ``ast.Name`` only, so
+    ``diff_bill.assign_moves(...)`` inside an oracle would have passed while defeating the
+    oracle's whole purpose.
+    """
+    bare = "def legacy_thing(x):\n    return settle_correspondences(x)\n"
+    assert migrated_names_called_in(bare) == {"legacy_thing": {"settle_correspondences"}}
+
+    qualified = "def legacy_thing(x):\n    return diff_bill.apply_similarity_assignment_rule(x)\n"
+    assert migrated_names_called_in(qualified) == {"legacy_thing": {"apply_similarity_assignment_rule"}}
+
+    innocent = "def legacy_thing(x):\n    return diff_text(x.a, x.b)\n"
+    assert migrated_names_called_in(innocent) == {}
 
 
 def test_classification_names_no_correspondence_cutoff():
