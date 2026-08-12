@@ -171,7 +171,7 @@ pythonpath = [".", "tools"]
 addopts = ["-n", "auto", "-rs"]
 markers = [
     "slow: tests that require real bill XML files (deselect with '-m not slow')",
-    "browser: end-to-end tests that drive a real browser via Playwright (run with '-m browser'; need 'playwright install chromium')",
+    "browser: end-to-end tests that drive a real browser via Playwright (run with '-m browser'; need 'playwright install chromium'; pass '--run-browser' to fail closed on a launch failure, which CI's browser step does)",
     "network: tests that fetch from a live external service (skipped unless '--run-network'; also deselectable with '-m not network')",
 ]
 
