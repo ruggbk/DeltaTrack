@@ -4670,7 +4670,7 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 
 ```json
 {"id": "A41", "class": "SUBSTANTIVE",
- "commits": ["34f3e48", "165cd31", "f5c8091", "75a6a0c", "a1dcd9e", "d90a84e"],
+ "commits": ["34f3e48", "165cd31", "f5c8091", "75a6a0c", "a1dcd9e", "d90a84e", "7527924"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
@@ -5010,9 +5010,47 @@ relationship between the flag and the list as a whole — a concordant region ca
 check can fire first. #618's independent recomputation of anchor-set discordance from the serialized
 H/X evidence is **unchanged** and predates this.
 
+### A41.2.3 — the scorer no longer needs a PDF renderer to be imported. **Not a rule change**
+
+The fourth item from the same parallel-implementation review, and the only one not already
+subsumed. **No metric, denominator, ruling, schema, population or boundary moves; the x27 evidence
+diff is exactly this control and no reported figure changes.**
+
+`score_metrics` imported `build_oracle` at module scope, and `build_oracle` imports `pymupdf` at
+module scope because rendering the adjudication stimuli is part of what **it** owns. A38 exists so
+the scorer consumes committed JSON and nothing else — and that held for the **data** path while
+being false at the **import line**: importing the scorer re-acquired the very renderer dependency
+A38 had removed, and the module could not be imported at all in a renderer-free environment.
+
+`build_oracle` is now resolved on first use (`_bo()`). **The delegation is unchanged and that is the
+point**: the A38.7 join, the A38.7 adjudication encoding and the A36.4 routing are still *called*,
+never restated locally, so a derivation that genuinely needs them still requires the renderer and
+still fails loudly without it. Removing the dependency by copying a frozen rule would have been the
+defect, not the fix — two copies of a rule are two rules. `FROZEN_CONTROL_ROUTES` became
+`frozen_control_routes()` for the same reason: evaluating it at module scope is exactly what would
+pull the renderer back into the import graph, and it is still derived from `build_oracle`'s own
+constants so the two cannot drift.
+
+**The control is executable, not a source grep.** A grep reads the import line an author wrote
+rather than the graph the interpreter walks, and would keep passing if some other frozen dependency
+acquired a renderer later. A child interpreter makes `pymupdf`/`fitz` genuinely unimportable and is
+asked what happens. Three of the four checks exist to stop it passing for the wrong reason: the
+blocker is asserted **live** (without which an interpreter that merely lacks a renderer is
+indistinguishable from a scorer that needs none); JSON-only scoring must still **compute** there
+(A27.5's Clopper–Pearson bound reproducing §8.1's own 0.1926), so the property is not a cosmetic
+import that reaches no working function; and a `build_oracle`-owned derivation must still fail under
+the blocker, which is what proves the rule was not copied. The fourth records that the control is
+**decisive only while `build_oracle` imports the renderer eagerly**, so it is re-pointed rather than
+silently trusted if that ever changes.
+
+Falsified by restoring the eager import: **187/190, the three renderer checks RED on named checks
+with no crash**, `blocker_live` still true — so the red is attributable to the scorer rather than to
+a broken blocker — and the decisiveness check still green. Restored, **190/190**, evidence
+byte-identical to the committed artifact.
+
 ### A41.3 — the controls, and that each can go RED
 
-`x27_score_metrics.py`, **187/187**, on SYNTHETIC + DEVELOPMENT material only. It covers all
+`x27_score_metrics.py`, **190/190**, on SYNTHETIC + DEVELOPMENT material only. It covers all
 **eleven** current §5 control rows (the row list is enumerated in the evidence file and a final
 check fails if any row has no executable test), the twelve explicit negatives, the false-green
 attacks, and the refusals.
@@ -5092,7 +5130,7 @@ cross-engine writers use, and a control proves it refuses today and would write 
 
 ### Realized
 
-`x27` **187/187**, **54/54** injected faults caught — each failing a NAMED control rather than
+`x27` **190/190**, **55/55** injected faults caught — each failing a NAMED control rather than
 crashing — `contamination.json` byte-identical.
 
 **Round 3 added a fourth class of control defect worth recording: a control that detects a fault
