@@ -33,6 +33,7 @@ import hashlib
 import inspect
 import json
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -3191,6 +3192,86 @@ def part_reproducibility(tmp: Path) -> dict:
     return {"payload_sha256": hashlib.sha256(json.dumps(first, sort_keys=True, default=str).encode()).hexdigest()}
 
 
+#: Run in a CHILD interpreter by `_renderer_free_probe`. It blocks the PDF renderer at the import
+#: system rather than relying on an environment that happens to lack one: the x27 interpreter DOES
+#: carry `pymupdf` (this module imports it), so without the blocker the property would be tested
+#: against a renderer that is present, and would pass for the wrong reason.
+RENDERER_FREE_CHILD = '''
+import json
+import sys
+
+BLOCKED = {"pymupdf", "fitz"}
+
+
+class _RendererBlocker:
+    """Make the PDF renderer genuinely unimportable, so no installed copy can answer instead."""
+
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in BLOCKED:
+            raise ModuleNotFoundError("No module named %r" % name)
+        return None
+
+
+for _loaded in [m for m in sys.modules if m.split(".")[0] in BLOCKED]:
+    del sys.modules[_loaded]
+sys.meta_path.insert(0, _RendererBlocker())
+sys.path.insert(0, sys.argv[1])
+
+out = {}
+
+# (a) Is the blocker actually blocking? Without this the whole probe passes vacuously -- an
+#     interpreter with no renderer installed looks identical to a scorer that needs none.
+try:
+    import build_oracle  # noqa: F401
+
+    out["blocker_live"] = False
+except ModuleNotFoundError as exc:
+    out["blocker_live"] = "pymupdf" in str(exc)
+
+# (b) The property under test: the scorer imports anyway.
+try:
+    import score_metrics as SM
+
+    out["scorer_imports"] = True
+except BaseException as exc:
+    out["scorer_imports"] = False
+    out["scorer_import_error"] = "%s: %s" % (type(exc).__name__, exc)
+
+if out["scorer_imports"]:
+    # (c) It does not merely import: JSON-only scoring still WORKS. A27.5 assigns the general
+    #     Clopper-Pearson bound to the scorer itself, so it depends on no oracle helper.
+    out["section8_bound"] = round(SM.clopper_pearson_upper(0, 14), 4)
+    # (d) ...and the frozen owners are still reached rather than locally restated. A
+    #     `build_oracle`-owned derivation must still route into `build_oracle`, and so must still
+    #     fail loudly when the renderer is genuinely absent. Silence here would mean the
+    #     dependency was removed by copying a frozen rule.
+    try:
+        SM.frozen_control_routes()
+        out["bo_owned_still_delegates"] = False
+    except ModuleNotFoundError as exc:
+        out["bo_owned_still_delegates"] = "pymupdf" in str(exc)
+
+print(json.dumps(out))
+'''
+
+
+def _renderer_free_probe(tmp: Path) -> dict:
+    """Import and exercise the scorer in a child interpreter that cannot import a PDF renderer."""
+    script = tmp / "renderer_free_child.py"
+    script.write_text(RENDERER_FREE_CHILD)
+    proc = subprocess.run(
+        [sys.executable, str(script), str(HERE.parent)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        # Returned rather than raised: a crash cannot distinguish "the rule broke" from "the
+        # probe has a bug", so the failure has to land on a named check.
+        return {"child_failed": (proc.stderr or "<no stderr>").strip()[-800:]}
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
 def part_boundary(tmp: Path) -> dict:
     print("\n== the execution boundary, and what this module may not touch ==")
     payload = {"schema": SM.SCHEMA}
@@ -3257,19 +3338,51 @@ def part_boundary(tmp: Path) -> dict:
         "the scorer can run an architecture, re-run anchor recognition, or discover files on "
         "disk -- and the contamination evidence is exactly what repo discovery would rewrite",
     )
-    # Stated rather than implied: the frozen A38.7 join helper lives in `build_oracle`, which
-    # imports a renderer at module scope. The scorer calls no renderer, and `part_reproducibility`
-    # proves it needs no PDF -- but claiming a renderer-free import graph would be false.
-    transitive = {
-        "build_oracle imports pymupdf at module scope": "import pymupdf"
-        in (HERE.parent / "build_oracle.py").read_text()
-    }
+    # --- the renderer dependency, asked of the INTERPRETER rather than of the source.
+    #
+    # A38 exists so the scorer consumes committed JSON and nothing else. That was true of the DATA
+    # path and false of the IMPORT line: `score_metrics` imported `build_oracle` at module scope,
+    # and `build_oracle` imports `pymupdf` at module scope because rendering adjudication stimuli
+    # is part of what IT owns -- so merely importing the scorer required a PDF renderer, which is
+    # the dependency A38 was written to remove. The import is now deferred to the call sites that
+    # need the frozen A38.7 helpers.
+    #
+    # A source grep is not evidence for this. It reads the import line an author wrote, not the
+    # graph the interpreter walks, and it would go on passing if any OTHER frozen dependency
+    # acquired a renderer tomorrow. So the control makes the renderer genuinely unimportable in a
+    # child interpreter and asks that interpreter what happens.
+    renderer_free = _renderer_free_probe(tmp)
     check(
-        "the ONE renderer dependency is transitive through the frozen join owner, and is stated",
-        {"build_oracle imports pymupdf at module scope": True},
-        transitive,
-        "the stated provenance of the renderer dependency is wrong, so a reader would take the "
-        "scorer's import graph to be cleaner than it is",
+        "the scorer IMPORTS with the PDF renderer made unimportable -- and the blocker is live",
+        {"blocker_live": True, "scorer_imports": True},
+        {k: renderer_free.get(k) for k in ("blocker_live", "scorer_imports")},
+        "importing `score_metrics` re-acquires a PDF renderer, so A38's pure-consumer property "
+        "holds for the data path but not for the import graph -- or `blocker_live` is False, in "
+        "which case the renderer was importable after all and this control proves nothing",
+    )
+    check(
+        "...and JSON-only scoring still COMPUTES there: A27.5's own bound, section 8.1's 0.1926",
+        0.1926,
+        renderer_free.get("section8_bound"),
+        "the scorer imports without a renderer but cannot actually score without one, so the "
+        "property is cosmetic -- an import that reaches no working function is not a consumer",
+    )
+    check(
+        "...and the frozen `build_oracle` owners are still DELEGATED to, never locally restated",
+        True,
+        renderer_free.get("bo_owned_still_delegates"),
+        "a `build_oracle`-owned derivation now answers from a local copy: the dependency was "
+        "removed by restating a frozen rule, and two copies of a rule are two rules",
+    )
+    # The precondition that makes the three checks above discriminating. If `build_oracle` ever
+    # stops importing a renderer eagerly, they all pass no matter what the scorer does -- so the
+    # control must be re-pointed at that moment, not quietly trusted.
+    check(
+        "the control is DECISIVE: `build_oracle` still imports the renderer at module scope",
+        True,
+        "import pymupdf" in (HERE.parent / "build_oracle.py").read_text(),
+        "`build_oracle` no longer imports a renderer eagerly, so the renderer-free checks above "
+        "would pass however `score_metrics` imported it -- they must be re-pointed, not trusted",
     )
     existing = {
         name: (EV / "results" / name).exists()
@@ -3294,7 +3407,13 @@ def part_boundary(tmp: Path) -> dict:
     return {
         "scorer_imports": sorted(imported),
         "forbidden_calls": forbidden_calls,
-        "renderer_dependency": "transitive, through build_oracle's frozen A38.7 join helper",
+        "renderer_dependency": (
+            "NONE at import: `build_oracle` (which imports pymupdf at module scope) is imported "
+            "lazily by `score_metrics._bo`, so the scorer imports and scores JSON-only quantities "
+            "with the renderer unimportable. The frozen A38.7/A36.4 helpers are still called, so a "
+            "derivation that genuinely needs them still requires the renderer"
+        ),
+        "renderer_free_child": renderer_free,
         "canonical_artifacts_present": existing,
     }
 

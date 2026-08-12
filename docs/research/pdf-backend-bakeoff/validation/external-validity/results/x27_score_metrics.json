@@ -627,7 +627,13 @@
     "extract_anchors": false,
     "filesystem_discovery": false
    },
-   "renderer_dependency": "transitive, through build_oracle's frozen A38.7 join helper",
+   "renderer_dependency": "NONE at import: `build_oracle` (which imports pymupdf at module scope) is imported lazily by `score_metrics._bo`, so the scorer imports and scores JSON-only quantities with the renderer unimportable. The frozen A38.7/A36.4 helpers are still called, so a derivation that genuinely needs them still requires the renderer",
+   "renderer_free_child": {
+    "blocker_live": true,
+    "scorer_imports": true,
+    "section8_bound": 0.1926,
+    "bo_owned_still_delegates": true
+   },
    "canonical_artifacts_present": {
     "frames.json": false,
     "oracle_key.json": false,
@@ -3467,15 +3473,41 @@
    "row": ""
   },
   {
-   "test": "the ONE renderer dependency is transitive through the frozen join owner, and is stated",
+   "test": "the scorer IMPORTS with the PDF renderer made unimportable -- and the blocker is live",
    "expected": {
-    "build_oracle imports pymupdf at module scope": true
+    "blocker_live": true,
+    "scorer_imports": true
    },
    "observed": {
-    "build_oracle imports pymupdf at module scope": true
+    "blocker_live": true,
+    "scorer_imports": true
    },
    "pass": true,
-   "fails_when": "the stated provenance of the renderer dependency is wrong, so a reader would take the scorer's import graph to be cleaner than it is",
+   "fails_when": "importing `score_metrics` re-acquires a PDF renderer, so A38's pure-consumer property holds for the data path but not for the import graph -- or `blocker_live` is False, in which case the renderer was importable after all and this control proves nothing",
+   "row": ""
+  },
+  {
+   "test": "...and JSON-only scoring still COMPUTES there: A27.5's own bound, section 8.1's 0.1926",
+   "expected": 0.1926,
+   "observed": 0.1926,
+   "pass": true,
+   "fails_when": "the scorer imports without a renderer but cannot actually score without one, so the property is cosmetic -- an import that reaches no working function is not a consumer",
+   "row": ""
+  },
+  {
+   "test": "...and the frozen `build_oracle` owners are still DELEGATED to, never locally restated",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "a `build_oracle`-owned derivation now answers from a local copy: the dependency was removed by restating a frozen rule, and two copies of a rule are two rules",
+   "row": ""
+  },
+  {
+   "test": "the control is DECISIVE: `build_oracle` still imports the renderer at module scope",
+   "expected": true,
+   "observed": true,
+   "pass": true,
+   "fails_when": "`build_oracle` no longer imports a renderer eagerly, so the renderer-free checks above would pass however `score_metrics` imported it -- they must be re-pointed, not trusted",
    "row": ""
   },
   {

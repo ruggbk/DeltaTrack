@@ -31,6 +31,11 @@ this module CALLS it rather than restating it, because two copies of a rule are 
     answer routing          `build_oracle.PURPOSE_ROUTE`                        (A36.4)
     cross-engine gate       `cross_engine_control.json`, produced by `X09.gate` (A39.2)
 
+`build_oracle` is imported LAZILY (see `_bo`) because it imports `pymupdf` at module scope.
+Consuming committed JSON must not require a PDF renderer merely to import this module; the
+delegation itself is unchanged, and `x27` proves the property in a child interpreter where the
+renderer cannot be imported at all.
+
 The only quantity this module implements from scratch is the general one-sided
 Clopper-Pearson upper bound, which A27.5 assigns to it explicitly and which
 `methodology_contracts` deliberately does not carry.
@@ -58,7 +63,6 @@ sys.path.insert(0, str(BAKE / "probes"))
 sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 import build_frames as BF  # noqa: E402
-import build_oracle as BO  # noqa: E402
 import m3_boundaries as M3  # noqa: E402
 import methodology_contracts as MC  # noqa: E402
 import neutral_identity as NI  # noqa: E402
@@ -66,6 +70,33 @@ from xml_sources import normalize as m2_normalize  # noqa: E402
 
 SCHEMA = "metrics/1"
 ARMS = ("H", "X")
+
+#: `build_oracle`, resolved on first use. NOT imported at module scope -- see `_bo`.
+_BO = None
+
+
+def _bo():
+    """The frozen oracle-side owners (A38.7 join, A38.7 encoding, A36.4 routing), LAZILY.
+
+    `build_oracle` imports `pymupdf` at module scope, because rendering the adjudication stimuli
+    is part of what it owns. The scorer renders nothing: A38 exists precisely so every fact it
+    needs is reachable from committed JSON. Importing those helpers eagerly would therefore make
+    a PDF renderer a hard requirement of *importing the scorer*, re-acquiring at the import line
+    the dependency A38 removed from the data path -- and it is why the scorer could not be
+    imported at all in a renderer-free environment.
+
+    Deferring the import to the call sites that genuinely need the frozen helpers keeps the
+    delegation intact. This is deliberately NOT a local copy of those rules: two copies of a rule
+    are two rules, so a caller that needs the A38.7 join still gets `build_oracle`'s, and still
+    fails loudly if the renderer is genuinely absent when that join is required.
+    """
+    global _BO
+    if _BO is None:
+        import build_oracle
+
+        _BO = build_oracle
+    return _BO
+
 
 # ---------------------------------------------------------------------- refusal reasons
 
@@ -242,7 +273,7 @@ def _key_form(key):
 
 def _readable(value) -> bool:
     """Is this adjudicated field an answer, or the oracle's own UNREADABLE?"""
-    return value is not None and value != BO.UNREADABLE
+    return value is not None and value != _bo().UNREADABLE
 
 
 # ------------------------------------------------------------- input validation (refusals)
@@ -277,7 +308,7 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
     _require(inputs.oracle_key, ("stimuli",), "oracle key")
     # The adjudicated encoding has ONE owner (A38.7). Calling it rather than re-checking the
     # namespaces here means the scorer cannot accept an artifact `build_oracle` would refuse.
-    BO.validate_adjudicated(inputs.oracle_adjudicated, inputs.oracle_key)
+    _bo().validate_adjudicated(inputs.oracle_adjudicated, inputs.oracle_key)
 
     known_docs = set(seen)
     for bid, record in inputs.oracle_key["stimuli"].items():
@@ -633,7 +664,7 @@ def _adjudicated_occurrences(record: dict, answer: dict) -> list[dict]:
     """
     out = []
     for ordinal, heading in enumerate(answer.get("headings", [])):
-        resolved = BO.resolve_adjudicated_occurrence(record, heading)
+        resolved = _bo().resolve_adjudicated_occurrence(record, heading)
         out.append(
             {
                 "ordinal": ordinal,
@@ -675,10 +706,10 @@ def _parent_answer_kind(heading: dict, answer: dict, item: dict) -> str:
             {
                 "blind_id": answer.get("id"),
                 "ordinal": item["ordinal"],
-                "expected": ["<printed text>", "NONE", "OFF_REGION", BO.UNREADABLE],
+                "expected": ["<printed text>", "NONE", "OFF_REGION", _bo().UNREADABLE],
             },
         )
-    if parent == BO.UNREADABLE:
+    if parent == _bo().UNREADABLE:
         return "UNREADABLE"
     if parent == ORACLE_PARENT_OFF_REGION:
         return ORACLE_PARENT_OFF_REGION
@@ -771,7 +802,7 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
             counts["m4_excluded_unreadable"] += 1
         elif parent_kind == ORACLE_PARENT_OFF_REGION:
             counts["m4_excluded_off_region"] += 1
-        if heading.get("role") == BO.UNREADABLE:
+        if heading.get("role") == _bo().UNREADABLE:
             counts["m5_excluded_unreadable"] += 1
 
         for arm in ARMS:
@@ -799,7 +830,7 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
                 )
 
             role = heading.get("role")
-            if role == BO.UNREADABLE:
+            if role == _bo().UNREADABLE:
                 continue
             if role is None:
                 raise ScoreInputError(ROLE_MISSING, {"blind_id": answer.get("id"), "ordinal": item["ordinal"]})
@@ -853,7 +884,7 @@ def _heading_metrics_from_counts(counts: dict, r1: dict) -> dict:
         # Reported beside the rate, not folded into it: section 6's population is "in-region or
         # resolvable", and no frozen source defines a resolver for an off-region parent.
         "excluded_off_region": counts["m4_excluded_off_region"],
-        "parent_answers": f"printed text | {ORACLE_PARENT_NONE} | {ORACLE_PARENT_OFF_REGION} | {BO.UNREADABLE}",
+        "parent_answers": f"printed text | {ORACLE_PARENT_NONE} | {ORACLE_PARENT_OFF_REGION} | {_bo().UNREADABLE}",
     }
     metrics["M5"]["r1_role_gate"] = _r1_role_gate(r1)
     metrics["M5"]["licenses"] = "corroboration only -- section 6 forbids M5 deciding anything"
@@ -968,11 +999,11 @@ def _frame_routes(frames) -> tuple:
     Derived from `build_oracle`'s own constants rather than restated, so the two cannot drift.
     """
     routes = set()
-    if BO.C_FRAME in frames:
-        routes.add(BO.C_FRAME_ROUTE)
-    if BO.D_FRAME in frames:
-        routes.add(BO.D_FRAME_ROUTE)
-    return tuple(r for r in BO.ROUTE_ORDER if r in routes)
+    if _bo().C_FRAME in frames:
+        routes.add(_bo().C_FRAME_ROUTE)
+    if _bo().D_FRAME in frames:
+        routes.add(_bo().D_FRAME_ROUTE)
+    return tuple(r for r in _bo().ROUTE_ORDER if r in routes)
 
 
 def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bid: str) -> tuple:
@@ -1122,8 +1153,18 @@ CONTROL_KINDS = ("N-A", "N-B", "N-C")
 #: coherent key missing one N-A would otherwise report 7/7 PASS and satisfy a Rule 3 blocker on a
 #: population smaller than the one the protocol froze.
 FROZEN_CONTROL_POPULATION = {"N-A": 8, "N-B": 8, "N-C": 4}
-#: Every control takes BOTH result-bearing routes (A36.6), so a control cannot be scored on one.
-FROZEN_CONTROL_ROUTES = (BO.ROUTE_AI, BO.ROUTE_HUMAN)
+
+
+def frozen_control_routes() -> tuple[str, ...]:
+    """Every control takes BOTH result-bearing routes (A36.6), so a control cannot be scored on one.
+
+    Derived from `build_oracle`'s own constants rather than restated, so the two cannot drift.
+    A function rather than a module constant only because that derivation is now lazy: evaluating
+    it at module scope is exactly what would drag the renderer back into the import graph.
+    """
+    return (_bo().ROUTE_AI, _bo().ROUTE_HUMAN)
+
+
 CONTROL_POPULATION_INCOMPLETE = "CONTROL_POPULATION_INCOMPLETE"
 CONTROL_ROUTE_SET_MISMATCH = "CONTROL_ROUTE_SET_MISMATCH"
 CONTROL_IDENTITY_DUPLICATED = "CONTROL_IDENTITY_DUPLICATED"
@@ -1166,7 +1207,7 @@ def _control_verdict(kind: str, expected, answer: dict) -> dict:
         return {"pass": True, "reason": None, "observed_texts": texts, "expected": [target]}
     if occurrences > 1:
         reason = CONTROL_TARGET_DUPLICATED
-    elif BO.UNREADABLE in texts:
+    elif _bo().UNREADABLE in texts:
         # Reported as its own reason rather than folded into "absent": an illegible stimulus is a
         # different finding from an adjudicator who read it and transcribed something else.
         reason = CONTROL_TARGET_UNREADABLE
@@ -1200,14 +1241,14 @@ def _validate_control_population(controls: dict) -> None:
             raise ScoreInputError(CONTROL_TRUTH_MALFORMED, {"blind_id": bid, "control_kind": kind})
         # BOTH result-bearing routes, per A36.6. A control declaring one route could otherwise be
         # scored on the route that passes while the route whose labels are consumed goes unchecked.
-        if tuple(record.get("adjudication_routes") or ()) != FROZEN_CONTROL_ROUTES:
+        if tuple(record.get("adjudication_routes") or ()) != frozen_control_routes():
             raise ScoreInputError(
                 CONTROL_ROUTE_SET_MISMATCH,
                 {
                     "blind_id": bid,
                     "control_kind": kind,
                     "declared": record.get("adjudication_routes"),
-                    "required": list(FROZEN_CONTROL_ROUTES),
+                    "required": list(frozen_control_routes()),
                 },
             )
 
@@ -1255,7 +1296,7 @@ def control_verdicts(key: dict, adjudicated: dict) -> dict:
     per_control = []
     for bid, record in controls.items():
         kind = record["control_kind"]
-        for route in FROZEN_CONTROL_ROUTES:
+        for route in frozen_control_routes():
             answer = adjudicated.get(route, {}).get(bid)
             if answer is None:
                 raise ScoreInputError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
@@ -1299,7 +1340,7 @@ def control_verdicts(key: dict, adjudicated: dict) -> dict:
         # to check": the second reports NOT_EVALUABLE everywhere and satisfies no Rule 3 blocker.
         "population_present": bool(controls),
         "frozen_population": dict(FROZEN_CONTROL_POPULATION),
-        "required_routes": list(FROZEN_CONTROL_ROUTES),
+        "required_routes": list(frozen_control_routes()),
         "comparison": "exact raw string equality; NO normalisation (R8)",
         "aggregation": "a kind PASSES only if every fixture passes on every required route; no tolerance",
         "ruled_by": "A41.2 R8",
@@ -1339,7 +1380,7 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
     """
     per_document: dict[str, dict] = {}
     excluded = {"control": 0, "r1_repeat": 0}
-    frame_purposes = ((BO.C_FRAME, BO.PURPOSE_C_METRICS), (BO.D_FRAME, BO.PURPOSE_D_DECISION))
+    frame_purposes = ((_bo().C_FRAME, _bo().PURPOSE_C_METRICS), (_bo().D_FRAME, _bo().PURPOSE_D_DECISION))
     # R1 is computed from the same committed artifacts, not supplied. M5's section 6 gate reads
     # this and nothing else, so no caller can hand the gate a verdict.
     r1 = r1_reliability(inputs.oracle_key, inputs.oracle_adjudicated)
@@ -1354,7 +1395,7 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
         for frame_name, purpose in frame_purposes:
             if frame_name not in record["frames"]:
                 continue
-            route = BO.PURPOSE_ROUTE[purpose]
+            route = _bo().PURPOSE_ROUTE[purpose]
             answer = inputs.oracle_adjudicated.get(route, {}).get(bid)
             if answer is None:
                 raise ScoreInputError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
@@ -1378,8 +1419,8 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
             if counts["n_stimuli"]
         },
         "excluded_stimuli": excluded,
-        "routing": {purpose: BO.PURPOSE_ROUTE[purpose] for _f, purpose in frame_purposes},
-        "estimand_purposes": list(BO.ESTIMAND_PURPOSES),
+        "routing": {purpose: _bo().PURPOSE_ROUTE[purpose] for _f, purpose in frame_purposes},
+        "estimand_purposes": list(_bo().ESTIMAND_PURPOSES),
         "pooling_rule": "C and D are separate estimands (A36.3); they are never summed together",
         "r1": r1,
     }
@@ -1781,7 +1822,7 @@ def write_metrics(payload: dict, out_path: Path | None = None) -> Path:
     import json
 
     out_path = Path(out_path) if out_path else (EV / "results" / "metrics.json")
-    BO.assert_write_permitted(out_path)
+    _bo().assert_write_permitted(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=1, sort_keys=True, default=str))
     return out_path
