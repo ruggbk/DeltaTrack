@@ -83,6 +83,14 @@ STIMULUS_DOCUMENT_NOT_IN_FRAMES = "STIMULUS_DOCUMENT_NOT_IN_FRAMES"
 ADJUDICATION_ROUTE_MISSING = "ADJUDICATION_ROUTE_MISSING"
 CONTROL_STIMULUS_IN_ESTIMAND = "CONTROL_STIMULUS_IN_ESTIMAND"
 CROSS_ENGINE_DOCUMENT_MISSING = "CROSS_ENGINE_DOCUMENT_MISSING"
+#: I13's consequence counts DOCUMENTS, so the cross-engine artifact's document set is a
+#: denominator and must equal the scored set exactly -- see `validate_inputs`.
+CROSS_ENGINE_EXTRA_DOCUMENT = "CROSS_ENGINE_EXTRA_DOCUMENT"
+CROSS_ENGINE_DUPLICATE_DOCUMENT = "CROSS_ENGINE_DUPLICATE_DOCUMENT"
+#: An R1 repeat whose primary is not in the key. The repeat would then have nothing to be a
+#: repeat OF, and silently skipping it would shrink the reliability population -- the population
+#: whose whole job is to be large enough to detect an unreliable adjudicator.
+R1_PRIMARY_MISSING = "R1_PRIMARY_MISSING"
 S1_ARTIFACT_MISSING = "S1_ARTIFACT_MISSING"
 STRATUM_MISSING = "STRATUM_MISSING"
 #: A null `role` is not the oracle's UNREADABLE. The codebook is a CLOSED vocabulary with
@@ -90,6 +98,20 @@ STRATUM_MISSING = "STRATUM_MISSING"
 #: missing answer rather than a representable one, and mapping it to UNSCORABLE would shrink the
 #: M5 denominator -- which reads as a cleaner result.
 ROLE_MISSING = "ROLE_MISSING"
+#: Same reasoning for `parent`. The frozen encoding (section 5.3, and `adjudicator_prompt.md`
+#: section 3) gives the adjudicator three literals and nothing else: the printed parent text,
+#: `NONE`, or `OFF_REGION`, plus `UNREADABLE` for an unresolvable field. A JSON null is none of
+#: them, so it is a missing answer -- and reading it as "no parent" is exactly the false green
+#: this refusal closes.
+PARENT_MISSING = "PARENT_MISSING"
+
+#: The adjudicated `parent` sentinels, frozen by PRE-REGISTRATION section 5.3 ("each heading's
+#: parent heading text as printed, or `NONE`, or `OFF_REGION`") and asked for in those words by
+#: `adjudicator_prompt.md`. They are LITERAL ANSWERS, never parent text: comparing `"NONE"` as a
+#: string would score a root heading wrong, and comparing `"OFF_REGION"` as a string would charge
+#: an architecture for the ORACLE's field of view.
+ORACLE_PARENT_NONE = "NONE"
+ORACLE_PARENT_OFF_REGION = "OFF_REGION"
 
 #: Statuses a metric entry can carry instead of a rate. I11 -- a zero content-bearing
 #: denominator is VACUOUS and is never printed as agreement.
@@ -111,6 +133,17 @@ KNOWN_LINE_STATES = frozenset({"SAME", "TEXT_DIFFERS", "H_ABSENT", "X_ABSENT", "
 #: length is recorded beside the count as a diagnostic so the stricter reading stays recoverable
 #: from the artifact without a second metric existing.
 M7_MIN_SINGLE_CHAR_TOKENS = 3
+
+#: Section 5.6's two R1 reliability thresholds, frozen verbatim. Below them, section 5.6 voids
+#: the text metrics / the role metric, and Rule 3 (A27.6) owns the decision consequence.
+R1_TEXT_THRESHOLD = 0.90
+R1_ROLE_THRESHOLD = 0.80
+#: The four denominators a reader could reasonably take from "heading-text agreement", none of
+#: which the frozen sources choose. `r1_reliability` computes ALL of them and refuses to collapse
+#: them when they straddle a threshold -- see its docstring and A41.2 R6.
+R1_DENOMINATOR_RULES = ("union", "intersection", "primary", "max")
+R1_AMBIGUOUS = "AMBIGUOUS_PENDING_A41_RULING"
+R1_NOT_EVALUABLE = "NOT_EVALUABLE_NO_R1_PAIRS"
 
 #: A27.5 / section 8.3. One-sided, 95 %.
 SECTION8_ALPHA = 0.05
@@ -143,9 +176,10 @@ class ScoreInputs:
     `document_strata` maps document id -> stratum label, read from the committed membership by
     the caller. It feeds section 4.5's "strata filled" count and nothing else.
 
-    `r1_role_agreement` is the section 5.6 R1 role reliability, when it has been established.
-    `None` means NOT SUPPLIED, and M5 then carries that status explicitly rather than being
-    reported as though its section 6 gate had been checked.
+    THERE IS NO `r1_role_agreement` PARAMETER, and its absence is deliberate. A caller-supplied
+    scalar cannot be evidence for a result-bearing reliability gate: it can assert PASS with
+    nothing behind it, and nothing downstream could tell. R1 is computed here from the committed
+    key and the committed adjudications instead -- see `r1_reliability`.
     """
 
     frames: tuple[dict, ...]
@@ -154,7 +188,6 @@ class ScoreInputs:
     cross_engine: dict
     s1: dict
     document_strata: dict = field(default_factory=dict)
-    r1_role_agreement: float | None = None
 
 
 # ------------------------------------------------------------------------- small helpers
@@ -253,13 +286,33 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
     if not isinstance(inputs.s1, dict) or "fires" not in inputs.s1:
         raise ScoreInputError(S1_ARTIFACT_MISSING, {"got": sorted(inputs.s1) if isinstance(inputs.s1, dict) else None})
     _require(inputs.cross_engine, ("per_document",), "cross-engine control")
-    qualified = {row["document"] for row in inputs.cross_engine["per_document"]}
+    # EXACT SET EQUALITY, not containment, and it is checked HERE -- before `qualification` runs.
+    #
+    # I13's consequence is a COUNT over documents ("failure on more than a third of sampled
+    # documents applies the qualification to BOTH headlines"), so the artifact's document set is a
+    # DENOMINATOR. Containment alone lets an extra row move that denominator: one extra passing
+    # row dilutes the fraction and can withhold a qualification that was earned, one extra failing
+    # row can manufacture one, and a duplicated document with conflicting verdicts makes the
+    # result depend on row order. None of those is detectable downstream, because the qualification
+    # is reported as a property of the run rather than of a population a reader can re-derive.
+    rows = inputs.cross_engine["per_document"]
+    documents = [row["document"] for row in rows]
+    duplicates = sorted({d for d in documents if documents.count(d) > 1})
+    if duplicates:
+        raise ScoreInputError(CROSS_ENGINE_DUPLICATE_DOCUMENT, {"documents": duplicates[:4], "n_rows": len(rows)})
+    extra = sorted(set(documents) - known_docs)
+    if extra:
+        raise ScoreInputError(CROSS_ENGINE_EXTRA_DOCUMENT, {"documents": extra[:4], "scored": sorted(known_docs)})
     for doc in sorted(known_docs):
-        if doc not in qualified:
+        if doc not in set(documents):
             raise ScoreInputError(CROSS_ENGINE_DOCUMENT_MISSING, {"document": doc})
         if inputs.document_strata and doc not in inputs.document_strata:
             raise ScoreInputError(STRATUM_MISSING, {"document": doc})
-    return {"n_documents": len(known_docs), "documents": sorted(known_docs)}
+    return {
+        "n_documents": len(known_docs),
+        "documents": sorted(known_docs),
+        "cross_engine_population": "exact set equality with the scored frames; no extras, no duplicates",
+    }
 
 
 def _validate_frame_internals(frame: dict) -> None:
@@ -553,6 +606,47 @@ def _adjudicated_occurrences(record: dict, answer: dict) -> list[dict]:
     return out
 
 
+def _parent_answer_kind(heading: dict, answer: dict, item: dict) -> str:
+    """Which of the FOUR frozen `parent` answers this is: NONE / OFF_REGION / UNREADABLE / TEXT.
+
+    WHY THIS EXISTS, and what it repairs. The adjudicator writes literal `NONE` and `OFF_REGION`
+    (PRE-REGISTRATION section 5.3; `adjudicator_prompt.md` section 3). Comparing those as parent
+    TEXT is wrong in both directions: `"NONE"` against an emitted `None` scores a correct root
+    heading as WRONG, and `"OFF_REGION"` can never equal any emitted parent, so every off-region
+    answer would count against an architecture for a limit of the ORACLE's field of view. Reading
+    a JSON null as "no parent" hid this, because a fixture could satisfy M4 without ever producing
+    the representation the adjudicator is actually asked for.
+
+    OFF_REGION LEAVES THE POPULATION, and that is a reading, not an omission. Section 6 fires M4
+    on "matched headings whose parent is in-region **or resolvable**", and **no frozen source
+    defines a resolver**: `OFF_REGION` appears exactly twice in the whole study -- section 5.3 and
+    the prompt -- and neither `build_oracle` nor `methodology_contracts` carries one. Inventing a
+    resolver here would have to recover the parent from an architecture's own document-scope
+    hierarchy, which is the very quantity M4 measures. So it is excluded and COUNTED, never
+    silently scored and never charged to an arm.
+
+    A null REFUSES. It is not one of the four answers, and the frozen encoding has a spelling for
+    every case the adjudicator can face.
+    """
+    parent = heading.get("parent")
+    if parent is None:
+        raise ScoreInputError(
+            PARENT_MISSING,
+            {
+                "blind_id": answer.get("id"),
+                "ordinal": item["ordinal"],
+                "expected": ["<printed text>", "NONE", "OFF_REGION", BO.UNREADABLE],
+            },
+        )
+    if parent == BO.UNREADABLE:
+        return "UNREADABLE"
+    if parent == ORACLE_PARENT_OFF_REGION:
+        return ORACLE_PARENT_OFF_REGION
+    if parent == ORACLE_PARENT_NONE:
+        return ORACLE_PARENT_NONE
+    return "TEXT"
+
+
 def _blank_heading_counts() -> dict:
     return {
         "n_adjudicated": 0,
@@ -570,6 +664,8 @@ def _blank_heading_counts() -> dict:
         "m4_correct": {arm: 0 for arm in ARMS},
         "m4_scored": {arm: 0 for arm in ARMS},
         "m4_excluded_unreadable": 0,
+        # A parent the adjudicator could read but could not SEE. Reported, never scored.
+        "m4_excluded_off_region": 0,
         "m5_agree": {arm: 0 for arm in ARMS},
         "m5_scored": {arm: 0 for arm in ARMS},
         "m5_excluded_unscorable": {arm: 0 for arm in ARMS},
@@ -628,10 +724,13 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
                 counts["m3_boundary"][arm]["TEXT_ERROR"] += score.text_error
 
         # ---- M2 / M4 / M5, on matched headings only
+        parent_kind = _parent_answer_kind(heading, answer, item)
         if not _readable(oracle_text):
             counts["m2_excluded_unreadable"] += 1
-        if not _readable(heading.get("parent")) and heading.get("parent") is not None:
+        if parent_kind == "UNREADABLE":
             counts["m4_excluded_unreadable"] += 1
+        elif parent_kind == ORACLE_PARENT_OFF_REGION:
+            counts["m4_excluded_off_region"] += 1
         if heading.get("role") == BO.UNREADABLE:
             counts["m5_excluded_unreadable"] += 1
 
@@ -645,14 +744,19 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
 
             # M4 -- the IMMEDIATE parent only. Full ancestry would score a different quantity
             # and would hide a one-level hierarchy error inside a correct grandparent.
-            parent = heading.get("parent")
-            if parent != BO.UNREADABLE:
-                emitted_parent = occurrence["immediate_parent"]
+            #
+            # The adjudicated field is one of FOUR answers, never a free string (section 5.3):
+            # printed parent text, `NONE`, `OFF_REGION`, or `UNREADABLE`. Only the first two are
+            # in M4's content-bearing population -- see `_parent_answer_kind`.
+            emitted_parent = occurrence["immediate_parent"]
+            if parent_kind == ORACLE_PARENT_NONE:
                 counts["m4_scored"][arm] += 1
-                if parent is None or emitted_parent is None:
-                    counts["m4_correct"][arm] += int(parent is None and emitted_parent is None)
-                else:
-                    counts["m4_correct"][arm] += int(m2_normalize(parent) == m2_normalize(emitted_parent))
+                counts["m4_correct"][arm] += int(emitted_parent is None)
+            elif parent_kind == "TEXT":
+                counts["m4_scored"][arm] += 1
+                counts["m4_correct"][arm] += int(
+                    emitted_parent is not None and m2_normalize(heading["parent"]) == m2_normalize(emitted_parent)
+                )
 
             role = heading.get("role")
             if role == BO.UNREADABLE:
@@ -667,7 +771,7 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
                 counts["m5_agree"][arm] += int(agreement)
 
 
-def _heading_metrics_from_counts(counts: dict, r1_role_agreement: float | None) -> dict:
+def _heading_metrics_from_counts(counts: dict, r1: dict) -> dict:
     """Turn the raw heading counts into the reported metric entries."""
     resolvable = counts["n_adjudicated"] - counts["n_adjudicated_unresolvable"]
     metrics = {
@@ -702,27 +806,193 @@ def _heading_metrics_from_counts(counts: dict, r1_role_agreement: float | None) 
             for arm in ARMS
         },
     }
-    metrics["M4"]["scope"] = "immediate parent only (A38.4 penultimate breadcrumb element)"
-    metrics["M5"]["r1_role_gate"] = _r1_role_gate(r1_role_agreement)
+    metrics["M4"] = {
+        **metrics["M4"],
+        "scope": "immediate parent only (A38.4 penultimate breadcrumb element)",
+        "excluded_unreadable": counts["m4_excluded_unreadable"],
+        # Reported beside the rate, not folded into it: section 6's population is "in-region or
+        # resolvable", and no frozen source defines a resolver for an off-region parent.
+        "excluded_off_region": counts["m4_excluded_off_region"],
+        "parent_answers": f"printed text | {ORACLE_PARENT_NONE} | {ORACLE_PARENT_OFF_REGION} | {BO.UNREADABLE}",
+    }
+    metrics["M5"]["r1_role_gate"] = _r1_role_gate(r1)
     metrics["M5"]["licenses"] = "corroboration only -- section 6 forbids M5 deciding anything"
+    # Section 5.6's other consequence: below 0.90 the TEXT metrics are void. Reported beside M2
+    # and M3 rather than applied, because Rule 3 (A27.6) owns the consequence.
+    metrics["r1_text_gate"] = {
+        "status": r1["text"]["status"],
+        "threshold": R1_TEXT_THRESHOLD,
+        "observed_by_denominator_rule": r1["text"]["ratios"],
+        "voids_text_metrics_if_FAIL": ["M2", "M3"],
+        "owner": "Rule 3 gate vector (A27.6); this module reports the FACTS only",
+    }
     return metrics
 
 
-def _r1_role_gate(r1_role_agreement: float | None) -> dict:
-    """Section 5.6's R1 role gate, represented rather than assumed.
+def _r1_pair_facts(key: dict, adjudicated: dict, primary_bid: str, repeat_bid: str, route: str) -> dict:
+    """One (primary, repeat) answer pair on ONE route: the per-heading agreement facts.
 
-    NOT SUPPLIED is a state, not a pass. Reporting M5 as though its gate had been checked when
-    no R1 role agreement exists is precisely the "green because nothing measured it" failure.
+    PAIRING IS BY RESOLVED A30 OCCURRENCE KEY, and that is the least-invented option rather than a
+    free choice: A30.3 requires the repeat to resolve its OWN `start_x_px` independently, the A30
+    occurrence key is the study's only cross-answer heading identity, and A30.3 already speaks of
+    an `R1_start_identity_agreement` over repeated items -- which presupposes comparing the two
+    resolutions. Pairing by list position would instead assume the two enumerations are aligned,
+    which is exactly the reliability question R1 asks.
+
+    ROLE AGREEMENT USES THE FINE section 5.3 ROLE, not the M5 coarsening: A36.7 says "the
+    adjudicator continues to record the fine section 5.3 role. **M5 alone** coarsens it", so
+    coarsening here would make R1 agree wherever two different fine roles collapse to the same
+    M5 class -- a reliability measure that hides the disagreement it exists to find.
     """
-    if r1_role_agreement is None:
-        return {"status": "NOT_SUPPLIED", "threshold": 0.80, "m5_void": False, "owner": "Rule 3 gate vector (A27.6)"}
-    passes = r1_role_agreement >= 0.80
+    primary = {
+        a["occurrence_key"]: a["heading"]
+        for a in _adjudicated_occurrences(key["stimuli"][primary_bid], adjudicated[route][primary_bid])
+        if a["resolved"]
+    }
+    repeat = {
+        a["occurrence_key"]: a["heading"]
+        for a in _adjudicated_occurrences(key["stimuli"][repeat_bid], adjudicated[route][repeat_bid])
+        if a["resolved"]
+    }
+    shared = sorted(set(primary) & set(repeat), key=lambda k: MC.canonical(list(k)))
+    text_agree = sum(
+        1
+        for k in shared
+        if _readable(primary[k].get("text"))
+        and m2_normalize(primary[k]["text"]) == m2_normalize(repeat[k].get("text") or "")
+    )
+    role_agree = sum(1 for k in shared if primary[k].get("role") == repeat[k].get("role"))
     return {
-        "status": "PASS" if passes else "FAIL",
-        "observed": r1_role_agreement,
-        "threshold": 0.80,
-        "m5_void": not passes,
-        "owner": "Rule 3 gate vector (A27.6)",
+        "route": route,
+        "primary_blind_id": primary_bid,
+        "repeat_blind_id": repeat_bid,
+        "n_primary_resolved": len(primary),
+        "n_repeat_resolved": len(repeat),
+        "n_shared": len(shared),
+        "n_text_agree": text_agree,
+        "n_role_agree": role_agree,
+        "denominators": {
+            "union": len(set(primary) | set(repeat)),
+            "intersection": len(shared),
+            "primary": len(primary),
+            "max": max(len(primary), len(repeat)),
+        },
+    }
+
+
+def _r1_status(numerators: int, denominators: dict, threshold: float) -> dict:
+    """PASS / FAIL only where EVERY candidate denominator agrees; otherwise abstain.
+
+    This is the whole point of computing all four. If they agree, the unruled choice cannot change
+    the gate and there is nothing to rule on. If they straddle the threshold, the gate result is a
+    function of an interpretation the frozen text does not make, and reporting either verdict would
+    be choosing the sensitivity of Rule 3.
+    """
+    ratios = {rule: (numerators / total if total else None) for rule, total in sorted(denominators.items())}
+    decided = [value for value in ratios.values() if value is not None]
+    if not decided:
+        return {"status": R1_NOT_EVALUABLE, "ratios": ratios, "threshold": threshold}
+    if all(value >= threshold for value in decided):
+        status = "PASS"
+    elif all(value < threshold for value in decided):
+        status = "FAIL"
+    else:
+        status = R1_AMBIGUOUS
+    return {"status": status, "ratios": ratios, "threshold": threshold}
+
+
+def r1_reliability(key: dict, adjudicated: dict) -> dict:
+    """Section 5.6's R1 reliability, computed from committed artifacts. NOT a supplied scalar.
+
+    WHAT IS FROZEN, and what is not. Section 5.6 fixes the two thresholds (text >= 0.90, role
+    >= 0.80) and their consequences; A28.3/A28.4/A36.6 fix the repeat's identity, its 330 DPI, its
+    inherited routes and its separately namespaced answers. **The computation is nowhere frozen.**
+    Two of its choices can move the gate and are recorded as A41.2 **R6** for ruling:
+
+        the DENOMINATOR when the two answers enumerate different numbers of headings
+        whether agreement is evaluated PER ROUTE or POOLED across routes
+
+    This function therefore reports the per-pair facts, and every candidate denominator's ratio,
+    and abstains (`AMBIGUOUS_PENDING_A41_RULING`) exactly when the candidates straddle a
+    threshold. It is computed PER ROUTE and never pooled -- pooling an AI pair with a human pair
+    would measure inter-source disagreement rather than repeat reliability, and A36.6 keeps the
+    two namespaces apart -- but that reading is itself part of R6 rather than a settled rule.
+
+    NO SCALAR INPUT EXISTS. A PASS requires committed pair-level evidence, which is why the
+    `r1_role_agreement` parameter was removed rather than defaulted.
+    """
+    by_base = {}
+    for bid, record in key["stimuli"].items():
+        if record.get("control_kind") is not None or record.get("is_r1_repeat"):
+            continue
+        by_base[record["base_identity"]] = bid
+
+    pairs = []
+    for bid, record in sorted(key["stimuli"].items()):
+        if not record.get("is_r1_repeat"):
+            continue
+        primary_bid = by_base.get(record.get("r1_base_identity"))
+        if primary_bid is None:
+            raise ScoreInputError(R1_PRIMARY_MISSING, {"repeat_blind_id": bid, "base": record.get("r1_base_identity")})
+        for route in record["adjudication_routes"]:
+            if bid not in adjudicated.get(route, {}) or primary_bid not in adjudicated.get(route, {}):
+                raise ScoreInputError(
+                    ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "primary": primary_bid, "route": route}
+                )
+            pairs.append(_r1_pair_facts(key, adjudicated, primary_bid, repeat_bid=bid, route=route))
+
+    per_route = {}
+    for route in sorted({p["route"] for p in pairs}):
+        rows = [p for p in pairs if p["route"] == route]
+        totals = {rule: sum(p["denominators"][rule] for p in rows) for rule in R1_DENOMINATOR_RULES}
+        per_route[route] = {
+            "n_pairs": len(rows),
+            "text": _r1_status(sum(p["n_text_agree"] for p in rows), totals, R1_TEXT_THRESHOLD),
+            "role": _r1_status(sum(p["n_role_agree"] for p in rows), totals, R1_ROLE_THRESHOLD),
+        }
+
+    def worst(dimension: str, threshold: float) -> dict:
+        statuses = [per_route[r][dimension]["status"] for r in per_route]
+        if not statuses:
+            return {"status": R1_NOT_EVALUABLE, "ratios": {}, "threshold": threshold}
+        for candidate in ("FAIL", R1_AMBIGUOUS, R1_NOT_EVALUABLE):
+            if candidate in statuses:
+                return {
+                    "status": candidate,
+                    "ratios": {r: per_route[r][dimension]["ratios"] for r in per_route},
+                    "threshold": threshold,
+                }
+        return {
+            "status": "PASS",
+            "ratios": {r: per_route[r][dimension]["ratios"] for r in per_route},
+            "threshold": threshold,
+        }
+
+    return {
+        "n_pairs": len(pairs),
+        "pairs": pairs,
+        "per_route": per_route,
+        "pooled_across_routes": False,
+        "text": worst("text", R1_TEXT_THRESHOLD),
+        "role": worst("role", R1_ROLE_THRESHOLD),
+        "denominator_rules_reported": list(R1_DENOMINATOR_RULES),
+        "open_ruling": "A41.2 R6 -- the denominator on unequal enumerations, and per-route vs pooled",
+        "decision_owner": "Rule 3 gate vector (A27.6); no consequence is applied here",
+    }
+
+
+def _r1_role_gate(r1: dict) -> dict:
+    """M5's section 6 gate, read from the COMPUTED R1 facts. No caller scalar can reach it."""
+    return {
+        "status": r1["role"]["status"],
+        "threshold": R1_ROLE_THRESHOLD,
+        "observed_by_denominator_rule": r1["role"]["ratios"],
+        # AMBIGUOUS is NOT void and NOT a pass. Voiding M5 on an unruled denominator would apply
+        # a consequence the protocol has not chosen; calling it a pass would claim a gate was
+        # checked when the frozen text does not yet decide what it checks.
+        "m5_void": r1["role"]["status"] == "FAIL",
+        "owner": "Rule 3 gate vector (A27.6); this module reports the FACTS only",
+        "evidence": "computed from the committed oracle key + adjudications, never supplied",
     }
 
 
@@ -743,6 +1013,9 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
     per_document: dict[str, dict] = {}
     excluded = {"control": 0, "r1_repeat": 0}
     frame_purposes = ((BO.C_FRAME, BO.PURPOSE_C_METRICS), (BO.D_FRAME, BO.PURPOSE_D_DECISION))
+    # R1 is computed from the same committed artifacts, not supplied. M5's section 6 gate reads
+    # this and nothing else, so no caller can hand the gate a verdict.
+    r1 = r1_reliability(inputs.oracle_key, inputs.oracle_adjudicated)
 
     for bid, record in inputs.oracle_key["stimuli"].items():
         if record.get("control_kind") is not None:
@@ -766,15 +1039,14 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
     pooled = {frame_name: _blank_heading_counts() for frame_name, _p in frame_purposes}
     for document, by_frame in sorted(per_document.items()):
         documents[document] = {
-            frame_name: _heading_metrics_from_counts(counts, inputs.r1_role_agreement)
-            for frame_name, counts in sorted(by_frame.items())
+            frame_name: _heading_metrics_from_counts(counts, r1) for frame_name, counts in sorted(by_frame.items())
         }
         for frame_name, counts in by_frame.items():
             _accumulate(pooled[frame_name], counts)
     return {
         "per_document": documents,
         "pooled": {
-            frame_name: _heading_metrics_from_counts(counts, inputs.r1_role_agreement)
+            frame_name: _heading_metrics_from_counts(counts, r1)
             for frame_name, counts in sorted(pooled.items())
             if counts["n_stimuli"]
         },
@@ -782,6 +1054,7 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
         "routing": {purpose: BO.PURPOSE_ROUTE[purpose] for _f, purpose in frame_purposes},
         "estimand_purposes": list(BO.ESTIMAND_PURPOSES),
         "pooling_rule": "C and D are separate estimands (A36.3); they are never summed together",
+        "r1": r1,
     }
 
 
@@ -890,7 +1163,16 @@ def section8(frames, paired_metrics: dict) -> dict:
         "excluded_documents_not_p_head": sorted(excluded),
         "n_documents": n,
         "events": k,
-        "per_document": events,
+        # THE STATISTIC POPULATION, and nothing else. The bound and the bootstrap were always
+        # P-head only, but this vector previously carried every document -- so a reader (or a
+        # later consumer) could take a P-robust row for a member of the statistic, and a
+        # discordance on an excluded document would appear inside the very list that documents
+        # `n_documents` and `events`. Section 4.4.1 claims NO heading metric on P-robust, so a
+        # P-robust row in this vector is not a diagnostic, it is a category error.
+        "per_document": p_head,
+        # The excluded rows stay VISIBLE -- dropping them would hide that a document was held out
+        # of a heading statistic at all -- but under a name that cannot be read as membership.
+        "excluded_diagnostics_not_in_statistic": [e for e in events if e["population"] != MC.P_HEAD],
         "forbidden": "no per-heading probability; no heading-as-iid-trial denominator (section 8.3)",
         "paired": paired_metrics,
     }
@@ -1107,6 +1389,9 @@ def score(inputs: ScoreInputs) -> dict:
         },
         "section8": section8(inputs.frames, paired),
         "adequacy_4_5": adequacy_facts(inputs.frames, inputs.document_strata),
+        # Section 5.6's reliability facts, computed from the committed artifacts. A Rule 3 gate
+        # INPUT, never a Rule 3 verdict -- and no caller scalar can reach it.
+        "r1_reliability": headings["r1"],
     }
 
 

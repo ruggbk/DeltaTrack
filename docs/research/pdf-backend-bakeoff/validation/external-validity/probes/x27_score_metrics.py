@@ -28,7 +28,9 @@ from __future__ import annotations
 
 import ast
 import copy
+import dataclasses
 import hashlib
+import inspect
 import json
 import sys
 import tempfile
@@ -299,7 +301,6 @@ def inputs(
     s1=None,
     cross_engine=None,
     strata=None,
-    r1_role_agreement=None,
 ) -> SM.ScoreInputs:
     docs = [f["document"] for f in frames]
     return SM.ScoreInputs(
@@ -309,7 +310,6 @@ def inputs(
         cross_engine=cross_engine or cross_engine_artifact(docs),
         s1=s1 or s1_artifact(),
         document_strata=strata if strata is not None else {d: 1 for d in docs},
-        r1_role_agreement=r1_role_agreement,
     )
 
 
@@ -589,7 +589,13 @@ def synthesize_adjudication(key: dict, *, truth: str = "H", role: str = "account
                     {
                         "text": text_from(row) if text_from else row["anchor"]["text"],
                         "role": role,
-                        "parent": row["immediate_parent"],
+                        # THE ADJUDICATOR'S OWN REPRESENTATION, not Python's. `adjudicator_prompt.md`
+                        # section 3 asks for the printed parent text or the literal `NONE`; a JSON
+                        # null is not an answer the prompt can produce, and a fixture that emitted
+                        # one let M4 pass without ever exercising the real encoding.
+                        "parent": row["immediate_parent"]
+                        if row["immediate_parent"] is not None
+                        else SM.ORACLE_PARENT_NONE,
                         **start_annotation(record, row),
                     }
                 )
@@ -602,13 +608,18 @@ def synthesize_adjudication(key: dict, *, truth: str = "H", role: str = "account
                     {
                         "text": expected.get("text", ""),
                         "role": "account",
-                        "parent": None,
+                        "parent": SM.ORACLE_PARENT_NONE,
                         "start_physical_line": 1,
                         "start_x_px": 0,
                     }
                 )
         for route in record["adjudication_routes"]:
-            out[route][bid] = {"id": bid, "headings": headings}
+            # INDEPENDENT PER ROUTE. Sharing one list object across the two namespaces makes a
+            # route-specific perturbation impossible -- `copy.deepcopy` memoizes, so the shared
+            # reference survives into the copy and a "human-only" edit silently changes the AI
+            # answer too. Two adjudication sources produce two answers (A36.6 keeps them
+            # separately namespaced), so the fixture must too.
+            out[route][bid] = {"id": bid, "headings": copy.deepcopy(headings)}
     return out
 
 
@@ -993,6 +1004,7 @@ def part_m4(tmp: Path) -> dict:
         "DEPARTMENTAL MANAGEMENT" in ancestry["architecture_occurrences"]["H"][1]["breadcrumb"],
         "the fixture does not contain the ancestry trap, so the control could not have caught it",
     )
+    _part_m4_sentinels(tmp)
     return {
         "baseline_m4": base["M4"]["H"],
         "after_delete": after["M4"]["H"],
@@ -1001,6 +1013,116 @@ def part_m4(tmp: Path) -> dict:
         "shifted_m4": s_after["M4"]["H"],
         "ancestry_m4": a_after["M4"]["H"],
     }
+
+
+def _part_m4_sentinels(tmp: Path) -> dict:
+    """The adjudicator's ACTUAL parent representation: literal `NONE` and `OFF_REGION`.
+
+    The reviewer's finding. Every M4 fixture above supplies a Python `None` for a root heading,
+    which is not a value `adjudicator_prompt.md` can produce -- so M4 was green without ever
+    seeing the encoding the real oracle will hand it. These controls go through the same
+    `SM.score` path with the literal strings.
+    """
+    print("\n== M4: the frozen `NONE` / `OFF_REGION` parent sentinels (section 5.3) ==")
+    # A root heading (emitted parent None) and a child (emitted parent = the root's text).
+    occ = {
+        arm: [
+            occurrence(1, 2, 4, kind="agency", text="DEPARTMENTAL MANAGEMENT", parent=None),
+            occurrence(1, 3, 6, kind="account", text="SALARIES AND EXPENSES", parent="DEPARTMENTAL MANAGEMENT"),
+        ]
+        for arm in ("H", "X")
+    }
+    f, built, _ = join_fixture(tmp, n_pages=1, occurrences=occ)
+    record = next(r for r in built.key["stimuli"].values() if not r["is_r1_repeat"])
+    rows = record["architecture_occurrences"]["H"]
+    root, child = rows[0], rows[1]
+
+    def answer(parent_of_root: str, parent_of_child: str) -> dict:
+        headings = [
+            {
+                "text": root["anchor"]["text"],
+                "role": "agency",
+                "parent": parent_of_root,
+                **start_annotation(record, root),
+            },
+            {
+                "text": child["anchor"]["text"],
+                "role": "account",
+                "parent": parent_of_child,
+                **start_annotation(record, child),
+            },
+        ]
+        out = {"schema": BO.ADJUDICATED_SCHEMA, BO.ROUTE_AI: {}, BO.ROUTE_HUMAN: {}}
+        for bid, rec in built.key["stimuli"].items():
+            for route in rec["adjudication_routes"]:
+                out[route][bid] = {"id": bid, "headings": headings}
+        return out
+
+    def m4_of(adjudicated):
+        return SM.score(inputs([f], key=built.key, adjudicated=adjudicated))["headings_pooled"][BO.C_FRAME]["M4"]
+
+    # --- POSITIVE: literal "NONE" scores correctly against an emitted `immediate_parent is None`.
+    good = m4_of(answer(SM.ORACLE_PARENT_NONE, "DEPARTMENTAL MANAGEMENT"))
+    check(
+        'literal "NONE" against an emitted None scores CORRECT, and the child scores too',
+        (2, 2, 1.0, 0, 0),
+        (
+            good["H"]["numerator"],
+            good["H"]["denominator"],
+            good["H"]["value"],
+            good["excluded_off_region"],
+            good["excluded_unreadable"],
+        ),
+        'the scorer compares "NONE" as ordinary parent TEXT, so a correct root heading scores '
+        "WRONG -- M4 penalises an architecture for having no parent to name",
+    )
+
+    # --- NEGATIVE: "NONE" claimed where the arm DID emit a parent must be wrong.
+    wrong = m4_of(answer(SM.ORACLE_PARENT_NONE, SM.ORACLE_PARENT_NONE))
+    check(
+        'NEGATIVE -- "NONE" against an emitted parent is WRONG, so the sentinel is not a wildcard',
+        (1, 2, 0.5),
+        (wrong["H"]["numerator"], wrong["H"]["denominator"], wrong["H"]["value"]),
+        '"NONE" matches whatever the arm emitted, so a hierarchy claim can never be contradicted',
+    )
+
+    # --- OFF_REGION leaves the population entirely; it is never compared as text.
+    off = m4_of(answer(SM.ORACLE_PARENT_NONE, SM.ORACLE_PARENT_OFF_REGION))
+    check(
+        '"OFF_REGION" LEAVES M4\'s population and is counted, never scored as text',
+        (1, 1, 1.0, 1),
+        (off["H"]["numerator"], off["H"]["denominator"], off["H"]["value"], off["excluded_off_region"]),
+        '"OFF_REGION" is compared as literal parent text, which can never equal any emitted '
+        "parent -- so every off-region answer counts against an architecture for a limit of the "
+        "ORACLE's field of view",
+    )
+    check(
+        "...and the frozen answer vocabulary is stated in the artifact",
+        f"printed text | NONE | OFF_REGION | {BO.UNREADABLE}",
+        off["parent_answers"],
+        "the artifact does not record which parent answers were recognised, so a reader cannot "
+        "tell a scored population from an excluded one",
+    )
+
+    # --- a JSON null is not one of the four answers and REFUSES.
+    check(
+        "NEGATIVE -- a null parent REFUSES rather than being read as 'no parent'",
+        SM.PARENT_MISSING,
+        refusal(lambda: SM.score(inputs([f], key=built.key, adjudicated=answer(None, "DEPARTMENTAL MANAGEMENT")))),
+        "a null is silently read as NONE, which is the representation gap that let the old M4 "
+        "fixtures pass without ever producing the adjudicator's own encoding",
+    )
+    check(
+        "UNREADABLE stays excluded, as already frozen",
+        (1, 1, 1),
+        (
+            m4_of(answer(SM.ORACLE_PARENT_NONE, BO.UNREADABLE))["H"]["denominator"],
+            m4_of(answer(SM.ORACLE_PARENT_NONE, BO.UNREADABLE))["excluded_unreadable"],
+            m4_of(answer(SM.ORACLE_PARENT_NONE, BO.UNREADABLE))["H"]["numerator"],
+        ),
+        "an UNREADABLE parent entered or left the denominator differently than before",
+    )
+    return {"none_scored": good["H"], "off_region": off, "vocabulary": off["parent_answers"]}
 
 
 def part_m5(tmp: Path) -> dict:
@@ -1053,23 +1175,218 @@ def part_m5(tmp: Path) -> dict:
         "as a cleaner result rather than as a defect",
     )
     check(
-        "the R1 role gate is REPRESENTED, and NOT SUPPLIED is not a pass",
-        ("NOT_SUPPLIED", False, "FAIL", True),
+        "with no R1 pair in the key, the M5 gate is NOT EVALUABLE and is not a pass",
+        (SM.R1_NOT_EVALUABLE, False, True),
         (
             pooled["M5"]["r1_role_gate"]["status"],
             pooled["M5"]["r1_role_gate"]["m5_void"],
-            _r1_status(f, built, adjudicated, 0.79)["status"],
-            _r1_status(f, built, adjudicated, 0.79)["m5_void"],
+            "computed" in pooled["M5"]["r1_role_gate"]["evidence"],
         ),
-        "M5 is reported as though its section 6 gate had been checked when no R1 role agreement "
-        "exists -- green because nothing measured it",
+        "M5 is reported as though its section 6 gate had been checked when no R1 pair exists -- "
+        "green because nothing measured it",
+    )
+    check(
+        "NO caller channel exists that could hand the gate a verdict",
+        (False, False),
+        (
+            "r1_role_agreement" in {fld.name for fld in dataclasses.fields(SM.ScoreInputs)},
+            "r1_role_agreement" in inspect.signature(SM.score).parameters,
+        ),
+        "a free scalar can still reach a result-bearing reliability gate, so a PASS can be "
+        "asserted with no evidence behind it and nothing downstream could tell",
     )
     return {"m5": pooled["M5"]["H"], "promoted_denominator": p_pooled["M5"]["H"]["agreement"]["denominator"]}
 
 
-def _r1_status(f, built, adjudicated, value):
-    scored = SM.score(inputs([f], key=built.key, adjudicated=adjudicated, r1_role_agreement=value))
-    return scored["headings_pooled"][BO.C_FRAME]["M5"]["r1_role_gate"]
+def part_r1(tmp: Path) -> dict:
+    """Section 5.6's R1 reliability, computed from committed artifacts -- and where it ABSTAINS.
+
+    The reviewer's item 2. R1's thresholds are frozen; its computation is not. Two choices can
+    move the gate, and this part both (a) proves the computable facts are computed from evidence
+    rather than supplied, and (b) exhibits the minimal fixture on which the competing readings
+    disagree across the threshold.
+    """
+    print("\n== section 5.6 R1: evidence-bound facts, and the abstention (A41.2 R6) ==")
+    # 12 discordant pages so the D census gives 12 primaries and plan_r1_repeats draws exactly one.
+    pages = [page_input(p + 1, start_gid=p * 100, text_differs={5}) for p in range(12)]
+    # THREE headings per region, so the ambiguity fixture below can drop one from the repeat's
+    # answer and still leave two agreeing -- the exact shape on which the candidate denominators
+    # disagree. One heading per region could not exhibit it at all.
+    occ = {
+        arm: [
+            occurrence(p + 1, ordinal, p * 100 + ordinal * 2, text=f"ACCOUNT P{p + 1} N{ordinal}")
+            for p in range(12)
+            for ordinal in (1, 2, 3)
+        ]
+        for arm in ("H", "X")
+    }
+    f = frame(pages, occurrences=occ)
+    built = BO.build([{"frame": f, "pdf_path": synthetic_pdf(tmp, 12), "stratum": "SYNTHETIC"}])
+    repeat_bid, repeat = next((b, r) for b, r in built.key["stimuli"].items() if r["is_r1_repeat"])
+    primary_bid = next(
+        b
+        for b, r in built.key["stimuli"].items()
+        if not r["is_r1_repeat"] and r["base_identity"] == repeat["r1_base_identity"]
+    )
+    check(
+        "the fixture really carries an R1 pair, so nothing below is vacuous",
+        (True, True),
+        (repeat["is_r1_repeat"], primary_bid != repeat_bid),
+        "no repeat exists, so every R1 figure below was computed on an empty population",
+    )
+
+    # --- an IDENTICAL repeat answer: perfect agreement, and every denominator agrees, so there is
+    # nothing to rule on and the gate is decided.
+    identical = synthesize_adjudication(built.key)
+    agree = SM.r1_reliability(built.key, identical)
+    # TWO pairs, not one: every region here is discordant, so the repeated region is in C AND D,
+    # and A36.6 gives the repeat both inherited routes -- one pair per route, never pooled.
+    check(
+        "an identical repeat gives PASS on both dimensions, with all four denominators agreeing",
+        ("PASS", "PASS", 2, [BO.ROUTE_AI, BO.ROUTE_HUMAN]),
+        (agree["text"]["status"], agree["role"]["status"], agree["n_pairs"], sorted(agree["per_route"])),
+        "a perfectly self-consistent adjudicator does not reach PASS, so the reliability gate "
+        "cannot be satisfied by any real adjudication",
+    )
+    # --- PER ROUTE, proven BEHAVIOURALLY. The first version of this control asserted the
+    # `pooled_across_routes: False` label and the route key names, and the injection sweep caught
+    # it: pooling the rows left both untouched, so the control could not fail. A route-asymmetric
+    # fixture is the only thing that can tell the two implementations apart -- only the HUMAN
+    # repeat disagrees, so per-route gives {ai: 1.0, human: 0.0} and pooling gives {ai: 0.5,
+    # human: 0.5}.
+    human_only = copy.deepcopy(identical)
+    for heading in human_only[BO.ROUTE_HUMAN][repeat_bid]["headings"]:
+        heading["text"] = "ONLY THE HUMAN REPEAT DISAGREES"
+    asymmetric = SM.r1_reliability(built.key, human_only)
+    ai_ratio = asymmetric["per_route"][BO.ROUTE_AI]["text"]["ratios"]["union"]
+    human_ratio = asymmetric["per_route"][BO.ROUTE_HUMAN]["text"]["ratios"]["union"]
+    check(
+        "R1 is computed PER ROUTE: a human-only disagreement leaves the AI route untouched",
+        ("PASS", "FAIL", 1.0, 0.0, False),
+        (
+            asymmetric["per_route"][BO.ROUTE_AI]["text"]["status"],
+            asymmetric["per_route"][BO.ROUTE_HUMAN]["text"]["status"],
+            ai_ratio,
+            human_ratio,
+            asymmetric["pooled_across_routes"],
+        ),
+        "AI and human pairs are pooled, so one route's disagreement is averaged into the other -- "
+        "which measures inter-source disagreement rather than the repeat reliability section 5.6 "
+        "asks for, and can hide a failing route behind a passing one",
+    )
+    check(
+        "...and the overall gate takes the WORST route, so a passing route cannot mask a failure",
+        ("FAIL", True),
+        (asymmetric["text"]["status"], ai_ratio != human_ratio),
+        "the overall verdict is an average or the best route, so a route that failed its "
+        "reliability gate does not reach Rule 3",
+    )
+
+    # --- a DISAGREEING repeat: the same heading, different text and role. Both gates must move.
+    disagreeing = copy.deepcopy(identical)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        if repeat_bid in disagreeing.get(route, {}):
+            for heading in disagreeing[route][repeat_bid]["headings"]:
+                heading["text"] = "A COMPLETELY DIFFERENT HEADING"
+                heading["role"] = "grouping"
+    disagree = SM.r1_reliability(built.key, disagreeing)
+    check(
+        "NEGATIVE -- a repeat that answers differently drives BOTH gates to FAIL",
+        ("FAIL", "FAIL"),
+        (disagree["text"]["status"], disagree["role"]["status"]),
+        "an adjudicator that contradicts itself on a re-presented stimulus still passes, which is "
+        "exactly the phase-1 defect R1 exists to catch (six identical stimuli, 3 BOUNDARY / 3 NOT)",
+    )
+    # --- THE FINE ROLE, proven with a fixture that DISCRIMINATES. The first version reused the
+    # `grouping` fixture above, whose role differs under the coarsening TOO (account -> LEAF vs
+    # grouping -> CONTAINER), so a coarsening implementation failed it identically and the control
+    # could not fail. `account` and `section` are different fine roles that BOTH coarsen to LEAF,
+    # which is the only shape that separates the two readings.
+    same_coarse = copy.deepcopy(identical)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        for heading in same_coarse[route][repeat_bid]["headings"]:
+            heading["role"] = "section"
+    coarse_blind = SM.r1_reliability(built.key, same_coarse)
+    check(
+        "the role comparison uses the FINE section 5.3 role: account vs section is a DISAGREEMENT",
+        ("FAIL", "PASS", MC.M5_LEAF, MC.M5_LEAF),
+        (
+            coarse_blind["role"]["status"],
+            coarse_blind["text"]["status"],
+            MC.m5_oracle_role("account"),
+            MC.m5_oracle_role("section"),
+        ),
+        "R1 coarsens the role before comparing, so two DIFFERENT fine roles that collapse to the "
+        "same M5 class read as agreement -- A36.7 says M5 ALONE coarsens, and an adjudicator "
+        "flipping account/section would look perfectly reliable",
+    )
+    check(
+        "...and the coarse-blind fixture leaves TEXT agreement untouched, so only the role moved",
+        (1.0, "PASS"),
+        (
+            coarse_blind["per_route"][BO.ROUTE_AI]["text"]["ratios"]["union"],
+            coarse_blind["per_route"][BO.ROUTE_AI]["text"]["status"],
+        ),
+        "the fixture perturbed the text as well, so a role-only claim cannot be attributed to the role comparison",
+    )
+
+    # --- THE AMBIGUITY, exhibited. The repeat enumerates FEWER headings than the primary, and the
+    # shared ones agree. Intersection says 1.0 (PASS); union / primary / max say 0.667 (FAIL).
+    # There is no frozen rule that chooses, and the two verdicts differ across the threshold.
+    fewer = copy.deepcopy(identical)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        if repeat_bid in fewer.get(route, {}):
+            fewer[route][repeat_bid]["headings"] = fewer[route][repeat_bid]["headings"][:2]
+    straddling = SM.r1_reliability(built.key, fewer)
+    pair = straddling["pairs"][0]
+    check(
+        "the ambiguity fixture really is 3 primary vs 2 repeat headings, both shared ones agreeing",
+        (3, 2, 2, 2),
+        (pair["n_primary_resolved"], pair["n_repeat_resolved"], pair["n_shared"], pair["n_text_agree"]),
+        "the fixture is not the unequal-enumeration shape, so it cannot exhibit the disagreement",
+    )
+    ratios = straddling["text"]["ratios"][pair["route"]]
+    check(
+        "THE OPEN RULING -- the candidate denominators STRADDLE the 0.90 threshold, so R1 abstains",
+        (SM.R1_AMBIGUOUS, 1.0, 2 / 3, 2 / 3, 2 / 3),
+        (
+            straddling["text"]["status"],
+            ratios["intersection"],
+            ratios["union"],
+            ratios["primary"],
+            ratios["max"],
+        ),
+        "the candidate denominators agree on this fixture, so the ambiguity A41.2 R6 records "
+        "would not actually change a gate result and should be closed rather than ruled",
+    )
+    check(
+        "...and ABSTAINING is neither a pass nor a void: no consequence follows an unruled choice",
+        (False, False),
+        (
+            SM._r1_role_gate(straddling)["m5_void"],
+            SM._r1_role_gate(straddling)["status"] == "PASS",
+        ),
+        "the scorer resolves the open denominator question itself, choosing the sensitivity of a "
+        "Rule 3 gate the frozen text has not decided",
+    )
+
+    # --- an orphaned repeat REFUSES rather than shrinking the reliability population.
+    orphan = copy.deepcopy(built.key)
+    orphan["stimuli"][repeat_bid]["r1_base_identity"] = "a base identity nobody committed"
+    check(
+        "NEGATIVE -- a repeat whose primary is absent REFUSES",
+        SM.R1_PRIMARY_MISSING,
+        refusal(lambda: SM.r1_reliability(orphan, identical)),
+        "an orphaned repeat is skipped, shrinking the very population whose size decides whether "
+        "an unreliable adjudicator can be detected",
+    )
+    return {
+        "n_pairs": agree["n_pairs"],
+        "identical": {"text": agree["text"]["status"], "role": agree["role"]["status"]},
+        "disagreeing": {"text": disagree["text"]["status"], "role": disagree["role"]["status"]},
+        "straddling_fixture": {"pair": pair, "text": straddling["text"]},
+        "open_ruling": agree["open_ruling"],
+    }
 
 
 def part_m7() -> dict:
@@ -1383,11 +1700,52 @@ def part_section8() -> dict:
         "a line-level difference on ordinary body text counts as heading-level discordance, so "
         "section 8 would answer a different question under its own name",
     )
+    # ---- THE STRUCTURED POPULATION must contain the statistic's members and nothing else.
+    # A P-robust row inside `per_document` is not a diagnostic, it is a category error: section
+    # 4.4.1 claims NO heading metric on P-robust, and the list documents `n_documents`/`events`.
+    print("\n-- section 8's structured per_document is the P-head statistic population")
+    members = {e["document"] for e in mixed["per_document"]}
+    check(
+        "a P-robust document with a discordance is ABSENT from the P-head per_document vector",
+        (False, 14, 14),
+        ("ROBUST/1" in members, len(mixed["per_document"]), mixed["n_documents"]),
+        "an excluded P-robust row sits inside the vector that documents N and the event count, so "
+        "a reader (or a later consumer) counts it as a member of a statistic it is barred from",
+    )
+    check(
+        "...and it remains explicitly REPORTED, under a name that cannot be read as membership",
+        (["ROBUST/1"], ["ROBUST/1"], True),
+        (
+            mixed["excluded_documents_not_p_head"],
+            [e["document"] for e in mixed["excluded_diagnostics_not_in_statistic"]],
+            all(e["population"] != MC.P_HEAD for e in mixed["excluded_diagnostics_not_in_statistic"]),
+        ),
+        "the exclusion is silent, so nothing records that a document was held out of a heading statistic at all",
+    )
+    p_head_only = SM.section8([f for f in docs], {})
+    check(
+        "...and adding it changes NO reported figure: N, events, bound and bootstrap all hold",
+        (
+            p_head_only["n_documents"],
+            p_head_only["events"],
+            p_head_only["clopper_pearson_upper_bound"],
+            p_head_only["bootstrap"]["reported"],
+        ),
+        (
+            mixed["n_documents"],
+            mixed["events"],
+            mixed["clopper_pearson_upper_bound"],
+            mixed["bootstrap"]["reported"],
+        ),
+        "a P-robust document moved a reported section 8 figure, so the P-head restriction is "
+        "decoration rather than a filter",
+    )
     return {
         "zero_event": {"n": block["n_documents"], "bound": block["clopper_pearson_upper_bound"]},
         "nonzero": {"events": nonzero["events"], "bound": nonzero["clopper_pearson_upper_bound"]},
         "bootstrap_interval": nonzero["bootstrap"]["interval"],
         "excluded_p_robust": mixed["excluded_documents_not_p_head"],
+        "structured_population": sorted(members),
     }
 
 
@@ -1549,17 +1907,90 @@ def part_qualification() -> dict:
     check(
         "NEGATIVE -- a scored document missing from the cross-engine artifact REFUSES",
         SM.CROSS_ENGINE_DOCUMENT_MISSING,
-        refusal(
-            lambda: SM.score(inputs([frame([page_input(1)])], cross_engine=cross_engine_artifact(["SOMETHING/ELSE"])))
-        ),
+        # An EMPTY population, so this isolates "missing" -- a wrong-document artifact would now
+        # trip the extra-document check first and this control would pass for that reason instead.
+        refusal(lambda: SM.score(inputs([frame([page_input(1)])], cross_engine=cross_engine_artifact([])))),
         "a document is scored with no cross-engine verdict, so it could never acquire the "
         "qualification the rule attaches to it -- the silent-escape case max(1, ...) exists for",
+    )
+
+    # ---- THE POPULATION IS A DENOMINATOR, so it must be EXACT, and the refusal must come
+    # ---- BEFORE `qualification` runs. Each fixture below is individually well-formed; only the
+    # ---- SET is wrong, which is what makes these meaningful rather than malformedness tests.
+    print("\n-- the cross-engine document population is exact")
+    scored_docs = [frame([page_input(1)], document="SYNTHETIC/1")]
+
+    def with_rows(rows):
+        return SM.score(inputs(scored_docs, cross_engine={"schema": "cross_engine_control/1", "per_document": rows}))
+
+    ok_row = {"document": "SYNTHETIC/1", "passed": True, "qualification": None}
+    fail_row = {"document": "SYNTHETIC/1", "passed": False, "qualification": "Q"}
+    check(
+        "the exactly-matching population SCORES, so the refusals below are not refusing everything",
+        None,
+        refusal(lambda: with_rows([ok_row])),
+        "an exact cross-engine population is refused, making every negative below meaningless",
+    )
+    check(
+        "NEGATIVE -- one EXTRA passing row REFUSES rather than diluting the one-third fraction",
+        SM.CROSS_ENGINE_EXTRA_DOCUMENT,
+        refusal(lambda: with_rows([ok_row, {"document": "NOT/SCORED", "passed": True, "qualification": None}])),
+        "an unscored passing document enlarges the denominator of I13's `> 1/3` rule, so a run "
+        "that earned the both-headlines qualification can have it diluted away",
+    )
+    check(
+        "NEGATIVE -- one EXTRA failing row REFUSES rather than manufacturing the qualification",
+        SM.CROSS_ENGINE_EXTRA_DOCUMENT,
+        refusal(lambda: with_rows([ok_row, {"document": "NOT/SCORED", "passed": False, "qualification": "Q"}])),
+        "an unscored FAILING document can push a clean run over `> 1/3` and qualify both "
+        "headlines on evidence about a document the study did not score",
+    )
+    check(
+        "NEGATIVE -- a DUPLICATED document with conflicting verdicts REFUSES, never order-dependent",
+        SM.CROSS_ENGINE_DUPLICATE_DOCUMENT,
+        refusal(lambda: with_rows([ok_row, fail_row])),
+        "two rows for one document are both consumed, so the reported verdict depends on which "
+        "row is read last -- a silent order dependence in a reported qualification",
+    )
+    check(
+        "...and the reverse row order refuses IDENTICALLY, so the refusal is not itself ordered",
+        SM.CROSS_ENGINE_DUPLICATE_DOCUMENT,
+        refusal(lambda: with_rows([fail_row, ok_row])),
+        "the duplicate refusal depends on row order, so one arrangement would still be accepted",
+    )
+    # The refusal must precede qualification: a `qualification()` computed on the extra row would
+    # be a REPORTED number, and this proves none is ever produced from a wrong population.
+    check(
+        "the refusal happens at INPUT VALIDATION, before any qualification is computed",
+        (SM.CROSS_ENGINE_EXTRA_DOCUMENT, "validate_inputs"),
+        (
+            refusal(lambda: with_rows([ok_row, {"document": "NOT/SCORED", "passed": False, "qualification": "Q"}])),
+            _refusal_frame(
+                lambda: with_rows([ok_row, {"document": "NOT/SCORED", "passed": False, "qualification": "Q"}])
+            ),
+        ),
+        "the population check runs after qualification, so a wrong denominator is computed and "
+        "only then rejected -- and a partial payload may already have been produced",
     )
     return {
         "one": one,
         "two_of_six": two["both_headlines_qualified"],
         "three_of_six": three["both_headlines_qualified"],
     }
+
+
+def _refusal_frame(fn) -> str | None:
+    """The function name that RAISED, so a control can pin WHERE a refusal happens."""
+    try:
+        fn()
+    except SM.ScoreInputError as exc:
+        tb = exc.__traceback__
+        name = None
+        while tb is not None:
+            name = tb.tb_frame.f_code.co_name
+            tb = tb.tb_next
+        return name
+    return None
 
 
 def part_refusals(tmp: Path) -> dict:
@@ -2085,6 +2516,7 @@ def main() -> int:
             "m3": part_m3(tmp),
             "m4": part_m4(tmp),
             "m5": part_m5(tmp),
+            "r1": part_r1(tmp),
             "m7": part_m7(),
             "rule0": part_rule0(),
             "section8": part_section8(),
