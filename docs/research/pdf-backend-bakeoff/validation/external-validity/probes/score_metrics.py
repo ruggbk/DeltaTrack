@@ -95,6 +95,11 @@ CROSS_ENGINE_ROW_MALFORMED = "CROSS_ENGINE_ROW_MALFORMED"
 #: repeat OF, and silently skipping it would shrink the reliability population -- the population
 #: whose whole job is to be large enough to detect an unreliable adjudicator.
 R1_PRIMARY_MISSING = "R1_PRIMARY_MISSING"
+#: A36.6 enforcement. A repeat that declares its own shorter route set could delete a FAILING
+#: required route and leave an internally coherent artifact behind, so the required routes are
+#: derived from FRAME MEMBERSHIP and the repeat's declaration is checked against them.
+R1_FRAME_SET_MISMATCH = "R1_FRAME_SET_MISMATCH"
+R1_ROUTE_SET_MISMATCH = "R1_ROUTE_SET_MISMATCH"
 S1_ARTIFACT_MISSING = "S1_ARTIFACT_MISSING"
 STRATUM_MISSING = "STRATUM_MISSING"
 #: A null `role` is not the oracle's UNREADABLE. The codebook is a CLOSED vocabulary with
@@ -142,10 +147,7 @@ M7_MIN_SINGLE_CHAR_TOKENS = 3
 #: the text metrics / the role metric, and Rule 3 (A27.6) owns the decision consequence.
 R1_TEXT_THRESHOLD = 0.90
 R1_ROLE_THRESHOLD = 0.80
-#: The four denominators a reader could reasonably take from "heading-text agreement", none of
-#: which the frozen sources choose. `r1_reliability` computes ALL of them and refuses to collapse
-#: them when they straddle a threshold -- see its docstring and A41.2 R6.
-#: R6 is RULED (A41.2): one denominator, no candidate set, and no abstention status. The four
+#: R6 is RULED (A41.2): ONE denominator, no candidate set, and no abstention status. The former
 #: candidate rules and `AMBIGUOUS_PENDING_A41_RULING` are deleted rather than deprecated, so a
 #: consumer cannot read a status the protocol no longer defines.
 R1_NOT_EVALUABLE = "NOT_EVALUABLE_NO_R1_PAIRS"
@@ -940,6 +942,73 @@ def _r1_status(numerator: int, denominator: int, threshold: float) -> dict:
     }
 
 
+def _frame_routes(frames) -> tuple:
+    """A36.4/A36.6's frozen frame -> route map: C -> AI, D -> human, C and D -> both.
+
+    Derived from `build_oracle`'s own constants rather than restated, so the two cannot drift.
+    """
+    routes = set()
+    if BO.C_FRAME in frames:
+        routes.add(BO.C_FRAME_ROUTE)
+    if BO.D_FRAME in frames:
+        routes.add(BO.D_FRAME_ROUTE)
+    return tuple(r for r in BO.ROUTE_ORDER if r in routes)
+
+
+def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bid: str) -> tuple:
+    """The routes an R1 pair MUST be scored on, enforced against A36.6 rather than declared.
+
+    A36.6: "The repeat remains ONE canonical `r1-repeat` identity and INHERITS its primary's
+    required route(s): C only -> AI, D only -> human, C and D -> both." So frames must match and
+    the repeat's declared routes must be exactly the frame-derived set.
+
+    WHY THE PRIMARY'S OWN `adjudication_routes` IS NOT THE COMPARISON, and this is the one place
+    the enforcement deliberately differs from a literal reading. A C-audit-selected primary carries
+    `human` IN ADDITION to its frame routes, and `plan_r1_repeats` explicitly does NOT inherit
+    `is_c_audit_selected` (`build_oracle`: `replace(s, is_r1_repeat=True, is_c_audit_selected=False)`).
+    So for a C-only audited primary the two route sets legitimately DIFFER -- primary `(ai, human)`,
+    repeat `(ai,)` -- and requiring equality would refuse a frozen, valid configuration that the
+    real run will contain, since most C regions are not discordant and the audit draws 25 of them.
+    The primary is therefore required to CONTAIN its frame routes, not to equal the repeat's.
+    """
+    if sorted(repeat.get("frames") or []) != sorted(primary.get("frames") or []):
+        raise ScoreInputError(
+            R1_FRAME_SET_MISMATCH,
+            {
+                "repeat_blind_id": repeat_bid,
+                "primary_blind_id": primary_bid,
+                "repeat_frames": repeat.get("frames"),
+                "primary_frames": primary.get("frames"),
+            },
+        )
+    expected = _frame_routes(repeat.get("frames") or [])
+    if tuple(repeat.get("adjudication_routes") or ()) != expected:
+        raise ScoreInputError(
+            R1_ROUTE_SET_MISMATCH,
+            {
+                "repeat_blind_id": repeat_bid,
+                "declared": repeat.get("adjudication_routes"),
+                "required_by_frames": list(expected),
+                "frames": repeat.get("frames"),
+            },
+        )
+    # The primary must at least carry its own frame routes; it may carry `human` on top when the
+    # C audit drew it, which the repeat does not inherit.
+    missing = [
+        r for r in _frame_routes(primary.get("frames") or []) if r not in (primary.get("adjudication_routes") or ())
+    ]
+    if missing:
+        raise ScoreInputError(
+            R1_ROUTE_SET_MISMATCH,
+            {
+                "primary_blind_id": primary_bid,
+                "declared": primary.get("adjudication_routes"),
+                "missing_frame_routes": missing,
+            },
+        )
+    return expected
+
+
 def r1_reliability(key: dict, adjudicated: dict) -> dict:
     """Section 5.6's R1 reliability, computed from committed artifacts. NOT a supplied scalar.
 
@@ -974,7 +1043,12 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
         primary_bid = by_base.get(record.get("r1_base_identity"))
         if primary_bid is None:
             raise ScoreInputError(R1_PRIMARY_MISSING, {"repeat_blind_id": bid, "base": record.get("r1_base_identity")})
-        for route in record["adjudication_routes"]:
+        # A36.6 ENFORCEMENT -- the required routes come from FRAME MEMBERSHIP, never from the
+        # repeat's own declaration. A shortened repeat record plus a correspondingly shortened
+        # answer set is internally coherent, so iterating what the repeat CLAIMS would let a
+        # FAILING required route be deleted and the gate pass on the survivor.
+        required = _required_r1_routes(key["stimuli"][primary_bid], record, bid, primary_bid)
+        for route in required:
             if bid not in adjudicated.get(route, {}) or primary_bid not in adjudicated.get(route, {}):
                 raise ScoreInputError(
                     ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "primary": primary_bid, "route": route}
@@ -1023,6 +1097,16 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
 
 #: A40's three control kinds, and the R8 verdict vocabulary.
 CONTROL_KINDS = ("N-A", "N-B", "N-C")
+#: A40.1 / §5.6's frozen control population: 8 N-A, 8 N-B, 4 N-C. Stated here so the scorer can
+#: refuse an INCOMPLETE control artifact rather than certifying whatever rows it was handed -- a
+#: coherent key missing one N-A would otherwise report 7/7 PASS and satisfy a Rule 3 blocker on a
+#: population smaller than the one the protocol froze.
+FROZEN_CONTROL_POPULATION = {"N-A": 8, "N-B": 8, "N-C": 4}
+#: Every control takes BOTH result-bearing routes (A36.6), so a control cannot be scored on one.
+FROZEN_CONTROL_ROUTES = (BO.ROUTE_AI, BO.ROUTE_HUMAN)
+CONTROL_POPULATION_INCOMPLETE = "CONTROL_POPULATION_INCOMPLETE"
+CONTROL_ROUTE_SET_MISMATCH = "CONTROL_ROUTE_SET_MISMATCH"
+CONTROL_IDENTITY_DUPLICATED = "CONTROL_IDENTITY_DUPLICATED"
 CONTROL_TARGET_ABSENT = "EXPECTED_TARGET_ABSENT"
 CONTROL_TARGET_DUPLICATED = "EXPECTED_TARGET_DUPLICATED"
 CONTROL_TARGET_UNREADABLE = "EXPECTED_TARGET_UNREADABLE"
@@ -1071,6 +1155,59 @@ def _control_verdict(kind: str, expected, answer: dict) -> dict:
     return {"pass": False, "reason": reason, "observed_texts": texts, "expected": [target]}
 
 
+def _validate_control_population(controls: dict) -> None:
+    """The frozen 8 / 8 / 4 control census, both routes each, unique identities. Refuses otherwise.
+
+    Each of these is a property of the INPUT ARTIFACT, not an observed control failure, which is
+    why they raise rather than returning FAIL or NOT_EVALUABLE: a FAIL would report a finding about
+    the adjudicator, and NOT_EVALUABLE would report one about the study, when the truth is that the
+    artifact handed to the scorer is not the frozen population.
+
+    A KEY WITH NO CONTROLS AT ALL IS NOT VALIDATED HERE, and that is deliberate rather than a hole.
+    The self-certification risk the enforcement closes is a PARTIAL population reporting PASS: a
+    key carrying 7 of 8 N-A controls would otherwise certify a Rule 3 blocker on a smaller census
+    than the protocol froze. A key carrying NONE certifies nothing -- every kind reports
+    `NOT_EVALUABLE`, which is not a PASS and cannot satisfy Rule 3 -- and refusing it outright would
+    make the scorer unrunnable on exactly the DEVELOPMENT and mechanism material it must be tested
+    against, including its own real-producer end-to-end check. The confirmatory key carries all 20
+    by construction, so the frozen census is enforced wherever it exists.
+    """
+    if not controls:
+        return
+    for bid, record in controls.items():
+        kind = record["control_kind"]
+        if kind not in CONTROL_KINDS:
+            raise ScoreInputError(CONTROL_TRUTH_MALFORMED, {"blind_id": bid, "control_kind": kind})
+        # BOTH result-bearing routes, per A36.6. A control declaring one route could otherwise be
+        # scored on the route that passes while the route whose labels are consumed goes unchecked.
+        if tuple(record.get("adjudication_routes") or ()) != FROZEN_CONTROL_ROUTES:
+            raise ScoreInputError(
+                CONTROL_ROUTE_SET_MISMATCH,
+                {
+                    "blind_id": bid,
+                    "control_kind": kind,
+                    "declared": record.get("adjudication_routes"),
+                    "required": list(FROZEN_CONTROL_ROUTES),
+                },
+            )
+
+    observed = {kind: sum(1 for r in controls.values() if r["control_kind"] == kind) for kind in CONTROL_KINDS}
+    if observed != FROZEN_CONTROL_POPULATION:
+        raise ScoreInputError(
+            CONTROL_POPULATION_INCOMPLETE, {"observed": observed, "frozen": dict(FROZEN_CONTROL_POPULATION)}
+        )
+
+    # UNIQUE IDENTITIES, not merely the right COUNT: a duplicated or re-identified control keeps
+    # the census looking correct while one real fixture goes unexercised and another is scored twice.
+    identities = [r.get("canonical_identity") for r in controls.values()]
+    duplicated = sorted({i for i in identities if identities.count(i) > 1})
+    if duplicated or None in identities:
+        raise ScoreInputError(
+            CONTROL_IDENTITY_DUPLICATED,
+            {"duplicated": duplicated[:4], "n_controls": len(controls), "n_unique": len(set(identities))},
+        )
+
+
 def control_verdicts(key: dict, adjudicated: dict) -> dict:
     """A41.2 R8 -- the N-A / N-B / N-C factual verdicts, from committed artifacts only.
 
@@ -1085,15 +1222,20 @@ def control_verdicts(key: dict, adjudicated: dict) -> dict:
 
     EVERY REQUIRED ROUTE, separately (A36.6 gives a control both result-bearing routes). A kind
     PASSES only if EVERY fixture passes on EVERY required route -- no tolerance, no percentage.
+
+    THE POPULATION IS VALIDATED FIRST, and an incomplete one REFUSES rather than being scored.
+    "All rows present passed" is not the frozen question: a coherent key missing one N-A would
+    report 7/7 PASS and satisfy a Rule 3 blocker on a smaller population than the protocol froze.
+    `FROZEN_CONTROL_POPULATION` is the known 8/8/4 census (A40.1) and nothing here rebuilds it --
+    no `control_fixtures` run, no source selection, no XML/PDF truth, no G6, no `x26`.
     """
+    controls = {bid: r for bid, r in sorted(key["stimuli"].items()) if r.get("control_kind") is not None}
+    _validate_control_population(controls)
+
     per_control = []
-    for bid, record in sorted(key["stimuli"].items()):
-        kind = record.get("control_kind")
-        if kind is None:
-            continue
-        if kind not in CONTROL_KINDS:
-            raise ScoreInputError(CONTROL_TRUTH_MALFORMED, {"blind_id": bid, "control_kind": kind})
-        for route in record["adjudication_routes"]:
+    for bid, record in controls.items():
+        kind = record["control_kind"]
+        for route in FROZEN_CONTROL_ROUTES:
             answer = adjudicated.get(route, {}).get(bid)
             if answer is None:
                 raise ScoreInputError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
@@ -1133,6 +1275,11 @@ def control_verdicts(key: dict, adjudicated: dict) -> dict:
         "per_control": per_control,
         "by_kind": by_kind,
         "n_controls": len({r["blind_id"] for r in per_control}),
+        # Stated so a reader can tell "the frozen census was checked" from "there were no controls
+        # to check": the second reports NOT_EVALUABLE everywhere and satisfies no Rule 3 blocker.
+        "population_present": bool(controls),
+        "frozen_population": dict(FROZEN_CONTROL_POPULATION),
+        "required_routes": list(FROZEN_CONTROL_ROUTES),
         "comparison": "exact raw string equality; NO normalisation (R8)",
         "aggregation": "a kind PASSES only if every fixture passes on every required route; no tolerance",
         "ruled_by": "A41.2 R8",

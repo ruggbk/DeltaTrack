@@ -4682,9 +4682,12 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 questions and this amendment keeps them apart, as A31 did. No frozen sentence is amended: every
 metric, denominator, threshold and normalisation the scorer applies was fixed by §6, §8, A19–A24,
 A27, A28, A36–A39 before this component existed. But the frozen text does not determine **every**
-quantity the scorer must produce, and A41.2 records five places where it had to be read. Two of
-those readings can move a reported number, so filing this as `false` would understate what a
-reviewer is being asked to approve. **The readings are recorded, not smuggled.**
+quantity the scorer must produce, and **A41.2 records all eight places where it had to be read or
+ruled — R1 through R8.** Three of them move a reported number: R1's §8 event evidence, R2's M7
+threshold, and **R6's R1 computation, which was raised as a STOP and ruled by the reviewer rather
+than chosen here**. R8 was reported as an unowned factual gate and is likewise now ruled and
+implemented. Filing this as `false` would understate what a reviewer approved. **Nothing was
+smuggled: every reading is recorded, and the two that could decide a gate were escalated first.**
 
 ### A41.1 — what was implemented, and what it calls rather than restates
 
@@ -4891,9 +4894,50 @@ tolerance, no percentage. The three statuses are Rule 3 **inputs**; no consequen
 **Realized** on the committed manifest, against its own committed truth: **N-A 16/16 · N-B 16/16 ·
 N-C 8/8** across 20 controls × both routes.
 
+### A41.2.1 — two completeness enforcements, added on review. **Not new rulings**
+
+Both close the same shape of hole: a **self-consistent but incomplete** artifact certifying a Rule 3
+blocker. Neither introduces a rule — each enforces one already frozen.
+
+**A36.6, enforced for R1's routes.** `r1_reliability` iterated the routes the **repeat** declared,
+so a shortened repeat record plus a correspondingly shortened answer set could delete a **failing**
+required route and leave the gate passing on the survivor, with nothing in the artifact looking
+wrong. A36.6 already freezes the invariant: the repeat *"inherits its primary's required route(s):
+C only → AI, D only → human, C and D → both"*. The required routes are now derived from **frame
+membership** (via `build_oracle`'s own `C_FRAME_ROUTE` / `D_FRAME_ROUTE`, not restated), the
+repeat's frames must equal the primary's, and its declared routes must equal the frame-derived set.
+`R1_FRAME_SET_MISMATCH` / `R1_ROUTE_SET_MISMATCH`.
+
+> **One deliberate divergence from the literal instruction, because the literal form would refuse
+> valid frozen input.** The review asked that the repeat's `adjudication_routes` equal the
+> **primary's**. It cannot: a C-audit-selected primary carries `human` **in addition** to its frame
+> routes, and `plan_r1_repeats` explicitly does **not** inherit `is_c_audit_selected`
+> (`replace(s, is_r1_repeat=True, is_c_audit_selected=False)`). For a C-only audited primary the two
+> sets legitimately differ — primary `(ai, human)`, repeat `(ai,)` — and the real run will contain
+> exactly that case, since most C regions are not discordant and the audit draws 25 of them. The
+> primary is therefore required to **contain** its frame routes; the repeat must **equal** them.
+> This is the same invariant A36.6 states, spelled so it cannot refuse a legal configuration.
+
+**The frozen 8 / 8 / 4 census, enforced for R8.** `control_verdicts` passed a kind when all rows
+**present** passed, so a coherent key missing one N-A would report **7/7 PASS** and satisfy a
+blocker on a smaller census than A40.1 froze. The scorer now requires the frozen population (8 N-A,
+8 N-B, 4 N-C), **both** result-bearing routes per control, and **unique** control identities — a
+duplicated identity keeps the count looking right while one real fixture goes unexercised and
+another is scored twice. `CONTROL_POPULATION_INCOMPLETE` / `CONTROL_ROUTE_SET_MISMATCH` /
+`CONTROL_IDENTITY_DUPLICATED`, all raised **before** any verdict is computed, because an incomplete
+artifact is not an observed control failure. Nothing is rebuilt: no `control_fixtures` run, no
+source selection, no XML/PDF truth, no G6, no `x26`.
+
+> **A key carrying NO controls is not refused, and that is deliberate.** The self-certification risk
+> is a *partial* population reporting PASS. A key with none certifies nothing — every kind reports
+> `NOT_EVALUABLE`, which no Rule 3 blocker accepts — and refusing it would make the scorer
+> unrunnable on the DEVELOPMENT and mechanism material it must be tested against, including its own
+> real-producer end-to-end check. `population_present` is reported so the two cases are
+> distinguishable, and the confirmatory key carries all 20 by construction.
+
 ### A41.3 — the controls, and that each can go RED
 
-`x27_score_metrics.py`, **158/158**, on SYNTHETIC + DEVELOPMENT material only. It covers all
+`x27_score_metrics.py`, **169/169**, on SYNTHETIC + DEVELOPMENT material only. It covers all
 **eleven** current §5 control rows (the row list is enumerated in the evidence file and a final
 check fails if any row has no executable test), the twelve explicit negatives, the false-green
 attacks, and the refusals.
@@ -4973,7 +5017,7 @@ cross-engine writers use, and a control proves it refuses today and would write 
 
 ### Realized
 
-`x27` **158/158**, **37/37** injected faults caught — each failing a NAMED control rather than
+`x27` **169/169**, **42/42** injected faults caught — each failing a NAMED control rather than
 crashing — `contamination.json` byte-identical.
 
 **Round 3 added a fourth class of control defect worth recording: a control that detects a fault

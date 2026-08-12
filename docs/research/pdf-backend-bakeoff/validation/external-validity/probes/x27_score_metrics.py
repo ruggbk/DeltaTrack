@@ -1224,17 +1224,18 @@ def part_m5(tmp: Path) -> dict:
 
 
 def part_r1(tmp: Path) -> dict:
-    """Section 5.6's R1 reliability, computed from committed artifacts -- and where it ABSTAINS.
+    """Section 5.6's R1 reliability, computed from committed artifacts under the A41.2 R6 ruling.
 
-    The reviewer's item 2. R1's thresholds are frozen; its computation is not. Two choices can
-    move the gate, and this part both (a) proves the computable facts are computed from evidence
-    rather than supplied, and (b) exhibits the minimal fixture on which the competing readings
-    disagree across the threshold.
+    R6 is RULED, so this part pins the ruled computation rather than exhibiting a choice: the
+    symmetric-union denominator under one-to-one identity matching, exact text equality, the fine
+    role, the per-route micro-average, and the worst-route gate. It also enforces A36.6 -- the
+    required routes come from FRAME MEMBERSHIP, never from the repeat's own declaration -- and
+    proves no caller scalar can reach the gate.
     """
-    print("\n== section 5.6 R1: evidence-bound facts, and the abstention (A41.2 R6) ==")
+    print("\n== section 5.6 R1: the ruled computation (A41.2 R6) and A36.6 route inheritance ==")
     # 12 discordant pages so the D census gives 12 primaries and plan_r1_repeats draws exactly one.
     pages = [page_input(p + 1, start_gid=p * 100, text_differs={5}) for p in range(12)]
-    # THREE headings per region, so the ambiguity fixture below can drop one from the repeat's
+    # THREE headings per region, so the unequal-enumeration fixture below can drop one from the repeat's
     # answer and still leave two agreeing -- the exact shape on which the candidate denominators
     # disagree. One heading per region could not exhibit it at all.
     occ = {
@@ -1523,6 +1524,58 @@ def part_r1(tmp: Path) -> dict:
         "consumer can read a status the protocol no longer defines",
     )
 
+    # ================= A36.6 ENFORCEMENT: required routes come from FRAMES, not from the repeat
+    # The route-asymmetric fixture is the one that matters here: AI passes and human FAILS, so a
+    # repeat able to declare "AI only" could delete the failing route and leave a coherent artifact.
+    shortened_key = copy.deepcopy(built.key)
+    shortened_key["stimuli"][repeat_bid]["adjudication_routes"] = [BO.ROUTE_AI]
+    shortened_answers = copy.deepcopy(human_only)
+    del shortened_answers[BO.ROUTE_HUMAN][repeat_bid]  # keep key+answers internally coherent
+    check(
+        "A36.6 -- a repeat declaring only the PASSING route REFUSES; it cannot delete the failure",
+        ("ScoreInputError", SM.R1_ROUTE_SET_MISMATCH),
+        refusal_any(lambda: SM.r1_reliability(shortened_key, shortened_answers)),
+        "the scorer iterates the routes the REPEAT claims, so a shortened repeat record plus a "
+        "correspondingly shortened answer set silently drops a FAILING required route and the gate "
+        "passes on the survivor -- and nothing in the artifact looks wrong",
+    )
+    check(
+        "...and the un-shortened pair still reaches the FAIL, so the refusal is the only difference",
+        "FAIL",
+        SM.r1_reliability(built.key, human_only)["text"]["status"],
+        "the asymmetric fixture does not actually fail on the human route, so the control above "
+        "would refuse something that was never going to be a masked failure",
+    )
+    narrowed = copy.deepcopy(built.key)
+    narrowed["stimuli"][repeat_bid]["frames"] = [BO.C_FRAME]
+    check(
+        "A36.6 -- a repeat whose FRAMES are silently narrowed REFUSES",
+        ("ScoreInputError", SM.R1_FRAME_SET_MISMATCH),
+        refusal_any(lambda: SM.r1_reliability(narrowed, identical)),
+        "frame membership is taken from the repeat, so narrowing it changes the required route set "
+        "-- the same masking, one level further back",
+    )
+    coherent_narrowing = copy.deepcopy(built.key)
+    coherent_narrowing["stimuli"][repeat_bid]["frames"] = [BO.C_FRAME]
+    coherent_narrowing["stimuli"][repeat_bid]["adjudication_routes"] = [BO.ROUTE_AI]
+    check(
+        "...even when frames AND routes are narrowed together, so the record is self-consistent",
+        ("ScoreInputError", SM.R1_FRAME_SET_MISMATCH),
+        refusal_any(lambda: SM.r1_reliability(coherent_narrowing, shortened_answers)),
+        "a self-consistent narrowing passes because only frames-vs-routes agreement is checked, "
+        "never agreement with the PRIMARY -- which is what A36.6 actually freezes",
+    )
+    check(
+        "the frozen frame->route map is derived from build_oracle's own constants",
+        ((BO.ROUTE_AI,), (BO.ROUTE_HUMAN,), (BO.ROUTE_AI, BO.ROUTE_HUMAN)),
+        (
+            SM._frame_routes([BO.C_FRAME]),
+            SM._frame_routes([BO.D_FRAME]),
+            SM._frame_routes([BO.C_FRAME, BO.D_FRAME]),
+        ),
+        "the C->AI / D->human / C&D->both mapping is restated here and can drift from A36.4's owner",
+    )
+
     # --- an orphaned repeat REFUSES rather than shrinking the reliability population.
     orphan = copy.deepcopy(built.key)
     orphan["stimuli"][repeat_bid]["r1_base_identity"] = "a base identity nobody committed"
@@ -1676,7 +1729,10 @@ def part_r8(tmp: Path) -> dict:
         answers[BO.ROUTE_HUMAN][na_bid]["headings"] = [{"text": "ONLY THE HUMAN ROUTE IS WRONG"}]
 
     asymmetric = mutate(human_only)
-    routes = asymmetric["by_kind"]["N-A"]["by_route"]
+    # `.get` with an explicit absent marker rather than direct indexing: a fault that scores only
+    # one route leaves the other absent, and a KeyError here would turn a caught fault into a crash.
+    absent = {"n_passed": "ROUTE ABSENT", "n_total": "ROUTE ABSENT"}
+    routes = {r: asymmetric["by_kind"]["N-A"]["by_route"].get(r, absent) for r in (BO.ROUTE_AI, BO.ROUTE_HUMAN)}
     check(
         "R8 -- one route cannot mask the other: AI passes, human fails, the KIND fails",
         ("FAIL", 8, 7, [BO.ROUTE_HUMAN]),
@@ -1717,6 +1773,71 @@ def part_r8(tmp: Path) -> dict:
         (True, True),
         (isinstance(a_truth, list) and bool(a_truth), isinstance(b_truth, list) and bool(b_truth)),
         "the swap produced a malformed record, so the control would fail for the wrong reason",
+    )
+
+    # ================= THE FROZEN 8 / 8 / 4 CENSUS, and both routes per control
+    # Each fixture below stays internally well formed; only the POPULATION is wrong, which is what
+    # makes these meaningful rather than malformedness tests.
+    na_bids = [b for b, r in built.key["stimuli"].items() if r["control_kind"] == "N-A"]
+
+    incomplete_key = copy.deepcopy(built.key)
+    del incomplete_key["stimuli"][na_bids[0]]
+    incomplete_answers = copy.deepcopy(truthful)
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        del incomplete_answers[route][na_bids[0]]
+    check(
+        "R8 -- deleting ONE N-A control and both its answers REFUSES, it does not certify 7/7",
+        ("ScoreInputError", SM.CONTROL_POPULATION_INCOMPLETE),
+        refusal_any(lambda: SM.control_verdicts(incomplete_key, incomplete_answers)),
+        "a coherent key missing one control reports 7/7 PASS and satisfies a Rule 3 blocker on a "
+        "SMALLER census than the protocol froze -- self-certification by omission, and the "
+        "artifact looks complete from the inside",
+    )
+    check(
+        "...and the same key WITH the control present passes, so the refusal is about completeness",
+        "PASS",
+        SM.control_verdicts(built.key, truthful)["by_kind"]["N-A"]["status"],
+        "the complete population is refused too, so the control above proves nothing",
+    )
+
+    one_route_key = copy.deepcopy(built.key)
+    one_route_key["stimuli"][na_bids[0]]["adjudication_routes"] = [BO.ROUTE_AI]
+    one_route_answers = copy.deepcopy(truthful)
+    del one_route_answers[BO.ROUTE_HUMAN][na_bids[0]]
+    check(
+        "R8 -- a control declaring only ONE route REFUSES; it is not scored on the survivor",
+        ("ScoreInputError", SM.CONTROL_ROUTE_SET_MISMATCH),
+        refusal_any(lambda: SM.control_verdicts(one_route_key, one_route_answers)),
+        "a control is scored on the route it kept, so the route whose labels are actually consumed "
+        "goes unchecked while the kind still reports PASS (A36.6 gives every control both routes)",
+    )
+
+    reidentified = copy.deepcopy(built.key)
+    reidentified["stimuli"][na_bids[1]]["canonical_identity"] = reidentified["stimuli"][na_bids[0]][
+        "canonical_identity"
+    ]
+    check(
+        "R8 -- a DUPLICATED control identity REFUSES even though the counts still look right",
+        ("ScoreInputError", SM.CONTROL_IDENTITY_DUPLICATED),
+        refusal_any(lambda: SM.control_verdicts(reidentified, truthful)),
+        "identity uniqueness is not checked, so one real fixture goes unexercised while another is "
+        "scored twice and the 8/8/4 census still reads correct",
+    )
+    check(
+        "the frozen census and required routes are STATED in the artifact, not implicit",
+        ({"N-A": 8, "N-B": 8, "N-C": 4}, [BO.ROUTE_AI, BO.ROUTE_HUMAN], True),
+        (verdicts["frozen_population"], verdicts["required_routes"], verdicts["population_present"]),
+        "a reader cannot tell which census was enforced, or whether one was present at all",
+    )
+    check(
+        "a key with NO controls reports NOT_EVALUABLE everywhere rather than PASS",
+        ({"N-A": "NOT_EVALUABLE", "N-B": "NOT_EVALUABLE", "N-C": "NOT_EVALUABLE"}, False),
+        (
+            {k: v["status"] for k, v in SM.control_verdicts(EMPTY_KEY, EMPTY_ADJUDICATED)["by_kind"].items()},
+            SM.control_verdicts(EMPTY_KEY, EMPTY_ADJUDICATED)["population_present"],
+        ),
+        "a control-free key reports PASS on a blocker it never evaluated -- and DEVELOPMENT material "
+        "legitimately carries no controls, so this path must be honest rather than forbidden",
     )
 
     # --- malformed committed truth REFUSES rather than silently passing or failing.
