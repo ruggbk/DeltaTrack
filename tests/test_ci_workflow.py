@@ -161,24 +161,41 @@ def test_required_test_context_is_an_aggregator_over_all_jobs() -> None:
             "reports 'skipped'/'failure', not 'success', and an aggregator that never "
             "reads the result passes regardless"
         )
-    # CRITICAL: Each env binding variable (e.g., $FAST_TESTS_RESULT) must actually appear
-    # in the `for result in` list that feeds the gating comparison. Merely binding the
-    # env var is not enough -- if it's omitted from the loop, that job's result is ignored
-    # and the aggregator becomes a rubber stamp for that job.
-    # Extract the variable names from the for-loop list.
-    loop_vars = re.findall(r"\$(\w+_RESULT)", normalised)
-    # The pattern matches $LINT_FORMAT_RESULT, $FAST_TESTS_RESULT, etc. inside the loop.
-    # We need to ensure every expected env binding variable appears in that list.
-    expected_vars = {f"{job_name.upper().replace('-', '_')}_RESULT" for job_name in needs}
-    missing_in_loop = expected_vars - set(loop_vars)
-    assert not missing_in_loop, (
-        f"the 'test' aggregator's for-loop is missing these job result variables: {sorted(missing_in_loop)}. "
-        "Each needs.<job>.result must be bound to an env var AND that env var must appear in the "
-        "`for result in` list, otherwise that job's failure is silently ignored."
+    # Reading a job's result is not the same as ACTING on it. The value has to reach the
+    # `for result in` list that feeds the comparison below, and the step above cannot see
+    # the difference: an env binding satisfies it whether or not the loop ever visits that
+    # variable. So a job bound to a variable the loop omits is an aggregator that is a
+    # rubber stamp for exactly that one job, while every other job still gates -- the
+    # hardest version of this defect to spot in a diff, because the binding is right there.
+    #
+    # The list is located and searched on its own rather than the whole script, because
+    # the script also contains `"$result"`, the error `echo`, and anything else a future
+    # step adds. Matching a variable anywhere in the script would count a name that appears
+    # only in a diagnostic message as though it gated the run.
+    #
+    # Deliberately NO naming convention is pinned. The variable carrying a job's result is
+    # found by which binding holds `needs.<job>.result`, not by being spelled
+    # FAST_TESTS_RESULT, so renaming the variables is not a failure while misrouting one
+    # is. A direct `${{ needs.<job>.result }}` written into the list counts too, which
+    # keeps the latitude the read check above already allows.
+    loop_match = re.search(r"for result in\s+(.*?);\s*do", normalised)
+    assert loop_match, (
+        "the 'test' aggregator has no `for result in ... ; do` list, so which job results "
+        "actually gate the required check cannot be established"
     )
+    result_list = loop_match.group(1)
+    looped_names = set(re.findall(r"\$\{?(\w+)\}?", result_list))
+    for job_name in needs:
+        result_expr = f"needs.{job_name}.result"
+        carriers = {name for name, value in env_bindings.items() if result_expr in value}
+        assert result_expr in result_list or carriers & looped_names, (
+            f"the 'test' aggregator never compares {result_expr}. It is carried by "
+            f"{sorted(carriers) or 'no env binding'}, and the `for result in` list visits "
+            f"{sorted(looped_names)}. The binding is decorative: '{job_name}' could fail "
+            "and the required check would still report success."
+        )
     # All result expressions must be compared against "success" and exit non-zero on mismatch
     # The current implementation loops over all results in a shell for-loop and exits 1 on any mismatch
-    assert "for result in" in normalised, "the 'test' aggregator must iterate over all job results"
     assert '"$result" != "success"' in normalised or '$result != "success"' in normalised, (
         "the 'test' aggregator must compare each result against 'success'"
     )
