@@ -110,10 +110,19 @@ def test_required_test_context_is_an_aggregator_over_all_jobs() -> None:
     making the aggregator a rubber stamp.
 
     Reading each result, comparing against `success`, and exiting non-zero are
-    pinned as one CONNECTED contract. That contract is load-bearing for
-    `fail-fast: false` on the matrix jobs: they may run every leg to completion,
-    and the aggregator stays non-permissive only because it fails whenever any
-    job (or any leg of a matrix job) is not `success`.
+    pinned as one CONNECTED contract, all three read from the single step that
+    holds the gate. Checked independently they are three textual facts that a
+    workflow gating nothing can still exhibit: a comparison whose branch only
+    echoes, next to an unreachable `exit 1`, satisfies "compares" and "exits"
+    while every dependency failure passes. And carriers must come from the
+    gating step's own `env:`, since a step-level binding does not exist in an
+    earlier step, so a correct binding added later cannot vouch for a misrouted
+    one in the gate.
+
+    That contract is load-bearing for `fail-fast: false` on the matrix jobs:
+    they may run every leg to completion, and the aggregator stays non-permissive
+    only because it fails whenever any job (or any leg of a matrix job) is not
+    `success`.
     """
     jobs = _workflow()["jobs"]
     aggregator = jobs.get("test")
@@ -143,65 +152,79 @@ def test_required_test_context_is_an_aggregator_over_all_jobs() -> None:
         "the 'test' aggregator must run even when a dependency fails or is skipped, "
         "or a skipped job leaves the required check with no verdict"
     )
-    # The aggregator must read EACH job's result and compare against "success"
-    script = " ".join(str(step.get("run", "")) for step in aggregator.get("steps", []))
-    normalised = " ".join(script.split())
-    # Also check env bindings in the aggregator steps
-    env_bindings = {}
-    for step in aggregator.get("steps", []):
-        for name, value in (step.get("env", {}) or {}).items():
-            env_bindings[name] = str(value)
-    for job_name in needs:
-        result_expr = f"needs.{job_name}.result"
-        # The result can be referenced directly in the script or via an env variable binding
-        direct_ref = result_expr in normalised
-        env_ref = any(result_expr in v for v in env_bindings.values())
-        assert direct_ref or env_ref, (
-            f"the 'test' aggregator must read {result_expr}: a skipped or failed job "
-            "reports 'skipped'/'failure', not 'success', and an aggregator that never "
-            "reads the result passes regardless"
-        )
-    # Reading a job's result is not the same as ACTING on it. The value has to reach the
-    # `for result in` list that feeds the comparison below, and the step above cannot see
-    # the difference: an env binding satisfies it whether or not the loop ever visits that
-    # variable. So a job bound to a variable the loop omits is an aggregator that is a
-    # rubber stamp for exactly that one job, while every other job still gates -- the
-    # hardest version of this defect to spot in a diff, because the binding is right there.
-    #
-    # The list is located and searched on its own rather than the whole script, because
-    # the script also contains `"$result"`, the error `echo`, and anything else a future
-    # step adds. Matching a variable anywhere in the script would count a name that appears
-    # only in a diagnostic message as though it gated the run.
-    #
-    # Deliberately NO naming convention is pinned. The variable carrying a job's result is
-    # found by which binding holds `needs.<job>.result`, not by being spelled
-    # FAST_TESTS_RESULT, so renaming the variables is not a failure while misrouting one
-    # is. A direct `${{ needs.<job>.result }}` written into the list counts too, which
-    # keeps the latitude the read check above already allows.
-    loop_match = re.search(r"for result in\s+(.*?);\s*do", normalised)
-    assert loop_match, (
-        "the 'test' aggregator has no `for result in ... ; do` list, so which job results "
-        "actually gate the required check cannot be established"
+    # Everything below is read from ONE step: the one holding the `for result in` gate.
+    # A step-level `env:` is scoped to its own step, so a binding in a LATER step does not
+    # exist while the loop runs. Merging the aggregator's steps into a single dictionary
+    # would let a correct-looking binding in a diagnostic step stand in for a misrouted one
+    # in the gate, and this guard would then confirm a contract that never holds at runtime.
+    # Job-level `env:` IS in scope for the step, so it is merged underneath the step's own
+    # bindings rather than ignored.
+    gating_steps = [
+        step
+        for step in aggregator.get("steps", [])
+        if isinstance(step.get("run"), str) and "for result in" in step["run"]
+    ]
+    assert len(gating_steps) == 1, (
+        f"expected exactly one step of the 'test' aggregator to hold the `for result in` gate, "
+        f"found {len(gating_steps)}. The results, the comparison and the exit are only connected "
+        "within a single step, so a gate split across steps is one this guard cannot testify about."
     )
-    result_list = loop_match.group(1)
+    gate = gating_steps[0]
+    normalised = " ".join(str(gate["run"]).split())
+    scoped_env = {
+        name: str(value) for name, value in {**(aggregator.get("env") or {}), **(gate.get("env") or {})}.items()
+    }
+    # The three properties are pinned as ONE contract, because each is separately satisfiable
+    # by a workflow that gates nothing. A loop that compares `$result` against "success" and
+    # only echoes, plus an unreachable `if false; then exit 1; fi` further down, contains a
+    # comparison AND an `exit 1` while a failed dependency sails through. So the loop body is
+    # read out of the loop, and the exit is read out of the branch the comparison takes.
+    #
+    # Narrow to the shell shape this workflow uses rather than parsing shell. A rewrite into
+    # a different shape fails here, which is the right outcome: the guard would no longer be
+    # able to say where the exit sits relative to the comparison.
+    gate_match = re.search(r"for result in\s+(.*?);\s*do\s+(.*?)\s+done\b", normalised)
+    assert gate_match, (
+        "the 'test' aggregator has no `for result in ... ; do ... done` gate, so which job "
+        "results are compared, and what happens when one is not 'success', cannot be "
+        "established from its script"
+    )
+    result_list, loop_body = gate_match.group(1), gate_match.group(2)
+    # Reading a job's result is not the same as ACTING on it. The value has to reach the
+    # loop's input list: an env binding alone does not, so a job bound to a variable the list
+    # omits is an aggregator that rubber-stamps exactly that one job while every other job
+    # still gates. That is the hardest version of this defect to spot in a diff, because the
+    # binding is sitting right there looking correct.
+    #
+    # The list is searched on its own rather than the whole script, which also contains
+    # `"$result"` and the error `echo`. Matching a variable anywhere in the script would count
+    # a name appearing only in a diagnostic message as though it gated the run.
+    #
+    # Deliberately NO naming convention is pinned. A job's carrier is found by which binding
+    # holds `needs.<job>.result`, not by being spelled FAST_TESTS_RESULT, so renaming the
+    # variables is not a failure while misrouting one is. A direct `${{ needs.<job>.result }}`
+    # written into the list counts too.
     looped_names = set(re.findall(r"\$\{?(\w+)\}?", result_list))
     for job_name in needs:
         result_expr = f"needs.{job_name}.result"
-        carriers = {name for name, value in env_bindings.items() if result_expr in value}
+        carriers = {name for name, value in scoped_env.items() if result_expr in value}
         assert result_expr in result_list or carriers & looped_names, (
-            f"the 'test' aggregator never compares {result_expr}. It is carried by "
-            f"{sorted(carriers) or 'no env binding'}, and the `for result in` list visits "
-            f"{sorted(looped_names)}. The binding is decorative: '{job_name}' could fail "
+            f"the 'test' aggregator never compares {result_expr}. Within the gating step it is "
+            f"carried by {sorted(carriers) or 'no env binding'}, and the `for result in` list "
+            f"visits {sorted(looped_names)}. The binding is decorative: '{job_name}' could fail "
             "and the required check would still report success."
         )
-    # All result expressions must be compared against "success" and exit non-zero on mismatch
-    # The current implementation loops over all results in a shell for-loop and exits 1 on any mismatch
-    assert '"$result" != "success"' in normalised or '$result != "success"' in normalised, (
-        "the 'test' aggregator must compare each result against 'success'"
+    branch_match = re.search(r'if\s+\[\s+"\$result"\s+!=\s+"success"\s+\]\s*;\s*then\s+(.*?)\s+fi\b', loop_body)
+    assert branch_match, (
+        "the 'test' aggregator's loop body does not test `$result` for non-success in the shape "
+        f'`if [ "$result" != "success" ]; then ... fi`. The body read was: {loop_body!r}'
     )
-    assert "exit 1" in normalised, (
-        "the 'test' aggregator's non-success branch must exit non-zero. Without it the "
-        "comparison is decorative and the required check reports success anyway."
+    non_success_branch = branch_match.group(1)
+    assert re.search(r"\bexit\s+[1-9]\d*\b", non_success_branch), (
+        "the 'test' aggregator compares each result against 'success', but the branch taken for "
+        f"a non-success result never exits non-zero. That branch is: {non_success_branch!r}. An "
+        "`exit 1` elsewhere in the script gates nothing, so the comparison is decorative and the "
+        "required check reports success while a dependency failed."
     )
 
 
