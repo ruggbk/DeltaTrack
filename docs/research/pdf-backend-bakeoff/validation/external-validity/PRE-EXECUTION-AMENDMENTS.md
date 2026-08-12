@@ -5150,7 +5150,7 @@ the surface as incomplete, naming that one file.
 
 ```json
 {"id": "A42", "class": "SUBSTANTIVE",
- "commits": ["d00a1e5", "0d0ca33"],
+ "commits": ["7aa3751", "7df515c"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/decide_architecture.py", "probes/x28_decide_architecture.py",
