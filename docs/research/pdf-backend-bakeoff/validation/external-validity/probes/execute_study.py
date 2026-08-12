@@ -1,0 +1,453 @@
+"""execute_study -- the canonical execution path. A43, made executable.
+
+RESULT-BEARING. This is the component that decides WHICH DOCUMENTS ENTER THE STUDY, so it can
+move every realized result. It introduces NO new methodological rule: the population is the
+one frozen in `results/holdout_membership.json`, the arms are the frozen runners, the frame is
+built by the frozen `build_frames.build_document_frame`, and the extraction scope is the whole
+document, which is what section 6 already means by "100 % of the holdout" and what
+`cross_engine_control` already documents as "what the canonical writer uses".
+
+THE DEFECT THIS REPAIRS. Every result-bearing API below this one takes a CALLER-SUPPLIED list
+of documents -- `build_oracle.build(documents)`, `s1_control.write_s1_control(documents)`,
+`cross_engine_control.write_cross_engine_control(documents)`, `score_metrics.ScoreInputs(frames)`.
+Each of them is correct in isolation and none of them can tell whether the list it received is
+the frozen population, a subset of it, or a different population entirely. There was no
+component whose job was to produce that list from the committed authority, and no writer for
+the `results/frames.json` those stages consume. A study can therefore have been run on 16 of
+17 members with every downstream gate green, because nothing downstream knows what 17 is.
+
+    THE POPULATION AUTHORITY IS THE COMMITTED MEMBERSHIP, AND THERE IS NO OTHER.
+
+Every descriptor this module hands to a later stage is re-checked against that authority at
+the moment it is handed over -- not once at load, because a list can be filtered after it is
+loaded and the filtering is exactly the failure mode. `assert_population_complete` therefore
+runs inside `write_frames`, `oracle_documents` and `control_documents`, and a subset, a
+superset, a duplicate or a substituted member refuses there rather than scoring quietly.
+
+WHAT THIS COMPONENT MAY NOT DECIDE. The membership; the extraction scope (whole document);
+which population or stratum a member carries (both are read from the authority, never
+inferred); the frame contents; any metric, threshold, route or decision rule. Its only
+permitted freedom is the JSON layout of the `frames.json` wrapper, which `score_metrics`
+deliberately does not read -- it consumes the document frames themselves.
+
+WHY THE WRITER IS HERE AND NOT IN `build_frames`. No frozen source requires a location.
+HARNESS-PLAN section 2 lists `results/frames.json` under `build_frames`' "outputs" but is
+explicitly "not frozen protocol"; `score_metrics` says only that "the `frames.json` wrapper
+belongs to whatever writes it". `build_frames` is deliberately pure -- it has no file I/O at
+all -- and keeping it that way preserves the property its controls rely on, that a frame is a
+value with no ambient state. The wrapper lives with the population assembler that knows what a
+complete population is, because the bijection assertion is the only thing the wrapper is for.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+import build_frames as BF
+import build_oracle as BO
+import run_extended
+import run_hybrid
+
+HERE = Path(__file__).resolve()
+EV = HERE.parents[1]
+
+MEMBERSHIP = EV / "results" / "holdout_membership.json"
+DOCS_DIR = EV / "holdout"
+FRAMES = EV / "results" / "frames.json"
+
+FRAMES_SCHEMA = "frames/1"
+
+# THE EXTRACTION SCOPE IS THE WHOLE DOCUMENT. Not a parameter, deliberately. Every x-probe
+# carries its own PAGE_LIMIT and every one of them labels it "a machinery demonstration
+# window, NOT a census"; a limit reaching this path would silently shrink the M0/M7/M9
+# denominators section 6 defines over "100 % of the holdout", and would shrink the D-frame
+# census that decides whether Rule 1 may run at all. There is no spelling of a prefix here.
+PAGE_LIMIT = None
+
+# refusal classes -- every one deterministic, none a value
+MEMBERSHIP_MISSING = "MEMBERSHIP_MISSING"
+MEMBERSHIP_MALFORMED = "MEMBERSHIP_MALFORMED"
+MEMBER_MALFORMED = "MEMBER_MALFORMED"
+DUPLICATE_MEMBER_ID = "DUPLICATE_MEMBER_ID"
+DECLARED_COUNT_MISMATCH = "DECLARED_COUNT_MISMATCH"
+UNKNOWN_POPULATION = "UNKNOWN_POPULATION"
+INVALID_STRATUM = "INVALID_STRATUM"
+SOURCE_FILE_MISSING = "SOURCE_FILE_MISSING"
+SOURCE_SHA_MISMATCH = "SOURCE_SHA_MISMATCH"
+POPULATION_INCOMPLETE = "POPULATION_INCOMPLETE"
+POPULATION_HAS_EXTRA = "POPULATION_HAS_EXTRA"
+POPULATION_DUPLICATED = "POPULATION_DUPLICATED"
+POPULATION_SUBSTITUTED = "POPULATION_SUBSTITUTED"
+FRAMES_ARTIFACT_MISSING = "FRAMES_ARTIFACT_MISSING"
+FRAMES_ARTIFACT_MALFORMED = "FRAMES_ARTIFACT_MALFORMED"
+FRAMES_ARTIFACT_UNCOMMITTED = "FRAMES_ARTIFACT_UNCOMMITTED"
+FRAME_POPULATION_MISMATCH = "FRAME_POPULATION_MISMATCH"
+FRAME_METADATA_MISMATCH = "FRAME_METADATA_MISMATCH"
+
+
+class ExecutionPathError(Exception):
+    """The canonical path is NOT EXECUTABLE on this input. Never a value, never a skip.
+
+    Every condition below is one where continuing would produce a study over a population
+    that is not the frozen one, which is indistinguishable downstream from a valid run.
+    """
+
+    def __init__(self, reason: str, detail=None):
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{reason} {detail!r}")
+
+
+@dataclass(frozen=True)
+class DocumentDescriptor:
+    """One frozen member, resolved to everything the later stages need.
+
+    Frozen so a stage cannot mutate a descriptor it was handed and change its own input.
+    """
+
+    document_id: str
+    kind: str
+    population: str
+    stratum: int
+    pdf_path: Path
+    sha256: str
+    pages: int
+
+
+def sha256_of(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _known_strata(doc: dict) -> frozenset[int]:
+    """The stratum ids the membership itself declares. Not a literal in this file.
+
+    A hardcoded 1..8 here would be a second authority for a fact the membership already
+    carries, which is the exact defect A43 repairs in `build_oracle.HOLDOUT_GUARD`.
+    """
+    strata = doc.get("strata")
+    if not isinstance(strata, list) or not strata:
+        raise ExecutionPathError(MEMBERSHIP_MALFORMED, {"why": "no strata block"})
+    out = set()
+    for s in strata:
+        if not isinstance(s, dict) or not isinstance(s.get("stratum"), int):
+            raise ExecutionPathError(MEMBERSHIP_MALFORMED, {"why": "malformed stratum record", "record": s})
+        out.add(s["stratum"])
+    return frozenset(out)
+
+
+def load_population(membership_path: Path = MEMBERSHIP, docs_root: Path = DOCS_DIR) -> tuple[DocumentDescriptor, ...]:
+    """Every frozen member, resolved and verified. The ONLY way a descriptor is created.
+
+    Validation is not a courtesy here: each check below is a way the population could differ
+    from the frozen one while every downstream gate stayed green.
+
+    The parameters exist for SYNTHETIC and DEVELOPMENT controls only. `canonical_population()`
+    takes none, and is what the canonical path and G5 use -- a caller-supplied membership path
+    is not evidence about the frozen population, the same reason `score_metrics` refuses a
+    caller-supplied R1 scalar.
+    """
+    membership_path, docs_root = Path(membership_path), Path(docs_root)
+    if not membership_path.is_file():
+        raise ExecutionPathError(MEMBERSHIP_MISSING, {"path": str(membership_path)})
+    try:
+        doc = json.loads(membership_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ExecutionPathError(MEMBERSHIP_MALFORMED, {"error": str(exc)}) from exc
+
+    members = doc.get("members")
+    if not isinstance(members, list) or not members:
+        raise ExecutionPathError(MEMBERSHIP_MALFORMED, {"why": "no members"})
+
+    known_strata = _known_strata(doc)
+    seen: set[str] = set()
+    out: list[DocumentDescriptor] = []
+    for m in members:
+        if not isinstance(m, dict):
+            raise ExecutionPathError(MEMBER_MALFORMED, {"member": m})
+        mid = m.get("id")
+        for field in ("id", "kind", "population", "stratum", "files"):
+            if m.get(field) in (None, "", []):
+                raise ExecutionPathError(MEMBER_MALFORMED, {"member": mid, "missing": field})
+        if mid in seen:
+            raise ExecutionPathError(DUPLICATE_MEMBER_ID, {"member": mid})
+        seen.add(mid)
+
+        if m["population"] not in BF.KNOWN_POPULATIONS:
+            raise ExecutionPathError(UNKNOWN_POPULATION, {"member": mid, "population": m["population"]})
+        if m["stratum"] not in known_strata:
+            raise ExecutionPathError(
+                INVALID_STRATUM, {"member": mid, "stratum": m["stratum"], "known": sorted(known_strata)}
+            )
+
+        files = m["files"]
+        if not isinstance(files, list) or len(files) != 1:
+            # The frozen population is one file per member. More than one would make
+            # "the document" ambiguous for every per-document metric and denominator.
+            raise ExecutionPathError(
+                MEMBER_MALFORMED, {"member": mid, "why": "expected exactly 1 file", "n": len(files or [])}
+            )
+        f = files[0]
+        for field in ("path", "sha256", "pages"):
+            if f.get(field) in (None, ""):
+                raise ExecutionPathError(MEMBER_MALFORMED, {"member": mid, "missing": f"files[0].{field}"})
+
+        pdf_path = docs_root / f["path"]
+        if not pdf_path.is_file():
+            raise ExecutionPathError(SOURCE_FILE_MISSING, {"member": mid, "path": str(pdf_path)})
+        # THE SOURCE IS HASHED, not trusted by name. F2 checks this at gate time; checking it
+        # again HERE is what stops a file swapped between the gate and the run from being
+        # extracted, and it is the only check that sees the bytes the runners will actually read.
+        actual = sha256_of(pdf_path)
+        if actual != f["sha256"]:
+            raise ExecutionPathError(SOURCE_SHA_MISMATCH, {"member": mid, "recorded": f["sha256"], "actual": actual})
+
+        out.append(
+            DocumentDescriptor(
+                document_id=mid,
+                kind=m["kind"],
+                population=m["population"],
+                stratum=m["stratum"],
+                pdf_path=pdf_path,
+                sha256=actual,
+                pages=f["pages"],
+            )
+        )
+
+    # The membership declares its own size. A member silently dropped from `members` while
+    # `n_members` still reads 17 is a corrupted authority, not a smaller population.
+    for field, value in (("n_members", len(out)), ("n_documents", len(out))):
+        declared = doc.get(field)
+        if declared is not None and declared != value:
+            raise ExecutionPathError(DECLARED_COUNT_MISMATCH, {"field": field, "declared": declared, "actual": value})
+    return tuple(out)
+
+
+def canonical_population() -> tuple[DocumentDescriptor, ...]:
+    """THE population. No parameters, so there is no channel through which it can be steered."""
+    return load_population()
+
+
+def frozen_member_ids(membership_path: Path = MEMBERSHIP) -> frozenset[str]:
+    """The frozen id set, read from the authority. `build_oracle`'s guard is derived from this."""
+    doc = json.loads(Path(membership_path).read_text())
+    return frozenset(m["id"] for m in doc.get("members", []))
+
+
+def assert_population_complete(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> None:
+    """The population handed to a stage IS the frozen one. Re-asserted at every handover.
+
+    Checked at the handover and not only at load, because `load_population` returns a tuple
+    that any caller can slice. Omission and substitution are reported as DIFFERENT refusals:
+    a 16-of-17 run and a 17-with-one-swapped run are different failures, and collapsing them
+    would hide which one happened.
+    """
+    frozen = frozen_member_ids(membership_path)
+    ids = [d.document_id for d in population]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise ExecutionPathError(POPULATION_DUPLICATED, {"duplicated": dupes})
+    got = set(ids)
+    missing, extra = sorted(frozen - got), sorted(got - frozen)
+    if missing and extra:
+        raise ExecutionPathError(POPULATION_SUBSTITUTED, {"missing": missing, "extra": extra})
+    if missing:
+        raise ExecutionPathError(POPULATION_INCOMPLETE, {"missing": missing, "n": len(got), "frozen": len(frozen)})
+    if extra:
+        raise ExecutionPathError(POPULATION_HAS_EXTRA, {"extra": extra})
+
+
+# ------------------------------------------------------------------ stage 1: the frames
+
+
+def build_document_frame_for(descriptor: DocumentDescriptor) -> dict:
+    """Run both frozen arms over the WHOLE document and build the frozen frame.
+
+    `assert_source_permitted` is called first and is the frozen gate: a confirmatory member
+    may not be opened while the execution boundary is not VALID. It is deliberately called
+    here, at the point of extraction, rather than once by the caller.
+    """
+    BO.assert_source_permitted(descriptor.document_id, descriptor.pdf_path)
+    h_pages = run_hybrid.run(descriptor.pdf_path, limit=PAGE_LIMIT)
+    x_pages, _summary = run_extended.run(descriptor.pdf_path, limit=PAGE_LIMIT)
+    return BF.build_document_frame(descriptor.sha256, descriptor.document_id, descriptor.population, h_pages, x_pages)
+
+
+def _authority_label(membership_path: Path) -> str:
+    """Study-relative when the authority is the committed one, absolute otherwise.
+
+    A SYNTHETIC control's membership lives outside the study tree, and `relative_to` raises
+    on it. The canonical artifact still records the plain committed path, so a reviewer can
+    see at a glance whether a frames.json was built from the authority or from a fixture.
+    """
+    path = Path(membership_path)
+    try:
+        return str(path.relative_to(EV))
+    except ValueError:
+        return str(path)
+
+
+def frames_document(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> dict:
+    """The `frames.json` payload: one frame per frozen member, and the bijection asserted.
+
+    THE BIJECTION IS THE POINT. `build_frames` cannot see the population -- it takes one
+    document at a time -- so "every frozen member has exactly one frame" is not a property any
+    existing component could hold. It is asserted here before the artifact exists, and again
+    in `load_frames` after it is read back.
+    """
+    assert_population_complete(population, membership_path)
+    frames = [build_document_frame_for(d) for d in population]
+
+    built = [f["document"] for f in frames]
+    expected = [d.document_id for d in population]
+    if sorted(built) != sorted(expected):
+        raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"built": sorted(built), "expected": sorted(expected)})
+
+    return {
+        "schema": FRAMES_SCHEMA,
+        "population_authority": _authority_label(membership_path),
+        "n_documents": len(frames),
+        "page_limit": PAGE_LIMIT,
+        "page_limit_note": "None means the WHOLE document -- section 6's '100 % of the holdout'",
+        "execution_boundary_state": BO.execution_boundary_state(),
+        "documents": [
+            {"document": d.document_id, "population": d.population, "stratum": d.stratum, "sha256": d.sha256}
+            for d in population
+        ],
+        "frames": frames,
+    }
+
+
+def write_frames(
+    population: tuple[DocumentDescriptor, ...],
+    out_path: Path | None = None,
+    membership_path: Path = MEMBERSHIP,
+) -> dict:
+    """Write the canonical `results/frames.json`. Refuses before a VALID boundary."""
+    out_path = Path(out_path) if out_path else FRAMES
+    BO.assert_write_permitted(out_path)
+    payload = frames_document(population, membership_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=1, default=str))
+    return payload
+
+
+# ------------------------------------------- stage 2+: consume the COMMITTED upstream artifact
+
+
+def load_frames(
+    path: Path | None = None,
+    population: tuple[DocumentDescriptor, ...] | None = None,
+    *,
+    require_committed: bool = True,
+    membership_path: Path = MEMBERSHIP,
+) -> dict:
+    """Read `frames.json` BACK FROM DISK, so a later stage consumes a committed artifact.
+
+    HARNESS-PLAN section 1: "Each stage's output is a committed JSON artifact, so a later
+    stage never re-derives an earlier stage's decisions." Passing the in-memory payload
+    straight from `write_frames` into the oracle would satisfy the types and break that rule
+    silently -- the frames the oracle used would be the ones in RAM, not the ones a reviewer
+    can read. `require_committed` makes the rule executable rather than advisory.
+    """
+    path = Path(path) if path else FRAMES
+    if not path.is_file():
+        raise ExecutionPathError(FRAMES_ARTIFACT_MISSING, {"path": str(path)})
+    if require_committed:
+        from x04_freeze_check import committed
+
+        try:
+            is_committed = committed(path)
+        except ValueError:
+            # Outside the repository entirely, so it cannot be committed. Reported as the
+            # same refusal rather than a ValueError escaping as an unhandled crash.
+            is_committed = False
+        if not is_committed:
+            raise ExecutionPathError(FRAMES_ARTIFACT_UNCOMMITTED, {"path": str(path)})
+    try:
+        doc = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ExecutionPathError(FRAMES_ARTIFACT_MALFORMED, {"error": str(exc)}) from exc
+    if doc.get("schema") != FRAMES_SCHEMA or not isinstance(doc.get("frames"), list):
+        raise ExecutionPathError(FRAMES_ARTIFACT_MALFORMED, {"schema": doc.get("schema")})
+
+    if population is not None:
+        assert_population_complete(population, membership_path)
+        got = sorted(f.get("document") for f in doc["frames"])
+        want = sorted(d.document_id for d in population)
+        if got != want:
+            raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"artifact": got, "population": want})
+    return doc
+
+
+def oracle_documents(
+    frames_doc: dict, population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP
+) -> list[dict]:
+    """`build_oracle.build`'s `documents`, assembled from the authority -- never transcribed.
+
+    The stratum comes from the committed membership, not from the frame and not from a
+    caller. A stratum handed in by hand is a second authority for a fact the population
+    already carries, and section 4.5's "strata filled" count reads it.
+    """
+    assert_population_complete(population, membership_path)
+    by_id = {f["document"]: f for f in frames_doc["frames"]}
+    missing = sorted(d.document_id for d in population if d.document_id not in by_id)
+    if missing:
+        raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"missing_frames": missing})
+
+    out = []
+    for d in population:
+        frame = by_id[d.document_id]
+        # The frame carries the document's own identity; if it disagrees with the authority
+        # the join is against a different document than the one the population names.
+        if frame.get("document_sha256") not in (None, d.sha256):
+            raise ExecutionPathError(
+                FRAME_METADATA_MISMATCH,
+                {"member": d.document_id, "frame_sha": frame.get("document_sha256"), "membership_sha": d.sha256},
+            )
+        out.append({"frame": frame, "pdf_path": d.pdf_path, "stratum": d.stratum})
+    return out
+
+
+def control_documents(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> list[dict]:
+    """The `documents` list `write_s1_control` and `write_cross_engine_control` both take."""
+    assert_population_complete(population, membership_path)
+    return [{"document": d.document_id, "pdf_path": d.pdf_path} for d in population]
+
+
+def document_strata(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> dict[str, int]:
+    """`ScoreInputs.document_strata`, read from the committed membership by this module."""
+    assert_population_complete(population, membership_path)
+    return {d.document_id: d.stratum for d in population}
+
+
+# ---------------------------------------------------------------- G5's liveness introspection
+
+# The public surface G5 requires. Named here so the gate checks a CONTRACT rather than a
+# file's existence: a module that imports but has lost `write_frames` is a broken execution
+# path, and readiness must not stay green on it.
+REQUIRED_CALLABLES = (
+    "canonical_population",
+    "assert_population_complete",
+    "build_document_frame_for",
+    "frames_document",
+    "write_frames",
+    "load_frames",
+    "oracle_documents",
+    "control_documents",
+    "document_strata",
+)
+
+
+def contract_report() -> list[str]:
+    """Problems with this module's own contract. Empty means the path is live."""
+    problems = [
+        f"execute_study.{name} is missing or not callable"
+        for name in REQUIRED_CALLABLES
+        if not callable(globals().get(name))
+    ]
+    if PAGE_LIMIT is not None:
+        problems.append(f"PAGE_LIMIT is {PAGE_LIMIT!r}; the canonical scope is the whole document")
+    return problems
