@@ -1,0 +1,407 @@
+{
+  "113-hr-3547/1_introduced-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 5,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 5,
+      "within": 0
+    },
+    "sha256": "201bf99917cda11d38df0fcddd144510be68ec6516c3a6995b604dab01264b95",
+    "stream_sha256": "aa303637e2f9b1b279ff87550e38432f74b64753fb405e6beb3116ad374f6bf3"
+  },
+  "113-hr-3547/2_engrossed-in-house->3_received-in-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 5,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 5,
+      "within": 0
+    },
+    "sha256": "201bf99917cda11d38df0fcddd144510be68ec6516c3a6995b604dab01264b95",
+    "stream_sha256": "aa303637e2f9b1b279ff87550e38432f74b64753fb405e6beb3116ad374f6bf3"
+  },
+  "113-hr-3547/3_received-in-senate->4_engrossed-amendment-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 5,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 1,
+      "within": 0
+    },
+    "sha256": "1d8cc13078700db0694bb33c97aba864d8d13497b212c2baf9c3bd692d5f32a2",
+    "stream_sha256": "3a33298954d99502edf748bc2aac2eb6a0f2b2829b16f88e7ad136123e16b437"
+  },
+  "113-hr-3547/4_engrossed-amendment-senate->5_engrossed-amendment-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 2811,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 1,
+      "within": 0
+    },
+    "sha256": "66b7f8d5aa0beb3f69dc9a3fed1511309331c554018049299fc7c7a20879c718",
+    "stream_sha256": "23426b37f5f773e38875fa8a16d3c302565258ac2bb60c750fdaf0ed6f327a5b"
+  },
+  "113-hr-3547/5_engrossed-amendment-house->6_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 16,
+      "invocations": 198,
+      "pairings": 2814,
+      "selected_links": 230,
+      "shortcut_1x1": 182,
+      "similarity_calls": 166,
+      "unique_selections": 2581,
+      "within": 198
+    },
+    "sha256": "706190dd1e196f45e6a6a428877e555234df92034d675e51f43844251c03a15c",
+    "stream_sha256": "a5251e5048820a1bd440bc361f7e52016cfcdcf17697a0b099102565805938e4"
+  },
+  "113-hr-83/6_engrossed-amendment-house->7_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 18,
+      "invocations": 141,
+      "pairings": 2804,
+      "selected_links": 174,
+      "shortcut_1x1": 123,
+      "similarity_calls": 177,
+      "unique_selections": 2627,
+      "within": 141
+    },
+    "sha256": "8ca7a8fd079b488b370e7d5ae616cf1cbd99f9bf9d9c254d3c20f53f92f8d630",
+    "stream_sha256": "392fd41ecb0700b0538f5917648b173a3fb3b0222e004c77b9539ec92a333fa1"
+  },
+  "114-hr-2029/1_reported-in-house->3_referred-in-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 167,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 152,
+      "within": 0
+    },
+    "sha256": "49e494ed8a61925ad8448f7acf620a9dc57938f3ab49dcea1a4d9ba3235a8121",
+    "stream_sha256": "e5ca1b41efac161f7b3f7da3750099b2d4013ab3930a18ad9d4eb29b5ba92c99"
+  },
+  "114-hr-2029/3_referred-in-senate->4_reported-in-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 119,
+      "invocations": 119,
+      "pairings": 317,
+      "selected_links": 119,
+      "shortcut_1x1": 0,
+      "similarity_calls": 238,
+      "unique_selections": 48,
+      "within": 119
+    },
+    "sha256": "b732bc57157bb8e441b393fbfa54e17679aade2767507cd5df2c197b9479e320",
+    "stream_sha256": "faac5179cb34f61f6f14bbedbb7609ad881532a77c8505c539ffdc88c353db85"
+  },
+  "114-hr-2029/4_reported-in-senate->5_engrossed-amendment-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 118,
+      "invocations": 118,
+      "pairings": 353,
+      "selected_links": 118,
+      "shortcut_1x1": 0,
+      "similarity_calls": 236,
+      "unique_selections": 31,
+      "within": 118
+    },
+    "sha256": "9f961381c38b5b03f3344859438bbc0963369c24a012b808ff8b95d0ba7eb765",
+    "stream_sha256": "cb99de9f8aedf7f6d54c34817e9f5a7b402bd75846e3b715dd9972952a9b6aaa"
+  },
+  "114-hr-2029/5_engrossed-amendment-senate->6_engrossed-amendment-house": {
+    "counts": {
+      "cross": 11,
+      "greedy": 11,
+      "invocations": 11,
+      "pairings": 3335,
+      "selected_links": 11,
+      "shortcut_1x1": 0,
+      "similarity_calls": 27,
+      "unique_selections": 124,
+      "within": 0
+    },
+    "sha256": "68de4e72ebe292b1276b8938232306de58e3f7b3d197132f9c4aa6dddac91971",
+    "stream_sha256": "3969cef4da2e4bd3a1167b3930eb2b7a4354f1b2262be62e4e40badc090d7e2b"
+  },
+  "114-hr-2029/6_engrossed-amendment-house->7_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 16,
+      "invocations": 216,
+      "pairings": 3755,
+      "selected_links": 246,
+      "shortcut_1x1": 200,
+      "similarity_calls": 150,
+      "unique_selections": 3039,
+      "within": 216
+    },
+    "sha256": "a229634bc802311c25f0b9bb5c9e4f26ce296766ddaa45d4e06b060ab1154ecc",
+    "stream_sha256": "9ca79ff1b9e00815b6999cc0e49de4e5aa6ff1ad6403e359f3287f151ef41e3d"
+  },
+  "115-hr-5895/1_reported-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 11,
+      "greedy": 11,
+      "invocations": 11,
+      "pairings": 421,
+      "selected_links": 11,
+      "shortcut_1x1": 0,
+      "similarity_calls": 24,
+      "unique_selections": 130,
+      "within": 0
+    },
+    "sha256": "41468e57a163ae69c663e93e719908a6df5f20d0740c4b8230603eadb3b47c28",
+    "stream_sha256": "88fda25289119a1b13051692e8ed9b6a2a7134b8f43284f955bc6f2bd984cce7"
+  },
+  "115-hr-5895/2_engrossed-in-house->4_engrossed-amendment-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 20,
+      "pairings": 613,
+      "selected_links": 20,
+      "shortcut_1x1": 20,
+      "similarity_calls": 0,
+      "unique_selections": 270,
+      "within": 20
+    },
+    "sha256": "b8fa69a084a153448e52706e7574faa0aea847110bd320f074c8566271252895",
+    "stream_sha256": "e7708a24d4310fb34bdffb9e2971893e801c353ae9796d38f585bf42069262c8"
+  },
+  "115-hr-5895/4_engrossed-amendment-senate->5_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 11,
+      "pairings": 561,
+      "selected_links": 11,
+      "shortcut_1x1": 11,
+      "similarity_calls": 0,
+      "unique_selections": 370,
+      "within": 11
+    },
+    "sha256": "ab250fde9c1f37b7cd521ace2ed2a033eefd848e09e7cd74b071f5e81e46e573",
+    "stream_sha256": "c0f4d01e2bd140e2e890babb669e5425842ce60f12ddffc68e6747b7f0c04146"
+  },
+  "117-hr-2471/1_introduced-in-house->6_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 6,
+      "pairings": 4020,
+      "selected_links": 6,
+      "shortcut_1x1": 6,
+      "similarity_calls": 0,
+      "unique_selections": 3,
+      "within": 6
+    },
+    "sha256": "911de402c97a71baa3464e8c789a55a905536cf7c2f0fcc01c77592acb038c05",
+    "stream_sha256": "676f2e16917c67e389e5ba649cb91f017bac4448798d326e0e5764a4a8d55804"
+  },
+  "117-hr-4502/1_reported-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 7,
+      "greedy": 7,
+      "invocations": 7,
+      "pairings": 1696,
+      "selected_links": 8,
+      "shortcut_1x1": 0,
+      "similarity_calls": 19,
+      "unique_selections": 320,
+      "within": 0
+    },
+    "sha256": "305bd03dbd8734e7fe541d0f54c6fb7ee004565d10a06cc8e48c598b1d03e273",
+    "stream_sha256": "8c81157d2f4d1c0a8d0b99b9c0e7dd90b8385f94cd207fdd5b9deaddeebaccb6"
+  },
+  "118-hr-2882/1_introduced-in-house->4_engrossed-amendment-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 7,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 2,
+      "within": 0
+    },
+    "sha256": "a80409c1f04e71e44a0a31fe0d49d894b765506e29da315f39e2b949e0003d3a",
+    "stream_sha256": "476013d0f334e50fafc52292ce99dd6ed2963a4d6c396b51062356255eb9b80b"
+  },
+  "118-hr-2882/4_engrossed-amendment-senate->5_engrossed-amendment-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 1842,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 4,
+      "within": 0
+    },
+    "sha256": "b63ecf607a66f46d1c1f5dfd5a7cb371b3488f1ead492c774002e2778e96bb63",
+    "stream_sha256": "d5c54f74f46439ef6e04787817bbdf40cf50788a2e95f193a55da03fcebfab2a"
+  },
+  "118-hr-4366/1_reported-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 212,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 205,
+      "within": 0
+    },
+    "sha256": "aeea8856b5148995ee5ca30e63d496a20f57a7b58e9b0f273cb9f54ff92d445f",
+    "stream_sha256": "a271eb2ea2f604a3f2f66252f42678fe68f33f0e6a987a7085b9f6d1f50741e7"
+  },
+  "118-hr-4366/2_engrossed-in-house->3_placed-on-calendar-senate": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 212,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 212,
+      "within": 0
+    },
+    "sha256": "fda8aae9f3d5390003067f6ad41f6c11b062fbe65682a79974e0ad1cc12ff5ef",
+    "stream_sha256": "8c61886cfacfbfe59ce2b469560d638d1e063b2a3286753d1c92a29e0144f8e9"
+  },
+  "118-hr-4366/3_placed-on-calendar-senate->4_engrossed-amendment-senate": {
+    "counts": {
+      "cross": 1,
+      "greedy": 1,
+      "invocations": 1,
+      "pairings": 783,
+      "selected_links": 1,
+      "shortcut_1x1": 0,
+      "similarity_calls": 3,
+      "unique_selections": 160,
+      "within": 0
+    },
+    "sha256": "39b6df129bda5f24f0c2e45fa8f85b44f16e7fd83d30f6366f8471a177bb5683",
+    "stream_sha256": "79414c54c8266669a31bdf54149f7061f4e50ede9f192f0a1ebbfc9f0c41e643"
+  },
+  "118-hr-4366/4_engrossed-amendment-senate->5_engrossed-amendment-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 4,
+      "invocations": 16,
+      "pairings": 1551,
+      "selected_links": 21,
+      "shortcut_1x1": 12,
+      "similarity_calls": 21,
+      "unique_selections": 613,
+      "within": 16
+    },
+    "sha256": "b9a63804d47cd0351309c5b40243c24a3abd29641880236bf09e29639a9050b2",
+    "stream_sha256": "066e2f26423f31c50328ca3c543a9e99ac7db2469d9ffef255d9a269569847f3"
+  },
+  "118-hr-4366/5_engrossed-amendment-house->6_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 6,
+      "invocations": 45,
+      "pairings": 1456,
+      "selected_links": 54,
+      "shortcut_1x1": 39,
+      "similarity_calls": 41,
+      "unique_selections": 1399,
+      "within": 45
+    },
+    "sha256": "b57a9b247b4b1b1796f197400fd244c65333d1dfbbe695587be7779e42564974",
+    "stream_sha256": "09b5316013e07ae9ad88312689a27751ebebb4c53da0c5836a143ce437c1fd6a"
+  },
+  "118-hr-8752/1_reported-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 324,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 306,
+      "within": 0
+    },
+    "sha256": "6e6169a915d12dba578f7f5b2e8b8475afeff13499012a14ae8e54a2cb5a6dc0",
+    "stream_sha256": "4c48da409bc3db33aa6c823d5a380cd2258187eb581446b226d654d6812b34a6"
+  },
+  "118-hr-8774/1_reported-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 0,
+      "invocations": 0,
+      "pairings": 337,
+      "selected_links": 0,
+      "shortcut_1x1": 0,
+      "similarity_calls": 0,
+      "unique_selections": 330,
+      "within": 0
+    },
+    "sha256": "8d734895eae54c4fcc8b4ebd4d9add3aa783d17fbb81d4f4e93ccbfc284a4e74",
+    "stream_sha256": "42a31ac00adcc66fac4d4042271c746f3b04f09630e305bd741e78240cddbe84"
+  },
+  "118-hr-9468/1_introduced-in-house->4_enrolled-bill": {
+    "counts": {
+      "cross": 0,
+      "greedy": 1,
+      "invocations": 1,
+      "pairings": 18,
+      "selected_links": 2,
+      "shortcut_1x1": 0,
+      "similarity_calls": 4,
+      "unique_selections": 16,
+      "within": 1
+    },
+    "sha256": "c6bc1dd81b0fe97e0d9f9d63e86a60aa06561b96d18b968929e885f5ca9e2071",
+    "stream_sha256": "e4a03300256e8d06220d44fe2fcd46e3313334ca1280c242c85612d4ba04c9e3"
+  },
+  "119-hr-1/1_reported-in-house->2_engrossed-in-house": {
+    "counts": {
+      "cross": 0,
+      "greedy": 1,
+      "invocations": 1,
+      "pairings": 1484,
+      "selected_links": 1,
+      "shortcut_1x1": 0,
+      "similarity_calls": 2,
+      "unique_selections": 1047,
+      "within": 1
+    },
+    "sha256": "9b8de776cdcae2a0052a12ef8970d5a0cc8655aea9cae62e33f52dc0a23f4fe5",
+    "stream_sha256": "b20cb8a03dae113dc13377fe3c9f5d9dcb0f63fa9dc82b3645b1339ca1678009"
+  }
+}

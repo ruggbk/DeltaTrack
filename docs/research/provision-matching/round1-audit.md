@@ -443,25 +443,43 @@ For each proposed gate: the mutation that must make it red. Controls already dec
 Slice A or #612 are not duplicated. Every mutation below has been *measured* against the current
 source, so none is a guess about what would happen.
 
-| Mutation | Measured effect | Gate that must redden |
-|---|---:|---|
-| Parser ordinal instead of local `oi`/`ni` | 0 / 329 on corpus | **synthetic only** — corpus cannot see it; needs the interleaved-division fixture from §5 |
-| Reverse the tie direction (ascending) | 97 / 329 | Oracle rows 5c, 5d; canonical digests |
-| Flatten division + cross into one population | 8 / 959 groups, ±9 links | Oracle rows 4, 6, 8; canonical digests |
-| Run cross-division retrieval before within-division assignment | same as flatten | Oracle row 4 (invocation populations differ even where selection agrees) |
-| Make the 1×1 shortcut compute similarity, then alter anything | 593 extra ratio calls | Oracle row 5b — pin the *set* of similarity computations, not just values |
-| Change unique-path direct selection | 14,001 selections | Oracle row 3; canonical digests |
-| Reorder winners, preserving the selected set | 62 / 329 invocations have >1 winner | Oracle row 5d — ordered, not set-compared |
-| Reorder leftovers, preserving counts | 5 / 329 invocations have >1 leftover on a side | Oracle row 5e — ordered |
-| Use `CandidateSet` iteration order as assignment order | 174 / 329 | Oracle rows 5d, 13 |
-| Drop division provenance | 1,852 pairs re-admitted | Oracle row 4 |
-| Admit a cross-division candidate the fallback never considers | n/a on corpus | **synthetic only** — §4 fixture |
-| Suppress an observation that should enter the fallback | 0 corpus participants affected | **synthetic only** — §4 fixture; this is the headline false-green |
-| Let the oracle call the new production stages | — | Structural: an import guard, as `test_matching_contracts` already does for engine imports |
+**Built and run in B0.** The table below is no longer a proposal: each mutation is implemented as
+a variant of the oracle in `tests/test_round1_preservation.py` and was run against the frozen
+expectation. The counts are what each one actually reddened.
 
-**Three controls are corpus-invisible.** Rows 1, 11 and 12 cannot redden on any corpus gate. That
-is the single most important operational finding in this report: without the synthetic fixtures,
-three consequential mutations ship green.
+| Mutation (oracle variant) | Corpus pairs red | Synthetic fixtures red |
+|---|---:|---|
+| `flatten_divisions` — drop the division partition *(also covers "drop division provenance")* | 18 / 27 | both |
+| `ascending_tie` — reverse the tie direction | 11 / 27 | interleaved |
+| `candidate_set_order` — use `CandidateSet` iteration order as assignment order | 11 / 27 | — |
+| `shortcut_computes_similarity` — 1×1 shortcut computes a ratio | 8 / 27 | assignment-leftover |
+| `reorder_winners` — same selected set, different emission order | 7 / 27 | — |
+| `unique_path_needs_same_division` — change unique-path direct selection | 5 / 27 | — |
+| `extra_cross_candidate` — admit a pair the fallback never considers | 5 / 27 | both |
+| `reorder_leftovers` — same counts, different order | 4 / 27 | — |
+| **`ordinal_tiebreak`** — parser ordinal instead of local `oi`/`ni` | **0 / 27** | **interleaved only** |
+| **`no_assignment_leftovers`** — fallback sees only structurally-unmatched observations | **0 / 27** | **both** |
+
+Two further controls are structural rather than mutational:
+
+| Control | What it proves |
+|---|---|
+| `test_the_independence_guard_can_fire` | A deliberately delegating oracle is caught by the AST guard, so the guard is not an assertion of absence that passes vacuously. |
+| `test_the_injection_harness_alone_changes_nothing` | An **unmutated** injection of the oracle into production reproduces all 27 frozen streams — so a red result below is the mutation biting, not the oracle having drifted from production. |
+| `test_the_durable_gate_reddens_on_a_fault_injected_into_PRODUCTION` | The fault put inside the function `match_nodes` actually calls turns the durable production gate red. Every other control mutates the oracle; this one mutates production. |
+
+**Two controls are corpus-invisible, exactly as predicted.** `ordinal_tiebreak` and
+`no_assignment_leftovers` move **zero** of 27 committed pairs and are caught only by the synthetic
+fixtures. `test_the_corpus_cannot_see_the_two_fixture_bound_mutations` pins that as a standing
+claim, so if the corpus ever grows a case that exercises either, the gate goes red and the
+finding is revisited rather than silently outdated.
+
+> **A weak fixture was caught by its own control.** The first interleaved fixture made local
+> position and parser ordinal disagree but gave its two fallback candidates *different*
+> similarities, so the tiebreak never fired and `ordinal_tiebreak` changed nothing. The fixture
+> now forces a tie, which is what makes the substitution observable. Recorded because it is the
+> exact failure mode the negative controls exist to find, and it was found in the harness rather
+> than in production.
 
 ---
 
@@ -496,27 +514,50 @@ All figures from `tests/corpus`, 27 adjacent XML version pairs, at `0ff0eb1e`. R
 
 ### Candidate materialisation, runtime and memory
 
-| Measurement | Value |
+> **Corrected 2026-08-12, after B0.** The first version of this section quoted 14,899
+> candidates and an 8.8 MB peak as though they described one comparison, and recommended
+> per-invocation storage on that basis. Both halves were wrong, and the corrected measurement
+> reverses the recommendation. See "What the first measurement got wrong" below.
+
+Measured over the **exact populations production forms**, recovered by wrapping
+`_similarity_pair` while `match_nodes` runs, by
+`probes/round1_candidate_scope.py`. A = one `CandidateSet` per comparison accumulating both
+round-1 retriever invocations; B = one per invocation, released after its assignment.
+
+| Measurement | A: comparison-scoped | B: per-invocation |
+|---|---:|---:|
+| Corpus-total build runtime | **30 ms** | 42 ms |
+| Worst single-comparison runtime | **6.3 ms** | 8.8 ms |
+| Worst single-comparison peak memory | 0.23 MB | **0.03 MB** |
+| Largest **live** candidate count | 350 | **49** |
+| Candidates materialised (corpus total) | 1,701 | 1,701 |
+| Pairs proposed by more than one invocation | 0 | 0 (cannot observe) |
+
+| Other measurements | Value |
 |---|---:|
-| Round-1a candidates if fully materialised (corpus total) | 14,899 |
-| Largest single-comparison `CandidateSet` | 3,389 |
 | Candidates scored today vs. a per-group flatten | 1,108 vs 2,750 |
 | Division subgrouping prunes | 1,852 pairs |
-| `CandidateSet.propose` × 14,899 | 347 ms |
-| `CandidateSet.candidates()` — sort + build | 723 ms |
-| Total materialisation | 1,084 ms |
-| Peak traced memory, materialised | 8.8 MB (~616 B/candidate) |
 | **`match_nodes` over 27 pairs, pre-parsed trees** | **505 ms** |
 | Peak traced memory inside `match_nodes`, worst pair | 1.5 MB |
 | Retiring the unique-path fast path | 505 → 816 ms (1.62×) |
 
-> **Materialisation recommendation.** One global round-1 `CandidateSet` costs **2.1× the entire
-> current matching stage** and holds 14,899 live `Candidate` objects for the life of a comparison,
-> almost all carrying no score because of the structural fast paths. Prefer **per-invocation
-> candidate sets**: one per division subgroup, discarded after its assignment. They are tiny — the
-> largest comparison is 49 pairs — and ADR 0020's retention requirement is about *evidence* for
-> candidates reaching assignment, not about holding every candidate. Keep whole-round
-> materialisation available as a research path for candidate-recall work, off the production path.
+#### What the first measurement got wrong
+
+Two independent errors compounded, and they pointed the same way:
+
+- **Scope.** 14,899 and 8.8 MB are corpus totals across 27 comparisons. A production peak is a
+  per-comparison quantity, and the largest live candidate count is **350**, not 14,899.
+- **Population.** 14,899 counted a candidate for every `match_path` group *including the 29,588
+  that take the unique-path fast path and never form a retrieval invocation at all*. It is a
+  real number for a different question — what retrieval would cost if the fast path were
+  retired — and it is not what round-1 retrieval materialises. That figure is **1,701**
+  (593 sole-candidate + 1,108 scored), which is 11× smaller.
+
+The corrected comparison shows **A is cheaper in runtime** (one `CandidateSet` per comparison
+instead of 922) and both are negligible in memory at 0.23 MB against a 1.5 MB matching stage.
+The original argument — that comparison-scoped storage costs 2.1× the matching stage — does not
+survive measurement, and the recommendation it produced is withdrawn. Storage scope is
+**not frozen**; see §13.
 
 ---
 
@@ -544,8 +585,9 @@ Committed at `docs/research/provision-matching/probes/round1_*.py`:
 | `round1_decisive.py` | Fast-path redundancy (27/27) and the assignment-conditioned exercise question |
 | `round1_controls.py` | Synthetic fallback fixture, tie-direction control, ordering controls |
 | `round1_ordering_hazard.py` | Constructs the case where local-position/ordinal agreement breaks |
-| `round1_cost.py` | Fast-path removal cost, candidate materialisation over the corpus |
-| `round1_candidateset_cost.py` | Isolated `CandidateSet` propose/materialise micro-benchmark |
+| `round1_cost.py` | Fast-path removal cost. Its candidate count is the FAST-PATH-RETIRED population (14,899), not what round-1 retrieval forms — see §10 |
+| `round1_candidateset_cost.py` | Isolated `CandidateSet` propose/materialise micro-benchmark, at a candidate count §10 corrects |
+| `round1_candidate_scope.py` | Comparison-scoped vs per-invocation storage, on the exact populations production forms. **Supersedes the two rows above for any storage decision.** |
 
 ---
 
@@ -558,11 +600,11 @@ the measurement shows there is no separate policy to migrate.
 
 | Slice | Content | Why here | Gate |
 |---|---|---|---|
-| **B0** *(test-only)* | Promote the audit probes; build the §8 oracle; add the two synthetic fixtures (assignment-leftover fallback, interleaved-division ordering). No production change. | Every later slice's gate depends on it. Shipping B1 first would mean changing round 1 while three mutations are unobservable. | Oracle reproduces current behaviour on 27 pairs + 2 fixtures; each control shown able to fire. |
+| **B0** ✅ *shipped* | `tests/test_round1_preservation.py` + `tests/data/round1_legacy_trace.json`: independent legacy transcription, frozen trace, structural independence guard, both synthetic fixtures, 10 negative controls, production fault injection. No production change. | Every later slice's gate depends on it. Shipping B1 first would mean changing round 1 while three mutations are unobservable. | 75 passed, 1 skipped. Each control's red gate recorded in §9. |
 | **B1** | Name the two retrieval rounds inside `_match_collision_group`. Extract `retrieve_division_candidates` and `retrieve_cross_division_candidates` returning ordered populations. `_similarity_pair` stays the assigner. | Retrieval is extractable *per round* without touching selection. The ordered population is what B2 needs to address. | Oracle rows 4, 6, 7, 8; canonical digests. |
 | **B2** | Route the greedy through evidence + contracts: `group_correspondence_evidence`, `assign_group`, with the local index space rebuilt privately. One implementation serves both rounds. | Needs B1's named populations. Adds `sole_candidate`. | Oracle rows 5a–5e; tie-direction and CandidateSet-order controls. |
 | **B3** | Unique-path handling. Pin the fast path's equivalence with a test, and decide whether to keep it as a retrieval-side optimisation or retire it. | Last, because the measurement removes it from the critical path — it is not a policy that must be migrated before B2 can proceed. | Oracle rows 1, 2, 3; the 27/27 equivalence test. |
-| **B4** | Closure: per-invocation `CandidateSet` materialisation, probe re-aiming, remove the residual `diff_text` double-call #623 flagged. | Cleanup with its own evidence, deliberately not bundled. | Canonical digests + runtime regression check. |
+| **B4** | Closure: probe re-aiming, remove the residual `diff_text` double-call #623 flagged. Candidate storage scope is settled in B1, not deferred to here (§13). | Cleanup with its own evidence, deliberately not bundled. | Canonical digests + runtime regression check. |
 
 **On "can retrieval be extracted alone?"** Yes — *per round*. A single whole-round-1 retrieval
 stage producing one candidate population before any assignment is **not** behaviour-preserving:
@@ -593,15 +635,36 @@ is changing nothing, and 1.62× on the stage that ADR 0020 already flags for per
 (#356, #169) is not free. Revisit in B3 if maintaining both paths complicates the assignment
 contract.
 
-### 2. Whole-round vs per-invocation candidate materialisation
+### 2. Candidate storage scope — NOT FROZEN, deferred into B1
 
-ADR 0020 wants the candidate set materialised so candidate *recall* becomes measurable. Production
-does not need that set to compute the diff. Per-invocation sets keep production cheap; a
-whole-round set makes the research target directly available at 2.1× the matching stage and 8.8 MB.
+The earlier recommendation here (per-invocation sets, on a claimed 2.1× cost) is **withdrawn**:
+it rested on a corpus-total figure misread as a per-comparison one, over a population 11× larger
+than round-1 retrieval actually forms. §10 carries the corrected measurement.
 
-**Recommendation: per-invocation in production, whole-round behind a research entry point.** This
-satisfies invariant 8 (evidence for candidates reaching assignment stays retained) without paying
-for provenance nothing in the run consumes.
+What the corrected data says, on the real populations:
+
+- Comparison-scoped is **faster** (30 ms vs 42 ms corpus-total; 6.3 ms vs 8.8 ms worst
+  comparison), because it builds 27 `CandidateSet` objects instead of 922.
+- Memory separates them but neither is material: 0.23 MB vs 0.03 MB worst-comparison peak,
+  against a matching stage that already peaks at 1.5 MB.
+- Largest live candidate count is 350 vs 49.
+- **Semantics differ where cost does not.** The checked-in contract says a candidate exists once
+  per observation pair, carrying every invocation's proposal. Only comparison-scoped storage can
+  express that: per-invocation sets put two proposals for one pair in different objects, where
+  nothing can merge them. On this corpus 0 pairs are proposed twice, so the difference is
+  currently latent — which is an argument for keeping the capability, not for discarding it, and
+  the same shape as the two corpus-invisible behaviours in §4.
+
+**Recommendation, and it is a lean rather than a ruling: comparison-scoped.** It is cheaper, it
+is what the contract describes, and it keeps candidate recall inspectable without a second
+code path. The cost that would argue against it does not exist at this scale.
+
+**Explicitly not frozen.** The architectural requirement B1 must satisfy is fixed even though
+the container is not: *one observation pair is one candidate carrying all applicable proposal
+provenance, and assignment still receives the exact ordered per-invocation populations it needs
+to rebuild legacy local positions.* Those are compatible — the ordered populations travel beside
+the candidate set (§7's `GroupRetrieval`), not inside it — but which object owns which is a B1
+decision, to be made against B1's own code rather than pre-committed here.
 
 ### Not deferred — settled by measurement
 
@@ -639,6 +702,10 @@ Promoting it early would collide with `CorrespondenceSet`'s no-revision rule, wh
 amended to say "settled or provisionally selected" is a documentation question for after the
 slices land, not a precondition.
 
+**Reviewed and accepted (2026-08-12).** No ADR amendment is required now: do not create settled
+`Correspondence` prematurely, let round 1b consume the ordered unclaimed population, and keep the
+wording issue open as a non-blocking vocabulary gap.
+
 ### One residue #623 left, noted for B4
 
 `_similarity_signals` calls `diff_text` and `_paired_record` calls it again on the same pairing.
@@ -649,9 +716,16 @@ it owes its own evidence. It is not this work's scope; B4 is the natural home.
 
 ## Scope and provenance
 
-Measured at `0ff0eb1e` over `tests/corpus` (27 adjacent XML pairs). Audit branch
-`worktree-adr0020-round1-audit`; probes committed there. No production source was modified.
+Audit measured at `0ff0eb1e` over `tests/corpus` (27 adjacent XML pairs). B0 built and re-measured
+on `2416425`, whose `src/` and `tests/` are byte-identical to `0ff0eb1e` — the only commits between
+them are PR #622's PDF external-validity docs and probes, so the matching baseline the audit names
+is unchanged. Audit branch `worktree-adr0020-round1-audit`. No production source has been modified.
 
 **Carry this caveat into the slices:** every corpus figure is scoped to the 27 committed XML
 pairs. The two behaviours in §4 and §5 are invisible there by construction, so the synthetic
 fixtures are not belt-and-braces — they are the only evidence available for those paths.
+
+**One correction stands against this report's own first draft** (§10): a corpus-total candidate
+count and peak were quoted as per-comparison, over a population 11× larger than round-1 retrieval
+forms. The storage recommendation built on it is withdrawn and the scope decision is deferred into
+B1. Treat any *other* aggregate in §10 as corpus-total unless it says otherwise.
