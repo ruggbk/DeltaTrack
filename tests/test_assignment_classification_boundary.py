@@ -598,6 +598,36 @@ def test_the_extracted_rule_agrees_with_the_pre_refactor_rule():
     assert revoked, "no pairing was revoked anywhere in the corpus, so agreement proves nothing"
 
 
+def test_the_evidence_normalizes_before_asking_whether_the_body_changed():
+    """Two bodies differing only in whitespace are `body_unchanged`, and carry no ratio.
+
+    **A unit fixture, because the corpus cannot host this one.** Dropping `_normalize_text`
+    changes nothing measurable on the committed corpus: 0 of its 15,034 path-matched pairings
+    differ only in whitespace (the 13,866 unchanged ones are byte-identical bodies), so a
+    corpus-wide gate stays green with the normalization deleted. And at the `text_similarity`
+    site the normalization is inert *by construction*, since that measure splits on whitespace
+    itself -- `text_similarity(a, b)` and `text_similarity(norm(a), norm(b))` are equal for every
+    input, not merely for these.
+
+    So the only place the normalization is observable is the `diff_text` emptiness gate, and the
+    only way to observe it is a pairing the corpus does not contain. Hence this: it fails if the
+    normalization is dropped, which is the whole reason to have it.
+    """
+    old_node = _node("o1", "the  quick   brown\n\n fox")
+    new_node = _node("n1", "the quick brown fox")
+    assert old_node.body_text != new_node.body_text, "the fixture must differ before normalization"
+
+    registry = ObservationRegistry([old_node], [new_node])
+    evidence = similarity_correspondence_evidence([(old_node, new_node)], registry)
+
+    assert len(evidence) == 1
+    assert evidence[0].get(BODY_UNCHANGED) is True, (
+        "the bodies differ only in whitespace, so the normalized word-level diff is empty; "
+        "reading body_text unnormalized reports a change that is not there"
+    )
+    assert WORD_OVERLAP not in evidence[0].names, "an unchanged body needs no ratio"
+
+
 def legacy_similarity_signals(old_node: BillNode, new_node: BillNode) -> dict:
     """The signals the PRE-SLICE rule computed, and which it skipped, transcribed.
 
