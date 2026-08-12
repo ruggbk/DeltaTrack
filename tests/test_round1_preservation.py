@@ -24,12 +24,37 @@ index space all surface here.
 structurally rather than by convention, and it lists the stage names B1 and B2 will
 introduce so that wiring the oracle to a *future* stage is refused in advance.
 
+## Identity: ADR 0019, not ``element_id``
+
+Every observation in the frozen trace is addressed by ``(side, node_ordinal)``, where the
+ordinal is the node's index in the parser's COMPLETE emitted sequence for that side, and the
+artifact records the ``source_sha256`` of each side plus the derived ``parser_revision`` that
+together scope those ordinals -- the identity [ADR
+0019](../docs/decisions/0019-observation-identity.md) requires of a stored artifact recording
+a judgment about parsed observations.
+
+An earlier version of this file keyed the trace on ``element_id``. That was a false green, not
+a stylistic choice. ``bill_tree`` reads the attribute as ``attrib.get("id", "")``, so a
+repeated or empty id is representable, and ADR 0019 keeps ``element_id`` as traceability
+metadata precisely because its uniqueness is a sampled property of externally authored markup.
+Two observations sharing an id make an element-id-keyed stream unable to distinguish a matcher
+that exchanges their partners:
+:func:`test_a_swap_between_same_id_observations_is_invisible_to_element_ids` builds that pair,
+swaps them, and shows the old representation textually unchanged while the ordinal
+representation moves.
+
+Local ``(oi, ni)`` positions are a separate thing and stay separate: they are legacy assignment
+ORDERING machinery, #590 measured that substituting parser ordinals for them changes the
+selected correspondence, and they must not be replaced by ordinals.
+
 ## What is frozen, and what it gates
 
-``tests/data/round1_legacy_trace.json`` holds, per committed version pair, a SHA-256 over
-the oracle's full ordered trace plus the structural counts behind it. It is generated from
-the ORACLE, never from production, so production is always being compared against an
-independent expectation.
+``tests/data/round1_legacy_trace.json`` holds, per committed version pair, the ADR 0019
+provenance above plus a SHA-256 over the oracle's full ordered trace and the structural counts
+behind it. It is generated from the ORACLE, never from production, so production is always
+being compared against an independent expectation. Provenance is checked before any judgment is
+compared, and a drift in either source bytes or parser revision fails closed rather than
+rebinding the stored judgment to a different parse.
 
 Three tests form the triangle:
 
@@ -61,11 +86,13 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import inspect
 import json
 import os
 import textwrap
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -74,9 +101,10 @@ from deltatrack.bill_tree import BillNode, normalize_bill
 from deltatrack.diff_bill import match_nodes
 from deltatrack.similarity import text_similarity
 from tests.conftest import assert_manifest_committed, manifest_version_pairs, manifest_xml_ids
-from tests.corpus_paths import DATA_DIR
+from tests.corpus_paths import DATA_DIR, PROJECT_ROOT
 
 _FROZEN = DATA_DIR / "round1_legacy_trace.json"
+_PROBES = PROJECT_ROOT / "docs" / "research" / "provision-matching" / "probes"
 
 
 # --- The oracle: the legacy composition, transcribed -----------------------------------
@@ -92,20 +120,60 @@ def legacy_normalize(text: str) -> str:
 class Recorder:
     """Collects the ordered trace as the oracle runs, and counts similarity calls.
 
-    The count is its own assertion rather than a by-product: the 1x1 shortcut's whole effect
-    is that no ratio is computed, and that is a performance property the pairing stream
-    cannot show. Pinning it keeps a later "tidy it up by always computing the ratio" visible
-    as what it is -- an optimisation regression, not a matching change.
+    **Every observation in the trace is addressed by its ADR 0019 node ordinal**, which is its
+    zero-based index in the parser's COMPLETE emitted sequence for that side. The map is built
+    once, in :func:`oracle_trace`, from the whole ``tree.nodes`` list; nothing here may derive
+    an ordinal from a collision subgroup, a division sublist, an invocation-local population or
+    a position in the pairing stream. ADR 0019 names indexing a filtered or re-sorted view as a
+    genuine hazard precisely because the resulting address looks valid and points elsewhere.
+
+    ``element_id`` is deliberately NOT the key. ADR 0019 records it as traceability metadata and
+    refuses it as identity: ``bill_tree`` reads it as ``attrib.get("id", "")``, so an empty one
+    is already representable, and its uniqueness is a sampled property of externally authored
+    markup rather than a contract. A trace keyed on it cannot distinguish two observations that
+    share an id, which is the false green
+    :func:`test_a_swap_between_same_id_observations_is_invisible_to_element_ids` demonstrates.
+
+    The similarity count is its own assertion rather than a by-product: the 1x1 shortcut's whole
+    effect is that no ratio is computed, and that is a performance property the pairing stream
+    cannot show.
     """
 
     def __init__(self, ordinals: dict[int, int] | None = None) -> None:
         self.invocations: list[dict] = []
-        self.unique_selections: list[tuple[str, str]] = []
+        self.unique_selections: list[list[int]] = []
         self.similarity_calls = 0
-        self.ordinals = ordinals or {}
+        # `None` means SELECTION-ONLY: the oracle is being run for its pairing behaviour rather
+        # than to produce a trace, which is what the production-injection controls need. It is a
+        # distinct state from "an empty map", because an empty map would silently address every
+        # node as unknown; here no address is ever requested.
+        self.tracing = ordinals is not None
+        self.ordinals = ordinals if ordinals is not None else {}
 
-    def ordinal(self, node: BillNode) -> int | None:
-        return self.ordinals.get(id(node))
+    @classmethod
+    def selection_only(cls) -> Recorder:
+        """A recorder for running the oracle as a drop-in ``_similarity_pair``, recording nothing."""
+        return cls(None)
+
+    def population(self, nodes: list[BillNode]) -> list[int]:
+        """The addresses of an invocation population, or nothing when not tracing."""
+        return [self.ordinal(n) for n in nodes] if self.tracing else []
+
+    def ordinal(self, node: BillNode) -> int:
+        """The node's address, refusing one the complete emitted sequence never carried.
+
+        Raises rather than returning ``None``. A missing address means the oracle is holding a
+        node from outside the parse it is describing, and a trace row silently carrying ``null``
+        would compare equal to another such row -- reintroducing exactly the collapse that
+        keying on ``element_id`` causes.
+        """
+        address = self.ordinals.get(id(node))
+        if address is None:
+            raise ValueError(
+                f"node {node.element_id!r} is absent from the complete emitted sequence this trace "
+                "addresses; its ADR 0019 ordinal cannot be derived"
+            )
+        return address
 
     def similarity(self, a: str, b: str) -> float:
         self.similarity_calls += 1
@@ -120,10 +188,14 @@ def legacy_similarity_pair(
     variant: frozenset[str] = frozenset(),
 ) -> list[tuple[BillNode | None, BillNode | None]]:
     """``diff_bill._similarity_pair``, transcribed, with one hook per negative control."""
+    # Populations are named by complete-sequence ordinal. `selected`, `left_old` and `left_new`
+    # stay LOCAL positions into these lists: they are legacy assignment-order machinery, and #590
+    # measured that substituting parser ordinals for them changes the selected correspondence.
+    # The two coexist deliberately -- identity is the ordinal, ordering policy is the position.
     record: dict = {
         "phase": phase,
-        "old": [n.element_id for n in old_nodes],
-        "new": [n.element_id for n in new_nodes],
+        "old": rec.population(old_nodes),
+        "new": rec.population(new_nodes),
         "candidates": None,
         "selected": [],
         "left_old": [],
@@ -187,6 +259,13 @@ def legacy_similarity_pair(
 
     if "reorder_winners" in variant:
         selected = list(reversed(selected))
+    if "swap_first_two_old_partners" in variant and len(selected) >= 2:
+        # Exchange which OLD observation each of the first two winners corresponds to, leaving
+        # the emitted row order and both NEW partners exactly where they were. Against a fixture
+        # whose two old observations share an element_id, the element-id projection of the
+        # stream is unchanged and the ordinal projection is not -- which is the whole point.
+        (a_old, a_new), (b_old, b_new) = selected[0], selected[1]
+        selected = [[b_old, a_new], [a_old, b_new], *selected[2:]]
     pairs.extend((old_nodes[oi], new_nodes[ni]) for oi, ni in selected)
     record["selected"] = selected
 
@@ -315,7 +394,8 @@ def legacy_match_nodes(old_nodes, new_nodes, rec: Recorder, variant: frozenset[s
                     pairs.append((None, group_new[0]))
                     continue
             if group_old and group_new:
-                rec.unique_selections.append((group_old[0].element_id, group_new[0].element_id))
+                if rec.tracing:
+                    rec.unique_selections.append([rec.ordinal(group_old[0]), rec.ordinal(group_new[0])])
             pairs.append((group_old[0] if group_old else None, group_new[0] if group_new else None))
         else:
             pairs.extend(legacy_collision_group(group_old, group_new, rec, variant))
@@ -326,18 +406,67 @@ def legacy_match_nodes(old_nodes, new_nodes, rec: Recorder, variant: frozenset[s
 # --- Trace shape and digest -------------------------------------------------------------
 
 
+def complete_sequence_ordinals(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> dict[int, int]:
+    """The ADR 0019 address of every node, built from the COMPLETE emitted sequences.
+
+    The only place an ordinal is minted. It is ``enumerate`` over the whole ``tree.nodes`` list
+    for each side and nothing else -- never a collision subgroup, a division sublist, an
+    invocation population or a stream position, all of which are filtered or re-sorted views and
+    would yield an address that looks valid while naming a different node.
+
+    Keyed on ``id(node)`` for the duration of one run, which is a run-local mechanism for
+    recovering the ordinal and NOT ADR 0019 observation identity. Both trees hold every node
+    alive for the whole comparison, and nothing here is persisted; the artifact stores the
+    resulting integers alongside the source digest and parser revision that scope them.
+    ``scripts/probe_node_identity.py`` sets the precedent.
+
+    Two nodes of one side sharing an object would collapse two addresses onto one, so it is
+    refused rather than assumed away.
+    """
+    ordinals: dict[int, int] = {}
+    for side_nodes in (old_nodes, new_nodes):
+        seen: dict[int, int] = {}
+        for index, node in enumerate(side_nodes):
+            if id(node) in seen:
+                raise ValueError(
+                    f"one node object appears at ordinals {seen[id(node)]} and {index} of a single "
+                    "side; two observations would collapse onto one address"
+                )
+            seen[id(node)] = index
+        ordinals.update(seen)
+    return ordinals
+
+
 def oracle_trace(old_nodes, new_nodes, variant: frozenset[str] = frozenset()) -> dict:
-    """The oracle's full ordered trace for one comparison."""
-    ordinals = {id(n): i for i, n in enumerate(old_nodes)}
-    ordinals.update({id(n): i for i, n in enumerate(new_nodes)})
-    rec = Recorder(ordinals)
+    """The oracle's full ordered trace for one comparison, addressed by ADR 0019 ordinal.
+
+    ``old_nodes`` and ``new_nodes`` must be the complete emitted sequences for their side --
+    ``tree.nodes``, not a filtered view. That is what makes every integer in the result a
+    legitimate node ordinal.
+    """
+    rec = Recorder(complete_sequence_ordinals(old_nodes, new_nodes))
     pairs = legacy_match_nodes(old_nodes, new_nodes, rec, variant)
     return {
-        "stream": [[o.element_id if o else None, n.element_id if n else None] for o, n in pairs],
+        "stream": [
+            [rec.ordinal(o) if o is not None else None, rec.ordinal(n) if n is not None else None] for o, n in pairs
+        ],
         "unique_selections": [list(p) for p in rec.unique_selections],
         "invocations": rec.invocations,
         "similarity_calls": rec.similarity_calls,
     }
+
+
+def element_id_projection(old_nodes, new_nodes, variant: frozenset[str] = frozenset()) -> list[list[str | None]]:
+    """The SUPERSEDED representation: the pairing stream keyed by ``element_id``.
+
+    Retained for exactly one purpose -- to demonstrate, in
+    :func:`test_a_swap_between_same_id_observations_is_invisible_to_element_ids`, that it cannot
+    distinguish a mutation the ordinal representation does. Nothing else may assert on it and no
+    frozen digest derives from it.
+    """
+    rec = Recorder(complete_sequence_ordinals(old_nodes, new_nodes))
+    pairs = legacy_match_nodes(old_nodes, new_nodes, rec, variant)
+    return [[o.element_id if o is not None else None, n.element_id if n is not None else None] for o, n in pairs]
 
 
 def trace_digest(trace: dict) -> str:
@@ -376,10 +505,49 @@ def stream_digest(stream: list) -> str:
     return hashlib.sha256(json.dumps(stream, separators=(",", ":")).encode()).hexdigest()
 
 
+def source_sha256(path: Path) -> str:
+    """SHA-256 of the source bytes, per ADR 0019.
+
+    The file is committed under ``tests/corpus/``, so git already pins the bytes and this is
+    *recorded* rather than relied on for storage -- ADR 0015's reservation, cashed in here.
+    What it buys is that the stored judgment names the source it was made about, so a fixture
+    swapped underneath it fails closed instead of silently rebinding.
+    """
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@lru_cache(maxsize=1)
+def parser_revision() -> str:
+    """The parser revision this trace's ordinals were derived under, DERIVED not declared.
+
+    ADR 0019 requires a revision that "changes whenever code capable of changing the emitted
+    observations changes", and accepts a content hash over the parser entry module and its
+    transitive ``deltatrack`` imports. That mechanism already exists in this repository, in
+    ``docs/research/provision-matching/probes/study2_frame.py``, and is reused rather than
+    reimplemented -- a second copy of an identity rule is how two artifacts come to disagree
+    about what parse they describe.
+
+    Loaded the same way ``tests/test_pass2_eval_contract.py`` loads it. Its transitive set is
+    ``bill_tree`` plus the two PDF parser modules ``bill_tree`` imports, and notably NOT
+    ``diff_bill``: a matching change does not move the revision, so the two failure modes stay
+    distinguishable. A matcher regression reddens the digests; a parser change reddens
+    provenance and says the stored judgment is about a different emitted sequence.
+    """
+    spec = importlib.util.spec_from_file_location("_probe_study2_frame", _PROBES / "study2_frame.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.parser_revision()
+
+
 def frozen_record(old_path: Path, new_path: Path) -> dict:
     old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
     trace = oracle_trace(old_tree.nodes, new_tree.nodes)
     return {
+        # ADR 0019 provenance: the two halves that scope every ordinal below.
+        "old_source_sha256": source_sha256(old_path),
+        "new_source_sha256": source_sha256(new_path),
+        "parser_revision": parser_revision(),
         "sha256": trace_digest(trace),
         "stream_sha256": stream_digest(trace["stream"]),
         "counts": trace_counts(trace),
@@ -453,17 +621,84 @@ def test_the_oracle_reproduces_the_frozen_trace(old_path: Path, new_path: Path):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("old_path,new_path", manifest_version_pairs(), ids=lambda p: p.stem)
+def test_the_stored_judgment_names_the_parse_it_was_made_about(old_path: Path, new_path: Path):
+    """ADR 0019 provenance, checked BEFORE any judgment is compared. Fails closed.
+
+    A frozen ordinal means nothing on its own: it addresses a node inside one emitted sequence,
+    produced from particular source bytes by a particular parser revision. If either moves, the
+    stored digests describe a sequence that no longer exists, and comparing them would silently
+    rebind a recorded judgment to a different subject -- the exact failure ADR 0019 was written
+    for, where a parser change redefined what three stored observations meant.
+
+    So this refuses rather than regenerates. A red here is not "update the fixture"; it is
+    "the observation sequence moved, and the round-1 expectation has to be re-derived and
+    re-reviewed against the new parse".
+    """
+    key = pair_key(old_path, new_path)
+    frozen = load_frozen()[key]
+
+    for label, path, field in (
+        ("old", old_path, "old_source_sha256"),
+        ("new", new_path, "new_source_sha256"),
+    ):
+        live = source_sha256(path)
+        assert live == frozen[field], (
+            f"{key}: the {label}-side source bytes changed ({frozen[field][:12]} -> {live[:12]}). "
+            "Every ordinal in this record addresses the previous parse; re-derive the expectation "
+            "rather than regenerating it to match."
+        )
+
+    live_revision = parser_revision()
+    assert live_revision == frozen["parser_revision"], (
+        f"{key}: the parser revision changed ({frozen['parser_revision'][:12]} -> {live_revision[:12]}), "
+        "so the emitted observation sequence may differ and these ordinals may address different "
+        "nodes. ADR 0019: a stored judgment is scoped to (source_sha256, parser_revision, ordinal). "
+        "Re-derive and re-review; do not regenerate to make this green."
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("field", ["old_source_sha256", "new_source_sha256", "parser_revision"])
+def test_the_provenance_gate_can_fire(field: str, monkeypatch):
+    """The negative control for the gate above, which has otherwise never rejected anything.
+
+    Each provenance field is perturbed in the loaded artifact and the gate must refuse. Without
+    this the check is an equality that has only ever been satisfied, and a typo in the field
+    name would leave it comparing nothing while reading as protection.
+    """
+    old_path, new_path = manifest_version_pairs()[0]
+    tampered = json.loads(_FROZEN.read_text())
+    tampered[pair_key(old_path, new_path)][field] = "0" * 64
+    monkeypatch.setitem(globals(), "load_frozen", lambda: tampered)
+
+    with pytest.raises(AssertionError, match="source bytes changed|parser revision changed"):
+        test_the_stored_judgment_names_the_parse_it_was_made_about(old_path, new_path)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("old_path,new_path", manifest_version_pairs(), ids=lambda p: p.stem)
 def test_production_reproduces_the_frozen_pairing_stream(old_path: Path, new_path: Path):
     """THE DURABLE GATE. Whatever round 1 becomes internally, this must still hold.
 
-    Compares production's observable output -- the ordered pairing stream by element id --
-    against the independently frozen expectation. It survives B1 and B2 because it names no
-    internal function.
+    Compares production's observable output -- the ordered pairing stream, each observation
+    addressed by its ADR 0019 ordinal in the complete emitted sequence -- against the
+    independently frozen expectation. It survives B1 and B2 because it names no internal
+    function.
+
+    **Addressed by ordinal, never by ``element_id``.** ADR 0019 keeps ``element_id`` as
+    traceability metadata and refuses it as identity, and the refusal has teeth here: two
+    observations sharing an id make an element-id-keyed stream unable to distinguish a matcher
+    that exchanges their partners. See
+    :func:`test_a_swap_between_same_id_observations_is_invisible_to_element_ids`.
     """
     key = pair_key(old_path, new_path)
     frozen = load_frozen()[key]
     old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-    produced = [[o.element_id if o else None, n.element_id if n else None] for o, n in match_nodes(old_tree, new_tree)]
+    ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
+    produced = [
+        [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None]
+        for o, n in match_nodes(old_tree, new_tree)
+    ]
 
     if stream_digest(produced) == frozen["stream_sha256"]:
         return
@@ -497,20 +732,25 @@ def test_production_internals_reproduce_the_frozen_invocation_trace():
     checked = 0
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        # Addresses come from the COMPLETE emitted sequences, resolved outside the spy. The
+        # populations the spy sees are collision subgroups and division sublists; numbering them
+        # by their position inside those views is the ADR 0019 hazard, so the map is built once
+        # from tree.nodes and only looked up here.
+        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
         seen: list[dict] = []
         real_pair = db._similarity_pair
         real_group = db._match_collision_group
         state = {"both_sided": 0, "n": 0}
 
-        def spy_pair(old_nodes, new_nodes, _real=real_pair, _seen=seen, _state=state):
+        def spy_pair(old_nodes, new_nodes, _real=real_pair, _seen=seen, _state=state, _ord=ordinals):
             _state["n"] += 1
             phase = "within" if _state["n"] <= _state["both_sided"] else "cross"
             result = _real(old_nodes, new_nodes)
             _seen.append(
                 {
                     "phase": phase,
-                    "old": [n.element_id for n in old_nodes],
-                    "new": [n.element_id for n in new_nodes],
+                    "old": [_ord[id(n)] for n in old_nodes],
+                    "new": [_ord[id(n)] for n in new_nodes],
                 }
             )
             return result
@@ -634,6 +874,78 @@ def test_the_oracle_module_reaches_diff_bill_only_for_the_production_comparison(
     }, f"the production import surface moved: {sorted(imported)}"
 
 
+# --- ADR 0019: where an ordinal is allowed to come from --------------------------------------
+
+
+def test_an_ordinal_is_refused_for_a_node_outside_the_complete_sequence():
+    """The bridge fails closed rather than inventing an address.
+
+    A node the parse never emitted has no ordinal. Returning ``None`` would put a null in the
+    trace that compares equal to every other null -- the same collapse that keying on a repeated
+    ``element_id`` causes, arriving by a different route.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    rec = Recorder(complete_sequence_ordinals(old_nodes, new_nodes))
+    stranger = node(MP, "not-in-this-parse", "text from another document", "D")
+
+    with pytest.raises(ValueError, match="absent from the complete emitted sequence"):
+        rec.ordinal(stranger)
+
+
+def test_ordinals_are_not_derived_from_an_invocation_population():
+    """The ADR 0019 hazard, demonstrated on the fixture where the two numberings disagree.
+
+    ADR 0019 names indexing a filtered or re-sorted view as a real hazard because the resulting
+    address looks valid and points at the wrong node. The cross-division fallback population is
+    exactly such a view: on the interleaved fixture it holds [X2, Y1], whose complete-sequence
+    ordinals are [2, 1] while their positions *within that population* are [0, 1].
+
+    The trace must carry the former. If it ever carried the latter, every fallback address in
+    the frozen artifact would silently name a different observation.
+    """
+    old_nodes, new_nodes = interleaved_division_fixture()
+    trace = oracle_trace(old_nodes, new_nodes)
+    cross = next(i for i in trace["invocations"] if i["phase"] == "cross")
+
+    complete = complete_sequence_ordinals(old_nodes, new_nodes)
+    by_complete_sequence = [complete[id(n)] for n in (old_nodes[2], old_nodes[1])]  # X2, Y1
+    by_population_position = list(range(len(cross["old"])))
+
+    assert by_complete_sequence == [2, 1]
+    assert by_population_position == [0, 1]
+    assert by_complete_sequence != by_population_position, (
+        "the fixture no longer distinguishes the two numberings, so this proves nothing"
+    )
+    assert cross["old"] == by_complete_sequence, (
+        f"the fallback population is addressed by {cross['old']}, which is not the complete "
+        "emitted sequence ordinal -- ADR 0019's filtered-view hazard"
+    )
+
+
+@pytest.mark.slow
+def test_every_frozen_ordinal_indexes_a_real_node_of_its_side():
+    """Range check over the whole artifact: no address falls outside its side's sequence.
+
+    Cheap, and it closes the one way a complete-sequence ordinal can still be wrong without any
+    digest noticing: an off-by-one or a side mix-up produces a valid-looking integer.
+    """
+    checked = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        trace = oracle_trace(old_tree.nodes, new_tree.nodes)
+        n_old, n_new = len(old_tree.nodes), len(new_tree.nodes)
+
+        for old_ordinal, new_ordinal in trace["stream"]:
+            assert old_ordinal is None or 0 <= old_ordinal < n_old
+            assert new_ordinal is None or 0 <= new_ordinal < n_new
+        for invocation in trace["invocations"]:
+            assert all(0 <= o < n_old for o in invocation["old"])
+            assert all(0 <= n < n_new for n in invocation["new"])
+        checked += 1
+
+    assert checked, "the range check ran over zero version pairs"
+
+
 # --- The two synthetic fixtures the corpus cannot supply -----------------------------------
 
 
@@ -704,15 +1016,46 @@ def interleaved_division_fixture() -> tuple[list[BillNode], list[BillNode]]:
     return old_nodes, new_nodes
 
 
-def production_stream(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> list[tuple]:
-    """Production's pairing stream for a synthetic node list, via a minimal tree stand-in."""
+#: The id two distinct old observations share in the fixture below. ``bill_tree`` reads the
+#: attribute as ``attrib.get("id", "")``, so a repeated -- or empty -- id is representable in
+#: real markup; ADR 0019 measured 144 synthesized ids across 48 documents and refuses to rest
+#: identity on a property of externally authored XML that can only ever be sampled.
+_DUPLICATE_ID = "dup"
+
+
+def duplicate_element_id_fixture() -> tuple[list[BillNode], list[BillNode]]:
+    """Two distinct old observations carrying the SAME ``element_id``, both of which get paired.
+
+    One ``match_path`` group, one division, two old and two new observations, so the greedy
+    runs and claims both pairs. The two old observations are genuinely different provisions --
+    different bodies, different ordinals -- and differ only in that the source markup gave them
+    the same id.
+
+    This is what makes an element-id-keyed trace unable to answer "which of these two
+    corresponds to which", and it is the population
+    :func:`test_a_swap_between_same_id_observations_is_invisible_to_element_ids` mutates.
+    """
+    old_nodes = [
+        node(MP, _DUPLICATE_ID, "alpha alpha alpha appropriations for salaries and expenses", "D"),
+        node(MP, _DUPLICATE_ID, "bravo bravo bravo appropriations for construction accounts", "D"),
+    ]
+    new_nodes = [
+        node(MP, "n-alpha", "alpha alpha alpha appropriations for salaries and expenses", "D"),
+        node(MP, "n-bravo", "bravo bravo bravo appropriations for construction accounts", "D"),
+    ]
+    return old_nodes, new_nodes
+
+
+def production_stream(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> list[list[int | None]]:
+    """Production's pairing stream for a synthetic node list, addressed by ADR 0019 ordinal."""
 
     class _Tree:
         def __init__(self, nodes):
             self.nodes = nodes
 
+    ordinals = complete_sequence_ordinals(old_nodes, new_nodes)
     return [
-        (o.element_id if o else None, n.element_id if n else None)
+        [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None]
         for o, n in match_nodes(_Tree(old_nodes), _Tree(new_nodes))
     ]
 
@@ -720,20 +1063,23 @@ def production_stream(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> l
 def test_assignment_leftovers_reach_the_cross_division_fallback():
     """The behaviour no corpus gate can observe, pinned exactly -- oracle and production.
 
-    ``oA2`` is left over by within-division ASSIGNMENT in division A. ``nB2`` is left over in
-    division B. They pair only because the fallback's population includes observations that
-    assignment declined, which is the dependency the whole separation has to preserve.
+    ``oA2`` (old ordinal 1) is left over by within-division ASSIGNMENT in division A; ``nB2``
+    (new ordinal 2) is left over in division B. They pair only because the fallback's population
+    includes observations that assignment declined, which is the dependency the whole separation
+    has to preserve.
+
+    Addresses are ordinals: old ``[oA1, oA2, oB1]`` = 0,1,2 and new ``[nA1, nB1, nB2]`` = 0,1,2.
     """
     old_nodes, new_nodes = assignment_leftover_fixture()
     trace = oracle_trace(old_nodes, new_nodes)
 
     assert [(i["phase"], i["old"], i["new"]) for i in trace["invocations"]] == [
-        ("within", ["oA1", "oA2"], ["nA1"]),
-        ("within", ["oB1"], ["nB1", "nB2"]),
-        ("cross", ["oA2"], ["nB2"]),
+        ("within", [0, 1], [0]),
+        ("within", [2], [1, 2]),
+        ("cross", [1], [2]),
     ]
-    assert trace["stream"] == [["oA1", "nA1"], ["oB1", "nB1"], ["oA2", "nB2"]]
-    assert production_stream(old_nodes, new_nodes) == [("oA1", "nA1"), ("oB1", "nB1"), ("oA2", "nB2")]
+    assert trace["stream"] == [[0, 0], [2, 1], [1, 2]]
+    assert production_stream(old_nodes, new_nodes) == [[0, 0], [2, 1], [1, 2]]
 
 
 def test_the_fallback_population_is_not_in_parser_ordinal_order():
@@ -741,18 +1087,19 @@ def test_the_fallback_population_is_not_in_parser_ordinal_order():
 
     Pins the divergence itself, so a later implementation that reads ``ObservationRef``
     ordinals where production reads local positions is caught here rather than on a bill.
+
+    Old ``[X1, Y1, X2]`` = ordinals 0,1,2; new ``[nX1, nZ1]`` = 0,1.
     """
     old_nodes, new_nodes = interleaved_division_fixture()
     trace = oracle_trace(old_nodes, new_nodes)
 
     cross = [i for i in trace["invocations"] if i["phase"] == "cross"]
     assert len(cross) == 1, "the fixture stopped exercising the cross-division fallback"
-    assert cross[0]["old"] == ["X2", "Y1"], "the fallback population lost its concatenation order"
 
-    ordinals = {n.element_id: i for i, n in enumerate(old_nodes)}
-    positions = [ordinals[e] for e in cross[0]["old"]]
-    assert positions == [2, 1], positions
-    assert positions != sorted(positions), (
+    # The population is [X2, Y1] -- ordinals [2, 1], i.e. NOT ascending. Local position 0 is
+    # ordinal 2 and local position 1 is ordinal 1, which is what makes the two keys disagree.
+    assert cross[0]["old"] == [2, 1], "the fallback population lost its concatenation order"
+    assert cross[0]["old"] != sorted(cross[0]["old"]), (
         "the fixture no longer produces a fallback population out of parser-ordinal order, so the "
         "ordinal-substitution control below cannot fire"
     )
@@ -763,11 +1110,100 @@ def test_the_fallback_population_is_not_in_parser_ordinal_order():
     scores = {(oi, ni): s for s, oi, ni in (tuple(c) for c in cross[0]["candidates"])}
     assert len(set(scores.values())) == 1, f"the fallback candidates no longer tie: {scores}"
 
-    # Descending LOCAL position picks Y1 (local 1). Descending parser ordinal would pick X2
-    # (ordinal 2). Production agrees with the oracle, and the control below shows the
-    # substitution moving it.
+    # Descending LOCAL position picks local 1 (= Y1, ordinal 1). Descending parser ordinal would
+    # pick local 0 (= X2, ordinal 2). `selected` stays in LOCAL positions: it is legacy ordering
+    # machinery, not an address, and #590 measured that substituting ordinals moves selection.
     assert cross[0]["selected"] == [[1, 0]]
-    assert production_stream(old_nodes, new_nodes) == [("X1", "nX1"), ("Y1", "nZ1"), ("X2", None)]
+    assert production_stream(old_nodes, new_nodes) == [[0, 0], [1, 1], [2, None]]
+
+
+# --- The decisive control for the identity representation -----------------------------------
+
+
+def test_the_duplicate_id_fixture_really_does_repeat_one_id():
+    """The premise, checked, so the control below cannot pass for the wrong reason.
+
+    If the two old observations stopped sharing an id -- or stopped being two -- the swap would
+    be visible to both representations and would prove nothing about either.
+    """
+    old_nodes, _new_nodes = duplicate_element_id_fixture()
+    assert len(old_nodes) == 2
+    assert old_nodes[0].element_id == old_nodes[1].element_id == _DUPLICATE_ID
+    assert old_nodes[0].body_text != old_nodes[1].body_text, "the two observations must be distinct"
+
+    # Both pairs score 1.0, so the `(similarity, oi, ni)` descending tiebreak emits local 1
+    # before local 0 -- the stream is [[1,1],[0,0]] rather than [[0,0],[1,1]].
+    trace = oracle_trace(*duplicate_element_id_fixture())
+    assert trace["stream"] == [[1, 1], [0, 0]], "the fixture must pair both old observations"
+
+
+def test_a_swap_between_same_id_observations_is_invisible_to_element_ids():
+    """THE control for this correction. Both halves, on one mutation.
+
+    The mutation exchanges which of the two same-id old observations corresponds to which new
+    observation, leaving the emitted row order and both new partners untouched. A matcher could
+    do exactly this and be wrong about every pairing it reports.
+
+    **A. The superseded representation cannot see it.** Keyed by ``element_id``, both rows read
+    ``("dup", <new id>)`` before and after, so the streams are textually identical and any
+    digest over them is equal. A gate built on that representation is green on a matcher that
+    has swapped two provisions.
+
+    **B. The corrected representation does see it**, because the two observations have distinct
+    ADR 0019 ordinals -- which is the property ADR 0019 says is unique by construction, where
+    ``element_id``'s uniqueness is only ever sampled.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    swap = frozenset({"swap_first_two_old_partners"})
+
+    # A. element_id projection: identical, so the old gate stays green on a swapped matcher.
+    #    Row order is the greedy's: both pairs score 1.0 and the descending tiebreak emits the
+    #    higher local position first, so "n-bravo" leads.
+    baseline_ids = element_id_projection(old_nodes, new_nodes)
+    swapped_ids = element_id_projection(old_nodes, new_nodes, swap)
+    assert baseline_ids == swapped_ids == [["dup", "n-bravo"], ["dup", "n-alpha"]], (
+        f"the element-id projection was expected to be blind to the swap; got {baseline_ids} then {swapped_ids}"
+    )
+    assert stream_digest(baseline_ids) == stream_digest(swapped_ids), (
+        "an element-id-keyed digest distinguished the swap, so this fixture no longer demonstrates "
+        "the false green the ordinal representation exists to close"
+    )
+
+    # B. ordinal projection: the correspondence actually moved, and the digest says so.
+    #    Baseline pairs old 1 with new 1 and old 0 with new 0; the swap crosses them.
+    baseline = oracle_trace(old_nodes, new_nodes)
+    swapped = oracle_trace(old_nodes, new_nodes, swap)
+    assert baseline["stream"] == [[1, 1], [0, 0]]
+    assert swapped["stream"] == [[0, 1], [1, 0]], "the mutation did not exchange the two old partners"
+    assert stream_digest(baseline["stream"]) != stream_digest(swapped["stream"])
+    assert trace_digest(baseline) != trace_digest(swapped)
+
+
+def test_the_named_gate_reddens_on_the_same_id_swap():
+    """The gate that must go red, named and exercised end to end.
+
+    :func:`test_production_reproduces_the_frozen_pairing_stream` compares
+    ``stream_digest`` of production's ordinal-addressed stream against the frozen
+    ``stream_sha256``. This reproduces that comparison against the swapped matcher on the
+    duplicate-id fixture, and requires it to fail -- while the element-id comparison it
+    replaced passes.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    frozen_stream_sha = stream_digest(oracle_trace(old_nodes, new_nodes)["stream"])
+    swapped = oracle_trace(old_nodes, new_nodes, frozenset({"swap_first_two_old_partners"}))
+
+    assert stream_digest(swapped["stream"]) != frozen_stream_sha, (
+        "test_production_reproduces_the_frozen_pairing_stream's comparison stayed green on a "
+        "swapped correspondence; the corrected representation is not actually binding"
+    )
+    superseded_sha = stream_digest(element_id_projection(old_nodes, new_nodes))
+    superseded_swapped = stream_digest(
+        element_id_projection(old_nodes, new_nodes, frozenset({"swap_first_two_old_partners"}))
+    )
+    assert superseded_sha == superseded_swapped, (
+        "the element-id comparison also reddened, so this no longer isolates the representation "
+        "as the thing that made the difference"
+    )
 
 
 # --- Negative controls --------------------------------------------------------------------
@@ -815,7 +1251,7 @@ def inject_into_production(monkeypatch, mutation: str | None) -> None:
     variant = frozenset({mutation}) if mutation else frozenset()
 
     def replacement(old_nodes, new_nodes):
-        return legacy_similarity_pair(old_nodes, new_nodes, Recorder(), "injected", variant)
+        return legacy_similarity_pair(old_nodes, new_nodes, Recorder.selection_only(), "injected", variant)
 
     monkeypatch.setattr("deltatrack.diff_bill._similarity_pair", replacement)
 
@@ -833,8 +1269,10 @@ def test_the_injection_harness_alone_changes_nothing(monkeypatch):
     inject_into_production(monkeypatch, None)
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
         produced = [
-            [o.element_id if o else None, n.element_id if n else None] for o, n in match_nodes(old_tree, new_tree)
+            [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None]
+            for o, n in match_nodes(old_tree, new_tree)
         ]
         key = pair_key(old_path, new_path)
         assert stream_digest(produced) == frozen[key]["stream_sha256"], (
@@ -857,8 +1295,10 @@ def test_the_durable_gate_reddens_on_a_fault_injected_into_PRODUCTION(monkeypatc
     moved = []
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
         produced = [
-            [o.element_id if o else None, n.element_id if n else None] for o, n in match_nodes(old_tree, new_tree)
+            [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None]
+            for o, n in match_nodes(old_tree, new_tree)
         ]
         if stream_digest(produced) != frozen[pair_key(old_path, new_path)]["stream_sha256"]:
             moved.append(pair_key(old_path, new_path))

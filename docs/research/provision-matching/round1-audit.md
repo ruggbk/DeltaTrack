@@ -435,6 +435,19 @@ the new helper.
 > two constructions in §4 and §5 are minimal and already verified against the real functions —
 > they should ship as fixtures in the first slice, before any production change.
 
+> **Correction, after B0 review.** The "identity bridge" column above says `ObservationRef` for
+> every result-bearing row, and that was the right design. The first B0 implementation did not
+> follow it: it serialized the pairing stream and invocation populations by `element_id`, and
+> the frozen digests derived from that. ADR 0019 keeps `element_id` as traceability metadata and
+> refuses it as identity, because `bill_tree` reads it as `attrib.get("id", "")` and its
+> uniqueness is a sampled property of externally authored markup rather than a contract. The
+> consequence is a real false green: two observations sharing an id make the stream unable to
+> distinguish a matcher that exchanges their partners. The trace is now addressed by
+> complete-emitted-sequence ordinal, the artifact carries each side's `source_sha256` and the
+> derived `parser_revision` that scope those ordinals, and a duplicate-id fixture demonstrates
+> both halves — the element-id projection blind to a swap, the ordinal projection catching it.
+> Local `(oi, ni)` positions stay local positions, per the first bullet above.
+
 ---
 
 ## 9. Negative controls
