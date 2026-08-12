@@ -4670,7 +4670,7 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 
 ```json
 {"id": "A41", "class": "SUBSTANTIVE",
- "commits": ["34f3e48", "165cd31", "f5c8091"],
+ "commits": ["34f3e48", "165cd31", "f5c8091", "75a6a0c"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
@@ -4893,7 +4893,7 @@ N-C 8/8** across 20 controls × both routes.
 
 ### A41.3 — the controls, and that each can go RED
 
-`x27_score_metrics.py`, **134/134**, on SYNTHETIC + DEVELOPMENT material only. It covers all
+`x27_score_metrics.py`, **158/158**, on SYNTHETIC + DEVELOPMENT material only. It covers all
 **eleven** current §5 control rows (the row list is enumerated in the evidence file and a final
 check fails if any row has no executable test), the twelve explicit negatives, the false-green
 attacks, and the refusals.
@@ -4973,8 +4973,14 @@ cross-engine writers use, and a control proves it refuses today and would write 
 
 ### Realized
 
-`x27` **134/134**, **26/26** injected faults caught after three control repairs,
-`contamination.json` byte-identical.
+`x27` **158/158**, **37/37** injected faults caught — each failing a NAMED control rather than
+crashing — `contamination.json` byte-identical.
+
+**Round 3 added a fourth class of control defect worth recording: a control that detects a fault
+only by CRASHING.** Four R6/R8 negatives indexed `failures[0]` or relied on a bare `KeyError`, so
+under their fault the probe raised instead of reporting a red check. The fault was caught either
+way, but a traceback cannot distinguish "the rule broke" from "the probe has a bug". All four now
+fail a named check, and the injection driver asserts `crashed == False`.
 `decide_architecture.py` is **not** created and **G5 is not modified to hide it**: G5 still reports
 the surface as incomplete, naming that one file.
 
