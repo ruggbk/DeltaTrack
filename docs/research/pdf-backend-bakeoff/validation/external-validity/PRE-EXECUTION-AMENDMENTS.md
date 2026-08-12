@@ -4670,7 +4670,7 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 
 ```json
 {"id": "A41", "class": "SUBSTANTIVE",
- "commits": ["34f3e48", "165cd31"],
+ "commits": ["34f3e48", "165cd31", "f5c8091"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
