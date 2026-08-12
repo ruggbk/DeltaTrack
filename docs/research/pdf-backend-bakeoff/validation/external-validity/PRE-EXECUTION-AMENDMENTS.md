@@ -4670,7 +4670,7 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 
 ```json
 {"id": "A41", "class": "SUBSTANTIVE",
- "commits": ["34f3e48", "165cd31", "f5c8091", "75a6a0c", "a1dcd9e", "d90a84e", "7527924"],
+ "commits": ["b82bb2b", "f5d6171", "bd543dc", "7d34796", "64ba7a4", "33f98bd", "70ab8e0"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
@@ -5090,7 +5090,7 @@ two answers (A36.6), and the fixture now does too. **26/26 after the repairs.**
 > refuses the same input one layer below and defines the **same reason string**, so a control
 > asserting the reason alone could not tell which layer had refused. Two layers refusing a
 > duplicated document is good defence; the defect was a control that could not go red. It now pins
-> the exception **class** (`165cd31`), and re-injecting the fault fails it. **17/17 after the
+> the exception **class** (`f5d6171`), and re-injecting the fault fails it. **17/17 after the
 > repair.** The sweep also measured that deleting the `control_kind` skip does not move the
 > "adding 20 real controls changes nothing" invariance — a control carries `frames == ()`, so the
 > frame-membership filter refuses it again — and that the exclusion **count** is what makes that
