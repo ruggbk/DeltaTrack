@@ -4666,6 +4666,486 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 
 ---
 
+## A41 — SUBSTANTIVE. `score_metrics` implements the already-frozen §6 and §8 contracts
+
+```json
+{"id": "A41", "class": "SUBSTANTIVE",
+ "commits": ["b82bb2b", "f5d6171", "bd543dc", "7d34796", "64ba7a4", "33f98bd", "70ab8e0"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
+ "supersedes_text_in": "none -- NO PREVIOUSLY FROZEN rule is changed. A41 makes previously UNSPECIFIED scorer ranges and operationalizations executable, before any confirmatory execution exists",
+ "status": "IMPLEMENTATION COMPLETE; R1-R9 ALL RULED AND IMPLEMENTED -- no reading remains open and no result-bearing factual gate is unowned. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
+```
+
+**Why `affects_scoring_rule` is `true` while `supersedes_text_in` is `none`.** These are different
+questions and this amendment keeps them apart, as A31 did — but the distinction is **not** "no
+scoring or statistical rule is introduced". It is:
+
+> **No PREVIOUSLY FROZEN rule is changed.** Every metric, denominator, threshold and normalisation
+> the scorer applies was fixed by §6, §8, A19–A24, A27, A28 and A36–A39 before this component
+> existed, and none of them is amended, reinterpreted or relaxed here.
+>
+> **A41 DOES make previously UNSPECIFIED scorer ranges and operationalizations executable** — and
+> pins result-bearing behaviour the frozen text left open. R6 fixes how R1's agreement is computed;
+> R8 fixes how a control verdict is decided; R9 fixes which quantities §8's pairing covers. Those
+> are new *operationalizations*, not new *rules*, and the distinction only holds because every one
+> was settled **before any confirmatory output existed**, which is the condition that makes
+> pre-execution amendment legitimate at all.
+
+**A41.2 records all nine places the frozen text had to be read or ruled — R1 through R9.** Four
+move a reported number: R1's §8 event evidence, R2's M7 threshold, and **R6 and R9, which were
+raised as STOPs and ruled by review rather than chosen here**. R8 was reported as an unowned factual
+gate and is likewise now ruled and implemented. Filing `affects_scoring_rule: false` would
+understate what a reviewer approved. **Nothing was smuggled: every reading is recorded, and the ones
+that could decide a gate were escalated first.**
+
+### A41.1 — what was implemented, and what it calls rather than restates
+
+`score_metrics.py` is a pure consumer of committed artifacts: frames, `oracle_key`,
+`oracle_adjudicated`, `results/cross_engine_control.json`, `results/s1_control.json`, and the
+committed membership's stratum labels. It opens no PDF, runs no arm, re-runs no clustering or
+anchor recognition, performs no adjudication, discovers no file on disk, and takes **no**
+architecture decision. `x27` asserts the import graph from the AST rather than from a substring
+scan, and separately scores a payload built from **JSON alone** to show no live object is needed.
+
+Where a frozen rule already had an executable owner, the scorer **calls** it:
+
+| quantity | owner called |
+|---|---|
+| M0a / M0b / M0-any / M0b_defined / both_absent | `neutral_identity.m0` (A22/A23) |
+| M3 boundaries and the heading-level outcome | `m3_boundaries.heading_outcome` (A3/A4/§6.3) |
+| M2's normalisation | `xml_sources.normalize` (§6.2) |
+| M5's role coarsening and UNSCORABLE rule | `methodology_contracts.m5_*` (A36.7) |
+| §4.5 adequacy | `methodology_contracts.filter_keys` / `adequacy_occurrences` / `adequacy` |
+| §8 zero-event closed form | `methodology_contracts.zero_event_upper_bound` |
+| §8 supplementary bootstrap | `methodology_contracts.section8_document_bootstrap` (A38.10) |
+| Rule 0's margin-line clause | `methodology_contracts.margin_line_loss` (A39.1) |
+| the occurrence-level join | `build_oracle.resolve_adjudicated_occurrence` (A38.7) |
+| the adjudicated encoding | `build_oracle.validate_adjudicated` (A38.7) |
+| which answer each estimand reads | `build_oracle.PURPOSE_ROUTE` (A36.4) |
+| the cross-engine verdict and its thresholds | `cross_engine_control.json`, from `X09.gate` (A39.2) |
+
+**The one quantity implemented here is the general one-sided Clopper–Pearson upper bound**, which
+A27.5 assigns to `score_metrics` and which `methodology_contracts` deliberately does not carry. It
+is a fixed-iteration bisection on the binomial CDF, so the bound is reproducible bit for bit; the
+**zero-event case delegates to the frozen closed form**, and a control requires the general path to
+agree with `1 − 0.05^(1/N)` at k = 0 for N ∈ {1, 14, 600}. §8.1's own fixture reproduces exactly:
+**0.1926 on 14 documents against 0.00498 on 600 headings, a factor of 39**.
+
+**Malformed or incomplete input REFUSES.** Fifteen explicit refusal classes, each because the
+alternative — skipping the record — moves a denominator with nothing to show for it. The scorer
+also **recomputes** the committed line-level predicates from `neutral_identity`'s own rules and
+refuses on drift, and refuses a frame whose committed coverage floor is not production's 0.85.
+
+### A41.2 — R1–R9, every one ruled
+
+**All nine are settled. Nothing here is open.** R1, R2 and R7 are approved as implemented; R3 and
+R4 are reporting shape; R5 is closed as a channel; **R6, R8 and R9 were STOPs or reported gaps and
+are now RULED and implemented**. None invents a threshold: every number is §5.6's, §6's or §8's.
+
+| ruling | subject | state |
+|---|---|---|
+| R1 | §8's event evidence | APPROVED — `ANCHOR_DISCORDANCE` |
+| R2 | M7's threshold | APPROVED — §6's ≥ 3, not an open choice |
+| R3 | recall's denominator on an A30 refusal | reading — stays in, sensitivity secondary |
+| R4 | C / D reported separately | reading — never pooled (A36.3) |
+| R5 | the R1 scalar channel | CLOSED — parameter removed |
+| **R6** | **R1's computation** | **RULED — union denominator, exact text, fine role, per-route micro-average** |
+| R7 | the M4 parent sentinels | APPROVED as repaired |
+| **R8** | **the N-A/N-B/N-C verdicts** | **RULED and IMPLEMENTED in the scorer** |
+| **R9** | **§8's paired-quantity scope** | **RULED — the two numeric M9 bases, per population, never pooled** |
+
+| # | where the frozen text stops | reading taken | rejected, and why |
+|---|---|---|---|
+| **R1** | §5's §8 block names the event *"per DOCUMENT: has ≥ 1 heading-level H/X discordance"* without naming the evidence | **any region whose emitted `Anchor` sets differ** (`ANCHOR_DISCORDANCE`). `Anchor` equality is whole-value — page, line, kind, text, division — so a heading either arm missed, placed, classed or read differently makes the sets differ. That is §8.2's *"produced identical heading output"*, it needs no oracle, and the predicate `H ≠ X` is symmetric | the **adjudicated** heading outcome, which would make §8's numerator a function of the D-frame draw and the adjudication budget, i.e. condition the estimand on the sample; and the **line-level** M0 predicates, which are not heading-level and would answer a different question under §8's name |
+| **R2** | §6's M7 row says *"≥ 3 single-character tokens"* | **§6's threshold, on the emitted anchor text** (A38.1's input). The longest run is recorded beside the count as a diagnostic | — |
+
+> **REVIEWER RULINGS, recorded.**
+>
+> **R1 — APPROVED** as implemented: `ANCHOR_DISCORDANCE`, i.e. emitted whole-`Anchor`-set
+> disagreement. Not to be reopened absent a concrete producer-valid falsification.
+>
+> **R2 — APPROVED, and it is NOT an open methodological choice.** §6 explicitly says ≥ 3
+> single-character tokens and A38.1 fixes the input as emitted `anchor.text`; phase 2's
+> exploratory ≥ 4-uppercase-run regex **is not authority** and was never a competing frozen
+> reading. The row above is kept only to record what the implementation follows. The `x27`
+> control that pins the threshold at 3 stands.
+>
+> **The live §5 control table has ELEVEN rows.** The earlier handoff's "12" was stale wording;
+> no twelfth row is to be invented to match it. `x27` enumerates the eleven and fails if any has
+> no executable test.
+| **R3** | I10 fixes recall's denominator as the adjudicated enumeration, but not what to do with an adjudicated heading whose A30 geometric identity **refuses** | it **stays in the denominator** and counts as a miss — it was printed — and `n_adjudicated_unresolvable` is reported beside it. A recall figure excluding them is emitted as an explicitly **SECONDARY** sensitivity value | dropping them, which shrinks a denominator invisibly; and headlining the sensitivity figure, which would report the number the design does not license |
+| **R4** | §6 fires M1 on C-regions; A36.3 makes C and D separate estimands; neither says how to lay the rows out | every heading metric is reported **per frame, per document, and pooled**, and never summed across frames. Each row carries its own denominator | pooling C and D into one denominator, which A36.3 forbids |
+| **R5** | §6 gates M5 on *"R1 role ≥ 0.80"*, and A38.1 assigned the R1 agreement computation to nobody | **the channel is CLOSED**: `r1_role_agreement` is removed and §5.6's reliability is computed from the committed key and adjudications by `score_metrics.r1_reliability` | a caller-supplied float, which can assert PASS with nothing behind it |
+
+> **R5 is CLOSED.** A caller scalar is not evidence for a result-bearing gate. `x27` asserts that
+> no such field or parameter exists, so the channel cannot return unnoticed. **Ownership now sits
+> with the scorer, and R6 fixes what it computes.**
+
+### R6 — RULED. R1's computation, and why it was a STOP first
+
+**Audited:** §5.6, §6 (M5's gate), §7.2 rule 3, A28.3, A28.4, A30.3, A36.4, A36.6, A36.7, A37,
+A38.1, A38.7, `build_oracle`, `methodology_contracts`. **Frozen:** both thresholds (text ≥ 0.90,
+role ≥ 0.80) and their consequences; the repeat's canonical identity, its 330 DPI, its identical
+committed bbox, its inherited routes, its separately namespaced answers, and that it resolves its
+**own** `start_x_px` independently (A30.3). **Not frozen anywhere:** the computation. Two of its
+choices changed gate results, which is why this was raised as a STOP rather than implemented:
+
+- **the denominator when the two answers enumerate different numbers of headings.** On the fixture
+  below, `intersection` gave **1.000 (PASS)** and `union` / `primary` / `max` gave **0.667 (FAIL)**.
+  R1 is a Rule 3 gate, so that is the difference between a valid comparative study and
+  **`INSUFFICIENT_COMPARATIVE_EVIDENCE`**. The same fixture does the same to M5's void at 0.80.
+- **per route or pooled.** A C∩D repeat is answered on **both** routes (A36.6), so one physical
+  repeat yields two pairs, and pooling an AI pair with a human pair measures **inter-source**
+  disagreement rather than repeat reliability — masking a failing route behind a passing one.
+
+**The reviewer ruled both.** The ruling is recorded and implemented below; the STOP is discharged
+rather than deleted, because the reason the choice needed a ruling is part of the record.
+
+### THE RULING, as implemented
+
+**R6.1 — denominator and matching.** The **symmetric union of the COMPLETE primary and repeat
+enumerations**, under **one-to-one matching on uniquely resolved A30 occurrence keys**. It is
+`|P| + |R| − matched`, never `|set(resolved keys)|`. Chosen because it is the only candidate that
+counts a heading the repeat *failed to enumerate* against agreement, and enumeration instability
+is exactly what §5.6 exists to detect; `intersection` is the one reading that makes an adjudicator
+who silently drops headings look perfectly reliable.
+
+| case | treatment |
+|---|---|
+| a uniquely resolved key appearing once on each side | one matched pair |
+| a heading on one side only | denominator, no numerator |
+| an UNRESOLVED adjudicated heading | denominator, no numerator |
+| the same resolved key more than once on either answer | **not pairable** — those rows stay denominator-bearing disagreement evidence, and are never collapsed through a dict or matched by choosing a duplicate |
+
+**R6.2 — text agreement is EXACT equality of the values as returned.** No `m2_normalize`, no NFKC,
+no whitespace collapse, no case folding: §5.3 and the prompt require exact transcription with case
+and internal spacing preserved, and M2's normalisation belongs to M2's accuracy claim. Using it
+here would hide precisely the spacing instability the repeat records. `UNREADABLE` on either side is
+denominator-bearing and earns no numerator.
+
+**R6.3 — role agreement is the exact fine §5.3 role** (A36.7: *"M5 **alone** coarsens it"*).
+`UNREADABLE` never agrees, **including `UNREADABLE` against `UNREADABLE`**: repeated unreadability
+is an absence of evidence, and it is the one answer an adjudicator can always produce.
+
+**R6.4 — aggregation.** A **heading-occurrence micro-average** within each route: numerator and
+denominator summed across that route's R1 pairs, never a mean of per-region rates. Each required
+route is evaluated **separately and never pooled**. The gate is the **worst** required route — any
+`FAIL` → FAIL; else any non-evaluable route → `NOT_EVALUABLE`; else PASS. Thresholds unchanged:
+text **≥ 0.90**, role **≥ 0.80**.
+
+**The abstention machinery is DELETED**, not deprecated: the four candidate rules and
+`AMBIGUOUS_PENDING_A41_RULING` are gone, so no consumer can read a status the protocol no longer
+defines. Pair-level and route-level raw counts stay in the output, so the gate is inspectable.
+
+**Realized on the ruling's own fixture** (`x27.part_r1`, real `build_oracle`, real A38.7 join):
+
+```
+one-sided     P 3 · R 2 · matched 2 · agree 2 · denominator 3 · 0.667 -> FAIL
+unresolved    P 3 · R 3 (1 unresolved) · matched 2 · agree 2 · denominator 4 · 0.500 -> FAIL
+duplicated    P 3 · R 3 (2 non-unique) · matched 1 · denominator 5 · FAIL
+whitespace    identical but for one doubled space · 0.000 -> FAIL (M2 would call them EQUAL)
+UNREADABLE    role UNREADABLE on both sides · 0.000 -> FAIL, text unaffected
+```
+
+### R7 — the M4 parent encoding, repaired
+
+**Found by review, and it was a false green.** §5.3 and `adjudicator_prompt.md` §3 give the
+adjudicator four answers for `parent`: the printed text, literal **`NONE`**, literal
+**`OFF_REGION`**, or **`UNREADABLE`**. The scorer read a Python `None` as "no parent" and compared
+everything else as text, and every M4 fixture supplied `None` — so M4 was green **without ever
+seeing the representation the real oracle will produce**. Under the real encoding, `"NONE"` would
+have scored a correct root heading WRONG, and `"OFF_REGION"` would have counted against an
+architecture on every occurrence, because it can never equal an emitted parent.
+
+Repaired on the scoring path: `NONE` scores against `immediate_parent is None`; `UNREADABLE` stays
+excluded as frozen; a **null refuses** (`PARENT_MISSING`), since it is not one of the four answers.
+
+**`OFF_REGION` leaves M4's content-bearing population, and that is a reading.** §6 fires M4 on
+*"matched headings whose parent is in-region **or resolvable**"*, and **no frozen source defines a
+resolver**: `OFF_REGION` occurs exactly twice in the study (§5.3 and the prompt), and neither
+`build_oracle` nor `methodology_contracts` carries one. A resolver would have to recover the
+parent from an architecture's own document-scope hierarchy — the very quantity M4 measures — so it
+is excluded and **counted** (`excluded_off_region`), never scored and never charged to an arm. No
+resolver was invented, and the prompt was **not** edited to suit the implementation.
+
+### R8 — RULED and IMPLEMENTED: the N-A / N-B / N-C factual verdicts
+
+**The gap, as reported.** The control *fixtures* were owned (`control_fixtures.py`, G6-gated, 8/8/4
+with every hash verified) and their *binding* was owned (`build_oracle.verify_join` checks the key's
+carried truth against the manifest; `x26` drives all 20 through the real oracle path) — but
+**nothing computed the verdict.** No component compared an adjudicated control answer against the
+committed `control_expected_truth`, so nothing decided "did the adjudicator report the alteration
+(N-A)?", "did it agree on the corroborated heading (N-B)?", "did it report no heading (N-C)?".
+Three Rule 3 blockers had no factual owner, and Phase 2 would have had to derive control truth on
+its own authority.
+
+**The ruling, implemented in `score_metrics.control_verdicts`.** The committed chain is reused, not
+rebuilt: `control_fixtures.json` → `build_oracle.control_expected_truth` → committed key, joined to
+the committed adjudications. Nothing reruns `control_fixtures`, source enumeration, XML/PDF truth
+construction, H, X, `x01`, or any oracle generation.
+
+| kind | rule, on EVERY required route |
+|---|---|
+| **N-A** | the single committed mutated expected heading text occurs **exactly once** in `headings[].text`, by **exact raw string equality**. Absent, duplicated or `UNREADABLE` → FAIL |
+| **N-B** | the single committed corroborated expected heading text occurs **exactly once**, same comparison, same failure conditions |
+| **N-C** | `headings` is **exactly empty**. Any reported heading → FAIL |
+
+**No normalisation, deliberately.** A `WELD_TWO_WORDS` or `SPLIT_ONE_WORD` control differs from its
+source **only in whitespace**, so normalising the comparison would make the control incapable of
+detecting the mutation it exists to test — it would pass whether or not the adjudicator saw the
+alteration. **Other headings in the crop do not by themselves fail N-A or N-B:** the committed truth
+establishes the *target* occurrence, not a complete oracle for every heading the region may contain,
+and failing on an extra heading would charge the control for correct enumeration.
+
+**Aggregation:** per control, per route, with observed texts recorded; per-kind status; counts by
+route and kind. A kind PASSES only if **every** fixture passes on **every** required route — no
+tolerance, no percentage. The three statuses are Rule 3 **inputs**; no consequence is applied here.
+
+**Realized** on the committed manifest, against its own committed truth: **N-A 16/16 · N-B 16/16 ·
+N-C 8/8** across 20 controls × both routes.
+
+### A41.2.1 — two completeness enforcements, added on review. **Not new rulings**
+
+Both close the same shape of hole: a **self-consistent but incomplete** artifact certifying a Rule 3
+blocker. Neither introduces a rule — each enforces one already frozen.
+
+**A36.6, enforced for R1's routes.** `r1_reliability` iterated the routes the **repeat** declared,
+so a shortened repeat record plus a correspondingly shortened answer set could delete a **failing**
+required route and leave the gate passing on the survivor, with nothing in the artifact looking
+wrong. A36.6 already freezes the invariant: the repeat *"inherits its primary's required route(s):
+C only → AI, D only → human, C and D → both"*. The required routes are now derived from **frame
+membership** (via `build_oracle`'s own `C_FRAME_ROUTE` / `D_FRAME_ROUTE`, not restated), the
+repeat's frames must equal the primary's, and its declared routes must equal the frame-derived set.
+`R1_FRAME_SET_MISMATCH` / `R1_ROUTE_SET_MISMATCH`.
+
+> **One deliberate divergence from the literal instruction, because the literal form would refuse
+> valid frozen input.** The review asked that the repeat's `adjudication_routes` equal the
+> **primary's**. It cannot: a C-audit-selected primary carries `human` **in addition** to its frame
+> routes, and `plan_r1_repeats` explicitly does **not** inherit `is_c_audit_selected`
+> (`replace(s, is_r1_repeat=True, is_c_audit_selected=False)`). For a C-only audited primary the two
+> sets legitimately differ — primary `(ai, human)`, repeat `(ai,)` — and the real run will contain
+> exactly that case, since most C regions are not discordant and the audit draws 25 of them. The
+> primary is therefore required to **contain** its frame routes; the repeat must **equal** them.
+> This is the same invariant A36.6 states, spelled so it cannot refuse a legal configuration.
+
+**The frozen 8 / 8 / 4 census, enforced for R8.** `control_verdicts` passed a kind when all rows
+**present** passed, so a coherent key missing one N-A would report **7/7 PASS** and satisfy a
+blocker on a smaller census than A40.1 froze. The scorer now requires the frozen population (8 N-A,
+8 N-B, 4 N-C), **both** result-bearing routes per control, and **unique** control identities — a
+duplicated identity keeps the count looking right while one real fixture goes unexercised and
+another is scored twice. `CONTROL_POPULATION_INCOMPLETE` / `CONTROL_ROUTE_SET_MISMATCH` /
+`CONTROL_IDENTITY_DUPLICATED`, all raised **before** any verdict is computed, because an incomplete
+artifact is not an observed control failure. Nothing is rebuilt: no `control_fixtures` run, no
+source selection, no XML/PDF truth, no G6, no `x26`.
+
+> **A key carrying NO controls is not refused, and that is deliberate.** The self-certification risk
+> is a *partial* population reporting PASS. A key with none certifies nothing — every kind reports
+> `NOT_EVALUABLE`, which no Rule 3 blocker accepts — and refusing it would make the scorer
+> unrunnable on the DEVELOPMENT and mechanism material it must be tested against, including its own
+> real-producer end-to-end check. `population_present` is reported so the two cases are
+> distinguishable, and the confirmatory key carries all 20 by construction.
+
+### R9 — RULED. §8's paired-quantity scope
+
+**The gap.** §8.3 requires per-document paired differences, an unweighted mean over documents and
+mandatory per-document detail, but **never enumerates which quantities are paired**. The first
+implementation chose M1 recall/precision, M2, M3-clean, M4 and M5 — not frozen anywhere — and
+silently dropped `VACUOUS` documents from each mean, which is an **unruled missingness policy** on
+top of an unruled quantity list.
+
+**The ruling: pair exactly the two non-constant numeric M9 basis quantities.**
+
+```
+n_margin_numbered_lines        A39.1's own quantity
+coverage                       production _coverage, against the frozen 0.85 floor
+```
+
+Both are defined on **every** document for **both** arms, so no missingness or vacuity policy has
+to be invented — which is precisely why the alternatives are excluded:
+
+| excluded | why |
+|---|---|
+| M1–M5, M7 | can be `VACUOUS`; pairing them needs a new rule for which documents enter each mean |
+| `derive_size_bands_returns_a_band`, `coverage_meets_floor` | booleans Rule 0 consumes, not numeric differences |
+| `coverage_floor` | a frozen constant — its difference is always zero |
+| `n_margin_numbered_with_glyph_size` | a diagnostic; A39.1's quantity is the margin-line count |
+| internal support counts | not themselves frozen result quantities |
+
+**POPULATION RULE.** M9 is valid on **both** P-head and P-robust (§4.4.1 claims M0 and M9 on
+both), and the two are **never pooled**: each quantity is reported per population with its own
+per-document detail and its own unweighted mean, and **no combined 17-document mean exists**. A
+control asserts the pooled figure appears nowhere in the payload.
+
+**§8's heading-discordance statistic stays P-head ONLY** — unchanged, and deliberately not
+broadened: a heading-level statistic may not take a population §4.4.1 claims no heading metric on.
+
+### A41.2.2 — three schema/reporting repairs, from a parallel implementation's review
+
+Found by comparing against an independent implementation. **No methodology changes; all three make
+the artifact say what the frozen rules already require.**
+
+**M6 is ABSENT from the schema, not present-and-annotated.** The payload carried
+`"m6": "DEFERRED by A20 …"`. §5 owns "M0–M9 minus M6", so a key named for it — even one whose value
+says DEFERRED — puts a deferred metric in a result-bearing artifact and invites a consumer to
+reserve, look up or later fill it. The key is gone, the explanation lives in module prose and here,
+and `owns` now **enumerates** the metrics owned rather than describing them by subtraction (which
+named M6 in passing). The control **recursively walks the finished payload** for any key or string
+naming M6 at any depth, and is proven non-vacuous by planting one.
+
+**I13 labels every applicable result surface, not a parent block.** The qualification now travels
+with M0, M7, M9, each per-document C/D heading estimand, the §8 event vector and **every** §8
+paired-difference detail row. A passing document carries an explicit `None`, so "not conditioned" is
+distinguishable from "nobody labelled this", and both headline qualifications are emitted explicitly
+from the >⅓ rule. It reaches **no** decision input: cross-engine qualifies reporting only (A27.6).
+The control **discovers** per-document result surfaces from the finished payload by content marker,
+not from the production list of paths, so a labelling path nobody enumerated is still covered.
+
+**The exact `d_frame == bool(d_reasons)` invariant.** `build_frames` emits the flag from the same
+expression that builds the reason list, so the two can only disagree if something rewrote one. The
+existing line-level and anchor checks each inspect **one** predicate and cannot see a broken
+relationship between the flag and the list as a whole — a concordant region carrying a reason with
+`d_frame` false satisfies every one of them. `D_FRAME_FLAG_DRIFT`, with a fixture chosen so no other
+check can fire first. #618's independent recomputation of anchor-set discordance from the serialized
+H/X evidence is **unchanged** and predates this.
+
+### A41.2.3 — the scorer no longer needs a PDF renderer to be imported. **Not a rule change**
+
+The fourth item from the same parallel-implementation review, and the only one not already
+subsumed. **No metric, denominator, ruling, schema, population or boundary moves; the x27 evidence
+diff is exactly this control and no reported figure changes.**
+
+`score_metrics` imported `build_oracle` at module scope, and `build_oracle` imports `pymupdf` at
+module scope because rendering the adjudication stimuli is part of what **it** owns. A38 exists so
+the scorer consumes committed JSON and nothing else — and that held for the **data** path while
+being false at the **import line**: importing the scorer re-acquired the very renderer dependency
+A38 had removed, and the module could not be imported at all in a renderer-free environment.
+
+`build_oracle` is now resolved on first use (`_bo()`). **The delegation is unchanged and that is the
+point**: the A38.7 join, the A38.7 adjudication encoding and the A36.4 routing are still *called*,
+never restated locally, so a derivation that genuinely needs them still requires the renderer and
+still fails loudly without it. Removing the dependency by copying a frozen rule would have been the
+defect, not the fix — two copies of a rule are two rules. `FROZEN_CONTROL_ROUTES` became
+`frozen_control_routes()` for the same reason: evaluating it at module scope is exactly what would
+pull the renderer back into the import graph, and it is still derived from `build_oracle`'s own
+constants so the two cannot drift.
+
+**The control is executable, not a source grep.** A grep reads the import line an author wrote
+rather than the graph the interpreter walks, and would keep passing if some other frozen dependency
+acquired a renderer later. A child interpreter makes `pymupdf`/`fitz` genuinely unimportable and is
+asked what happens. Three of the four checks exist to stop it passing for the wrong reason: the
+blocker is asserted **live** (without which an interpreter that merely lacks a renderer is
+indistinguishable from a scorer that needs none); JSON-only scoring must still **compute** there
+(A27.5's Clopper–Pearson bound reproducing §8.1's own 0.1926), so the property is not a cosmetic
+import that reaches no working function; and a `build_oracle`-owned derivation must still fail under
+the blocker, which is what proves the rule was not copied. The fourth records that the control is
+**decisive only while `build_oracle` imports the renderer eagerly**, so it is re-pointed rather than
+silently trusted if that ever changes.
+
+Falsified by restoring the eager import: **187/190, the three renderer checks RED on named checks
+with no crash**, `blocker_live` still true — so the red is attributable to the scorer rather than to
+a broken blocker — and the decisiveness check still green. Restored, **190/190**, evidence
+byte-identical to the committed artifact.
+
+### A41.3 — the controls, and that each can go RED
+
+`x27_score_metrics.py`, **190/190**, on SYNTHETIC + DEVELOPMENT material only. It covers all
+**eleven** current §5 control rows (the row list is enumerated in the evidence file and a final
+check fails if any row has no executable test), the twelve explicit negatives, the false-green
+attacks, and the refusals.
+
+**Every frozen quantity was then falsified by injection.** Seventeen faults were applied to
+`score_metrics.py` one at a time — the all-lines M0 denominator, a vacuous rate printed as 0.0,
+recall against the emitted enumeration, dropping an UNMATCHED occurrence, M4 against full ancestry,
+M5's UNSCORABLE inside the denominator, M7's threshold moved to 2, a tolerance in the margin-line
+clause, an accepted coverage-floor drift, a bootstrap at zero events, a heading-unit §8
+denominator, a heading-count-weighted paired mean, an arm's own output substituted for oracle truth
+in M3, an accepted duplicate document, a control entering an estimand, an R1 repeat counted, and a
+line-level §8 event — and **16 of the 17 were caught by the specific control written for each**.
+Evidence: `results/x27_score_metrics.json` plus the injection table in the session report.
+
+**Round 2, after the reviewer's repairs: 26 faults, and the sweep again earned its cost.** Nine
+new faults cover the repaired surfaces — `NONE` compared as text, `OFF_REGION` scored as text, a
+null parent read as no-parent, containment-only cross-engine population, extras admitted, §8's
+unfiltered vector, R1 resolving its own open denominator, R1 coarsening the role, R1 pooling
+routes. **Twenty-four were caught first time; two were not, and both were non-discriminating
+controls of exactly the kind this sweep exists to find:**
+
+- **the fine-role control reused a fixture whose roles differ under the coarsening too**
+  (`account` → LEAF vs `grouping` → CONTAINER), so a coarsening implementation failed it
+  identically. Repaired with `account` vs `section`, which are different fine roles that **both**
+  coarsen to LEAF — the only shape that separates the two readings.
+- **the per-route control asserted a self-declared `pooled_across_routes: False` label** rather
+  than behaviour, so pooling the rows left it green. Repaired with a route-asymmetric fixture
+  (only the human repeat disagrees), which forces the two implementations to different numbers.
+
+Fixing the second exposed a third defect, in the fixture builder itself: `synthesize_adjudication`
+assigned **one** headings list to both answer routes, and `copy.deepcopy` memoizes, so a
+"human-only" perturbation silently changed the AI answer as well. Two adjudication sources produce
+two answers (A36.6), and the fixture now does too. **26/26 after the repairs.**
+
+> **The seventeenth of round 1 is the reason the sweep was run at all.** Deleting the scorer's own
+> `DUPLICATE_DOCUMENT_IDENTITY` guard left the whole suite **green**: `methodology_contracts`
+> refuses the same input one layer below and defines the **same reason string**, so a control
+> asserting the reason alone could not tell which layer had refused. Two layers refusing a
+> duplicated document is good defence; the defect was a control that could not go red. It now pins
+> the exception **class** (`f5d6171`), and re-injecting the fault fails it. **17/17 after the
+> repair.** The sweep also measured that deleting the `control_kind` skip does not move the
+> "adding 20 real controls changes nothing" invariance — a control carries `frames == ()`, so the
+> frame-membership filter refuses it again — and that the exclusion **count** is what makes that
+> deletion visible. Both facts are now recorded beside the controls they concern rather than
+> assumed.
+
+**Not merely a synthetic suite.** The frames come from `build_frames`' own private synthetic
+constructor (the seam `x17` uses), the oracle keys from the **real** `build_oracle` over rendered
+synthetic PDFs, the twenty controls from the **committed** `control_fixtures.json` manifest through
+`BO.control_specs`, and one part runs the whole chain — `run_hybrid`, `run_extended`,
+`build_document_frame`, `build_oracle`, the scorer — on a real **non-holdout** DEVELOPMENT document.
+
+**The synthetic adjudications are a MECHANISM fixture and are labelled as such in the artifact.**
+Their oracle text is derived from an arm's own emitted output, so every agreement figure `x27`
+prints is evidence about the **join**, never about accuracy. No human or AI adjudication exists.
+
+### A41.4 — a DEVELOPMENT observation the reviewer should see, with its caveat
+
+On the first **8 pages** of `118-hr-8752/1`, the A39.1 quantity — `Page.lines` where
+`line_number is not None` — is **H 134 against X 171**, so Rule 0's margin-line clause **fires**,
+naming H. This is a machinery observation on a truncated window of a development document, it is
+**not** a confirmatory result, and it is not evidence about either arm on the holdout. It is
+recorded because A39.1's clause has no tolerance by design, so a reviewer should know the clause
+does fire on real material, and because the page-limit truncation is an obvious candidate
+explanation that only a whole-document run can eliminate. `x00`'s five-document measurement is of
+different quantities (line counts and heading counts), so it neither confirms nor contradicts this.
+
+### Population and boundary
+
+SYNTHETIC + DEVELOPMENT only. No holdout document opened, no H/X run on any holdout member,
+nothing adjudicated by a human or an AI, no architecture decision, and none of `frames.json`,
+`oracle_key.json`, `oracle_blind.json`, `oracle_adjudicated.json`, `s1_control.json`,
+`cross_engine_control.json`, `metrics.json`, `scores.json` or `EXECUTION-START.json` created —
+`x27` asserts their absence as its last act. The canonical `metrics.json` writer is guarded by
+`build_oracle.assert_write_permitted`, the same VALID-only authority the oracle, S1 and
+cross-engine writers use, and a control proves it refuses today and would write to a scratch path.
+
+### Realized
+
+`x27` **190/190**; **55** injected faults caught in total, each failing a NAMED control rather than
+crashing — 54 through round 5, plus round 6's renderer fault (A41.2.3). **Scope, stated because a
+falsification belongs to the tree it ran on:** the round 6 fault is the only one re-injected against
+this HEAD; the other 54 were run against their own rounds' HEADs and are not re-asserted here.
+`contamination.json` byte-identical.
+
+**Round 3 added a fourth class of control defect worth recording: a control that detects a fault
+only by CRASHING.** Four R6/R8 negatives indexed `failures[0]` or relied on a bare `KeyError`, so
+under their fault the probe raised instead of reporting a red check. The fault was caught either
+way, but a traceback cannot distinguish "the rule broke" from "the probe has a bug". All four now
+fail a named check, and the injection driver asserts `crashed == False`.
+`decide_architecture.py` is **not** created and **G5 is not modified to hide it**: G5 still reports
+the surface as incomplete, naming that one file.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
