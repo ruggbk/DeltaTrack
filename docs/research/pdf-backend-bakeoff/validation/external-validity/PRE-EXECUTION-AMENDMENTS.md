@@ -5439,7 +5439,7 @@ authorization, and A11's one-way marker is not created here.
 
 ```json
 {"id": "A43", "class": "SUBSTANTIVE",
- "commits": ["75201b5"],
+ "commits": ["75201b5", "b847dea"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/execute_study.py", "probes/x29_execute_study.py",
@@ -5611,6 +5611,15 @@ extract a development document and harm nothing.
 
 **The file-removal mutation restores byte-identically** and is asserted to, because fault injection
 that leaves debris is how a green tree stops meaning anything.
+
+**One defect in the repair was found by the controls themselves and is recorded rather than
+quietly fixed.** G5's liveness check imports the execution path, which reaches the frozen runners
+under the bake-off's own probe tree. `x29` sets those `sys.path` entries up, as every probe
+importing `run_hybrid` does, so the check passed there; `x04` never needed them before, and run on
+its own it reported `execution path does not import: No module named 'pdfium_hybrid'` **on a
+healthy tree**. A gate that fails for its own reasons rather than the tree's is worse than no gate,
+because the red is uninformative and invites being ignored. Fixed in `b847dea`, and it is why the
+gate is exercised from `x04`'s own process and not only through `x29`.
 
 ### A43.5 — what this deliberately does NOT do
 
