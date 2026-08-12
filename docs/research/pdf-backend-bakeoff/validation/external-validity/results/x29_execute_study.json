@@ -42,12 +42,12 @@
   "surface_size": 15
  },
  "population_evidence": {
-  "membership": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp1za1x2tb/pop/membership.json",
-  "docs_root": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp1za1x2tb/pop/holdout",
+  "membership": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp275ku9ka/pop/membership.json",
+  "docs_root": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp275ku9ka/pop/holdout",
   "n_members": 2
  },
  "frames_evidence": {
-  "frames_written": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp1za1x2tb/frames/frames.json",
+  "frames_written": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp275ku9ka/frames/frames.json",
   "n_frames": 2,
   "c_frame_selected_p_head": 9,
   "c_frame_selected_p_robust": 0

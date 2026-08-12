@@ -813,6 +813,13 @@ def execution_path_report() -> list[str]:
     The guard check is here rather than in G1 because it is a statement about the POPULATION,
     which is what this component owns. Nothing in here opens a PDF or reads the holdout.
     """
+    # The execution path reaches the frozen arms, which live under the bake-off's own probe
+    # tree. Every probe that imports them sets these up; this gate is the first thing in x04
+    # that does, and without them G5 would report a broken execution path on a healthy one --
+    # a gate failing for its own reasons rather than the tree's.
+    for extra in (EV / "probes", REPO / "src", EV.parents[1] / "probes", EV.parents[1] / "probes" / "backends"):
+        if str(extra) not in sys.path:
+            sys.path.insert(0, str(extra))
     try:
         import build_oracle as BO
         import execute_study as ES
