@@ -5146,6 +5146,295 @@ the surface as incomplete, naming that one file.
 
 ---
 
+## A42 — SUBSTANTIVE. `decide_architecture` implements the already-frozen section 7.2 machinery
+
+```json
+{"id": "A42", "class": "SUBSTANTIVE",
+ "commits": ["7aa3751", "7df515c"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/decide_architecture.py", "probes/x28_decide_architecture.py",
+                   "probes/score_metrics.py", "probes/x27_score_metrics.py"],
+ "supersedes_text_in": "none -- NO PREVIOUSLY FROZEN rule is changed. A42 makes the already-frozen Rule 0 / Rule 1 / Rule 3 machinery executable, before any confirmatory execution exists. A41's REALIZED x27 figure moves 190 -> 194; none of A41's rulings is reversed",
+ "status": "IMPLEMENTATION COMPLETE. A42.3 RULED -- Rule 1's M4 condition is the per-heading existential, and `score_metrics` now emits the paired fact"}
+```
+
+**Why `affects_scoring_rule` is `true` while `supersedes_text_in` is `none`.** The same distinction
+A31 and A41 kept, and for the same reason:
+
+> **No PREVIOUSLY FROZEN rule is changed.** Every threshold, unit, outcome and gate this module
+> applies was fixed by section 7.2, A5, A10, A20, A27.3, A27.4, A27.6, A28.2 and A39.1 before the
+> component existed, and none is amended, reinterpreted or relaxed.
+>
+> **A42 DOES make previously UNSPECIFIED orderings and operationalizations executable.** Which rule
+> runs first, what an unevaluable gate does, where the census count comes from, and how the R1 gate
+> composes its two dimensions are all result-bearing and none was spelled out. They are recorded in
+> A42.2 rather than absorbed, and every one was settled **before any confirmatory output existed**.
+
+### A42.1 — the decision state, and which frozen source owns each predicate
+
+`decide_architecture.py` is a pure consumer of `score_metrics`' payload and the committed frames.
+It opens no PDF, runs no arm, recomputes no metric, reconstructs no oracle truth, alters no
+population and repairs no surprising input. `score_metrics` emits `rule0_outcome: None` and
+`decision_taken_here: False`; **this module is where the decision is taken, and the only one.**
+
+| predicate | frozen source |
+|---|---|
+| Rule 0's three clauses | section 7.2 rule 0 -- band, the 0.85 floor, margin-numbered lines |
+| the margin-line quantity, with NO tolerance | **A39.1**, via `methodology_contracts.margin_line_loss` |
+| a document BOTH arms lose is neutral, never an asymmetric loss | section 7.2 rule 0's both-lose branch |
+| an asymmetric loss on EACH arm rejects BOTH, with no ranking | **A27.4** |
+| `EXTENDED_BY_RULE_0_M9` / `HYBRID_BY_RULE_0_M9` | **A27.4** |
+| `X_CORRECTS >= 5`, `X_REGRESSES == 0` | **A5** rows 1 and 2 |
+| no M4 parent regression, as a PAIRED per-heading existential | **A5** row 4, as A20 restated it, **ruled by A42.3** |
+| the M6 veto is STRUCK | **A20** |
+| condition 1 holding while a veto fails is "insufficient evidence, NEVER an X win" | **A5** |
+| the item is a REGION; `<= 60` evaluable, `> 60` insufficient | **A10** as unit-fixed by **A27.3** |
+| Rule 1 never runs on a sample | **A27.3** |
+| the nine-gate vector | **A27.6** |
+| `INADEQUATE` blocks, `LIMITED` does not | **A28.2** |
+| cross-engine qualifies REPORTING only | **A27.6** |
+| `HYBRID_BY_PRIOR`, and the ban on writing it as an H victory | section 7.2 rule 2, **A10** |
+| the five-outcome enum, closed | **A10** + **A27.4** |
+
+The decision unit is the **heading occurrence**: Rule 1 reads `m3_outcomes` and never the WELD/SPLIT
+boundary tallies beside it, which would inflate both counters (HARNESS-PLAN 7.2, recorded there as
+a build check rather than an ambiguity).
+
+### A42.2 — the readings taken, each with its authority
+
+Recorded so a reviewer can overturn any of them, rather than discovering them in the code.
+
+**1. Rule 0 runs before the remaining Rule 3 gates.** Section 7.2 rule 0 says M9 "supersedes
+everything below" and rejects an arm "regardless of every other metric"; HARNESS-PLAN section 6
+restates it as "Rule 0 (M9) runs **FIRST**"; I12 has M9 rejecting an arm "before any other metric
+is consulted"; and the section 6 control row is "the losing arm is not rejected outright **before
+other metrics**". No text supports the opposite order. **The consequence, stated because it is the
+uncomfortable one:** a Rule 0 outcome can be emitted while, say, X2-b has failed. That is what the
+frozen text says, and M9 needs no oracle, no adjudication and no control -- section 6's M9 row
+gives its oracle requirement as "none needed" -- so no Rule 3 gate except M9's own evaluability is
+an input to it. **The full gate vector is emitted whatever decided**, so a failing gate is visible
+in the artifact rather than erased by the rule that won.
+
+**2. M9 evaluability is checked BEFORE Rule 0.** It is section 7.2 rule 3's own listed item ("the
+M9 gate cannot be evaluated") and it is Rule 0's precondition. Rule 0 is **not run** without it:
+the facts it would read are the ones whose absence made the gate unevaluable, and refusing there
+would turn rule 3's frozen ANSWER into an exception. `x28` found this by stripping one clause.
+
+**3. `NOT_EVALUABLE` is not a pass.** A41.2.1 already states it, of an oracle key carrying no
+controls: every kind reports `NOT_EVALUABLE`, "**which no Rule 3 blocker accepts**". Every gate
+therefore satisfies Rule 3 only on `PASS`.
+
+**4. The R1 Rule 3 gate is the worse of section 5.6's two dimensions**, composed with **R6.4's own
+precedence** -- any `FAIL` wins, else any `NOT_EVALUABLE`, else `PASS`. Nothing new is invented:
+R6.4 already defines that precedence for the routes within each dimension, and both thresholds
+(text 0.90, role 0.80) are unchanged.
+
+**5. The D-frame census is read from `build_frames`' own committed `counts["d_frame_census"]`**,
+cross-checked against the committed census LIST it was derived from, with a truncated census
+refusing. A27.3 requires the complete census be enumerated **before** any sampling and
+`build_frames` commits exactly that ("the COMPLETE census, never sampled and never truncated to the
+A10 budget"). **Rejected: a caller-supplied integer**, which is R5's closed channel -- "a caller
+scalar is not evidence for a result-bearing gate". Reading a producer's committed count is not
+recomputing a metric; deriving the census from regions here would be, and is not done.
+
+**6. Rule 1's D-evidence adequacy condition is that the adjudicated D-frame region count EQUALS the
+committed census.** A27.3: "`<= 60` regions -> human-adjudicate the **complete census**", and "Rule
+1 must never run on a 60- or a 120-region **sample**". A census of 40 with 39 adjudicated is a
+sample, and yields `INSUFFICIENT_COMPARATIVE_EVIDENCE`. This is the frozen budget clause enforced,
+not a second threshold.
+
+**7. X2-a and X2-b are SUPPLIED named statuses.** A27.6 says the decider "**receives** a named
+status for every decision-blocking condition still operative" and separately records that the
+confirmatory X2 run "is planned and **not run**", so no committed artifact carries the verdict and
+none has a frozen shape. Every other gate is DERIVED from a fact `score_metrics` computed, per R5.
+A missing or unrecognised status **refuses**.
+
+**8. The wording gate is blunt on purpose.** HARNESS-PLAN section 6 requires a pre-committed
+sentence and forbids any comparative-accuracy claim for H. The gate is a literal pattern scan over
+the **rendered** conclusion, and the first thing `x28` caught was the study's own natural
+disclaimer -- "this is not a finding that hybrid is more accurate" -- tripping it. **The disclaimer
+was reworded rather than the gate taught to parse negation**: a negation-aware gate is precisely
+the check that passes for the wrong reason.
+
+### A42.3 — RULED. Rule 1's M4 condition is the per-heading existential, and it now has a producer
+
+> **THE RULING, taken by the study owner on the record below, not by the implementation.**
+>
+> 1. Rule 1's fourth condition is the **literal per-heading existential**.
+> 2. **`score_metrics` must emit the paired fact.** The aggregate `m4_correct` counts are
+>    insufficient and may not be substituted for it.
+> 3. The decider's **supplied `m4_no_regression` channel is removed**; condition 4 is read from the
+>    scorer like every other decision input.
+>
+> The gap as it was originally reported is preserved below, because the reason the question had to
+> be escalated is part of the record — the same way A38.8's forward ambiguity was kept when A39.1
+> ruled it.
+
+**What changed, and what deliberately did not.** `score_metrics` gains `m4_h_correct_x_wrong`, its
+mirror `m4_x_correct_h_wrong` (a **diagnostic**; Rule 1 is one-directional and reads only the
+first), and `m4_h_correct_x_wrong_keys` — the occurrence keys of the vetoing headings, because a
+veto that decides an architecture should name the headings it fired on and a bare count cannot be
+checked against the adjudication. The pair is counted inside `_score_stimulus`, where both arms'
+per-heading M4 results are in hand; nothing downstream can recover it from the aggregates. **No
+existing metric, denominator, threshold, rate or exclusion moves** — this is an addition, and every
+one of A41's 190 checks still passes unchanged.
+
+**One sub-reading the ruling did not need to state, recorded because the implementation had to take
+it.** The paired population is **headings scored under M4 for BOTH arms**. §6 fires M4 on *matched*
+headings, so a heading X never emitted is not in M4's population for X, and charging it here would
+count one failure twice — once in M1's recall and again as a hierarchy regression. **Nothing escapes
+by it:** an unemitted heading scores a maximal `TEXT_ERROR` in M3 (A9 — a severe failure may never
+become an exclusion), so if H is clean it is already `X_REGRESSES`, and Rule 1's condition 2 vetoes
+at **zero**. The veto is therefore about hierarchy specifically, which is the quantity A5 row 4
+names.
+
+**The gap, as originally reported.** Rule 1's fourth condition is a **per-heading existential**:
+
+> A5 row 4: "**no heading** whose immediate parent is correct under H and wrong under X"
+> A20: Rule 1 becomes `X_CORRECTS >= 5`, `X_REGRESSES == 0`, "**no M4 regression**"
+
+`score_metrics` emits M4 as **per-arm counts** -- `m4_correct: {H, X}`, `m4_scored: {H, X}`, plus
+the exclusions -- and **no paired quantity**. The existential is therefore not computable from
+`metrics.json`, and the scorer is closed.
+
+**Two readings, and they disagree on real payloads.**
+
+| reading | what it evaluates |
+|---|---|
+| **(a) existential** | does ANY scored heading have H's immediate parent correct and X's wrong? A5 row 4's literal words |
+| **(b) count directionality** | does M4 move against X, i.e. `m4_correct[H] > m4_correct[X]`? A5's own framing -- "each metric is vetoed in **its own native unit**, and every veto is a **hard directionality check**" -- and the only form the scorer emits |
+
+**The concrete payload on which they differ.** A D-frame census of 10 regions, fully adjudicated,
+every Rule 3 gate `PASS`; `m3_outcomes` = `X_CORRECTS 5`, `X_REGRESSES 0`; M4's scored population
+is two matched headings with readable printed parents:
+
+```
+heading P    H's immediate parent CORRECT, X's WRONG
+heading Q    X's immediate parent CORRECT, H's WRONG
+--> m4_correct = {"H": 1, "X": 1}   m4_scored = {"H": 2, "X": 2}   M4 rate 0.5 on both arms
+```
+
+Reading **(a)**: heading P exists, condition 4 fails, condition 1 holds, and A5 gives
+`INSUFFICIENT_COMPARATIVE_EVIDENCE`. Reading **(b)**: the counts are equal, M4 does not move
+against X, all three conditions hold, and the outcome is `EXTENDED_BY_RULE_1`. **Different
+architectures.**
+
+**Reading (a) was ruled.** Reading (b) is now a **defect**, and it is one nothing else in the suite
+could see: on every other fixture the aggregates and the pairing agree, so only a payload built to
+make them disagree can tell the two implementations apart. That payload is therefore an executable
+control in **both** probes — `x27` proves the scorer computes the pair over a real oracle key and a
+real adjudication, and `x28` injects reading (b) into the decider as a **named fault** and requires
+the architecture to flip.
+
+**A one-directional inference was considered and NOT built.** `m4_correct[H] > m4_correct[X]` does
+imply, by pigeonhole, that at least one such heading exists -- but the converse does not hold, so
+it could prove the veto FIRES and never that it does not. Building it would substitute an argument
+for a measurement on the majority of payloads, and the ruling makes the measurement available.
+
+**The refusal stays, repointed.** `M4_VETO_FACT_MISSING` no longer means "no component owns this";
+it means the D-frame block reached the decider **without** the paired quantity. The decider does not
+fall back to the aggregates, because that fallback IS reading (b), and it does not default to "no
+regression", because that is the one default that can only ever help X. An **absent** D block is a
+different thing entirely -- an empty census, a frozen and legitimate state in which condition 1
+fails and the prior stands -- and is not a refusal.
+
+Recorded in the same shape as A38.8's forward ambiguity: the gap was found and reported **before**
+execution rather than discovered inside the decider, and the escalation is what produced the ruling
+rather than an implementation choice nobody reviewed.
+
+### A42.4 — the controls, and that each can go RED
+
+`x28_decide_architecture.py`, **92/92**, SYNTHETIC only, and `x27_score_metrics.py` **194/194**
+(was 190; the four new checks are A42.3's). x28 covers all **eleven** HARNESS-PLAN section 6 control
+rows (a final check fails if any row has no executable test), every Rule 0 predicate with a positive
+and a near-miss fixture, both precedence directions, the 4-vs-5 and 0-vs-1 boundaries, 5-and-1, the
+M4 veto, D = 60 vs 61, all five outcomes, and eleven refusals.
+
+**Two controls the ruling added, each aimed at a reading that would otherwise pass silently.**
+
+**A5 row 4's paired quantity, where the aggregates are blind (`x27`).** A real oracle key over a
+real frame, with H wrong on `ACCOUNT 0` and X wrong on `ACCOUNT 1`, so `m4_correct` is **3/4 on both
+arms and the M4 rates are equal** while `ACCOUNT 1` is correct under H and wrong under X. The paired
+fact reports 1 and names the occurrence; the near-miss — both arms wrong on the **same** account,
+aggregates equal again — reports 0, so the quantity is not a restatement of the aggregates. Neither
+arm is clean in this fixture, so the oracle cannot be synthesized from one arm's output the way the
+other M4 controls do it: the structure still comes from the real key and only the `parent` field is
+stated, which is the one field the control is about.
+
+**One document, DIFFERENT clauses (`x28`).** H loses the band and X loses margin lines on the **same**
+document. §7.2 rule 0 fires only when exactly one architecture loses a document the other keeps, so
+this is neutral for RQ1 and stays a failure in RQ2. An implementation that asked each clause "did an
+arm lose me?" independently would see a band loss naming H and a margin loss naming X, fire twice,
+and reject **both** arms on a single document — inventing A27.4's two-sided branch, which requires
+**different** documents. A second check asserts both clauses really did fire, so the trap is live.
+
+**The fixtures are real producer output.** Every payload is `score_metrics.score(...)` over
+synthetic frames, and the pooled D block is shaped by the scorer's **own**
+`_heading_metrics_from_counts`. `part_contract` walks every field path the decider reads against a
+real payload and is proven non-vacuous by planting an absent path -- the check that would catch a
+scorer/decider field-name mismatch, which a hand-written fixture cannot see because it encodes the
+decider's belief about the producer. The **61-region census is produced by `build_frames`** from
+real discordant lines and read back, so the budget boundary is tested against the producer's count
+and not against a number the probe wrote down.
+
+> **Rule 3 gate STATUSES are overwritten on those real payloads to reach later rules, and they are
+> FIXTURES, never evidence.** Building genuinely passing R1, control and adequacy artifacts is
+> `x27`'s work against the real oracle path. What `x28` must prove is what the DECIDER does with a
+> status, and `part_contract` is what stops the overwrite drifting onto a field the scorer lacks.
+
+**Eleven faults were injected into `decide_architecture.py` one at a time** -- the threshold lowered
+to 4, the regression tolerance restored, the budget relaxed to 120, the M4 veto disabled, **reading
+(b) substituted for the paired fact**, A27.4's two-sided rejection removed, `NOT_EVALUABLE` accepted
+as a pass, 5-and-1 collapsed into the prior, Rule 0 no longer superseding, the wording gate
+disabled, and the closed-enum guard removed -- and **all eleven were caught by a NAMED check with
+`crashed == False`**. The anchor for each fault is asserted **unique** in the source, so a fault
+cannot silently patch zero or two sites.
+
+> **The fifth is the ruling's own guard.** It replaces the paired read with
+> `max(0, m4_correct[H] - m4_correct[X])` -- reading (b), exactly as A42.3 states it -- and requires
+> the architecture to flip from `INSUFFICIENT_COMPARATIVE_EVIDENCE` to `EXTENDED_BY_RULE_1` on the
+> equal-aggregate payload. Without that fault the ruling would be a sentence in a document; with it,
+> re-deriving condition 4 from the aggregates fails a named check.
+
+**Three real defects were found by the controls rather than by inspection.** `decide` evaluated
+Rule 0 eagerly even when M9 was not evaluable, so a stripped M9 clause raised `MISSING_REQUIRED_FACT`
+instead of returning rule 3's frozen answer; Rule 0 is now not run without its precondition and
+reports a same-shaped `evaluated: False` block. The closed-enum fault was at first detected **only
+by a `KeyError`** -- A41.3's fourth class of control defect; `render_conclusion` now refuses an
+outcome with no pre-committed sentence by the distinct name `SENTENCE_MISSING_FOR_OUTCOME`, so the
+two layers are distinguishable and the fault fails a named check. And the empty-census control was
+itself wrong: it removed the D block while leaving a **five-region** census, which is a census that
+went unadjudicated and correctly refuses -- the fixture, not the decider, was at fault, and it now
+uses a zero census, which is the state it meant to describe.
+
+**No sixth outcome can be emitted.** The enum is asserted closed on the way out of `decide`; an AST
+walk (not a grep) finds no outcome-shaped literal in the module outside the five; a 240-payload
+sweep over the fixture dimensions emits only the five; and all five are reached.
+
+### Population and boundary
+
+SYNTHETIC only. No holdout document opened, no H/X run on any holdout member, nothing adjudicated,
+**no architecture decision taken on real evidence**, and none of `frames.json`, `oracle_key.json`,
+`oracle_blind.json`, `oracle_adjudicated.json`, `s1_control.json`, `cross_engine_control.json`,
+`metrics.json`, `scores.json` or `EXECUTION-START.json` created -- `x28` asserts their absence as
+its last act. `contamination.json` is byte-identical. **The decider has no writer at all**: it
+returns a payload and never persists one, and a control asserts the module contains no write path,
+so an architecture decision cannot be recorded before the frozen start procedure is performed.
+
+**`score_metrics.py` is reopened by A42.3's ruling, and only as an ADDITION.** Three new emitted
+quantities, computed inside the existing join from results the scorer already had in hand. No
+metric, denominator, threshold, rate, exclusion, refusal class, population or boundary moves, and
+`x27`'s 190 pre-existing checks all still pass unchanged -- which is the evidence that the change is
+additive rather than the claim that it is.
+
+**G5 now goes GREEN**, because `probes/decide_architecture.py` was the one file it named as
+missing. G5 is **not** modified: the surface it measures is unchanged and the file simply exists.
+**Execution remains FORBIDDEN and the boundary remains ABSENT** -- G5 is a readiness gate, not an
+authorization, and A11's one-way marker is not created here.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
