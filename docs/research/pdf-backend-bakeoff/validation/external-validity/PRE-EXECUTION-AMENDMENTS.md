@@ -4666,6 +4666,150 @@ decision, no confirmatory or scoring artifact, and no execution marker.
 
 ---
 
+## A41 — SUBSTANTIVE. `score_metrics` implements the already-frozen §6 and §8 contracts
+
+```json
+{"id": "A41", "class": "SUBSTANTIVE",
+ "commits": ["34f3e48", "165cd31"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": true,
+ "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
+ "supersedes_text_in": "none -- no metric, denominator, matching rule, threshold, normalisation, hierarchy rule, statistical rule or decision rule is changed",
+ "status": "IMPLEMENTATION COMPLETE, OPEN FOR REVIEW -- five readings are recorded below for ruling, two of them result-changing. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
+```
+
+**Why `affects_scoring_rule` is `true` while `supersedes_text_in` is `none`.** These are different
+questions and this amendment keeps them apart, as A31 did. No frozen sentence is amended: every
+metric, denominator, threshold and normalisation the scorer applies was fixed by §6, §8, A19–A24,
+A27, A28, A36–A39 before this component existed. But the frozen text does not determine **every**
+quantity the scorer must produce, and A41.2 records five places where it had to be read. Two of
+those readings can move a reported number, so filing this as `false` would understate what a
+reviewer is being asked to approve. **The readings are recorded, not smuggled.**
+
+### A41.1 — what was implemented, and what it calls rather than restates
+
+`score_metrics.py` is a pure consumer of committed artifacts: frames, `oracle_key`,
+`oracle_adjudicated`, `results/cross_engine_control.json`, `results/s1_control.json`, and the
+committed membership's stratum labels. It opens no PDF, runs no arm, re-runs no clustering or
+anchor recognition, performs no adjudication, discovers no file on disk, and takes **no**
+architecture decision. `x27` asserts the import graph from the AST rather than from a substring
+scan, and separately scores a payload built from **JSON alone** to show no live object is needed.
+
+Where a frozen rule already had an executable owner, the scorer **calls** it:
+
+| quantity | owner called |
+|---|---|
+| M0a / M0b / M0-any / M0b_defined / both_absent | `neutral_identity.m0` (A22/A23) |
+| M3 boundaries and the heading-level outcome | `m3_boundaries.heading_outcome` (A3/A4/§6.3) |
+| M2's normalisation | `xml_sources.normalize` (§6.2) |
+| M5's role coarsening and UNSCORABLE rule | `methodology_contracts.m5_*` (A36.7) |
+| §4.5 adequacy | `methodology_contracts.filter_keys` / `adequacy_occurrences` / `adequacy` |
+| §8 zero-event closed form | `methodology_contracts.zero_event_upper_bound` |
+| §8 supplementary bootstrap | `methodology_contracts.section8_document_bootstrap` (A38.10) |
+| Rule 0's margin-line clause | `methodology_contracts.margin_line_loss` (A39.1) |
+| the occurrence-level join | `build_oracle.resolve_adjudicated_occurrence` (A38.7) |
+| the adjudicated encoding | `build_oracle.validate_adjudicated` (A38.7) |
+| which answer each estimand reads | `build_oracle.PURPOSE_ROUTE` (A36.4) |
+| the cross-engine verdict and its thresholds | `cross_engine_control.json`, from `X09.gate` (A39.2) |
+
+**The one quantity implemented here is the general one-sided Clopper–Pearson upper bound**, which
+A27.5 assigns to `score_metrics` and which `methodology_contracts` deliberately does not carry. It
+is a fixed-iteration bisection on the binomial CDF, so the bound is reproducible bit for bit; the
+**zero-event case delegates to the frozen closed form**, and a control requires the general path to
+agree with `1 − 0.05^(1/N)` at k = 0 for N ∈ {1, 14, 600}. §8.1's own fixture reproduces exactly:
+**0.1926 on 14 documents against 0.00498 on 600 headings, a factor of 39**.
+
+**Malformed or incomplete input REFUSES.** Fifteen explicit refusal classes, each because the
+alternative — skipping the record — moves a denominator with nothing to show for it. The scorer
+also **recomputes** the committed line-level predicates from `neutral_identity`'s own rules and
+refuses on drift, and refuses a frame whose committed coverage floor is not production's 0.85.
+
+### A41.2 — the five readings, recorded for ruling
+
+**Two are result-changing (R1, R2). Three are reporting shape (R3–R5).** None invents a threshold.
+
+| # | where the frozen text stops | reading taken | rejected, and why |
+|---|---|---|---|
+| **R1** | §5's §8 block names the event *"per DOCUMENT: has ≥ 1 heading-level H/X discordance"* without naming the evidence | **any region whose emitted `Anchor` sets differ** (`ANCHOR_DISCORDANCE`). `Anchor` equality is whole-value — page, line, kind, text, division — so a heading either arm missed, placed, classed or read differently makes the sets differ. That is §8.2's *"produced identical heading output"*, it needs no oracle, and the predicate `H ≠ X` is symmetric | the **adjudicated** heading outcome, which would make §8's numerator a function of the D-frame draw and the adjudication budget, i.e. condition the estimand on the sample; and the **line-level** M0 predicates, which are not heading-level and would answer a different question under §8's name |
+| **R2** | §6's M7 row says *"≥ 3 single-character tokens"*; phase 2's exploratory `v08_display_split.py` matched a **run of ≥ 4 uppercase** single-character tokens over **engine** text | **§6's threshold, on the emitted anchor text**, because §6 is the frozen source and A38.1 fixes M7's input as `architecture_occurrences[].anchor.text`. The **longest run is recorded beside the count** as a diagnostic, so the stricter reading stays recoverable from the artifact without a second metric existing | silently adopting the phase-2 regex, which is neither frozen here nor applied to the input A38.1 names. Note §7.4: M7 *"records a follow-up; does not flip"*, so this cannot decide the architecture |
+| **R3** | I10 fixes recall's denominator as the adjudicated enumeration, but not what to do with an adjudicated heading whose A30 geometric identity **refuses** | it **stays in the denominator** and counts as a miss — it was printed — and `n_adjudicated_unresolvable` is reported beside it. A recall figure excluding them is emitted as an explicitly **SECONDARY** sensitivity value | dropping them, which shrinks a denominator invisibly; and headlining the sensitivity figure, which would report the number the design does not license |
+| **R4** | §6 fires M1 on C-regions; A36.3 makes C and D separate estimands; neither says how to lay the rows out | every heading metric is reported **per frame, per document, and pooled**, and never summed across frames. Each row carries its own denominator | pooling C and D into one denominator, which A36.3 forbids |
+| **R5** | §6 gates M5 on *"R1 role ≥ 0.80"*, and **A38.1's ownership table assigns the R1 answers a producer but assigns the R1 agreement computation to nobody** | the gate is a **supplied fact**. Absent, M5 carries `status: NOT_SUPPLIED` and `m5_void: false` explicitly, rather than being reported as though its gate had been checked | computing an R1 pairing rule here, which would be new methodology in the scorer; and reporting M5 silently ungated, which is the "green because nothing measured it" failure |
+
+> **R5 leaves a real gap for the reviewer: nothing in the harness yet owns the R1 reliability
+> computation** (heading-text agreement ≥ 0.90, role agreement ≥ 0.80, §5.6). It is a Rule 3 gate
+> input, so it needs an owner before the decider can evaluate the gate vector. `score_metrics`
+> represents it and refuses to fake it.
+
+### A41.3 — the controls, and that each can go RED
+
+`x27_score_metrics.py`, **107/107**, on SYNTHETIC + DEVELOPMENT material only. It covers all
+**eleven** current §5 control rows (the row list is enumerated in the evidence file and a final
+check fails if any row has no executable test), the twelve explicit negatives, the false-green
+attacks, and the refusals.
+
+**Every frozen quantity was then falsified by injection.** Seventeen faults were applied to
+`score_metrics.py` one at a time — the all-lines M0 denominator, a vacuous rate printed as 0.0,
+recall against the emitted enumeration, dropping an UNMATCHED occurrence, M4 against full ancestry,
+M5's UNSCORABLE inside the denominator, M7's threshold moved to 2, a tolerance in the margin-line
+clause, an accepted coverage-floor drift, a bootstrap at zero events, a heading-unit §8
+denominator, a heading-count-weighted paired mean, an arm's own output substituted for oracle truth
+in M3, an accepted duplicate document, a control entering an estimand, an R1 repeat counted, and a
+line-level §8 event — and **16 of the 17 were caught by the specific control written for each**.
+Evidence: `results/x27_score_metrics.json` plus the injection table in the session report.
+
+> **The seventeenth is the reason the sweep was run.** Deleting the scorer's own
+> `DUPLICATE_DOCUMENT_IDENTITY` guard left the whole suite **green**: `methodology_contracts`
+> refuses the same input one layer below and defines the **same reason string**, so a control
+> asserting the reason alone could not tell which layer had refused. Two layers refusing a
+> duplicated document is good defence; the defect was a control that could not go red. It now pins
+> the exception **class** (`165cd31`), and re-injecting the fault fails it. **17/17 after the
+> repair.** The sweep also measured that deleting the `control_kind` skip does not move the
+> "adding 20 real controls changes nothing" invariance — a control carries `frames == ()`, so the
+> frame-membership filter refuses it again — and that the exclusion **count** is what makes that
+> deletion visible. Both facts are now recorded beside the controls they concern rather than
+> assumed.
+
+**Not merely a synthetic suite.** The frames come from `build_frames`' own private synthetic
+constructor (the seam `x17` uses), the oracle keys from the **real** `build_oracle` over rendered
+synthetic PDFs, the twenty controls from the **committed** `control_fixtures.json` manifest through
+`BO.control_specs`, and one part runs the whole chain — `run_hybrid`, `run_extended`,
+`build_document_frame`, `build_oracle`, the scorer — on a real **non-holdout** DEVELOPMENT document.
+
+**The synthetic adjudications are a MECHANISM fixture and are labelled as such in the artifact.**
+Their oracle text is derived from an arm's own emitted output, so every agreement figure `x27`
+prints is evidence about the **join**, never about accuracy. No human or AI adjudication exists.
+
+### A41.4 — a DEVELOPMENT observation the reviewer should see, with its caveat
+
+On the first **8 pages** of `118-hr-8752/1`, the A39.1 quantity — `Page.lines` where
+`line_number is not None` — is **H 134 against X 171**, so Rule 0's margin-line clause **fires**,
+naming H. This is a machinery observation on a truncated window of a development document, it is
+**not** a confirmatory result, and it is not evidence about either arm on the holdout. It is
+recorded because A39.1's clause has no tolerance by design, so a reviewer should know the clause
+does fire on real material, and because the page-limit truncation is an obvious candidate
+explanation that only a whole-document run can eliminate. `x00`'s five-document measurement is of
+different quantities (line counts and heading counts), so it neither confirms nor contradicts this.
+
+### Population and boundary
+
+SYNTHETIC + DEVELOPMENT only. No holdout document opened, no H/X run on any holdout member,
+nothing adjudicated by a human or an AI, no architecture decision, and none of `frames.json`,
+`oracle_key.json`, `oracle_blind.json`, `oracle_adjudicated.json`, `s1_control.json`,
+`cross_engine_control.json`, `metrics.json`, `scores.json` or `EXECUTION-START.json` created —
+`x27` asserts their absence as its last act. The canonical `metrics.json` writer is guarded by
+`build_oracle.assert_write_permitted`, the same VALID-only authority the oracle, S1 and
+cross-engine writers use, and a control proves it refuses today and would write to a scratch path.
+
+### Realized
+
+`x27` **107/107** (new), 17/17 injected faults caught after one control repair,
+`contamination.json` byte-identical.
+`decide_architecture.py` is **not** created and **G5 is not modified to hide it**: G5 still reports
+the surface as incomplete, naming that one file.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
