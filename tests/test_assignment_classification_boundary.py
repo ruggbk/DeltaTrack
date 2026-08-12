@@ -75,6 +75,7 @@ from deltatrack.matching import (
     OLD,
     Correspondence,
     CorrespondenceEvidence,
+    ObservationRef,
 )
 from deltatrack.similarity import (
     MOVE_THRESHOLD,
@@ -583,6 +584,87 @@ def test_the_move_cutoff_is_pinned_for_phase_1():
     green. ADR 0020 prescribes no value; a later evidence-backed change updates this knowingly.
     """
     assert MOVE_THRESHOLD == 0.6
+
+
+# --- ADR 0019: what an address means, pinned where round 2 actually reads it ------------
+#
+# These are lasting contracts rather than migration evidence, and they exist because every
+# other test in this module can be satisfied by the WRONG address. The preservation oracles
+# bridge to the pre-slice pipeline through `element_id`, and the candidate checks round-trip a
+# ref through the same registry that issued it -- so both would still agree if
+# `ObservationRef.ordinal` silently became a position in the filtered unmatched list. ADR 0019
+# names exactly that substitution as the hazard: the resulting address looks valid and points
+# at the wrong node.
+
+
+def test_the_round_2_population_is_addressed_by_complete_parser_ordinal():
+    """The address entering round 2 is the COMPLETE parser sequence position, not a list index.
+
+    The fixture is built so the two cannot be confused. Three old-side observations are parsed;
+    the first is paired away, so the two that reach round 2 sit at population positions 0 and 1
+    while their parser ordinals are 1 and 2. Same on the new side: population position 0, parser
+    ordinal 1. Any test whose fixture had the unmatched nodes leading the sequence would pass
+    under either rule and prove nothing.
+    """
+    old_nodes = [_node("old-0", "alpha"), _node("old-1", "beta"), _node("old-2", "gamma")]
+    new_nodes = [_node("new-0", "alpha"), _node("new-1", "delta")]
+    registry = ObservationRegistry(old_nodes, new_nodes)
+
+    # (old-0, new-0) pairs and never reaches round 2; everything after it is unmatched.
+    pairs = [
+        (old_nodes[0], new_nodes[0]),
+        (old_nodes[1], None),
+        (old_nodes[2], None),
+        (None, new_nodes[1]),
+    ]
+    population = unmatched_population(pairs, registry)
+
+    assert [observation.ref for observation in population.old] == [
+        ObservationRef(OLD, 1),
+        ObservationRef(OLD, 2),
+    ], (
+        "population positions 0 and 1 are NOT parser ordinals 1 and 2. The address that enters "
+        "round 2's CandidateSet must be the complete parser-emitted sequence position; a filtered "
+        "unmatched-list position is a different number that looks just as valid (ADR 0019)."
+    )
+    assert [observation.ref for observation in population.new] == [ObservationRef(NEW, 1)], (
+        "new-side population position 0 is NOT parser ordinal 1; see above."
+    )
+
+    # The legacy (ri, ai) ordering key IS the population position, and it is a different number
+    # from the address above. Both are correct; they answer different questions.
+    assert [registry.node(observation.ref).element_id for observation in population.old] == ["old-1", "old-2"]
+
+
+def test_an_address_is_recovered_by_live_object_identity_not_value_equality():
+    """A copied observation has no address, however equal it looks.
+
+    #590 established object identity as a valid RUN-LOCAL mechanism for recovering an ordinal,
+    which is only sound while the trees hold every node alive. It is not persistent identity and
+    it is not value equality: a `BillNode` is a frozen dataclass, so a copy compares equal to its
+    original while being a different observation. Resolving one by value would hand back an
+    address the parse never issued to it.
+    """
+    old_nodes = [_node("old-0", "alpha"), _node("old-1", "beta")]
+    registry = ObservationRegistry(old_nodes, [_node("new-0", "alpha")])
+
+    assert registry.ref(OLD, old_nodes[1]) == ObservationRef(OLD, 1)
+
+    copy = replace(old_nodes[1])
+    assert copy == old_nodes[1] and copy is not old_nodes[1], "the control needs an equal-but-distinct copy"
+    with pytest.raises(ValueError, match="absent from that side's complete parser sequence"):
+        registry.ref(OLD, copy)
+
+
+def test_a_registry_refuses_one_node_object_listed_twice():
+    """Two ordinals collapsing onto one observation is refused at construction.
+
+    The identity map is what makes an address recoverable, so a repeated object would silently
+    give two parser positions the same address and lose one of them.
+    """
+    shared = _node("old-0", "alpha")
+    with pytest.raises(ValueError, match="two observations would collapse onto one address"):
+        ObservationRegistry([shared, shared], [_node("new-0", "alpha")])
 
 
 # --- Slice 2: the preservation oracles, over the committed corpus ----------------------
