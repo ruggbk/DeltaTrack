@@ -17,6 +17,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from deltatrack.bill_tree import BillNode, BillTree, amount_text, normalize_bill
+from deltatrack.matching import (
+    NEW,
+    OLD,
+    CandidateSet,
+    Correspondence,
+    CorrespondenceEvidence,
+    CorrespondenceSet,
+    ObservationRef,
+    RetrieverInvocation,
+)
 from deltatrack.similarity import (
     MOVE_THRESHOLD,
     SIMILARITY_THRESHOLD,
@@ -540,79 +550,468 @@ def apply_similarity_revocation(
     return decided
 
 
-def reconcile_moves(
-    changes: list[NodeDiff],
-    threshold: float = MOVE_THRESHOLD,
-) -> list[NodeDiff]:
-    """Re-link removed+added pairs that are actually moved sections.
+#: The assignment rounds this pipeline runs, in order. Round 1 is ``match_nodes`` followed by
+#: :func:`apply_similarity_revocation`, whose retrieval and assignment are still fused; round 2
+#: is the move pass below. These are provenance carried on a :class:`SettledCorrespondence` so
+#: classification can reproduce the legacy record order and label a move — not a ranking, and
+#: not a quality signal.
+PATH_ROUND = 1
+MOVE_ROUND = 2
 
-    Computes pairwise text similarity between removed and added entries.
-    Pairs above threshold are greedily matched (highest similarity first)
-    and converted to change_type="moved".
+#: The one signal round-2 correspondence evidence carries. A retrieval score becomes evidence
+#: only by being promoted to a named signal (ADR 0020), which :func:`move_correspondence_evidence`
+#: is the sole place to do; assignment reads this and never ``Proposal.score``.
+WORD_OVERLAP = "word_overlap"
+
+
+@dataclass(frozen=True)
+class Observation:
+    """One parsed node together with its run-local ADR 0019 address.
+
+    The address is source-agnostic and lives in ``deltatrack.matching``; binding an address to
+    an XML ``BillNode`` is specific to this pipeline and so lives here. That split is what lets
+    ``matching`` stay free of engine imports, which is how the contracts survive an unsettled
+    PDF observation representation.
     """
-    removed = [(i, c) for i, c in enumerate(changes) if c.change_type == "removed"]
-    added = [(i, c) for i, c in enumerate(changes) if c.change_type == "added"]
 
-    if not removed or not added:
-        return changes
+    ref: ObservationRef
+    node: BillNode
 
-    # Pairwise similarities (gated + matcher-reused; identical result to the
-    # naive removed×added double loop, since callers sort by the full tuple).
-    candidates = move_candidates(
-        [_normalize_text(rc.old_text or "") for _, rc in removed],
-        [_normalize_text(ac.new_text or "") for _, ac in added],
-        threshold,
+
+class ObservationRegistry:
+    """The complete parser-emitted sequence for each side, and the address of every node.
+
+    ADR 0019's ``ordinal`` indexes the **complete** emitted sequence, so this is built straight
+    from ``enumerate(tree.nodes)`` and is the only authority for turning an
+    :class:`~deltatrack.matching.ObservationRef` back into a node. Classification resolves every
+    settled correspondence through it rather than through a filtered-list position or an
+    ``element_id`` — both of which are addresses that look valid while pointing at the wrong node,
+    which is the hazard ADR 0019 names.
+
+    ``match_nodes`` returns node objects rather than ordinals, so recovering an address means
+    locating the node in the complete sequence. That is done by live object identity, which is
+    valid only because both trees hold every node alive for the whole comparison (#590 established
+    this, and it is a run-local mechanism, never persistent identity). Totality and injectivity are
+    asserted rather than assumed: a repeated node object would collapse two addresses onto one, and
+    a foreign node would yield none — both silently.
+    """
+
+    def __init__(self, old_nodes: list[BillNode], new_nodes: list[BillNode]) -> None:
+        self._nodes: dict[str, tuple[BillNode, ...]] = {OLD: tuple(old_nodes), NEW: tuple(new_nodes)}
+        self._ordinals: dict[str, dict[int, int]] = {}
+        for side, nodes in self._nodes.items():
+            ordinals: dict[int, int] = {}
+            for ordinal, node in enumerate(nodes):
+                if id(node) in ordinals:
+                    raise ValueError(
+                        f"the {side} parse lists one node object at ordinals {ordinals[id(node)]} and "
+                        f"{ordinal}; two observations would collapse onto one address"
+                    )
+                ordinals[id(node)] = ordinal
+            self._ordinals[side] = ordinals
+
+    def ref(self, side: str, node: BillNode) -> ObservationRef:
+        """The address of ``node``, refusing one the parse never emitted."""
+        ordinal = self._ordinals[side].get(id(node))
+        if ordinal is None:
+            raise ValueError(
+                f"a {side}-side pairing names a node absent from that side's complete parser "
+                f"sequence ({node.element_id!r}); its address cannot be recovered"
+            )
+        return ObservationRef(side, ordinal)
+
+    def node(self, ref: ObservationRef) -> BillNode:
+        """The node ``ref`` addresses."""
+        return self._nodes[ref.side][ref.ordinal]
+
+    def observation(self, side: str, node: BillNode) -> Observation:
+        """``node`` paired with its address."""
+        return Observation(self.ref(side, node), node)
+
+
+@dataclass(frozen=True)
+class UnmatchedPopulation:
+    """Round 2's retrieval population: each side's unmatched observations, in stream order.
+
+    **The index into ``old``/``new`` is the legacy ``(ri, ai)``.** That is the whole reason this
+    is an ordered tuple rather than a set or a mapping keyed by address. Production sorts round-2
+    candidates on ``(similarity, ri, ai)``, where those are positions in the filtered
+    removal/addition lists, and #590 measured that substituting ADR 0019 ordinals for them changes
+    the selected correspondence on 3 of the 27 committed corpus pairs — a symmetric difference of
+    20 links.
+
+    So the two solve different problems and are kept apart structurally rather than by comment:
+    ``ObservationRef`` is the architectural address and is a field on :class:`Observation`, while
+    ``(ri, ai)`` is legacy assignment ordering policy and exists only as a position in these
+    tuples, recomputed where needed and stored nowhere.
+
+    Text-free observations are present and occupy positions even though they can never produce a
+    candidate (#357). Dropping them would renumber every position after the first one.
+    """
+
+    old: tuple[Observation, ...]
+    new: tuple[Observation, ...]
+
+
+@dataclass(frozen=True)
+class SettledCorrespondence:
+    """One settled correspondence and the assignment round that selected it.
+
+    The round is carried rather than re-derived because ``moved`` is currently *defined* by
+    provenance. A round-1 pairing and a round-2 move are both 1:1 correspondences of one old and
+    one new observation, and nothing about the two observations distinguishes them. The tempting
+    derivation is ``old.match_path != new.match_path``, which agrees across the whole committed
+    corpus — 0 of 496 selected moves link observations sharing a match path, while all 14,707
+    surviving round-1 pairings do. It is still not the rule production applies, and half that
+    agreement is structural rather than measured (round-1 pairing only ever happens inside one
+    match-path group), so a Phase-1 extraction adopting it would be changing policy while claiming
+    to move it. Whether classification should later derive it is a Phase-2 question that now has
+    the measurement.
+    """
+
+    correspondence: Correspondence
+    round: int
+
+
+def observation_registry(old: BillTree, new: BillTree) -> ObservationRegistry:
+    """The complete observation sequences for one comparison."""
+    return ObservationRegistry(old.nodes, new.nodes)
+
+
+def unmatched_population(
+    pairs: list[tuple[BillNode | None, BillNode | None]],
+    registry: ObservationRegistry,
+) -> UnmatchedPopulation:
+    """Round 2's retrieval population, projected from the post-revocation pairing stream.
+
+    Each side keeps the order the stream presents, which is what makes the legacy ``(ri, ai)``
+    positions the same ones production computes today. Production derives them by filtering the
+    **classified** change list on ``change_type``. Classification emits exactly one record per
+    pairing, in order, and the type is a function of the pairing's shape alone, so filtering the
+    pairings and filtering the records yield the same sequence element for element. #590 Section E
+    measured that equality as ordered ``element_id`` sequences over all 27 corpus pairs (1,207 old
+    and 16,321 new observations); deriving the population here from the pairings makes it true by
+    construction instead, and the measurement becomes corroboration rather than the argument.
+
+    A pairing naming neither side is refused. It is unreachable from ``match_nodes`` — a tuple is
+    emitted only for a ``match_path`` present on at least one side — and the classification it fed
+    had no branch for it, so one would silently emit no record and break exactly the positional
+    correspondence this projection depends on.
+    """
+    old_unmatched: list[Observation] = []
+    new_unmatched: list[Observation] = []
+    for position, (old_node, new_node) in enumerate(pairs):
+        if old_node is not None and new_node is not None:
+            continue
+        if old_node is not None:
+            old_unmatched.append(registry.observation(OLD, old_node))
+        elif new_node is not None:
+            new_unmatched.append(registry.observation(NEW, new_node))
+        else:
+            raise ValueError(f"pairing {position} names no observation on either side")
+    return UnmatchedPopulation(old=tuple(old_unmatched), new=tuple(new_unmatched))
+
+
+def retrieve_move_candidates(population: UnmatchedPopulation, *, bound: float) -> CandidateSet:
+    """RETRIEVAL, round 2: which unmatched observation pairs are worth evaluating.
+
+    ``bound`` is retrieval's own control. ADR 0020 permits retrieval to bound consideration and
+    requires the control to be explicit and recorded, so it is written into the invocation's
+    config and travels with every proposal. It is a **separate parameter** from assignment's
+    threshold even though production passes the same constant to both: that is what lets a test
+    move the two apart and show each stage reading its own input, rather than inferring it from
+    one shared constant that no test can separate.
+
+    Scoring is delegated to ``similarity.move_candidates`` unchanged, so the pairing population,
+    the normalization, the empty-text skip (#357) and the numbers are production's own. Text-free
+    entries yield no candidate while still occupying their positions.
+    """
+    candidates = CandidateSet()
+    if not population.old or not population.new:
+        return candidates
+
+    invocation = RetrieverInvocation.of("unmatched_text_overlap", round=MOVE_ROUND, threshold=bound)
+    for score, ri, ai in move_candidates(
+        [_normalize_text(observation.node.body_text) for observation in population.old],
+        [_normalize_text(observation.node.body_text) for observation in population.new],
+        bound,
+    ):
+        candidates.propose(population.old[ri].ref, population.new[ai].ref, invocation, score=score)
+    return candidates
+
+
+def move_correspondence_evidence(candidates: CandidateSet) -> tuple[CorrespondenceEvidence, ...]:
+    """CORRESPONDENCE EVIDENCE, round 2: promote the retrieval score to a named signal.
+
+    ADR 0020 is explicit that a retrieval score is *not* correspondence evidence — it exists for
+    observability and for recall and ranking analysis — and equally explicit about what to do when
+    one turns out to be informative: name it as an evidence signal, where it can be measured. This
+    is that promotion, and the only place it happens. Assignment reads the signal and never
+    ``Proposal.score``, so the two can be perturbed independently and the boundary tested rather
+    than asserted.
+
+    No verdict, no confidence, no threshold. What the number *means* for correspondence is
+    assignment's to decide.
+    """
+    evidence: list[CorrespondenceEvidence] = []
+    for candidate in candidates.candidates():
+        if len(candidate.proposals) != 1:
+            raise ValueError(
+                f"candidate {candidate.ordinal_pair} carries {len(candidate.proposals)} proposals; "
+                "round 2 runs exactly one retriever invocation"
+            )
+        score = candidate.proposals[0].score
+        if not isinstance(score, float):
+            raise ValueError(f"candidate {candidate.ordinal_pair} was retrieved without a score to promote")
+        evidence.append(CorrespondenceEvidence.of(candidate.old, candidate.new, **{WORD_OVERLAP: score}))
+    return tuple(evidence)
+
+
+def _word_overlap(evidence: CorrespondenceEvidence) -> float:
+    """The one evidence signal round-2 assignment reads."""
+    value = evidence.get(WORD_OVERLAP)
+    if not isinstance(value, float):
+        raise ValueError(f"evidence for {evidence.old}->{evidence.new} carries no {WORD_OVERLAP} signal")
+    return value
+
+
+def _greedy_move_links(
+    population: UnmatchedPopulation,
+    evidence: tuple[CorrespondenceEvidence, ...],
+    threshold: float,
+) -> list[CorrespondenceEvidence]:
+    """The legacy competition, kept whole and kept private.
+
+    Production sorts ``(similarity, ri, ai)`` tuples with ``reverse=True``, so a tie on similarity
+    breaks on **descending** ``ri`` and then **descending** ``ai``. Sorting on similarity alone and
+    leaning on a stable secondary order is a different rule, and #590 measured that replacing
+    ``(ri, ai)`` with parser ordinals moves the selected set on 3 corpus pairs — so the key is
+    policy, not an incidental tiebreak.
+
+    ``(ri, ai)`` are positions in ``population`` and **never leave this function**. They are legacy
+    ordering machinery rather than addresses, and letting them cross the stage boundary is what
+    would invite a later reader to mistake one for the other.
+    """
+    ri_of = {observation.ref: index for index, observation in enumerate(population.old)}
+    ai_of = {observation.ref: index for index, observation in enumerate(population.new)}
+
+    eligible = [item for item in evidence if _word_overlap(item) >= threshold]
+    ordered = sorted(eligible, key=lambda item: (_word_overlap(item), ri_of[item.old], ai_of[item.new]), reverse=True)
+
+    claimed_old: set[int] = set()
+    claimed_new: set[int] = set()
+    selected: list[CorrespondenceEvidence] = []
+    for item in ordered:
+        ri, ai = ri_of[item.old], ai_of[item.new]
+        if ri in claimed_old or ai in claimed_new:
+            continue
+        claimed_old.add(ri)
+        claimed_new.add(ai)
+        selected.append(item)
+    return selected
+
+
+def assign_moves(
+    population: UnmatchedPopulation,
+    evidence: tuple[CorrespondenceEvidence, ...],
+    *,
+    threshold: float,
+) -> tuple[Correspondence, ...]:
+    """ASSIGNMENT, round 2: which retrieved pairs actually correspond.
+
+    Returns settled 1:1 correspondences in greedy selection order, each carrying the one evidence
+    record that selected it. ``threshold`` is assignment's own, because every rule deciding whether
+    a candidate *becomes* a correspondence lives here (ADR 0020 invariant 6).
+
+    Production passes the same constant to retrieval's bound and to this, so re-applying it selects
+    exactly what it selected before. That is the point rather than an oversight: the bound expresses
+    what was worth considering and this expresses what corresponds, and only the second is permitted
+    to decide. Give the two different values and this refuses the difference — which is what makes
+    the separation testable instead of decorative.
+    """
+    return tuple(
+        Correspondence(old=(item.old,), new=(item.new,), evidence=(item,))
+        for item in _greedy_move_links(population, evidence, threshold)
     )
 
-    if not candidates:
-        return changes
 
-    # Greedy: highest similarity first
-    candidates.sort(reverse=True)
-    claimed_removed: set[int] = set()
-    claimed_added: set[int] = set()
-    moved_indices: set[int] = set()  # original indices to remove
-    moved_entries: list[NodeDiff] = []
+def settle_correspondences(
+    pairs: list[tuple[BillNode | None, BillNode | None]],
+    registry: ObservationRegistry,
+    moves: tuple[Correspondence, ...],
+) -> tuple[SettledCorrespondence, ...]:
+    """Every correspondence settled for one comparison, tagged with the round that selected it.
 
-    for sim, ri, ai in candidates:
-        if ri in claimed_removed or ai in claimed_added:
-            continue
-        claimed_removed.add(ri)
-        claimed_added.add(ai)
+    **Nothing is settled before this point**, and that is forced rather than preferred:
+    ``CorrespondenceSet`` refuses an observation that already corresponds, so settling an unmatched
+    observation as a 1:0 and later revising it into a 1:1 move is impossible to express. The
+    post-revocation stream is therefore provisional throughout — an ``(old, None)`` in it is an
+    unmatched observation, not a settled removal — and round 2 runs before any of it is committed.
 
-        orig_ri, rc = removed[ri]
-        orig_ai, ac = added[ai]
-        moved_indices.add(orig_ri)
-        moved_indices.add(orig_ai)
+    Emission is chronological: round 1 in the order the pairing stream presents it, then round 2 in
+    greedy selection order. That is the order assignment produced them and nothing more. Where the
+    moved records land in the **output** is classification's policy, and :func:`classify` applies
+    it to whatever order this returns.
 
-        # Compute text_diff if texts differ
-        old_norm = _normalize_text(rc.old_text or "")
-        new_norm = _normalize_text(ac.new_text or "")
-        text_changes = diff_text(old_norm, new_norm) if old_norm != new_norm else None
+    The ``CorrespondenceSet`` built here is the exclusivity invariant checked rather than assumed —
+    every observation in at most one correspondence — and it is what refuses a premature settlement.
+    """
+    claimed = {ref for move in moves for ref in (*move.old, *move.new)}
+    settled: list[SettledCorrespondence] = []
 
-        moved_entries.append(
-            NodeDiff(
-                display_path_old=rc.display_path_old,
-                display_path_new=ac.display_path_new,
-                match_path=rc.match_path,
-                change_type="moved",
-                old_text=rc.old_text,
-                new_text=ac.new_text,
-                text_diff=text_changes,
-                section_number=ac.section_number or rc.section_number,
-                element_id_old=rc.element_id_old,
-                element_id_new=ac.element_id_new,
-                # Carry each side's amount source across the move, from the same entry
-                # the text comes from, so a moved section's amounts stay readable (#365).
-                old_amount_text=rc.old_amount_text,
-                new_amount_text=ac.new_amount_text,
+    for position, (old_node, new_node) in enumerate(pairs):
+        if old_node is not None and new_node is not None:
+            old_ref = registry.ref(OLD, old_node)
+            new_ref = registry.ref(NEW, new_node)
+            # One empty-signal record per surviving round-1 link. The contract requires exactly one
+            # evidence record per selected link, and round-1 evidence is NOT migrated by this slice
+            # — `match_nodes` still decides these pairings with its own fused rules. An empty signal
+            # set is explicitly valid, and inventing a score here would be this slice choosing the
+            # signal that ADR 0020 leaves to measurement.
+            settled.append(
+                SettledCorrespondence(
+                    Correspondence(
+                        old=(old_ref,),
+                        new=(new_ref,),
+                        evidence=(CorrespondenceEvidence.of(old_ref, new_ref),),
+                    ),
+                    PATH_ROUND,
+                )
             )
-        )
+        elif old_node is not None:
+            old_ref = registry.ref(OLD, old_node)
+            if old_ref not in claimed:
+                settled.append(SettledCorrespondence(Correspondence(old=(old_ref,)), PATH_ROUND))
+        elif new_node is not None:
+            new_ref = registry.ref(NEW, new_node)
+            if new_ref not in claimed:
+                settled.append(SettledCorrespondence(Correspondence(new=(new_ref,)), PATH_ROUND))
+        else:
+            raise ValueError(f"pairing {position} names no observation on either side")
 
-    # Rebuild: keep non-moved entries in original order, append moved at end
-    result = [c for i, c in enumerate(changes) if i not in moved_indices]
-    result.extend(moved_entries)
-    return result
+    settled.extend(SettledCorrespondence(move, MOVE_ROUND) for move in moves)
+
+    exclusive = CorrespondenceSet()
+    for item in settled:
+        exclusive.add(item.correspondence)
+    return tuple(settled)
+
+
+def _added_record(new_node: BillNode) -> NodeDiff:
+    return NodeDiff(
+        display_path_old=None,
+        display_path_new=new_node.display_path,
+        match_path=new_node.match_path,
+        change_type="added",
+        old_text=None,
+        new_text=new_node.body_text,
+        text_diff=None,
+        section_number=new_node.section_number,
+        element_id_old="",
+        element_id_new=new_node.element_id,
+        new_amount_text=amount_text(new_node),
+    )
+
+
+def _removed_record(old_node: BillNode) -> NodeDiff:
+    return NodeDiff(
+        display_path_old=old_node.display_path,
+        display_path_new=None,
+        match_path=old_node.match_path,
+        change_type="removed",
+        old_text=old_node.body_text,
+        new_text=None,
+        text_diff=None,
+        section_number=old_node.section_number,
+        element_id_old=old_node.element_id,
+        element_id_new="",
+        old_amount_text=amount_text(old_node),
+    )
+
+
+def _paired_record(old_node: BillNode, new_node: BillNode) -> NodeDiff:
+    """A round-1 1:1: ``unchanged`` when the word-level diff is empty, else ``modified``."""
+    text_changes = diff_text(_normalize_text(old_node.body_text), _normalize_text(new_node.body_text))
+    return NodeDiff(
+        display_path_old=old_node.display_path,
+        display_path_new=new_node.display_path,
+        match_path=old_node.match_path,
+        change_type="unchanged" if not text_changes else "modified",
+        old_text=old_node.body_text,
+        new_text=new_node.body_text,
+        text_diff=None if not text_changes else text_changes,
+        section_number=new_node.section_number or old_node.section_number,
+        element_id_old=old_node.element_id,
+        element_id_new=new_node.element_id,
+        old_amount_text=amount_text(old_node),
+        new_amount_text=amount_text(new_node),
+    )
+
+
+def _moved_record(old_node: BillNode, new_node: BillNode) -> NodeDiff:
+    """A round-2 1:1.
+
+    ``text_diff`` is ``None`` rather than ``[]`` when the normalized texts match, which is a
+    serialized field and so a canonical byte. ``match_path`` is the OLD node's while
+    ``section_number`` prefers the new — both transcribed from the legacy record, not tidied.
+    """
+    old_normalized = _normalize_text(old_node.body_text)
+    new_normalized = _normalize_text(new_node.body_text)
+    return NodeDiff(
+        display_path_old=old_node.display_path,
+        display_path_new=new_node.display_path,
+        match_path=old_node.match_path,
+        change_type="moved",
+        old_text=old_node.body_text,
+        new_text=new_node.body_text,
+        text_diff=diff_text(old_normalized, new_normalized) if old_normalized != new_normalized else None,
+        section_number=new_node.section_number or old_node.section_number,
+        element_id_old=old_node.element_id,
+        element_id_new=new_node.element_id,
+        # Each side's amount source travels with the text it came from, so a moved section's
+        # amounts stay readable (#365).
+        old_amount_text=amount_text(old_node),
+        new_amount_text=amount_text(new_node),
+    )
+
+
+def _classified(item: SettledCorrespondence, registry: ObservationRegistry) -> NodeDiff:
+    """One settled correspondence as one change record."""
+    correspondence = item.correspondence
+    if not correspondence.is_binary:
+        raise ValueError(
+            f"classification received a {correspondence.shape} correspondence; the canonical contract "
+            "is a binary row and ADR 0020 requires a non-binary one to be projected explicitly"
+        )
+    old_node = registry.node(correspondence.old[0]) if correspondence.old else None
+    new_node = registry.node(correspondence.new[0]) if correspondence.new else None
+
+    if old_node is None:
+        return _added_record(new_node)
+    if new_node is None:
+        return _removed_record(old_node)
+    if item.round == MOVE_ROUND:
+        return _moved_record(old_node, new_node)
+    return _paired_record(old_node, new_node)
+
+
+def classify(
+    settled: tuple[SettledCorrespondence, ...],
+    registry: ObservationRegistry,
+) -> list[NodeDiff]:
+    """CLASSIFICATION: what changed, given settled correspondence.
+
+    Decides nothing about correspondence: no threshold is applied to any evidence, no partner is
+    changed, and every observation is resolved through the complete :class:`ObservationRegistry`
+    rather than through a filtered-list position or an ``element_id``.
+
+    **Record order is this stage's policy, applied here rather than inherited.** The legacy output
+    keeps non-moved records in their preserved order and appends the round-2 moved records in greedy
+    selection order. That is reproduced by a stable sort on the round alone, so the result depends on
+    each round's internal order and not on how assignment happened to interleave the two — an
+    output-construction requirement kept out of the stage that decides correspondence.
+    """
+    return [_classified(item, registry) for item in sorted(settled, key=lambda item: item.round)]
 
 
 def _count_changes(changes: list[NodeDiff]) -> dict:
@@ -624,98 +1023,32 @@ def _count_changes(changes: list[NodeDiff]) -> dict:
 def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
     """Compare two bill versions and produce a structured diff.
 
-    The loop below is classification only: it classifies the pairing shape it is handed and
-    never changes it. The similarity rule that can revoke a pairing runs ahead of it, in
-    :func:`apply_similarity_revocation`, so a revoked pairing arrives here as an unmatched
-    old observation followed by an unmatched new one and is classified by the same two
-    branches that already handle a structurally unmatched node. That is why this function
-    has three branches where it used to have four: the fourth built a removal and an
-    addition field-for-field identical to those two, and had nothing left to do once the
-    decision moved.
+    The body is the ADR 0020 stage sequence, written out so stage ownership reads off the call
+    graph rather than off a comment. Both retrieval rounds now run **before** classification,
+    which is the rule this slice exists to satisfy: retrieval may run in several rounds and a
+    later round may consult earlier matching state, but none of it may run after classification.
 
-    Everything else stays where it is, deliberately. ``match_nodes`` still owns the rest of
-    the retrieval and assignment behaviour, and ``reconcile_moves`` still runs after this
-    loop -- a second retrieval pass that ADR 0020 eventually requires to move ahead of
-    classification, and that this slice does not touch.
+    Round 2 stays after :func:`apply_similarity_revocation`, and that ordering is load-bearing
+    rather than incidental — 228 of the corpus's 496 selected moves touch an observation that
+    exists only because the similarity rule revoked its pairing, and 145 have both sides so
+    produced. Post-#591 that is a sequencing constraint inside matching, no longer a dependency
+    on classification output.
+
+    What this slice does **not** unfuse, said plainly: round 1. ``match_nodes`` still decides both
+    what may be compared (``match_path`` grouping, division subgrouping, the cross-division
+    fallback) and what corresponds (``_similarity_pair``'s unthresholded greedy claim), in one
+    pass, and :func:`apply_similarity_revocation` still owns the rule that can revoke a pairing.
+    One real stage boundary becomes live here — round 2, and the boundary into classification —
+    not four.
     """
+    registry = observation_registry(old, new)
     pairs = apply_similarity_revocation(match_nodes(old, new))
-    changes: list[NodeDiff] = []
-
-    for old_node, new_node in pairs:
-        if old_node is None and new_node is not None:
-            changes.append(
-                NodeDiff(
-                    display_path_old=None,
-                    display_path_new=new_node.display_path,
-                    match_path=new_node.match_path,
-                    change_type="added",
-                    old_text=None,
-                    new_text=new_node.body_text,
-                    text_diff=None,
-                    section_number=new_node.section_number,
-                    element_id_old="",
-                    element_id_new=new_node.element_id,
-                    new_amount_text=amount_text(new_node),
-                )
-            )
-
-        elif old_node is not None and new_node is None:
-            changes.append(
-                NodeDiff(
-                    display_path_old=old_node.display_path,
-                    display_path_new=None,
-                    match_path=old_node.match_path,
-                    change_type="removed",
-                    old_text=old_node.body_text,
-                    new_text=None,
-                    text_diff=None,
-                    section_number=old_node.section_number,
-                    element_id_old=old_node.element_id,
-                    element_id_new="",
-                    old_amount_text=amount_text(old_node),
-                )
-            )
-
-        elif old_node is not None and new_node is not None:
-            old_normalized = _normalize_text(old_node.body_text)
-            new_normalized = _normalize_text(new_node.body_text)
-            text_changes = diff_text(old_normalized, new_normalized)
-            if not text_changes:
-                changes.append(
-                    NodeDiff(
-                        display_path_old=old_node.display_path,
-                        display_path_new=new_node.display_path,
-                        match_path=old_node.match_path,
-                        change_type="unchanged",
-                        old_text=old_node.body_text,
-                        new_text=new_node.body_text,
-                        text_diff=None,
-                        section_number=new_node.section_number or old_node.section_number,
-                        element_id_old=old_node.element_id,
-                        element_id_new=new_node.element_id,
-                        old_amount_text=amount_text(old_node),
-                        new_amount_text=amount_text(new_node),
-                    )
-                )
-            else:
-                changes.append(
-                    NodeDiff(
-                        display_path_old=old_node.display_path,
-                        display_path_new=new_node.display_path,
-                        match_path=old_node.match_path,
-                        change_type="modified",
-                        old_text=old_node.body_text,
-                        new_text=new_node.body_text,
-                        text_diff=text_changes,
-                        section_number=new_node.section_number or old_node.section_number,
-                        element_id_old=old_node.element_id,
-                        element_id_new=new_node.element_id,
-                        old_amount_text=amount_text(old_node),
-                        new_amount_text=amount_text(new_node),
-                    )
-                )
-
-    changes = reconcile_moves(changes)
+    population = unmatched_population(pairs, registry)
+    candidates = retrieve_move_candidates(population, bound=MOVE_THRESHOLD)
+    evidence = move_correspondence_evidence(candidates)
+    moves = assign_moves(population, evidence, threshold=MOVE_THRESHOLD)
+    settled = settle_correspondences(pairs, registry, moves)
+    changes = classify(settled, registry)
 
     return BillDiff(
         old_version=old.version,
