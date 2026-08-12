@@ -5130,8 +5130,11 @@ cross-engine writers use, and a control proves it refuses today and would write 
 
 ### Realized
 
-`x27` **190/190**, **55/55** injected faults caught — each failing a NAMED control rather than
-crashing — `contamination.json` byte-identical.
+`x27` **190/190**; **55** injected faults caught in total, each failing a NAMED control rather than
+crashing — 54 through round 5, plus round 6's renderer fault (A41.2.3). **Scope, stated because a
+falsification belongs to the tree it ran on:** the round 6 fault is the only one re-injected against
+this HEAD; the other 54 were run against their own rounds' HEADs and are not re-asserted here.
+`contamination.json` byte-identical.
 
 **Round 3 added a fourth class of control defect worth recording: a control that detects a fault
 only by CRASHING.** Four R6/R8 negatives indexed `failures[0]` or relied on a bare `KeyError`, so
