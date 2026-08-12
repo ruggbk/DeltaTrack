@@ -1,0 +1,2101 @@
+"""x27 -- HARNESS-PLAN section 5's control table, executed against `score_metrics`.
+
+NOT CONFIRMATORY. SYNTHETIC + DEVELOPMENT only. No holdout document is opened, nothing is
+adjudicated by a human or an AI, no architecture decision is taken, and none of
+`results/frames.json`, `oracle_key.json`, `oracle_blind.json`, `oracle_adjudicated.json`,
+`s1_control.json`, `cross_engine_control.json`, `metrics.json`, `scores.json` or
+`EXECUTION-START.json` is created. Evidence: `results/x27_score_metrics.json`.
+
+RUN WITH AN INTERPRETER CARRYING BOTH `pymupdf` AND `pypdfium2`, as `x21`/`x22` require.
+
+WHAT THIS PROBE EXISTS TO PROVE, and what would make each half FALSE:
+
+    the scorer computes section 6 / section 8 from committed facts     -- every control below
+    each frozen quantity can go RED                                   -- the negatives
+    a malformed or incomplete input REFUSES rather than scoring        -- part_refusals
+    the scorer never reads a summary it could have trusted             -- the corrupted-`counts`
+                                                                         attack
+    the same inputs give the same numbers                             -- part_reproducibility
+
+THE SYNTHETIC ADJUDICATIONS ARE A MECHANISM FIXTURE, NEVER AN ACCURACY MEASUREMENT. Their
+"oracle" text is taken from one arm's own emitted output, so agreement proves the JOIN works and
+says nothing about whether either architecture is correct. Real adjudication is human/AI, does
+not exist, and cannot exist before the execution boundary. Every number this probe prints is a
+property of a fixture built here.
+"""
+
+from __future__ import annotations
+
+import ast
+import copy
+import hashlib
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve()
+EV = HERE.parents[1]
+BAKE = EV.parents[1]
+REPO = BAKE.parents[2]
+sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(BAKE / "probes"))
+sys.path.insert(0, str(BAKE / "probes" / "backends"))
+
+import build_frames as BF  # noqa: E402
+import build_oracle as BO  # noqa: E402
+import control_fixtures as CF  # noqa: E402
+import m3_boundaries as M3  # noqa: E402
+import methodology_contracts as MC  # noqa: E402
+import oracle_geometry as OG  # noqa: E402
+import pymupdf  # noqa: E402
+import score_metrics as SM  # noqa: E402
+from neutral_identity import Cell, EmittedLine, NeutralLine  # noqa: E402
+
+from deltatrack.parsers.pdf_anchors import Anchor  # noqa: E402
+
+OUT = EV / "results" / "x27_score_metrics.json"
+ROWS: list[dict] = []
+FAILED: list[str] = []
+
+#: section 5 control-table rows, so the evidence file states which row each check discharges.
+SECTION5_ROWS = (
+    "S1 liveness",
+    "M3 weld/space fixture",
+    "M3 insulation",
+    "negative: delete agency anchors",
+    "negative: shift heading baselines one line-height",
+    "negative: inject an R E P O R T page",
+    "M0 denominator",
+    "vacuity",
+    "section 8 independence",
+    "section 8 zero-event",
+    "section 8 pairing",
+)
+COVERED: dict[str, list[str]] = {row: [] for row in SECTION5_ROWS}
+
+
+def check(name: str, expected, observed, fails_when: str = "", row: str = "") -> bool:
+    ok = expected == observed
+    ROWS.append(
+        {"test": name, "expected": expected, "observed": observed, "pass": ok, "fails_when": fails_when, "row": row}
+    )
+    if not ok:
+        FAILED.append(name)
+    if row:
+        COVERED.setdefault(row, []).append(name)
+    print(
+        f"[{'PASS' if ok else 'FAIL'}] {name}"
+        + ("" if ok else f"\n        expected={expected!r}\n        observed={observed!r}")
+    )
+    return ok
+
+
+def refusal(fn) -> str | None:
+    """The refusal class a callable raises, or None if it returned. Never swallows the reason."""
+    try:
+        fn()
+    except SM.ScoreInputError as exc:
+        return exc.reason
+    except (BO.OracleBuildError, MC.BootstrapInputError) as exc:
+        return exc.reason
+    except MC.UnknownRole as exc:
+        return type(exc).__name__
+    return None
+
+
+# ============================================================ synthetic fixture material
+#
+# The frames come from `build_frames._build_document_frame_from_inputs` -- the private synthetic
+# seam `x17` uses -- so every `line_state`, region grid, C/D membership and count below is REAL
+# producer output rather than a hand-written dict resembling one. Only `architecture_occurrences`
+# and `m9` are attached by hand, because the real producer derives them from live `Page` objects;
+# `part_development` closes that gap by running the whole chain on a real DEVELOPMENT PDF.
+
+LINES_PER_REGION = BF.REGION_SIZE
+DOC_SHA = hashlib.sha256(b"x27-synthetic").hexdigest()
+#: A second source SHA. A28.3's base stimulus identity is (sha, page, region_ordinal), so any
+#: fixture with two documents needs two SHAs or the realized stimulus set collides.
+DOC_SHA_B = hashlib.sha256(b"x27-synthetic-b").hexdigest()
+#: x21's synthetic-PDF geometry, so a frame built here can be rendered by the REAL `build_oracle`.
+LEFT_X, RIGHT_X = 100.0, 300.0
+CANDIDATE_XS = (100.0, 140.0)
+
+
+def nline(page: int, ordinal: int, gids) -> NeutralLine:
+    baseline = 792.0 - (120.0 + ordinal * 20.0)
+    ordered = sorted(gids)
+    return NeutralLine(
+        page=page,
+        ordinal=ordinal,
+        baseline=baseline,
+        x0=LEFT_X,
+        y0=baseline - 3.0,
+        x1=RIGHT_X,
+        y1=baseline + 9.0,
+        gids=frozenset(ordered),
+        # A38.2 -- two candidates a fixed distance apart, so a nearest-glyph boundary exists
+        candidates=tuple((g, CANDIDATE_XS[i % len(CANDIDATE_XS)]) for i, g in enumerate(ordered)),
+    )
+
+
+def eline(pairs) -> EmittedLine:
+    return EmittedLine(cells=[Cell(ngid=g, char=c) for g, c in pairs])
+
+
+def page_input(
+    page_number: int,
+    n_lines: int = LINES_PER_REGION,
+    *,
+    start_gid: int = 0,
+    text_differs=(),
+    merge=(),
+    both_absent=(),
+    h_anchors=None,
+    x_anchors=None,
+) -> BF.PageInput:
+    """One page of neutral lines, with the arms' emitted lines under our control.
+
+    text_differs  ordinals where X emits a DIFFERENT character for the same glyph
+    merge         ordinals X merges with the NEXT line (a pure segmentation difference)
+    both_absent   ordinals NEITHER arm emits (chrome both correctly drop)
+    """
+    neutral, h, x, gid = [], [], [], start_gid
+    for i in range(n_lines):
+        gids = list(range(gid, gid + 2))
+        neutral.append(nline(page_number, i, gids))
+        gid += 2
+    skip_x: set[int] = set()
+    for i, line in enumerate(neutral):
+        gids = sorted(line.gids)
+        if i in both_absent:
+            continue
+        h.append(eline([(g, "A") for g in gids]))
+        if i in skip_x:
+            continue
+        if i in merge and i + 1 < n_lines and (i + 1) not in both_absent:
+            nxt = sorted(neutral[i + 1].gids)
+            x.append(eline([(g, "A") for g in gids + nxt]))
+            skip_x.add(i + 1)
+            continue
+        char = "Z" if i in text_differs else "A"
+        x.append(eline([(g, char) for g in gids]))
+    return BF.PageInput(
+        page_number=page_number,
+        neutral=neutral,
+        h_emitted=h,
+        x_emitted=x,
+        h_anchors_by_region=h_anchors or {},
+        x_anchors_by_region=x_anchors or {},
+    )
+
+
+def anchor(page: int, line: int, kind: str = "account", text: str = "SALARIES AND EXPENSES") -> Anchor:
+    return Anchor(page_number=page, line_number=line, kind=kind, text=text, division="")
+
+
+def occurrence(
+    page: int,
+    line_ordinal: int,
+    ngid: int,
+    *,
+    kind: str = "account",
+    text: str = "SALARIES AND EXPENSES",
+    parent: str | None = "DEPARTMENTAL MANAGEMENT",
+    region_ordinal: int = 0,
+    line_number: int | None = None,
+    matchable: bool = True,
+    sha: str = DOC_SHA,
+) -> dict:
+    """One emitted occurrence record in `build_frames`' committed A38.3 shape."""
+    key = [sha, page, [page, line_ordinal], ngid] if matchable else None
+    return {
+        "anchor": {
+            "page_number": page,
+            "line_number": line_ordinal if line_number is None else line_number,
+            "kind": kind,
+            "text": text,
+            "division": "",
+        },
+        "page_number": page,
+        "region_ordinal": region_ordinal,
+        "placed_neutral_line_key": [page, line_ordinal],
+        "occurrence_key": key,
+        "match_status": "MATCHABLE" if matchable else "UNMATCHED",
+        "unmatched_reason": None if matchable else "START_NGID_NOT_OWNED_BY_NEUTRAL_LINE",
+        "immediate_parent": parent,
+        "breadcrumb": [p for p in (parent, text) if p is not None],
+    }
+
+
+def m9_facts(*, band: bool = True, coverage: float = 1.0, margin: int = 120, lines: int = 140) -> dict:
+    return {
+        "derive_size_bands_returns_a_band": band,
+        "coverage": coverage,
+        "coverage_floor": 0.85,
+        "coverage_meets_floor": coverage >= 0.85,
+        "n_lines_total": lines,
+        "n_margin_numbered_lines": margin,
+        "n_margin_numbered_with_glyph_size": margin,
+        "margin_numbered_line_keys": [[1, i] for i in range(margin)],
+        "rule0_comparison": "RAW FACTS ONLY",
+    }
+
+
+def frame(
+    pages,
+    *,
+    document: str = "SYNTHETIC/1",
+    sha: str = DOC_SHA,
+    population: str = BF.P_HEAD,
+    occurrences=None,
+    m9_h=None,
+    m9_x=None,
+) -> dict:
+    built = BF._build_document_frame_from_inputs(sha, document, population, list(pages))
+    built["architecture_occurrences"] = occurrences or {"H": [], "X": []}
+    built["m9"] = {"H": m9_h or m9_facts(), "X": m9_x or m9_facts()}
+    return built
+
+
+EMPTY_KEY = {"schema": "oracle_key/3", "stimuli": {}}
+EMPTY_ADJUDICATED = {"schema": BO.ADJUDICATED_SCHEMA, BO.ROUTE_AI: {}, BO.ROUTE_HUMAN: {}}
+
+
+def s1_artifact(fires: bool = True) -> dict:
+    return {"schema": "s1_control/1", "advance_scale": 1.25, "fires": fires, "n_firing": 1 if fires else 0}
+
+
+def cross_engine_artifact(documents, failed=()) -> dict:
+    return {
+        "schema": "cross_engine_control/1",
+        "per_document": [
+            {"document": d, "passed": d not in failed, "qualification": None if d not in failed else "Q"}
+            for d in documents
+        ],
+        "n_documents": len(list(documents)),
+    }
+
+
+def inputs(
+    frames,
+    *,
+    key=None,
+    adjudicated=None,
+    s1=None,
+    cross_engine=None,
+    strata=None,
+    r1_role_agreement=None,
+) -> SM.ScoreInputs:
+    docs = [f["document"] for f in frames]
+    return SM.ScoreInputs(
+        frames=tuple(frames),
+        oracle_key=key or EMPTY_KEY,
+        oracle_adjudicated=adjudicated or EMPTY_ADJUDICATED,
+        cross_engine=cross_engine or cross_engine_artifact(docs),
+        s1=s1 or s1_artifact(),
+        document_strata=strata if strata is not None else {d: 1 for d in docs},
+        r1_role_agreement=r1_role_agreement,
+    )
+
+
+# ================================================================= M0, its denominator, vacuity
+
+
+def part_m0() -> dict:
+    print("\n== M0: the risk set, BOTH_ABSENT, and the region-level M0c ==")
+    clean = frame([page_input(1)])
+    block = SM.m0_block(clean)
+    check(
+        "a fully concordant page yields a full risk set and zero discordance",
+        (LINES_PER_REGION, 0, 0, 0),
+        (block["risk_set"], block["M0a_text"], block["M0b_segmentation"], block["both_absent"]),
+        "the fixture is not concordant, so every comparison below starts from a moving baseline",
+    )
+
+    # --- section 5 row: M0 denominator. BOTH_ABSENT must appear in NO M0 denominator.
+    with_chrome = frame([page_input(1, both_absent={5, 6, 7})])
+    chrome_block = SM.m0_block(with_chrome)
+    denominators = {
+        name: chrome_block[name]["denominator"] for name in ("M0a_text_rate", "M0b_segmentation_rate", "M0_any_rate")
+    }
+    check(
+        "3 BOTH_ABSENT lines leave the risk set at 5 and are reported as a raw count",
+        (5, 3, LINES_PER_REGION),
+        (chrome_block["risk_set"], chrome_block["both_absent"], chrome_block["neutral_lines_in_scope"]),
+        "a jointly-dropped line entered the risk set, which would make the rate a function of "
+        "how much page furniture GPO set rather than of the seam",
+        row="M0 denominator",
+    )
+    check(
+        "every M0 line-rate denominator IS the risk set, never the line count",
+        {name: 5 for name in denominators},
+        denominators,
+        "a BOTH_ABSENT line appears in an M0 denominator, i.e. a shared drop is scored as agreement",
+        row="M0 denominator",
+    )
+    check(
+        "...and M0b's DEFINED denominator is reported separately (A23's reporting rule)",
+        5,
+        chrome_block["M0b_rate_on_defined"]["denominator"],
+        "the defined-population rate shares the risk-set denominator, so a zero M0b could be read "
+        "as 'the arms grouped identically' when it means 'there was nothing to compare'",
+    )
+
+    # --- NEGATIVE: BOTH_ABSENT counted as agreement. The two denominators must DIFFER here, or
+    # the control above passed on a fixture that could not tell them apart.
+    discordant_with_chrome = frame([page_input(1, text_differs={0}, both_absent={5, 6, 7})])
+    b = SM.m0_block(discordant_with_chrome)
+    check(
+        "NEGATIVE -- the all-lines denominator gives a DIFFERENT rate, so the fixture is decisive",
+        (1 / 5, 1 / 8),
+        (b["M0_any_rate"]["value"], b["M0_any_rate_ALL_LINES_superseded"]),
+        "both denominators agree on this fixture, so 'BOTH_ABSENT is excluded' was never tested",
+        row="M0 denominator",
+    )
+    check(
+        "...and the REPORTED headline is the risk-set rate, not the superseded one",
+        1 / 5,
+        b["M0a_text_rate"]["value"],
+        "the scorer reports the all-lines rate, which counts a shared drop as agreement",
+        row="M0 denominator",
+    )
+
+    # --- section 5 row: vacuity. A zero content-bearing denominator is VACUOUS, never a rate.
+    all_absent = frame([page_input(1, both_absent=set(range(LINES_PER_REGION)))])
+    vac = SM.m0_block(all_absent)
+    check(
+        "a page neither arm emitted reports VACUOUS, not 0.0 and not agreement",
+        (0, None, SM.VACUOUS, None, SM.VACUOUS),
+        (
+            vac["risk_set"],
+            vac["M0a_text_rate"]["value"],
+            vac["M0a_text_rate"]["status"],
+            vac["M0_any_rate"]["value"],
+            vac["M0_any_rate"]["status"],
+        ),
+        "a zero-denominator metric is printed as a rate -- 0.0 reads as perfect agreement and "
+        "1.0 as total failure, and neither was measured",
+        row="vacuity",
+    )
+
+    # --- M0b vs M0a: a pure segmentation difference must move M0b and NOT M0a.
+    merged = frame([page_input(1, merge={2})])
+    m = SM.m0_block(merged)
+    check(
+        "a pure segmentation difference moves M0b and leaves M0a at zero",
+        (0, 2, 2, 0),
+        (m["M0a_text"], m["M0b_segmentation"], m["M0b_only_segmentation"], m["M0a_only_text"]),
+        "grouping and characters are conflated, which is the exact defect A23 corrected",
+    )
+
+    # --- M0c is REGION-level and is never pooled with the line rates.
+    differing = frame(
+        [
+            page_input(
+                1,
+                h_anchors={0: {anchor(1, 3)}},
+                x_anchors={0: {anchor(1, 3, text="SALARIESAND EXPENSES")}},
+            )
+        ]
+    )
+    c = SM.m0_block(differing)
+    check(
+        "an anchor-set difference is counted as M0c over REGIONS, with the line rates untouched",
+        (1, 1, 1.0, 0, 0),
+        (
+            c["M0c_anchor_regions"],
+            c["M0c_rate"]["denominator"],
+            c["M0c_rate"]["value"],
+            c["M0a_text"],
+            c["M0b_segmentation"],
+        ),
+        "M0c is pooled into or averaged with the per-line rates, which section 5 forbids",
+    )
+    return {
+        "concordant": {k: block[k] for k in ("risk_set", "M0a_text", "M0b_segmentation")},
+        "with_chrome": {k: chrome_block[k] for k in ("risk_set", "both_absent", "neutral_lines_in_scope")},
+        "vacuous": {"risk_set": vac["risk_set"], "status": vac["M0a_text_rate"]["status"]},
+        "segmentation_only": {k: m[k] for k in ("M0a_text", "M0b_segmentation")},
+        "m0c": {"regions": c["M0c_anchor_regions"], "rate": c["M0c_rate"]["value"]},
+    }
+
+
+def part_i9() -> dict:
+    """I9 -- M0's eligibility set and the D-frame's are ONE set, and drift REFUSES."""
+    print("\n== I9: one eligibility set for M0 and the D-frame ==")
+    good = frame([page_input(1, text_differs={0})])
+    check(
+        "a text-discordant line puts its region in the D-frame (same predicate, one set)",
+        (True, [BF.TEXT_DISCORDANCE]),
+        (good["pages"][0]["regions"][0]["d_frame"], good["pages"][0]["regions"][0]["d_reasons"]),
+        "M0 and the D-frame would be reading different eligibility sets, so Rule 1's census and "
+        "M0 would be measuring different things",
+    )
+    check(
+        "the clean input SCORES, so the refusals below are not refusing everything",
+        None,
+        refusal(lambda: SM.score(inputs([good]))),
+        "the scorer refuses valid input, making every negative control meaningless",
+    )
+
+    stripped = copy.deepcopy(good)
+    stripped["pages"][0]["regions"][0]["d_frame"] = False
+    stripped["pages"][0]["regions"][0]["d_reasons"] = []
+    check(
+        "NEGATIVE -- a discordant line in a NON-D region REFUSES (I9)",
+        SM.D_FRAME_ELIGIBILITY_DRIFT,
+        refusal(lambda: SM.score(inputs([stripped]))),
+        "two eligibility sets are accepted silently, and the D-frame census that Rule 1 reads "
+        "would exclude regions M0 counted as discordant",
+    )
+
+    invented = copy.deepcopy(frame([page_input(1)]))
+    invented["pages"][0]["regions"][0]["d_frame"] = True
+    check(
+        "NEGATIVE -- a D-frame region with NO qualifying predicate REFUSES",
+        SM.D_FRAME_ELIGIBILITY_DRIFT,
+        refusal(lambda: SM.score(inputs([invented]))),
+        "a region can be in the adjudication census for no recorded reason, which would spend "
+        "human adjudication budget on regions nothing selected",
+    )
+
+    lied = copy.deepcopy(good)
+    lied["pages"][0]["neutral_lines"][0]["line_state"]["text_discordance"] = False
+    check(
+        "NEGATIVE -- a committed predicate that disagrees with the frozen rule REFUSES",
+        SM.LINE_STATE_PREDICATE_DRIFT,
+        refusal(lambda: SM.score(inputs([lied]))),
+        "the scorer trusts a committed boolean over `neutral_identity`'s own predicate, so a "
+        "frame could report agreement its own texts contradict",
+    )
+
+    unknown = copy.deepcopy(good)
+    unknown["pages"][0]["neutral_lines"][0]["line_state"]["state"] = "PROBABLY_FINE"
+    check(
+        "NEGATIVE -- an unknown line state REFUSES rather than defaulting into the risk set",
+        SM.UNKNOWN_LINE_STATE,
+        refusal(lambda: SM.score(inputs([unknown]))),
+        "an unrecognised state falls through to 'not BOTH_ABSENT' and silently enlarges the M0 denominator",
+    )
+    return {"d_reasons": good["pages"][0]["regions"][0]["d_reasons"]}
+
+
+def part_s1() -> dict:
+    """Section 5's first row: if S1 does not fire, M0 is NOT REPORTABLE."""
+    print("\n== section 5 row 1: S1 liveness gates M0's reportability ==")
+    f = frame([page_input(1, text_differs={0})])
+    live = SM.score(inputs([f], s1=s1_artifact(True)))
+    dead = SM.score(inputs([f], s1=s1_artifact(False)))
+    live_m0 = live["per_document"]["SYNTHETIC/1"]["M0"]
+    dead_m0 = dead["per_document"]["SYNTHETIC/1"]["M0"]
+    check(
+        "S1 FIRING leaves M0 reportable",
+        (True, "REPORTED", 1 / LINES_PER_REGION),
+        (live["s1"]["m0_reportable"], live_m0["M0a_text_rate"]["status"], live_m0["M0a_text_rate"]["value"]),
+        "a live comparator still suppresses M0, so the control cannot distinguish live from dead",
+        row="S1 liveness",
+    )
+    check(
+        "S1 NOT firing makes every M0 rate NOT REPORTABLE",
+        (False, SM.NOT_REPORTABLE_S1_DEAD, None),
+        (dead["s1"]["m0_reportable"], dead_m0["M0a_text_rate"]["status"], dead_m0["M0a_text_rate"]["value"]),
+        "M0 is reported from a comparator that cannot be shown to move -- exactly the phase-1 "
+        "defect S1 exists to catch",
+        row="S1 liveness",
+    )
+    check(
+        "...and the RAW counts survive the suppression, so evidence is not destroyed",
+        (1, LINES_PER_REGION),
+        (dead_m0["M0a_text"], dead_m0["risk_set"]),
+        "withholding the rate also deleted the counts, so a reader cannot see what was measured",
+        row="S1 liveness",
+    )
+    check(
+        "NEGATIVE -- an S1 artifact with no verdict at all REFUSES",
+        SM.S1_ARTIFACT_MISSING,
+        refusal(lambda: SM.score(inputs([f], s1={"schema": "s1_control/1"}))),
+        "a missing liveness verdict is read as firing, so M0 is reported with no live comparator",
+        row="S1 liveness",
+    )
+    return {"live": live["s1"], "dead": dead["s1"]}
+
+
+# ============================================================== the M1-M5 heading join, on a
+# ============================================================== REAL oracle key
+
+
+def synthetic_pdf(tmp: Path, n_pages: int) -> Path:
+    """x21's deterministic synthetic PDF geometry, so a frame built here can really be rendered."""
+    doc = pymupdf.open()
+    for p in range(n_pages):
+        page = doc.new_page(width=612, height=792)
+        for i in range(LINES_PER_REGION):
+            page.insert_text((LEFT_X, 120.0 + i * 20.0), f"SYNTHETIC HEADING P{p} LINE {i}", fontsize=11)
+    path = tmp / f"x27_synthetic_{n_pages}.pdf"
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def start_annotation(record: dict, occurrence_record: dict) -> dict:
+    """The (start_physical_line, start_x_px) that names this occurrence, from COMMITTED facts.
+
+    The inverse of A38.7's join, built from the key's own `region_line_bijection`,
+    `identity_candidates`, `bbox_pdf_points` and `dpi` -- and from the A34 transform's own
+    inverse rather than a second linear guess. Nothing here reads a PDF or an arm's text.
+    """
+    key = occurrence_record["occurrence_key"]
+    line_key, ngid = key[2], key[3]
+    bijection = [list(m) for m in record["region_line_bijection"]]
+    index = bijection.index(list(line_key))
+    candidates = record["identity_candidates"][f"{line_key[0]}:{line_key[1]}"]
+    x0 = next(float(c[1]) for c in candidates if int(c[0]) == ngid)
+    return {
+        "start_physical_line": index + 1,
+        "start_x_px": OG.pdf_x_to_pixel(x0, record["bbox_pdf_points"][0], record["dpi"]),
+    }
+
+
+def synthesize_adjudication(key: dict, *, truth: str = "H", role: str = "account", text_from=None) -> dict:
+    """An `oracle_adjudicated/1` artifact derived from the KEY's own committed facts.
+
+    A MECHANISM FIXTURE. The heading text comes from an arm's own emitted output (or from
+    `text_from`), so this can prove the join binds and the denominators are right; it can never
+    measure accuracy, and no number derived from it is an accuracy claim.
+    """
+    out = {"schema": BO.ADJUDICATED_SCHEMA, BO.ROUTE_AI: {}, BO.ROUTE_HUMAN: {}}
+    for bid, record in key["stimuli"].items():
+        headings = []
+        if record["control_kind"] is None:
+            for row in record["architecture_occurrences"][truth]:
+                if row["occurrence_key"] is None:
+                    continue  # A30 refused: the oracle side has no identity to name it by
+                headings.append(
+                    {
+                        "text": text_from(row) if text_from else row["anchor"]["text"],
+                        "role": role,
+                        "parent": row["immediate_parent"],
+                        **start_annotation(record, row),
+                    }
+                )
+        else:
+            # A control's committed expected truth. Its non-text fields are placeholders, which
+            # is safe precisely BECAUSE no metric may read a control answer -- and the
+            # invariance control below is what proves none does.
+            for expected in record["control_expected_truth"] or []:
+                headings.append(
+                    {
+                        "text": expected.get("text", ""),
+                        "role": "account",
+                        "parent": None,
+                        "start_physical_line": 1,
+                        "start_x_px": 0,
+                    }
+                )
+        for route in record["adjudication_routes"]:
+            out[route][bid] = {"id": bid, "headings": headings}
+    return out
+
+
+def join_fixture(tmp: Path, *, n_pages: int = 2, occurrences=None, page_kwargs=None) -> tuple:
+    """A REAL oracle key over a REAL frame, plus the adjudication that names its occurrences."""
+    kwargs = page_kwargs or {}
+    pages = [page_input(p + 1, start_gid=p * 100, **kwargs.get(p + 1, {})) for p in range(n_pages)]
+    occ = occurrences or {
+        arm: [occurrence(p + 1, 2, p * 100 + 4, text="SALARIES AND EXPENSES") for p in range(n_pages)]
+        for arm in ("H", "X")
+    }
+    f = frame(pages, occurrences=occ)
+    built = BO.build([{"frame": f, "pdf_path": synthetic_pdf(tmp, n_pages), "stratum": "SYNTHETIC"}])
+    return f, built, synthesize_adjudication(built.key)
+
+
+def part_join(tmp: Path) -> dict:
+    print("\n== M1-M5: the occurrence-level join, on a real oracle key ==")
+    f, built, adjudicated = join_fixture(tmp, n_pages=2)
+    scored = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))
+    frames_present = sorted(scored["headings_pooled"])
+    pooled = scored["headings_pooled"][BO.C_FRAME]
+    counts = pooled["counts"]
+    check(
+        "the join BINDS: every adjudicated heading matches an emitted occurrence in both arms",
+        (2, 2, 2, 0),
+        (
+            counts["n_adjudicated"],
+            counts["n_matched"]["H"],
+            counts["n_matched"]["X"],
+            counts["n_adjudicated_unresolvable"],
+        ),
+        "the two sides of the M1-M5 join do not meet, so every matched-heading denominator is zero",
+    )
+    check(
+        "M1 recall and precision are reported with their own denominators",
+        (1.0, 2, 1.0, 2),
+        (
+            pooled["M1"]["H"]["recall"]["value"],
+            pooled["M1"]["H"]["recall"]["denominator"],
+            pooled["M1"]["H"]["precision"]["value"],
+            pooled["M1"]["H"]["precision"]["denominator"],
+        ),
+        "a rate is reported without the denominator it is a fraction of",
+    )
+    check(
+        "only the frames the fixture actually populates are reported",
+        [BO.C_FRAME],
+        frames_present,
+        "an unpopulated frame is reported with invented counts, or C and D were pooled",
+    )
+
+    # --- I10: recall's denominator is the ADJUDICATED enumeration, never the emitted one.
+    fewer = copy.deepcopy(f)
+    fewer["architecture_occurrences"]["H"] = fewer["architecture_occurrences"]["H"][:1]
+    built2 = BO.build([{"frame": fewer, "pdf_path": synthetic_pdf(tmp, 2), "stratum": "SYNTHETIC"}])
+    # the adjudication still enumerates BOTH printed headings -- it is built from X, which kept them
+    adj2 = synthesize_adjudication(built2.key, truth="X")
+    scored2 = SM.score(inputs([fewer], key=built2.key, adjudicated=adj2))
+    p2 = scored2["headings_pooled"][BO.C_FRAME]
+    check(
+        "I10 -- an arm that emitted one of two printed headings scores recall 1/2, not 1/1",
+        (1, 2, 0.5, 1, 1, 1.0),
+        (
+            p2["M1"]["H"]["recall"]["numerator"],
+            p2["M1"]["H"]["recall"]["denominator"],
+            p2["M1"]["H"]["recall"]["value"],
+            p2["M1"]["H"]["precision"]["numerator"],
+            p2["M1"]["H"]["precision"]["denominator"],
+            p2["M1"]["H"]["precision"]["value"],
+        ),
+        "recall's denominator is the EMITTED enumeration, which makes an arm that dropped a "
+        "heading look perfect -- the denominator shrinks with the failure it should expose",
+    )
+    check(
+        "...and the WRONG denominator would have given a different number, so this is decisive",
+        True,
+        p2["M1"]["H"]["recall"]["value"] != p2["M1"]["H"]["precision"]["value"],
+        "the two denominators coincide on this fixture, so I10 was never actually tested",
+    )
+
+    # --- NEGATIVE: wrong numerator. An emitted occurrence matching NOTHING must not be counted.
+    extra = copy.deepcopy(f)
+    extra["architecture_occurrences"]["H"] = list(extra["architecture_occurrences"]["H"]) + [
+        occurrence(1, 4, 999, text="A HEADING NOBODY ADJUDICATED")
+    ]
+    built3 = BO.build([{"frame": extra, "pdf_path": synthetic_pdf(tmp, 2), "stratum": "SYNTHETIC"}])
+    scored3 = SM.score(inputs([extra], key=built3.key, adjudicated=synthesize_adjudication(built3.key, truth="X")))
+    p3 = scored3["headings_pooled"][BO.C_FRAME]
+    check(
+        "NEGATIVE -- an unmatchable EMITTED heading enlarges the precision denominator only",
+        (2, 3, 2, 2),
+        (
+            p3["M1"]["H"]["recall"]["numerator"],
+            p3["M1"]["H"]["precision"]["denominator"],
+            p3["M1"]["H"]["precision"]["numerator"],
+            p3["M1"]["H"]["recall"]["denominator"],
+        ),
+        "the numerator counts EMITTED rather than MATCHED headings, so emitting more raises the "
+        "score -- a precision metric that rewards over-emission",
+    )
+
+    # --- NEGATIVE: a silent record drop. An UNMATCHED occurrence must stay in the denominator.
+    unmatched = copy.deepcopy(f)
+    unmatched["architecture_occurrences"]["H"] = list(unmatched["architecture_occurrences"]["H"]) + [
+        occurrence(1, 5, 12, text="PRODUCTION EMITTED THIS", matchable=False)
+    ]
+    built4 = BO.build([{"frame": unmatched, "pdf_path": synthetic_pdf(tmp, 2), "stratum": "SYNTHETIC"}])
+    scored4 = SM.score(inputs([unmatched], key=built4.key, adjudicated=synthesize_adjudication(built4.key, truth="X")))
+    p4 = scored4["headings_pooled"][BO.C_FRAME]
+    check(
+        "NEGATIVE -- an A30-refused occurrence is KEPT in the precision denominator",
+        3,
+        p4["M1"]["H"]["precision"]["denominator"],
+        "an UNMATCHED occurrence is dropped, shrinking a denominator invisibly -- the one failure "
+        "mode A38.3 names explicitly",
+    )
+    return {
+        "pooled_c_counts": counts,
+        "i10": {"recall": p2["M1"]["H"]["recall"], "precision": p2["M1"]["H"]["precision"]},
+        "n_stimuli": built.key["n_stimuli"],
+    }
+
+
+def part_m3(tmp: Path) -> dict:
+    print("\n== section 5 rows: the M3 weld/space fixture and M3's insulation ==")
+
+    # --- row: FAMILYHOUSING vs FAMILY HOUSING must reach M3 as X_CORRECTS.
+    #
+    # The two arms carry DIFFERENT text on the SAME occurrence key, which is exactly what A30.1
+    # licenses: identity is the source position, never the text. x16 measured 30 such cases.
+    occ = {
+        "H": [occurrence(1, 2, 4, text="FAMILYHOUSING")],
+        "X": [occurrence(1, 2, 4, text="FAMILY HOUSING")],
+    }
+    f, built, _adj = join_fixture(tmp, n_pages=1, occurrences=occ)
+    adjudicated = synthesize_adjudication(built.key, truth="X")  # the oracle prints FAMILY HOUSING
+    scored = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))
+    m3 = scored["headings_pooled"][BO.C_FRAME]["M3"]
+    check(
+        "the weld/space fixture reaches M3 as X_CORRECTS",
+        (1, 0, 0),
+        (
+            m3["heading_outcomes"]["X_CORRECTS"],
+            m3["heading_outcomes"]["X_REGRESSES"],
+            m3["heading_outcomes"]["BOTH_CLEAN"],
+        ),
+        "`FAMILYHOUSING` against `FAMILY HOUSING` does not reach M3 as X_CORRECTS -- the primary "
+        "comparative metric cannot see the failure class the seam choice governs",
+        row="M3 weld/space fixture",
+    )
+    check(
+        "the reported outcome vocabulary IS `m3_boundaries.HeadingOutcome`, complete",
+        sorted(o.value for o in M3.HeadingOutcome),
+        sorted(m3["heading_outcomes"]),
+        "an outcome bucket is missing, so headings falling into it vanish from the tally the "
+        "decision rule counts -- X_REGRESSES above all",
+        row="M3 weld/space fixture",
+    )
+    check(
+        "...and the weld is charged to H at the BOUNDARY level, not as a character error",
+        (1, 0, 0, 0),
+        (
+            m3["boundary_outcomes"]["H"]["WELD"],
+            m3["boundary_outcomes"]["H"]["SPLIT"],
+            m3["boundary_outcomes"]["H"]["TEXT_ERROR"],
+            m3["boundary_outcomes"]["X"]["WELD"],
+        ),
+        "a spacing defect is scored as a character defect (or vice versa), which is the "
+        "conflation section 6.3 exists to prevent",
+        row="M3 weld/space fixture",
+    )
+    check(
+        "...and M2 sees the weld as inexact while X reads exactly",
+        (0.0, 1.0),
+        (
+            scored["headings_pooled"][BO.C_FRAME]["M2"]["H"]["value"],
+            scored["headings_pooled"][BO.C_FRAME]["M2"]["X"]["value"],
+        ),
+        "M2 cannot separate a welded heading from a correct one under the frozen normalisation",
+    )
+
+    # --- row: M3 insulation. A SEGMENTATION-only difference must fabricate no weld or split.
+    same_text = {arm: [occurrence(1, 2, 4, text="SALARIES AND EXPENSES")] for arm in ("H", "X")}
+    seg_f, seg_built, _ = join_fixture(tmp, n_pages=1, occurrences=same_text, page_kwargs={1: {"merge": {2}}})
+    seg_scored = SM.score(inputs([seg_f], key=seg_built.key, adjudicated=synthesize_adjudication(seg_built.key)))
+    seg_m3 = seg_scored["headings_pooled"][BO.C_FRAME]["M3"]
+    seg_m0 = seg_scored["per_document"]["SYNTHETIC/1"]["M0"]
+    check(
+        "the insulation fixture really IS segmentation-discordant, so the control is not vacuous",
+        (2, 0, True),
+        (
+            seg_m0["M0b_segmentation"],
+            seg_m0["M0a_text"],
+            seg_f["pages"][0]["regions"][0]["d_frame"],
+        ),
+        "the fixture carries no segmentation difference, so 'M3 ignored it' proves nothing",
+        row="M3 insulation",
+    )
+    check(
+        "M3 fabricates NO weld or split from a segmentation-only difference",
+        (0, 0, 0, 0, 1),
+        (
+            seg_m3["boundary_outcomes"]["H"]["WELD"],
+            seg_m3["boundary_outcomes"]["H"]["SPLIT"],
+            seg_m3["boundary_outcomes"]["X"]["WELD"],
+            seg_m3["boundary_outcomes"]["X"]["SPLIT"],
+            seg_m3["heading_outcomes"]["BOTH_CLEAN"],
+        ),
+        "a split-only difference fabricates a weld/split against a clean oracle, so the primary "
+        "comparative metric would report a boundary defect that was never printed",
+        row="M3 insulation",
+    )
+
+    # --- NEGATIVE: architecture segmentation substituted for oracle/text truth. Flipping which
+    # lines the arms GROUP together, with every text unchanged, must not move M3 at all.
+    plain_f, plain_built, _ = join_fixture(tmp, n_pages=1, occurrences=same_text)
+    plain_m3 = SM.score(inputs([plain_f], key=plain_built.key, adjudicated=synthesize_adjudication(plain_built.key)))[
+        "headings_pooled"
+    ][BO.C_FRAME]["M3"]
+    check(
+        "NEGATIVE -- M3 is INVARIANT to the segmentation labels, text held identical",
+        plain_m3,
+        seg_m3,
+        "M3 reads a segmentation label as truth, which section 5 forbids: it consumes projected "
+        "text plus the oracle and nothing else",
+        row="M3 insulation",
+    )
+    check(
+        "...and the fixtures really do differ in segmentation, so the invariance is not vacuous",
+        (0, 2),
+        (
+            SM.m0_block(plain_f)["M0b_segmentation"],
+            SM.m0_block(seg_f)["M0b_segmentation"],
+        ),
+        "the two fixtures have identical segmentation, so 'M3 did not move' was guaranteed",
+        row="M3 insulation",
+    )
+
+    # --- a severe corruption must count AGAINST an arm, never become an exclusion (A9).
+    garbage = {
+        "H": [occurrence(1, 2, 4, text="SALARIES AND EXPENSES")],
+        "X": [occurrence(1, 2, 4, text="###")],
+    }
+    g_f, g_built, _ = join_fixture(tmp, n_pages=1, occurrences=garbage)
+    g_m3 = SM.score(inputs([g_f], key=g_built.key, adjudicated=synthesize_adjudication(g_built.key, truth="H")))[
+        "headings_pooled"
+    ][BO.C_FRAME]["M3"]
+    check(
+        "severe corruption in one arm is X_REGRESSES, never UNSCORABLE",
+        (1, 0, 1, 1),
+        (
+            g_m3["heading_outcomes"]["X_REGRESSES"],
+            g_m3["heading_outcomes"]["UNSCORABLE"],
+            g_m3["clean_rate"]["H"]["numerator"],
+            g_m3["clean_rate"]["X"]["denominator"],
+        ),
+        "an arm's worst failures leave the denominator, which removes exactly the distinguishing "
+        "cases -- the defect A9 withdrew UNALIGNABLE for",
+    )
+    return {
+        "weld": m3["heading_outcomes"],
+        "insulated": seg_m3["boundary_outcomes"],
+        "garbage": g_m3["heading_outcomes"],
+    }
+
+
+def part_m4(tmp: Path) -> dict:
+    print("\n== section 5 rows: the two M4 negatives ==")
+
+    # One agency and three accounts beneath it, all keyed and all correct.
+    def census(parent_of):
+        rows = [occurrence(1, 1, 2, kind="agency", text="DEPARTMENTAL MANAGEMENT", parent=None)]
+        for i, ordinal in enumerate((2, 3, 4)):
+            rows.append(
+                occurrence(
+                    1,
+                    ordinal,
+                    ordinal * 2,
+                    kind="account",
+                    text=f"ACCOUNT {i}",
+                    parent=parent_of(i),
+                )
+            )
+        return rows
+
+    base_occ = {arm: census(lambda i: "DEPARTMENTAL MANAGEMENT") for arm in ("H", "X")}
+    f, built, _ = join_fixture(tmp, n_pages=1, occurrences=base_occ)
+    adjudicated = synthesize_adjudication(built.key, truth="H", role="account")
+    base = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))["headings_pooled"][BO.C_FRAME]
+    check(
+        "the M4 baseline is perfect, so any fall below is caused by the injection",
+        (1.0, 1.0, 4, 4),
+        (
+            base["M4"]["H"]["value"],
+            base["M1"]["H"]["recall"]["value"],
+            base["M4"]["H"]["denominator"],
+            base["M1"]["H"]["recall"]["denominator"],
+        ),
+        "the baseline is already imperfect, so a 'fall' cannot be attributed to the injection",
+    )
+
+    # --- row: DELETE AGENCY ANCHORS. M4 must fall FURTHER than M1.
+    #
+    # Deleting the agency occurrence is what production does to the breadcrumb: the children's
+    # penultimate element is gone, so their emitted immediate parent is None.
+    deleted = copy.deepcopy(f)
+    deleted["architecture_occurrences"]["H"] = [
+        {**r, "immediate_parent": None, "breadcrumb": [r["anchor"]["text"]]}
+        for r in deleted["architecture_occurrences"]["H"]
+        if r["anchor"]["kind"] != "agency"
+    ]
+    d_built = BO.build([{"frame": deleted, "pdf_path": synthetic_pdf(tmp, 1), "stratum": "SYNTHETIC"}])
+    # the ORACLE still sees all four printed headings, so it is built from the untouched arm
+    d_adj = synthesize_adjudication(d_built.key, truth="X", role="account")
+    after = SM.score(inputs([deleted], key=d_built.key, adjudicated=d_adj))["headings_pooled"][BO.C_FRAME]
+    m1_drop = base["M1"]["H"]["recall"]["value"] - after["M1"]["H"]["recall"]["value"]
+    m4_drop = base["M4"]["H"]["value"] - after["M4"]["H"]["value"]
+    check(
+        "deleting the agency anchors makes M4 fall FURTHER than M1",
+        (0.25, 1.0, True),
+        (m1_drop, m4_drop, m4_drop > m1_drop),
+        "M4 does not fall further than M1, so the hierarchy metric adds nothing over presence -- "
+        "it would be reporting the labels again rather than the tree",
+        row="negative: delete agency anchors",
+    )
+
+    # --- row: SHIFT HEADING BASELINES ONE LINE-HEIGHT. M4 must fall.
+    #
+    # At the scorer's layer a one-line-height shift shows up as each heading inheriting the
+    # NEIGHBOURING heading's parent: identity is unchanged (the shift is geometric, and A30
+    # identity is a source position), so M1 must hold still while M4 moves. The upstream
+    # geometric shift itself is `build_frames`' concern and `x17` owns it.
+    shifted = copy.deepcopy(f)
+    shifted["architecture_occurrences"]["H"] = [
+        {**r, "immediate_parent": "SOME OTHER AGENCY" if r["anchor"]["kind"] == "account" else r["immediate_parent"]}
+        for r in shifted["architecture_occurrences"]["H"]
+    ]
+    s_built = BO.build([{"frame": shifted, "pdf_path": synthetic_pdf(tmp, 1), "stratum": "SYNTHETIC"}])
+    s_adj = synthesize_adjudication(s_built.key, truth="X", role="account")
+    s_after = SM.score(inputs([shifted], key=s_built.key, adjudicated=s_adj))["headings_pooled"][BO.C_FRAME]
+    check(
+        "a one-line parent shift makes M4 fall while M1 holds still",
+        (0.25, 1.0, 4),
+        (
+            s_after["M4"]["H"]["value"],
+            s_after["M1"]["H"]["recall"]["value"],
+            s_after["M4"]["H"]["denominator"],
+        ),
+        "M4 does not fall, so a hierarchy that points at the wrong parent scores as correct",
+        row="negative: shift heading baselines one line-height",
+    )
+
+    # --- NEGATIVE: full ancestry substituted for the immediate parent.
+    #
+    # The emitted breadcrumb CONTAINS the adjudicated parent for a grandchild whose immediate
+    # parent is wrong. A scorer matching against ancestry would call that correct.
+    ancestry = copy.deepcopy(f)
+    ancestry["architecture_occurrences"]["H"] = [
+        {
+            **r,
+            "immediate_parent": "AN INTERMEDIATE GROUPING"
+            if r["anchor"]["kind"] == "account"
+            else r["immediate_parent"],
+            "breadcrumb": ["DEPARTMENTAL MANAGEMENT", "AN INTERMEDIATE GROUPING", r["anchor"]["text"]],
+        }
+        for r in ancestry["architecture_occurrences"]["H"]
+    ]
+    a_built = BO.build([{"frame": ancestry, "pdf_path": synthetic_pdf(tmp, 1), "stratum": "SYNTHETIC"}])
+    a_adj = synthesize_adjudication(a_built.key, truth="X", role="account")
+    a_after = SM.score(inputs([ancestry], key=a_built.key, adjudicated=a_adj))["headings_pooled"][BO.C_FRAME]
+    check(
+        "NEGATIVE -- an ancestor that is not the IMMEDIATE parent scores as wrong",
+        0.25,
+        a_after["M4"]["H"]["value"],
+        "M4 scored full ancestry, so a heading filed one level off its true parent counts as "
+        "correct as long as the right agency appears somewhere above it",
+    )
+    check(
+        "...and the adjudicated parent really IS in the emitted breadcrumb, so the trap is live",
+        True,
+        "DEPARTMENTAL MANAGEMENT" in ancestry["architecture_occurrences"]["H"][1]["breadcrumb"],
+        "the fixture does not contain the ancestry trap, so the control could not have caught it",
+    )
+    return {
+        "baseline_m4": base["M4"]["H"],
+        "after_delete": after["M4"]["H"],
+        "m1_drop": m1_drop,
+        "m4_drop": m4_drop,
+        "shifted_m4": s_after["M4"]["H"],
+        "ancestry_m4": a_after["M4"]["H"],
+    }
+
+
+def part_m5(tmp: Path) -> dict:
+    print("\n== M5: the frozen role map, and UNSCORABLE out of the denominator ==")
+    occ = {
+        arm: [
+            occurrence(1, 2, 4, kind="account", text="ACCOUNT A"),
+            occurrence(1, 3, 6, kind="subsection", text="SUBSECTION B"),
+        ]
+        for arm in ("H", "X")
+    }
+    f, built, _ = join_fixture(tmp, n_pages=1, occurrences=occ)
+    adjudicated = synthesize_adjudication(built.key, truth="H", role="account")
+    pooled = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))["headings_pooled"][BO.C_FRAME]
+    check(
+        "an UNSCORABLE pair leaves the M5 DENOMINATOR and is reported as a raw exclusion",
+        (1, 1, 1.0, 1),
+        (
+            pooled["M5"]["H"]["agreement"]["numerator"],
+            pooled["M5"]["H"]["agreement"]["denominator"],
+            pooled["M5"]["H"]["agreement"]["value"],
+            pooled["M5"]["H"]["excluded_unscorable"],
+        ),
+        "an UNSCORABLE pair is counted as a disagreement, penalising an architecture for a role "
+        "M5 was never licensed to score",
+    )
+
+    # --- NEGATIVE: change UNSCORABLE to scored. The exclusion must be driven by the frozen map.
+    promoted = copy.deepcopy(f)
+    promoted["architecture_occurrences"]["H"] = [
+        {**r, "anchor": {**r["anchor"], "kind": "account"}} for r in promoted["architecture_occurrences"]["H"]
+    ]
+    p_built = BO.build([{"frame": promoted, "pdf_path": synthetic_pdf(tmp, 1), "stratum": "SYNTHETIC"}])
+    p_adj = synthesize_adjudication(p_built.key, truth="H", role="account")
+    p_pooled = SM.score(inputs([promoted], key=p_built.key, adjudicated=p_adj))["headings_pooled"][BO.C_FRAME]
+    check(
+        "NEGATIVE -- making the UNSCORABLE kind scorable MOVES the denominator",
+        (2, 0),
+        (p_pooled["M5"]["H"]["agreement"]["denominator"], p_pooled["M5"]["H"]["excluded_unscorable"]),
+        "the denominator does not respond to the frozen A36.7 map, so the exclusion is decoration",
+    )
+
+    # --- a role outside the frozen map must REFUSE, never become a silent UNSCORABLE.
+    bad_role = synthesize_adjudication(built.key, truth="H", role="a role nobody froze")
+    check(
+        "NEGATIVE -- an unmapped oracle role REFUSES (A36.7)",
+        "UnknownRole",
+        refusal(lambda: SM.score(inputs([f], key=built.key, adjudicated=bad_role))),
+        "an unknown role maps to UNSCORABLE and quietly SHRINKS the M5 denominator, which reads "
+        "as a cleaner result rather than as a defect",
+    )
+    check(
+        "the R1 role gate is REPRESENTED, and NOT SUPPLIED is not a pass",
+        ("NOT_SUPPLIED", False, "FAIL", True),
+        (
+            pooled["M5"]["r1_role_gate"]["status"],
+            pooled["M5"]["r1_role_gate"]["m5_void"],
+            _r1_status(f, built, adjudicated, 0.79)["status"],
+            _r1_status(f, built, adjudicated, 0.79)["m5_void"],
+        ),
+        "M5 is reported as though its section 6 gate had been checked when no R1 role agreement "
+        "exists -- green because nothing measured it",
+    )
+    return {"m5": pooled["M5"]["H"], "promoted_denominator": p_pooled["M5"]["H"]["agreement"]["denominator"]}
+
+
+def _r1_status(f, built, adjudicated, value):
+    scored = SM.score(inputs([f], key=built.key, adjudicated=adjudicated, r1_role_agreement=value))
+    return scored["headings_pooled"][BO.C_FRAME]["M5"]["r1_role_gate"]
+
+
+def part_m7() -> dict:
+    print("\n== section 5 row: inject an `R E P O R T` page, and M7's own failure mode ==")
+    injected = frame(
+        [page_input(1)],
+        occurrences={
+            "H": [occurrence(1, 2, 4, text="R E P O R T")],
+            "X": [occurrence(1, 2, 4, text="REPORT")],
+        },
+    )
+    block = SM.m7_block(injected)
+    check(
+        "the injected letter-spaced page is DETECTED for the arm that split it",
+        (1, 1, 0),
+        (block["H"]["n_display_split"], len(block["H"]["instances"]), block["X"]["n_display_split"]),
+        "M7 does not detect an injected `R E P O R T`, so phase 2's flip condition cannot be "
+        "evaluated on fresh data at all",
+        row="negative: inject an R E P O R T page",
+    )
+    check(
+        "...and the matching text is PRINTED, not merely counted",
+        "R E P O R T",
+        block["H"]["instances"][0]["text"],
+        "only a count is reported, so a reader cannot tell a real signature from a coincidence",
+        row="negative: inject an R E P O R T page",
+    )
+
+    # --- NEGATIVE: M7 must be able to FAIL independently. The threshold is the frozen >= 3.
+    boundary = frame(
+        [page_input(1)],
+        occurrences={
+            "H": [
+                occurrence(1, 2, 4, text="A B OF THE THING"),  # exactly 2 single-char tokens
+                occurrence(1, 3, 6, text="A B C OF THE THING"),  # exactly 3
+            ],
+            "X": [],
+        },
+    )
+    b = SM.m7_block(boundary)
+    signatures = [SM.m7_signature(t) for t in ("A B OF THE THING", "A B C OF THE THING")]
+    check(
+        "NEGATIVE -- 2 single-character tokens do NOT match and 3 DO: the threshold is live",
+        (1, [False, True], [2, 3]),
+        (
+            b["H"]["n_display_split"],
+            [s["matches"] for s in signatures],
+            [s["n_single_char_tokens"] for s in signatures],
+        ),
+        "the frozen `>= 3 single-character tokens` condition is not what is implemented, so M7 "
+        "either fires on ordinary prose or cannot fire at all",
+        row="negative: inject an R E P O R T page",
+    )
+    check(
+        "...and an ordinary heading matches nothing, so M7 is not simply always true",
+        (0, 0),
+        (
+            SM.m7_signature("SALARIES AND EXPENSES")["n_single_char_tokens"],
+            SM.m7_block(frame([page_input(1)], occurrences={"H": [occurrence(1, 2, 4)], "X": []}))["H"][
+                "n_display_split"
+            ],
+        ),
+        "M7 fires on an ordinary account heading, so its rate carries no information",
+        row="negative: inject an R E P O R T page",
+    )
+    check(
+        "M7's denominator is the arm's COMPLETE emitted census (100 % of the holdout)",
+        (2, 1),
+        (b["H"]["rate"]["denominator"], block["H"]["rate"]["denominator"]),
+        "M7 is computed over an adjudicated subset, which section 6 does not license -- it is a "
+        "self-signature over each architecture's own output",
+    )
+    check(
+        "an arm that emitted nothing reports VACUOUS, not a zero rate",
+        (SM.VACUOUS, None),
+        (b["X"]["rate"]["status"], b["X"]["rate"]["value"]),
+        "a zero-denominator M7 is printed as 0.0, which reads as 'no display splits observed'",
+        row="vacuity",
+    )
+    return {"injected": block["H"], "boundary": {"n_display_split": b["H"]["n_display_split"]}}
+
+
+def part_rule0() -> dict:
+    print("\n== M9 / Rule 0 raw facts: no tolerance, and the floor cannot move ==")
+    f = frame([page_input(1)], m9_h=m9_facts(margin=197), m9_x=m9_facts(margin=198))
+    facts = SM.rule0_facts(f)
+    check(
+        "a ONE-line margin deficit fires, and names the loser -- no tolerance",
+        ("H", True, 1),
+        (facts["margin_line_loss"]["loser"], facts["margin_line_loss"]["fires"], facts["margin_line_loss"]["deficit"]),
+        "a tolerance was introduced, so 'loses margin-numbered lines' became 'loses more than N' "
+        "-- choosing the sensitivity of a decision rule the frozen text does not parameterise",
+    )
+    equal = SM.rule0_facts(frame([page_input(1)], m9_h=m9_facts(margin=198), m9_x=m9_facts(margin=198)))
+    check(
+        "...and an EQUAL count does not fire, so the clause is not simply always true",
+        (None, False, 0),
+        (
+            equal["margin_line_loss"]["loser"],
+            equal["margin_line_loss"]["fires"],
+            equal["margin_line_loss"]["deficit"],
+        ),
+        "the margin clause fires on identical counts, which would reject an arm for nothing",
+    )
+    check(
+        "no Rule 0 OUTCOME is emitted here -- only the facts the rule reads",
+        (None, True),
+        (facts["rule0_outcome"], "decide_architecture" in facts["rule0_owner"]),
+        "the scorer decided Rule 0, taking a decision section 7 owns and A27.4 gave its own outcome enum",
+    )
+
+    band = SM.rule0_facts(frame([page_input(1)], m9_h=m9_facts(band=False), m9_x=m9_facts(band=True)))
+    both = SM.rule0_facts(frame([page_input(1)], m9_h=m9_facts(band=False), m9_x=m9_facts(band=False)))
+    check(
+        "the band clause fires for exactly ONE losing arm, and NOT when both lose",
+        ("H", True, None, False),
+        (
+            band["band_loss"]["loser"],
+            band["band_loss"]["fires"],
+            both["band_loss"]["loser"],
+            both["band_loss"]["fires"],
+        ),
+        "a shared failure is read as an asymmetric loss, which would reject an arm on evidence "
+        "that distinguishes nothing (section 7.2 rule 0's both-lose branch)",
+    )
+
+    low = SM.rule0_facts(frame([page_input(1)], m9_h=m9_facts(coverage=0.84), m9_x=m9_facts(coverage=0.85)))
+    check(
+        "the coverage clause bites exactly at the frozen 0.85 floor",
+        ("H", True, 0.85),
+        (low["coverage_loss"]["loser"], low["coverage_loss"]["fires"], low["coverage_floor"]),
+        "the 0.85 floor moved, so an arm keeps or loses a document's whole heading tree by a "
+        "threshold this study invented",
+    )
+
+    # --- NEGATIVE: the coverage threshold changed. A frame committing another floor REFUSES.
+    moved = copy.deepcopy(f)
+    moved["m9"]["H"]["coverage_floor"] = 0.80
+    check(
+        "NEGATIVE -- a committed coverage floor other than production's 0.85 REFUSES",
+        SM.COVERAGE_FLOOR_DRIFT,
+        refusal(lambda: SM.score(inputs([moved]))),
+        "a moved threshold is scored silently, which is a DEVIATION presented as a result",
+    )
+    inconsistent = copy.deepcopy(f)
+    inconsistent["m9"]["X"]["coverage"] = 0.5
+    check(
+        "NEGATIVE -- a committed verdict that contradicts its own floor REFUSES",
+        SM.COVERAGE_FLOOR_DRIFT,
+        refusal(lambda: SM.score(inputs([inconsistent]))),
+        "the scorer trusts `coverage_meets_floor` over the coverage and the floor beside it",
+    )
+    return {"margin": facts["margin_line_loss"], "band": band["band_loss"], "coverage": low["coverage_loss"]}
+
+
+def part_section8() -> dict:
+    print("\n== section 8: the document unit, the exact bound, the bootstrap, the pairing ==")
+
+    # --- row: INDEPENDENCE. The bound must be computed on DOCUMENTS, never on headings.
+    doc_bound = SM.clopper_pearson_upper(0, 14)
+    heading_bound = SM.clopper_pearson_upper(0, 600)
+    check(
+        "section 8.1's own fixture reproduces: 14 documents 0.1926 vs 600 headings 0.00498",
+        (0.1926, 0.00498, 39),
+        (round(doc_bound, 4), round(heading_bound, 5), round(doc_bound / heading_bound)),
+        "the two bounds agree, so nothing here could detect headings being treated as iid "
+        "trials -- the 39x overstatement section 8.1 measured",
+        row="section 8 independence",
+    )
+
+    docs = [frame([page_input(1)], document=f"DOC/{i}", sha=DOC_SHA) for i in range(14)]
+    block = SM.section8(docs, {})
+    check(
+        "N is the number of DOCUMENTS scored, and the bound is the document-unit one",
+        (14, 0, "document", round(doc_bound, 10)),
+        (
+            block["n_documents"],
+            block["events"],
+            block["independent_unit"],
+            round(block["clopper_pearson_upper_bound"], 10),
+        ),
+        "N counts headings, regions or stimuli, so the bound asserts an independence the design explicitly denies",
+        row="section 8 independence",
+    )
+    check(
+        "NEGATIVE -- a heading-level table (one document, many rows) REFUSES",
+        MC.DUPLICATE_DOCUMENT_IDENTITY,
+        refusal(lambda: MC.section8_document_bootstrap([("DOC/0", True), ("DOC/0", False)])),
+        "a heading-as-rows table is accepted and silently double-weights a document, which is "
+        "exactly how a per-heading denominator gets in",
+        row="section 8 independence",
+    )
+
+    # --- row: ZERO-EVENT. No bootstrap, and the closed form must be `1 - 0.05 ** (1/N)`.
+    check(
+        "at zero events NO bootstrap is reported, and the reason is explicit",
+        (False, MC.ZERO_EVENTS_BOOTSTRAP_REFUSED, False),
+        (block["bootstrap"]["reported"], block["bootstrap"]["reason"], block["bootstrap"]["gating"]),
+        "a bootstrap is reported at zero events, where 8.1 measured the percentile interval is "
+        "[0.0, 0.0] and carries no information about a new document",
+        row="section 8 zero-event",
+    )
+    check(
+        "...and the zero-event bound IS the frozen closed form, to the last bit",
+        (1 - 0.05 ** (1 / 14), True),
+        (block["clopper_pearson_upper_bound"], block["zero_event_closed_form_used"]),
+        "the closed form is not `1 - 0.05 ** (1/N)`, so the one number section 8 froze verbatim "
+        "was recomputed by something else",
+        row="section 8 zero-event",
+    )
+    check(
+        "...and the general bisection AGREES with the closed form at k = 0, so it is not a special case",
+        [True, True, True],
+        [abs(SM.clopper_pearson_upper(0, n) - MC.zero_event_upper_bound(n)) < 1e-12 for n in (1, 14, 600)],
+        "the general Clopper-Pearson path disagrees with the frozen closed form, so one of the "
+        "two is wrong and only the zero-event case would ever reveal it",
+        row="section 8 zero-event",
+    )
+    # The wording gate has to test for the ASSERTIVE forms, and separately for the presence of
+    # the disclaimer: a naive substring search for "the true rate is zero" hits the disclaimer
+    # itself, which would fail the honest sentence and pass a silent one.
+    claims = {
+        phrase: phrase in block["statement"]
+        for phrase in ("the architectures agree", "are identical", "produced identical", "the rate is zero.")
+    }
+    check(
+        "...and the reported wording is an OBSERVATION plus a bound, with an explicit disclaimer",
+        (True, True, {p: False for p in claims}),
+        (
+            "no heading-level discordance observed" in block["statement"],
+            "not a claim that the true rate is zero" in block["statement"],
+            claims,
+        ),
+        "the zero-event sentence asserts equivalence, or carries no disclaimer, so a loose bound "
+        "reads as 'the architectures agree' -- the phrasing section 7.2 forbids",
+        row="section 8 zero-event",
+    )
+
+    # --- the non-zero branch: a bootstrap IS reported, deterministically, and never gates.
+    with_event = [
+        frame(
+            [
+                page_input(
+                    1,
+                    h_anchors={0: {anchor(1, 3)}},
+                    x_anchors={0: {anchor(1, 3, text="SALARIESAND EXPENSES")}},
+                )
+            ],
+            document="DOC/0",
+        )
+    ] + [frame([page_input(1)], document=f"DOC/{i}") for i in range(1, 14)]
+    nonzero = SM.section8(with_event, {})
+    again = SM.section8(with_event, {})
+    check(
+        "one discordant document gives 1/14, a REPORTED non-gating bootstrap, and a wider bound",
+        (1, 14, True, False, True),
+        (
+            nonzero["events"],
+            nonzero["n_documents"],
+            nonzero["bootstrap"]["reported"],
+            nonzero["bootstrap"]["gating"],
+            nonzero["clopper_pearson_upper_bound"] > block["clopper_pearson_upper_bound"],
+        ),
+        "an event does not move the bound or the bootstrap, so section 8 is not reading the "
+        "per-document evidence at all",
+    )
+    check(
+        "...and the bootstrap interval is deterministic across runs",
+        nonzero["bootstrap"]["interval"],
+        again["bootstrap"]["interval"],
+        "the interval moves between runs, so no reported figure is reproducible",
+    )
+
+    # --- P-HEAD ONLY. A P-robust document may not enter the statistic.
+    robust = frame(
+        [
+            page_input(
+                1,
+                h_anchors={0: {anchor(1, 3)}},
+                x_anchors={0: {anchor(1, 3, text="OTHER")}},
+            )
+        ],
+        document="ROBUST/1",
+        population="P-robust",
+    )
+    mixed = SM.section8(docs + [robust], {})
+    check(
+        "a P-robust document is EXCLUDED from the section 8 statistic and named",
+        (14, 0, ["ROBUST/1"]),
+        (mixed["n_documents"], mixed["events"], mixed["excluded_documents_not_p_head"]),
+        "a P-robust document enters a heading-level statistic section 4.4.1 claims nothing "
+        "about, inflating N and reusing a draw sequence that is not its own",
+    )
+    check(
+        "...and that document really DID carry an event, so the exclusion is not vacuous",
+        True,
+        SM.document_discordance_event(robust)["event"],
+        "the excluded document had no event anyway, so 'the numbers did not move' proves nothing",
+    )
+
+    # --- the event definition is heading-level, not line-level.
+    text_only = frame([page_input(1, text_differs={0})], document="TEXTONLY/1")
+    check(
+        "the event is HEADING-level: a body-line text difference is not a section 8 event",
+        (False, 0, 1),
+        (
+            SM.document_discordance_event(text_only)["event"],
+            SM.document_discordance_event(text_only)["n_anchor_discordant_regions"],
+            SM.m0_block(text_only)["M0a_text"],
+        ),
+        "a line-level difference on ordinary body text counts as heading-level discordance, so "
+        "section 8 would answer a different question under its own name",
+    )
+    return {
+        "zero_event": {"n": block["n_documents"], "bound": block["clopper_pearson_upper_bound"]},
+        "nonzero": {"events": nonzero["events"], "bound": nonzero["clopper_pearson_upper_bound"]},
+        "bootstrap_interval": nonzero["bootstrap"]["interval"],
+        "excluded_p_robust": mixed["excluded_documents_not_p_head"],
+    }
+
+
+def part_pairing(tmp: Path) -> dict:
+    """Section 5 row: the paired mean is UNWEIGHTED over documents."""
+    print("\n== section 5 row: section 8 pairing is unweighted over documents ==")
+    # Document A: 1 heading, X correct and H welded  -> per-document difference +1.0
+    # Document B: 3 headings, all clean in both arms -> per-document difference  0.0
+    # DISTINCT source SHAs: A28.3's base stimulus identity is (sha, page, region), so two
+    # documents sharing a sha would collide in the realized stimulus set and `build_oracle` would
+    # refuse -- correctly, and for a reason that has nothing to do with pairing.
+    a_occ = {
+        "H": [occurrence(1, 2, 4, text="FAMILYHOUSING")],
+        "X": [occurrence(1, 2, 4, text="FAMILY HOUSING")],
+    }
+    b_occ = {
+        arm: [
+            occurrence(1, ordinal, ordinal * 2, text=f"ACCOUNT {i}", sha=DOC_SHA_B)
+            for i, ordinal in enumerate((2, 3, 4))
+        ]
+        for arm in ("H", "X")
+    }
+    a_frame = frame([page_input(1, start_gid=0)], document="DOC/A", occurrences=a_occ)
+    b_frame = frame([page_input(1, start_gid=0)], document="DOC/B", sha=DOC_SHA_B, occurrences=b_occ)
+    pdf = synthetic_pdf(tmp, 1)
+    built = BO.build(
+        [
+            {"frame": a_frame, "pdf_path": pdf, "stratum": "SYNTHETIC"},
+            {"frame": b_frame, "pdf_path": pdf, "stratum": "SYNTHETIC"},
+        ]
+    )
+    adjudicated = synthesize_adjudication(built.key, truth="X")
+    scored = SM.score(inputs([a_frame, b_frame], key=built.key, adjudicated=adjudicated))
+    rows = scored["section8"]["paired"]["by_frame"][BO.C_FRAME]["M2"]
+    by_doc = {r["document"]: r for r in rows["per_document"]}
+    weighted = sum(by_doc[d]["difference"] * n for d, n in (("DOC/A", 1), ("DOC/B", 3))) / 4
+    check(
+        "the per-document differences are +1.0 and 0.0, and the mean is the UNWEIGHTED 0.5",
+        (1.0, 0.0, 0.5, 2),
+        (
+            by_doc["DOC/A"]["difference"],
+            by_doc["DOC/B"]["difference"],
+            rows["unweighted_mean_difference"],
+            rows["n_documents_contributing"],
+        ),
+        "the paired mean is weighted by heading count instead of unweighted over documents, so a "
+        "long bill outvotes a short one and 40 discordances on one bill become forty findings",
+        row="section 8 pairing",
+    )
+    check(
+        "...and the heading-WEIGHTED mean differs, so the fixture can tell them apart",
+        (0.25, True),
+        (weighted, weighted != rows["unweighted_mean_difference"]),
+        "both means agree on this fixture, so 'unweighted' was never actually tested",
+        row="section 8 pairing",
+    )
+    check(
+        "per-document detail is MANDATORY and is never collapsed to the mean",
+        (2, "UNWEIGHTED mean over documents (section 8.3); never weighted by heading count"),
+        (len(rows["per_document"]), scored["section8"]["paired"]["weighting"]),
+        "only the mean is reported, so 40 discordances on one bill cannot be distinguished from "
+        "40 documents each showing one",
+        row="section 8 pairing",
+    )
+    return {
+        "per_document": rows["per_document"],
+        "unweighted": rows["unweighted_mean_difference"],
+        "weighted": weighted,
+    }
+
+
+def part_adequacy() -> dict:
+    print("\n== section 4.5 adequacy facts (A28.1 / A28.2 / A30.4) ==")
+    kinds = ("account", "agency", "grouping", "section", "title")
+    occ = {
+        arm: [occurrence(1, i, i * 2 + 2, kind=kind, text=f"H{i}") for i, kind in enumerate(kinds)]
+        for arm in ("H", "X")
+    }
+    head = frame([page_input(1)], document="HEAD/1", occurrences=occ)
+    facts = SM.adequacy_facts([head], {"HEAD/1": 1})
+    check(
+        "only account / agency / grouping occurrences count, and both arms count ONCE",
+        (3, sorted(MC.ADEQUACY_KINDS)),
+        (facts["n_occurrences"], facts["kinds_counted"]),
+        "the adequacy denominator is widened to title/division/section, which would make the "
+        "holdout look more adequate than the frozen quantity it is compared against",
+    )
+    robust = frame([page_input(1)], document="ROBUST/1", population="P-robust", occurrences=occ)
+    with_robust = SM.adequacy_facts([head, robust], {"HEAD/1": 1, "ROBUST/1": 4})
+    check(
+        "a P-robust document adds NOTHING to the occurrence count (A28.1 via A30.4)",
+        3,
+        with_robust["n_occurrences"],
+        "a P-robust document inflates the adequacy count, and a larger count reads as MORE "
+        "adequate -- the caller-obligation hole A30.4 closed",
+    )
+    check(
+        "the A28.2 state machine's verdict is reported as a fact, with its owner named",
+        ("INADEQUATE", True),
+        (facts["verdict"], "decide_architecture" in facts["owner"]),
+        "the scorer applies Rule 3's consequence, taking a decision A27.6 assigns elsewhere",
+    )
+    # 8 strata x 100 distinct occurrences = the frozen 800. Each document needs its OWN sha, or
+    # the keys collide across documents and the union counts 100 rather than 800 -- which is
+    # itself the A28.1 union semantics working correctly.
+    generous = SM.adequacy_facts(
+        [
+            frame(
+                [page_input(1)],
+                document=f"D/{i}",
+                sha=hashlib.sha256(f"x27-adequacy-{i}".encode()).hexdigest(),
+                occurrences={
+                    arm: [
+                        occurrence(
+                            1,
+                            j % 8,
+                            j * 2 + 2,
+                            kind="account",
+                            text=f"A{j}",
+                            sha=hashlib.sha256(f"x27-adequacy-{i}".encode()).hexdigest(),
+                        )
+                        for j in range(100)
+                    ]
+                    for arm in ("H", "X")
+                },
+            )
+            for i in range(8)
+        ],
+        {f"D/{i}": i for i in range(8)},
+    )
+    check(
+        "...and the machine really can return the other states, so INADEQUATE is not hardcoded",
+        ("GENERALISABLE", 8),
+        (generous["verdict"], generous["strata_filled"]),
+        "every population is INADEQUATE, so the verdict carries no information",
+    )
+    return {"head_only": facts, "with_robust": with_robust["n_occurrences"], "generous": generous["verdict"]}
+
+
+def part_qualification() -> dict:
+    print("\n== I13: the PDFIUM-CONDITIONED FRAME label, and the one-third rule ==")
+    docs = [f"DOC/{i}" for i in range(6)]
+    one = SM.qualification(cross_engine_artifact(docs, failed={"DOC/0"}))
+    two = SM.qualification(cross_engine_artifact(docs, failed={"DOC/0", "DOC/1"}))
+    three = SM.qualification(cross_engine_artifact(docs, failed={"DOC/0", "DOC/1", "DOC/2"}))
+    check(
+        "a failing document is labelled, and the label never blocks",
+        (SM.PDFIUM_CONDITIONED_FRAME, None, False),
+        (one["per_document"]["DOC/0"], one["per_document"]["DOC/1"], one["decision_blocking"]),
+        "a cross-engine failure blocks the decision, which A27.6 forbids -- x09 qualifies reporting and nothing else",
+    )
+    check(
+        "EXACTLY one third does not qualify both headlines; MORE than one third does",
+        (False, True, True),
+        (two["both_headlines_qualified"], three["both_headlines_qualified"], one["n_failed"] == 1),
+        "the one-third rule is implemented as >= rather than >, so a compliant run acquires a "
+        "qualification it did not earn (or the reverse)",
+    )
+    check(
+        "NEGATIVE -- a scored document missing from the cross-engine artifact REFUSES",
+        SM.CROSS_ENGINE_DOCUMENT_MISSING,
+        refusal(
+            lambda: SM.score(inputs([frame([page_input(1)])], cross_engine=cross_engine_artifact(["SOMETHING/ELSE"])))
+        ),
+        "a document is scored with no cross-engine verdict, so it could never acquire the "
+        "qualification the rule attaches to it -- the silent-escape case max(1, ...) exists for",
+    )
+    return {
+        "one": one,
+        "two_of_six": two["both_headlines_qualified"],
+        "three_of_six": three["both_headlines_qualified"],
+    }
+
+
+def part_refusals(tmp: Path) -> dict:
+    print("\n== malformed and INCOMPLETE input refuses; nothing is skipped ==")
+    good = frame([page_input(1)])
+    cases = {}
+
+    no_m9 = copy.deepcopy(good)
+    del no_m9["m9"]
+    cases[SM.MISSING_REQUIRED_FIELD] = refusal(lambda: SM.score(inputs([no_m9])))
+
+    duplicate_doc = [copy.deepcopy(good), copy.deepcopy(good)]
+    cases[SM.DUPLICATE_DOCUMENT_IDENTITY] = refusal(lambda: SM.score(inputs(duplicate_doc)))
+
+    bad_population = copy.deepcopy(good)
+    bad_population["population"] = "P-something"
+    cases[SM.UNKNOWN_POPULATION] = refusal(lambda: SM.score(inputs([bad_population])))
+
+    half_status = copy.deepcopy(good)
+    half_status["architecture_occurrences"]["H"] = [
+        {**occurrence(1, 2, 4), "match_status": "MATCHABLE", "occurrence_key": None}
+    ]
+    cases[SM.OCCURRENCE_RECORD_INCOMPLETE] = refusal(lambda: SM.score(inputs([half_status])))
+
+    duplicate_key = copy.deepcopy(good)
+    duplicate_key["architecture_occurrences"]["H"] = [occurrence(1, 2, 4), occurrence(1, 2, 4)]
+    cases[SM.DUPLICATE_OCCURRENCE_KEY] = refusal(lambda: SM.score(inputs([duplicate_key])))
+
+    not_a_sequence = SM.ScoreInputs(
+        frames=good, oracle_key=EMPTY_KEY, oracle_adjudicated=EMPTY_ADJUDICATED, cross_engine={}, s1={}
+    )
+    cases[SM.FRAMES_NOT_A_SEQUENCE] = refusal(lambda: SM.score(not_a_sequence))
+
+    _f, built, adjudicated = join_fixture(tmp, n_pages=1)
+    orphan_key = copy.deepcopy(built.key)
+    for record in orphan_key["stimuli"].values():
+        record["document"] = "A DOCUMENT WITH NO FRAME"
+    cases[SM.STIMULUS_DOCUMENT_NOT_IN_FRAMES] = refusal(
+        lambda: SM.score(inputs([good], key=orphan_key, adjudicated=adjudicated))
+    )
+
+    missing_answer = {k: (dict(v) if isinstance(v, dict) else v) for k, v in adjudicated.items()}
+    missing_answer[BO.ROUTE_AI] = {}
+    cases[BO.ADJUDICATION_ROUTE_MISSING] = refusal(
+        lambda: SM.score(inputs([_f], key=built.key, adjudicated=missing_answer))
+    )
+
+    control_in_frame = copy.deepcopy(built.key)
+    for record in control_in_frame["stimuli"].values():
+        record["control_kind"] = "N-A"
+    cases[SM.CONTROL_STIMULUS_IN_ESTIMAND] = refusal(
+        lambda: SM.score(inputs([_f], key=control_in_frame, adjudicated=adjudicated))
+    )
+
+    check(
+        "every malformed or incomplete input REFUSES with its own reason",
+        {reason: reason for reason in cases},
+        cases,
+        "a malformed record is skipped, scored, or refused under the wrong reason -- and a "
+        "skipped record moves a denominator with nothing to show for it",
+    )
+    check(
+        "...and the equivalent WELL-FORMED input still scores, so nothing above refuses blindly",
+        None,
+        refusal(lambda: SM.score(inputs([good]))),
+        "valid input is refused too, so the refusals prove nothing about malformedness",
+    )
+    return {"refusals": cases}
+
+
+def part_attacks(tmp: Path) -> dict:
+    print("\n== additional false-green attacks ==")
+    f, built, adjudicated = join_fixture(tmp, n_pages=2)
+    base = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))
+    base_json = json.dumps(base, sort_keys=True, default=str)
+    out = {}
+
+    # --- 1. change record IDENTITY, preserve the aggregate count.
+    reidentified = copy.deepcopy(f)
+    reidentified["architecture_occurrences"]["H"] = [
+        {**r, "occurrence_key": [r["occurrence_key"][0], r["occurrence_key"][1], r["occurrence_key"][2], 999]}
+        for r in reidentified["architecture_occurrences"]["H"]
+    ]
+    r_built = BO.build([{"frame": reidentified, "pdf_path": synthetic_pdf(tmp, 2), "stratum": "SYNTHETIC"}])
+    r_scored = SM.score(
+        inputs([reidentified], key=r_built.key, adjudicated=synthesize_adjudication(r_built.key, truth="X"))
+    )
+    out["reidentified_matched"] = r_scored["headings_pooled"][BO.C_FRAME]["counts"]["n_matched"]["H"]
+    check(
+        "ATTACK -- changing an occurrence's identity while keeping the COUNT identical is caught",
+        (2, 0),
+        (base["headings_pooled"][BO.C_FRAME]["counts"]["n_matched"]["H"], out["reidentified_matched"]),
+        "the join counts records rather than identities, so a heading matched to the wrong "
+        "occurrence scores as a match",
+    )
+
+    # --- 2. swap two DOCUMENT identities.
+    a = frame(
+        [page_input(1, h_anchors={0: {anchor(1, 3)}}, x_anchors={0: {anchor(1, 3, text="OTHER")}})], document="A/1"
+    )
+    b = frame([page_input(1)], document="B/1")
+    straight = SM.section8([a, b], {})
+    swapped_a = frame(
+        [page_input(1, h_anchors={0: {anchor(1, 3)}}, x_anchors={0: {anchor(1, 3, text="OTHER")}})], document="B/1"
+    )
+    swapped_b = frame([page_input(1)], document="A/1")
+    swapped = SM.section8([swapped_a, swapped_b], {})
+    events_straight = {e["document"]: e["event"] for e in straight["per_document"]}
+    events_swapped = {e["document"]: e["event"] for e in swapped["per_document"]}
+    check(
+        "ATTACK -- swapping two document identities MOVES the per-document evidence",
+        ({"A/1": True, "B/1": False}, {"A/1": False, "B/1": True}),
+        (events_straight, events_swapped),
+        "the per-document record does not follow the document identity, so a finding could be "
+        "reported against the wrong bill",
+    )
+    check(
+        "...while the aggregate is unchanged, which is why the per-document detail is mandatory",
+        (straight["events"], straight["n_documents"]),
+        (swapped["events"], swapped["n_documents"]),
+        "the aggregate moved too, so this attack could have been caught by a total alone",
+    )
+
+    # --- 3. corrupt the committed SUMMARY. The scorer must recompute from the records.
+    lying_counts = copy.deepcopy(f)
+    lying_counts["counts"] = {k: 0 for k in lying_counts["counts"]}
+    lying_counts["d_frame_census"] = []
+    l_built = BO.build([{"frame": lying_counts, "pdf_path": synthetic_pdf(tmp, 2), "stratum": "SYNTHETIC"}])
+    l_scored = SM.score(inputs([lying_counts], key=l_built.key, adjudicated=synthesize_adjudication(l_built.key)))
+    check(
+        "ATTACK -- zeroing the frame's own `counts` summary changes NOTHING",
+        base["per_document"]["SYNTHETIC/1"]["M0"]["risk_set"],
+        l_scored["per_document"]["SYNTHETIC/1"]["M0"]["risk_set"],
+        "the scorer reads the committed summary instead of the records, so a wrong summary "
+        "silently becomes the reported result",
+    )
+
+    # --- 4. permute the input ORDER.
+    two_docs = [f, frame([page_input(1)], document="SYNTHETIC/2")]
+    forward = SM.score(inputs(two_docs, key=built.key, adjudicated=adjudicated))
+    reverse = SM.score(inputs(list(reversed(two_docs)), key=built.key, adjudicated=adjudicated))
+    check(
+        "ATTACK -- reversing the document order gives a byte-identical payload",
+        json.dumps(forward, sort_keys=True, default=str),
+        json.dumps(reverse, sort_keys=True, default=str),
+        "the caller's listing order changes a reported number, so two runs over the same "
+        "population print different results",
+    )
+    reordered_pages = copy.deepcopy(f)
+    reordered_pages["pages"] = list(reversed(reordered_pages["pages"]))
+    p_built = BO.build([{"frame": reordered_pages, "pdf_path": synthetic_pdf(tmp, 2), "stratum": "SYNTHETIC"}])
+    p_scored = SM.score(inputs([reordered_pages], key=p_built.key, adjudicated=synthesize_adjudication(p_built.key)))
+    check(
+        "...and reversing the PAGE order leaves every M0 quantity identical",
+        {
+            k: base["per_document"]["SYNTHETIC/1"]["M0"][k]
+            for k in ("risk_set", "M0a_text", "M0b_segmentation", "both_absent")
+        },
+        {
+            k: p_scored["per_document"]["SYNTHETIC/1"]["M0"][k]
+            for k in ("risk_set", "M0a_text", "M0b_segmentation", "both_absent")
+        },
+        "page order changes M0, so the artifact's page ordering is load-bearing when it must not be",
+    )
+
+    # --- 5. the base payload is stable, so every 'changed' verdict above means something.
+    check(
+        "the unattacked payload is reproducible, so 'it changed' is evidence",
+        base_json,
+        json.dumps(SM.score(inputs([f], key=built.key, adjudicated=adjudicated)), sort_keys=True, default=str),
+        "the scorer is not deterministic, so no attack above can be distinguished from noise",
+    )
+    return out
+
+
+def part_controls_and_repeats(tmp: Path) -> dict:
+    """Controls and R1 repeats must not move a single denominator."""
+    print("\n== controls and R1 repeats are excluded, and the exclusion is INVARIANT ==")
+    # 12 pages, EVERY region discordant. The C-frame is capped at 8 regions per document (A27.2),
+    # so a concordant 12-page fixture yields 8 primaries and `plan_r1_repeats`' floor(8 * 0.10) is
+    # ZERO -- the vacuous case. The D-frame is an uncapped census, so making every region
+    # discordant gives 12 primaries and exactly one repeat.
+    n_pages = 12
+    pages = [page_input(p + 1, start_gid=p * 100, text_differs={5}) for p in range(n_pages)]
+    occ = {arm: [occurrence(p + 1, 2, p * 100 + 4) for p in range(n_pages)] for arm in ("H", "X")}
+    f = frame(pages, occurrences=occ)
+    pdf = synthetic_pdf(tmp, n_pages)
+
+    plain = BO.build([{"frame": f, "pdf_path": pdf, "stratum": "SYNTHETIC"}])
+    manifest = json.loads(CF.MANIFEST_PATH.read_text())
+    with_controls = BO.build(
+        [{"frame": f, "pdf_path": pdf, "stratum": "SYNTHETIC"}], controls=BO.control_specs(manifest, EV, REPO)
+    )
+
+    n_repeats = sum(1 for r in plain.key["stimuli"].values() if r["is_r1_repeat"])
+    n_controls = sum(1 for r in with_controls.key["stimuli"].values() if r["control_kind"] is not None)
+    check(
+        "the fixture really contains R1 repeats and real controls, so the invariance is not vacuous",
+        (True, 20),
+        (n_repeats >= 1, n_controls),
+        "no repeat or control is present, so 'adding them changed nothing' was guaranteed",
+    )
+
+    plain_scored = SM.score(inputs([f], key=plain.key, adjudicated=synthesize_adjudication(plain.key)))
+    loaded_scored = SM.score(inputs([f], key=with_controls.key, adjudicated=synthesize_adjudication(with_controls.key)))
+    strip = lambda payload: {  # noqa: E731
+        "pooled": payload["headings_pooled"],
+        "per_document": payload["per_document"],
+        "section8": payload["section8"],
+        "adequacy": payload["adequacy_4_5"],
+    }
+    check(
+        "adding 20 REAL controls moves no metric, no denominator and no section 8 figure",
+        json.dumps(strip(plain_scored), sort_keys=True, default=str),
+        json.dumps(strip(loaded_scored), sort_keys=True, default=str),
+        "a control contributed to an estimand it exists only to bound, which would put "
+        "deliberately altered text into a correctness denominator",
+    )
+    check(
+        "...and the exclusions are COUNTED rather than silent",
+        (20, n_repeats),
+        (
+            loaded_scored["heading_population_notes"]["excluded_stimuli"]["control"],
+            loaded_scored["heading_population_notes"]["excluded_stimuli"]["r1_repeat"],
+        ),
+        "the excluded stimuli are invisible in the artifact, so a reader cannot see what was "
+        "left out of the denominators",
+    )
+    # The expected stimulus count is DERIVED from the committed frame, not asserted: the C-frame
+    # cap and the D census are `build_frames`' business, and hardcoding a number here would make
+    # this control fail whenever that (frozen, separately tested) arithmetic changed.
+    c_regions = sum(1 for page in f["pages"] for r in page["regions"] if r["c_frame"])
+    d_regions = sum(1 for page in f["pages"] for r in page["regions"] if r["d_frame"])
+    counts = {name: plain_scored["headings_pooled"][name]["counts"] for name in (BO.C_FRAME, BO.D_FRAME)}
+    check(
+        "an R1 repeat does not double-count its primary's region, in EITHER frame",
+        {BO.C_FRAME: (c_regions, c_regions), BO.D_FRAME: (d_regions, d_regions)},
+        {name: (c["n_stimuli"], c["n_adjudicated"]) for name, c in counts.items()},
+        "a repeat is scored as an independent stimulus, so one physical occurrence enters a "
+        "denominator twice -- and the repeat exists to measure the ADJUDICATOR, not the arms",
+    )
+    check(
+        "...and the two frames really are different sizes here, so C and D are not interchangeable",
+        (8, 12, True),
+        (c_regions, d_regions, c_regions != d_regions),
+        "C and D have the same population in this fixture, so a scorer that pooled them or read "
+        "the wrong one would look correct",
+    )
+    return {"n_repeats": n_repeats, "n_controls": n_controls, "c_regions": c_regions, "d_regions": d_regions}
+
+
+def part_reproducibility(tmp: Path) -> dict:
+    print("\n== reproducibility, and no live object is required ==")
+    f, built, adjudicated = join_fixture(tmp, n_pages=2)
+    first = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))
+    second = SM.score(inputs([f], key=built.key, adjudicated=adjudicated))
+    check(
+        "two runs over the same inputs produce byte-identical output",
+        json.dumps(first, sort_keys=True, default=str),
+        json.dumps(second, sort_keys=True, default=str),
+        "the scorer is not deterministic, so no reported number is reproducible",
+    )
+    # A38's central claim, exercised: every input round-trips through JSON, so nothing survives
+    # only in a live Python object still holding a PDF handle or a runner result.
+    round_tripped = SM.ScoreInputs(
+        frames=tuple(json.loads(json.dumps(x, default=str)) for x in [f]),
+        oracle_key=json.loads(json.dumps(built.key, default=str)),
+        oracle_adjudicated=json.loads(json.dumps(adjudicated, default=str)),
+        cross_engine=json.loads(json.dumps(cross_engine_artifact([f["document"]]), default=str)),
+        s1=json.loads(json.dumps(s1_artifact(), default=str)),
+        document_strata={f["document"]: 1},
+    )
+    check(
+        "scoring COMMITTED JSON alone reproduces the same payload -- no PDF, no runner",
+        json.dumps(first, sort_keys=True, default=str),
+        json.dumps(SM.score(round_tripped), sort_keys=True, default=str),
+        "a fact the scorer needs survives only in a live Python object, so it would have to "
+        "reopen a PDF or rerun an architecture to score",
+    )
+    return {"payload_sha256": hashlib.sha256(json.dumps(first, sort_keys=True, default=str).encode()).hexdigest()}
+
+
+def part_boundary(tmp: Path) -> dict:
+    print("\n== the execution boundary, and what this module may not touch ==")
+    payload = {"schema": SM.SCHEMA}
+    check(
+        "writing the CANONICAL metrics.json REFUSES before a valid execution boundary",
+        BO.CONFIRMATORY_WRITE_BEFORE_EXECUTION,
+        refusal(lambda: SM.write_metrics(payload, EV / "results" / "metrics.json")),
+        "a confirmatory scoring artifact can be created before execution is authorised, which "
+        "is the one-way boundary A11 exists to enforce",
+    )
+    scratch = SM.write_metrics(payload, tmp / "metrics.json")
+    check(
+        "...and an ordinary path still writes, so the guard is not refusing everything",
+        True,
+        scratch.exists(),
+        "the writer refuses every path, so the control above proves nothing about the boundary",
+    )
+
+    # The import graph, from the AST rather than from a substring search. A prose mention of
+    # "PDFIUM-CONDITIONED FRAME" is not a call, and a scan that cannot tell the difference either
+    # fails on the honest docstring or passes on a real import hidden in a long line.
+    source = (HERE.parent / "score_metrics.py").read_text()
+    tree = ast.parse(source)
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    permitted = {
+        "__future__",
+        "math",
+        "sys",
+        "json",
+        "dataclasses",
+        "pathlib",
+        "build_frames",
+        "build_oracle",
+        "m3_boundaries",
+        "methodology_contracts",
+        "neutral_identity",
+        "xml_sources",
+    }
+    check(
+        "the scorer imports NOTHING outside the frozen consumer allowlist",
+        set(),
+        imported - permitted,
+        "the scorer imports an architecture, an engine, a runner or the contamination probe, "
+        "which would make it a producer rather than a consumer of committed facts",
+    )
+    forbidden_calls = {
+        "run_hybrid.run": "run_hybrid" in imported,
+        "run_extended.run": "run_extended" in imported,
+        "x01_contamination": any(name.startswith("x01") for name in imported),
+        "an engine": bool(imported & {"pypdfium2", "pymupdf", "fitz"}),
+        "extract_anchors": "pdf_anchors" in imported or "extract_anchors(" in source,
+        "filesystem_discovery": any(token in source for token in ("rglob", "glob(", "os.walk", "iterdir")),
+    }
+    check(
+        "...and it neither runs an arm, re-extracts anchors, nor enumerates the repository",
+        {k: False for k in forbidden_calls},
+        forbidden_calls,
+        "the scorer can run an architecture, re-run anchor recognition, or discover files on "
+        "disk -- and the contamination evidence is exactly what repo discovery would rewrite",
+    )
+    # Stated rather than implied: the frozen A38.7 join helper lives in `build_oracle`, which
+    # imports a renderer at module scope. The scorer calls no renderer, and `part_reproducibility`
+    # proves it needs no PDF -- but claiming a renderer-free import graph would be false.
+    transitive = {
+        "build_oracle imports pymupdf at module scope": "import pymupdf"
+        in (HERE.parent / "build_oracle.py").read_text()
+    }
+    check(
+        "the ONE renderer dependency is transitive through the frozen join owner, and is stated",
+        {"build_oracle imports pymupdf at module scope": True},
+        transitive,
+        "the stated provenance of the renderer dependency is wrong, so a reader would take the "
+        "scorer's import graph to be cleaner than it is",
+    )
+    existing = {
+        name: (EV / "results" / name).exists()
+        for name in (
+            "frames.json",
+            "oracle_key.json",
+            "oracle_blind.json",
+            "oracle_adjudicated.json",
+            "s1_control.json",
+            "cross_engine_control.json",
+            "metrics.json",
+            "scores.json",
+            "EXECUTION-START.json",
+        )
+    }
+    check(
+        "NO canonical confirmatory artifact exists after this probe",
+        {name: False for name in existing},
+        existing,
+        "a canonical artifact was created, which would cross the execution boundary this session may not cross",
+    )
+    return {
+        "scorer_imports": sorted(imported),
+        "forbidden_calls": forbidden_calls,
+        "renderer_dependency": "transitive, through build_oracle's frozen A38.7 join helper",
+        "canonical_artifacts_present": existing,
+    }
+
+
+# ============================================================== DEVELOPMENT: the real chain
+
+DEV_DOC = "118-hr-8752/1"
+DEV_PATH = REPO / "tests/corpus/118-hr-8752/1_reported-in-house.pdf"
+DEV_PAGE_LIMIT = 8  # machinery demonstration window, NOT a census
+
+
+def part_development(tmp: Path) -> dict:
+    """The scorer against the REAL producers, so no fixture encodes a belief about their shape.
+
+    A synthetic frame is my belief about what `build_frames` emits. This part removes the belief:
+    real `run_hybrid` / `run_extended` output, the real public `build_document_frame`, the real
+    `build_oracle`, and an adjudication derived from the key's own committed facts.
+    """
+    print("\n== DEVELOPMENT: the whole chain on a real non-holdout document ==")
+    import run_extended  # local: the PROBE may run an architecture; `score_metrics` may not
+    import run_hybrid
+
+    for member in BO.HOLDOUT_GUARD:
+        if member in str(DEV_PATH):
+            raise SystemExit(f"REFUSED: {DEV_PATH} touches holdout member {member}")
+
+    h = run_hybrid.run(DEV_PATH, limit=DEV_PAGE_LIMIT)
+    x, _s = run_extended.run(DEV_PATH, limit=DEV_PAGE_LIMIT)
+    sha = hashlib.sha256(DEV_PATH.read_bytes()).hexdigest()
+    dev_frame = BF.build_document_frame(sha, DEV_DOC, BF.P_HEAD, h, x)
+    built = BO.build([{"frame": dev_frame, "pdf_path": DEV_PATH, "stratum": "DEVELOPMENT"}])
+    adjudicated = synthesize_adjudication(built.key)
+
+    scored = SM.score(
+        inputs(
+            [dev_frame],
+            key=built.key,
+            adjudicated=adjudicated,
+            strata={DEV_DOC: 1},
+            cross_engine=cross_engine_artifact([DEV_DOC]),
+        )
+    )
+    check(
+        "the REAL producer's frame passes every input validation unchanged",
+        (DEV_DOC, BF.P_HEAD),
+        (scored["documents_scored"][0], scored["per_document"][DEV_DOC]["population"]),
+        "the scorer's contract disagrees with what `build_frames` actually emits, so every "
+        "synthetic fixture above encodes a belief rather than the producer's shape",
+    )
+    m0 = scored["per_document"][DEV_DOC]["M0"]
+    check(
+        "M0 is computed over a real, non-empty risk set with BOTH_ABSENT held out",
+        (True, True, True),
+        (
+            m0["risk_set"] > 0,
+            m0["both_absent"] > 0,
+            m0["risk_set"] + m0["both_absent"] == m0["neutral_lines_in_scope"],
+        ),
+        "the real document yields no risk set or no chrome, so the M0 controls above ran on "
+        "material unlike anything the study will score",
+    )
+    # PER FRAME, and PRIMARIES ONLY. A region may be in both C and D (A36.1), where it is scored
+    # once in each estimand, and an R1 repeat is outside every metric population -- so a single
+    # pooled total would compare a scored figure against a census of different membership.
+    resolved = {}
+    for name, member in ((BO.C_FRAME, "in_c_frame"), (BO.D_FRAME, "in_d_frame")):
+        resolved[name] = sum(
+            1
+            for record in built.key["stimuli"].values()
+            if record[member] and not record["is_r1_repeat"] and record["control_kind"] is None
+            for row in (record["architecture_occurrences"] or {}).get("H", [])
+            if row["occurrence_key"] is not None
+        )
+    matched = {
+        name: metrics["counts"]["n_matched"]["H"]
+        for name, metrics in scored["per_document"][DEV_DOC]["headings_by_frame"].items()
+    }
+    check(
+        "the A38.7 join binds real occurrences: every keyed occurrence in a stimulus matches",
+        (True, {name: resolved[name] for name in matched}),
+        (sum(resolved.values()) > 0, matched),
+        "the geometric round trip through `pdf_x_to_pixel` / `pixel_to_pdf_x` does not resolve "
+        "back to the same glyph on real material, so the join is unproven where it matters",
+    )
+    check(
+        "M9's real facts carry production's own coverage floor",
+        (0.85, True),
+        (scored["per_document"][DEV_DOC]["M9"]["coverage_floor"], scored["section8"]["n_documents"] == 1),
+        "the real M9 basis does not carry the frozen floor, so Rule 0's coverage clause could "
+        "not be evaluated from committed facts",
+    )
+    return {
+        "document": DEV_DOC,
+        "page_limit": DEV_PAGE_LIMIT,
+        "note": "DEV_PAGE_LIMIT is a machinery demonstration window, not a census",
+        "m0": {k: m0[k] for k in ("risk_set", "both_absent", "M0a_text", "M0b_segmentation", "M0_any")},
+        "m0_rates": {k: m0[k]["value"] for k in ("M0a_text_rate", "M0b_segmentation_rate", "M0_any_rate")},
+        "n_stimuli": built.key["n_stimuli"],
+        "keyed_occurrences_in_stimuli": resolved,
+        "matched_occurrences": matched,
+        "m7": {arm: scored["per_document"][DEV_DOC]["M7"][arm]["n_display_split"] for arm in ("H", "X")},
+        "rule0": scored["per_document"][DEV_DOC]["M9"]["margin_line_loss"],
+        "section8": {
+            "events": scored["section8"]["events"],
+            "bound": scored["section8"]["clopper_pearson_upper_bound"],
+        },
+        "adequacy": scored["adequacy_4_5"]["n_occurrences"],
+    }
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as raw:
+        tmp = Path(raw)
+        evidence = {
+            "m0": part_m0(),
+            "i9": part_i9(),
+            "s1": part_s1(),
+            "join": part_join(tmp),
+            "m3": part_m3(tmp),
+            "m4": part_m4(tmp),
+            "m5": part_m5(tmp),
+            "m7": part_m7(),
+            "rule0": part_rule0(),
+            "section8": part_section8(),
+            "pairing": part_pairing(tmp),
+            "adequacy": part_adequacy(),
+            "qualification": part_qualification(),
+            "refusals": part_refusals(tmp),
+            "attacks": part_attacks(tmp),
+            "controls_and_repeats": part_controls_and_repeats(tmp),
+            "reproducibility": part_reproducibility(tmp),
+            "development": part_development(tmp),
+            "boundary": part_boundary(tmp),
+        }
+
+    uncovered = [row for row, names in COVERED.items() if not names]
+    check(
+        "every section 5 control row has at least one executable check",
+        [],
+        uncovered,
+        "a frozen control row is unimplemented, so the scorer carries a quantity nothing can falsify",
+    )
+
+    doc = {
+        "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened, nothing adjudicated by a human or an AI",
+        "contract": "HARNESS-PLAN section 5 (the scorer) over PRE-REGISTRATION section 6 and section 8",
+        "question": "does `score_metrics` compute the frozen quantities from committed artifacts, "
+        "and can each of them be made to go RED?",
+        "artifacts_created": "NONE of frames.json, oracle_key.json, oracle_blind.json, "
+        "oracle_adjudicated.json, s1_control.json, cross_engine_control.json, metrics.json, "
+        "scores.json, EXECUTION-START.json",
+        "synthetic_adjudication_caveat": "the fixtures' oracle text comes from an arm's own emitted "
+        "output, so every agreement figure here is evidence about the JOIN and never about accuracy",
+        "section5_rows": {row: names for row, names in COVERED.items()},
+        "evidence": evidence,
+        "tests": ROWS,
+        "failures": FAILED,
+    }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(doc, indent=1, default=str))
+    print(f"\n{len(ROWS) - len(FAILED)}/{len(ROWS)} checks pass")
+    print(f"wrote {OUT}")
+    return 1 if FAILED else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
