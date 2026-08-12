@@ -410,7 +410,7 @@
     "CONTROL_STIMULUS_IN_ESTIMAND": "CONTROL_STIMULUS_IN_ESTIMAND"
    },
    "duplicate_document_layer": [
-    "BootstrapInputError",
+    "ScoreInputError",
     "DUPLICATE_DOCUMENT_IDENTITY"
    ]
   },
@@ -1769,10 +1769,10 @@
     "DUPLICATE_DOCUMENT_IDENTITY"
    ],
    "observed": [
-    "BootstrapInputError",
+    "ScoreInputError",
     "DUPLICATE_DOCUMENT_IDENTITY"
    ],
-   "pass": false,
+   "pass": true,
    "fails_when": "the scorer's own duplicate-document guard is gone and the refusal is coming from the frozen section 8 vector validator instead -- which shares the reason STRING, so the check above cannot see the difference and stays green with the guard deleted",
    "row": ""
   },
@@ -2133,7 +2133,5 @@
    "row": ""
   }
  ],
- "failures": [
-  "a duplicated document is refused by the SCORER, not only by the section 8 helper"
- ]
+ "failures": []
 }
