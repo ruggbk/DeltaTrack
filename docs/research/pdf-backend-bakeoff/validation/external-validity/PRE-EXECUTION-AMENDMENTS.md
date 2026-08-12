@@ -4675,7 +4675,7 @@ decision, no confirmatory or scoring artifact, and no execution marker.
  "affects_membership": false, "affects_scoring_rule": true,
  "files_touched": ["probes/score_metrics.py", "probes/x27_score_metrics.py"],
  "supersedes_text_in": "none -- NO PREVIOUSLY FROZEN rule is changed. A41 makes previously UNSPECIFIED scorer ranges and operationalizations executable, before any confirmatory execution exists",
- "status": "IMPLEMENTATION COMPLETE; R1-R8 ALL RULED AND IMPLEMENTED -- no reading remains open and no result-bearing factual gate is unowned. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
+ "status": "IMPLEMENTATION COMPLETE; R1-R9 ALL RULED AND IMPLEMENTED -- no reading remains open and no result-bearing factual gate is unowned. `decide_architecture.py` remains UNSTARTED and G5 is intentionally incomplete for it alone"}
 ```
 
 **Why `affects_scoring_rule` is `true` while `supersedes_text_in` is `none`.** These are different
