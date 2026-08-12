@@ -35,13 +35,11 @@ THE PROHIBITION THAT OUTLIVES THE OUTCOME. "X failed to prove a win because we d
 adjudicate enough items" must never be written as "H empirically beat X" (A10). Hybrid survives
 BY PRIOR, and the rendered conclusion is gated against any comparative-accuracy claim for H.
 
-ONE FACT THIS MODULE CANNOT DERIVE, AND DOES NOT GUESS. Rule 1's fourth condition (A5 row 4, A20's
-"no M4 regression") is a per-heading existential -- "no heading whose immediate parent is correct
-under H and wrong under X". `score_metrics` emits M4 as PER-ARM counts (`m4_correct` / `m4_scored`)
-and no paired quantity, so the condition is not computable from `metrics.json`. Approximating it
-with a count comparison would be choosing one reading of the frozen text over another, and the two
-readings disagree on real payloads. The verdict is therefore SUPPLIED as a named status and its
-absence REFUSES -- see `A42` and `m4_no_regression` below.
+RULE 1'S FOURTH CONDITION IS THE LITERAL PER-HEADING EXISTENTIAL (A42.3, ruled). "No heading whose
+immediate parent is correct under H and wrong under X" is read from `score_metrics`' PAIRED fact,
+`M4.h_correct_x_wrong`. The per-arm `m4_correct` counts are NOT sufficient and are never
+substituted for it: two headings, one wrong under each arm, leave the aggregates equal while the
+condition is violated. A D-frame block that carries no paired fact REFUSES.
 """
 
 from __future__ import annotations
@@ -239,16 +237,16 @@ class DecisionInputs:
     not recomputing a metric; deriving the census here from regions would be, and is not done.
 
     `x2a` / `x2b` are the two A27.6 gates no committed artifact carries yet (the confirmatory X2
-    run is an execution-time path that does not exist). `m4_no_regression` is Rule 1's fourth
-    condition -- see the module docstring and A42; it has no producer and is NOT guessed.
+    run is an execution-time path that does not exist). They are the ONLY supplied facts: Rule 1's
+    fourth condition was one too until A42.3 ruled it, and it is now read from the scorer's own
+    paired M4 quantity like every other decision input.
     """
 
     metrics: dict
     frames: tuple = ()
     x2a: str | None = None
     x2b: str | None = None
-    m4_no_regression: bool | None = None
-    #: Free-text provenance for the three supplied facts, recorded in the artifact so a reader can
+    #: Free-text provenance for the two supplied gates, recorded in the artifact so a reader can
     #: see WHAT answered a gate rather than only that something did.
     supplied_evidence: dict = field(default_factory=dict)
 
@@ -598,28 +596,36 @@ def rule1(inputs: DecisionInputs, budget: dict) -> dict:
     corrects = outcomes.get("X_CORRECTS", 0)
     regresses = outcomes.get("X_REGRESSES", 0)
 
-    # Rule 1's fourth condition has NO producer -- see the module docstring. It is supplied, and its
-    # absence refuses rather than defaulting to "no regression", which would be the one default that
-    # can only ever help X.
-    if inputs.m4_no_regression is None:
+    # CONDITION 4 IS READ, NEVER INFERRED (A42.3). An absent D block is an EMPTY census -- a frozen,
+    # legitimate state in which condition 1 fails and the prior stands. A D block that exists but
+    # carries no paired fact is a scorer that did not emit it, which REFUSES: falling back to the
+    # aggregates would silently substitute the reading A42.3 rejected, and defaulting to "no
+    # regression" is the one default that can only ever help X.
+    if pooled_d is None:
+        m4_regressions = 0
+    elif "h_correct_x_wrong" not in pooled_d.get("M4", {}):
         raise DecisionInputError(
             M4_VETO_FACT_MISSING,
             {
                 "condition": "A5 row 4 / A20 -- no heading whose immediate parent is correct under H and wrong under X",
-                "why": "score_metrics emits M4 as per-arm counts only; the paired quantity has no "
-                "producer and is not approximated here",
+                "why": "the D-frame block carries no paired M4 quantity; the per-arm m4_correct "
+                "counts cannot express a per-heading existential and are NOT substituted (A42.3)",
             },
         )
+    else:
+        m4_regressions = pooled_d["M4"]["h_correct_x_wrong"]
 
     conditions = {
         "x_corrects_at_least_5": corrects >= X_CORRECTS_MIN,
         "x_regresses_exactly_0": regresses == X_REGRESSES_MAX,
-        "no_m4_parent_regression": bool(inputs.m4_no_regression),
+        "no_m4_parent_regression": m4_regressions == 0,
     }
     return {
         "evaluable": budget["within_budget"] and budget["census_fully_adjudicated"],
         "x_corrects": corrects,
         "x_regresses": regresses,
+        "m4_h_correct_x_wrong": m4_regressions,
+        "m4_vetoing_occurrences": (pooled_d or {}).get("M4", {}).get("h_correct_x_wrong_occurrences", []),
         "thresholds": {"x_corrects_min": X_CORRECTS_MIN, "x_regresses_max": X_REGRESSES_MAX},
         "conditions": conditions,
         "all_conditions_hold": all(conditions.values()),
@@ -627,7 +633,8 @@ def rule1(inputs: DecisionInputs, budget: dict) -> dict:
         "vetoes_failing": [k for k in ("x_regresses_exactly_0", "no_m4_parent_regression") if not conditions[k]],
         "decision_unit": "heading occurrence (A3); m3_outcomes, never WELD/SPLIT boundary tallies",
         "m6_veto": "STRUCK by A20 -- M6 is deferred and may not veto",
-        "m4_condition_source": "SUPPLIED -- the paired M4 quantity has no producer (see A42)",
+        "m4_condition_source": "metrics.headings_pooled.D.M4.h_correct_x_wrong -- the PAIRED "
+        "per-heading existential (A42.3); the per-arm m4_correct rates are never substituted",
     }
 
 

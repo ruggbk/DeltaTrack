@@ -737,6 +737,20 @@ def _blank_heading_counts() -> dict:
         "m4_excluded_unreadable": 0,
         # A parent the adjudicator could read but could not SEE. Reported, never scored.
         "m4_excluded_off_region": 0,
+        # RULE 1's FOURTH CONDITION, as a PAIRED quantity (A42.3). A5 row 4 is a per-heading
+        # existential -- "no heading whose immediate parent is correct under H and wrong under X" --
+        # and the per-arm counts above CANNOT express it: two headings, one wrong under each arm,
+        # leave `m4_correct` equal on both while the condition is violated. The pair is counted
+        # here, where the two arms' per-heading results are both in hand; nothing downstream can
+        # recover it from the aggregates.
+        "m4_h_correct_x_wrong": 0,
+        # The mirror is a DIAGNOSTIC. Rule 1 is one-directional and reads only the line above; this
+        # is emitted so a reader can see the pairing is real and not an artefact of one arm.
+        "m4_x_correct_h_wrong": 0,
+        # The occurrence keys of the vetoing headings. A count cannot be checked against the
+        # adjudication; the instances can, and a veto that decides an architecture should name the
+        # headings it fired on.
+        "m4_h_correct_x_wrong_keys": [],
         "m5_agree": {arm: 0 for arm in ARMS},
         "m5_scored": {arm: 0 for arm in ARMS},
         "m5_excluded_unscorable": {arm: 0 for arm in ARMS},
@@ -805,6 +819,11 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
         if heading.get("role") == _bo().UNREADABLE:
             counts["m5_excluded_unreadable"] += 1
 
+        # Each arm's M4 result for THIS heading: True, False, or None when the heading is not in
+        # M4's content-bearing population for that arm. Held per heading so the pair can be
+        # compared once both arms are known -- see the veto below.
+        m4_result = {arm: None for arm in ARMS}
+
         for arm in ARMS:
             occurrence = matched[arm]
             if occurrence is None:
@@ -822,12 +841,14 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
             emitted_parent = occurrence["immediate_parent"]
             if parent_kind == ORACLE_PARENT_NONE:
                 counts["m4_scored"][arm] += 1
-                counts["m4_correct"][arm] += int(emitted_parent is None)
+                m4_result[arm] = emitted_parent is None
+                counts["m4_correct"][arm] += int(m4_result[arm])
             elif parent_kind == "TEXT":
                 counts["m4_scored"][arm] += 1
-                counts["m4_correct"][arm] += int(
-                    emitted_parent is not None and m2_normalize(heading["parent"]) == m2_normalize(emitted_parent)
+                m4_result[arm] = emitted_parent is not None and m2_normalize(heading["parent"]) == m2_normalize(
+                    emitted_parent
                 )
+                counts["m4_correct"][arm] += int(m4_result[arm])
 
             role = heading.get("role")
             if role == _bo().UNREADABLE:
@@ -840,6 +861,21 @@ def _score_stimulus(counts: dict, record: dict, answer: dict) -> None:
             else:
                 counts["m5_scored"][arm] += 1
                 counts["m5_agree"][arm] += int(agreement)
+
+        # ---- Rule 1's fourth condition, PAIRED (A5 row 4 / A20, ruled by A42.3)
+        #
+        # THE POPULATION IS HEADINGS SCORED UNDER M4 FOR BOTH ARMS, and that is a reading with a
+        # reason. A heading X never emitted is not in M4's population for X -- section 6 fires M4
+        # on MATCHED headings -- so charging it here would count one failure twice, in M1's recall
+        # and again as a hierarchy regression. Nothing escapes by it: an unemitted heading scores a
+        # maximal TEXT_ERROR in M3 (A9), so if H is clean it is already `X_REGRESSES`, and Rule 1's
+        # condition 2 vetoes at ZERO. The veto below is therefore about hierarchy specifically,
+        # which is the quantity A5 row 4 names.
+        if m4_result["H"] is True and m4_result["X"] is False:
+            counts["m4_h_correct_x_wrong"] += 1
+            counts["m4_h_correct_x_wrong_keys"].append(_key_form(item["occurrence_key"]))
+        if m4_result["X"] is True and m4_result["H"] is False:
+            counts["m4_x_correct_h_wrong"] += 1
 
 
 def _heading_metrics_from_counts(counts: dict, r1: dict) -> dict:
@@ -885,6 +921,15 @@ def _heading_metrics_from_counts(counts: dict, r1: dict) -> dict:
         # resolvable", and no frozen source defines a resolver for an off-region parent.
         "excluded_off_region": counts["m4_excluded_off_region"],
         "parent_answers": f"printed text | {ORACLE_PARENT_NONE} | {ORACLE_PARENT_OFF_REGION} | {_bo().UNREADABLE}",
+        # A5 row 4's PAIRED quantity, surfaced beside the rates rather than left in `counts`. This
+        # is the fact `decide_architecture` reads for Rule 1's fourth condition; the rates above
+        # cannot express it and must not be substituted for it (A42.3).
+        "h_correct_x_wrong": counts["m4_h_correct_x_wrong"],
+        "h_correct_x_wrong_occurrences": counts["m4_h_correct_x_wrong_keys"],
+        "x_correct_h_wrong": counts["m4_x_correct_h_wrong"],
+        "paired_population": "headings scored under M4 for BOTH arms; an unmatched heading is M1 "
+        "recall's miss and M3's TEXT_ERROR, never charged twice here",
+        "veto_owner": "decide_architecture -- Rule 1 condition 4; no consequence is applied here",
     }
     metrics["M5"]["r1_role_gate"] = _r1_role_gate(r1)
     metrics["M5"]["licenses"] = "corroboration only -- section 6 forbids M5 deciding anything"

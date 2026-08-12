@@ -206,17 +206,34 @@ def scored(frames, *, s1_fires: bool = True, cross_failed=()) -> dict:
     )
 
 
-def d_pooled(*, corrects: int, regresses: int, n_stimuli: int) -> dict:
+def d_pooled(
+    *,
+    corrects: int,
+    regresses: int,
+    n_stimuli: int,
+    m4_regressions: int = 0,
+    m4_correct: tuple = (4, 4),
+    m4_scored: int = 4,
+) -> dict:
     """A pooled D-frame heading block, SHAPED BY THE SCORER'S OWN producer.
 
     `_blank_heading_counts` and `_heading_metrics_from_counts` are `score_metrics`' own functions,
     so the block a fixture hands the decider has the structure the real run will hand it. Only the
-    two `m3_outcomes` tallies Rule 1 reads, and the adjudicated-region count, are set here.
+    quantities Rule 1 reads are set: the two `m3_outcomes` tallies, the adjudicated-region count,
+    and A5 row 4's PAIRED M4 fact.
+
+    `m4_correct` is settable INDEPENDENTLY of `m4_regressions` on purpose -- the aggregates and the
+    pairing are different quantities (A42.3), and a fixture that could not make them disagree could
+    not test that the decider reads the right one.
     """
     counts = SM._blank_heading_counts()
     counts["n_stimuli"] = n_stimuli
     counts["m3_outcomes"]["X_CORRECTS"] = corrects
     counts["m3_outcomes"]["X_REGRESSES"] = regresses
+    counts["m4_h_correct_x_wrong"] = m4_regressions
+    counts["m4_h_correct_x_wrong_keys"] = [[DOC_SHA, 1, [1, 3], 6]] * m4_regressions
+    counts["m4_correct"]["H"], counts["m4_correct"]["X"] = m4_correct
+    counts["m4_scored"] = {arm: m4_scored for arm in ("H", "X")}
     return SM._heading_metrics_from_counts(counts, SM.r1_reliability(EMPTY_KEY, EMPTY_ADJUDICATED))
 
 
@@ -243,7 +260,8 @@ def decision(
     corrects: int = 0,
     regresses: int = 0,
     adjudicated: int | None = None,
-    m4_ok: bool = True,
+    m4_regressions: int = 0,
+    m4_correct: tuple = (4, 4),
     m9_h=None,
     m9_x=None,
     extra_frames=(),
@@ -261,11 +279,15 @@ def decision(
         payload = pass_gates(payload)
     census = sum(f["counts"]["d_frame_census"] for f in frames)
     payload["headings_pooled"]["D"] = d_pooled(
-        corrects=corrects, regresses=regresses, n_stimuli=census if adjudicated is None else adjudicated
+        corrects=corrects,
+        regresses=regresses,
+        n_stimuli=census if adjudicated is None else adjudicated,
+        m4_regressions=m4_regressions,
+        m4_correct=m4_correct,
     )
     if mutate:
         mutate(payload)
-    return DA.decide(DA.DecisionInputs(metrics=payload, frames=tuple(frames), x2a=x2a, x2b=x2b, m4_no_regression=m4_ok))
+    return DA.decide(DA.DecisionInputs(metrics=payload, frames=tuple(frames), x2a=x2a, x2b=x2b))
 
 
 def outcome(**kwargs) -> str:
@@ -294,6 +316,10 @@ CONTRACT_PATHS = (
     ("cross_engine_qualification", "n_failed"),
 )
 
+#: A5 row 4's paired quantity, walked against a REAL pooled block below. It lives under a frame
+#: key, so it cannot be reached by the flat walk above.
+POOLED_M4_PATHS = (("M4", "h_correct_x_wrong"), ("M4", "h_correct_x_wrong_occurrences"))
+
 #: Per-document and frame paths, walked separately because they live one level down.
 DOCUMENT_PATHS = (
     ("M9", "band_loss", "fires"),
@@ -306,6 +332,17 @@ DOCUMENT_PATHS = (
     ("M9", "X", "n_margin_numbered_lines"),
 )
 FRAME_PATHS = (("document",), ("counts", "d_frame_census"), ("d_frame_census",), ("d_frame_truncated",))
+
+
+def _real_pooled_block() -> dict:
+    """A pooled heading block from `score_metrics`' OWN producer, with nothing this probe added.
+
+    `d_pooled` sets values on top of this; here it is called bare, so a missing key is the
+    SCORER's omission and cannot be one x28 papered over. The division of labour is deliberate:
+    x27 proves the paired quantity is COMPUTED correctly over a real oracle key and a real
+    adjudication; x28 proves the field exists where the decider reaches for it.
+    """
+    return SM._heading_metrics_from_counts(SM._blank_heading_counts(), SM.r1_reliability(EMPTY_KEY, EMPTY_ADJUDICATED))
 
 
 def _resolve(node, path):
@@ -335,6 +372,18 @@ def part_contract() -> dict:
         [],
         missing_doc,
         "Rule 0 reads an M9 clause field the scorer does not emit",
+    )
+    # A5 row 4's paired fact, on a pooled block the REAL scorer produced from a REAL oracle key --
+    # not on `d_pooled`'s fixture. This is the check that would catch the scorer dropping the
+    # quantity the ruling requires it to emit.
+    real_pooled = _real_pooled_block()
+    missing_pair = [".".join(p) for p in POOLED_M4_PATHS if not _resolve(real_pooled, p)[1]]
+    check(
+        "the PAIRED M4 fact the decider reads is emitted by the real scorer (A42.3)",
+        [],
+        missing_pair,
+        "the scorer stopped emitting A5 row 4's paired quantity, so Rule 1's fourth condition has "
+        "no producer again and the decider can only refuse",
     )
     missing_frame = [".".join(p) for p in FRAME_PATHS if not _resolve(f, p)[1]]
     check(
@@ -428,6 +477,45 @@ def part_rule0() -> dict:
         False,
         decision(m9_h=m9_facts(margin=198), m9_x=m9_facts(margin=198))["rule0"]["fires"],
         "the margin clause fires on identical counts, rejecting an arm for nothing",
+    )
+
+    # ---- SAME DOCUMENT, DIFFERENT CLAUSES. The case a per-clause implementation gets wrong.
+    #
+    # H loses the BAND on this document and X loses MARGIN LINES on the SAME document. Section 7.2
+    # rule 0 fires only when exactly one architecture loses a document the other keeps, so both
+    # losing it -- by whatever clause -- is neutral for RQ1 and stays a FAILURE in RQ2. An
+    # implementation that asked each clause "did an arm lose me?" independently would see a band
+    # loss naming H and a margin loss naming X and fire twice, rejecting BOTH arms on a single
+    # document that distinguishes nothing. A27.4's two-sided branch requires DIFFERENT documents.
+    same_document = decision(
+        m9_h=m9_facts(band=False, margin=200),
+        m9_x=m9_facts(band=True, margin=190),
+        corrects=0,
+    )
+    check(
+        "SAME document, DIFFERENT clauses (H band, X margin) -> Rule 0 does NOT fire",
+        (False, [], [], ["SYNTHETIC/1"], DA.HYBRID_BY_PRIOR),
+        (
+            same_document["rule0"]["fires"],
+            same_document["rule0"]["H_asymmetric_loss_documents"],
+            same_document["rule0"]["X_asymmetric_loss_documents"],
+            same_document["rule0"]["both_lose_documents"],
+            same_document["outcome"],
+        ),
+        "the clauses were read independently instead of per document, so one document both arms "
+        "lost was counted as an asymmetric loss for each -- rejecting BOTH architectures on "
+        "evidence section 7.2 rule 0 calls neutral, and inventing A27.4's two-sided branch on a "
+        "single document when A27.4 requires different ones",
+    )
+    check(
+        "...and BOTH clauses really did fire on that document, so the trap is live",
+        ("H", "X"),
+        (
+            same_document["rule0"]["per_document"]["SYNTHETIC/1"]["clauses"]["band_loss"],
+            same_document["rule0"]["per_document"]["SYNTHETIC/1"]["clauses"]["margin_line_loss"],
+        ),
+        "the fixture does not actually produce two opposite clause losses on one document, so the "
+        "control could not have caught the per-clause reading",
     )
 
     # ---- A27.4: each arm asymmetric on a DIFFERENT document -> BOTH rejected
@@ -668,7 +756,7 @@ def part_rule1() -> dict:
     check(
         "6 corrections, 0 regressions, no M4 regression -> EXTENDED_BY_RULE_1",
         DA.EXTENDED_BY_RULE_1,
-        outcome(corrects=6, regresses=0, m4_ok=True),
+        outcome(corrects=6, regresses=0, m4_regressions=0),
         "a clean synthetic X win does not produce an X win, so no evidence could ever flip the ADR",
         row="synthetic X win (6 corrects, 0 regressions, no M4 regression)",
     )
@@ -693,20 +781,47 @@ def part_rule1() -> dict:
         row="synthetic 5 corrects and 1 regression",
     )
 
-    m4 = decision(corrects=5, regresses=0, m4_ok=False)
+    # THE A42.3 PAYLOAD, asserted directly: the aggregates are EQUAL and the pairing is 1. This is
+    # the fixture on which the two readings of A5 row 4 gave different architectures, and the
+    # ruling took the per-heading existential.
+    m4 = decision(corrects=5, regresses=0, m4_regressions=1, m4_correct=(3, 3))
     check(
         "5 corrections, 0 regressions, ONE M4 parent regression -> INSUFFICIENT (A5 row 4 / A20)",
-        (DA.INSUFFICIENT_COMPARATIVE_EVIDENCE, DA.DECIDED_BY_RULE_1, ["no_m4_parent_regression"]),
-        (m4["outcome"], m4["decided_by"], m4["rule1"]["vetoes_failing"]),
+        (DA.INSUFFICIENT_COMPARATIVE_EVIDENCE, DA.DECIDED_BY_RULE_1, ["no_m4_parent_regression"], 1),
+        (m4["outcome"], m4["decided_by"], m4["rule1"]["vetoes_failing"], m4["rule1"]["m4_h_correct_x_wrong"]),
         "the M4 parent veto stopped blocking, so X wins while breaking a hierarchy H had right",
+        row="synthetic 5 corrects and 1 M4 regression",
+    )
+    a42_block = d_pooled(corrects=5, regresses=0, n_stimuli=10, m4_regressions=1, m4_correct=(3, 3))
+    check(
+        "...and it fires while the per-arm M4 AGGREGATES are equal -- the A42.3 payload",
+        (3, 3, True, True),
+        (
+            a42_block["counts"]["m4_correct"]["H"],
+            a42_block["counts"]["m4_correct"]["X"],
+            a42_block["M4"]["H"]["value"] == a42_block["M4"]["X"]["value"],
+            bool(m4["rule1"]["m4_vetoing_occurrences"]),
+        ),
+        "the fixture's aggregates are NOT equal, so it does not separate the two readings of A5 "
+        "row 4 and the veto could have fired for the wrong reason",
         row="synthetic 5 corrects and 1 M4 regression",
     )
     check(
         "the M4 veto only bites when condition 1 holds -- 4 corrections still yields the PRIOR",
         DA.HYBRID_BY_PRIOR,
-        outcome(corrects=4, regresses=0, m4_ok=False),
+        outcome(corrects=4, regresses=0, m4_regressions=1, m4_correct=(3, 3)),
         "a failing veto beneath the win threshold was reported as insufficient evidence, when the "
         "census simply yielded no X win and Rule 2's prior applies",
+    )
+    check(
+        "condition 4 is READ from the scorer's paired fact, not supplied and not inferred",
+        (True, False),
+        (
+            "h_correct_x_wrong" in m4["rule1"]["m4_condition_source"],
+            hasattr(DA.DecisionInputs(metrics={}), "m4_no_regression"),
+        ),
+        "the supplied-fact channel came back, so a caller can assert Rule 1's fourth condition "
+        "with nothing behind it (R5's closed channel, reopened)",
     )
     check(
         "M6 is STRUCK by A20 and is not a Rule 1 condition",
@@ -767,18 +882,18 @@ def part_enums() -> dict:
     for m9 in ("clean", "h_loses", "x_loses", "two_sided"):
         for gates in (True, False):
             for regions in (0, 10, 61):
-                for corrects, regresses, m4_ok in (
-                    (0, 0, True),
-                    (5, 0, True),
-                    (5, 1, True),
-                    (5, 0, False),
-                    (6, 0, True),
+                for corrects, regresses, m4_regressions in (
+                    (0, 0, 0),
+                    (5, 0, 0),
+                    (5, 1, 0),
+                    (5, 0, 1),
+                    (6, 0, 0),
                 ):
                     kwargs = {
                         "d_regions": regions,
                         "corrects": corrects,
                         "regresses": regresses,
-                        "m4_ok": m4_ok,
+                        "m4_regressions": m4_regressions,
                         "gates_pass": gates,
                     }
                     if m9 == "h_loses":
@@ -902,21 +1017,22 @@ def part_refusals() -> dict:
     base["headings_pooled"]["D"] = d_pooled(corrects=6, regresses=0, n_stimuli=5)
 
     def call(**kwargs):
-        args = {
-            "metrics": base,
-            "frames": tuple(base_frames),
-            "x2a": DA.GATE_PASS,
-            "x2b": DA.GATE_PASS,
-            "m4_no_regression": True,
-        }
+        args = {"metrics": base, "frames": tuple(base_frames), "x2a": DA.GATE_PASS, "x2b": DA.GATE_PASS}
         args.update(kwargs)
         return lambda: DA.decide(DA.DecisionInputs(**args))
+
+    without_pair = copy.deepcopy(base)
+    without_pair["headings_pooled"]["D"]["M4"].pop("h_correct_x_wrong")
 
     cases = (
         ("a MISSING X2-a status refuses", DA.GATE_STATUS_MISSING, call(x2a=None)),
         ("a MISSING X2-b status refuses", DA.GATE_STATUS_MISSING, call(x2b=None)),
         ("an UNKNOWN gate status refuses", DA.GATE_STATUS_UNKNOWN, call(x2a="PROBABLY_FINE")),
-        ("a MISSING M4 veto fact refuses", DA.M4_VETO_FACT_MISSING, call(m4_no_regression=None)),
+        (
+            "a D block carrying NO paired M4 fact refuses -- the aggregates are not a fallback",
+            DA.M4_VETO_FACT_MISSING,
+            call(metrics=without_pair),
+        ),
         (
             "an unknown metrics SCHEMA refuses",
             DA.METRICS_SCHEMA_UNKNOWN,
@@ -959,18 +1075,31 @@ def part_refusals() -> dict:
         )
 
     check(
-        "M4's refusal NAMES the unowned quantity rather than defaulting to 'no regression'",
+        "M4's refusal NAMES the rejected fallback rather than silently taking it",
         True,
-        _m4_detail_names_the_gap(),
-        "the refusal is anonymous, so a reader cannot tell that a Rule 1 condition has no producer",
+        _m4_refusal_names_the_rejected_reading(without_pair, base_frames),
+        "the refusal is anonymous, so a reader cannot tell the decider declined to substitute the "
+        "aggregates rather than simply failing to find a key",
     )
-    # The default that would help X is exactly the one not taken.
+    # An EMPTY census is not a missing fact: it is a frozen, legitimate state, and the most likely
+    # real outcome of the study. The D block is absent because there was nothing to adjudicate --
+    # NOT because a census went unadjudicated, which is the partial case the budget refuses above.
+    empty_frames = [frame(d_regions=0)]
+    empty = pass_gates(scored(empty_frames))
     check(
-        "the M4 fact has NO default -- absence is not 'no regression'",
-        (None, DA.M4_VETO_FACT_MISSING),
-        (DA.DecisionInputs(metrics=base).m4_no_regression, refusal(call(m4_no_regression=None))),
-        "a defaulted M4 veto passes silently, and the default that costs nothing to write is the "
-        "one that can only ever help X",
+        "an ABSENT D block over a ZERO census is not a refusal -- the prior stands",
+        (DA.HYBRID_BY_PRIOR, 0, True),
+        (
+            (
+                decided := DA.decide(
+                    DA.DecisionInputs(metrics=empty, frames=tuple(empty_frames), x2a="PASS", x2b="PASS")
+                )
+            )["outcome"],
+            decided["budget"]["d_frame_census"],
+            decided["budget"]["census_fully_adjudicated"],
+        ),
+        "an empty census was turned into a refusal, so the most likely real outcome of the whole "
+        "study could not be expressed at all",
     )
     return {"n_refusal_classes": len(cases)}
 
@@ -993,11 +1122,12 @@ def _set(frame_dict: dict, path, value) -> dict:
     return out
 
 
-def _m4_detail_names_the_gap() -> bool:
+def _m4_refusal_names_the_rejected_reading(metrics: dict, frames) -> bool:
+    """The refusal must say WHY it refused, not merely that a key was absent (A42.3)."""
     try:
-        decision(m4_ok=None)
+        DA.decide(DA.DecisionInputs(metrics=metrics, frames=tuple(frames), x2a="PASS", x2b="PASS"))
     except DA.DecisionInputError as exc:
-        return "no producer" in json.dumps(exc.detail)
+        return "m4_correct" in json.dumps(exc.detail)
     return False
 
 
@@ -1024,10 +1154,20 @@ FAULTS = (
         lambda m: _faulted_outcome(m, d_regions=61, corrects=6) == m.EXTENDED_BY_RULE_1,
     ),
     (
-        '"no_m4_parent_regression": bool(inputs.m4_no_regression),',
+        '"no_m4_parent_regression": m4_regressions == 0,',
         '"no_m4_parent_regression": True,',
         "m4_veto_disabled",
-        lambda m: _faulted_outcome(m, corrects=5, m4_ok=False) == m.EXTENDED_BY_RULE_1,
+        lambda m: _faulted_outcome(m, corrects=5, m4_regressions=1) == m.EXTENDED_BY_RULE_1,
+    ),
+    # THE REJECTED READING, injected. A42.3 ruled the per-heading existential over the count
+    # comparison; this fault IS reading (b), and on the equal-aggregate payload it flips the
+    # architecture. Nothing else in the suite would notice, because every other fixture has the
+    # aggregates and the pairing agreeing.
+    (
+        '        m4_regressions = pooled_d["M4"]["h_correct_x_wrong"]',
+        '        _c = pooled_d["counts"]["m4_correct"]\n        m4_regressions = max(0, _c["H"] - _c["X"])',
+        "m4_veto_inferred_from_aggregates_the_A42_3_rejected_reading",
+        lambda m: _faulted_outcome(m, corrects=5, m4_regressions=1, m4_correct=(3, 3)) == m.EXTENDED_BY_RULE_1,
     ),
     (
         "if h_documents and x_documents:",
@@ -1096,17 +1236,33 @@ def _load_faulted(old: str, new: str):
         return module
 
 
-def _faulted_inputs(module, *, d_regions=10, corrects=0, regresses=0, m4_ok=True, m9_h=None, m9_x=None, extra=()):
+def _faulted_inputs(
+    module,
+    *,
+    d_regions=10,
+    corrects=0,
+    regresses=0,
+    m4_regressions=0,
+    m4_correct=(4, 4),
+    m9_h=None,
+    m9_x=None,
+    extra=(),
+):
     frames = [frame(d_regions=d_regions, m9_h=m9_h, m9_x=m9_x), *extra]
     payload = pass_gates(scored(frames))
     census = sum(f["counts"]["d_frame_census"] for f in frames)
-    payload["headings_pooled"]["D"] = d_pooled(corrects=corrects, regresses=regresses, n_stimuli=census)
+    payload["headings_pooled"]["D"] = d_pooled(
+        corrects=corrects,
+        regresses=regresses,
+        n_stimuli=census,
+        m4_regressions=m4_regressions,
+        m4_correct=m4_correct,
+    )
     return module.DecisionInputs(
         metrics=payload,
         frames=tuple(frames),
         x2a=module.GATE_PASS,
         x2b=module.GATE_PASS,
-        m4_no_regression=m4_ok,
     )
 
 
@@ -1127,9 +1283,7 @@ def _faulted_not_evaluable(module) -> str:
     payload["control_verdicts"]["by_kind"]["N-A"]["status"] = "NOT_EVALUABLE"
     payload["headings_pooled"]["D"] = d_pooled(corrects=6, regresses=0, n_stimuli=5)
     return module.decide(
-        module.DecisionInputs(
-            metrics=payload, frames=tuple(frames), x2a=module.GATE_PASS, x2b=module.GATE_PASS, m4_no_regression=True
-        )
+        module.DecisionInputs(metrics=payload, frames=tuple(frames), x2a=module.GATE_PASS, x2b=module.GATE_PASS)
     )["outcome"]
 
 

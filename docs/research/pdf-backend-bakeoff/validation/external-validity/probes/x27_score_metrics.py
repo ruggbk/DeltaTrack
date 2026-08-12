@@ -1078,13 +1078,128 @@ def part_m4(tmp: Path) -> dict:
         "the fixture does not contain the ancestry trap, so the control could not have caught it",
     )
     _part_m4_sentinels(tmp)
+    pairing = _part_m4_pairing(tmp)
     return {
+        "pairing": pairing,
         "baseline_m4": base["M4"]["H"],
         "after_delete": after["M4"]["H"],
         "m1_drop": m1_drop,
         "m4_drop": m4_drop,
         "shifted_m4": s_after["M4"]["H"],
         "ancestry_m4": a_after["M4"]["H"],
+    }
+
+
+def _m4_pairing_census(bad_account: str) -> list:
+    """One agency and three accounts, with ONE named account given the wrong immediate parent."""
+    rows = [occurrence(1, 1, 2, kind="agency", text="DEPARTMENTAL MANAGEMENT", parent=None)]
+    for i, ordinal in enumerate((2, 3, 4)):
+        text = f"ACCOUNT {i}"
+        rows.append(
+            occurrence(
+                1,
+                ordinal,
+                ordinal * 2,
+                kind="account",
+                text=text,
+                parent="SOME OTHER AGENCY" if text == bad_account else "DEPARTMENTAL MANAGEMENT",
+            )
+        )
+    return rows
+
+
+def _m4_pairing_oracle(built) -> dict:
+    """The adjudication for the pairing fixture, carrying the TRUE printed parents.
+
+    Neither arm is clean in this fixture -- each is wrong on a different account -- so the oracle
+    cannot be synthesized from one arm's output the way the other M4 controls do it. The structure
+    (identities, start annotations, routes) still comes from the REAL key; only the `parent` field
+    is stated, which is the one field this control is about.
+    """
+    adjudicated = synthesize_adjudication(built.key, truth="H", role="account")
+    for route in (BO.ROUTE_AI, BO.ROUTE_HUMAN):
+        for answer in adjudicated[route].values():
+            for heading in answer["headings"]:
+                heading["parent"] = (
+                    SM.ORACLE_PARENT_NONE if heading["text"] == "DEPARTMENTAL MANAGEMENT" else "DEPARTMENTAL MANAGEMENT"
+                )
+    return adjudicated
+
+
+def _part_m4_pairing(tmp: Path) -> dict:
+    """A5 row 4's PAIRED quantity, on the one fixture shape that separates it from the aggregates.
+
+    THE FIXTURE IS THE ARGUMENT. H is wrong on `ACCOUNT 0` and X is wrong on `ACCOUNT 1`, so:
+
+        m4_correct    H 3 / 4   X 3 / 4      -- EQUAL on both arms, and the RATES are equal too
+        the pairing   ACCOUNT 1 is correct under H and WRONG under X -- Rule 1's condition 4 is
+                      violated, and NOTHING in the aggregates can see it
+
+    This is the payload A42.3 states as the one on which the two readings of A5 row 4 give
+    different architectures. The ruling took the per-heading existential, so the scorer must emit
+    the pair; this control is what stops that being quietly re-derived from `m4_correct` later.
+    """
+    print("\n== A5 row 4: the PAIRED M4 quantity, where the aggregates are blind ==")
+    occ = {"H": _m4_pairing_census("ACCOUNT 0"), "X": _m4_pairing_census("ACCOUNT 1")}
+    f, built, _ = join_fixture(tmp, n_pages=1, occurrences=occ)
+    pooled = SM.score(inputs([f], key=built.key, adjudicated=_m4_pairing_oracle(built)))["headings_pooled"][BO.C_FRAME]
+    counts, m4 = pooled["counts"], pooled["M4"]
+
+    check(
+        "the per-arm M4 aggregates are EQUAL -- so they cannot express the condition",
+        (3, 3, 4, 4, True),
+        (
+            counts["m4_correct"]["H"],
+            counts["m4_correct"]["X"],
+            counts["m4_scored"]["H"],
+            counts["m4_scored"]["X"],
+            m4["H"]["value"] == m4["X"]["value"],
+        ),
+        "the fixture does not actually produce equal aggregates, so it does not separate the two "
+        "readings and this whole control proves nothing",
+    )
+    check(
+        "...while the PAIRED fact sees the violation, and names the heading it fired on",
+        (1, 1, [6]),
+        (
+            counts["m4_h_correct_x_wrong"],
+            counts["m4_x_correct_h_wrong"],
+            [k[3] for k in counts["m4_h_correct_x_wrong_keys"]],
+        ),
+        "A5 row 4's per-heading existential was collapsed into a count comparison, which is the "
+        "reading A42.3 rejected -- an X that breaks one hierarchy H had right would win Rule 1 as "
+        "long as it repaired a different one",
+    )
+    check(
+        "the paired fact is surfaced on the reported M4 block, where the decider reads it",
+        (1, 1),
+        (m4["h_correct_x_wrong"], m4["x_correct_h_wrong"]),
+        "the quantity exists only in raw counts, so the decider would have to reach past the "
+        "reported metric to find it",
+    )
+
+    # NEAR-MISS: equal aggregates again, but NO opposite pairing. If the paired fact were secretly
+    # a function of the aggregates, this would report 1 as well.
+    clean = {arm: _m4_pairing_census("ACCOUNT 0") for arm in ("H", "X")}
+    cf, cbuilt, _ = join_fixture(tmp, n_pages=1, occurrences=clean)
+    clean_pooled = SM.score(inputs([cf], key=cbuilt.key, adjudicated=_m4_pairing_oracle(cbuilt)))["headings_pooled"][
+        BO.C_FRAME
+    ]
+    check(
+        "NEAR-MISS -- both arms wrong on the SAME account: aggregates equal, pairing ZERO",
+        (3, 3, 0, 0),
+        (
+            clean_pooled["counts"]["m4_correct"]["H"],
+            clean_pooled["counts"]["m4_correct"]["X"],
+            clean_pooled["counts"]["m4_h_correct_x_wrong"],
+            clean_pooled["counts"]["m4_x_correct_h_wrong"],
+        ),
+        "the paired fact fires whenever an arm is wrong anywhere, so it is a restatement of the "
+        "aggregates rather than the per-heading comparison Rule 1 needs",
+    )
+    return {
+        "opposite_pairing": {k: counts[k] for k in ("m4_correct", "m4_scored", "m4_h_correct_x_wrong")},
+        "near_miss": clean_pooled["counts"]["m4_h_correct_x_wrong"],
     }
 
 

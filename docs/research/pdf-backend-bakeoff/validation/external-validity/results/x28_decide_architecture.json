@@ -13,7 +13,8 @@
    "5 corrections AND 1 regression -> INSUFFICIENT, never EXTENDED_BY_RULE_1, never HYBRID"
   ],
   "synthetic 5 corrects and 1 M4 regression": [
-   "5 corrections, 0 regressions, ONE M4 parent regression -> INSUFFICIENT (A5 row 4 / A20)"
+   "5 corrections, 0 regressions, ONE M4 parent regression -> INSUFFICIENT (A5 row 4 / A20)",
+   "...and it fires while the per-arm M4 AGGREGATES are equal -- the A42.3 payload"
   ],
   "synthetic census of 61 regions": [
    "D = 61 regions -> INSUFFICIENT, and Rule 1 is NOT reached"
@@ -118,6 +119,8 @@
     "evaluable": true,
     "x_corrects": 5,
     "x_regresses": 1,
+    "m4_h_correct_x_wrong": 0,
+    "m4_vetoing_occurrences": [],
     "thresholds": {
      "x_corrects_min": 5,
      "x_regresses_max": 0
@@ -134,7 +137,7 @@
     ],
     "decision_unit": "heading occurrence (A3); m3_outcomes, never WELD/SPLIT boundary tallies",
     "m6_veto": "STRUCK by A20 -- M6 is deferred and may not veto",
-    "m4_condition_source": "SUPPLIED -- the paired M4 quantity has no producer (see A42)"
+    "m4_condition_source": "metrics.headings_pooled.D.M4.h_correct_x_wrong -- the PAIRED per-heading existential (A42.3); the per-arm m4_correct rates are never substituted"
    }
   },
   "enums": {
@@ -177,8 +180,15 @@
     },
     {
      "fault": "m4_veto_disabled",
-     "anchor": "\"no_m4_parent_regression\": bool(inputs.m4_no_regression),",
+     "anchor": "\"no_m4_parent_regression\": m4_regressions == 0,",
      "replacement": "\"no_m4_parent_regression\": True,",
+     "detected": true,
+     "crashed": false
+    },
+    {
+     "fault": "m4_veto_inferred_from_aggregates_the_A42_3_rejected_reading",
+     "anchor": "        m4_regressions = pooled_d[\"M4\"][\"h_correct_x_wrong\"]",
+     "replacement": "        _c = pooled_d[\"counts\"][\"m4_correct\"]\n        m4_regressions = max(0, _c[\"H\"] - _c[\"X\"])",
      "detected": true,
      "crashed": false
     },
@@ -225,7 +235,7 @@
      "crashed": false
     }
    ],
-   "n_faults": 10
+   "n_faults": 11
   },
   "boundary": {
    "checked": [
@@ -257,6 +267,14 @@
    "observed": [],
    "pass": true,
    "fails_when": "Rule 0 reads an M9 clause field the scorer does not emit",
+   "row": ""
+  },
+  {
+   "test": "the PAIRED M4 fact the decider reads is emitted by the real scorer (A42.3)",
+   "expected": [],
+   "observed": [],
+   "pass": true,
+   "fails_when": "the scorer stopped emitting A5 row 4's paired quantity, so Rule 1's fourth condition has no producer again and the decider can only refuse",
    "row": ""
   },
   {
@@ -357,6 +375,44 @@
    "observed": false,
    "pass": true,
    "fails_when": "the margin clause fires on identical counts, rejecting an arm for nothing",
+   "row": ""
+  },
+  {
+   "test": "SAME document, DIFFERENT clauses (H band, X margin) -> Rule 0 does NOT fire",
+   "expected": [
+    false,
+    [],
+    [],
+    [
+     "SYNTHETIC/1"
+    ],
+    "HYBRID_BY_PRIOR"
+   ],
+   "observed": [
+    false,
+    [],
+    [],
+    [
+     "SYNTHETIC/1"
+    ],
+    "HYBRID_BY_PRIOR"
+   ],
+   "pass": true,
+   "fails_when": "the clauses were read independently instead of per document, so one document both arms lost was counted as an asymmetric loss for each -- rejecting BOTH architectures on evidence section 7.2 rule 0 calls neutral, and inventing A27.4's two-sided branch on a single document when A27.4 requires different ones",
+   "row": ""
+  },
+  {
+   "test": "...and BOTH clauses really did fire on that document, so the trap is live",
+   "expected": [
+    "H",
+    "X"
+   ],
+   "observed": [
+    "H",
+    "X"
+   ],
+   "pass": true,
+   "fails_when": "the fixture does not actually produce two opposite clause losses on one document, so the control could not have caught the per-clause reading",
    "row": ""
   },
   {
@@ -818,17 +874,37 @@
     "RULE_1",
     [
      "no_m4_parent_regression"
-    ]
+    ],
+    1
    ],
    "observed": [
     "INSUFFICIENT_COMPARATIVE_EVIDENCE",
     "RULE_1",
     [
      "no_m4_parent_regression"
-    ]
+    ],
+    1
    ],
    "pass": true,
    "fails_when": "the M4 parent veto stopped blocking, so X wins while breaking a hierarchy H had right",
+   "row": "synthetic 5 corrects and 1 M4 regression"
+  },
+  {
+   "test": "...and it fires while the per-arm M4 AGGREGATES are equal -- the A42.3 payload",
+   "expected": [
+    3,
+    3,
+    true,
+    true
+   ],
+   "observed": [
+    3,
+    3,
+    true,
+    true
+   ],
+   "pass": true,
+   "fails_when": "the fixture's aggregates are NOT equal, so it does not separate the two readings of A5 row 4 and the veto could have fired for the wrong reason",
    "row": "synthetic 5 corrects and 1 M4 regression"
   },
   {
@@ -837,6 +913,20 @@
    "observed": "HYBRID_BY_PRIOR",
    "pass": true,
    "fails_when": "a failing veto beneath the win threshold was reported as insufficient evidence, when the census simply yielded no X win and Rule 2's prior applies",
+   "row": ""
+  },
+  {
+   "test": "condition 4 is READ from the scorer's paired fact, not supplied and not inferred",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "fails_when": "the supplied-fact channel came back, so a caller can assert Rule 1's fourth condition with nothing behind it (R5's closed channel, reopened)",
    "row": ""
   },
   {
@@ -1030,7 +1120,7 @@
    "row": ""
   },
   {
-   "test": "a MISSING M4 veto fact refuses",
+   "test": "a D block carrying NO paired M4 fact refuses -- the aggregates are not a fallback",
    "expected": "M4_VETO_FACT_MISSING",
    "observed": "M4_VETO_FACT_MISSING",
    "pass": true,
@@ -1094,25 +1184,27 @@
    "row": ""
   },
   {
-   "test": "M4's refusal NAMES the unowned quantity rather than defaulting to 'no regression'",
+   "test": "M4's refusal NAMES the rejected fallback rather than silently taking it",
    "expected": true,
    "observed": true,
    "pass": true,
-   "fails_when": "the refusal is anonymous, so a reader cannot tell that a Rule 1 condition has no producer",
+   "fails_when": "the refusal is anonymous, so a reader cannot tell the decider declined to substitute the aggregates rather than simply failing to find a key",
    "row": ""
   },
   {
-   "test": "the M4 fact has NO default -- absence is not 'no regression'",
+   "test": "an ABSENT D block over a ZERO census is not a refusal -- the prior stands",
    "expected": [
-    null,
-    "M4_VETO_FACT_MISSING"
+    "HYBRID_BY_PRIOR",
+    0,
+    true
    ],
    "observed": [
-    null,
-    "M4_VETO_FACT_MISSING"
+    "HYBRID_BY_PRIOR",
+    0,
+    true
    ],
    "pass": true,
-   "fails_when": "a defaulted M4 veto passes silently, and the default that costs nothing to write is the one that can only ever help X",
+   "fails_when": "an empty census was turned into a refusal, so the most likely real outcome of the whole study could not be expressed at all",
    "row": ""
   },
   {
@@ -1159,6 +1251,20 @@
   },
   {
    "test": "FAULT m4_veto_disabled changes a result-bearing answer (and is caught by a NAMED check)",
+   "expected": [
+    true,
+    false
+   ],
+   "observed": [
+    true,
+    false
+   ],
+   "pass": true,
+   "fails_when": "the fault is invisible, so the control asserting the correct behaviour is not discriminating -- or it was detected only by a crash, which cannot distinguish 'the rule broke' from 'the probe has a bug'",
+   "row": ""
+  },
+  {
+   "test": "FAULT m4_veto_inferred_from_aggregates_the_A42_3_rejected_reading changes a result-bearing answer (and is caught by a NAMED check)",
    "expected": [
     true,
     false
