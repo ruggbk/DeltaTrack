@@ -1097,10 +1097,48 @@ def self_test(contam: dict, exposure: dict) -> int:
     frozen_ok = blob_sha(MEMBERSHIP) == blob_sha(MEMBERSHIP, POPULATION_FREEZE_COMMIT)
     checks.append(("F11 anchors to the PINNED freeze commit, not last_commit", frozen_ok))
 
-    # The execution boundary must refuse to open while readiness is closed.
-    rc_auth = main(["--authorize-execution"])
-    checks.append(("execution authorization is REFUSED while readiness is closed", rc_auth != 0))
-    checks.append(("...and no marker was written", not EXECUTION_MARKER.exists()))
+    # The execution boundary must refuse to open while readiness is closed -- and the
+    # known-bad case is CONSTRUCTED here rather than inherited from the working tree.
+    #
+    # THE PREVIOUS SPELLING OF THIS CONTROL WAS NOT INERT, and that is the defect this
+    # replaces. It injected nothing: it called the real `main(["--authorize-execution"])`
+    # against ambient state, so its premise was "whatever the tree happens to be". That
+    # premise held only while readiness was CLOSED. Once the execution path was completed
+    # and readiness correctly became OPEN, the control inverted -- authorization succeeded,
+    # both assertions failed, and because the call targeted the REAL `EXECUTION_MARKER` the
+    # SELF-TEST WROTE THE CANONICAL ONE-WAY BOUNDARY MARKER as a side effect.
+    #
+    # Two properties are required of a negative control for a guard, and the old one had
+    # neither. It must construct and revert its own fault, like every other block in this
+    # file. And it must be INERT IF THE GUARD FAILS OPEN: the hypothesis under test is "the
+    # refusal does not fire", so a control aimed at the real boundary performs exactly the
+    # act the boundary exists to prevent, on precisely the run where that act does damage.
+    # The marker is therefore redirected to a DISPOSABLE non-canonical path before the call,
+    # and the canonical marker is proven untouched afterwards.
+    real_f, real_g, real_marker = check_freeze, check_execution, EXECUTION_MARKER
+    disposable = EV / "results" / ".selftest-EXECUTION-START.json"
+    canonical_before = real_marker.read_text() if real_marker.exists() else None
+    try:
+        disposable.unlink(missing_ok=True)
+        # Freeze GREEN, readiness CLOSED by one injected gate -- the exact mutation under test.
+        globals()["check_freeze"] = lambda m, lk: [("F-stub", True, "")]
+        globals()["check_execution"] = lambda m: [("G-stub-closed", False, "injected closed readiness")]
+        globals()["EXECUTION_MARKER"] = disposable
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc_auth = main(["--authorize-execution"])
+        checks.append(("execution authorization is REFUSED while readiness is closed", rc_auth != 0))
+        checks.append(("...and no marker was written", not disposable.exists()))
+        # The canonical boundary is compared BEFORE and AFTER rather than merely asserted
+        # absent, so the control also fails if it ever mutates an existing marker.
+        canonical_after = real_marker.read_text() if real_marker.exists() else None
+        checks.append(
+            ("...and the REAL canonical marker is untouched by the control", canonical_after == canonical_before)
+        )
+    finally:
+        globals()["check_freeze"], globals()["check_execution"] = real_f, real_g
+        globals()["EXECUTION_MARKER"] = real_marker
+        disposable.unlink(missing_ok=True)
 
     # G2 must bind PROVENANCE, not accept a claim. Each case is committed-simulated so the
     # test exercises the provenance logic rather than the "is it committed" precondition.
