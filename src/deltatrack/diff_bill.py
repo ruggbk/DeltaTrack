@@ -496,9 +496,17 @@ def match_nodes_with_retrieval(
     cross-division round.
 
     **Nothing reads its iteration order.** Assignment consumes the ordered ``RetrievedPopulation``
-    tuples and never this set; the set exists for observability and for the recall measurement
-    ADR 0020 wants, and its canonical ordinal-pair ordering is deliberately not the order any
-    decision is made in.
+    tuples and never this set, and its canonical ordinal-pair ordering is deliberately not the
+    order any decision is made in.
+
+    **The set is TRANSITIONAL and is not yet comparison-wide candidate recall.** It is complete
+    for the two collision-path retrieval stages this slice introduces, and nothing else: the
+    unique-path fast path still pairs its observations directly in the loop below without
+    forming a candidate, so on the committed corpus the great majority of ``match_path`` groups
+    contribute no entry here. Reading a candidate-recall figure off this set today would
+    therefore be wrong by roughly the size of that population, not by a rounding error. Bringing
+    the fast path under retrieval is a later slice; until it lands, treat this as observability
+    for the collision path alone.
     """
     if registry is None:
         registry = observation_registry(old, new)
