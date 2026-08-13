@@ -5786,6 +5786,79 @@ gate's own behaviour. `results/contamination.json` is untouched and byte-identic
 
 ---
 
+## A44 — CLERICAL. The authorization negative control constructs its own closed readiness
+
+```json
+{"id": "A44", "class": "CLERICAL",
+ "commits": ["9cff2cd"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/x04_freeze_check.py"],
+ "supersedes_text_in": "none -- NO frozen rule changes. One self-test control is rewritten to construct the condition it names. No F or G gate, metric, threshold, population, adjudication route or decision rule moves",
+ "status": "COMPLETE. Self-test 36/36. Boundary ABSENT, execution FORBIDDEN"}
+```
+
+**The defect: a negative control whose known-bad case was the working tree.** The self-test
+control named *"execution authorization is REFUSED while readiness is closed"* injected
+nothing. It called the real `main(["--authorize-execution"])` against ambient state, so its
+premise was whatever the tree happened to be, and that premise held **only while readiness was
+CLOSED**. Every other block in the file constructs its case and reverts it in a `finally`;
+this one did neither.
+
+When the execution path was completed and readiness correctly became **OPEN**, the control
+inverted. Two things followed, and the second is the serious one:
+
+1. The assertion became **unsatisfiable on any tree that can execute**. A green `--self-test`
+   and a `READY TO AUTHORIZE` normal run were mutually exclusive by construction, so readiness
+   could no longer be re-established at the moment it mattered.
+2. Because the call targeted the real `EXECUTION_MARKER`, **the self-test wrote the canonical
+   one-way boundary marker as a side effect**, with no cleanup. Running the readiness probe
+   staged the very boundary the probe exists to protect. The marker it produced was
+   well-formed and byte-identical to a deliberate authorization at that HEAD, so nothing about
+   its *content* was wrong — what was wrong is the **provenance of the act**. Committed, it
+   would have recorded a test side effect as the authorization.
+
+**The rule this restores.** A negative control for a guard must be **inert if the guard fails
+open**. The hypothesis under test is "the refusal does not fire", so a control aimed at the
+real boundary performs exactly the guarded act on precisely the run where that act does
+damage. Adding cleanup around the canonical marker would not fix this: the control must not
+target the real boundary in the first place.
+
+**The repair.** Freeze integrity is stubbed **green** and `check_execution` is stubbed to
+report **one injected failed readiness gate** — the exact mutation under test — and
+`EXECUTION_MARKER` is redirected to a disposable non-canonical path before the call. Three
+properties are then required: the return code is non-zero; the disposable marker was not
+written; and the canonical marker is **unchanged**. The canonical marker is compared before
+and after rather than merely asserted absent, so the control also fails if it ever mutates an
+existing boundary. All three globals are restored and the disposable artifact deleted in
+`finally`.
+
+**Non-vacuity, measured.** With the refusal itself failed open (`if False and blocked:`), the
+two assertions **fail** — so the control can still fire — while *"the REAL canonical marker is
+untouched"* **passes**, and `git status` shows no marker at either path. That is the inertness
+property demonstrated under the exact condition it exists for, rather than argued.
+
+**Why CLERICAL and not TOOLING.** TOOLING is the natural label and it is **not available for
+this file**, which is a fact about the ledger rather than a judgement. `probes/x04_freeze_check.py`
+already appears in ten SUBSTANTIVE declarations, and F9 rejects any file declared under both a
+SUBSTANTIVE and a TOOLING amendment. Declared as TOOLING this amendment turns F9 **red**, with
+`probes/x04_freeze_check.py is declared under both a SUBSTANTIVE and a TOOLING amendment` —
+measured, not predicted. A7 met the same collision and resolved it with `files_touched: []`,
+which is no longer open either: F9 is now bidirectional and a declared commit must name every
+protected file it touched. CLERICAL carries the same machine-checked constraint that matters
+here (`affects_scoring_rule` must be false) without overstating the change as SUBSTANTIVE.
+
+**What this deliberately does NOT do.** Gate logic is untouched — no F or G check changes.
+`x04_freeze_check.py` is **not** in `METHODOLOGY_SURFACE`, so no authorized frozen-blob
+manifest is affected. Nothing is authorized: the boundary remains **ABSENT** and execution
+remains **FORBIDDEN**. **No holdout document was opened by any extractor**; the only holdout
+bytes read were the ones F2 and F8 hash at gate time, which is the frozen gate's own
+behaviour. `results/contamination.json` is untouched and `x01_contamination.py` was not run.
+`holdout_membership.json` is unmodified. No canonical `frames.json`, oracle, key, adjudication,
+metric or decision artifact exists.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
