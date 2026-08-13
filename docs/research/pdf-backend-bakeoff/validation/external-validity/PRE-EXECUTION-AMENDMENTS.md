@@ -5439,7 +5439,7 @@ authorization, and A11's one-way marker is not created here.
 
 ```json
 {"id": "A43", "class": "SUBSTANTIVE",
- "commits": ["75201b5", "b847dea", "b3d9ede", "c03ce73"],
+ "commits": ["75201b5", "b847dea", "b3d9ede", "c03ce73", "bda030a"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/execute_study.py", "probes/x29_execute_study.py",
@@ -5720,6 +5720,61 @@ two agree by transitivity. Keeping a third comparison would imply the other two 
 **Controls: `x29` 56 → 58.** Both negatives, plus the non-vacuity positive that an **intact**
 artifact still loads with no population argument — without which a bijection that refused
 everything would pass both negatives and look like a fix.
+
+### A43.8 — RULED. The canonical authority was never proven to still be the frozen artifact
+
+**The defect.** This module calls `results/holdout_membership.json` *the committed authority*
+and reads it from the **working tree**. x04's F1/F10/F11 do prove it is tracked, clean and
+identical to the population freeze — **at gate time**. Execution happens afterwards, and nothing
+re-established it, so an edit between the gate and the run was invisible to the whole path.
+
+**Measured**, with a **simulated** valid boundary (`EXECUTION-START.json` is never created) and
+the canonical membership edited so member A pointed at member B's path and SHA:
+
+```
+canonical_population()      ACCEPTED -- 116-hr-7611 resolved to 115-hr-5961/rh.pdf
+assert_population_complete  ACCEPTED
+control_documents           ACCEPTED
+document_strata             ACCEPTED
+assert_source_permitted     ACCEPTED   <- the last guard before extraction
+```
+
+**Why A43.6 and A43.7 cannot see this, and are not weakened by it.** Those checks compare the
+descriptor, and the artifact, **against the authority**. Here the **authority itself moved**, so
+every comparison agrees — both sides wrong. Re-hashing the source cannot see it either, because
+the mutated authority records the hash of the file it now points at. An authority is only worth
+comparing against **while it is the frozen one**, and that is a fact about git rather than about
+its contents. It is the one property none of the content checks can establish about themselves.
+
+**The invariant.** Before any canonical confirmatory source is opened, or any canonical artifact
+is written or consumed, the canonical membership must be **tracked, unmodified against HEAD, and
+byte-equal to the blob at `POPULATION_FREEZE_COMMIT`**. Enforced at `canonical_population`,
+`build_document_frame_for`, `write_frames` and `load_frames`.
+
+| refusal | condition |
+|---|---|
+| `CANONICAL_AUTHORITY_UNCOMMITTED` | untracked, or modified against HEAD |
+| `CANONICAL_AUTHORITY_NOT_FROZEN` | committed, but not the blob frozen at the population commit |
+
+**x04 is the single definition** of both "committed" and "the frozen population", reused here
+rather than restated. A second spelling would be a second thing to keep in agreement — the exact
+defect A43.2 repaired for the holdout guard, and it would be perverse to reintroduce it in the
+check that exists to prove the authority is genuine.
+
+**Fixtures are exempt, deliberately.** A SYNTHETIC or DEVELOPMENT membership is untracked by
+design, so requiring it to be committed would refuse every control while proving nothing about
+the canonical run. The restriction attaches to the canonical **path**, not to the concept, and a
+control asserts that the fixture seam stays exempt.
+
+**Ordering.** A43.8 runs *before* `assert_source_permitted` in `build_document_frame_for`. It
+reads git and the manifest and never the PDF, so it does not reintroduce A43.6's ordering defect,
+and an authority worth consulting is a precondition for both checks that follow.
+
+**Controls: `x29` 58 → 68.** The post-gate mutation refused at three separate entry points, five
+non-vacuity positives establishing that the clean committed authority is accepted by each, an
+assertion that the fixture seam stays exempt, and proof that the simulated boundary creates **no
+marker** and that the manifest is restored **byte-identically** — this control edits the real
+frozen artifact, so leaving debris would fail F10 on the next gate run.
 
 ### A43.5 — what this deliberately does NOT do
 

@@ -11,6 +11,8 @@
  "population_authority": "results/holdout_membership.json",
  "page_limit": null,
  "refusal_classes": [
+  "CANONICAL_AUTHORITY_NOT_FROZEN",
+  "CANONICAL_AUTHORITY_UNCOMMITTED",
   "DECLARED_COUNT_MISMATCH",
   "DESCRIPTOR_METADATA_MISMATCH",
   "DUPLICATE_FRAME",
@@ -43,6 +45,14 @@
    "stratum",
    "canonical_authority",
    "readback"
+  ]
+ },
+ "authority": {
+  "canonical_authority_verified_at": [
+   "canonical_population",
+   "build_document_frame_for",
+   "write_frames",
+   "load_frames"
   ]
  },
  "guard": {
@@ -321,6 +331,66 @@
    "observed": "2 frames"
   },
   {
+   "check": "NON-VACUITY: the clean committed authority is ACCEPTED by canonical_population",
+   "ok": true,
+   "fails_when": "the new check refuses the frozen authority, which would make the negative meaningless",
+   "observed": "17 descriptors"
+  },
+  {
+   "check": "NON-VACUITY: the clean committed authority passes assert_canonical_authority",
+   "ok": true,
+   "fails_when": "",
+   "observed": "accepted"
+  },
+  {
+   "check": "NON-VACUITY: the clean committed authority passes load_frames (authority arm)",
+   "ok": true,
+   "fails_when": "",
+   "observed": "FRAMES_ARTIFACT_MISSING"
+  },
+  {
+   "check": "a SYNTHETIC fixture membership is exempt from the committed requirement",
+   "ok": true,
+   "fails_when": "the restriction attaches to the concept rather than the canonical path, refusing every control",
+   "observed": ""
+  },
+  {
+   "check": "the simulated boundary does not create EXECUTION-START.json",
+   "ok": true,
+   "fails_when": "the probe authorized execution",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION repoint a member at another member's bytes AFTER the gate -> CANONICAL_AUTHORITY_UNCOMMITTED",
+   "ok": true,
+   "fails_when": "the authority is edited between x04's gate and execution, and every descriptor check still agrees because the AUTHORITY ITSELF moved",
+   "observed": "CANONICAL_AUTHORITY_UNCOMMITTED"
+  },
+  {
+   "check": "...and the invariant refuses directly, not only through the loader",
+   "ok": true,
+   "fails_when": "",
+   "observed": "CANONICAL_AUTHORITY_UNCOMMITTED"
+  },
+  {
+   "check": "...and a canonical artifact may not be CONSUMED against the drifted authority",
+   "ok": true,
+   "fails_when": "the artifact is compared to a manifest that is no longer the frozen one",
+   "observed": "CANONICAL_AUTHORITY_UNCOMMITTED"
+  },
+  {
+   "check": "the canonical authority is restored byte-identically after fault injection",
+   "ok": true,
+   "fails_when": "the frozen manifest is left modified, which F10 would then fail on",
+   "observed": "1a8588c436e1"
+  },
+  {
+   "check": "the authority invariant is GREEN again after the fault is reverted",
+   "ok": true,
+   "fails_when": "",
+   "observed": ""
+  },
+  {
    "check": "build_oracle.HOLDOUT_GUARD equals the committed membership",
    "ok": true,
    "fails_when": "the guard is a transcription that drifts from the authority",
@@ -417,6 +487,6 @@
    "observed": ""
   }
  ],
- "n_checks": 58,
+ "n_checks": 68,
  "n_failed": 0
 }
