@@ -92,6 +92,7 @@ DESCRIPTOR_METADATA_MISMATCH = "DESCRIPTOR_METADATA_MISMATCH"
 EXTRACTION_SOURCE_MISMATCH = "EXTRACTION_SOURCE_MISMATCH"
 NON_CANONICAL_AUTHORITY = "NON_CANONICAL_AUTHORITY"
 FRAME_SOURCE_MISMATCH = "FRAME_SOURCE_MISMATCH"
+DUPLICATE_FRAME = "DUPLICATE_FRAME"
 
 
 class ExecutionPathError(Exception):
@@ -489,12 +490,32 @@ def load_frames(
         if bad:
             raise ExecutionPathError(FRAME_SOURCE_MISMATCH, {"member": did, "fields": bad})
 
+    # A43.7 -- THE FRAME SET IS A PROPERTY OF THE ARTIFACT, not of the caller's argument.
+    #
+    # The bijection used to sit inside `if population is not None`, so an artifact whose every
+    # surviving frame was individually valid passed when no population was supplied. Measured:
+    # a truncated artifact loaded with 1 frame, and a duplicated one with 3 frames, against a
+    # 2-member authority. Per-frame validity cannot see either -- deleting a frame leaves the
+    # rest correct, and a duplicate IS correct, twice.
+    #
+    # The artifact must therefore carry EXACTLY ONE frame per member of the authority, checked
+    # unconditionally. `population` now adds only its descriptor checks, and the old
+    # artifact-vs-population comparison is dropped as redundant: artifact == authority holds
+    # here and population == authority holds in assert_population_complete, so the two agree
+    # by transitivity rather than by a third comparison.
+    ids = [f.get("document") for f in doc["frames"]]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise ExecutionPathError(DUPLICATE_FRAME, {"duplicated": dupes, "n_frames": len(ids)})
+    missing, extra = sorted(set(records) - set(ids)), sorted(set(ids) - set(records))
+    if missing or extra:
+        raise ExecutionPathError(
+            FRAME_POPULATION_MISMATCH,
+            {"missing": missing, "extra": extra, "n_frames": len(ids), "n_authority": len(records)},
+        )
+
     if population is not None:
         assert_population_complete(population, membership_path)
-        got = sorted(f.get("document") for f in doc["frames"])
-        want_ids = sorted(d.document_id for d in population)
-        if got != want_ids:
-            raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"artifact": got, "population": want_ids})
     return doc
 
 

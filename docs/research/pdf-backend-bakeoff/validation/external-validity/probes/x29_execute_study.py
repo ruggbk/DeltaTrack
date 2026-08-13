@@ -451,12 +451,55 @@ def part_identity(root: Path) -> dict:
         )
         check(f"MUTATION frame {field} disagrees with the authority -> FRAME_SOURCE_MISMATCH", ok, why, obs)
 
+    # --- MUTATION 23/24: A43.7, the frame SET with NO population argument ---------------
+    # Per-frame validity cannot see either of these: deleting a frame leaves every survivor
+    # correct, and a duplicate IS correct, twice. Both previously passed because the bijection
+    # was conditional on a population tuple being supplied.
+    intact = root / "frames_intact.json"
+    intact.write_text(json.dumps(payload, default=str))
+
+    truncated = copy.deepcopy(payload)
+    truncated["frames"].pop()
+    trunc_path = root / "frames_short.json"
+    trunc_path.write_text(json.dumps(truncated, default=str))
+    ok, obs = refuses(
+        lambda: ES.load_frames(trunc_path, None, require_committed=False, membership_path=mpath),
+        ES.FRAME_POPULATION_MISMATCH,
+    )
+    check(
+        "MUTATION drop a frame, every survivor still valid, population=None -> FRAME_POPULATION_MISMATCH",
+        ok,
+        "a 1-of-2 artifact is consumed as a complete study whenever the caller passes no population",
+        obs,
+    )
+
+    duplicated = copy.deepcopy(payload)
+    duplicated["frames"].append(copy.deepcopy(duplicated["frames"][0]))
+    dup_path = root / "frames_dup.json"
+    dup_path.write_text(json.dumps(duplicated, default=str))
+    ok, obs = refuses(
+        lambda: ES.load_frames(dup_path, None, require_committed=False, membership_path=mpath), ES.DUPLICATE_FRAME
+    )
+    check(
+        "MUTATION duplicate a VALID frame, population=None -> DUPLICATE_FRAME",
+        ok,
+        "one document is scored twice; the duplicate is individually valid so no per-frame check sees it",
+        obs,
+    )
+
     ok, obs = True, ""
     try:
-        ES.load_frames(root / "elsewhere.json", None, require_committed=False, membership_path=mpath)
+        loaded = ES.load_frames(intact, None, require_committed=False, membership_path=mpath)
+        ok = len(loaded["frames"]) == len(pop)
+        obs = f"{len(loaded['frames'])} frames"
     except Exception as exc:
         ok, obs = False, f"{type(exc).__name__}: {exc}"
-    check("NON-VACUITY: an unmutated artifact still loads with no population argument", ok, "", obs)
+    check(
+        "NON-VACUITY: the INTACT artifact still loads with no population argument",
+        ok,
+        "the new bijection refuses a correct artifact, making the two negatives meaningless",
+        obs,
+    )
     return {
         "n_members": len(pop),
         "mutations": ["pdf_path", "population", "stratum", "canonical_authority", "readback"],
