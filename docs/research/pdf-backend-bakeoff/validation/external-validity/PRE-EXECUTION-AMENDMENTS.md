@@ -5439,7 +5439,7 @@ authorization, and A11's one-way marker is not created here.
 
 ```json
 {"id": "A43", "class": "SUBSTANTIVE",
- "commits": ["75201b5", "b847dea"],
+ "commits": ["75201b5", "b847dea", "b3d9ede"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/execute_study.py", "probes/x29_execute_study.py",
@@ -5620,6 +5620,71 @@ its own it reported `execution path does not import: No module named 'pdfium_hyb
 healthy tree**. A gate that fails for its own reasons rather than the tree's is worse than no gate,
 because the red is uninformative and invites being ignored. Fixed in `b847dea`, and it is why the
 gate is exercised from `x04`'s own process and not only through `x29`.
+
+### A43.6 — RULED. Authority validation was ID-ONLY after `load_population`
+
+**The defect.** `assert_population_complete` compared `{d.document_id}` against the frozen id
+set and nothing else. `load_population` validated everything — population, stratum, path, source
+hash — but it returned plain descriptors, and **every check after that point was an id
+comparison**. A descriptor carrying the correct id and substituted result-bearing metadata
+therefore passed every handover.
+
+**Measured on DEVELOPMENT material before the repair. All four were ACCEPTED.**
+
+| channel | mutation | what it moved |
+|---|---|---|
+| `pdf_path` | swapped to another DEVELOPMENT pdf, **id and recorded sha retained** | the frame was built from the **other document's bytes** while still carrying the frozen `document_sha256` |
+| `population` | swapped to the other **valid** value | `c_frame_selected` **3 → 0** — the C-frame draw is P-head-only, so it empties **silently** |
+| `stratum` | swapped to another **valid** value | `document_strata` changed, which §4.5's adequacy count reads |
+| authority | canonical `results/frames.json` written from a **synthetic** membership | the fixture recorded itself as `population_authority` |
+
+**The first is the worst.** The emitted frame claimed the frozen `document_sha256` while its
+pages came from a different document — a frame that misdescribes its own provenance, on the key
+every downstream join uses. Nothing downstream could have detected it, because everything
+downstream trusts `document_sha256` as identity.
+
+**Why A43's own controls missed it, stated because the pattern generalises.** Every one of the
+17 mutations mutated the **membership file**, which `load_population` validates and refuses. Not
+one mutated a **descriptor after load**, which is precisely where the authority stopped being
+consulted. The controls tested the loader thoroughly and the *handover* not at all, and read as
+comprehensive because the count was high. **A high control count over one seam is not coverage of
+two.**
+
+**The repair, smallest form.**
+
+- `assert_population_complete` compares `kind`, `population`, `stratum`, `sha256` and the
+  recorded **path suffix** against the authority's own record, for every descriptor, at every
+  handover. The suffix rather than the absolute path because `docs_root` is a
+  SYNTHETIC/DEVELOPMENT seam; an absolute comparison would refuse every control while proving
+  nothing more about the canonical run. **`pages` is deliberately not compared** — no rule reads
+  it, and the source bytes it would only proxy for are verified directly below.
+- `build_document_frame_for` **re-hashes the file it is about to extract**, against the
+  **authority** and not the descriptor: comparing to the descriptor's own `sha256` would be
+  circular, since a substituted descriptor carries whatever hash it likes. Hashing at load proves
+  what was true at load; this is the only check that sees the bytes the runners will open.
+- the **canonical** `frames.json` may only be bound to the **canonical** membership. The two
+  seams — an alternate `out_path` and an alternate `membership_path` — are each reasonable and
+  their combination is not.
+- `load_frames` checks every frame's `document_sha256` and `population` against the authority
+  **unconditionally**, including the no-`population` arm a downstream consumer is most likely to
+  call and which previously checked nothing at all.
+
+**An ordering defect in the repair, found by the controls.** The re-hash **reads the file**, so
+running it before `assert_source_permitted` meant a confirmatory member's bytes were read before
+the gate deciding whether it may be opened, and a pre-boundary holdout reported a hash mismatch
+instead of `HOLDOUT_BEFORE_EXECUTION_BOUNDARY`. Authorization is the more fundamental question and
+is now asked first.
+
+**Controls: `x29` 41 → 56.** Five mutations (`pdf_path`, `population`, `stratum`,
+canonical-authority binding, and read-back on both `document_sha256` and `population`) plus **six
+non-vacuity positives** — the unmutated population passes each of the same handovers, an
+unmutated artifact still loads with no population argument, and **the same synthetic membership
+is still accepted at a NON-canonical path**, so the authority refusal is about the *pairing* and
+not about the fixture.
+
+**Clerical.** `x29`'s evidence artifact recorded absolute `mktemp` paths, so it differed on every
+run; a diff that always shows a change is a diff nobody reads. Two consecutive runs now produce a
+byte-identical artifact.
 
 ### A43.5 — what this deliberately does NOT do
 
