@@ -12,16 +12,20 @@
  "page_limit": null,
  "refusal_classes": [
   "DECLARED_COUNT_MISMATCH",
+  "DESCRIPTOR_METADATA_MISMATCH",
   "DUPLICATE_MEMBER_ID",
+  "EXTRACTION_SOURCE_MISMATCH",
   "FRAMES_ARTIFACT_MALFORMED",
   "FRAMES_ARTIFACT_MISSING",
   "FRAMES_ARTIFACT_UNCOMMITTED",
   "FRAME_METADATA_MISMATCH",
   "FRAME_POPULATION_MISMATCH",
+  "FRAME_SOURCE_MISMATCH",
   "INVALID_STRATUM",
   "MEMBERSHIP_MALFORMED",
   "MEMBERSHIP_MISSING",
   "MEMBER_MALFORMED",
+  "NON_CANONICAL_AUTHORITY",
   "POPULATION_DUPLICATED",
   "POPULATION_HAS_EXTRA",
   "POPULATION_INCOMPLETE",
@@ -30,6 +34,16 @@
   "SOURCE_SHA_MISMATCH",
   "UNKNOWN_POPULATION"
  ],
+ "identity": {
+  "n_members": 2,
+  "mutations": [
+   "pdf_path",
+   "population",
+   "stratum",
+   "canonical_authority",
+   "readback"
+  ]
+ },
  "guard": {
   "n_guarded": 17,
   "equals_membership": true
@@ -42,12 +56,12 @@
   "surface_size": 15
  },
  "population_evidence": {
-  "membership": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp275ku9ka/pop/membership.json",
-  "docs_root": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp275ku9ka/pop/holdout",
+  "membership": "<tmp>/membership.json",
+  "docs_root": "<tmp>/holdout",
   "n_members": 2
  },
  "frames_evidence": {
-  "frames_written": "/var/folders/_0/v874pq416t1fq68r14zwss840000gn/T/tmp275ku9ka/frames/frames.json",
+  "frames_written": "<tmp>/frames.json",
   "n_frames": 2,
   "c_frame_selected_p_head": 9,
   "c_frame_selected_p_robust": 0
@@ -204,6 +218,96 @@
    "observed": "P-head c_frame_selected=9, P-robust=0"
   },
   {
+   "check": "NON-VACUITY: the unmutated population passes assert_population_complete",
+   "ok": true,
+   "fails_when": "the handover refuses everything",
+   "observed": "accepted"
+  },
+  {
+   "check": "NON-VACUITY: the unmutated population passes control_documents",
+   "ok": true,
+   "fails_when": "the handover refuses everything",
+   "observed": "accepted"
+  },
+  {
+   "check": "NON-VACUITY: the unmutated population passes document_strata",
+   "ok": true,
+   "fails_when": "the handover refuses everything",
+   "observed": "accepted"
+  },
+  {
+   "check": "NON-VACUITY: the unmutated population passes build_document_frame_for",
+   "ok": true,
+   "fails_when": "the handover refuses everything",
+   "observed": "accepted"
+  },
+  {
+   "check": "MUTATION swap pdf_path to another DEVELOPMENT pdf, keeping id -> DESCRIPTOR_METADATA_MISMATCH",
+   "ok": true,
+   "fails_when": "the frame is built from substituted bytes while carrying the frozen document_sha256",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "...and the bytes are RE-HASHED at the point of extraction -> EXTRACTION_SOURCE_MISMATCH",
+   "ok": true,
+   "fails_when": "a path substituted after load reaches the runners; hashing at load only proves what was true at load",
+   "observed": "EXTRACTION_SOURCE_MISMATCH"
+  },
+  {
+   "check": "MUTATION swap population to the other VALID value, keeping id -> DESCRIPTOR_METADATA_MISMATCH",
+   "ok": true,
+   "fails_when": "the C-frame draw silently empties (P-head-only) under an unchanged document id",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "...and frames_document refuses before building anything",
+   "ok": true,
+   "fails_when": "the mutated frame is produced",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "MUTATION swap stratum to another VALID value, keeping id -> DESCRIPTOR_METADATA_MISMATCH",
+   "ok": true,
+   "fails_when": "section 4.5's strata-filled count reads a stratum the authority never assigned",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "...and document_strata refuses rather than reporting the mutated map",
+   "ok": true,
+   "fails_when": "the mutated map is returned",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "MUTATION write the CANONICAL frames.json from a synthetic membership -> NON_CANONICAL_AUTHORITY",
+   "ok": true,
+   "fails_when": "a fixture population is written to the canonical path and records itself as the authority",
+   "observed": "NON_CANONICAL_AUTHORITY"
+  },
+  {
+   "check": "NON-VACUITY: the same synthetic membership is accepted at a NON-canonical path",
+   "ok": true,
+   "fails_when": "",
+   "observed": "accepted at a non-canonical path"
+  },
+  {
+   "check": "MUTATION frame document_sha256 disagrees with the authority -> FRAME_SOURCE_MISMATCH",
+   "ok": true,
+   "fails_when": "a frame built from substituted bytes is consumed downstream",
+   "observed": "FRAME_SOURCE_MISMATCH"
+  },
+  {
+   "check": "MUTATION frame population disagrees with the authority -> FRAME_SOURCE_MISMATCH",
+   "ok": true,
+   "fails_when": "a frame built under the wrong population is consumed downstream",
+   "observed": "FRAME_SOURCE_MISMATCH"
+  },
+  {
+   "check": "NON-VACUITY: an unmutated artifact still loads with no population argument",
+   "ok": true,
+   "fails_when": "",
+   "observed": ""
+  },
+  {
    "check": "build_oracle.HOLDOUT_GUARD equals the committed membership",
    "ok": true,
    "fails_when": "the guard is a transcription that drifts from the authority",
@@ -300,6 +404,6 @@
    "observed": ""
   }
  ],
- "n_checks": 41,
+ "n_checks": 56,
  "n_failed": 0
 }
