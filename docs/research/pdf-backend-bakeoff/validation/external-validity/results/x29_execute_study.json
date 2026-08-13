@@ -13,6 +13,7 @@
  "refusal_classes": [
   "DECLARED_COUNT_MISMATCH",
   "DESCRIPTOR_METADATA_MISMATCH",
+  "DUPLICATE_FRAME",
   "DUPLICATE_MEMBER_ID",
   "EXTRACTION_SOURCE_MISMATCH",
   "FRAMES_ARTIFACT_MALFORMED",
@@ -302,10 +303,22 @@
    "observed": "FRAME_SOURCE_MISMATCH"
   },
   {
-   "check": "NON-VACUITY: an unmutated artifact still loads with no population argument",
+   "check": "MUTATION drop a frame, every survivor still valid, population=None -> FRAME_POPULATION_MISMATCH",
    "ok": true,
-   "fails_when": "",
-   "observed": ""
+   "fails_when": "a 1-of-2 artifact is consumed as a complete study whenever the caller passes no population",
+   "observed": "FRAME_POPULATION_MISMATCH"
+  },
+  {
+   "check": "MUTATION duplicate a VALID frame, population=None -> DUPLICATE_FRAME",
+   "ok": true,
+   "fails_when": "one document is scored twice; the duplicate is individually valid so no per-frame check sees it",
+   "observed": "DUPLICATE_FRAME"
+  },
+  {
+   "check": "NON-VACUITY: the INTACT artifact still loads with no population argument",
+   "ok": true,
+   "fails_when": "the new bijection refuses a correct artifact, making the two negatives meaningless",
+   "observed": "2 frames"
   },
   {
    "check": "build_oracle.HOLDOUT_GUARD equals the committed membership",
@@ -404,6 +417,6 @@
    "observed": ""
   }
  ],
- "n_checks": 56,
+ "n_checks": 58,
  "n_failed": 0
 }

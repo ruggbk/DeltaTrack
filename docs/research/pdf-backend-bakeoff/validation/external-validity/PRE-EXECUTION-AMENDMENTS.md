@@ -5439,7 +5439,7 @@ authorization, and A11's one-way marker is not created here.
 
 ```json
 {"id": "A43", "class": "SUBSTANTIVE",
- "commits": ["75201b5", "b847dea", "b3d9ede"],
+ "commits": ["75201b5", "b847dea", "b3d9ede", "c03ce73"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/execute_study.py", "probes/x29_execute_study.py",
@@ -5685,6 +5685,41 @@ not about the fixture.
 **Clerical.** `x29`'s evidence artifact recorded absolute `mktemp` paths, so it differed on every
 run; a diff that always shows a change is a diff nobody reads. Two consecutive runs now produce a
 byte-identical artifact.
+
+### A43.7 — RULED. The frame-set bijection was conditional on the caller
+
+**The defect, and it is the same shape as A43.6 one level out.** A43.6 made `load_frames` check
+every frame's `document_sha256` and `population` against the authority **unconditionally**. The
+**frame-set** check was left where it already was — inside `if population is not None`. So an
+artifact whose every surviving frame was individually valid passed when no population was
+supplied. Measured on DEVELOPMENT material against a **2-member** authority:
+
+```
+truncated  (one frame removed)  -> load_frames(population=None) SUCCEEDED, 1 frame
+duplicated (one frame copied)   -> load_frames(population=None) SUCCEEDED, 3 frames
+```
+
+**Per-frame validity cannot see either of these.** Deleting a frame leaves every survivor
+correct, and a duplicate **is** correct — twice. And the no-`population` arm is the one a
+downstream consumer is most likely to call, because it is the one that needs no extra argument.
+
+**The invariant, stated where it belongs.** The frame set is a property of **the artifact**, not
+of the caller's argument, so it is checked unconditionally: the artifact must carry **exactly one
+frame per member of the authority**.
+
+| condition | refusal |
+|---|---|
+| a member appears more than once | `DUPLICATE_FRAME` — new, so "scored twice" is never reported as "a member is missing" |
+| a member is absent, or a non-member is present | `FRAME_POPULATION_MISMATCH`, with both counts |
+
+`population` now contributes **only** its descriptor checks. The old artifact-vs-population
+comparison is **dropped as redundant** rather than kept as reassurance: artifact == authority
+holds in the new check and population == authority holds in `assert_population_complete`, so the
+two agree by transitivity. Keeping a third comparison would imply the other two were not trusted.
+
+**Controls: `x29` 56 → 58.** Both negatives, plus the non-vacuity positive that an **intact**
+artifact still loads with no population argument — without which a bijection that refused
+everything would pass both negatives and look like a fix.
 
 ### A43.5 — what this deliberately does NOT do
 
