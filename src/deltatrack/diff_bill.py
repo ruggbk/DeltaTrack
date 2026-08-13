@@ -199,53 +199,6 @@ def financial_change_to_dict(fc: FinancialChange) -> dict:
     }
 
 
-def _similarity_pair(
-    old_nodes: list[BillNode],
-    new_nodes: list[BillNode],
-) -> list[tuple[BillNode | None, BillNode | None]]:
-    """Greedy best-match pairing by text similarity within a group."""
-    if not old_nodes and not new_nodes:
-        return []
-    if not old_nodes:
-        return [(None, n) for n in new_nodes]
-    if not new_nodes:
-        return [(o, None) for o in old_nodes]
-    if len(old_nodes) == 1 and len(new_nodes) == 1:
-        return [(old_nodes[0], new_nodes[0])]
-
-    # Compute all pairwise similarities
-    candidates: list[tuple[float, int, int]] = []
-    for oi, o in enumerate(old_nodes):
-        o_norm = _normalize_text(o.body_text)
-        for ni, n in enumerate(new_nodes):
-            n_norm = _normalize_text(n.body_text)
-            sim = text_similarity(o_norm, n_norm)
-            candidates.append((sim, oi, ni))
-
-    # Greedy: highest similarity first
-    candidates.sort(reverse=True)
-    claimed_old: set[int] = set()
-    claimed_new: set[int] = set()
-    pairs: list[tuple[BillNode | None, BillNode | None]] = []
-
-    for _sim, oi, ni in candidates:
-        if oi in claimed_old or ni in claimed_new:
-            continue
-        claimed_old.add(oi)
-        claimed_new.add(ni)
-        pairs.append((old_nodes[oi], new_nodes[ni]))
-
-    # Leftovers
-    for oi, o in enumerate(old_nodes):
-        if oi not in claimed_old:
-            pairs.append((o, None))
-    for ni, n in enumerate(new_nodes):
-        if ni not in claimed_new:
-            pairs.append((None, n))
-
-    return pairs
-
-
 @dataclass(frozen=True)
 class RetrievedPopulation:
     """One round-1 retriever invocation's ordered population, and its ADR 0019 addresses.
@@ -399,24 +352,347 @@ def retrieve_cross_division_population(
     )
 
 
+@dataclass(frozen=True)
+class SelectedLink:
+    """One pairing round-1 group ASSIGNMENT selected, and the evidence record that selected it.
+
+    ADR 0020 requires every selected link to carry exactly one evidence record. Carrying it on
+    the link rather than recovering it afterwards is what makes that structural: there is no
+    point at which a selection exists apart from its grounds, so no later edit can sever the
+    two without deleting a field.
+
+    Nodes rather than :class:`~deltatrack.matching.ObservationRef`, because the orchestrator
+    routes nodes and the registry is not this stage's to consult. The ADR 0019 addresses are on
+    ``evidence``, which is where a consumer that wants them should read them.
+    """
+
+    old: BillNode
+    new: BillNode
+    evidence: CorrespondenceEvidence
+
+
+@dataclass(frozen=True)
+class GroupAssignment:
+    """ASSIGNMENT's result for one retrieved population: what corresponds, and what is left.
+
+    **``evidence`` is every candidate's record, not the winners'.** ADR 0020 invariant 8 keeps
+    the evidence for candidates that reached assignment inspectable, losers included, and the
+    tempting shape -- return the selected links and drop the rest -- is a false green that reads
+    as compliance: every selected link would carry a record, and nothing would show that the
+    competition it won was ever described. Retained and unattached, exactly as
+    :func:`similarity_correspondence_evidence` and :func:`move_correspondence_evidence` already
+    keep their rejected records.
+
+    ``leftover_old`` and ``leftover_new`` are the observations no link claimed, each in
+    invocation-local order. They are what round 1b's retrieval population is built from, so the
+    order is policy rather than presentation -- see :func:`retrieve_cross_division_population`.
+
+    Not a :class:`~deltatrack.matching.Correspondence` or a ``CorrespondenceSet``, deliberately.
+    Round 1a's selections are provisional: round 1b consults their leftovers, and the later
+    similarity rule may revoke one outright. ``CorrespondenceSet`` refuses an observation that
+    already corresponds, so settling here merely to satisfy the vocabulary would make a
+    revocation impossible to express. Settlement stays where it is, in
+    :func:`settle_correspondences`.
+    """
+
+    evidence: tuple[CorrespondenceEvidence, ...]
+    links: tuple[SelectedLink, ...]
+    leftover_old: tuple[BillNode, ...]
+    leftover_new: tuple[BillNode, ...]
+
+    def __post_init__(self) -> None:
+        retained = set(self.evidence)
+        orphaned = [link for link in self.links if link.evidence not in retained]
+        if orphaned:
+            raise ValueError(
+                f"{len(orphaned)} selected link(s) carry evidence absent from the retained set, "
+                f"e.g. {orphaned[0].evidence.old}->{orphaned[0].evidence.new}; a selection's grounds "
+                "must be one of the records the competition was decided on"
+            )
+
+
+def group_correspondence_evidence(
+    population: RetrievedPopulation,
+    candidates: CandidateSet,
+) -> tuple[CorrespondenceEvidence, ...]:
+    """CORRESPONDENCE EVIDENCE, round 1: describe every pair retrieval admitted, and only those.
+
+    One record per admitted candidate, addressed by ADR 0019 observation pair, in
+    invocation-local order. It decides nothing: no verdict, no threshold, no winner flag, and no
+    local ``(oi, ni)``. Those are :func:`assign_group`'s, and keeping them out of here is what
+    lets a test hand assignment evidence that disagrees with the node texts and watch which one
+    it follows.
+
+    ## Two authorities, and why neither can do the other's job
+
+    **The ``CandidateSet`` is the admission authority.** Nothing is described until
+    :meth:`~deltatrack.matching.CandidateSet.candidate_for` says retrieval proposed that
+    observation pair *and* that the candidate carries a proposal from this population's own
+    invocation. This is the ADR 0020 boundary made load-bearing rather than merely checked
+    afterwards: reconstructing a pair from population membership alone would let "retrieval says
+    this is not a candidate" and "assignment nevertheless selects it" hold at the same time,
+    which is the state the intermediate value exists to make unreachable.
+
+    **The population remains the invocation-local ordering authority.** The set is reached by
+    lookup and never iterated, deliberately: its
+    :meth:`~deltatrack.matching.CandidateSet.candidates` order is canonical by ordinal pair, and
+    a stage that walked it to answer an admission question would be holding that order at the
+    moment it built the sequence assignment consumes. So the loop below is over
+    ``population.old`` x ``population.new``, and the emitted order is the population's, which is
+    what makes ``(oi, ni)`` reconstructible downstream.
+
+    The set also could not supply the local view on its own: every within-division population of
+    a comparison runs under one :class:`~deltatrack.matching.RetrieverInvocation`, so filtering
+    the comparison-scoped set by invocation yields the union across divisions with no
+    division-local partition and no ordering. Admission is a per-pair question the set answers;
+    the membership and order of *this* invocation's view are the population's.
+
+    Both failures are refused rather than resolved -- see
+    :func:`_refuse_a_candidate_retrieval_did_not_admit` -- and refused for the whole population
+    before anything is measured, so a partial description can never be handed on.
+
+    ## Two populations, two signal sets, and why the second carries no number
+
+    A multi-candidate population gets :data:`WORD_OVERLAP` for every pair: the word-level ratio
+    of the two normalized bodies, which is the quantity the fused matcher computed to decide the
+    greedy competition. It is natively evidence here -- unlike round 2, where the same name is a
+    promoted retrieval score.
+
+    A 1x1 population gets **one record with no signals**, and that absence is the preserved
+    behaviour rather than an omission. The fused matcher selected a sole candidate without
+    computing a ratio, which skips 593 invocations' worth of ``text_similarity`` on the
+    committed corpus; #623 measured the equivalent tidy-up at +21% on ``diff_bills`` and
+    rejected it. So no ratio is computed and none is invented: an empty
+    :class:`~deltatrack.matching.CorrespondenceEvidence` is valid under the checked-in contract,
+    and a fabricated ``1.0`` or ``None`` would be a number a later reader could compare against
+    a real one. The record exists because the candidate reaches assignment and every such
+    candidate is described; what it says is nothing.
+
+    **Not :func:`_similarity_signals`.** That helper serves the later similarity revocation rule
+    and deliberately computes the diff first, skipping the ratio entirely for unchanged bodies.
+    Reusing it here would change which ``text_similarity`` calls the engine makes -- the fused
+    group matcher scores every candidate of a multi-candidate population whether or not the
+    bodies happen to be identical. B2 extracts the behaviour that exists rather than making the
+    two similarity rules aesthetically uniform.
+
+    A one-sided population forms no pair, so it is admitted to nothing, describes nothing and
+    returns ``()``.
+    """
+    if not population.forms_candidates:
+        return ()
+
+    _refuse_a_candidate_retrieval_did_not_admit(population, candidates)
+
+    # The 1x1 shortcut applies only AFTER admission. The sole pair has to be in the candidate set
+    # under this invocation like any other; what the shortcut preserves is that no ratio is
+    # computed for it, not that it skips the boundary.
+    if len(population.old) == 1 and len(population.new) == 1:
+        return (CorrespondenceEvidence(old=population.old_refs[0], new=population.new_refs[0]),)
+
+    # The legacy loop's exact shape, including re-normalizing each new body per old node.
+    # Hoisting that out is a pure-function optimisation and not this slice's to make.
+    evidence: list[CorrespondenceEvidence] = []
+    for old_index, old_node in enumerate(population.old):
+        old_normalized = _normalize_text(old_node.body_text)
+        for new_index, new_node in enumerate(population.new):
+            new_normalized = _normalize_text(new_node.body_text)
+            evidence.append(
+                CorrespondenceEvidence.of(
+                    population.old_refs[old_index],
+                    population.new_refs[new_index],
+                    **{WORD_OVERLAP: text_similarity(old_normalized, new_normalized)},
+                )
+            )
+    return tuple(evidence)
+
+
+def _refuse_a_candidate_retrieval_did_not_admit(
+    population: RetrievedPopulation,
+    candidates: CandidateSet,
+) -> None:
+    """Every pair about to be described, admitted by retrieval under this invocation. Fails closed.
+
+    Two questions, two failures, and they are distinct enough to be worth separate messages. A
+    pair absent from the set is one retrieval never proposed at all. A pair present but carrying
+    no proposal from this population's invocation is one some *other* invocation surfaced, which
+    is not the same fact: candidates are comparison-scoped and the cross-division round can
+    legitimately re-propose a pair the within-division round already offered, so "this pair was
+    considered by somebody" would admit a pair the current invocation never retrieved.
+
+    **Refused, never reconstructed.** The tempting recovery -- the population says the pair
+    exists, so describe it anyway -- is precisely the hole this closes: it would let retrieval
+    and assignment disagree about what was considered while every pairing that resulted still
+    looked correct, which is the shape a materialisation defect takes and the one no
+    pairing-stream gate can see.
+
+    Checked for the whole population before anything is measured, so a partial description can
+    never reach assignment. Iterated in population order rather than by walking the set, because
+    the set's canonical order is exactly what must not leak into the sequence assignment reads.
+    """
+    for old_ref in population.old_refs:
+        for new_ref in population.new_refs:
+            candidate = candidates.candidate_for(old_ref, new_ref)
+            if candidate is None:
+                raise ValueError(
+                    f"retrieval never admitted {old_ref}->{new_ref}, which {population.invocation.retriever} is "
+                    "describing; correspondence evidence exists only for pairs the candidate set holds"
+                )
+            if population.invocation not in candidate.invocations:
+                raise ValueError(
+                    f"candidate {old_ref}->{new_ref} carries no proposal from {population.invocation}; it was "
+                    f"surfaced by {[i.retriever for i in candidate.invocations]} and this invocation may not "
+                    "describe a pair it did not retrieve"
+                )
+
+
+def assign_group(
+    population: RetrievedPopulation,
+    evidence: tuple[CorrespondenceEvidence, ...],
+) -> GroupAssignment:
+    """ASSIGNMENT, round 1: which of one invocation's candidates actually correspond.
+
+    Reads the ordered population and the supplied evidence, and **nothing else**. No body text,
+    no normalization, no ``text_similarity``, no ``diff_text``, no ``Proposal.score``. Hand it
+    evidence that disagrees with what recomputing the texts would say and it follows the
+    evidence; that is what makes the boundary a fact rather than a comment, and
+    ``tests/test_round1_preservation.py`` bombs ``text_similarity`` while driving it to prove it.
+
+    **There is no threshold here, and adding one would change matching policy.** The fused
+    matcher's greedy claim was unthresholded: a 0.01 pairing wins its group if it is the best
+    available, and the separate post-round-1 rule in :func:`apply_similarity_assignment_rule` is
+    what revokes it afterwards. Those are two assignment acts in sequence, not one rule split in
+    two, and folding ``SIMILARITY_THRESHOLD`` into this one would silently delete the
+    composition.
+
+    ## The ordering is policy, and it is local
+
+    Multi-candidate populations reproduce ``sorted(candidates, reverse=True)`` over legacy
+    ``(similarity, oi, ni)`` tuples: highest :data:`WORD_OVERLAP` first, ties broken on
+    **descending** invocation-local ``oi`` and then **descending** local ``ni``, then greedy
+    exclusivity -- once an observation is claimed it cannot be selected again.
+
+    ``oi`` and ``ni`` are positions in ``population.old_refs`` / ``population.new_refs``,
+    reconstructed here and stored nowhere. They are **not** ADR 0019 ordinals, not
+    ``CandidateSet`` iteration positions and not positions in ``evidence``: #590 measured that
+    substituting parser ordinals for them changes the selected correspondence, and B0 measured
+    that using the candidate set's canonical order changes the selected links on 174 of 329
+    greedy invocations. The same separation ``_greedy_move_links`` keeps on the round-2 side,
+    for the same reason.
+
+    A 1x1 population selects its sole candidate outright, without reading a signal -- which is
+    what the greedy would do anyway, and what lets :func:`group_correspondence_evidence` leave
+    the record empty.
+
+    Leftovers follow the selections: old first in local order, then new, which is the order the
+    fused matcher emitted them in and the order round 1b's population depends on.
+
+    Malformed input raises rather than resolving itself. A population whose evidence is not
+    exactly one record per retrieved candidate means the two stages disagree about what was
+    retrieved, and quietly assigning over the subset would drop a candidate from the competition
+    while every pairing that remained still looked correct.
+    """
+    if not population.forms_candidates:
+        raise ValueError(
+            f"assignment received a {len(population.old)}x{len(population.new)} population, which "
+            "forms no candidate pair; retrieval's one-sided output is routed unclaimed and never assigned"
+        )
+
+    old_position = {ref: index for index, ref in enumerate(population.old_refs)}
+    new_position = {ref: index for index, ref in enumerate(population.new_refs)}
+    _refuse_evidence_that_is_not_one_record_per_candidate(population, evidence, old_position, new_position)
+
+    if len(population.old) == 1 and len(population.new) == 1:
+        (sole,) = evidence
+        return GroupAssignment(
+            evidence=evidence,
+            links=(SelectedLink(population.old[0], population.new[0], sole),),
+            leftover_old=(),
+            leftover_new=(),
+        )
+
+    ordered = sorted(
+        evidence,
+        key=lambda item: (_word_overlap(item), old_position[item.old], new_position[item.new]),
+        reverse=True,
+    )
+
+    claimed_old: set[int] = set()
+    claimed_new: set[int] = set()
+    links: list[SelectedLink] = []
+    for item in ordered:
+        old_index, new_index = old_position[item.old], new_position[item.new]
+        if old_index in claimed_old or new_index in claimed_new:
+            continue
+        claimed_old.add(old_index)
+        claimed_new.add(new_index)
+        links.append(SelectedLink(population.old[old_index], population.new[new_index], item))
+
+    return GroupAssignment(
+        evidence=evidence,
+        links=tuple(links),
+        leftover_old=tuple(node for index, node in enumerate(population.old) if index not in claimed_old),
+        leftover_new=tuple(node for index, node in enumerate(population.new) if index not in claimed_new),
+    )
+
+
+def _refuse_evidence_that_is_not_one_record_per_candidate(
+    population: RetrievedPopulation,
+    evidence: tuple[CorrespondenceEvidence, ...],
+    old_position: dict[ObservationRef, int],
+    new_position: dict[ObservationRef, int],
+) -> None:
+    """Exactly one record per retrieved candidate: no missing, no extra, no repeat.
+
+    The count, the addressing and the absence of duplicates together pin the evidence set to
+    the population's full cross product, which is the only set assignment is entitled to decide
+    over. Each of the three fails differently and silently: a missing record drops a candidate
+    from the competition, an extra one lets assignment select a pair retrieval never admitted,
+    and a repeat gives one candidate two chances at the greedy claim.
+
+    This is the stages-disagree check, not the admission check. Whether retrieval admitted a pair
+    at all is settled one stage earlier, in
+    :func:`_refuse_a_candidate_retrieval_did_not_admit`, and settled against the ``CandidateSet``
+    rather than against the population -- which is why assignment can be handed hand-authored
+    evidence in a test without also being handed a candidate set.
+    """
+    expected = len(population.old) * len(population.new)
+    if len(evidence) != expected:
+        raise ValueError(
+            f"assignment received {len(evidence)} evidence records for a "
+            f"{len(population.old)}x{len(population.new)} retrieved population; every candidate that "
+            "reaches assignment carries exactly one"
+        )
+    described: set[tuple[ObservationRef, ObservationRef]] = set()
+    for item in evidence:
+        if item.old not in old_position or item.new not in new_position:
+            raise ValueError(
+                f"evidence names {item.old}->{item.new}, which this invocation never retrieved; "
+                "assignment decides over the retrieved candidates and no others"
+            )
+        if item.link in described:
+            raise ValueError(f"two evidence records for the candidate {item.old}->{item.new}")
+        described.add(item.link)
+
+
 def _match_collision_group(
     old_nodes: list[BillNode],
     new_nodes: list[BillNode],
     registry: "ObservationRegistry",
     candidates: CandidateSet,
-) -> list[tuple[BillNode | None, BillNode | None]]:
-    """Resolve a collision group: two retrieval rounds, each followed by legacy assignment.
+) -> tuple[list[tuple[BillNode | None, BillNode | None]], list[GroupAssignment]]:
+    """Resolve a collision group: two retrieval rounds, each followed by evidence and assignment.
 
-    The two populations are now named and produced by
-    :func:`retrieve_within_division_populations` and
-    :func:`retrieve_cross_division_population`; the rationale for the division partition lives
-    with the first of those. What remains here is orchestration: run the retrieval, hand each
-    population to the existing scorer, and route the result.
+    Orchestration only, and after B2 the four ADR 0020 stages are each somewhere else:
+    :func:`retrieve_within_division_populations` and :func:`retrieve_cross_division_population`
+    decide what is considered, :func:`group_correspondence_evidence` describes it, and
+    :func:`assign_group` decides what corresponds. What remains here is running them in order
+    and routing the result.
 
-    **``_similarity_pair`` is still the assigner.** It computes the similarities, applies the
-    greedy competition and breaks ties on local position, and none of that moves in this slice.
-    Splitting it into correspondence evidence and an assignment stage is B2's work; naming the
-    populations it consumes is what makes that split possible without also inventing them.
+    **The two rounds stay two competitions.** Round 1a's evidence and assignment are complete
+    before round 1b's population exists, because that population is built from 1a's assignment
+    leftovers. Computing the cross-division candidates earlier, or flattening the two into one
+    competition, would give a pair that 1a already resolved a second chance under different
+    company -- a matching-policy change, not a refactor.
 
     Two orderings are preserved because canonical output depends on them. Within-division
     populations are visited in division first-appearance order, and ``unmatched_old`` /
@@ -424,45 +700,48 @@ def _match_collision_group(
     division contributed with observations assignment declined. That interleaved sequence is
     round 1b's local index space, so it is built in one pass rather than assembled from two
     lists afterwards, which would reorder it.
+
+    **``propose_into`` runs before the evidence stage, and that order is load-bearing rather
+    than tidy.** The candidate set is what admits a pair to being described, so materialising
+    this invocation's proposals is a precondition of describing it, not bookkeeping alongside it.
+    A reader tempted to move the call later, or to drop it for a round whose pairs were "already"
+    proposed, is removing the admission the next line depends on.
+
+    Returns the pairing stream and every :class:`GroupAssignment` produced, in the order they
+    were produced. The assignments are what carry the evidence out of the stage; dropping them
+    here would leave the retained-evidence invariant true of a value nothing can reach.
     """
     pairs: list[tuple[BillNode | None, BillNode | None]] = []
+    assignments: list[GroupAssignment] = []
     unmatched_old: list[BillNode] = []
     unmatched_new: list[BillNode] = []
 
-    # Round 1a: retrieval, then the legacy assignment over each retrieved population.
+    # Round 1a: retrieval, then evidence and assignment over each retrieved population.
     for population in retrieve_within_division_populations(old_nodes, new_nodes, registry):
         if not population.forms_candidates:
-            # A division on one side only. No pair can be formed, so no invocation is recorded
-            # and the scorer is not called -- calling it with an empty side would return the
-            # same routing while adding an invocation that never happened.
+            # A division on one side only. No pair can be formed, so no invocation is recorded,
+            # nothing is described and nothing is assigned -- running the stages over an empty
+            # side would return the same routing while adding an invocation that never happened.
             unmatched_old.extend(population.old)
             unmatched_new.extend(population.new)
             continue
 
         population.propose_into(candidates)
-        for old_node, new_node in _similarity_pair(list(population.old), list(population.new)):
-            if old_node is None:
-                unmatched_new.append(new_node)
-            elif new_node is None:
-                unmatched_old.append(old_node)
-            else:
-                pairs.append((old_node, new_node))
+        assignment = assign_group(population, group_correspondence_evidence(population, candidates))
+        assignments.append(assignment)
+        pairs.extend((link.old, link.new) for link in assignment.links)
+        unmatched_old.extend(assignment.leftover_old)
+        unmatched_new.extend(assignment.leftover_new)
 
-    # Round 1b: retrieval over what round 1a left unclaimed, then the same assignment.
+    # Round 1b: retrieval over what round 1a's ASSIGNMENT left unclaimed, then the same stages.
     cross = retrieve_cross_division_population(unmatched_old, unmatched_new, registry)
     if cross is not None:
         cross.propose_into(candidates)
-        leftover_old: list[BillNode] = []
-        leftover_new: list[BillNode] = []
-        for old_node, new_node in _similarity_pair(list(cross.old), list(cross.new)):
-            if old_node is None:
-                leftover_new.append(new_node)
-            elif new_node is None:
-                leftover_old.append(old_node)
-            else:
-                pairs.append((old_node, new_node))
-        unmatched_old = leftover_old
-        unmatched_new = leftover_new
+        assignment = assign_group(cross, group_correspondence_evidence(cross, candidates))
+        assignments.append(assignment)
+        pairs.extend((link.old, link.new) for link in assignment.links)
+        unmatched_old = list(assignment.leftover_old)
+        unmatched_new = list(assignment.leftover_new)
 
     # Whatever neither round claimed. Unmatched observations, not settled 1:0 or 0:1 -- the
     # move pass may still pair either half with a different partner.
@@ -471,19 +750,29 @@ def _match_collision_group(
     for new_node in unmatched_new:
         pairs.append((None, new_node))
 
-    return pairs
+    return pairs, assignments
 
 
-def match_nodes_with_retrieval(
+def match_nodes_with_stage_outputs(
     old: BillTree,
     new: BillTree,
     registry: "ObservationRegistry | None" = None,
-) -> tuple[list[tuple[BillNode | None, BillNode | None]], CandidateSet]:
-    """Round 1, returning both the pairing stream and what retrieval considered.
+) -> tuple[list[tuple[BillNode | None, BillNode | None]], CandidateSet, tuple[GroupAssignment, ...]]:
+    """Round 1, returning the pairing stream and every stage output behind it.
 
-    The single implementation; :func:`match_nodes` is the projection that drops the candidate
-    set. Keeping one body rather than two is the point -- a second copy of the traversal would
-    be a second authority on candidate membership and order.
+    The single implementation. :func:`match_nodes_with_retrieval` and :func:`match_nodes` are
+    projections that drop the trailing elements, and keeping one body rather than three is the
+    point -- a second copy of the traversal would be a second authority on candidate membership
+    and order.
+
+    The third element is what makes ADR 0020 invariant 8 reachable rather than merely true
+    internally: every :class:`GroupAssignment` the collision path produced, each carrying the
+    evidence for all of its candidates and the record that selected each link. Losing
+    competitors included -- see :class:`GroupAssignment`.
+
+    **It is collision-path-complete and nothing more**, for the same reason the candidate set
+    is: the unique-path fast path below pairs its observations directly without retrieving,
+    describing or assigning them, so most ``match_path`` groups contribute no assignment here.
 
     ``registry`` is accepted so a caller that already built one does not build a second; when
     omitted it is derived from the two complete node sequences.
@@ -495,9 +784,13 @@ def match_nodes_with_retrieval(
     left unclaimed by its own division's assignment can legitimately be re-proposed by the
     cross-division round.
 
-    **Nothing reads its iteration order.** Assignment consumes the ordered ``RetrievedPopulation``
-    tuples and never this set, and its canonical ordinal-pair ordering is deliberately not the
-    order any decision is made in.
+    **The set gates what may be described, and orders nothing.** Every pair
+    :func:`group_correspondence_evidence` describes must be in it, carrying a proposal from the
+    describing invocation, so a pair retrieval did not admit cannot reach assignment -- the
+    intermediate value is on the result-bearing path rather than beside it. It is reached by
+    :meth:`~deltatrack.matching.CandidateSet.candidate_for` lookup and never iterated: its
+    canonical ordinal-pair order is deliberately not the order any decision is made in, and
+    assignment consumes the ordered ``RetrievedPopulation`` tuples and never this set at all.
 
     **The set is TRANSITIONAL and is not yet comparison-wide candidate recall.** It is complete
     for the two collision-path retrieval stages this slice introduces, and nothing else: the
@@ -523,6 +816,7 @@ def match_nodes_with_retrieval(
 
     pairs: list[tuple[BillNode | None, BillNode | None]] = []
     candidates = CandidateSet()
+    assignments: list[GroupAssignment] = []
 
     for path in all_paths:
         old_nodes = old_groups.get(path, [])
@@ -530,9 +824,9 @@ def match_nodes_with_retrieval(
 
         if len(old_nodes) <= 1 and len(new_nodes) <= 1:
             # Fast path: no collision, preserve current behavior. Deliberately NOT routed
-            # through the retrieval stages -- its architecture treatment is a later slice, and
-            # sending it through new machinery here would be an unmeasured behaviour change
-            # wearing a refactor's clothes.
+            # through the retrieval, evidence and assignment stages -- its architecture
+            # treatment is a later slice, and sending it through new machinery here would be an
+            # unmeasured behaviour change wearing a refactor's clothes.
             pairs.append(
                 (
                     old_nodes[0] if old_nodes else None,
@@ -540,8 +834,24 @@ def match_nodes_with_retrieval(
                 )
             )
         else:
-            pairs.extend(_match_collision_group(old_nodes, new_nodes, registry, candidates))
+            group_pairs, group_assignments = _match_collision_group(old_nodes, new_nodes, registry, candidates)
+            pairs.extend(group_pairs)
+            assignments.extend(group_assignments)
 
+    return pairs, candidates, tuple(assignments)
+
+
+def match_nodes_with_retrieval(
+    old: BillTree,
+    new: BillTree,
+    registry: "ObservationRegistry | None" = None,
+) -> tuple[list[tuple[BillNode | None, BillNode | None]], CandidateSet]:
+    """Round 1's pairing stream and what retrieval considered, for the callers that want both.
+
+    :func:`match_nodes_with_stage_outputs` is the implementation and also returns the round-1
+    assignments.
+    """
+    pairs, candidates, _assignments = match_nodes_with_stage_outputs(old, new, registry)
     return pairs, candidates
 
 
@@ -561,9 +871,10 @@ def match_nodes(
     with text similarity fallback.
 
     The pairing stream alone, for the callers that want nothing else.
-    :func:`match_nodes_with_retrieval` is the implementation and also returns the candidate set.
+    :func:`match_nodes_with_stage_outputs` is the implementation and also returns the candidate
+    set and the round-1 assignments.
     """
-    return match_nodes_with_retrieval(old, new)[0]
+    return match_nodes_with_stage_outputs(old, new)[0]
 
 
 def diff_text(old_text: str, new_text: str) -> list[str]:
@@ -655,9 +966,10 @@ def _normalize_text(text: str) -> str:
 
 
 #: The assignment rounds this pipeline runs, in order. Round 1 is ``match_nodes`` followed by
-#: :func:`apply_similarity_assignment_rule`; its retrieval and its other assignment acts (the
-#: unique-path direct selection, ``_similarity_pair``'s greedy claim) are still fused inside
-#: ``match_nodes``. Round 2 is the move pass below. These are provenance carried on a
+#: :func:`apply_similarity_assignment_rule`; its collision path now runs the separated stages
+#: (:func:`group_correspondence_evidence`, :func:`assign_group`), and its remaining fused
+#: assignment act is the unique-path direct selection inside ``match_nodes``. Round 2 is the
+#: move pass below. These are provenance carried on a
 #: :class:`SettledCorrespondence` so classification can reproduce the legacy record order and
 #: label a move — not a ranking, and not a quality signal.
 PATH_ROUND = 1
@@ -833,10 +1145,11 @@ def similarity_correspondence_evidence(
     """CORRESPONDENCE EVIDENCE for the similarity rule: one record per 1:1 pairing.
 
     Named for the one rule these signals feed, not for round 1. ``match_nodes`` also decides
-    correspondence -- ``_similarity_pair``'s unthresholded greedy claim and the unique-path
-    direct selection are both assignment acts under ADR 0020 invariant 6 -- and neither produces
-    evidence here. A name like ``round1_correspondence_evidence`` would claim coverage this does
-    not have.
+    correspondence -- :func:`assign_group`'s unthresholded greedy claim and the unique-path
+    direct selection are both assignment acts under ADR 0020 invariant 6 -- and neither is
+    described here. A name like ``round1_correspondence_evidence`` would claim coverage this
+    does not have: the group competition has its own evidence stage in
+    :func:`group_correspondence_evidence`, and the unique path still has none.
 
     **Every 1:1 pairing gets a record, including the ones the rule will revoke.** That is ADR
     0020 invariant 8: evidence for candidates that reach assignment stays retained and
@@ -935,8 +1248,14 @@ def apply_similarity_assignment_rule(
     """Replace each revoked pairing with the two unmatched observations it becomes.
 
     Named for the one rule it applies. It is **not** the whole of round-1 assignment: ``match_nodes``
-    still selects a unique-path pairing outright and still runs ``_similarity_pair``'s greedy claim,
-    both of which decide correspondence and neither of which this slice touches.
+    still selects a unique-path pairing outright, and :func:`assign_group` has already run the
+    group competition, both of which decide correspondence.
+
+    **This rule and the group competition are two assignment acts in sequence, not one rule in
+    two places.** :func:`assign_group` is unthresholded -- a 0.01 pairing wins its group if it is
+    the best available -- and this is where a threshold first applies, revoking a pairing the
+    group competition selected. Folding ``threshold`` into the group stage would delete that
+    composition while leaving both stage names in place.
 
     Input is ``match_nodes`` output; output is the same shape, so no new type is introduced and
     nothing here is an ADR 0020 ``Correspondence``. A ``(old, None)`` or ``(None, new)`` in the
@@ -1064,7 +1383,17 @@ def move_correspondence_evidence(candidates: CandidateSet) -> tuple[Corresponden
 
 
 def _word_overlap(evidence: CorrespondenceEvidence) -> float:
-    """The one evidence signal round-2 assignment reads."""
+    """How a :data:`WORD_OVERLAP` signal is read, for both rounds' assignment.
+
+    One reader because it is one signal by one measure -- the reasoning :data:`WORD_OVERLAP`
+    itself records. :func:`assign_group` reads it to order the round-1 group competition and
+    :func:`_greedy_move_links` to order round 2's; what differs between them is the ordering key
+    and whether a threshold applies, neither of which is part of reading the number.
+
+    A missing or non-``float`` value raises rather than defaulting. Assignment cannot decide
+    without the signal, and the safe-looking reading of an absence -- treat it as zero -- would
+    silently demote a candidate to last place in a competition it might have won.
+    """
     value = evidence.get(WORD_OVERLAP)
     if not isinstance(value, float):
         raise ValueError(f"evidence for {evidence.old}->{evidence.new} carries no {WORD_OVERLAP} signal")
@@ -1342,13 +1671,17 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
     produced. Post-#591 that is a sequencing constraint inside matching, no longer a dependency
     on classification output.
 
-    What remains fused, said plainly: **round-1 retrieval, and the rest of round-1 assignment.**
-    ``match_nodes`` still decides what may be compared (``match_path`` grouping, division
-    subgrouping, the cross-division fallback) and still makes two assignment decisions of its own
-    in the same pass — it selects a unique-path pairing outright, and ``_similarity_pair`` runs an
-    unthresholded greedy claim. Both are assignment under ADR 0020 invariant 6 and both are
-    deferred. What this slice moves is the **one** round-1 rule that can revoke a pairing: it now
-    reads named evidence and owns its threshold, rather than recomputing both inline.
+    What remains fused, said plainly: **the unique-path fast path.** ``match_nodes`` still pairs
+    a non-colliding ``match_path`` group outright, without retrieving, describing or assigning
+    it, which is assignment under ADR 0020 invariant 6 and is deferred to a later slice. The
+    collision path is separated: retrieval names the populations, evidence describes every
+    candidate they admit, and :func:`assign_group` decides which of them correspond, reading the
+    evidence and never the texts.
+
+    Three round-1 assignment acts therefore run in sequence, and the order is the composition
+    rather than a redundancy: the unique-path direct selection, :func:`assign_group`'s
+    unthresholded group competition, and :func:`apply_similarity_assignment_rule`, which is the
+    one rule that can revoke a pairing and the only one that owns a threshold.
     """
     registry = observation_registry(old, new)
     pairings = match_nodes(old, new)

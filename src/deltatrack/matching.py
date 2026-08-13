@@ -371,6 +371,29 @@ class CandidateSet:
             for (old, new), by_invocation in sorted(self._proposals.items(), key=lambda item: item[0])
         )
 
+    def candidate_for(self, old: ObservationRef, new: ObservationRef) -> Candidate | None:
+        """The candidate for one observation pair, or ``None`` if retrieval never proposed it.
+
+        The admission lookup: how a downstream stage asks "did retrieval consider this pair, and
+        under which invocations?" without walking the set. That it is a lookup rather than
+        iteration is the point, and it is what lets the set be load-bearing without becoming an
+        ordering: :meth:`candidates` is canonically ordered by ordinal pair, and ADR 0020 keeps
+        that order away from assignment because B0 measured it changing the selected links on
+        174 of 329 greedy invocations. A consumer that must iterate to answer an admission
+        question has the canonical order in hand at exactly the moment it decides something.
+
+        Mirrors :meth:`CorrespondenceSet.correspondence_for` on the assignment side.
+
+        Returns a :class:`Candidate`, not a bool, because the two questions a consumer has are
+        different and both need answering: whether the pair was admitted at all, and whether the
+        invocation it is acting for is among the ones that proposed it. A membership predicate
+        would answer the first and force the caller to reach into the set for the second.
+        """
+        by_invocation = self._proposals.get((old, new))
+        if by_invocation is None:
+            return None
+        return Candidate(old=old, new=new, proposals=tuple(by_invocation.values()))
+
     def __len__(self) -> int:
         return len(self._proposals)
 

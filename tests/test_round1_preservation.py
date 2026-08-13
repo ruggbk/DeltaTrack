@@ -99,14 +99,19 @@ import pytest
 
 from deltatrack.bill_tree import BillNode, normalize_bill
 from deltatrack.diff_bill import (
+    GroupAssignment,
     RetrievedPopulation,
+    SelectedLink,
+    assign_group,
+    group_correspondence_evidence,
     match_nodes,
     match_nodes_with_retrieval,
+    match_nodes_with_stage_outputs,
     observation_registry,
     retrieve_cross_division_population,
     retrieve_within_division_populations,
 )
-from deltatrack.matching import NEW, OLD, CandidateSet, RetrieverInvocation
+from deltatrack.matching import NEW, OLD, CandidateSet, CorrespondenceEvidence, RetrieverInvocation
 from deltatrack.similarity import text_similarity
 from tests.conftest import assert_manifest_committed, manifest_version_pairs, manifest_xml_ids
 from tests.corpus_paths import DATA_DIR, PROJECT_ROOT
@@ -160,7 +165,7 @@ class Recorder:
 
     @classmethod
     def selection_only(cls) -> Recorder:
-        """A recorder for running the oracle as a drop-in ``_similarity_pair``, recording nothing."""
+        """A recorder for running the oracle as a drop-in for production's assigner, recording nothing."""
         return cls(None)
 
     def population(self, nodes: list[BillNode]) -> list[int]:
@@ -790,8 +795,9 @@ def test_the_retrieval_stages_emit_the_frozen_invocation_populations():
     implementation formed -- same membership, same order, same sequence of invocations.
 
     What moved is where the assertion is taken. It now reads the retrieval stages' own outputs,
-    which is the boundary B2 will consume, so this survives ``_similarity_pair`` being split
-    into evidence and assignment.
+    which is the boundary B2 consumes -- and it did survive the split of the fused scorer into
+    :func:`group_correspondence_evidence` and :func:`assign_group`, unchanged and against this
+    same frozen expectation.
     """
     checked = 0
     for old_path, new_path in manifest_version_pairs():
@@ -858,39 +864,159 @@ def test_the_retrieval_stage_boundary_can_fail(mutation: str, monkeypatch):
 
 
 def test_assignment_never_receives_the_candidate_set():
-    """Structural: ``CandidateSet`` iteration order cannot become assignment order.
+    """Structural: ``CandidateSet`` order cannot become assignment order.
 
     ADR 0020's candidate set is canonically ordered by ordinal pair, and B0 measured that using
     that order as assignment order changes the selected links on 174 of 329 greedy invocations.
-    The protection is the call signature rather than a convention: the scorer is handed two
-    ordered lists and has no reference to the set, so no ordering it carries can reach a
+    The protection is the call signature: :func:`assign_group` is handed the ordered population
+    and the evidence, holds no reference to the set, and so no ordering it carries can reach a
     selection.
+
+    **The evidence stage now legitimately receives it, and that is the reviewed B2 correction.**
+    The set is the admission authority -- nothing is described unless it holds the pair under the
+    describing invocation -- so the guard cannot be "no stage sees the set". It is narrower and
+    more exact: the set may gate *what* is described and may not order anything. Both halves are
+    required here, so removing the parameter from the evidence stage reddens exactly as adding
+    one to assignment does.
+
+    Retargeted from ``_similarity_pair``, which B2 removed.
     """
     import inspect
 
-    from deltatrack.diff_bill import _match_collision_group, _similarity_pair
+    from deltatrack.diff_bill import _match_collision_group
 
-    assert "candidates" not in inspect.signature(_similarity_pair).parameters
+    assert "candidates" not in inspect.signature(assign_group).parameters, (
+        "assign_group takes the candidate set as a parameter; its canonical order is then one lookup "
+        "away from the sequence it decides on"
+    )
+    assert "candidates" in inspect.signature(group_correspondence_evidence).parameters, (
+        "the evidence stage no longer receives the candidate set, so retrieval's admission cannot "
+        "constrain what reaches assignment"
+    )
 
+    staged = ("group_correspondence_evidence", "assign_group")
     body = inspect.getsource(_match_collision_group)
     tree = ast.parse(textwrap.dedent(body))
+    reached = set()
     for call in ast.walk(tree):
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
             continue
-        if call.func.id != "_similarity_pair":
+        if call.func.id not in staged:
             continue
-        named = {n.id for arg in call.args for n in ast.walk(arg) if isinstance(n, ast.Name)}
-        assert "candidates" not in named, (
-            f"the scorer is called with the candidate set in scope as an argument: {sorted(named)}"
+        reached.add(call.func.id)
+        if call.func.id != "assign_group":
+            continue
+        # The set may appear inside this call only as an argument of the nested evidence call.
+        # A bare `candidates` among assign_group's own arguments is the regression.
+        direct = {arg.id for arg in call.args if isinstance(arg, ast.Name)}
+        assert "candidates" not in direct, (
+            f"assign_group is called with the candidate set as a direct argument: {sorted(direct)}"
         )
+
+    assert reached == set(staged), (
+        f"the orchestrator no longer calls {sorted(set(staged) - reached)}; this guard is inspecting "
+        "a call site that has moved and would pass by finding nothing"
+    )
+
+
+def test_the_evidence_stage_reaches_the_candidate_set_by_lookup_and_never_iterates_it():
+    """Structural: admission is a question asked of the set, not a walk over it.
+
+    This is what lets the set be load-bearing without becoming an ordering.
+    ``CandidateSet.candidates()`` is canonical by ordinal pair; a stage that iterated it to decide
+    what to describe would hold that order at the moment it builds the sequence assignment reads,
+    and the two genuinely differ -- on the interleaved fixture's fallback population the canonical
+    order is ``[1, 2]`` and the invocation-local order is ``[2, 1]``.
+
+    So the evidence path may name ``candidate_for`` and must not call ``candidates()`` or iterate
+    the set. Checked over the evidence stage and the admission helper it delegates to, because the
+    constraint belongs to the path rather than to either function alone.
+    """
+    import inspect
+
+    from deltatrack.diff_bill import _refuse_a_candidate_retrieval_did_not_admit
+
+    for stage in (group_correspondence_evidence, _refuse_a_candidate_retrieval_did_not_admit):
+        tree = ast.parse(textwrap.dedent(inspect.getsource(stage)))
+        called = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        assert "candidates" not in called, (
+            f"{stage.__name__} calls CandidateSet.candidates(); the canonical ordinal-pair order is then "
+            "in scope where the described sequence is built"
+        )
+        for node in ast.walk(tree):
+            if isinstance(node, ast.For) and isinstance(node.iter, ast.Name):
+                assert node.iter.id != "candidates", f"{stage.__name__} iterates the candidate set directly"
+
+    assert "candidate_for" in inspect.getsource(_refuse_a_candidate_retrieval_did_not_admit), (
+        "the admission helper no longer reaches the candidate set by lookup, so this guard is "
+        "asserting the absence of an iteration over a set that is no longer consulted at all"
+    )
+
+
+#: Every symbol that would mean round-1 ASSIGNMENT had reached back for a measurement, an input
+#: it must not read, or the threshold that belongs to a different rule. Spelled literally rather
+#: than imported, for the reason ``EXPECTED_INVOCATION`` is: importing them would let a rename
+#: move the guard and the code it guards together.
+FORBIDDEN_IN_GROUP_ASSIGNMENT = frozenset(
+    {
+        "text_similarity",
+        "_normalize_text",
+        "diff_text",
+        "body_text",
+        "_similarity_signals",
+        "similarity_correspondence_evidence",
+        "SIMILARITY_THRESHOLD",
+        "threshold",
+        "score",
+        "proposals",
+    }
+)
+
+
+def test_group_assignment_names_no_measurement_and_no_threshold():
+    """Structural: assignment cannot recompute what evidence already describes.
+
+    ADR 0020's boundary is that evidence describes and assignment decides. An assignment stage
+    that re-derives the similarity it was handed is not reading evidence at all -- it is the
+    fused matcher with an extra parameter, and every test that supplies evidence would still
+    pass because the recomputed answer usually agrees.
+
+    Cheap and total where the behavioural control below is decisive but local: this reads the
+    whole function body, so a recomputation on a branch no fixture reaches is still caught.
+    ``threshold``, ``score`` and ``proposals`` are here for the two adjacent mistakes -- folding
+    the later similarity rule's cutoff into the group competition, and reading
+    ``Proposal.score`` as though a retrieval score were evidence.
+    """
+    import inspect
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(assign_group)))
+    named = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    named |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    offending = named & FORBIDDEN_IN_GROUP_ASSIGNMENT
+    assert not offending, f"assign_group names {sorted(offending)}; assignment reads evidence and nothing else"
+
+
+def test_the_measurement_guard_can_fire():
+    """The negative control for the guard above, which has only ever been observed green."""
+    tree = ast.parse("def fused(population, evidence):\n    return text_similarity(population.old[0].body_text, '')\n")
+    named = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    named |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert named & FORBIDDEN_IN_GROUP_ASSIGNMENT >= {"text_similarity", "body_text"}, (
+        "the guard failed to see an assignment stage plainly recomputing the measurement"
+    )
 
 
 # --- B1: the CandidateSet, bound independently of the code that builds it --------------------
 #
-# Legacy assignment consumes `population.old` / `population.new` through `_similarity_pair` and
-# never the candidate set. So candidate materialisation can be wrong -- a dropped pair, a
-# mis-attributed invocation -- while the frozen pairing stream, the retrieval-population tests
-# and the canonical bytes all stay exact. Nothing above binds it. These do.
+# Assignment consumes `population.old` / `population.new` and the evidence describing them, and
+# never the candidate set -- true of the fused scorer and still true of `assign_group`. So
+# candidate materialisation can be wrong -- a dropped pair, a mis-attributed invocation -- while
+# the frozen pairing stream, the retrieval-population tests and the canonical bytes all stay
+# exact. Nothing above binds it. These do.
 
 #: The two invocations B1's retrieval stages run under, rebuilt here from the literal names and
 #: round rather than imported from production. Importing the constant would let a change to it
@@ -1029,56 +1155,873 @@ def test_two_invocations_proposing_one_pair_keep_both_provenances():
         )
 
 
-@pytest.mark.slow
-def test_a_dropped_candidate_is_invisible_to_matching_and_caught_here(monkeypatch):
-    """THE decisive control: a candidate-only defect, and what does and does not see it.
+def dropping_propose_into(self, candidates):
+    """``propose_into`` with exactly one real pair omitted per invocation. Nothing else moves.
 
-    ``propose_into`` is made to omit exactly one ``old_ref x new_ref`` pair per invocation. The
-    scorer still receives the complete population, so matching cannot notice.
-
-    **A.** the frozen pairing stream stays exact -- proving the defect is invisible to every
-    gate that existed before this one, which is why the B1 candidate set could certify itself.
-    **B.** the materialisation gate goes red.
+    A **candidate-materialisation** fault and nothing more: the population it is called on is
+    untouched -- same nodes, same refs, same order -- and every other pair is proposed under the
+    same invocation. So it isolates the one question the admission boundary exists to answer,
+    which is what happens when the set and the population disagree about what was retrieved.
     """
-    real_propose = RetrievedPopulation.propose_into
+    dropped = False
+    for old_ref in self.old_refs:
+        for new_ref in self.new_refs:
+            if not dropped:
+                dropped = True
+                continue
+            candidates.propose(old_ref, new_ref, self.invocation)
 
-    def dropping_propose_into(self, candidates):
-        dropped = False
-        for old_ref in self.old_refs:
-            for new_ref in self.new_refs:
-                if not dropped:
-                    dropped = True
-                    continue
-                candidates.propose(old_ref, new_ref, self.invocation)
+
+def test_an_omitted_candidate_cannot_reach_assignment(monkeypatch):
+    """THE B2 admission control: a CandidateSet-only fault, and the boundary refusing it.
+
+    **This replaces B1's expectation that a candidate omission stays invisible to matching.**
+    That control was right for B1, where the set was observational and needed an independent gate
+    to certify itself. B2 is the slice where ``CandidateSet -> evidence -> assignment`` becomes
+    the real path, so it is now *expected* that a corrupted set stops matching. Unfaulted
+    behaviour is unchanged and still byte-identical; what changed is behaviour under a fault,
+    which was never frozen methodology.
+
+    One fault, four claims, on the duplicate-id fixture whose 2x2 competition selects both pairs:
+
+    **A.** the ``RetrievedPopulation`` is unchanged -- same nodes, same refs, same order -- so
+    this is a candidate-only defect and not a retrieval one wearing its name.
+    **B.** the candidate set really is missing that pair.
+    **C.** the evidence stage fails closed on it, naming the pair, rather than reconstructing it
+    from population membership.
+    **D.** assignment never sees it. Proven materially rather than by absence: the omitted pair
+    is one the clean run *selects*, so a reconstructing implementation would have gone on to
+    choose a link retrieval never admitted.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    population = population_of(old_nodes, new_nodes)
+    honest = admitted(population)
+
+    # D's premise: the pair about to be dropped is one the clean run actually selects. Without
+    # this the control could be refusing a candidate that would have lost anyway.
+    omitted = (population.old_refs[0], population.new_refs[0])
+    clean_links = {
+        link.evidence.link for link in assign_group(population, group_correspondence_evidence(population, honest)).links
+    }
+    assert omitted in clean_links, (
+        "the pair this control drops is not selected by the unfaulted run, so proving it cannot "
+        "reach assignment says nothing about a link that would otherwise have been chosen"
+    )
+
+    monkeypatch.setattr(RetrievedPopulation, "propose_into", dropping_propose_into)
+    faulted = CandidateSet()
+    population.propose_into(faulted)
+
+    # A. the population is untouched by the fault.
+    after = population_of(old_nodes, new_nodes)
+    assert (population.old_refs, population.new_refs) == (after.old_refs, after.new_refs)
+    assert [n.element_id for n in population.old] == [n.element_id for n in after.old]
+    assert [n.element_id for n in population.new] == [n.element_id for n in after.new]
+    assert population.invocation == after.invocation
+
+    # B. the set is missing exactly that pair, and nothing else.
+    assert faulted.candidate_for(*omitted) is None, "the fault did not omit the pair it was supposed to"
+    assert len(faulted) == len(honest) - 1, "the fault omitted more than one pair; it is no longer isolating"
+
+    # C. the evidence stage refuses it rather than reconstructing it from the population.
+    with pytest.raises(ValueError, match="never admitted"):
+        group_correspondence_evidence(population, faulted)
+
+    # D. and so nothing downstream can select it: the whole engine fails closed on this group.
+    with pytest.raises(ValueError, match="never admitted"):
+        match_nodes(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+
+
+def test_a_candidate_missing_this_invocations_provenance_is_refused():
+    """The second admission failure: the pair was considered, but not by this invocation.
+
+    Distinct from absence, and the distinction is real rather than defensive. Candidates are
+    comparison-scoped and the cross-division round can legitimately re-propose a pair the
+    within-division round already offered, so a set holding a pair proves only that *somebody*
+    retrieved it. Admitting on that basis would let one invocation describe -- and assignment
+    then select -- a pair that invocation never retrieved, which is the same boundary violation
+    arriving through provenance instead of membership.
+
+    Driven with a set built entirely under the *other* round-1 invocation, which is the shape the
+    cross-division round produces for pairs the within-division round also saw.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    population = population_of(old_nodes, new_nodes)
+
+    other = CandidateSet()
+    for old_ref in population.old_refs:
+        for new_ref in population.new_refs:
+            other.propose(old_ref, new_ref, EXPECTED_INVOCATION["cross"])
+
+    assert other.candidate_for(population.old_refs[0], population.new_refs[0]) is not None, (
+        "the pair is absent from this set, so the refusal below would be about membership rather "
+        "than about provenance and the two failures would not be distinguished"
+    )
+    assert population.invocation != EXPECTED_INVOCATION["cross"]
+
+    with pytest.raises(ValueError, match="carries no proposal from"):
+        group_correspondence_evidence(population, other)
+
+
+@pytest.mark.slow
+def test_the_admission_boundary_fails_closed_across_the_corpus(monkeypatch):
+    """The same fault at corpus scale: every pair with a collision group now refuses to match.
+
+    The synthetic control above is exact about which pair and why. This one answers the question
+    it cannot: whether the boundary is wired on the path the engine actually takes over real
+    bills, or only on the one a hand-built population reaches.
+
+    Pairs whose ``match_path`` groups never collide produce no candidate at all, so there is
+    nothing for the fault to omit and nothing to refuse. They are counted rather than assumed
+    away, and the two sets must agree exactly -- which is also what stops this passing on a run
+    where the fault silently did nothing.
+    """
+    clean_have_candidates = []
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        if len(match_nodes_with_retrieval(old_tree, new_tree)[1]):
+            clean_have_candidates.append(pair_key(old_path, new_path))
+    assert clean_have_candidates, "no committed pair materialises a candidate; the fault has nothing to omit"
 
     monkeypatch.setattr(RetrievedPopulation, "propose_into", dropping_propose_into)
 
-    frozen = load_frozen()
-    stream_intact = []
-    candidates_red = []
+    failed_closed = []
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        pairs, candidates = match_nodes_with_retrieval(old_tree, new_tree)
-        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
-        produced = [
-            [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None] for o, n in pairs
-        ]
-        key = pair_key(old_path, new_path)
-        stream_intact.append(stream_digest(produced) == frozen[key]["stream_sha256"])
-        if actual_candidate_provenance(candidates) != expected_candidate_provenance(old_tree, new_tree):
-            candidates_red.append(key)
+        try:
+            match_nodes(old_tree, new_tree)
+        except ValueError as exc:
+            assert "never admitted" in str(exc)
+            failed_closed.append(pair_key(old_path, new_path))
 
-    assert all(stream_intact), (
-        "dropping candidates changed the pairing stream, so this control is not isolating a "
-        "candidate-only defect and half its claim is unreadable"
+    assert failed_closed == clean_have_candidates, (
+        "the pairs that fail closed under a candidate omission are not exactly the pairs that "
+        f"materialise candidates: only-failed={sorted(set(failed_closed) - set(clean_have_candidates))}, "
+        f"only-candidates={sorted(set(clean_have_candidates) - set(failed_closed))}"
     )
-    assert candidates_red, (
-        "dropping one proposal per invocation left the candidate set matching its independent "
-        "expectation; the materialisation gate cannot see a candidate-only defect"
+
+
+def test_the_materialisation_gate_can_still_see_a_candidate_only_defect():
+    """The corpus materialisation gate's projection, shown to distinguish a dropped proposal.
+
+    That gate is kept, and kept independent -- it compares production's set against an
+    expectation expanded from the ORACLE's invocation trace, so it answers a question the
+    fail-closed boundary cannot: whether the set holds the *right* pairs under the *right*
+    invocations, rather than merely agreeing with whatever the evidence stage went on to ask for.
+
+    Its negative control moved here from the old corpus fault-injection test. It could no longer
+    live there: under a faulted candidate set production now raises before returning a set to
+    project, which is the reviewed behaviour change and is proved by the two controls above. What
+    still needs proving is the narrower thing -- that ``actual_candidate_provenance`` is capable
+    of telling a dropped proposal from an intact set -- and that needs no corpus and no engine.
+    """
+    population = population_of(*duplicate_element_id_fixture())
+    faulted = CandidateSet()
+    dropping_propose_into(population, faulted)
+
+    assert actual_candidate_provenance(faulted) != actual_candidate_provenance(admitted(population)), (
+        "the projection behind the materialisation gate cannot distinguish a candidate set that is "
+        "missing a proposal, so that gate is comparing something other than what it claims to"
     )
-    assert RetrievedPopulation.propose_into is dropping_propose_into  # the patch really was live
-    monkeypatch.undo()
-    assert RetrievedPopulation.propose_into is real_propose
+
+
+# --- B2: the evidence/assignment boundary, bound where the frozen stream cannot see it -------
+#
+# B1 left one function computing every similarity, running the greedy competition and breaking
+# ties on local position. B2 splits it: `group_correspondence_evidence` describes every retrieved
+# candidate, `assign_group` decides which of them correspond.
+#
+# Nothing above can tell a real separation from a cosmetic one. A stage that recomputed the
+# measurement it was handed, or that described only the winners, or that quietly acquired the
+# later similarity rule's threshold, produces a byte-identical pairing stream on every committed
+# pair. These bind the boundary itself.
+
+#: The evidence signal name, spelled literally for the reason ``EXPECTED_INVOCATION`` is:
+#: importing production's constant would let a rename move expectation and actual together.
+_WORD_OVERLAP = "word_overlap"
+
+#: Which retrieval round produced a population, keyed on the invocations rebuilt above rather
+#: than read off a production attribute. The phase is a fact about which retriever ran.
+_PHASE_OF_INVOCATION = {invocation: phase for phase, invocation in EXPECTED_INVOCATION.items()}
+
+
+def _refuse_to_measure(*_args, **_kwargs):
+    """A ``text_similarity`` that cannot be called. Bombs rather than returning a wrong answer.
+
+    Returning a sentinel would let a stage that recomputes carry on and *usually* agree, because
+    the recomputed value is normally the same one the evidence carries. The whole question is
+    whether the call happens at all, so the call is what fails.
+    """
+    raise AssertionError("text_similarity was called by a stage that must not measure anything")
+
+
+def observed_group_evidence(old_tree, new_tree) -> list[dict]:
+    """Every evidence-stage output production produced, in order, addressed by ADR 0019 ordinal.
+
+    ``None`` where a signal was **not computed**, read off ``.names`` rather than off ``.get``,
+    so "absent" stays distinguishable from "present and null" -- the distinction
+    :func:`_similarity_signals` documents on the other similarity rule and the one a 1x1
+    population's empty record turns on.
+
+    Saved and restored by hand rather than through ``monkeypatch`` for the reason
+    :func:`observed_retrieval_populations` gives: across a corpus loop an accumulating patch
+    would wrap the previous iteration's spy.
+    """
+    from deltatrack import diff_bill as db
+
+    seen: list[dict] = []
+    real = db.group_correspondence_evidence
+
+    def spy(population, candidates):
+        evidence = real(population, candidates)
+        seen.append(
+            {
+                "phase": _PHASE_OF_INVOCATION[population.invocation],
+                "links": [
+                    [
+                        item.old.ordinal,
+                        item.new.ordinal,
+                        round(item.get(_WORD_OVERLAP), 12) if _WORD_OVERLAP in item.names else None,
+                    ]
+                    for item in evidence
+                ],
+            }
+        )
+        return evidence
+
+    db.group_correspondence_evidence = spy
+    try:
+        match_nodes(old_tree, new_tree)
+    finally:
+        db.group_correspondence_evidence = real
+    return seen
+
+
+def expected_group_evidence(old_tree, new_tree) -> list[dict]:
+    """What the ORACLE says each evidence call must describe, and with what number.
+
+    Independent by construction. The oracle records, per invocation, the exact ``(similarity,
+    oi, ni)`` tuples the fused matcher built -- in generation order, before the competition sorts
+    them -- and the branch it took. Expanding those local positions back through the invocation's
+    own ordinal lists produces the expected evidence without ever asking the evidence stage what
+    it meant to compute.
+
+    A ``shortcut_1x1`` invocation expects exactly one record carrying **no** number. That is the
+    preserved behaviour, not a gap in the expectation: the fused matcher paired a sole candidate
+    without calling ``text_similarity`` at all.
+    """
+    expected: list[dict] = []
+    for invocation in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]:
+        old_ordinals, new_ordinals = invocation["old"], invocation["new"]
+        if invocation["branch"] == "shortcut_1x1":
+            links = [[old_ordinals[0], new_ordinals[0], None]]
+        else:
+            links = [[old_ordinals[oi], new_ordinals[ni], score] for score, oi, ni in invocation["candidates"]]
+        expected.append({"phase": invocation["phase"], "links": links})
+    return expected
+
+
+@pytest.mark.slow
+def test_the_evidence_stage_describes_exactly_the_candidates_retrieval_admitted():
+    """Completeness, fidelity and order, against an expectation the stage did not produce.
+
+    Binds all three at once because they fail together and they fail invisibly:
+
+    - **completeness** -- one record per retrieved candidate, no missing, no extra. An
+      implementation that described only the greedy winners would halve most of these lists
+      while selecting exactly the same links.
+    - **fidelity** -- each record's ``word_overlap`` is the ratio the fused matcher computed for
+      that pair, to twelve places.
+    - **membership** -- the pairs described are the invocation's own, expanded from the frozen
+      trace's local positions through its ordinal lists, so evidence for a pair retrieval never
+      admitted shows up as an extra row rather than as a silently wider competition.
+
+    The sequence of calls is compared too, phase included, so flattening the within-division and
+    cross-division rounds into one competition moves this even where it leaves the stream intact.
+    """
+    checked = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        observed = observed_group_evidence(old_tree, new_tree)
+        expected = expected_group_evidence(old_tree, new_tree)
+        key = pair_key(old_path, new_path)
+
+        assert len(observed) == len(expected), (
+            f"{key}: production ran {len(observed)} evidence stages, the frozen trace expects {len(expected)}"
+        )
+        for index, (seen, want) in enumerate(zip(observed, expected)):
+            assert seen == want, f"{key}: evidence call {index} ({want['phase']}) differs from the frozen expectation"
+        checked += 1
+
+    assert checked, "the evidence comparison ran over zero version pairs"
+
+
+@pytest.mark.slow
+def test_the_evidence_comparison_is_non_vacuous():
+    """The gate above would pass on two empty lists; this refuses that reading."""
+    scored = described = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        for call in observed_group_evidence(old_tree, new_tree):
+            described += len(call["links"])
+            scored += sum(1 for link in call["links"] if link[2] is not None)
+    assert described > 1000, f"only {described} candidates were described over the corpus; the gate is near-vacuous"
+    assert scored, "no candidate carried a word_overlap, so the fidelity half of that gate compared nothing"
+
+
+def production_similarity_calls(old_tree, new_tree) -> int:
+    """How many times ``match_nodes`` calls ``text_similarity``. A measurement, not a proxy.
+
+    Counted at production's own module global, which is where every round-1 measurement resolves.
+    Restored by hand for the reason :func:`observed_group_evidence` gives.
+    """
+    from deltatrack import diff_bill as db
+
+    real = db.text_similarity
+    calls = 0
+
+    def counting(old_text, new_text):
+        nonlocal calls
+        calls += 1
+        return real(old_text, new_text)
+
+    db.text_similarity = counting
+    try:
+        match_nodes(old_tree, new_tree)
+    finally:
+        db.text_similarity = real
+    return calls
+
+
+@pytest.mark.slow
+def test_production_measures_exactly_the_frozen_set_of_similarities():
+    """THE call-behaviour gate: production's measurement set, against the frozen count.
+
+    The pairing stream cannot see how a decision was reached, only what it decided. This can,
+    and it is the one gate that catches every way the evidence stage could quietly change *what
+    gets measured* while selecting identically:
+
+    - a 1x1 population that starts scoring its sole candidate inflates the count (593 shortcut
+      invocations on the committed corpus);
+    - reusing :func:`_similarity_signals` -- which computes the diff first and skips the ratio
+      entirely for unchanged bodies -- deflates it;
+    - describing only the greedy winners deflates it;
+    - describing a pair retrieval never admitted inflates it.
+
+    The frozen count comes from the oracle, so this is production measured against an
+    independent expectation rather than against its own intent.
+    """
+    frozen = load_frozen()
+    checked = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        key = pair_key(old_path, new_path)
+        expected = frozen[key]["counts"]["similarity_calls"]
+        assert production_similarity_calls(old_tree, new_tree) == expected, (
+            f"{key}: production's round-1 similarity calls differ from the frozen expectation of {expected}"
+        )
+        checked += 1
+
+    assert checked, "the call-count comparison ran over zero version pairs"
+
+
+@pytest.mark.slow
+def test_the_call_count_gate_can_fire(monkeypatch):
+    """The negative control: scoring a 1x1 sole candidate must move the count.
+
+    Without this the gate is an equality that has only ever been satisfied. The mutation is the
+    exact tidy-up ADR 0020's audit rejected -- make the architecture uniform by measuring the
+    sole candidate too -- and it changes no pairing anywhere, so nothing else here sees it.
+
+    The measurement goes through ``db.text_similarity`` rather than this module's own import,
+    which is not a style choice: :func:`production_similarity_calls` counts at production's
+    module global, so a mutation calling the function by any other route would add a real
+    measurement that the counter never sees -- and the control would report "cannot fire" while
+    the fault it injected was in fact invisible for a second, unrelated reason.
+    """
+    from deltatrack import diff_bill as db
+
+    real = db.group_correspondence_evidence
+
+    def scores_the_sole_candidate(population, candidates):
+        if population.forms_candidates and len(population.old) == 1 and len(population.new) == 1:
+            old_text = " ".join(population.old[0].body_text.split())
+            new_text = " ".join(population.new[0].body_text.split())
+            return (
+                CorrespondenceEvidence.of(
+                    population.old_refs[0],
+                    population.new_refs[0],
+                    **{_WORD_OVERLAP: db.text_similarity(old_text, new_text)},
+                ),
+            )
+        return real(population, candidates)
+
+    monkeypatch.setattr(db, "group_correspondence_evidence", scores_the_sole_candidate)
+
+    frozen = load_frozen()
+    inflated = []
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        key = pair_key(old_path, new_path)
+        if production_similarity_calls(old_tree, new_tree) != frozen[key]["counts"]["similarity_calls"]:
+            inflated.append(key)
+
+    assert inflated, (
+        "scoring every 1x1 sole candidate left production's similarity-call count unchanged on every "
+        "committed pair; the call-count gate cannot see the optimisation regression it exists for"
+    )
+
+
+# --- Driving the two stages directly, on the fixtures the corpus cannot supply ---------------
+
+
+def population_of(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> RetrievedPopulation:
+    """The single within-division population a one-division fixture retrieves."""
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    (population,) = retrieve_within_division_populations(old_nodes, new_nodes, registry)
+    return population
+
+
+def admitted(*populations: RetrievedPopulation) -> CandidateSet:
+    """The candidate set retrieval materialises for these populations.
+
+    The evidence stage now refuses a pair the set does not admit, so a test driving that stage
+    has to supply the admission as well as the population. Built through production's own
+    ``propose_into`` deliberately: these tests are about what happens *after* admission, and
+    hand-rolling the set here would put a second, divergent materialisation rule in the harness.
+    The one control that needs a *faulted* set builds it explicitly instead.
+    """
+    candidates = CandidateSet()
+    for population in populations:
+        population.propose_into(candidates)
+    return candidates
+
+
+def sole_candidate_fixture() -> tuple[list[BillNode], list[BillNode]]:
+    """One collision group, two divisions, each a 1x1 -- so every population takes the shortcut.
+
+    Division B's two bodies are deliberately **dissimilar**. A fixture whose sole candidates
+    happened to match would leave "no ratio was computed" indistinguishable from "a ratio was
+    computed and came out high", which is the reading the shortcut exists to make impossible.
+    """
+    old_nodes = [
+        node(MP, "oA", "alpha alpha alpha division a body text", "A"),
+        node(MP, "oB", "bravo bravo bravo division b body text", "B"),
+    ]
+    new_nodes = [
+        node(MP, "nA", "alpha alpha alpha division a body text", "A"),
+        node(MP, "nB", "utterly unrelated wording sharing nothing whatsoever", "B"),
+    ]
+    return old_nodes, new_nodes
+
+
+def test_a_1x1_population_is_described_without_measuring_anything(monkeypatch):
+    """E: the shortcut's real effect, retargeted onto the stage that inherited it.
+
+    The pairing stream cannot show this -- selecting a sole candidate is what the greedy would
+    do anyway. What the shortcut changes is that **no ratio exists**, and B2 had an obvious way
+    to lose that while looking tidier: give every candidate a number so the architecture reads
+    uniformly. So the record is required to be present (the candidate does reach assignment and
+    every such candidate is described) and required to carry no signal at all.
+
+    ``text_similarity`` is bombed rather than counted, so a stage that measured would fail here
+    even if it discarded the result.
+
+    The sole pair is admitted through the candidate set like any other -- the shortcut is about
+    what is *measured*, not about skipping the boundary -- so the population is materialised
+    first and the admission is asserted before the record is inspected.
+    """
+    from deltatrack import diff_bill as db
+
+    old_nodes, new_nodes = sole_candidate_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    populations = retrieve_within_division_populations(old_nodes, new_nodes, registry)
+    assert [(len(p.old), len(p.new)) for p in populations] == [(1, 1), (1, 1)], (
+        "the fixture stopped producing two 1x1 populations, so this proves nothing"
+    )
+    candidates = admitted(*populations)
+
+    monkeypatch.setattr(db, "text_similarity", _refuse_to_measure)
+
+    for population in populations:
+        candidate = candidates.candidate_for(population.old_refs[0], population.new_refs[0])
+        assert candidate is not None and population.invocation in candidate.invocations, (
+            "the sole pair was not admitted under its own invocation, so the shortcut is bypassing the boundary"
+        )
+
+        evidence = group_correspondence_evidence(population, candidates)
+        assert len(evidence) == 1, "a 1x1 population must still describe its sole candidate"
+        assert evidence[0].names == (), f"the sole candidate was given an invented signal: {evidence[0].signals}"
+        assert evidence[0].link == (population.old_refs[0], population.new_refs[0])
+
+        assignment = assign_group(population, evidence)
+        assert [(link.old, link.new) for link in assignment.links] == [(population.old[0], population.new[0])]
+        assert assignment.links[0].evidence is evidence[0]
+        assert (assignment.leftover_old, assignment.leftover_new) == ((), ())
+
+
+def test_production_measures_nothing_on_an_all_1x1_group():
+    """The same claim end to end, so it binds the engine and not only the two stages."""
+    old_nodes, new_nodes = sole_candidate_fixture()
+    calls = production_similarity_calls(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    assert calls == 0, f"a collision group of 1x1 populations measured {calls} similarities"
+    assert production_stream(old_nodes, new_nodes) == [[0, 0], [1, 1]], "the shortcut stopped pairing both divisions"
+
+
+def test_assignment_follows_the_supplied_evidence_and_never_recomputes_it(monkeypatch):
+    """C: THE decisive control. Evidence that disagrees with the texts, and who wins.
+
+    The duplicate-id fixture pairs like for like: old 0 and new 0 carry one body, old 1 and new
+    1 another, so recomputing the texts scores the **diagonal** 1.0 and the crossed pairs near
+    zero. The mutation inverts exactly that -- crossed pairs 1.0, diagonal 0.0 -- while leaving
+    the population, the addresses and the record count untouched.
+
+    An assignment stage reading the evidence selects the crossed pairs. One that recomputes
+    selects the diagonal. So the two hypotheses are separated by the *result*, not merely by
+    whether a call happened, and ``text_similarity`` is additionally bombed so a recomputing
+    implementation cannot even reach a wrong answer quietly.
+
+    The honest direction is asserted too, under the same bomb: hand assignment the evidence
+    production actually computed and it must reproduce the frozen selection without measuring.
+    That is what stops this passing because assignment ignores evidence in some third way.
+    """
+    from deltatrack import diff_bill as db
+
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    population = population_of(old_nodes, new_nodes)
+    honest = group_correspondence_evidence(population, admitted(population))
+    assert len(honest) == 4, "the fixture stopped producing a 2x2 competition"
+
+    # What recomputing the texts says, checked rather than assumed -- the mutation below is only
+    # a disagreement if the diagonal really is what the measurement prefers.
+    scored = {(item.old.ordinal, item.new.ordinal): item.get(_WORD_OVERLAP) for item in honest}
+    assert scored[(0, 0)] == scored[(1, 1)] == 1.0
+    assert scored[(0, 1)] < 0.5 and scored[(1, 0)] < 0.5
+
+    inverted = tuple(
+        CorrespondenceEvidence.of(
+            item.old,
+            item.new,
+            **{_WORD_OVERLAP: 0.0 if item.old.ordinal == item.new.ordinal else 1.0},
+        )
+        for item in honest
+    )
+
+    monkeypatch.setattr(db, "text_similarity", _refuse_to_measure)
+
+    def selected(evidence):
+        links = assign_group(population, evidence).links
+        return [(link.evidence.old.ordinal, link.evidence.new.ordinal) for link in links]
+
+    assert selected(honest) == [(1, 1), (0, 0)], (
+        "assignment did not reproduce the frozen selection from the evidence production computed"
+    )
+    assert selected(inverted) == [(1, 0), (0, 1)], (
+        "assignment ignored the supplied evidence and selected the pairing the node texts imply; "
+        "the evidence boundary is decorative"
+    )
+
+
+def test_the_evidence_authority_control_would_be_blind_without_the_disagreement():
+    """The premise the control above rests on: the two hypotheses really do differ.
+
+    If the inverted evidence selected the same links as the honest evidence, the control would
+    pass on an implementation that recomputed everything. Stated as its own assertion so that a
+    fixture change which collapses the difference reddens here rather than silently emptying the
+    control next door.
+    """
+    population = population_of(*duplicate_element_id_fixture())
+    honest = group_correspondence_evidence(population, admitted(population))
+    inverted = tuple(
+        CorrespondenceEvidence.of(
+            item.old, item.new, **{_WORD_OVERLAP: 0.0 if item.old.ordinal == item.new.ordinal else 1.0}
+        )
+        for item in honest
+    )
+    links = {
+        label: {
+            (link.evidence.old.ordinal, link.evidence.new.ordinal) for link in assign_group(population, evidence).links
+        }
+        for label, evidence in (("honest", honest), ("inverted", inverted))
+    }
+    assert links["honest"].isdisjoint(links["inverted"]), (
+        f"the inverted evidence selects {links['inverted']} and the honest evidence {links['honest']}; "
+        "they overlap, so the authority control cannot separate reading from recomputing"
+    )
+
+
+def test_assignment_breaks_ties_on_invocation_local_position(monkeypatch):
+    """D: local position decides, and the ADR 0019 ordinal would decide differently.
+
+    Driven on the interleaved fixture's fallback population, which is the one place the two
+    numberings disagree: it holds ``[X2, Y1]`` -- local positions 0 and 1, complete-sequence
+    ordinals 2 and 1 -- and both candidates tie at 1.0, so the tie is what picks the winner.
+
+    Descending **local** position selects ``Y1``; descending **ordinal** selects ``X2``. The
+    alternative is computed here rather than described, so a change that made the two agree
+    reddens this test instead of quietly emptying it.
+    """
+    from deltatrack import diff_bill as db
+
+    old_nodes, new_nodes = interleaved_division_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    # The population round 1a's assignment leaves: X2 (ordinal 2) then Y1 (ordinal 1).
+    cross = retrieve_cross_division_population([old_nodes[2], old_nodes[1]], [new_nodes[1]], registry)
+    assert cross is not None
+    assert [ref.ordinal for ref in cross.old_refs] == [2, 1], "the fallback population lost its concatenation order"
+
+    evidence = group_correspondence_evidence(cross, admitted(cross))
+    assert len({item.get(_WORD_OVERLAP) for item in evidence}) == 1, "the fallback candidates no longer tie"
+
+    # The evidence came out in POPULATION order, not the candidate set's canonical ordinal-pair
+    # order. On this population the two disagree -- local [2, 1] against canonical [1, 2] -- which
+    # is what makes the admission boundary safe to have wired: the set gates membership and has
+    # no way to reach the sequence assignment reads.
+    assert [item.old.ordinal for item in evidence] == [2, 1], (
+        "the evidence stage emitted the candidate set's canonical order rather than the population's"
+    )
+    assert [candidate.old.ordinal for candidate in admitted(cross).candidates()] == [1, 2]
+
+    monkeypatch.setattr(db, "text_similarity", _refuse_to_measure)
+    (link,) = assign_group(cross, evidence).links
+    assert link.old.element_id == "Y1", (
+        f"assignment selected {link.old.element_id!r}; descending invocation-local position selects 'Y1', "
+        "and 'X2' is what substituting the ADR 0019 ordinal would select"
+    )
+
+    by_ordinal = max(evidence, key=lambda item: (item.get(_WORD_OVERLAP), item.old.ordinal, item.new.ordinal))
+    assert by_ordinal.old.ordinal == 2, (
+        "an ordinal-keyed competition now picks the same candidate as a local-position one; the "
+        "fixture no longer distinguishes the two orderings"
+    )
+
+
+def test_losing_candidates_keep_their_evidence_after_assignment():
+    """F: the competition stays inspectable, losers included.
+
+    The false-green this refuses is an implementation where "evidence" quietly means "evidence
+    for winners". It satisfies every per-link requirement -- each selected link carries exactly
+    one record -- while destroying the reason ADR 0020 invariant 8 exists: that a correspondence
+    decision can be re-examined against the alternatives it beat.
+
+    The 2x2 duplicate-id fixture runs a real competition: four candidates reach assignment, two
+    links are selected, and two candidates lose to greedy exclusivity rather than to a score.
+    """
+    population = population_of(*duplicate_element_id_fixture())
+    evidence = group_correspondence_evidence(population, admitted(population))
+    assignment = assign_group(population, evidence)
+
+    assert len(assignment.evidence) == 4, (
+        f"assignment retained {len(assignment.evidence)} of 4 candidates' evidence; the losers were discarded"
+    )
+    assert set(assignment.evidence) == set(evidence), "assignment altered the evidence it was handed"
+    assert len(assignment.links) == 2
+
+    selected = {link.evidence for link in assignment.links}
+    losers = [item for item in assignment.evidence if item not in selected]
+    assert len(losers) == 2
+    assert all(_WORD_OVERLAP in item.names for item in losers), (
+        "a losing candidate's record carries no signal, so what it lost on is not inspectable"
+    )
+
+    # And the other half: a selected link names exactly the record that selected it, not merely
+    # some record about the same pair.
+    for link in assignment.links:
+        assert link.evidence in evidence
+        assert link.evidence.link == (
+            population.old_refs[list(population.old).index(link.old)],
+            population.new_refs[list(population.new).index(link.new)],
+        )
+
+
+def test_a_selection_cannot_be_severed_from_its_evidence():
+    """The retention invariant is enforced by the type, not only observed on a fixture."""
+    population = population_of(*duplicate_element_id_fixture())
+    evidence = group_correspondence_evidence(population, admitted(population))
+    assignment = assign_group(population, evidence)
+    stranger = CorrespondenceEvidence.of(population.old_refs[0], population.new_refs[0], **{_WORD_OVERLAP: 0.5})
+
+    with pytest.raises(ValueError, match="absent from the retained set"):
+        GroupAssignment(
+            evidence=(),
+            links=assignment.links,
+            leftover_old=(),
+            leftover_new=(),
+        )
+    with pytest.raises(ValueError, match="absent from the retained set"):
+        GroupAssignment(
+            evidence=evidence,
+            links=(SelectedLink(population.old[0], population.new[0], stranger),),
+            leftover_old=(),
+            leftover_new=(),
+        )
+
+
+@pytest.mark.slow
+def test_every_candidate_that_reached_assignment_keeps_its_evidence_on_the_corpus():
+    """The retained-evidence invariant on the result-bearing path, over every committed pair.
+
+    :func:`match_nodes_with_stage_outputs` is what makes this reachable: without it the
+    assignments would be internal values that no caller could inspect, and "evidence is
+    retained" would be a claim about a variable that goes out of scope.
+    """
+    total_candidates = total_links = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        key = pair_key(old_path, new_path)
+        _pairs, _candidates, assignments = match_nodes_with_stage_outputs(old_tree, new_tree)
+        for index, assignment in enumerate(assignments):
+            described = {item.link for item in assignment.evidence}
+            assert len(described) == len(assignment.evidence), f"{key}: assignment {index} repeats an evidence link"
+            for link in assignment.links:
+                assert link.evidence in assignment.evidence, (
+                    f"{key}: assignment {index} selected a link whose evidence it did not retain"
+                )
+            assert len(assignment.links) <= len(assignment.evidence)
+            total_candidates += len(assignment.evidence)
+            total_links += len(assignment.links)
+
+    assert total_candidates > total_links > 0, (
+        f"{total_candidates} candidates produced {total_links} links; with no losing candidate anywhere "
+        "on the corpus this gate cannot distinguish retained evidence from winners-only evidence"
+    )
+
+
+@pytest.mark.slow
+def test_the_evidence_population_is_exactly_the_materialised_candidate_set():
+    """The CandidateSet is not decoration: it holds precisely the pairs evidence describes.
+
+    The two are the same facts written twice -- ``propose_into`` materialises the comparison-wide
+    set, the evidence stage describes each invocation's own view -- and nothing forces them to
+    agree except this. Written as a set comparison in both directions because they fail
+    differently: a pair described but never proposed is evidence for something retrieval did not
+    admit, and a pair proposed but never described is a candidate that reached assignment
+    undescribed.
+
+    Why the evidence stage does not simply *consume* the set: every within-division population of
+    a comparison runs under one ``RetrieverInvocation``, so the set carries no division-local
+    partition to filter on and no local ordering to assign by. The population is the only
+    structure that has both.
+    """
+    checked = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        _pairs, candidates, assignments = match_nodes_with_stage_outputs(old_tree, new_tree)
+        described = {item.link for assignment in assignments for item in assignment.evidence}
+        materialised = {(candidate.old, candidate.new) for candidate in candidates.candidates()}
+        key = pair_key(old_path, new_path)
+        assert described == materialised, (
+            f"{key}: {len(described - materialised)} described pairs were never proposed and "
+            f"{len(materialised - described)} proposed pairs were never described"
+        )
+        checked += 1
+
+    assert checked, "the evidence/candidate comparison ran over zero version pairs"
+
+
+def below_threshold_group_fixture() -> tuple[list[BillNode], list[BillNode]]:
+    """A 2x2 competition whose best candidate scores far under the similarity rule's cutoff.
+
+    Each pairing shares exactly one word out of twelve, so the best score is about 0.17 against
+    a ``SIMILARITY_THRESHOLD`` of 0.4 at the time of writing. The group competition is
+    unthresholded, so both pairs must still be selected -- revoking them is the separate,
+    later rule's job.
+    """
+    old_nodes = [
+        node(MP, "o1", "alpha bravo charlie delta echo foxtrot", "A"),
+        node(MP, "o2", "golf hotel india juliet kilo lima", "A"),
+    ]
+    new_nodes = [
+        node(MP, "n1", "alpha mike november oscar papa quebec", "A"),
+        node(MP, "n2", "golf sierra tango uniform victor whiskey", "A"),
+    ]
+    return old_nodes, new_nodes
+
+
+def test_the_group_competition_applies_no_threshold():
+    """The composition B2 must not collapse: an unthresholded claim, revoked later or not at all.
+
+    The tempting tidy-up is to give the new assignment stage the threshold the *other* round-1
+    similarity rule owns, on the reasoning that a stage which decides correspondence ought to own
+    its cutoff. It would delete a whole assignment act: the group competition selects the best
+    available pairing however weak, and ``apply_similarity_assignment_rule`` is what afterwards
+    turns a weak one into a removal plus an addition. Fold them together and a pairing that
+    should have been selected and then revoked is instead never selected -- which changes what
+    round 1b's fallback population contains.
+
+    Both halves are asserted. The stage selects everything it can at 0.17, and it selects a
+    hand-authored 0.01 candidate too, which no plausible threshold would admit.
+    """
+    old_nodes, new_nodes = below_threshold_group_fixture()
+    population = population_of(old_nodes, new_nodes)
+    evidence = group_correspondence_evidence(population, admitted(population))
+
+    best = max(item.get(_WORD_OVERLAP) for item in evidence)
+    assert 0 < best < 0.2, f"the fixture's best candidate scores {best}; it must sit well under the 0.4 cutoff"
+
+    assignment = assign_group(population, evidence)
+    assert len(assignment.links) == 2, (
+        f"the group competition selected {len(assignment.links)} of 2 possible links on sub-threshold "
+        "evidence; it has acquired a cutoff that belongs to apply_similarity_assignment_rule"
+    )
+    assert (assignment.leftover_old, assignment.leftover_new) == ((), ())
+
+    # And at a score no threshold in this codebase would admit.
+    negligible = tuple(
+        CorrespondenceEvidence.of(
+            item.old, item.new, **{_WORD_OVERLAP: 0.01 if item.old.ordinal == item.new.ordinal else 0.0}
+        )
+        for item in evidence
+    )
+    assert len(assign_group(population, negligible).links) == 2
+
+    # End to end, so this binds the engine's round-1 output and not only the stage.
+    assert production_stream(old_nodes, new_nodes) == [[1, 1], [0, 0]]
+
+
+def test_assignment_leftovers_are_what_the_cross_round_retrieves():
+    """G: assignment emits the leftovers round 1b's retrieval needs, read at the stage boundary.
+
+    B2 moved this. The fused matcher returned its leftovers inline in the pairing stream, so
+    their membership and order were only ever observable through the stream; they are now a
+    field on :class:`GroupAssignment`, and this is what binds that field to the population the
+    fallback is entitled to see.
+
+    **Scoped to the stage, deliberately.** It composes the stages itself, so it cannot see the
+    orchestrator wiring them up wrongly -- an implementation of ``_match_collision_group`` that
+    built the fallback from the observations no division ever paired, dropping the ones
+    assignment declined, leaves this green. Fault injection confirmed that:
+    :func:`test_assignment_leftovers_reach_the_cross_division_fallback` is the control that
+    reddens there, because it reads production's own stream. The two are complementary and
+    neither is redundant -- this one would stay green if ``assign_group`` returned the right
+    stream with the wrong leftovers, which the other cannot distinguish.
+    """
+    old_nodes, new_nodes = assignment_leftover_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+
+    candidates = CandidateSet()
+    unmatched_old: list[BillNode] = []
+    unmatched_new: list[BillNode] = []
+    for population in retrieve_within_division_populations(old_nodes, new_nodes, registry):
+        if not population.forms_candidates:
+            unmatched_old.extend(population.old)
+            unmatched_new.extend(population.new)
+            continue
+        population.propose_into(candidates)
+        assignment = assign_group(population, group_correspondence_evidence(population, candidates))
+        unmatched_old.extend(assignment.leftover_old)
+        unmatched_new.extend(assignment.leftover_new)
+
+    assert [n.element_id for n in unmatched_old] == ["oA2"], "within-division assignment stopped leaving oA2 over"
+    assert [n.element_id for n in unmatched_new] == ["nB2"]
+
+    cross = retrieve_cross_division_population(unmatched_old, unmatched_new, registry)
+    assert cross is not None
+    assert [ref.ordinal for ref in cross.old_refs] == [1] and [ref.ordinal for ref in cross.new_refs] == [2]
+
+    cross.propose_into(candidates)
+    (link,) = assign_group(cross, group_correspondence_evidence(cross, candidates)).links
+    assert (link.old.element_id, link.new.element_id) == ("oA2", "nB2")
 
 
 # --- Independence, enforced structurally --------------------------------------------------
@@ -1091,7 +2034,6 @@ FORBIDDEN_IN_ORACLE = frozenset(
         # today's production round 1
         "match_nodes",
         "_match_collision_group",
-        "_similarity_pair",
         "similarity_correspondence_evidence",
         "apply_similarity_assignment_rule",
         "_similarity_rule_keeps",
@@ -1104,9 +2046,15 @@ FORBIDDEN_IN_ORACLE = frozenset(
         "retrieve_cross_division_population",
         "match_nodes_with_retrieval",
         "RetrievedPopulation",
-        # the stages B2 will add
+        # B2's stages and result types, under the names they shipped with. `_similarity_pair` is
+        # gone from this set for the reason B1 corrected its own guesses: B2 replaced it with the
+        # two below, and a guard listing a symbol that no longer exists protects nothing.
         "group_correspondence_evidence",
         "assign_group",
+        "GroupAssignment",
+        "SelectedLink",
+        "match_nodes_with_stage_outputs",
+        "_refuse_a_candidate_retrieval_did_not_admit",
         # and the module they would arrive through
         "diff_bill",
     }
@@ -1190,17 +2138,30 @@ def test_the_oracle_module_reaches_diff_bill_only_for_the_production_comparison(
         "deltatrack.diff_bill.observation_registry",
         "deltatrack.diff_bill.retrieve_cross_division_population",
         "deltatrack.diff_bill.retrieve_within_division_populations",
+        # B2's evidence and assignment stages, their result types and the projection that
+        # returns them. Same standing as the line above: driven and inspected, never consulted
+        # for what the answer should be. The injection harness also builds a `GroupAssignment`,
+        # which is re-expressing the ORACLE's pairing stream in production's result type rather
+        # than delegating a decision to production.
+        "deltatrack.diff_bill.GroupAssignment",
+        "deltatrack.diff_bill.SelectedLink",
+        "deltatrack.diff_bill.assign_group",
+        "deltatrack.diff_bill.group_correspondence_evidence",
+        "deltatrack.diff_bill.match_nodes_with_stage_outputs",
         # Contract vocabulary from `matching`, which holds no matching policy: the two side
-        # constants, the candidate container and the invocation type the expectation rebuilds.
+        # constants, the candidate container, the invocation type the expectation rebuilds, and
+        # the evidence record the B2 controls hand to assignment by hand.
         "deltatrack.matching.CandidateSet",
+        "deltatrack.matching.CorrespondenceEvidence",
         "deltatrack.matching.NEW",
         "deltatrack.matching.OLD",
         "deltatrack.matching.RetrieverInvocation",
-        # Read for their SIGNATURE and source only, by the structural check that assignment
-        # cannot receive the candidate set. Neither is called from this module, and the AST guard
-        # above still refuses either name inside an oracle function.
+        # Read for their SOURCE only, by the two structural checks: that assignment cannot
+        # receive the candidate set, and that the evidence path reaches it by lookup rather than
+        # by iterating it. Neither is called from this module, and the AST guard above still
+        # refuses either name inside an oracle function.
         "deltatrack.diff_bill._match_collision_group",
-        "deltatrack.diff_bill._similarity_pair",
+        "deltatrack.diff_bill._refuse_a_candidate_retrieval_did_not_admit",
     }, f"the production import surface moved: {sorted(imported)}"
 
 
@@ -1585,17 +2546,51 @@ def test_a_corpus_visible_mutation_reddens_the_frozen_trace(mutation: str):
 
 
 def inject_into_production(monkeypatch, mutation: str | None) -> None:
-    """Replace production's ``_similarity_pair`` with the oracle's, optionally mutated.
+    """Replace production's ``assign_group`` with the oracle's competition, optionally mutated.
 
-    Signature-compatible, so ``match_nodes`` and ``_match_collision_group`` drive it exactly
-    as they drive their own. ``monkeypatch`` restores it, including on failure.
+    **Retargeted from ``_similarity_pair`` to the stage that inherited its selection policy.**
+    B2 split the fused scorer, so the seam a round-1 assignment regression would actually live
+    behind is now :func:`assign_group`; injecting at the old name would patch nothing and the
+    control would read green while testing an unpatched engine.
+
+    The adapter is deliberately thin. The oracle still decides -- it is handed the population's
+    two ordered node lists and returns a pairing stream exactly as before -- and this only
+    re-expresses that stream in the stage's result type, routing matched pairs to links and the
+    rest to leftovers. Each selected link is given the record that already describes it, taken
+    from the evidence production computed, so the injected stage satisfies the same
+    every-link-carries-its-evidence invariant without inventing a signal.
+
+    ``monkeypatch`` restores it, including on failure.
     """
     variant = frozenset({mutation}) if mutation else frozenset()
 
-    def replacement(old_nodes, new_nodes):
-        return legacy_similarity_pair(old_nodes, new_nodes, Recorder.selection_only(), "injected", variant)
+    def replacement(population, evidence):
+        by_link = {item.link: item for item in evidence}
+        old_ref_of = {id(node): ref for node, ref in zip(population.old, population.old_refs)}
+        new_ref_of = {id(node): ref for node, ref in zip(population.new, population.new_refs)}
 
-    monkeypatch.setattr("deltatrack.diff_bill._similarity_pair", replacement)
+        links: list[SelectedLink] = []
+        leftover_old: list[BillNode] = []
+        leftover_new: list[BillNode] = []
+        for old_node, new_node in legacy_similarity_pair(
+            list(population.old), list(population.new), Recorder.selection_only(), "injected", variant
+        ):
+            if old_node is None:
+                leftover_new.append(new_node)
+            elif new_node is None:
+                leftover_old.append(old_node)
+            else:
+                link = (old_ref_of[id(old_node)], new_ref_of[id(new_node)])
+                links.append(SelectedLink(old_node, new_node, by_link[link]))
+
+        return GroupAssignment(
+            evidence=evidence,
+            links=tuple(links),
+            leftover_old=tuple(leftover_old),
+            leftover_new=tuple(leftover_new),
+        )
+
+    monkeypatch.setattr("deltatrack.diff_bill.assign_group", replacement)
 
 
 @pytest.mark.slow
@@ -1618,7 +2613,7 @@ def test_the_injection_harness_alone_changes_nothing(monkeypatch):
         ]
         key = pair_key(old_path, new_path)
         assert stream_digest(produced) == frozen[key]["stream_sha256"], (
-            f"{key}: substituting the oracle for production's own _similarity_pair moved the stream, "
+            f"{key}: substituting the oracle for production's own assign_group moved the stream, "
             "so the oracle is not a faithful transcription and every control below is unreadable"
         )
 
