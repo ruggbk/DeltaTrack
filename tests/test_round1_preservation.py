@@ -165,7 +165,7 @@ class Recorder:
 
     @classmethod
     def selection_only(cls) -> Recorder:
-        """A recorder for running the oracle as a drop-in ``_similarity_pair``, recording nothing."""
+        """A recorder for running the oracle as a drop-in for production's assigner, recording nothing."""
         return cls(None)
 
     def population(self, nodes: list[BillNode]) -> list[int]:
@@ -795,8 +795,9 @@ def test_the_retrieval_stages_emit_the_frozen_invocation_populations():
     implementation formed -- same membership, same order, same sequence of invocations.
 
     What moved is where the assertion is taken. It now reads the retrieval stages' own outputs,
-    which is the boundary B2 will consume, so this survives ``_similarity_pair`` being split
-    into evidence and assignment.
+    which is the boundary B2 consumes -- and it did survive the split of the fused scorer into
+    :func:`group_correspondence_evidence` and :func:`assign_group`, unchanged and against this
+    same frozen expectation.
     """
     checked = 0
     for old_path, new_path in manifest_version_pairs():
@@ -961,10 +962,11 @@ def test_the_measurement_guard_can_fire():
 
 # --- B1: the CandidateSet, bound independently of the code that builds it --------------------
 #
-# Legacy assignment consumes `population.old` / `population.new` through `_similarity_pair` and
-# never the candidate set. So candidate materialisation can be wrong -- a dropped pair, a
-# mis-attributed invocation -- while the frozen pairing stream, the retrieval-population tests
-# and the canonical bytes all stay exact. Nothing above binds it. These do.
+# Assignment consumes `population.old` / `population.new` and the evidence describing them, and
+# never the candidate set -- true of the fused scorer and still true of `assign_group`. So
+# candidate materialisation can be wrong -- a dropped pair, a mis-attributed invocation -- while
+# the frozen pairing stream, the retrieval-population tests and the canonical bytes all stay
+# exact. Nothing above binds it. These do.
 
 #: The two invocations B1's retrieval stages run under, rebuilt here from the literal names and
 #: round rather than imported from production. Importing the constant would let a change to it
@@ -1776,14 +1778,21 @@ def test_the_group_competition_applies_no_threshold():
 
 
 def test_assignment_leftovers_are_what_the_cross_round_retrieves():
-    """G: the two rounds compose through assignment's leftovers, read at the stage boundary.
+    """G: assignment emits the leftovers round 1b's retrieval needs, read at the stage boundary.
 
-    ``test_assignment_leftovers_reach_the_cross_division_fallback`` pins this end to end. This
-    pins the seam: what round 1a's ASSIGNMENT declines is exactly what round 1b's retrieval is
-    handed, in that order. An implementation that built the fallback population from the
-    observations no division ever paired -- dropping the ones assignment declined -- passes every
-    corpus gate in this repository, because the corpus never presents a group where the two
-    differ.
+    B2 moved this. The fused matcher returned its leftovers inline in the pairing stream, so
+    their membership and order were only ever observable through the stream; they are now a
+    field on :class:`GroupAssignment`, and this is what binds that field to the population the
+    fallback is entitled to see.
+
+    **Scoped to the stage, deliberately.** It composes the stages itself, so it cannot see the
+    orchestrator wiring them up wrongly -- an implementation of ``_match_collision_group`` that
+    built the fallback from the observations no division ever paired, dropping the ones
+    assignment declined, leaves this green. Fault injection confirmed that:
+    :func:`test_assignment_leftovers_reach_the_cross_division_fallback` is the control that
+    reddens there, because it reads production's own stream. The two are complementary and
+    neither is redundant -- this one would stay green if ``assign_group`` returned the right
+    stream with the wrong leftovers, which the other cannot distinguish.
     """
     old_nodes, new_nodes = assignment_leftover_fixture()
     registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
@@ -2396,7 +2405,7 @@ def test_the_injection_harness_alone_changes_nothing(monkeypatch):
         ]
         key = pair_key(old_path, new_path)
         assert stream_digest(produced) == frozen[key]["stream_sha256"], (
-            f"{key}: substituting the oracle for production's own _similarity_pair moved the stream, "
+            f"{key}: substituting the oracle for production's own assign_group moved the stream, "
             "so the oracle is not a faithful transcription and every control below is unreadable"
         )
 
