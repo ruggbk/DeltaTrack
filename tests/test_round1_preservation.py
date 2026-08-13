@@ -98,7 +98,15 @@ from pathlib import Path
 import pytest
 
 from deltatrack.bill_tree import BillNode, normalize_bill
-from deltatrack.diff_bill import match_nodes
+from deltatrack.diff_bill import (
+    RetrievedPopulation,
+    match_nodes,
+    match_nodes_with_retrieval,
+    observation_registry,
+    retrieve_cross_division_population,
+    retrieve_within_division_populations,
+)
+from deltatrack.matching import NEW, OLD, CandidateSet, RetrieverInvocation
 from deltatrack.similarity import text_similarity
 from tests.conftest import assert_manifest_committed, manifest_version_pairs, manifest_xml_ids
 from tests.corpus_paths import DATA_DIR, PROJECT_ROOT
@@ -717,65 +725,360 @@ def test_production_reproduces_the_frozen_pairing_stream(old_path: Path, new_pat
     )
 
 
-@pytest.mark.slow
-def test_production_internals_reproduce_the_frozen_invocation_trace():
-    """Today's corroboration at the stage boundary, by wrapping the LEGACY internals.
+def observed_retrieval_populations(old_tree, new_tree) -> list[dict]:
+    """The populations B1's RETRIEVAL STAGES emit, in order, addressed by ADR 0019 ordinal.
 
-    ``_similarity_pair`` and ``_match_collision_group`` exist now and may not after B1, so
-    this test is explicitly transitional: B1 and B2 replace it with assertions on their own
-    stage outputs, compared against the same frozen invocation trace. What it buys today is
-    that the oracle's invocation-level expectation is not merely self-consistent -- it is the
-    shape production actually runs.
+    Recorded at the new stage boundary rather than by wrapping ``_similarity_pair``. The
+    pre-B1 version of this helper spied on the scorer and inferred each invocation's phase from
+    a call counter; the phase is now a property of which retrieval function produced the
+    population, so it is read rather than reconstructed.
+
+    Only populations that actually form candidates are reported. A division present on one side
+    only is a real retrieval output and is deliberately emitted by the stage, but it pairs
+    nothing and runs no invocation, so it is not part of the invocation trace the oracle froze.
     """
     from deltatrack import diff_bill as db
 
+    ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
+    seen: list[dict] = []
+    real_within = db.retrieve_within_division_populations
+    real_cross = db.retrieve_cross_division_population
+
+    def record(population, phase):
+        seen.append(
+            {
+                "phase": phase,
+                "old": [ordinals[id(n)] for n in population.old],
+                "new": [ordinals[id(n)] for n in population.new],
+            }
+        )
+
+    def spy_within(old_nodes, new_nodes, registry):
+        populations = real_within(old_nodes, new_nodes, registry)
+        for population in populations:
+            if population.forms_candidates:
+                record(population, "within")
+        return populations
+
+    def spy_cross(unmatched_old, unmatched_new, registry):
+        population = real_cross(unmatched_old, unmatched_new, registry)
+        if population is not None:
+            record(population, "cross")
+        return population
+
+    # Saved and restored here rather than through `monkeypatch`, which accumulates for the whole
+    # test: across a corpus loop the second patch would wrap the FIRST iteration's spy, and that
+    # spy holds the first pair's ordinal map. It fails loudly as a KeyError, but only because
+    # the map is strict -- a looser bridge would have recorded the wrong addresses in silence.
+    # Restoring per call also lets a mutation stay patched around this observer and compose.
+    db.retrieve_within_division_populations = spy_within
+    db.retrieve_cross_division_population = spy_cross
+    try:
+        match_nodes(old_tree, new_tree)
+    finally:
+        db.retrieve_within_division_populations = real_within
+        db.retrieve_cross_division_population = real_cross
+    return seen
+
+
+@pytest.mark.slow
+def test_the_retrieval_stages_emit_the_frozen_invocation_populations():
+    """B1's stage boundary, against the SAME frozen expectation the pre-B1 internals met.
+
+    The expectation is unchanged and was not regenerated for this slice: retrieval was named
+    and extracted, so the populations it hands to assignment must be exactly the ones the fused
+    implementation formed -- same membership, same order, same sequence of invocations.
+
+    What moved is where the assertion is taken. It now reads the retrieval stages' own outputs,
+    which is the boundary B2 will consume, so this survives ``_similarity_pair`` being split
+    into evidence and assignment.
+    """
     checked = 0
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        # Addresses come from the COMPLETE emitted sequences, resolved outside the spy. The
-        # populations the spy sees are collision subgroups and division sublists; numbering them
-        # by their position inside those views is the ADR 0019 hazard, so the map is built once
-        # from tree.nodes and only looked up here.
-        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
-        seen: list[dict] = []
-        real_pair = db._similarity_pair
-        real_group = db._match_collision_group
-        state = {"both_sided": 0, "n": 0}
-
-        def spy_pair(old_nodes, new_nodes, _real=real_pair, _seen=seen, _state=state, _ord=ordinals):
-            _state["n"] += 1
-            phase = "within" if _state["n"] <= _state["both_sided"] else "cross"
-            result = _real(old_nodes, new_nodes)
-            _seen.append(
-                {
-                    "phase": phase,
-                    "old": [_ord[id(n)] for n in old_nodes],
-                    "new": [_ord[id(n)] for n in new_nodes],
-                }
-            )
-            return result
-
-        def spy_group(old_nodes, new_nodes, _real=real_group, _state=state):
-            _state["n"] = 0
-            _state["both_sided"] = len({n.division_key for n in old_nodes} & {n.division_key for n in new_nodes})
-            return _real(old_nodes, new_nodes)
-
-        db._similarity_pair = spy_pair
-        db._match_collision_group = spy_group
-        try:
-            match_nodes(old_tree, new_tree)
-        finally:
-            db._similarity_pair = real_pair
-            db._match_collision_group = real_group
-
+        seen = observed_retrieval_populations(old_tree, new_tree)
         expected = [
             {"phase": i["phase"], "old": i["old"], "new": i["new"]}
             for i in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]
         ]
-        assert seen == expected, f"{pair_key(old_path, new_path)}: invocation populations differ from the oracle"
+        assert seen == expected, (
+            f"{pair_key(old_path, new_path)}: the retrieval stages' populations differ from the frozen expectation"
+        )
         checked += 1
 
     assert checked, "the invocation comparison ran over zero version pairs"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mutation", ["sorted_divisions", "sorted_fallback"])
+def test_the_retrieval_stage_boundary_can_fail(mutation: str, monkeypatch):
+    """The new stage-boundary test would otherwise only ever have been observed green.
+
+    Two mutations a plausible B1 could have shipped, each tidying an order that turns out to be
+    policy:
+
+    ``sorted_divisions`` visits divisions in sorted key order instead of first-appearance order.
+    ``sorted_fallback`` sorts the cross-division population instead of preserving the
+    concatenation round 1a produced.
+
+    Both leave every candidate PAIR intact and change only order, which is precisely the class
+    of change a membership-only check would wave through.
+    """
+    from deltatrack import diff_bill as db
+
+    real_within = db.retrieve_within_division_populations
+    real_cross = db.retrieve_cross_division_population
+
+    def sorted_divisions(old_nodes, new_nodes, registry):
+        return tuple(sorted(real_within(old_nodes, new_nodes, registry), key=lambda p: p.division_key or ""))
+
+    def sorted_fallback(unmatched_old, unmatched_new, registry):
+        return real_cross(list(reversed(unmatched_old)), list(reversed(unmatched_new)), registry)
+
+    if mutation == "sorted_divisions":
+        monkeypatch.setattr(db, "retrieve_within_division_populations", sorted_divisions)
+    else:
+        monkeypatch.setattr(db, "retrieve_cross_division_population", sorted_fallback)
+
+    moved = []
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        seen = observed_retrieval_populations(old_tree, new_tree)
+        expected = [
+            {"phase": i["phase"], "old": i["old"], "new": i["new"]}
+            for i in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]
+        ]
+        if seen != expected:
+            moved.append(pair_key(old_path, new_path))
+
+    assert moved, (
+        f"the {mutation!r} mutation left every retrieved population identical, so the stage-boundary "
+        "test cannot see a retrieval ordering regression"
+    )
+
+
+def test_assignment_never_receives_the_candidate_set():
+    """Structural: ``CandidateSet`` iteration order cannot become assignment order.
+
+    ADR 0020's candidate set is canonically ordered by ordinal pair, and B0 measured that using
+    that order as assignment order changes the selected links on 174 of 329 greedy invocations.
+    The protection is the call signature rather than a convention: the scorer is handed two
+    ordered lists and has no reference to the set, so no ordering it carries can reach a
+    selection.
+    """
+    import inspect
+
+    from deltatrack.diff_bill import _match_collision_group, _similarity_pair
+
+    assert "candidates" not in inspect.signature(_similarity_pair).parameters
+
+    body = inspect.getsource(_match_collision_group)
+    tree = ast.parse(textwrap.dedent(body))
+    for call in ast.walk(tree):
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+            continue
+        if call.func.id != "_similarity_pair":
+            continue
+        named = {n.id for arg in call.args for n in ast.walk(arg) if isinstance(n, ast.Name)}
+        assert "candidates" not in named, (
+            f"the scorer is called with the candidate set in scope as an argument: {sorted(named)}"
+        )
+
+
+# --- B1: the CandidateSet, bound independently of the code that builds it --------------------
+#
+# Legacy assignment consumes `population.old` / `population.new` through `_similarity_pair` and
+# never the candidate set. So candidate materialisation can be wrong -- a dropped pair, a
+# mis-attributed invocation -- while the frozen pairing stream, the retrieval-population tests
+# and the canonical bytes all stay exact. Nothing above binds it. These do.
+
+#: The two invocations B1's retrieval stages run under, rebuilt here from the literal names and
+#: round rather than imported from production. Importing the constant would let a change to it
+#: move expectation and actual together, which is the whole failure mode this file exists to
+#: refuse. `1` is `PATH_ROUND`, spelled out for the same reason.
+EXPECTED_INVOCATION = {
+    "within": RetrieverInvocation.of("path_division_group", round=1),
+    "cross": RetrieverInvocation.of("path_group_cross_division", round=1),
+}
+
+
+def expected_candidate_provenance(old_tree, new_tree) -> dict[tuple[int, int], set]:
+    """The candidate set B1 must have materialised, derived from the ORACLE's invocations.
+
+    Independent by construction: it reads the transcribed invocation trace -- whose digest the
+    frozen artifact pins -- and expands each invocation's population into its full cross
+    product. It never calls ``RetrievedPopulation.propose_into``, which is the code under test;
+    building the expected side with the production helper would assert only that the helper
+    agrees with itself.
+
+    Returns ``{(old_ordinal, new_ordinal): {invocation, ...}}``. Keying by observation pair and
+    accumulating a SET of invocations is the checked-in ``CandidateSet`` semantics restated
+    independently: one candidate per pair however many invocations proposed it, each retaining
+    its own provenance.
+    """
+    expected: dict[tuple[int, int], set] = defaultdict(set)
+    for invocation in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]:
+        which = EXPECTED_INVOCATION[invocation["phase"]]
+        for old_ordinal in invocation["old"]:
+            for new_ordinal in invocation["new"]:
+                expected[(old_ordinal, new_ordinal)].add(which)
+    return dict(expected)
+
+
+def actual_candidate_provenance(candidates) -> dict[tuple[int, int], set]:
+    """The production ``CandidateSet``, projected the same way, with its addressing checked."""
+    projected: dict[tuple[int, int], set] = {}
+    for candidate in candidates.candidates():
+        assert candidate.old.side == OLD and candidate.new.side == NEW, (
+            f"a candidate pairs {candidate.old.side} with {candidate.new.side}"
+        )
+        key = (candidate.old.ordinal, candidate.new.ordinal)
+        assert key not in projected, f"{key} appears as two candidates; one pair is one candidate"
+        projected[key] = set(candidate.invocations)
+    return projected
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("old_path,new_path", manifest_version_pairs(), ids=lambda p: p.stem)
+def test_the_candidate_set_materialises_exactly_what_retrieval_considered(old_path: Path, new_path: Path):
+    """Membership, addressing, provenance and deduplication, against an independent expectation.
+
+    Binds all four at once because they fail together: a dropped pair moves membership, a
+    mis-attributed proposal moves provenance, and a pair recorded twice moves deduplication.
+    """
+    old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+    _pairs, candidates = match_nodes_with_retrieval(old_tree, new_tree)
+
+    expected = expected_candidate_provenance(old_tree, new_tree)
+    actual = actual_candidate_provenance(candidates)
+    key = pair_key(old_path, new_path)
+
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    assert not missing, f"{key}: {len(missing)} considered pairs never reached the candidate set, e.g. {missing[:4]}"
+    assert not extra, f"{key}: {len(extra)} candidates were never considered by retrieval, e.g. {extra[:4]}"
+
+    mismatched = {k: (actual[k], expected[k]) for k in expected if actual[k] != expected[k]}
+    assert not mismatched, f"{key}: {len(mismatched)} candidates carry the wrong invocation provenance"
+
+    # Complete-sequence addressing: every ordinal indexes a real node of its own side.
+    n_old, n_new = len(old_tree.nodes), len(new_tree.nodes)
+    for old_ordinal, new_ordinal in actual:
+        assert 0 <= old_ordinal < n_old and 0 <= new_ordinal < n_new
+
+
+@pytest.mark.slow
+def test_the_candidate_population_is_non_vacuous():
+    """The gate above would pass on two empty dicts; this refuses that reading."""
+    total = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        total += len(match_nodes_with_retrieval(old_tree, new_tree)[1])
+    assert total > 1000, f"only {total} candidates materialised over the corpus; the gate is near-vacuous"
+
+
+def test_a_one_sided_population_contributes_no_candidates():
+    """A division present on one side forms no pair, so it must propose nothing.
+
+    Asserted on the real retrieval stage rather than a hand-built value: the interleaved fixture
+    has division Y on the old side only and division Z on the new side only.
+    """
+    old_nodes, new_nodes = interleaved_division_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    populations = retrieve_within_division_populations(old_nodes, new_nodes, registry)
+
+    one_sided = [p for p in populations if not p.forms_candidates]
+    assert one_sided, "the fixture stopped producing a one-sided division, so this proves nothing"
+
+    candidates = CandidateSet()
+    for population in one_sided:
+        population.propose_into(candidates)
+    assert len(candidates) == 0, "a one-sided population proposed a candidate pair"
+
+    # And the paired direction, so this is not an assertion that propose_into never works.
+    two_sided = [p for p in populations if p.forms_candidates]
+    assert two_sided, "the fixture stopped producing a two-sided division"
+    for population in two_sided:
+        population.propose_into(candidates)
+    assert len(candidates) == sum(len(p.old) * len(p.new) for p in two_sided)
+
+
+def test_two_invocations_proposing_one_pair_keep_both_provenances():
+    """The bridge from B1's populations to ``CandidateSet``'s multi-proposal accumulation.
+
+    Current policy happens to produce no pair proposed by both round-1 invocations on the
+    committed corpus, and this does not pretend otherwise -- it drives the accumulation directly
+    with two populations naming the same observations under different invocations, which is the
+    shape the cross-division round can legitimately produce.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    (population,) = retrieve_within_division_populations(old_nodes, new_nodes, registry)
+
+    cross = retrieve_cross_division_population(list(population.old), list(population.new), registry)
+    assert cross is not None and cross.invocation != population.invocation
+
+    candidates = CandidateSet()
+    population.propose_into(candidates)
+    cross.propose_into(candidates)
+
+    assert len(candidates) == len(population.old) * len(population.new), "the same pair became two candidates"
+    for candidate in candidates.candidates():
+        assert set(candidate.invocations) == {population.invocation, cross.invocation}, (
+            f"candidate {candidate.ordinal_pair} lost a proposal's provenance: {candidate.invocations}"
+        )
+
+
+@pytest.mark.slow
+def test_a_dropped_candidate_is_invisible_to_matching_and_caught_here(monkeypatch):
+    """THE decisive control: a candidate-only defect, and what does and does not see it.
+
+    ``propose_into`` is made to omit exactly one ``old_ref x new_ref`` pair per invocation. The
+    scorer still receives the complete population, so matching cannot notice.
+
+    **A.** the frozen pairing stream stays exact -- proving the defect is invisible to every
+    gate that existed before this one, which is why the B1 candidate set could certify itself.
+    **B.** the materialisation gate goes red.
+    """
+    real_propose = RetrievedPopulation.propose_into
+
+    def dropping_propose_into(self, candidates):
+        dropped = False
+        for old_ref in self.old_refs:
+            for new_ref in self.new_refs:
+                if not dropped:
+                    dropped = True
+                    continue
+                candidates.propose(old_ref, new_ref, self.invocation)
+
+    monkeypatch.setattr(RetrievedPopulation, "propose_into", dropping_propose_into)
+
+    frozen = load_frozen()
+    stream_intact = []
+    candidates_red = []
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        pairs, candidates = match_nodes_with_retrieval(old_tree, new_tree)
+        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
+        produced = [
+            [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None] for o, n in pairs
+        ]
+        key = pair_key(old_path, new_path)
+        stream_intact.append(stream_digest(produced) == frozen[key]["stream_sha256"])
+        if actual_candidate_provenance(candidates) != expected_candidate_provenance(old_tree, new_tree):
+            candidates_red.append(key)
+
+    assert all(stream_intact), (
+        "dropping candidates changed the pairing stream, so this control is not isolating a "
+        "candidate-only defect and half its claim is unreadable"
+    )
+    assert candidates_red, (
+        "dropping one proposal per invocation left the candidate set matching its independent "
+        "expectation; the materialisation gate cannot see a candidate-only defect"
+    )
+    assert RetrievedPopulation.propose_into is dropping_propose_into  # the patch really was live
+    monkeypatch.undo()
+    assert RetrievedPopulation.propose_into is real_propose
 
 
 # --- Independence, enforced structurally --------------------------------------------------
@@ -793,9 +1096,15 @@ FORBIDDEN_IN_ORACLE = frozenset(
         "apply_similarity_assignment_rule",
         "_similarity_rule_keeps",
         "_similarity_signals",
-        # the stages B1 and B2 will add
-        "retrieve_division_candidates",
-        "retrieve_cross_division_candidates",
+        # B1's retrieval stages, under the names they actually shipped with. The pre-B1 version
+        # of this set guessed `retrieve_division_candidates` /
+        # `retrieve_cross_division_candidates`, which no longer name anything -- a guard listing
+        # symbols that do not exist protects nothing, so these are corrected to the real ones.
+        "retrieve_within_division_populations",
+        "retrieve_cross_division_population",
+        "match_nodes_with_retrieval",
+        "RetrievedPopulation",
+        # the stages B2 will add
         "group_correspondence_evidence",
         "assign_group",
         # and the module they would arrive through
@@ -869,8 +1178,29 @@ def test_the_oracle_module_reaches_diff_bill_only_for_the_production_comparison(
         "deltatrack.bill_tree.normalize_bill",
         "deltatrack.diff_bill.match_nodes",
         "deltatrack.similarity.text_similarity",
-        # The transitional internals wrapper, which B1 removes along with the test that uses it.
+        # The module itself, for the stage-boundary observer and the retrieval-order mutations,
+        # both of which have to reach into production to patch the stage they measure.
         "deltatrack.diff_bill",
+        # B1's retrieval stages and their output type, imported so the candidate-materialisation
+        # gate can drive and inspect them. They are the code UNDER TEST, never the source of the
+        # expected value: the expectation is expanded from the oracle's invocation trace, and the
+        # AST guard above refuses every one of these names inside an oracle function.
+        "deltatrack.diff_bill.RetrievedPopulation",
+        "deltatrack.diff_bill.match_nodes_with_retrieval",
+        "deltatrack.diff_bill.observation_registry",
+        "deltatrack.diff_bill.retrieve_cross_division_population",
+        "deltatrack.diff_bill.retrieve_within_division_populations",
+        # Contract vocabulary from `matching`, which holds no matching policy: the two side
+        # constants, the candidate container and the invocation type the expectation rebuilds.
+        "deltatrack.matching.CandidateSet",
+        "deltatrack.matching.NEW",
+        "deltatrack.matching.OLD",
+        "deltatrack.matching.RetrieverInvocation",
+        # Read for their SIGNATURE and source only, by the structural check that assignment
+        # cannot receive the candidate set. Neither is called from this module, and the AST guard
+        # above still refuses either name inside an oracle function.
+        "deltatrack.diff_bill._match_collision_group",
+        "deltatrack.diff_bill._similarity_pair",
     }, f"the production import surface moved: {sorted(imported)}"
 
 
@@ -947,6 +1277,18 @@ def test_every_frozen_ordinal_indexes_a_real_node_of_its_side():
 
 
 # --- The two synthetic fixtures the corpus cannot supply -----------------------------------
+
+
+class _TreeStandIn:
+    """The one attribute ``observation_registry`` and ``match_nodes`` read off a tree.
+
+    A synthetic fixture is a node list, not a parsed bill, and the registry only ever needs the
+    complete emitted sequence for each side. Building a real ``BillTree`` would mean inventing a
+    congress, bill type and version that nothing here reads.
+    """
+
+    def __init__(self, nodes: list[BillNode]) -> None:
+        self.nodes = nodes
 
 
 def node(match_path, element_id, body, division_key) -> BillNode:

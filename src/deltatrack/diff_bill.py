@@ -246,41 +246,92 @@ def _similarity_pair(
     return pairs
 
 
-def _match_collision_group(
+@dataclass(frozen=True)
+class RetrievedPopulation:
+    """One round-1 retriever invocation's ordered population, and its ADR 0019 addresses.
+
+    RETRIEVAL's output for one invocation. It says which observations were *considered
+    together*; it decides no correspondence, applies no threshold and computes no score.
+
+    **The order of ``old`` and ``new`` is policy, not presentation.** Legacy assignment sorts on
+    ``(similarity, oi, ni)`` where those are positions in these two tuples, and #590 measured
+    that substituting ADR 0019 ordinals for them changes the selected correspondence. So the
+    ordered tuples are the contract B2's assignment stage will consume, and ``old_refs`` /
+    ``new_refs`` are the identities of the same observations at the same positions -- two
+    parallel readings of one population, never a re-sort of it.
+
+    ``old`` or ``new`` may be empty. A division present on one side only is still a retrieval
+    fact worth naming: it forms no candidate pair, and the observations it holds pass to the
+    next round unclaimed. :attr:`forms_candidates` is what the orchestrator branches on, so the
+    "no candidates here" case is a property of the population rather than a shape the caller
+    has to re-derive.
+    """
+
+    invocation: RetrieverInvocation
+    division_key: str | None
+    old: tuple[BillNode, ...]
+    new: tuple[BillNode, ...]
+    old_refs: tuple[ObservationRef, ...]
+    new_refs: tuple[ObservationRef, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.old) != len(self.old_refs) or len(self.new) != len(self.new_refs):
+            raise ValueError(
+                f"population and addresses disagree: {len(self.old)}/{len(self.old_refs)} old, "
+                f"{len(self.new)}/{len(self.new_refs)} new; a position must mean the same "
+                "observation in both readings"
+            )
+
+    @property
+    def forms_candidates(self) -> bool:
+        """Whether this invocation pairs anything at all. False when either side is empty."""
+        return bool(self.old) and bool(self.new)
+
+    def propose_into(self, candidates: CandidateSet) -> None:
+        """Record every pair this invocation considered, as ADR 0020 retrieval provenance.
+
+        The full cross product, which is what the legacy scorer evaluates. No rank and no
+        score: round-1 retrieval is structural, it emits membership and provenance, and ADR
+        0020 is explicit that an invented score is worse than an absent field because it looks
+        comparable. The similarity ratio is *correspondence evidence* and belongs to B2.
+        """
+        for old_ref in self.old_refs:
+            for new_ref in self.new_refs:
+                candidates.propose(old_ref, new_ref, self.invocation)
+
+
+def retrieve_within_division_populations(
     old_nodes: list[BillNode],
     new_nodes: list[BillNode],
-) -> list[tuple[BillNode | None, BillNode | None]]:
-    """Resolve a collision group (multiple nodes sharing one match_path).
+    registry: "ObservationRegistry",
+) -> tuple[RetrievedPopulation, ...]:
+    """RETRIEVAL, round 1a: partition one ``match_path`` group by division.
 
-    Uses each node's division key to sub-group, then text similarity as fallback.
+    Deliberately NOT also by body_index (#434), though nodes now carry one. A document with two
+    top-level bodies makes every section collide with its counterpart in the other text, so
+    partitioning on the body looks like the matching fix. It is not: body_index is a node's
+    POSITION IN ITS OWN DOCUMENT, and the same position does not mean the same text across
+    versions.
 
-    The key is carried on the node (#468). It used to be recovered from the division's
-    display label by splitting on ``":"``, which tied matching to a presentation choice:
-    the GPO form #66 asks for has no colon, so every division collapsed into one bucket
-    and nodes silently paired across divisions.
+    A reported bill holds the base text at body[0] and the committee substitute at body[1]. When
+    the substitute is adopted, the NEXT version is a single body holding that substitute -- at
+    index 0, because it is now the only body. Partitioning on the index pairs old body[0] (the
+    base, superseded) with it and reports old body[1] (the text that actually survived) as
+    removed. 114-hr-2029 is exactly this: v5 scores 0.809 similarity to v4's body[1] and 0.532
+    to body[0], and the partition inverted that pairing on a committed corpus pair.
+
+    Similarity already resolves both directions without the constraint, because it compares text
+    rather than position. division_key is safe here in a way body_index is not -- a division's
+    key is its header text, which is a name that travels with the content across versions. The
+    key is carried on the node (#468); recovering it from the division's display label tied
+    matching to a presentation choice, and the GPO form #66 asks for has no colon, so every
+    division collapsed into one bucket and nodes silently paired across divisions.
+
+    **One population per division, in first-appearance order**, old-side divisions before
+    new-only ones. That traversal order is what builds the next round's population, so it is
+    behaviour rather than iteration detail. Divisions present on one side only are emitted too,
+    carrying an empty side -- see :class:`RetrievedPopulation`.
     """
-    # Step 1: Sub-group by division.
-    #
-    # Deliberately NOT also by body_index (#434), though nodes now carry one. A document
-    # with two top-level bodies makes every section collide with its counterpart in the
-    # other text, so partitioning on the body looks like the matching fix. It is not:
-    # body_index is a node's POSITION IN ITS OWN DOCUMENT, and the same position does not
-    # mean the same text across versions.
-    #
-    # A reported bill holds the base text at body[0] and the committee substitute at
-    # body[1]. When the substitute is adopted, the NEXT version is a single body holding
-    # that substitute -- at index 0, because it is now the only body. Partitioning on the
-    # index pairs old body[0] (the base, superseded) with it and reports old body[1] (the
-    # text that actually survived) as removed. 114-hr-2029 is exactly this: v5 scores
-    # 0.809 similarity to v4's body[1] and 0.532 to body[0], and the partition inverted
-    # that pairing on a committed corpus pair.
-    #
-    # Similarity already resolves both directions without the constraint, because it
-    # compares text rather than position: going one body to two, the unchanged base text
-    # wins its pairing on being identical, and the substitute is left over as added. So
-    # the constraint was not earning the direction it was added for, while breaking the
-    # other one. division_key is safe here in a way body_index is not -- a division's key
-    # is its header text, which is a name that travels with the content across versions.
     old_by_div: dict[str, list[BillNode]] = defaultdict(list)
     new_by_div: dict[str, list[BillNode]] = defaultdict(list)
     for node in old_nodes:
@@ -288,53 +339,210 @@ def _match_collision_group(
     for node in new_nodes:
         new_by_div[node.division_key].append(node)
 
+    invocation = RetrieverInvocation.of("path_division_group", round=PATH_ROUND)
+    populations: list[RetrievedPopulation] = []
+    for division_key in dict.fromkeys(list(old_by_div.keys()) + list(new_by_div.keys())):
+        div_old = tuple(old_by_div.get(division_key, []))
+        div_new = tuple(new_by_div.get(division_key, []))
+        populations.append(
+            RetrievedPopulation(
+                invocation=invocation,
+                division_key=division_key,
+                old=div_old,
+                new=div_new,
+                old_refs=tuple(registry.ref(OLD, node) for node in div_old),
+                new_refs=tuple(registry.ref(NEW, node) for node in div_new),
+            )
+        )
+    return tuple(populations)
+
+
+def retrieve_cross_division_population(
+    unmatched_old: list[BillNode],
+    unmatched_new: list[BillNode],
+    registry: "ObservationRegistry",
+) -> RetrievedPopulation | None:
+    """RETRIEVAL, round 1b: the observations round 1a left unclaimed, across division lines.
+
+    **This round's population is conditioned on round 1a's ASSIGNMENT.** ADR 0020 permits that
+    explicitly -- retrieval may run in several rounds and a later round may consult earlier
+    matching state -- and the prohibition it does impose holds here: this reads *which
+    observations remain unclaimed*, never the correspondence evidence computed for the pairs it
+    is deciding whether to emit.
+
+    Those selections are provisional internal state, not settled ``Correspondence``. The
+    similarity rule may still revoke a round-1 pairing and the move pass may still re-partner
+    either half, so nothing is committed to a ``CorrespondenceSet`` here; doing so merely to
+    satisfy the multi-round vocabulary would collide with its no-revision rule.
+
+    ``None`` when either side is empty -- the eligibility gate, made explicit rather than left
+    as an ``if`` in the caller. It matters that this is a retrieval decision: with one side
+    empty no pair can be formed, so there is nothing to consider and no invocation to record.
+
+    **The concatenation order is load-bearing.** Both lists arrive in division-traversal order,
+    mixing observations a one-sided division contributed with observations round 1a's assignment
+    declined, and that sequence is this invocation's local index space. It is NOT sorted, and it
+    is not in parser-ordinal order in general: ``tests/test_round1_preservation.py`` constructs
+    a group whose fallback population addresses ``[2, 1]``.
+    """
+    if not unmatched_old or not unmatched_new:
+        return None
+    old = tuple(unmatched_old)
+    new = tuple(unmatched_new)
+    return RetrievedPopulation(
+        invocation=RetrieverInvocation.of("path_group_cross_division", round=PATH_ROUND),
+        division_key=None,
+        old=old,
+        new=new,
+        old_refs=tuple(registry.ref(OLD, node) for node in old),
+        new_refs=tuple(registry.ref(NEW, node) for node in new),
+    )
+
+
+def _match_collision_group(
+    old_nodes: list[BillNode],
+    new_nodes: list[BillNode],
+    registry: "ObservationRegistry",
+    candidates: CandidateSet,
+) -> list[tuple[BillNode | None, BillNode | None]]:
+    """Resolve a collision group: two retrieval rounds, each followed by legacy assignment.
+
+    The two populations are now named and produced by
+    :func:`retrieve_within_division_populations` and
+    :func:`retrieve_cross_division_population`; the rationale for the division partition lives
+    with the first of those. What remains here is orchestration: run the retrieval, hand each
+    population to the existing scorer, and route the result.
+
+    **``_similarity_pair`` is still the assigner.** It computes the similarities, applies the
+    greedy competition and breaks ties on local position, and none of that moves in this slice.
+    Splitting it into correspondence evidence and an assignment stage is B2's work; naming the
+    populations it consumes is what makes that split possible without also inventing them.
+
+    Two orderings are preserved because canonical output depends on them. Within-division
+    populations are visited in division first-appearance order, and ``unmatched_old`` /
+    ``unmatched_new`` accumulate in that same traversal -- interleaving observations a one-sided
+    division contributed with observations assignment declined. That interleaved sequence is
+    round 1b's local index space, so it is built in one pass rather than assembled from two
+    lists afterwards, which would reorder it.
+    """
     pairs: list[tuple[BillNode | None, BillNode | None]] = []
     unmatched_old: list[BillNode] = []
     unmatched_new: list[BillNode] = []
 
-    all_divs = dict.fromkeys(list(old_by_div.keys()) + list(new_by_div.keys()))
+    # Round 1a: retrieval, then the legacy assignment over each retrieved population.
+    for population in retrieve_within_division_populations(old_nodes, new_nodes, registry):
+        if not population.forms_candidates:
+            # A division on one side only. No pair can be formed, so no invocation is recorded
+            # and the scorer is not called -- calling it with an empty side would return the
+            # same routing while adding an invocation that never happened.
+            unmatched_old.extend(population.old)
+            unmatched_new.extend(population.new)
+            continue
 
-    # Step 2: Pair within each division sub-group
-    for group_key in all_divs:
-        div_old = old_by_div.get(group_key, [])
-        div_new = new_by_div.get(group_key, [])
-
-        if not div_old:
-            unmatched_new.extend(div_new)
-        elif not div_new:
-            unmatched_old.extend(div_old)
-        else:
-            sub_pairs = _similarity_pair(div_old, div_new)
-            for o, n in sub_pairs:
-                if o is None:
-                    unmatched_new.append(n)
-                elif n is None:
-                    unmatched_old.append(o)
-                else:
-                    pairs.append((o, n))
-
-    # Step 3-4: Cross-division similarity fallback for leftovers
-    if unmatched_old and unmatched_new:
-        cross_pairs = _similarity_pair(unmatched_old, unmatched_new)
-        leftover_old = []
-        leftover_new = []
-        for o, n in cross_pairs:
-            if o is None:
-                leftover_new.append(n)
-            elif n is None:
-                leftover_old.append(o)
+        population.propose_into(candidates)
+        for old_node, new_node in _similarity_pair(list(population.old), list(population.new)):
+            if old_node is None:
+                unmatched_new.append(new_node)
+            elif new_node is None:
+                unmatched_old.append(old_node)
             else:
-                pairs.append((o, n))
+                pairs.append((old_node, new_node))
+
+    # Round 1b: retrieval over what round 1a left unclaimed, then the same assignment.
+    cross = retrieve_cross_division_population(unmatched_old, unmatched_new, registry)
+    if cross is not None:
+        cross.propose_into(candidates)
+        leftover_old: list[BillNode] = []
+        leftover_new: list[BillNode] = []
+        for old_node, new_node in _similarity_pair(list(cross.old), list(cross.new)):
+            if old_node is None:
+                leftover_new.append(new_node)
+            elif new_node is None:
+                leftover_old.append(old_node)
+            else:
+                pairs.append((old_node, new_node))
         unmatched_old = leftover_old
         unmatched_new = leftover_new
 
-    # Step 5: True leftovers
-    for o in unmatched_old:
-        pairs.append((o, None))
-    for n in unmatched_new:
-        pairs.append((None, n))
+    # Whatever neither round claimed. Unmatched observations, not settled 1:0 or 0:1 -- the
+    # move pass may still pair either half with a different partner.
+    for old_node in unmatched_old:
+        pairs.append((old_node, None))
+    for new_node in unmatched_new:
+        pairs.append((None, new_node))
 
     return pairs
+
+
+def match_nodes_with_retrieval(
+    old: BillTree,
+    new: BillTree,
+    registry: "ObservationRegistry | None" = None,
+) -> tuple[list[tuple[BillNode | None, BillNode | None]], CandidateSet]:
+    """Round 1, returning both the pairing stream and what retrieval considered.
+
+    The single implementation; :func:`match_nodes` is the projection that drops the candidate
+    set. Keeping one body rather than two is the point -- a second copy of the traversal would
+    be a second authority on candidate membership and order.
+
+    ``registry`` is accepted so a caller that already built one does not build a second; when
+    omitted it is derived from the two complete node sequences.
+
+    **The CandidateSet is comparison-scoped**, accumulated across both round-1 retriever
+    invocations, so one observation pair is one ``Candidate`` carrying every invocation that
+    proposed it. That is the checked-in contract rather than a preference: per-invocation sets
+    put two proposals for one pair in different objects where nothing can merge them, and a pair
+    left unclaimed by its own division's assignment can legitimately be re-proposed by the
+    cross-division round.
+
+    **Nothing reads its iteration order.** Assignment consumes the ordered ``RetrievedPopulation``
+    tuples and never this set, and its canonical ordinal-pair ordering is deliberately not the
+    order any decision is made in.
+
+    **The set is TRANSITIONAL and is not yet comparison-wide candidate recall.** It is complete
+    for the two collision-path retrieval stages this slice introduces, and nothing else: the
+    unique-path fast path still pairs its observations directly in the loop below without
+    forming a candidate, so on the committed corpus the great majority of ``match_path`` groups
+    contribute no entry here. Reading a candidate-recall figure off this set today would
+    therefore be wrong by roughly the size of that population, not by a rounding error. Bringing
+    the fast path under retrieval is a later slice; until it lands, treat this as observability
+    for the collision path alone.
+    """
+    if registry is None:
+        registry = observation_registry(old, new)
+
+    old_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
+    new_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
+
+    for node in old.nodes:
+        old_groups[node.match_path].append(node)
+    for node in new.nodes:
+        new_groups[node.match_path].append(node)
+
+    all_paths = dict.fromkeys(list(old_groups.keys()) + list(new_groups.keys()))
+
+    pairs: list[tuple[BillNode | None, BillNode | None]] = []
+    candidates = CandidateSet()
+
+    for path in all_paths:
+        old_nodes = old_groups.get(path, [])
+        new_nodes = new_groups.get(path, [])
+
+        if len(old_nodes) <= 1 and len(new_nodes) <= 1:
+            # Fast path: no collision, preserve current behavior. Deliberately NOT routed
+            # through the retrieval stages -- its architecture treatment is a later slice, and
+            # sending it through new machinery here would be an unmeasured behaviour change
+            # wearing a refactor's clothes.
+            pairs.append(
+                (
+                    old_nodes[0] if old_nodes else None,
+                    new_nodes[0] if new_nodes else None,
+                )
+            )
+        else:
+            pairs.extend(_match_collision_group(old_nodes, new_nodes, registry, candidates))
+
+    return pairs, candidates
 
 
 def match_nodes(
@@ -351,36 +559,11 @@ def match_nodes(
     For unique match_paths, pairs directly (fast path). For collision groups
     (multiple nodes sharing one match_path), uses division-aware sub-grouping
     with text similarity fallback.
+
+    The pairing stream alone, for the callers that want nothing else.
+    :func:`match_nodes_with_retrieval` is the implementation and also returns the candidate set.
     """
-    # Group nodes by match_path
-    old_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
-    new_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
-
-    for node in old.nodes:
-        old_groups[node.match_path].append(node)
-    for node in new.nodes:
-        new_groups[node.match_path].append(node)
-
-    all_paths = dict.fromkeys(list(old_groups.keys()) + list(new_groups.keys()))
-
-    pairs: list[tuple[BillNode | None, BillNode | None]] = []
-
-    for path in all_paths:
-        old_nodes = old_groups.get(path, [])
-        new_nodes = new_groups.get(path, [])
-
-        if len(old_nodes) <= 1 and len(new_nodes) <= 1:
-            # Fast path: no collision, preserve current behavior
-            pairs.append(
-                (
-                    old_nodes[0] if old_nodes else None,
-                    new_nodes[0] if new_nodes else None,
-                )
-            )
-        else:
-            pairs.extend(_match_collision_group(old_nodes, new_nodes))
-
-    return pairs
+    return match_nodes_with_retrieval(old, new)[0]
 
 
 def diff_text(old_text: str, new_text: str) -> list[str]:
