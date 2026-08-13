@@ -153,29 +153,59 @@ class OracleBuildError(Exception):
 
 # ------------------------------------------------------- the confirmatory holdout guard
 
-# The 17 confirmatory members. This module may not open one: H/X have not been run on them,
-# and running them here would spend the holdout before the protocol authorises execution.
-HOLDOUT_GUARD = frozenset(
-    {
-        "116-hr-7611",
-        "115-hr-5961",
-        "115-hr-6147",
-        "115-s-2976",
-        "115-s-1609",
-        "114-s-3001",
-        "115-hr-6157",
-        "117-hr-3237",
-        "119-hr-6938",
-        "119-hr-7148",
-        "CRPT-114HRPT215",
-        "CRPT-119HRPT632",
-        "CRPT-115HRPT699",
-        "CRPT-116HRPT456",
-        "CRPT-117HRPT109",
-        "CRPT-118HRPT123",
-        "CRPT-115SRPT275",
-    }
-)
+# The confirmatory members. This module may not open one before the boundary is VALID: H/X
+# have not been run on them, and running them early would spend the holdout before the
+# protocol authorises execution.
+#
+# A43 -- DERIVED FROM THE COMMITTED MEMBERSHIP, never transcribed.
+#
+# This was a hand-written literal of 17 ids, and it was WRONG in both directions: 5 ids that
+# are in no committed membership version, no contamination class and no exposure list (they
+# appear nowhere in this study but in that literal), and 5 real frozen members absent from it.
+# The consequence was not cosmetic. `assert_source_permitted` PERMITTED those 5 members
+# pre-boundary, so the one gate standing between the holdout and an unauthorised extraction
+# was open on 29 % of the population; and `realized_population` derives its label from the
+# same set, so a confirmatory key would have described itself with the wrong membership.
+#
+# The repair is not a corrected literal -- that would leave the same drift possible tomorrow.
+# The population already HAS a single committed authority, and F1/F2/F10/F11 already gate its
+# integrity, so the guard is READ from it. Divergence is now unspellable rather than checked,
+# and `assert_guard_matches_membership` keeps an executable assertion for the gate to run.
+MEMBERSHIP_PATH = EV / "results" / "holdout_membership.json"
+HOLDOUT_POPULATION_UNAVAILABLE = "HOLDOUT_POPULATION_UNAVAILABLE"
+HOLDOUT_GUARD_DIVERGED = "HOLDOUT_GUARD_DIVERGED"
+
+
+def _membership_ids(path: Path = MEMBERSHIP_PATH) -> frozenset[str]:
+    """The frozen id set, read from the committed authority.
+
+    An unreadable or empty authority RAISES rather than yielding an empty guard: an empty
+    frozenset would make `holdout_member` return None for every document, which is precisely
+    "the holdout is unguarded" wearing the appearance of a clean load.
+    """
+    try:
+        ids = frozenset(m["id"] for m in json.loads(Path(path).read_text())["members"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise OracleBuildError(HOLDOUT_POPULATION_UNAVAILABLE, {"path": str(path), "error": str(exc)}) from exc
+    if not ids:
+        raise OracleBuildError(HOLDOUT_POPULATION_UNAVAILABLE, {"path": str(path), "why": "no members"})
+    return ids
+
+
+HOLDOUT_GUARD = _membership_ids()
+
+
+def assert_guard_matches_membership(path: Path = MEMBERSHIP_PATH) -> None:
+    """The guard IS the committed population. Executable, so a gate can run it.
+
+    Redundant while the guard is derived, and deliberately kept: it is what fails if anyone
+    ever re-introduces an independent literal, and it is the check G5 runs.
+    """
+    frozen = _membership_ids(path)
+    missing, extra = sorted(frozen - HOLDOUT_GUARD), sorted(HOLDOUT_GUARD - frozen)
+    if missing or extra:
+        raise OracleBuildError(HOLDOUT_GUARD_DIVERGED, {"unguarded_members": missing, "guarded_non_members": extra})
+
 
 # Written only once execution is authorised. Its ABSENCE is the pre-execution state, so the
 # canonical artifacts below may not be written while it does not exist.
@@ -183,6 +213,11 @@ EXECUTION_MARKER = EV / "results" / "EXECUTION-START.json"
 # Every canonical CONFIRMATORY artifact, so oracle, S1 and cross-engine writers all sit behind
 # one VALID-state requirement rather than three differently-strict ones.
 CANONICAL_ARTIFACTS = {
+    # A43 -- frames.json belongs in this set and was absent only because it had no writer.
+    # It is derived from confirmatory H/X extraction over the holdout, so it is exactly the
+    # kind of artifact this guard exists for; leaving it out would have let the first
+    # confirmatory artifact be the one the write guard could not see.
+    (EV / "results" / "frames.json").resolve(),
     (EV / "results" / "oracle_key.json").resolve(),
     (EV / "results" / "oracle_blind.json").resolve(),
     (EV / "results" / "oracle_adjudicated.json").resolve(),

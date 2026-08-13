@@ -103,6 +103,12 @@ METHODOLOGY_SURFACE = {
     "probes/s1_control.py": "the S1 liveness gate input (A27.6 decision-blocking)",
     "probes/cross_engine_control.py": "the confirmatory PDFIUM-CONDITIONED FRAME qualification",
     "probes/control_fixtures.py": "the N-A/N-B/N-C control truth (A27.6 Rule 3 blockers)",
+    # A43 -- THE COMPONENT THAT DECIDES WHICH DOCUMENTS ENTER THE STUDY. Its absence is how
+    # readiness read green while the study could not execute at all: every result-bearing API
+    # below it takes a CALLER-SUPPLIED document list, so none of them can tell the frozen
+    # population from a subset of it. G5 listed the producers and never the thing that feeds
+    # them, which is the widest result-bearing surface of the lot.
+    "probes/execute_study.py": "which documents enter the study; the committed frames.json",
 }
 
 # Files whose post-freeze modification is a methodological change and must be declared
@@ -769,13 +775,19 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
     # records enter a frame, what the adjudicator sees, which label binds to which region,
     # a metric outcome, or the decision must exist and be committed FIRST.
     missing = sorted(p for p in METHODOLOGY_SURFACE if not committed(EV / p))
+    # A43 -- FILE EXISTENCE IS NOT LIVENESS. G5 previously asked only "is each path committed",
+    # which a module that imports and has lost its entrypoint passes. The canonical execution
+    # path is the one component whose breakage cannot be detected downstream -- every stage
+    # under it accepts whatever document list it is handed -- so its CONTRACT is checked here.
+    live = [] if missing else execution_path_report()
     results.append(
         (
-            "G5 result-bearing methodology surface exists and is committed",
-            not missing,
+            "G5 result-bearing methodology surface exists, is committed, and the execution path is live",
+            not missing and not live,
             f"MISSING {len(missing)}/{len(METHODOLOGY_SURFACE)}: " + ", ".join(missing[:4])
             if missing
-            else f"all {len(METHODOLOGY_SURFACE)} result-bearing files committed",
+            else "; ".join(live[:3])
+            or f"all {len(METHODOLOGY_SURFACE)} result-bearing files committed; execution path live",
         )
     )
 
@@ -785,6 +797,41 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
     # forbidden even when every producer file is present and committed.
     results.append(g6_control_fixtures())
     return results
+
+
+def execution_path_report() -> list[str]:
+    """A43 -- is the canonical execution path actually usable? Problems, or empty.
+
+    Three separable failures, because they fail differently and a single boolean would hide
+    which one happened:
+
+      * the module does not IMPORT -- a syntax error or a broken dependency;
+      * it imports but has lost a REQUIRED CALLABLE -- the entrypoint was renamed or deleted;
+      * `build_oracle`'s holdout guard has DIVERGED from the committed membership -- the A43
+        defect itself, which left the source-access gate open on 5 of 17 frozen members.
+
+    The guard check is here rather than in G1 because it is a statement about the POPULATION,
+    which is what this component owns. Nothing in here opens a PDF or reads the holdout.
+    """
+    # The execution path reaches the frozen arms, which live under the bake-off's own probe
+    # tree. Every probe that imports them sets these up; this gate is the first thing in x04
+    # that does, and without them G5 would report a broken execution path on a healthy one --
+    # a gate failing for its own reasons rather than the tree's.
+    for extra in (EV / "probes", REPO / "src", EV.parents[1] / "probes", EV.parents[1] / "probes" / "backends"):
+        if str(extra) not in sys.path:
+            sys.path.insert(0, str(extra))
+    try:
+        import build_oracle as BO
+        import execute_study as ES
+    except Exception as exc:
+        return [f"execution path does not import: {type(exc).__name__}: {exc}"]
+
+    problems = list(ES.contract_report())
+    try:
+        BO.assert_guard_matches_membership()
+    except Exception as exc:
+        problems.append(f"holdout guard diverged from committed membership: {exc}")
+    return problems
 
 
 CONTROL_FIXTURES = EV / "results" / "control_fixtures.json"

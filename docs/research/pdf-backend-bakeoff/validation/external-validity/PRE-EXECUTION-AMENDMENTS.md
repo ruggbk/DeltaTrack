@@ -5435,6 +5435,357 @@ authorization, and A11's one-way marker is not created here.
 
 ---
 
+## A43 — SUBSTANTIVE. The canonical execution path, and a holdout guard read from the authority
+
+```json
+{"id": "A43", "class": "SUBSTANTIVE",
+ "commits": ["75201b5", "b847dea", "b3d9ede", "c03ce73", "bda030a"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/execute_study.py", "probes/x29_execute_study.py",
+                   "probes/build_oracle.py", "probes/x04_freeze_check.py"],
+ "supersedes_text_in": "none -- NO PREVIOUSLY FROZEN rule is changed. A43 makes the already-frozen execution ORDER executable and repairs a guard that had drifted from the committed population. No membership, frame rule, metric, denominator, threshold, adjudication route or decision rule moves",
+ "status": "IMPLEMENTATION COMPLETE. x29 41/41, SYNTHETIC + DEVELOPMENT. Boundary ABSENT, execution FORBIDDEN"}
+```
+
+**Why `affects_scoring_rule` is `false` while this is SUBSTANTIVE.** Nothing here computes,
+weights or thresholds anything. What it changes is **which documents reach the scorer at all**,
+which is result-bearing in the widest possible sense and therefore may not be a TOOLING
+declaration. The distinction A31/A41/A42 kept applies unchanged: the rules were already frozen;
+what was missing was a component able to execute them.
+
+**Both defects were found by attempting the frozen procedure, not by inspection**, and both are
+reproduced as executable controls rather than described.
+
+### A43.1 — there was no canonical execution path, and no `frames.json` writer
+
+PRE-REGISTRATION's execution gate names the order — *"extract → build both frames → render →
+write `oracle_key.json` and commit → adjudicate"* — and HARNESS-PLAN §1 adds that *"each stage's
+output is a committed JSON artifact, so a later stage never re-derives an earlier stage's
+decisions."* Neither had an executable owner.
+
+| stage | writer | who supplies its documents |
+|---|---|---|
+| `frames.json` | **none existed** | — |
+| `oracle_key.json` / `oracle_blind.json` | `build_oracle.write_artifacts` | caller-supplied `documents` |
+| `s1_control.json` | `s1_control.write_s1_control` | caller-supplied `documents` |
+| `cross_engine_control.json` | `cross_engine_control.write_cross_engine_control` | caller-supplied `documents` |
+| `metrics.json` | `score_metrics.write_metrics` | caller-supplied `frames` |
+
+**Every one of those APIs is correct in isolation and none of them can tell the frozen population
+from a subset of it.** `build_frames` has no file I/O at all — no `import json`, no `Path`, no
+`write_text` — and `x17` records `canonical_frames_json_created: False` deliberately. Nothing in
+the repository read `holdout_membership.json` to iterate the members: the only readers were `x01`,
+`x03`, `x04` and `control_fixtures`, none of which is a producer. `cross_engine_control` even
+documents `limit=None` as *"what the canonical writer uses"*, referring to a component that did not
+exist.
+
+**The consequence, stated plainly:** a confirmatory study could have run on 16 of 17 members, or on
+17 documents one of which was not a member, with every downstream gate green — because no gate
+downstream knows what 17 is. The D-frame census that decides whether Rule 1 may run at all is a sum
+over whatever frames it was handed.
+
+`probes/execute_study.py` closes it. **The committed membership is the single population
+authority**; document id, population, stratum, PDF path and expected SHA-256 are read from it and
+never inferred, transcribed or passed in. It runs the frozen arms over the **whole document**,
+calls the existing public `build_frames.build_document_frame`, writes `results/frames.json` with
+**exactly one frame per frozen member**, and hands later stages their descriptors
+(`oracle_documents`, `control_documents`, `document_strata`) rather than having each transcribe the
+population again.
+
+**The bijection is re-asserted at every handover, not once at load.** `load_population` returns a
+tuple and any caller can slice it, so `assert_population_complete` runs inside `frames_document`,
+`oracle_documents`, `control_documents` and `document_strata`. Omission, extra, duplicate and
+substitution are **four distinct refusals**: a 16-of-17 run and a 17-with-one-swapped run are
+different failures and collapsing them would hide which happened.
+
+**`load_frames` reads the artifact back from disk and requires it committed**, because passing
+`write_frames`' in-memory payload straight into the oracle satisfies the types while breaking
+HARNESS-PLAN §1 silently — the frames the oracle used would be the ones in RAM, not the ones a
+reviewer can read.
+
+**Three readings taken, recorded so a reviewer can overturn them rather than find them in code.**
+
+1. **The extraction scope is the whole document**, and is not a parameter. §6 defines M0, M7 and M9
+   over *"100 % of the holdout"*, and `cross_engine_control` already documents `limit=None` as the
+   canonical writer's behaviour. Every `x`-probe carries its own `PAGE_LIMIT` and every one of them
+   labels it *"a machinery demonstration window, NOT a census"*. A prefix reaching this path would
+   shrink every denominator and the D-frame census; there is deliberately no spelling of one.
+2. **The writer lives with the population assembler, not in `build_frames`.** No frozen source
+   requires a location: HARNESS-PLAN §2 lists `frames.json` under `build_frames`' "outputs" but is
+   explicitly *"not frozen protocol"*, and `score_metrics` says only that *"the `frames.json`
+   wrapper belongs to whatever writes it"* — it consumes the document frames, never the wrapper.
+   `build_frames` is deliberately pure, and the bijection assertion is the only thing the wrapper
+   is for, so it belongs where the population is known.
+3. **`frames.json` joins `CANONICAL_ARTIFACTS`.** It was absent only because it had no writer, and
+   it is derived from confirmatory extraction over the holdout. Leaving it out would have made the
+   *first* confirmatory artifact the one `assert_write_permitted` could not see.
+
+### A43.2 — `build_oracle.HOLDOUT_GUARD` had drifted from the committed population
+
+The guard was a hand-written literal of 17 ids. Measured against the frozen membership:
+
+```
+in membership, NOT guarded : 113-hr-933, 116-hr-7617, 117-s-4663, 119-hr-8469, CRPT-114HRPT605
+guarded, NOT in membership : CRPT-115HRPT699, CRPT-115SRPT275, CRPT-116HRPT456,
+                             CRPT-117HRPT109, CRPT-118HRPT123
+```
+
+**Wrong in both directions, 5 for 5.** The five guarded non-members appear in **no** committed
+membership version, **no** contamination class and **no** exposure list — they occur nowhere in
+this study except that literal, so this was never a copy that went stale. `build_oracle` was added
+at A35, long after the population was frozen at `4e2b520`, and the list was transcribed fresh.
+
+**The consequence is the one that matters.** `assert_source_permitted` is the single gate standing
+between the holdout and an unauthorised extraction, and it was **open on 5 of 17 members** —
+`assert_source_permitted` returned cleanly for each of them with the boundary ABSENT. The same set
+feeds `realized_population`, so a confirmatory key would have described itself with the wrong
+membership.
+
+**The repair is not a corrected literal**, which would leave the same drift possible tomorrow. The
+population already has a single committed authority whose integrity F1/F2/F10/F11 already gate, so
+the guard is **read from it** and divergence is unspellable. `assert_guard_matches_membership`
+keeps the equality executable so a gate can run it, and an unreadable authority **raises** rather
+than yielding an empty guard — an empty `frozenset` would disable the holdout guard entirely while
+looking like a clean load.
+
+**Four other probes carried the same literal and all four were correct** (`x16`, `x17`, `x18`,
+`x20`). The divergence was isolated to the one copy that gates source access. The systemic gap is
+not any single transcription: it is that a population with a committed authority was duplicated by
+hand five times with nothing making the copies equal to it.
+
+### A43.3 — G5 asked the wrong question
+
+G5 checked *"is each listed path committed"*. Two ways that stayed green while the study could not
+run:
+
+- **the missing component was not on the list**, so its absence was invisible — G5 named producers
+  and never the thing that feeds them, which is the widest result-bearing surface of the lot;
+- **file existence is not liveness** — a module that imports with its entrypoint deleted, or with a
+  page limit introduced on the canonical path, passes a committed-file check.
+
+G5 now covers `probes/execute_study.py` and additionally requires the path to be **live**:
+importable, carrying every required callable, whole-document scope, and a holdout guard equal to
+the committed membership. This is the same repair A39.5 made when the denominator was kept at a
+tidy 11 while decision-blocking producers were invisible to readiness — truthful completeness, not
+a stable numerator. The surface is now **15**.
+
+### A43.4 — the controls, and that each can go RED
+
+`x29_execute_study.py`, **41/41**, SYNTHETIC + DEVELOPMENT only. **Seventeen mutations are
+injected**, each naming the concrete fact that makes it fail:
+
+| # | mutation | refusal required |
+|---|---|---|
+| 1 | omit one frozen member | `POPULATION_INCOMPLETE` |
+| 2 | append a non-member | `POPULATION_HAS_EXTRA` |
+| 3 | duplicate a member in the handover | `POPULATION_DUPLICATED` |
+| 4 | duplicate an id inside the membership | `DUPLICATE_MEMBER_ID` |
+| 5 | substitute one member for another | `POPULATION_SUBSTITUTED`, **not** merely incomplete |
+| 6 | recorded `sha256` ≠ source bytes | `SOURCE_SHA_MISMATCH` |
+| 7 | source file absent | `SOURCE_FILE_MISSING` |
+| 8 | `population` → `"P-heads"` | `UNKNOWN_POPULATION` |
+| 9 | `stratum` → `99` | `INVALID_STRATUM` |
+| 10 | `n_members` → `99` | `DECLARED_COUNT_MISMATCH` |
+| 11 | delete a member's `stratum` | `MEMBER_MALFORMED` |
+| 12 | load frames against a subset | `POPULATION_INCOMPLETE` |
+| 13 | delete a frame from the artifact | `FRAME_POPULATION_MISMATCH` |
+| 14 | consume an **uncommitted** `frames.json` | `FRAMES_ARTIFACT_UNCOMMITTED` |
+| 15 | drop a real member from the guard, add a phantom | `HOLDOUT_GUARD_DIVERGED`, **and G5 red** |
+| 16 | unreadable membership | `HOLDOUT_POPULATION_UNAVAILABLE`, never an empty guard |
+| 17 | delete `write_frames` / set a `PAGE_LIMIT` / remove the file | **G5 red** in all three |
+
+**Two controls exist because a refusal alone would be vacuous.** Mutations 8 and 9 guard fields
+nobody had proven anything reads, so the probe also mutates each to another **valid** value and
+requires the change to **propagate**: a stratum change alters `document_strata`, and switching
+`P-head` → `P-robust` moves the C-frame draw from **9 selected regions to 0** (the draw is
+P-head-only). The population string is therefore result-bearing, and a mutated one would have
+silently emptied the C-frame rather than erroring.
+
+**The guard controls are inert by construction.** The hypothesis under test is *"the source guard
+does not fire"*, so a probe handing it a real holdout PDF would perform exactly the unauthorised
+extraction the guard exists to prevent, on precisely the run where the guard is broken. Every such
+control instead pairs a **frozen member's ID** with a **DEVELOPMENT file path** — the id alone is
+what `holdout_member` matches, so the guard is fully exercised, and a guard that failed open would
+extract a development document and harm nothing.
+
+**The file-removal mutation restores byte-identically** and is asserted to, because fault injection
+that leaves debris is how a green tree stops meaning anything.
+
+**One defect in the repair was found by the controls themselves and is recorded rather than
+quietly fixed.** G5's liveness check imports the execution path, which reaches the frozen runners
+under the bake-off's own probe tree. `x29` sets those `sys.path` entries up, as every probe
+importing `run_hybrid` does, so the check passed there; `x04` never needed them before, and run on
+its own it reported `execution path does not import: No module named 'pdfium_hybrid'` **on a
+healthy tree**. A gate that fails for its own reasons rather than the tree's is worse than no gate,
+because the red is uninformative and invites being ignored. Fixed in `b847dea`, and it is why the
+gate is exercised from `x04`'s own process and not only through `x29`.
+
+### A43.6 — RULED. Authority validation was ID-ONLY after `load_population`
+
+**The defect.** `assert_population_complete` compared `{d.document_id}` against the frozen id
+set and nothing else. `load_population` validated everything — population, stratum, path, source
+hash — but it returned plain descriptors, and **every check after that point was an id
+comparison**. A descriptor carrying the correct id and substituted result-bearing metadata
+therefore passed every handover.
+
+**Measured on DEVELOPMENT material before the repair. All four were ACCEPTED.**
+
+| channel | mutation | what it moved |
+|---|---|---|
+| `pdf_path` | swapped to another DEVELOPMENT pdf, **id and recorded sha retained** | the frame was built from the **other document's bytes** while still carrying the frozen `document_sha256` |
+| `population` | swapped to the other **valid** value | `c_frame_selected` **3 → 0** — the C-frame draw is P-head-only, so it empties **silently** |
+| `stratum` | swapped to another **valid** value | `document_strata` changed, which §4.5's adequacy count reads |
+| authority | canonical `results/frames.json` written from a **synthetic** membership | the fixture recorded itself as `population_authority` |
+
+**The first is the worst.** The emitted frame claimed the frozen `document_sha256` while its
+pages came from a different document — a frame that misdescribes its own provenance, on the key
+every downstream join uses. Nothing downstream could have detected it, because everything
+downstream trusts `document_sha256` as identity.
+
+**Why A43's own controls missed it, stated because the pattern generalises.** Every one of the
+17 mutations mutated the **membership file**, which `load_population` validates and refuses. Not
+one mutated a **descriptor after load**, which is precisely where the authority stopped being
+consulted. The controls tested the loader thoroughly and the *handover* not at all, and read as
+comprehensive because the count was high. **A high control count over one seam is not coverage of
+two.**
+
+**The repair, smallest form.**
+
+- `assert_population_complete` compares `kind`, `population`, `stratum`, `sha256` and the
+  recorded **path suffix** against the authority's own record, for every descriptor, at every
+  handover. The suffix rather than the absolute path because `docs_root` is a
+  SYNTHETIC/DEVELOPMENT seam; an absolute comparison would refuse every control while proving
+  nothing more about the canonical run. **`pages` is deliberately not compared** — no rule reads
+  it, and the source bytes it would only proxy for are verified directly below.
+- `build_document_frame_for` **re-hashes the file it is about to extract**, against the
+  **authority** and not the descriptor: comparing to the descriptor's own `sha256` would be
+  circular, since a substituted descriptor carries whatever hash it likes. Hashing at load proves
+  what was true at load; this is the only check that sees the bytes the runners will open.
+- the **canonical** `frames.json` may only be bound to the **canonical** membership. The two
+  seams — an alternate `out_path` and an alternate `membership_path` — are each reasonable and
+  their combination is not.
+- `load_frames` checks every frame's `document_sha256` and `population` against the authority
+  **unconditionally**, including the no-`population` arm a downstream consumer is most likely to
+  call and which previously checked nothing at all.
+
+**An ordering defect in the repair, found by the controls.** The re-hash **reads the file**, so
+running it before `assert_source_permitted` meant a confirmatory member's bytes were read before
+the gate deciding whether it may be opened, and a pre-boundary holdout reported a hash mismatch
+instead of `HOLDOUT_BEFORE_EXECUTION_BOUNDARY`. Authorization is the more fundamental question and
+is now asked first.
+
+**Controls: `x29` 41 → 56.** Five mutations (`pdf_path`, `population`, `stratum`,
+canonical-authority binding, and read-back on both `document_sha256` and `population`) plus **six
+non-vacuity positives** — the unmutated population passes each of the same handovers, an
+unmutated artifact still loads with no population argument, and **the same synthetic membership
+is still accepted at a NON-canonical path**, so the authority refusal is about the *pairing* and
+not about the fixture.
+
+**Clerical.** `x29`'s evidence artifact recorded absolute `mktemp` paths, so it differed on every
+run; a diff that always shows a change is a diff nobody reads. Two consecutive runs now produce a
+byte-identical artifact.
+
+### A43.7 — RULED. The frame-set bijection was conditional on the caller
+
+**The defect, and it is the same shape as A43.6 one level out.** A43.6 made `load_frames` check
+every frame's `document_sha256` and `population` against the authority **unconditionally**. The
+**frame-set** check was left where it already was — inside `if population is not None`. So an
+artifact whose every surviving frame was individually valid passed when no population was
+supplied. Measured on DEVELOPMENT material against a **2-member** authority:
+
+```
+truncated  (one frame removed)  -> load_frames(population=None) SUCCEEDED, 1 frame
+duplicated (one frame copied)   -> load_frames(population=None) SUCCEEDED, 3 frames
+```
+
+**Per-frame validity cannot see either of these.** Deleting a frame leaves every survivor
+correct, and a duplicate **is** correct — twice. And the no-`population` arm is the one a
+downstream consumer is most likely to call, because it is the one that needs no extra argument.
+
+**The invariant, stated where it belongs.** The frame set is a property of **the artifact**, not
+of the caller's argument, so it is checked unconditionally: the artifact must carry **exactly one
+frame per member of the authority**.
+
+| condition | refusal |
+|---|---|
+| a member appears more than once | `DUPLICATE_FRAME` — new, so "scored twice" is never reported as "a member is missing" |
+| a member is absent, or a non-member is present | `FRAME_POPULATION_MISMATCH`, with both counts |
+
+`population` now contributes **only** its descriptor checks. The old artifact-vs-population
+comparison is **dropped as redundant** rather than kept as reassurance: artifact == authority
+holds in the new check and population == authority holds in `assert_population_complete`, so the
+two agree by transitivity. Keeping a third comparison would imply the other two were not trusted.
+
+**Controls: `x29` 56 → 58.** Both negatives, plus the non-vacuity positive that an **intact**
+artifact still loads with no population argument — without which a bijection that refused
+everything would pass both negatives and look like a fix.
+
+### A43.8 — RULED. The canonical authority was never proven to still be the frozen artifact
+
+**The defect.** This module calls `results/holdout_membership.json` *the committed authority*
+and reads it from the **working tree**. x04's F1/F10/F11 do prove it is tracked, clean and
+identical to the population freeze — **at gate time**. Execution happens afterwards, and nothing
+re-established it, so an edit between the gate and the run was invisible to the whole path.
+
+**Measured**, with a **simulated** valid boundary (`EXECUTION-START.json` is never created) and
+the canonical membership edited so member A pointed at member B's path and SHA:
+
+```
+canonical_population()      ACCEPTED -- 116-hr-7611 resolved to 115-hr-5961/rh.pdf
+assert_population_complete  ACCEPTED
+control_documents           ACCEPTED
+document_strata             ACCEPTED
+assert_source_permitted     ACCEPTED   <- the last guard before extraction
+```
+
+**Why A43.6 and A43.7 cannot see this, and are not weakened by it.** Those checks compare the
+descriptor, and the artifact, **against the authority**. Here the **authority itself moved**, so
+every comparison agrees — both sides wrong. Re-hashing the source cannot see it either, because
+the mutated authority records the hash of the file it now points at. An authority is only worth
+comparing against **while it is the frozen one**, and that is a fact about git rather than about
+its contents. It is the one property none of the content checks can establish about themselves.
+
+**The invariant.** Before any canonical confirmatory source is opened, or any canonical artifact
+is written or consumed, the canonical membership must be **tracked, unmodified against HEAD, and
+byte-equal to the blob at `POPULATION_FREEZE_COMMIT`**. Enforced at `canonical_population`,
+`build_document_frame_for`, `write_frames` and `load_frames`.
+
+| refusal | condition |
+|---|---|
+| `CANONICAL_AUTHORITY_UNCOMMITTED` | untracked, or modified against HEAD |
+| `CANONICAL_AUTHORITY_NOT_FROZEN` | committed, but not the blob frozen at the population commit |
+
+**x04 is the single definition** of both "committed" and "the frozen population", reused here
+rather than restated. A second spelling would be a second thing to keep in agreement — the exact
+defect A43.2 repaired for the holdout guard, and it would be perverse to reintroduce it in the
+check that exists to prove the authority is genuine.
+
+**Fixtures are exempt, deliberately.** A SYNTHETIC or DEVELOPMENT membership is untracked by
+design, so requiring it to be committed would refuse every control while proving nothing about
+the canonical run. The restriction attaches to the canonical **path**, not to the concept, and a
+control asserts that the fixture seam stays exempt.
+
+**Ordering.** A43.8 runs *before* `assert_source_permitted` in `build_document_frame_for`. It
+reads git and the manifest and never the PDF, so it does not reintroduce A43.6's ordering defect,
+and an authority worth consulting is a precondition for both checks that follow.
+
+**Controls: `x29` 58 → 68.** The post-gate mutation refused at three separate entry points, five
+non-vacuity positives establishing that the clean committed authority is accepted by each, an
+assertion that the fixture seam stays exempt, and proof that the simulated boundary creates **no
+marker** and that the manifest is restored **byte-identically** — this control edits the real
+frozen artifact, so leaving debris would fail F10 on the next gate run.
+
+### A43.5 — what this deliberately does NOT do
+
+**Nothing is authorized.** The boundary remains **ABSENT** and execution remains **FORBIDDEN**;
+A11's one-way marker is not created here. **No holdout document is opened by any extractor** — the
+only holdout bytes read this session are the ones F2 and F8 hash at gate time, which is the frozen
+gate's own behaviour. `results/contamination.json` is untouched and byte-identical, and
+`x01_contamination.py` was not run. No canonical confirmatory artifact exists.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
