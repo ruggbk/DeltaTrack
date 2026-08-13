@@ -93,6 +93,10 @@ EXTRACTION_SOURCE_MISMATCH = "EXTRACTION_SOURCE_MISMATCH"
 NON_CANONICAL_AUTHORITY = "NON_CANONICAL_AUTHORITY"
 FRAME_SOURCE_MISMATCH = "FRAME_SOURCE_MISMATCH"
 DUPLICATE_FRAME = "DUPLICATE_FRAME"
+# A43.8 -- the authority was read from the WORKING TREE and never proven to still be the
+# committed frozen artifact at the moment it was trusted.
+CANONICAL_AUTHORITY_UNCOMMITTED = "CANONICAL_AUTHORITY_UNCOMMITTED"
+CANONICAL_AUTHORITY_NOT_FROZEN = "CANONICAL_AUTHORITY_NOT_FROZEN"
 
 
 class ExecutionPathError(Exception):
@@ -234,6 +238,7 @@ def load_population(membership_path: Path = MEMBERSHIP, docs_root: Path = DOCS_D
 
 def canonical_population() -> tuple[DocumentDescriptor, ...]:
     """THE population. No parameters, so there is no channel through which it can be steered."""
+    assert_canonical_authority()
     return load_population()
 
 
@@ -241,6 +246,61 @@ def frozen_member_ids(membership_path: Path = MEMBERSHIP) -> frozenset[str]:
     """The frozen id set, read from the authority. `build_oracle`'s guard is derived from this."""
     doc = json.loads(Path(membership_path).read_text())
     return frozenset(m["id"] for m in doc.get("members", []))
+
+
+def is_canonical_authority(membership_path: Path = MEMBERSHIP) -> bool:
+    """Is this THE committed membership, as opposed to a SYNTHETIC/DEVELOPMENT fixture?"""
+    try:
+        return Path(membership_path).resolve() == MEMBERSHIP.resolve()
+    except OSError:
+        return False
+
+
+def assert_canonical_authority(membership_path: Path = MEMBERSHIP) -> None:
+    """A43.8 -- the canonical authority must still BE the frozen artifact when it is trusted.
+
+    THE DEFECT THIS CLOSES. Every check in this module reads `holdout_membership.json` from
+    the WORKING TREE. x04's F1/F10/F11 prove it is committed, clean and identical to the
+    population freeze -- but they prove it AT GATE TIME. Execution happens afterwards, and
+    nothing re-established it. Measured, with a simulated VALID boundary and the canonical
+    membership edited so member A pointed at member B's path and SHA:
+
+        canonical_population()      ACCEPTED -- 116-hr-7611 resolved to 115-hr-5961/rh.pdf
+        assert_population_complete  ACCEPTED
+        control_documents           ACCEPTED
+        document_strata             ACCEPTED
+        assert_source_permitted     ACCEPTED   (the last guard before extraction)
+
+    A43.6's descriptor checks cannot see this and are not weakened by it: they compare the
+    descriptor against the authority, and here THE AUTHORITY ITSELF MOVED, so the two agree --
+    both wrong. Re-hashing the source cannot see it either, because the mutated authority
+    records the hash of the file it now points at. An authority is only worth comparing
+    against while it is the frozen one, which is a fact about git and not about its contents.
+
+    NOT IMPOSED ON FIXTURES. A SYNTHETIC or DEVELOPMENT membership is untracked by design, so
+    requiring it to be committed would refuse every control while proving nothing about the
+    canonical run. The restriction attaches to the canonical PATH, not to the concept.
+
+    x04 IS THE SINGLE DEFINITION of both "committed" and "the frozen population", reused here
+    rather than restated. A second spelling would be a second thing to keep in agreement --
+    the defect A43.2 already repaired for the holdout guard.
+    """
+    if not is_canonical_authority(membership_path):
+        return
+    from x04_freeze_check import POPULATION_FREEZE_COMMIT, blob_sha, committed
+
+    if not committed(MEMBERSHIP):
+        raise ExecutionPathError(
+            CANONICAL_AUTHORITY_UNCOMMITTED,
+            {"path": str(MEMBERSHIP), "why": "untracked, or modified against HEAD"},
+        )
+    have = blob_sha(MEMBERSHIP)
+    want = blob_sha(MEMBERSHIP, POPULATION_FREEZE_COMMIT)
+    if not want or have != want:
+        raise ExecutionPathError(
+            CANONICAL_AUTHORITY_NOT_FROZEN,
+            {"blob": have, "frozen_blob": want, "population_freeze_commit": POPULATION_FREEZE_COMMIT},
+        )
 
 
 def authority_index(membership_path: Path = MEMBERSHIP) -> dict[str, dict]:
@@ -342,6 +402,10 @@ def build_document_frame_for(descriptor: DocumentDescriptor, membership_path: Pa
     of `HOLDOUT_BEFORE_EXECUTION_BOUNDARY`. Authorization is the more fundamental question and
     is asked first; the substitution check then runs on material we are permitted to open.
     """
+    # A43.8 first: it reads git and the manifest, never the PDF, so it does not reintroduce
+    # the ordering defect above -- and an authority worth consulting is a precondition for
+    # both of the checks that follow.
+    assert_canonical_authority(membership_path)
     BO.assert_source_permitted(descriptor.document_id, descriptor.pdf_path)
     recorded = authority_index(membership_path).get(descriptor.document_id, {}).get("sha256")
     actual = sha256_of(descriptor.pdf_path)
@@ -424,6 +488,7 @@ def write_frames(
             NON_CANONICAL_AUTHORITY,
             {"out_path": str(out_path), "membership_path": str(membership_path), "required": str(MEMBERSHIP)},
         )
+    assert_canonical_authority(membership_path)
     BO.assert_write_permitted(out_path)
     payload = frames_document(population, membership_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -450,6 +515,10 @@ def load_frames(
     can read. `require_committed` makes the rule executable rather than advisory.
     """
     path = Path(path) if path else FRAMES
+    # A43.8 -- a canonical artifact may not be CONSUMED against a drifted authority either.
+    # Every check below compares the artifact to the manifest, so the manifest must first be
+    # the frozen one for those comparisons to mean anything.
+    assert_canonical_authority(membership_path)
     if not path.is_file():
         raise ExecutionPathError(FRAMES_ARTIFACT_MISSING, {"path": str(path)})
     if require_committed:

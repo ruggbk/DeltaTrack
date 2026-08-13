@@ -506,6 +506,116 @@ def part_identity(root: Path) -> dict:
     }
 
 
+def part_authority() -> dict:
+    """A43.8 -- the canonical authority must still BE the committed frozen artifact.
+
+    Operates on the REAL canonical membership, because that is the seam under test, and
+    restores it byte-identically. The execution boundary is SIMULATED -- `EXECUTION-START.json`
+    is never created, and this probe may not authorize anything.
+    """
+    print("\n== A43.8: the canonical authority is verified at the moment it is trusted ==")
+
+    # NON-VACUITY FIRST: on the clean committed tree the canonical path works.
+    try:
+        pop = ES.canonical_population()
+        ok, obs = len(pop) == len(ES.frozen_member_ids()), f"{len(pop)} descriptors"
+    except Exception as exc:
+        ok, obs = False, f"{type(exc).__name__}: {exc}"
+    check(
+        "NON-VACUITY: the clean committed authority is ACCEPTED by canonical_population",
+        ok,
+        "the new check refuses the frozen authority, which would make the negative meaningless",
+        obs,
+    )
+    for label, fn in (
+        ("assert_canonical_authority", ES.assert_canonical_authority),
+        ("load_frames (authority arm)", lambda: ES.load_frames(EV / "results" / "does_not_exist.json")),
+    ):
+        try:
+            fn()
+            ok, obs = True, "accepted"
+        except ES.ExecutionPathError as exc:
+            # FRAMES_ARTIFACT_MISSING means it got PAST the authority check, which is the
+            # fact under test here; only an authority refusal counts as a failure.
+            ok = exc.reason == ES.FRAMES_ARTIFACT_MISSING
+            obs = exc.reason
+        except Exception as exc:
+            ok, obs = False, f"{type(exc).__name__}: {exc}"
+        check(f"NON-VACUITY: the clean committed authority passes {label}", ok, "", obs)
+
+    check(
+        "a SYNTHETIC fixture membership is exempt from the committed requirement",
+        ES.is_canonical_authority(EV / "results" / "holdout_membership.json")
+        and not ES.is_canonical_authority(Path("/tmp/whatever.json")),
+        "the restriction attaches to the concept rather than the canonical path, refusing every control",
+    )
+
+    saved = ES.MEMBERSHIP.read_bytes()
+    before = hashlib.sha256(saved).hexdigest()
+    real_state = BO.execution_boundary_state
+    try:
+        # The equivalent of a valid boundary, WITHOUT creating the one-way marker.
+        BO.execution_boundary_state = lambda: "VALID"
+        check(
+            "the simulated boundary does not create EXECUTION-START.json",
+            not (EV / "results" / "EXECUTION-START.json").exists(),
+            "the probe authorized execution",
+        )
+
+        # MUTATION 25: after the gate, member A is repointed at member B's bytes and SHA.
+        doc = json.loads(saved)
+        a, b = doc["members"][0], doc["members"][1]
+        a["files"][0]["path"] = b["files"][0]["path"]
+        a["files"][0]["sha256"] = b["files"][0]["sha256"]
+        a["files"][0]["pages"] = b["files"][0]["pages"]
+        ES.MEMBERSHIP.write_text(json.dumps(doc, indent=1))
+
+        ok, obs = refuses(ES.canonical_population, ES.CANONICAL_AUTHORITY_UNCOMMITTED)
+        check(
+            "MUTATION repoint a member at another member's bytes AFTER the gate -> CANONICAL_AUTHORITY_UNCOMMITTED",
+            ok,
+            "the authority is edited between x04's gate and execution, and every descriptor check "
+            "still agrees because the AUTHORITY ITSELF moved",
+            obs,
+        )
+        ok, obs = refuses(ES.assert_canonical_authority, ES.CANONICAL_AUTHORITY_UNCOMMITTED)
+        check("...and the invariant refuses directly, not only through the loader", ok, "", obs)
+        ok, obs = refuses(
+            lambda: ES.load_frames(EV / "results" / "does_not_exist.json"), ES.CANONICAL_AUTHORITY_UNCOMMITTED
+        )
+        check(
+            "...and a canonical artifact may not be CONSUMED against the drifted authority",
+            ok,
+            "the artifact is compared to a manifest that is no longer the frozen one",
+            obs,
+        )
+    finally:
+        BO.execution_boundary_state = real_state
+        ES.MEMBERSHIP.write_bytes(saved)
+
+    after = hashlib.sha256(ES.MEMBERSHIP.read_bytes()).hexdigest()
+    check(
+        "the canonical authority is restored byte-identically after fault injection",
+        before == after,
+        "the frozen manifest is left modified, which F10 would then fail on",
+        after[:12],
+    )
+    ok, obs = True, ""
+    try:
+        ES.assert_canonical_authority()
+    except Exception as exc:
+        ok, obs = False, f"{type(exc).__name__}: {exc}"
+    check("the authority invariant is GREEN again after the fault is reverted", ok, "", obs)
+    return {
+        "canonical_authority_verified_at": [
+            "canonical_population",
+            "build_document_frame_for",
+            "write_frames",
+            "load_frames",
+        ]
+    }
+
+
 def part_guard() -> dict:
     print("\n== A43: the holdout guard IS the committed membership ==")
     frozen = ES.frozen_member_ids()
@@ -668,6 +778,7 @@ def main() -> int:
         pop_ev = part_population(root / "pop")
         frame_ev = part_frames(root / "frames")
         identity_ev = part_identity(root / "identity")
+    authority_ev = part_authority()
     guard_ev = part_guard()
     boundary_ev = part_boundary()
     g5_ev = part_g5()
@@ -683,6 +794,7 @@ def main() -> int:
         "page_limit": ES.PAGE_LIMIT,
         "refusal_classes": sorted(v for k, v in vars(ES).items() if k.isupper() and isinstance(v, str) and k == v),
         "identity": identity_ev,
+        "authority": authority_ev,
         "guard": guard_ev,
         "boundary": boundary_ev,
         "g5": g5_ev,
