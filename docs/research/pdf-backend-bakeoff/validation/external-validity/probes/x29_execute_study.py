@@ -19,6 +19,7 @@ open the probe would extract a development document and harm nothing.
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 import shutil
@@ -234,7 +235,10 @@ def part_population(root: Path) -> dict:
         "document_strata returns the same map whatever the membership says",
         f"{before} -> {after}",
     )
-    return {"membership": str(mpath), "docs_root": str(droot), "n_members": len(pop)}
+    # CLERICAL: the fixture lives in a per-run temporary directory, so recording its absolute
+    # path made this artifact differ on every run for no informational gain -- a diff that
+    # always shows a change is a diff nobody reads. The shape is what matters, not the mktemp.
+    return {"membership": "<tmp>/membership.json", "docs_root": "<tmp>/holdout", "n_members": len(pop)}
 
 
 def part_frames(root: Path) -> dict:
@@ -334,10 +338,128 @@ def part_frames(root: Path) -> dict:
         f"P-head c_frame_selected={c_head}, P-robust={c_robust}",
     )
     return {
-        "frames_written": str(out_path),
+        "frames_written": "<tmp>/frames.json",
         "n_frames": len(payload["frames"]),
         "c_frame_selected_p_head": c_head,
         "c_frame_selected_p_robust": c_robust,
+    }
+
+
+def part_identity(root: Path) -> dict:
+    """A43.6 -- authority validation was ID-ONLY after load_population.
+
+    Every mutation here keeps the document id CORRECT and changes one result-bearing field.
+    Before the repair all four were accepted by every handover, which is why they are the
+    controls: an id-set comparison cannot see any of them.
+    """
+    print("\n== A43.6: a correct id with substituted metadata ==")
+    mpath, droot = make_membership(root, DEV_DOCS)
+    pop = ES.load_population(mpath, droot)
+    a, b = pop[0], pop[1]
+
+    # NON-VACUITY, established first: the UNMUTATED population passes every handover the
+    # mutations below are checked against. Without this the refusals could come from a path
+    # that refuses everything, and the controls would prove nothing.
+    for label, fn in (
+        ("assert_population_complete", lambda: ES.assert_population_complete(pop, mpath)),
+        ("control_documents", lambda: ES.control_documents(pop, mpath)),
+        ("document_strata", lambda: ES.document_strata(pop, mpath)),
+        ("build_document_frame_for", lambda: ES.build_document_frame_for(a, mpath)),
+    ):
+        try:
+            fn()
+            ok, obs = True, "accepted"
+        except Exception as exc:
+            ok, obs = False, f"{type(exc).__name__}: {exc}"
+        check(f"NON-VACUITY: the unmutated population passes {label}", ok, "the handover refuses everything", obs)
+
+    # --- MUTATION 18: pdf_path substituted, id and recorded sha RETAINED ---------------
+    swapped_path = (dataclasses.replace(a, pdf_path=b.pdf_path), b)
+    ok, obs = refuses(lambda: ES.assert_population_complete(swapped_path, mpath), ES.DESCRIPTOR_METADATA_MISMATCH)
+    check(
+        "MUTATION swap pdf_path to another DEVELOPMENT pdf, keeping id -> DESCRIPTOR_METADATA_MISMATCH",
+        ok,
+        "the frame is built from substituted bytes while carrying the frozen document_sha256",
+        obs,
+    )
+    ok, obs = refuses(lambda: ES.build_document_frame_for(swapped_path[0], mpath), ES.EXTRACTION_SOURCE_MISMATCH)
+    check(
+        "...and the bytes are RE-HASHED at the point of extraction -> EXTRACTION_SOURCE_MISMATCH",
+        ok,
+        "a path substituted after load reaches the runners; hashing at load only proves what was true at load",
+        obs,
+    )
+
+    # --- MUTATION 19: population substituted for the other VALID one ------------------
+    swapped_pop = (dataclasses.replace(a, population=BF.P_ROBUST), b)
+    ok, obs = refuses(lambda: ES.assert_population_complete(swapped_pop, mpath), ES.DESCRIPTOR_METADATA_MISMATCH)
+    check(
+        "MUTATION swap population to the other VALID value, keeping id -> DESCRIPTOR_METADATA_MISMATCH",
+        ok,
+        "the C-frame draw silently empties (P-head-only) under an unchanged document id",
+        obs,
+    )
+    ok, obs = refuses(lambda: ES.frames_document(swapped_pop, mpath), ES.DESCRIPTOR_METADATA_MISMATCH)
+    check("...and frames_document refuses before building anything", ok, "the mutated frame is produced", obs)
+
+    # --- MUTATION 20: stratum substituted for another VALID one -----------------------
+    swapped_stratum = (dataclasses.replace(a, stratum=3), b)
+    ok, obs = refuses(lambda: ES.assert_population_complete(swapped_stratum, mpath), ES.DESCRIPTOR_METADATA_MISMATCH)
+    check(
+        "MUTATION swap stratum to another VALID value, keeping id -> DESCRIPTOR_METADATA_MISMATCH",
+        ok,
+        "section 4.5's strata-filled count reads a stratum the authority never assigned",
+        obs,
+    )
+    ok, obs = refuses(lambda: ES.document_strata(swapped_stratum, mpath), ES.DESCRIPTOR_METADATA_MISMATCH)
+    check(
+        "...and document_strata refuses rather than reporting the mutated map", ok, "the mutated map is returned", obs
+    )
+
+    # --- MUTATION 21: canonical frames.json bound to an ALTERNATE authority -----------
+    ok, obs = refuses(lambda: ES.write_frames(pop, ES.FRAMES, mpath), ES.NON_CANONICAL_AUTHORITY)
+    check(
+        "MUTATION write the CANONICAL frames.json from a synthetic membership -> NON_CANONICAL_AUTHORITY",
+        ok,
+        "a fixture population is written to the canonical path and records itself as the authority",
+        obs,
+    )
+    # NON-VACUITY for that gate: the same synthetic membership IS allowed at a non-canonical
+    # path, so the refusal is about the pairing and not about the fixture.
+    try:
+        ES.write_frames(pop, root / "elsewhere.json", mpath)
+        ok, obs = True, "accepted at a non-canonical path"
+    except Exception as exc:
+        ok, obs = False, f"{type(exc).__name__}: {exc}"
+    check("NON-VACUITY: the same synthetic membership is accepted at a NON-canonical path", ok, "", obs)
+
+    # --- MUTATION 22: read-back, a frame disagreeing with the authority ---------------
+    payload = ES.frames_document(pop, mpath)
+    for field, bad_value, why in (
+        ("document_sha256", "0" * 64, "a frame built from substituted bytes is consumed downstream"),
+        ("population", BF.P_ROBUST, "a frame built under the wrong population is consumed downstream"),
+    ):
+        doc = copy.deepcopy(payload)
+        doc["frames"][0][field] = bad_value
+        art = root / f"frames_bad_{field}.json"
+        art.write_text(json.dumps(doc, default=str))
+        # Deliberately with NO population argument -- the arm a downstream consumer is most
+        # likely to call, and the one that previously checked nothing at all.
+        ok, obs = refuses(
+            lambda art=art: ES.load_frames(art, None, require_committed=False, membership_path=mpath),
+            ES.FRAME_SOURCE_MISMATCH,
+        )
+        check(f"MUTATION frame {field} disagrees with the authority -> FRAME_SOURCE_MISMATCH", ok, why, obs)
+
+    ok, obs = True, ""
+    try:
+        ES.load_frames(root / "elsewhere.json", None, require_committed=False, membership_path=mpath)
+    except Exception as exc:
+        ok, obs = False, f"{type(exc).__name__}: {exc}"
+    check("NON-VACUITY: an unmutated artifact still loads with no population argument", ok, "", obs)
+    return {
+        "n_members": len(pop),
+        "mutations": ["pdf_path", "population", "stratum", "canonical_authority", "readback"],
     }
 
 
@@ -502,6 +624,7 @@ def main() -> int:
         root = Path(tmp)
         pop_ev = part_population(root / "pop")
         frame_ev = part_frames(root / "frames")
+        identity_ev = part_identity(root / "identity")
     guard_ev = part_guard()
     boundary_ev = part_boundary()
     g5_ev = part_g5()
@@ -516,6 +639,7 @@ def main() -> int:
         "population_authority": "results/holdout_membership.json",
         "page_limit": ES.PAGE_LIMIT,
         "refusal_classes": sorted(v for k, v in vars(ES).items() if k.isupper() and isinstance(v, str) and k == v),
+        "identity": identity_ev,
         "guard": guard_ev,
         "boundary": boundary_ev,
         "g5": g5_ev,

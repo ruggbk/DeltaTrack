@@ -86,6 +86,12 @@ FRAMES_ARTIFACT_MALFORMED = "FRAMES_ARTIFACT_MALFORMED"
 FRAMES_ARTIFACT_UNCOMMITTED = "FRAMES_ARTIFACT_UNCOMMITTED"
 FRAME_POPULATION_MISMATCH = "FRAME_POPULATION_MISMATCH"
 FRAME_METADATA_MISMATCH = "FRAME_METADATA_MISMATCH"
+# A43.6 -- the ID-ONLY hole. A descriptor carrying the right id and the wrong result-bearing
+# metadata passed every handover, because completeness was a set comparison over ids.
+DESCRIPTOR_METADATA_MISMATCH = "DESCRIPTOR_METADATA_MISMATCH"
+EXTRACTION_SOURCE_MISMATCH = "EXTRACTION_SOURCE_MISMATCH"
+NON_CANONICAL_AUTHORITY = "NON_CANONICAL_AUTHORITY"
+FRAME_SOURCE_MISMATCH = "FRAME_SOURCE_MISMATCH"
 
 
 class ExecutionPathError(Exception):
@@ -236,15 +242,48 @@ def frozen_member_ids(membership_path: Path = MEMBERSHIP) -> frozenset[str]:
     return frozenset(m["id"] for m in doc.get("members", []))
 
 
+def authority_index(membership_path: Path = MEMBERSHIP) -> dict[str, dict]:
+    """id -> the authority's own record of that member. The comparison target for A43.6."""
+    doc = json.loads(Path(membership_path).read_text())
+    out = {}
+    for m in doc.get("members", []):
+        f = (m.get("files") or [{}])[0]
+        out[m["id"]] = {
+            "kind": m.get("kind"),
+            "population": m.get("population"),
+            "stratum": m.get("stratum"),
+            "path": f.get("path"),
+            "sha256": f.get("sha256"),
+        }
+    return out
+
+
 def assert_population_complete(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> None:
-    """The population handed to a stage IS the frozen one. Re-asserted at every handover.
+    """The population handed to a stage IS the frozen one -- BY ID AND BY METADATA.
 
     Checked at the handover and not only at load, because `load_population` returns a tuple
     that any caller can slice. Omission and substitution are reported as DIFFERENT refusals:
     a 16-of-17 run and a 17-with-one-swapped run are different failures, and collapsing them
     would hide which one happened.
+
+    A43.6 -- THE ID SET WAS NOT ENOUGH, and the hole was real rather than theoretical.
+    Completeness compared `{d.document_id}` against the frozen ids and nothing else, so a
+    descriptor could carry the correct id with a substituted `pdf_path`, `population` or
+    `stratum` and pass every handover. Measured on DEVELOPMENT material, all three were
+    accepted, and all three are result-bearing:
+
+        pdf_path   -> the frame was built from the OTHER document's bytes while still carrying
+                      the frozen document_sha256 -- a frame that misdescribes its own
+                      provenance, which is the key every downstream join uses
+        population -> c_frame_selected 3 -> 0 (the C-frame draw is P-head-only)
+        stratum    -> document_strata changed, which section 4.5's adequacy count reads
+
+    Every result-bearing field is therefore compared against the authority's own record.
+    `pages` deliberately is not: no rule reads it, and the SOURCE BYTES it would only proxy for
+    are verified directly at the point of extraction.
     """
-    frozen = frozen_member_ids(membership_path)
+    frozen_records = authority_index(membership_path)
+    frozen = frozenset(frozen_records)
     ids = [d.document_id for d in population]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     if dupes:
@@ -258,18 +297,63 @@ def assert_population_complete(population: tuple[DocumentDescriptor, ...], membe
     if extra:
         raise ExecutionPathError(POPULATION_HAS_EXTRA, {"extra": extra})
 
+    for d in population:
+        want = frozen_records[d.document_id]
+        mismatches = {
+            field: (value, want[field])
+            for field, value in (
+                ("kind", d.kind),
+                ("population", d.population),
+                ("stratum", d.stratum),
+                ("sha256", d.sha256),
+            )
+            if value != want[field]
+        }
+        # The path is compared by its RECORDED SUFFIX, not absolutely: `docs_root` is a
+        # SYNTHETIC/DEVELOPMENT seam, so an absolute comparison would refuse every control
+        # while proving nothing more about the canonical run, whose docs_root is the default.
+        if want["path"] and not str(d.pdf_path).endswith(str(want["path"])):
+            mismatches["path"] = (str(d.pdf_path), want["path"])
+        if mismatches:
+            raise ExecutionPathError(DESCRIPTOR_METADATA_MISMATCH, {"member": d.document_id, "fields": mismatches})
+
 
 # ------------------------------------------------------------------ stage 1: the frames
 
 
-def build_document_frame_for(descriptor: DocumentDescriptor) -> dict:
+def build_document_frame_for(descriptor: DocumentDescriptor, membership_path: Path = MEMBERSHIP) -> dict:
     """Run both frozen arms over the WHOLE document and build the frozen frame.
 
     `assert_source_permitted` is called first and is the frozen gate: a confirmatory member
     may not be opened while the execution boundary is not VALID. It is deliberately called
     here, at the point of extraction, rather than once by the caller.
+
+    A43.6 -- THE BYTES ABOUT TO BE EXTRACTED ARE RE-HASHED HERE, against the authority and not
+    against the descriptor. Hashing at load proves what was true at load; this is the only
+    check that sees the file the runners are about to open, and it is what closes the
+    substituted-path channel at the exact moment it would do damage. Comparing to the
+    descriptor's own `sha256` would be circular -- a substituted descriptor carries whatever
+    hash it likes.
+
+    ORDER MATTERS, and the first spelling of this had it wrong. The re-hash READS THE FILE, so
+    running it first meant a confirmatory member's bytes were read before the gate that decides
+    whether it may be opened at all, and a pre-boundary holdout reported a hash mismatch instead
+    of `HOLDOUT_BEFORE_EXECUTION_BOUNDARY`. Authorization is the more fundamental question and
+    is asked first; the substitution check then runs on material we are permitted to open.
     """
     BO.assert_source_permitted(descriptor.document_id, descriptor.pdf_path)
+    recorded = authority_index(membership_path).get(descriptor.document_id, {}).get("sha256")
+    actual = sha256_of(descriptor.pdf_path)
+    if recorded is None or actual != recorded:
+        raise ExecutionPathError(
+            EXTRACTION_SOURCE_MISMATCH,
+            {
+                "member": descriptor.document_id,
+                "path": str(descriptor.pdf_path),
+                "recorded": recorded,
+                "actual": actual,
+            },
+        )
     h_pages = run_hybrid.run(descriptor.pdf_path, limit=PAGE_LIMIT)
     x_pages, _summary = run_extended.run(descriptor.pdf_path, limit=PAGE_LIMIT)
     return BF.build_document_frame(descriptor.sha256, descriptor.document_id, descriptor.population, h_pages, x_pages)
@@ -298,7 +382,7 @@ def frames_document(population: tuple[DocumentDescriptor, ...], membership_path:
     in `load_frames` after it is read back.
     """
     assert_population_complete(population, membership_path)
-    frames = [build_document_frame_for(d) for d in population]
+    frames = [build_document_frame_for(d, membership_path) for d in population]
 
     built = [f["document"] for f in frames]
     expected = [d.document_id for d in population]
@@ -325,8 +409,20 @@ def write_frames(
     out_path: Path | None = None,
     membership_path: Path = MEMBERSHIP,
 ) -> dict:
-    """Write the canonical `results/frames.json`. Refuses before a VALID boundary."""
+    """Write the canonical `results/frames.json`. Refuses before a VALID boundary.
+
+    A43.6 -- THE CANONICAL ARTIFACT MAY ONLY BE BOUND TO THE CANONICAL AUTHORITY. The
+    `membership_path` seam exists for SYNTHETIC and DEVELOPMENT controls, and nothing stopped
+    it being combined with the canonical `out_path`: a frames.json at the canonical location,
+    built from a fixture population, recording that fixture as its own `population_authority`.
+    The two seams are independently reasonable and their combination is not.
+    """
     out_path = Path(out_path) if out_path else FRAMES
+    if out_path.resolve() == FRAMES.resolve() and Path(membership_path).resolve() != MEMBERSHIP.resolve():
+        raise ExecutionPathError(
+            NON_CANONICAL_AUTHORITY,
+            {"out_path": str(out_path), "membership_path": str(membership_path), "required": str(MEMBERSHIP)},
+        )
     BO.assert_write_permitted(out_path)
     payload = frames_document(population, membership_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -373,12 +469,32 @@ def load_frames(
     if doc.get("schema") != FRAMES_SCHEMA or not isinstance(doc.get("frames"), list):
         raise ExecutionPathError(FRAMES_ARTIFACT_MALFORMED, {"schema": doc.get("schema")})
 
+    # A43.6 -- EVERY FRAME IS CHECKED AGAINST THE AUTHORITY, unconditionally and before any
+    # consumer can read it. This does not need the `population` argument: the artifact claims
+    # a document identity per frame, and that claim is checkable on its own. A frame built
+    # from substituted bytes, or under the wrong population, is refused here even if the
+    # caller passes no population at all -- the arm of load_frames a downstream stage is most
+    # likely to use.
+    records = authority_index(membership_path)
+    for f in doc["frames"]:
+        did = f.get("document")
+        want = records.get(did)
+        if want is None:
+            raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"frame_document_not_a_member": did})
+        bad = {
+            field: (f.get(key), want[field])
+            for field, key in (("sha256", "document_sha256"), ("population", "population"))
+            if f.get(key) != want[field]
+        }
+        if bad:
+            raise ExecutionPathError(FRAME_SOURCE_MISMATCH, {"member": did, "fields": bad})
+
     if population is not None:
         assert_population_complete(population, membership_path)
         got = sorted(f.get("document") for f in doc["frames"])
-        want = sorted(d.document_id for d in population)
-        if got != want:
-            raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"artifact": got, "population": want})
+        want_ids = sorted(d.document_id for d in population)
+        if got != want_ids:
+            raise ExecutionPathError(FRAME_POPULATION_MISMATCH, {"artifact": got, "population": want_ids})
     return doc
 
 
