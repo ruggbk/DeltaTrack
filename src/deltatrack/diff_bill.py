@@ -411,23 +411,45 @@ class GroupAssignment:
             )
 
 
-def group_correspondence_evidence(population: RetrievedPopulation) -> tuple[CorrespondenceEvidence, ...]:
-    """CORRESPONDENCE EVIDENCE, round 1: describe every pair this invocation retrieved.
+def group_correspondence_evidence(
+    population: RetrievedPopulation,
+    candidates: CandidateSet,
+) -> tuple[CorrespondenceEvidence, ...]:
+    """CORRESPONDENCE EVIDENCE, round 1: describe every pair retrieval admitted, and only those.
 
-    One record per candidate, addressed by ADR 0019 observation pair, in invocation-local order.
-    It decides nothing: no verdict, no threshold, no winner flag, and no local ``(oi, ni)``.
-    Those are :func:`assign_group`'s, and keeping them out of here is what lets a test hand
-    assignment evidence that disagrees with the node texts and watch which one it follows.
+    One record per admitted candidate, addressed by ADR 0019 observation pair, in
+    invocation-local order. It decides nothing: no verdict, no threshold, no winner flag, and no
+    local ``(oi, ni)``. Those are :func:`assign_group`'s, and keeping them out of here is what
+    lets a test hand assignment evidence that disagrees with the node texts and watch which one
+    it follows.
 
-    **The population is the membership authority for one invocation's local view, and the
-    ``CandidateSet`` cannot be.** Every within-division population of a comparison runs under
-    one :class:`~deltatrack.matching.RetrieverInvocation`, so filtering the comparison-scoped
-    set by invocation yields the union across divisions rather than this division's admitted
-    pairs -- the set carries no division-local partition and no local ordering. What keeps the
-    two honest is that they are the same facts written twice:
-    :meth:`RetrievedPopulation.propose_into` materialises exactly this cross product, and
-    ``tests/test_round1_preservation.py`` binds the evidence population to the candidate set
-    rather than leaving the agreement assumed.
+    ## Two authorities, and why neither can do the other's job
+
+    **The ``CandidateSet`` is the admission authority.** Nothing is described until
+    :meth:`~deltatrack.matching.CandidateSet.candidate_for` says retrieval proposed that
+    observation pair *and* that the candidate carries a proposal from this population's own
+    invocation. This is the ADR 0020 boundary made load-bearing rather than merely checked
+    afterwards: reconstructing a pair from population membership alone would let "retrieval says
+    this is not a candidate" and "assignment nevertheless selects it" hold at the same time,
+    which is the state the intermediate value exists to make unreachable.
+
+    **The population remains the invocation-local ordering authority.** The set is reached by
+    lookup and never iterated, deliberately: its
+    :meth:`~deltatrack.matching.CandidateSet.candidates` order is canonical by ordinal pair, and
+    a stage that walked it to answer an admission question would be holding that order at the
+    moment it built the sequence assignment consumes. So the loop below is over
+    ``population.old`` x ``population.new``, and the emitted order is the population's, which is
+    what makes ``(oi, ni)`` reconstructible downstream.
+
+    The set also could not supply the local view on its own: every within-division population of
+    a comparison runs under one :class:`~deltatrack.matching.RetrieverInvocation`, so filtering
+    the comparison-scoped set by invocation yields the union across divisions with no
+    division-local partition and no ordering. Admission is a per-pair question the set answers;
+    the membership and order of *this* invocation's view are the population's.
+
+    Both failures are refused rather than resolved -- see
+    :func:`_refuse_a_candidate_retrieval_did_not_admit` -- and refused for the whole population
+    before anything is measured, so a partial description can never be handed on.
 
     ## Two populations, two signal sets, and why the second carries no number
 
@@ -453,11 +475,17 @@ def group_correspondence_evidence(population: RetrievedPopulation) -> tuple[Corr
     bodies happen to be identical. B2 extracts the behaviour that exists rather than making the
     two similarity rules aesthetically uniform.
 
-    A one-sided population forms no pair, so it describes nothing and returns ``()``.
+    A one-sided population forms no pair, so it is admitted to nothing, describes nothing and
+    returns ``()``.
     """
     if not population.forms_candidates:
         return ()
 
+    _refuse_a_candidate_retrieval_did_not_admit(population, candidates)
+
+    # The 1x1 shortcut applies only AFTER admission. The sole pair has to be in the candidate set
+    # under this invocation like any other; what the shortcut preserves is that no ratio is
+    # computed for it, not that it skips the boundary.
     if len(population.old) == 1 and len(population.new) == 1:
         return (CorrespondenceEvidence(old=population.old_refs[0], new=population.new_refs[0]),)
 
@@ -476,6 +504,45 @@ def group_correspondence_evidence(population: RetrievedPopulation) -> tuple[Corr
                 )
             )
     return tuple(evidence)
+
+
+def _refuse_a_candidate_retrieval_did_not_admit(
+    population: RetrievedPopulation,
+    candidates: CandidateSet,
+) -> None:
+    """Every pair about to be described, admitted by retrieval under this invocation. Fails closed.
+
+    Two questions, two failures, and they are distinct enough to be worth separate messages. A
+    pair absent from the set is one retrieval never proposed at all. A pair present but carrying
+    no proposal from this population's invocation is one some *other* invocation surfaced, which
+    is not the same fact: candidates are comparison-scoped and the cross-division round can
+    legitimately re-propose a pair the within-division round already offered, so "this pair was
+    considered by somebody" would admit a pair the current invocation never retrieved.
+
+    **Refused, never reconstructed.** The tempting recovery -- the population says the pair
+    exists, so describe it anyway -- is precisely the hole this closes: it would let retrieval
+    and assignment disagree about what was considered while every pairing that resulted still
+    looked correct, which is the shape a materialisation defect takes and the one no
+    pairing-stream gate can see.
+
+    Checked for the whole population before anything is measured, so a partial description can
+    never reach assignment. Iterated in population order rather than by walking the set, because
+    the set's canonical order is exactly what must not leak into the sequence assignment reads.
+    """
+    for old_ref in population.old_refs:
+        for new_ref in population.new_refs:
+            candidate = candidates.candidate_for(old_ref, new_ref)
+            if candidate is None:
+                raise ValueError(
+                    f"retrieval never admitted {old_ref}->{new_ref}, which {population.invocation.retriever} is "
+                    "describing; correspondence evidence exists only for pairs the candidate set holds"
+                )
+            if population.invocation not in candidate.invocations:
+                raise ValueError(
+                    f"candidate {old_ref}->{new_ref} carries no proposal from {population.invocation}; it was "
+                    f"surfaced by {[i.retriever for i in candidate.invocations]} and this invocation may not "
+                    "describe a pair it did not retrieve"
+                )
 
 
 def assign_group(
@@ -532,7 +599,7 @@ def assign_group(
 
     old_position = {ref: index for index, ref in enumerate(population.old_refs)}
     new_position = {ref: index for index, ref in enumerate(population.new_refs)}
-    _refuse_evidence_that_is_not_the_candidate_population(population, evidence, old_position, new_position)
+    _refuse_evidence_that_is_not_one_record_per_candidate(population, evidence, old_position, new_position)
 
     if len(population.old) == 1 and len(population.new) == 1:
         (sole,) = evidence
@@ -568,7 +635,7 @@ def assign_group(
     )
 
 
-def _refuse_evidence_that_is_not_the_candidate_population(
+def _refuse_evidence_that_is_not_one_record_per_candidate(
     population: RetrievedPopulation,
     evidence: tuple[CorrespondenceEvidence, ...],
     old_position: dict[ObservationRef, int],
@@ -581,6 +648,12 @@ def _refuse_evidence_that_is_not_the_candidate_population(
     over. Each of the three fails differently and silently: a missing record drops a candidate
     from the competition, an extra one lets assignment select a pair retrieval never admitted,
     and a repeat gives one candidate two chances at the greedy claim.
+
+    This is the stages-disagree check, not the admission check. Whether retrieval admitted a pair
+    at all is settled one stage earlier, in
+    :func:`_refuse_a_candidate_retrieval_did_not_admit`, and settled against the ``CandidateSet``
+    rather than against the population -- which is why assignment can be handed hand-authored
+    evidence in a test without also being handed a candidate set.
     """
     expected = len(population.old) * len(population.new)
     if len(evidence) != expected:
@@ -628,6 +701,12 @@ def _match_collision_group(
     round 1b's local index space, so it is built in one pass rather than assembled from two
     lists afterwards, which would reorder it.
 
+    **``propose_into`` runs before the evidence stage, and that order is load-bearing rather
+    than tidy.** The candidate set is what admits a pair to being described, so materialising
+    this invocation's proposals is a precondition of describing it, not bookkeeping alongside it.
+    A reader tempted to move the call later, or to drop it for a round whose pairs were "already"
+    proposed, is removing the admission the next line depends on.
+
     Returns the pairing stream and every :class:`GroupAssignment` produced, in the order they
     were produced. The assignments are what carry the evidence out of the stage; dropping them
     here would leave the retained-evidence invariant true of a value nothing can reach.
@@ -648,7 +727,7 @@ def _match_collision_group(
             continue
 
         population.propose_into(candidates)
-        assignment = assign_group(population, group_correspondence_evidence(population))
+        assignment = assign_group(population, group_correspondence_evidence(population, candidates))
         assignments.append(assignment)
         pairs.extend((link.old, link.new) for link in assignment.links)
         unmatched_old.extend(assignment.leftover_old)
@@ -658,7 +737,7 @@ def _match_collision_group(
     cross = retrieve_cross_division_population(unmatched_old, unmatched_new, registry)
     if cross is not None:
         cross.propose_into(candidates)
-        assignment = assign_group(cross, group_correspondence_evidence(cross))
+        assignment = assign_group(cross, group_correspondence_evidence(cross, candidates))
         assignments.append(assignment)
         pairs.extend((link.old, link.new) for link in assignment.links)
         unmatched_old = list(assignment.leftover_old)
@@ -705,9 +784,13 @@ def match_nodes_with_stage_outputs(
     left unclaimed by its own division's assignment can legitimately be re-proposed by the
     cross-division round.
 
-    **Nothing reads its iteration order.** Assignment consumes the ordered ``RetrievedPopulation``
-    tuples and never this set, and its canonical ordinal-pair ordering is deliberately not the
-    order any decision is made in.
+    **The set gates what may be described, and orders nothing.** Every pair
+    :func:`group_correspondence_evidence` describes must be in it, carrying a proposal from the
+    describing invocation, so a pair retrieval did not admit cannot reach assignment -- the
+    intermediate value is on the result-bearing path rather than beside it. It is reached by
+    :meth:`~deltatrack.matching.CandidateSet.candidate_for` lookup and never iterated: its
+    canonical ordinal-pair order is deliberately not the order any decision is made in, and
+    assignment consumes the ordered ``RetrievedPopulation`` tuples and never this set at all.
 
     **The set is TRANSITIONAL and is not yet comparison-wide candidate recall.** It is complete
     for the two collision-path retrieval stages this slice introduces, and nothing else: the

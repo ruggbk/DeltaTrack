@@ -864,29 +864,37 @@ def test_the_retrieval_stage_boundary_can_fail(mutation: str, monkeypatch):
 
 
 def test_assignment_never_receives_the_candidate_set():
-    """Structural: ``CandidateSet`` iteration order cannot become assignment order.
+    """Structural: ``CandidateSet`` order cannot become assignment order.
 
     ADR 0020's candidate set is canonically ordered by ordinal pair, and B0 measured that using
     that order as assignment order changes the selected links on 174 of 329 greedy invocations.
-    The protection is the call signature rather than a convention: each stage is handed the
-    ordered population (and, for assignment, the evidence) and has no reference to the set, so
-    no ordering it carries can reach a selection.
+    The protection is the call signature: :func:`assign_group` is handed the ordered population
+    and the evidence, holds no reference to the set, and so no ordering it carries can reach a
+    selection.
 
-    **Retargeted from ``_similarity_pair`` to the stages that replaced it.** B2 split the fused
-    scorer into :func:`group_correspondence_evidence` and :func:`assign_group`, and a guard
-    naming a symbol that no longer exists protects nothing -- the same correction B1 made to
-    the forbidden-symbol set below.
+    **The evidence stage now legitimately receives it, and that is the reviewed B2 correction.**
+    The set is the admission authority -- nothing is described unless it holds the pair under the
+    describing invocation -- so the guard cannot be "no stage sees the set". It is narrower and
+    more exact: the set may gate *what* is described and may not order anything. Both halves are
+    required here, so removing the parameter from the evidence stage reddens exactly as adding
+    one to assignment does.
+
+    Retargeted from ``_similarity_pair``, which B2 removed.
     """
     import inspect
 
     from deltatrack.diff_bill import _match_collision_group
 
-    staged = ("group_correspondence_evidence", "assign_group")
-    for stage in (group_correspondence_evidence, assign_group):
-        assert "candidates" not in inspect.signature(stage).parameters, (
-            f"{stage.__name__} takes the candidate set as a parameter"
-        )
+    assert "candidates" not in inspect.signature(assign_group).parameters, (
+        "assign_group takes the candidate set as a parameter; its canonical order is then one lookup "
+        "away from the sequence it decides on"
+    )
+    assert "candidates" in inspect.signature(group_correspondence_evidence).parameters, (
+        "the evidence stage no longer receives the candidate set, so retrieval's admission cannot "
+        "constrain what reaches assignment"
+    )
 
+    staged = ("group_correspondence_evidence", "assign_group")
     body = inspect.getsource(_match_collision_group)
     tree = ast.parse(textwrap.dedent(body))
     reached = set()
@@ -896,14 +904,56 @@ def test_assignment_never_receives_the_candidate_set():
         if call.func.id not in staged:
             continue
         reached.add(call.func.id)
-        named = {n.id for arg in call.args for n in ast.walk(arg) if isinstance(n, ast.Name)}
-        assert "candidates" not in named, (
-            f"{call.func.id} is called with the candidate set in scope as an argument: {sorted(named)}"
+        if call.func.id != "assign_group":
+            continue
+        # The set may appear inside this call only as an argument of the nested evidence call.
+        # A bare `candidates` among assign_group's own arguments is the regression.
+        direct = {arg.id for arg in call.args if isinstance(arg, ast.Name)}
+        assert "candidates" not in direct, (
+            f"assign_group is called with the candidate set as a direct argument: {sorted(direct)}"
         )
 
     assert reached == set(staged), (
         f"the orchestrator no longer calls {sorted(set(staged) - reached)}; this guard is inspecting "
         "a call site that has moved and would pass by finding nothing"
+    )
+
+
+def test_the_evidence_stage_reaches_the_candidate_set_by_lookup_and_never_iterates_it():
+    """Structural: admission is a question asked of the set, not a walk over it.
+
+    This is what lets the set be load-bearing without becoming an ordering.
+    ``CandidateSet.candidates()`` is canonical by ordinal pair; a stage that iterated it to decide
+    what to describe would hold that order at the moment it builds the sequence assignment reads,
+    and the two genuinely differ -- on the interleaved fixture's fallback population the canonical
+    order is ``[1, 2]`` and the invocation-local order is ``[2, 1]``.
+
+    So the evidence path may name ``candidate_for`` and must not call ``candidates()`` or iterate
+    the set. Checked over the evidence stage and the admission helper it delegates to, because the
+    constraint belongs to the path rather than to either function alone.
+    """
+    import inspect
+
+    from deltatrack.diff_bill import _refuse_a_candidate_retrieval_did_not_admit
+
+    for stage in (group_correspondence_evidence, _refuse_a_candidate_retrieval_did_not_admit):
+        tree = ast.parse(textwrap.dedent(inspect.getsource(stage)))
+        called = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        assert "candidates" not in called, (
+            f"{stage.__name__} calls CandidateSet.candidates(); the canonical ordinal-pair order is then "
+            "in scope where the described sequence is built"
+        )
+        for node in ast.walk(tree):
+            if isinstance(node, ast.For) and isinstance(node.iter, ast.Name):
+                assert node.iter.id != "candidates", f"{stage.__name__} iterates the candidate set directly"
+
+    assert "candidate_for" in inspect.getsource(_refuse_a_candidate_retrieval_did_not_admit), (
+        "the admission helper no longer reaches the candidate set by lookup, so this guard is "
+        "asserting the absence of an iteration over a set that is no longer consulted at all"
     )
 
 
@@ -1105,56 +1155,174 @@ def test_two_invocations_proposing_one_pair_keep_both_provenances():
         )
 
 
-@pytest.mark.slow
-def test_a_dropped_candidate_is_invisible_to_matching_and_caught_here(monkeypatch):
-    """THE decisive control: a candidate-only defect, and what does and does not see it.
+def dropping_propose_into(self, candidates):
+    """``propose_into`` with exactly one real pair omitted per invocation. Nothing else moves.
 
-    ``propose_into`` is made to omit exactly one ``old_ref x new_ref`` pair per invocation. The
-    scorer still receives the complete population, so matching cannot notice.
-
-    **A.** the frozen pairing stream stays exact -- proving the defect is invisible to every
-    gate that existed before this one, which is why the B1 candidate set could certify itself.
-    **B.** the materialisation gate goes red.
+    A **candidate-materialisation** fault and nothing more: the population it is called on is
+    untouched -- same nodes, same refs, same order -- and every other pair is proposed under the
+    same invocation. So it isolates the one question the admission boundary exists to answer,
+    which is what happens when the set and the population disagree about what was retrieved.
     """
-    real_propose = RetrievedPopulation.propose_into
+    dropped = False
+    for old_ref in self.old_refs:
+        for new_ref in self.new_refs:
+            if not dropped:
+                dropped = True
+                continue
+            candidates.propose(old_ref, new_ref, self.invocation)
 
-    def dropping_propose_into(self, candidates):
-        dropped = False
-        for old_ref in self.old_refs:
-            for new_ref in self.new_refs:
-                if not dropped:
-                    dropped = True
-                    continue
-                candidates.propose(old_ref, new_ref, self.invocation)
+
+def test_an_omitted_candidate_cannot_reach_assignment(monkeypatch):
+    """THE B2 admission control: a CandidateSet-only fault, and the boundary refusing it.
+
+    **This replaces B1's expectation that a candidate omission stays invisible to matching.**
+    That control was right for B1, where the set was observational and needed an independent gate
+    to certify itself. B2 is the slice where ``CandidateSet -> evidence -> assignment`` becomes
+    the real path, so it is now *expected* that a corrupted set stops matching. Unfaulted
+    behaviour is unchanged and still byte-identical; what changed is behaviour under a fault,
+    which was never frozen methodology.
+
+    One fault, four claims, on the duplicate-id fixture whose 2x2 competition selects both pairs:
+
+    **A.** the ``RetrievedPopulation`` is unchanged -- same nodes, same refs, same order -- so
+    this is a candidate-only defect and not a retrieval one wearing its name.
+    **B.** the candidate set really is missing that pair.
+    **C.** the evidence stage fails closed on it, naming the pair, rather than reconstructing it
+    from population membership.
+    **D.** assignment never sees it. Proven materially rather than by absence: the omitted pair
+    is one the clean run *selects*, so a reconstructing implementation would have gone on to
+    choose a link retrieval never admitted.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    population = population_of(old_nodes, new_nodes)
+    honest = admitted(population)
+
+    # D's premise: the pair about to be dropped is one the clean run actually selects. Without
+    # this the control could be refusing a candidate that would have lost anyway.
+    omitted = (population.old_refs[0], population.new_refs[0])
+    clean_links = {
+        link.evidence.link for link in assign_group(population, group_correspondence_evidence(population, honest)).links
+    }
+    assert omitted in clean_links, (
+        "the pair this control drops is not selected by the unfaulted run, so proving it cannot "
+        "reach assignment says nothing about a link that would otherwise have been chosen"
+    )
+
+    monkeypatch.setattr(RetrievedPopulation, "propose_into", dropping_propose_into)
+    faulted = CandidateSet()
+    population.propose_into(faulted)
+
+    # A. the population is untouched by the fault.
+    after = population_of(old_nodes, new_nodes)
+    assert (population.old_refs, population.new_refs) == (after.old_refs, after.new_refs)
+    assert [n.element_id for n in population.old] == [n.element_id for n in after.old]
+    assert [n.element_id for n in population.new] == [n.element_id for n in after.new]
+    assert population.invocation == after.invocation
+
+    # B. the set is missing exactly that pair, and nothing else.
+    assert faulted.candidate_for(*omitted) is None, "the fault did not omit the pair it was supposed to"
+    assert len(faulted) == len(honest) - 1, "the fault omitted more than one pair; it is no longer isolating"
+
+    # C. the evidence stage refuses it rather than reconstructing it from the population.
+    with pytest.raises(ValueError, match="never admitted"):
+        group_correspondence_evidence(population, faulted)
+
+    # D. and so nothing downstream can select it: the whole engine fails closed on this group.
+    with pytest.raises(ValueError, match="never admitted"):
+        match_nodes(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+
+
+def test_a_candidate_missing_this_invocations_provenance_is_refused():
+    """The second admission failure: the pair was considered, but not by this invocation.
+
+    Distinct from absence, and the distinction is real rather than defensive. Candidates are
+    comparison-scoped and the cross-division round can legitimately re-propose a pair the
+    within-division round already offered, so a set holding a pair proves only that *somebody*
+    retrieved it. Admitting on that basis would let one invocation describe -- and assignment
+    then select -- a pair that invocation never retrieved, which is the same boundary violation
+    arriving through provenance instead of membership.
+
+    Driven with a set built entirely under the *other* round-1 invocation, which is the shape the
+    cross-division round produces for pairs the within-division round also saw.
+    """
+    old_nodes, new_nodes = duplicate_element_id_fixture()
+    population = population_of(old_nodes, new_nodes)
+
+    other = CandidateSet()
+    for old_ref in population.old_refs:
+        for new_ref in population.new_refs:
+            other.propose(old_ref, new_ref, EXPECTED_INVOCATION["cross"])
+
+    assert other.candidate_for(population.old_refs[0], population.new_refs[0]) is not None, (
+        "the pair is absent from this set, so the refusal below would be about membership rather "
+        "than about provenance and the two failures would not be distinguished"
+    )
+    assert population.invocation != EXPECTED_INVOCATION["cross"]
+
+    with pytest.raises(ValueError, match="carries no proposal from"):
+        group_correspondence_evidence(population, other)
+
+
+@pytest.mark.slow
+def test_the_admission_boundary_fails_closed_across_the_corpus(monkeypatch):
+    """The same fault at corpus scale: every pair with a collision group now refuses to match.
+
+    The synthetic control above is exact about which pair and why. This one answers the question
+    it cannot: whether the boundary is wired on the path the engine actually takes over real
+    bills, or only on the one a hand-built population reaches.
+
+    Pairs whose ``match_path`` groups never collide produce no candidate at all, so there is
+    nothing for the fault to omit and nothing to refuse. They are counted rather than assumed
+    away, and the two sets must agree exactly -- which is also what stops this passing on a run
+    where the fault silently did nothing.
+    """
+    clean_have_candidates = []
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        if len(match_nodes_with_retrieval(old_tree, new_tree)[1]):
+            clean_have_candidates.append(pair_key(old_path, new_path))
+    assert clean_have_candidates, "no committed pair materialises a candidate; the fault has nothing to omit"
 
     monkeypatch.setattr(RetrievedPopulation, "propose_into", dropping_propose_into)
 
-    frozen = load_frozen()
-    stream_intact = []
-    candidates_red = []
+    failed_closed = []
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        pairs, candidates = match_nodes_with_retrieval(old_tree, new_tree)
-        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
-        produced = [
-            [ordinals[id(o)] if o is not None else None, ordinals[id(n)] if n is not None else None] for o, n in pairs
-        ]
-        key = pair_key(old_path, new_path)
-        stream_intact.append(stream_digest(produced) == frozen[key]["stream_sha256"])
-        if actual_candidate_provenance(candidates) != expected_candidate_provenance(old_tree, new_tree):
-            candidates_red.append(key)
+        try:
+            match_nodes(old_tree, new_tree)
+        except ValueError as exc:
+            assert "never admitted" in str(exc)
+            failed_closed.append(pair_key(old_path, new_path))
 
-    assert all(stream_intact), (
-        "dropping candidates changed the pairing stream, so this control is not isolating a "
-        "candidate-only defect and half its claim is unreadable"
+    assert failed_closed == clean_have_candidates, (
+        "the pairs that fail closed under a candidate omission are not exactly the pairs that "
+        f"materialise candidates: only-failed={sorted(set(failed_closed) - set(clean_have_candidates))}, "
+        f"only-candidates={sorted(set(clean_have_candidates) - set(failed_closed))}"
     )
-    assert candidates_red, (
-        "dropping one proposal per invocation left the candidate set matching its independent "
-        "expectation; the materialisation gate cannot see a candidate-only defect"
+
+
+def test_the_materialisation_gate_can_still_see_a_candidate_only_defect():
+    """The corpus materialisation gate's projection, shown to distinguish a dropped proposal.
+
+    That gate is kept, and kept independent -- it compares production's set against an
+    expectation expanded from the ORACLE's invocation trace, so it answers a question the
+    fail-closed boundary cannot: whether the set holds the *right* pairs under the *right*
+    invocations, rather than merely agreeing with whatever the evidence stage went on to ask for.
+
+    Its negative control moved here from the old corpus fault-injection test. It could no longer
+    live there: under a faulted candidate set production now raises before returning a set to
+    project, which is the reviewed behaviour change and is proved by the two controls above. What
+    still needs proving is the narrower thing -- that ``actual_candidate_provenance`` is capable
+    of telling a dropped proposal from an intact set -- and that needs no corpus and no engine.
+    """
+    population = population_of(*duplicate_element_id_fixture())
+    faulted = CandidateSet()
+    dropping_propose_into(population, faulted)
+
+    assert actual_candidate_provenance(faulted) != actual_candidate_provenance(admitted(population)), (
+        "the projection behind the materialisation gate cannot distinguish a candidate set that is "
+        "missing a proposal, so that gate is comparing something other than what it claims to"
     )
-    assert RetrievedPopulation.propose_into is dropping_propose_into  # the patch really was live
-    monkeypatch.undo()
-    assert RetrievedPopulation.propose_into is real_propose
 
 
 # --- B2: the evidence/assignment boundary, bound where the frozen stream cannot see it -------
@@ -1204,8 +1372,8 @@ def observed_group_evidence(old_tree, new_tree) -> list[dict]:
     seen: list[dict] = []
     real = db.group_correspondence_evidence
 
-    def spy(population):
-        evidence = real(population)
+    def spy(population, candidates):
+        evidence = real(population, candidates)
         seen.append(
             {
                 "phase": _PHASE_OF_INVOCATION[population.invocation],
@@ -1375,7 +1543,7 @@ def test_the_call_count_gate_can_fire(monkeypatch):
 
     real = db.group_correspondence_evidence
 
-    def scores_the_sole_candidate(population):
+    def scores_the_sole_candidate(population, candidates):
         if population.forms_candidates and len(population.old) == 1 and len(population.new) == 1:
             old_text = " ".join(population.old[0].body_text.split())
             new_text = " ".join(population.new[0].body_text.split())
@@ -1386,7 +1554,7 @@ def test_the_call_count_gate_can_fire(monkeypatch):
                     **{_WORD_OVERLAP: db.text_similarity(old_text, new_text)},
                 ),
             )
-        return real(population)
+        return real(population, candidates)
 
     monkeypatch.setattr(db, "group_correspondence_evidence", scores_the_sole_candidate)
 
@@ -1412,6 +1580,21 @@ def population_of(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> Retri
     registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
     (population,) = retrieve_within_division_populations(old_nodes, new_nodes, registry)
     return population
+
+
+def admitted(*populations: RetrievedPopulation) -> CandidateSet:
+    """The candidate set retrieval materialises for these populations.
+
+    The evidence stage now refuses a pair the set does not admit, so a test driving that stage
+    has to supply the admission as well as the population. Built through production's own
+    ``propose_into`` deliberately: these tests are about what happens *after* admission, and
+    hand-rolling the set here would put a second, divergent materialisation rule in the harness.
+    The one control that needs a *faulted* set builds it explicitly instead.
+    """
+    candidates = CandidateSet()
+    for population in populations:
+        population.propose_into(candidates)
+    return candidates
 
 
 def sole_candidate_fixture() -> tuple[list[BillNode], list[BillNode]]:
@@ -1443,6 +1626,10 @@ def test_a_1x1_population_is_described_without_measuring_anything(monkeypatch):
 
     ``text_similarity`` is bombed rather than counted, so a stage that measured would fail here
     even if it discarded the result.
+
+    The sole pair is admitted through the candidate set like any other -- the shortcut is about
+    what is *measured*, not about skipping the boundary -- so the population is materialised
+    first and the admission is asserted before the record is inspected.
     """
     from deltatrack import diff_bill as db
 
@@ -1452,11 +1639,17 @@ def test_a_1x1_population_is_described_without_measuring_anything(monkeypatch):
     assert [(len(p.old), len(p.new)) for p in populations] == [(1, 1), (1, 1)], (
         "the fixture stopped producing two 1x1 populations, so this proves nothing"
     )
+    candidates = admitted(*populations)
 
     monkeypatch.setattr(db, "text_similarity", _refuse_to_measure)
 
     for population in populations:
-        evidence = group_correspondence_evidence(population)
+        candidate = candidates.candidate_for(population.old_refs[0], population.new_refs[0])
+        assert candidate is not None and population.invocation in candidate.invocations, (
+            "the sole pair was not admitted under its own invocation, so the shortcut is bypassing the boundary"
+        )
+
+        evidence = group_correspondence_evidence(population, candidates)
         assert len(evidence) == 1, "a 1x1 population must still describe its sole candidate"
         assert evidence[0].names == (), f"the sole candidate was given an invented signal: {evidence[0].signals}"
         assert evidence[0].link == (population.old_refs[0], population.new_refs[0])
@@ -1496,7 +1689,7 @@ def test_assignment_follows_the_supplied_evidence_and_never_recomputes_it(monkey
 
     old_nodes, new_nodes = duplicate_element_id_fixture()
     population = population_of(old_nodes, new_nodes)
-    honest = group_correspondence_evidence(population)
+    honest = group_correspondence_evidence(population, admitted(population))
     assert len(honest) == 4, "the fixture stopped producing a 2x2 competition"
 
     # What recomputing the texts says, checked rather than assumed -- the mutation below is only
@@ -1538,7 +1731,7 @@ def test_the_evidence_authority_control_would_be_blind_without_the_disagreement(
     control next door.
     """
     population = population_of(*duplicate_element_id_fixture())
-    honest = group_correspondence_evidence(population)
+    honest = group_correspondence_evidence(population, admitted(population))
     inverted = tuple(
         CorrespondenceEvidence.of(
             item.old, item.new, **{_WORD_OVERLAP: 0.0 if item.old.ordinal == item.new.ordinal else 1.0}
@@ -1577,8 +1770,17 @@ def test_assignment_breaks_ties_on_invocation_local_position(monkeypatch):
     assert cross is not None
     assert [ref.ordinal for ref in cross.old_refs] == [2, 1], "the fallback population lost its concatenation order"
 
-    evidence = group_correspondence_evidence(cross)
+    evidence = group_correspondence_evidence(cross, admitted(cross))
     assert len({item.get(_WORD_OVERLAP) for item in evidence}) == 1, "the fallback candidates no longer tie"
+
+    # The evidence came out in POPULATION order, not the candidate set's canonical ordinal-pair
+    # order. On this population the two disagree -- local [2, 1] against canonical [1, 2] -- which
+    # is what makes the admission boundary safe to have wired: the set gates membership and has
+    # no way to reach the sequence assignment reads.
+    assert [item.old.ordinal for item in evidence] == [2, 1], (
+        "the evidence stage emitted the candidate set's canonical order rather than the population's"
+    )
+    assert [candidate.old.ordinal for candidate in admitted(cross).candidates()] == [1, 2]
 
     monkeypatch.setattr(db, "text_similarity", _refuse_to_measure)
     (link,) = assign_group(cross, evidence).links
@@ -1606,7 +1808,7 @@ def test_losing_candidates_keep_their_evidence_after_assignment():
     links are selected, and two candidates lose to greedy exclusivity rather than to a score.
     """
     population = population_of(*duplicate_element_id_fixture())
-    evidence = group_correspondence_evidence(population)
+    evidence = group_correspondence_evidence(population, admitted(population))
     assignment = assign_group(population, evidence)
 
     assert len(assignment.evidence) == 4, (
@@ -1635,7 +1837,7 @@ def test_losing_candidates_keep_their_evidence_after_assignment():
 def test_a_selection_cannot_be_severed_from_its_evidence():
     """The retention invariant is enforced by the type, not only observed on a fixture."""
     population = population_of(*duplicate_element_id_fixture())
-    evidence = group_correspondence_evidence(population)
+    evidence = group_correspondence_evidence(population, admitted(population))
     assignment = assign_group(population, evidence)
     stranger = CorrespondenceEvidence.of(population.old_refs[0], population.new_refs[0], **{_WORD_OVERLAP: 0.5})
 
@@ -1752,7 +1954,7 @@ def test_the_group_competition_applies_no_threshold():
     """
     old_nodes, new_nodes = below_threshold_group_fixture()
     population = population_of(old_nodes, new_nodes)
-    evidence = group_correspondence_evidence(population)
+    evidence = group_correspondence_evidence(population, admitted(population))
 
     best = max(item.get(_WORD_OVERLAP) for item in evidence)
     assert 0 < best < 0.2, f"the fixture's best candidate scores {best}; it must sit well under the 0.4 cutoff"
@@ -1797,6 +1999,7 @@ def test_assignment_leftovers_are_what_the_cross_round_retrieves():
     old_nodes, new_nodes = assignment_leftover_fixture()
     registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
 
+    candidates = CandidateSet()
     unmatched_old: list[BillNode] = []
     unmatched_new: list[BillNode] = []
     for population in retrieve_within_division_populations(old_nodes, new_nodes, registry):
@@ -1804,7 +2007,8 @@ def test_assignment_leftovers_are_what_the_cross_round_retrieves():
             unmatched_old.extend(population.old)
             unmatched_new.extend(population.new)
             continue
-        assignment = assign_group(population, group_correspondence_evidence(population))
+        population.propose_into(candidates)
+        assignment = assign_group(population, group_correspondence_evidence(population, candidates))
         unmatched_old.extend(assignment.leftover_old)
         unmatched_new.extend(assignment.leftover_new)
 
@@ -1815,7 +2019,8 @@ def test_assignment_leftovers_are_what_the_cross_round_retrieves():
     assert cross is not None
     assert [ref.ordinal for ref in cross.old_refs] == [1] and [ref.ordinal for ref in cross.new_refs] == [2]
 
-    (link,) = assign_group(cross, group_correspondence_evidence(cross)).links
+    cross.propose_into(candidates)
+    (link,) = assign_group(cross, group_correspondence_evidence(cross, candidates)).links
     assert (link.old.element_id, link.new.element_id) == ("oA2", "nB2")
 
 
@@ -1849,6 +2054,7 @@ FORBIDDEN_IN_ORACLE = frozenset(
         "GroupAssignment",
         "SelectedLink",
         "match_nodes_with_stage_outputs",
+        "_refuse_a_candidate_retrieval_did_not_admit",
         # and the module they would arrive through
         "diff_bill",
     }
@@ -1950,10 +2156,12 @@ def test_the_oracle_module_reaches_diff_bill_only_for_the_production_comparison(
         "deltatrack.matching.NEW",
         "deltatrack.matching.OLD",
         "deltatrack.matching.RetrieverInvocation",
-        # Read for its SOURCE only, by the structural check that assignment cannot receive the
-        # candidate set. Not called from this module, and the AST guard above still refuses the
-        # name inside an oracle function.
+        # Read for their SOURCE only, by the two structural checks: that assignment cannot
+        # receive the candidate set, and that the evidence path reaches it by lookup rather than
+        # by iterating it. Neither is called from this module, and the AST guard above still
+        # refuses either name inside an oracle function.
         "deltatrack.diff_bill._match_collision_group",
+        "deltatrack.diff_bill._refuse_a_candidate_retrieval_did_not_admit",
     }, f"the production import surface moved: {sorted(imported)}"
 
 
