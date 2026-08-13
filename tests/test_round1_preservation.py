@@ -717,65 +717,164 @@ def test_production_reproduces_the_frozen_pairing_stream(old_path: Path, new_pat
     )
 
 
-@pytest.mark.slow
-def test_production_internals_reproduce_the_frozen_invocation_trace():
-    """Today's corroboration at the stage boundary, by wrapping the LEGACY internals.
+def observed_retrieval_populations(old_tree, new_tree) -> list[dict]:
+    """The populations B1's RETRIEVAL STAGES emit, in order, addressed by ADR 0019 ordinal.
 
-    ``_similarity_pair`` and ``_match_collision_group`` exist now and may not after B1, so
-    this test is explicitly transitional: B1 and B2 replace it with assertions on their own
-    stage outputs, compared against the same frozen invocation trace. What it buys today is
-    that the oracle's invocation-level expectation is not merely self-consistent -- it is the
-    shape production actually runs.
+    Recorded at the new stage boundary rather than by wrapping ``_similarity_pair``. The
+    pre-B1 version of this helper spied on the scorer and inferred each invocation's phase from
+    a call counter; the phase is now a property of which retrieval function produced the
+    population, so it is read rather than reconstructed.
+
+    Only populations that actually form candidates are reported. A division present on one side
+    only is a real retrieval output and is deliberately emitted by the stage, but it pairs
+    nothing and runs no invocation, so it is not part of the invocation trace the oracle froze.
     """
     from deltatrack import diff_bill as db
 
+    ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
+    seen: list[dict] = []
+    real_within = db.retrieve_within_division_populations
+    real_cross = db.retrieve_cross_division_population
+
+    def record(population, phase):
+        seen.append(
+            {
+                "phase": phase,
+                "old": [ordinals[id(n)] for n in population.old],
+                "new": [ordinals[id(n)] for n in population.new],
+            }
+        )
+
+    def spy_within(old_nodes, new_nodes, registry):
+        populations = real_within(old_nodes, new_nodes, registry)
+        for population in populations:
+            if population.forms_candidates:
+                record(population, "within")
+        return populations
+
+    def spy_cross(unmatched_old, unmatched_new, registry):
+        population = real_cross(unmatched_old, unmatched_new, registry)
+        if population is not None:
+            record(population, "cross")
+        return population
+
+    # Saved and restored here rather than through `monkeypatch`, which accumulates for the whole
+    # test: across a corpus loop the second patch would wrap the FIRST iteration's spy, and that
+    # spy holds the first pair's ordinal map. It fails loudly as a KeyError, but only because
+    # the map is strict -- a looser bridge would have recorded the wrong addresses in silence.
+    # Restoring per call also lets a mutation stay patched around this observer and compose.
+    db.retrieve_within_division_populations = spy_within
+    db.retrieve_cross_division_population = spy_cross
+    try:
+        match_nodes(old_tree, new_tree)
+    finally:
+        db.retrieve_within_division_populations = real_within
+        db.retrieve_cross_division_population = real_cross
+    return seen
+
+
+@pytest.mark.slow
+def test_the_retrieval_stages_emit_the_frozen_invocation_populations():
+    """B1's stage boundary, against the SAME frozen expectation the pre-B1 internals met.
+
+    The expectation is unchanged and was not regenerated for this slice: retrieval was named
+    and extracted, so the populations it hands to assignment must be exactly the ones the fused
+    implementation formed -- same membership, same order, same sequence of invocations.
+
+    What moved is where the assertion is taken. It now reads the retrieval stages' own outputs,
+    which is the boundary B2 will consume, so this survives ``_similarity_pair`` being split
+    into evidence and assignment.
+    """
     checked = 0
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        # Addresses come from the COMPLETE emitted sequences, resolved outside the spy. The
-        # populations the spy sees are collision subgroups and division sublists; numbering them
-        # by their position inside those views is the ADR 0019 hazard, so the map is built once
-        # from tree.nodes and only looked up here.
-        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
-        seen: list[dict] = []
-        real_pair = db._similarity_pair
-        real_group = db._match_collision_group
-        state = {"both_sided": 0, "n": 0}
-
-        def spy_pair(old_nodes, new_nodes, _real=real_pair, _seen=seen, _state=state, _ord=ordinals):
-            _state["n"] += 1
-            phase = "within" if _state["n"] <= _state["both_sided"] else "cross"
-            result = _real(old_nodes, new_nodes)
-            _seen.append(
-                {
-                    "phase": phase,
-                    "old": [_ord[id(n)] for n in old_nodes],
-                    "new": [_ord[id(n)] for n in new_nodes],
-                }
-            )
-            return result
-
-        def spy_group(old_nodes, new_nodes, _real=real_group, _state=state):
-            _state["n"] = 0
-            _state["both_sided"] = len({n.division_key for n in old_nodes} & {n.division_key for n in new_nodes})
-            return _real(old_nodes, new_nodes)
-
-        db._similarity_pair = spy_pair
-        db._match_collision_group = spy_group
-        try:
-            match_nodes(old_tree, new_tree)
-        finally:
-            db._similarity_pair = real_pair
-            db._match_collision_group = real_group
-
+        seen = observed_retrieval_populations(old_tree, new_tree)
         expected = [
             {"phase": i["phase"], "old": i["old"], "new": i["new"]}
             for i in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]
         ]
-        assert seen == expected, f"{pair_key(old_path, new_path)}: invocation populations differ from the oracle"
+        assert seen == expected, (
+            f"{pair_key(old_path, new_path)}: the retrieval stages' populations differ from the frozen expectation"
+        )
         checked += 1
 
     assert checked, "the invocation comparison ran over zero version pairs"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mutation", ["sorted_divisions", "sorted_fallback"])
+def test_the_retrieval_stage_boundary_can_fail(mutation: str, monkeypatch):
+    """The new stage-boundary test would otherwise only ever have been observed green.
+
+    Two mutations a plausible B1 could have shipped, each tidying an order that turns out to be
+    policy:
+
+    ``sorted_divisions`` visits divisions in sorted key order instead of first-appearance order.
+    ``sorted_fallback`` sorts the cross-division population instead of preserving the
+    concatenation round 1a produced.
+
+    Both leave every candidate PAIR intact and change only order, which is precisely the class
+    of change a membership-only check would wave through.
+    """
+    from deltatrack import diff_bill as db
+
+    real_within = db.retrieve_within_division_populations
+    real_cross = db.retrieve_cross_division_population
+
+    def sorted_divisions(old_nodes, new_nodes, registry):
+        return tuple(sorted(real_within(old_nodes, new_nodes, registry), key=lambda p: p.division_key or ""))
+
+    def sorted_fallback(unmatched_old, unmatched_new, registry):
+        return real_cross(list(reversed(unmatched_old)), list(reversed(unmatched_new)), registry)
+
+    if mutation == "sorted_divisions":
+        monkeypatch.setattr(db, "retrieve_within_division_populations", sorted_divisions)
+    else:
+        monkeypatch.setattr(db, "retrieve_cross_division_population", sorted_fallback)
+
+    moved = []
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        seen = observed_retrieval_populations(old_tree, new_tree)
+        expected = [
+            {"phase": i["phase"], "old": i["old"], "new": i["new"]}
+            for i in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]
+        ]
+        if seen != expected:
+            moved.append(pair_key(old_path, new_path))
+
+    assert moved, (
+        f"the {mutation!r} mutation left every retrieved population identical, so the stage-boundary "
+        "test cannot see a retrieval ordering regression"
+    )
+
+
+def test_assignment_never_receives_the_candidate_set():
+    """Structural: ``CandidateSet`` iteration order cannot become assignment order.
+
+    ADR 0020's candidate set is canonically ordered by ordinal pair, and B0 measured that using
+    that order as assignment order changes the selected links on 174 of 329 greedy invocations.
+    The protection is the call signature rather than a convention: the scorer is handed two
+    ordered lists and has no reference to the set, so no ordering it carries can reach a
+    selection.
+    """
+    import inspect
+
+    from deltatrack.diff_bill import _match_collision_group, _similarity_pair
+
+    assert "candidates" not in inspect.signature(_similarity_pair).parameters
+
+    body = inspect.getsource(_match_collision_group)
+    tree = ast.parse(textwrap.dedent(body))
+    for call in ast.walk(tree):
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+            continue
+        if call.func.id != "_similarity_pair":
+            continue
+        named = {n.id for arg in call.args for n in ast.walk(arg) if isinstance(n, ast.Name)}
+        assert "candidates" not in named, (
+            f"the scorer is called with the candidate set in scope as an argument: {sorted(named)}"
+        )
 
 
 # --- Independence, enforced structurally --------------------------------------------------
@@ -869,8 +968,14 @@ def test_the_oracle_module_reaches_diff_bill_only_for_the_production_comparison(
         "deltatrack.bill_tree.normalize_bill",
         "deltatrack.diff_bill.match_nodes",
         "deltatrack.similarity.text_similarity",
-        # The transitional internals wrapper, which B1 removes along with the test that uses it.
+        # The module itself, for the stage-boundary observer and the retrieval-order mutations,
+        # both of which have to reach into production to patch the stage they measure.
         "deltatrack.diff_bill",
+        # Read for their SIGNATURE and source only, by the structural check that assignment
+        # cannot receive the candidate set. Neither is called from this module, and the AST guard
+        # above still refuses either name inside an oracle function.
+        "deltatrack.diff_bill._match_collision_group",
+        "deltatrack.diff_bill._similarity_pair",
     }, f"the production import surface moved: {sorted(imported)}"
 
 
