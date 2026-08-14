@@ -322,6 +322,16 @@ pull request**, from the ground-truth work rather than from the refactor.
 The data contracts are specified in the Decision. Module layout and pull-request sequencing
 are implementation preferences and belong in the tracker.
 
+**One duplicate computation is deliberately left in place, and it is not an unfinished
+requirement of this record.** `_similarity_signals` runs `diff_text` to decide
+`body_unchanged`, and `_paired_record` runs it again on the same pairing to produce the
+`text_diff` the output carries. That is **performance debt, not a stage-boundary defect**: the
+two calls answer questions owned by different stages, and removing the second means routing
+classification's output back across the boundary this record draws. #591 quantified the
+duplication and accepted it as preservation cost. Optimisation is deferred unless end-to-end
+profiling justifies it, and the call-count gate that would protect such a change belongs with
+the change rather than ahead of it. Nothing in this record is waiting on it.
+
 ## Invariants
 
 1. One observation pair appears once in the candidate set, carrying one or more proposals.

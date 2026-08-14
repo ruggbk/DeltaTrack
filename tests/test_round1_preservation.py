@@ -70,8 +70,10 @@ Three tests form the triangle:
 
 ## The two behaviours the corpus cannot see
 
-Measured in the round-1 audit and reproduced by
-``docs/research/provision-matching/probes/round1_decisive.py``: over all 27 committed
+Measured in the round-1 audit (§4 and §5, which retain the figures) and now bound by the two
+synthetic fixtures below rather than by a probe -- the probe that first measured this was
+retired at closure, and :func:`test_the_corpus_cannot_see_the_two_fixture_bound_mutations` is
+what keeps the claim honest if the corpus ever grows a case that exercises either. Over all 27 committed
 version pairs, **no** observation left over by within-division assignment ever reaches the
 cross-division fallback (238 groups produce leftovers, 30 groups reach the fallback, the
 sets are disjoint), and **every** list handed to the greedy is already in ascending parser

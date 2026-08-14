@@ -7,8 +7,9 @@ still here earns its place under one of four tests** — it reproduces a consequ
 frozen input, records a durable decision, or maps a retired artifact to the executable invariant
 that inherited its question. The investigation itself (the pre-work source survey, the pipeline
 walkthrough, the rule-by-rule stage map, the proposed signatures, the oracle design, the slice
-plan and the resolved blockers) was working material and was removed at closure; it is readable in
-full at `7fdbf62`, and git history holds the rest.
+plan and the resolved blockers) was working material and was removed at closure. Two different
+pins, because they are two different artifacts: the **full pre-cut text of this document** is at
+`542de8c^`, and the **eight retired probe files** are at `7fdbf62`. Git history holds the rest.
 
 Read this for *why a number is what it is*. For the architecture, read
 [ADR 0020](../../decisions/0020-matching-stages.md) and

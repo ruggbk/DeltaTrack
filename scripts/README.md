@@ -14,21 +14,21 @@ root.
 | `fetch_test_assets.py` | Re-fetch a bill-print PDF the slow suite needs that `tools/fetch_bills.py` cannot produce (it defaults to XML). Every asset it lists is committed, so this is a provenance record plus a way to restore one you deleted, not a setup step. Committee-report PDFs are **not** fetched here — the ones the gates read are committed fixtures ([ADR 0015](../docs/decisions/0015-corpus-test-fixtures.md)). |
 | `compare_differs.py <a> <b>` | Compare DeltaTrack against off-the-shelf differs on the same bill pair (evidence for [ADR 0001](../docs/decisions/0001-structured-money-diff.md)). |
 | `probe_observation_identity.py [root]` | Measure what can serve as an observation address: duplicated body texts, duplicated `match_path`s, emission determinism, and how much of `element_id` is recoverable from the source rather than synthesized. Read-only; the evidence behind [ADR 0019](../docs/decisions/0019-observation-identity.md). Defaults to the committed `tests/corpus`, so it needs no downloads. Re-run under a different `PYTHONHASHSEED` to check the determinism digest does not move. |
-| `probe_matching_stages.py [root]` | Size what the **pre-ADR-0020 fused** matching decision cost: pairs split by the similarity cutoff that carry amounts on both sides (#368), changes recovered by the move pass, and match paths whose output is not a one-to-one relation. Read-only; the evidence that motivated [ADR 0020](../docs/decisions/0020-matching-stages.md), and a measurement of the state that record set out to change rather than a description of the engine today. Defaults to the committed `tests/corpus`, so it needs no downloads. |
+| `probe_matching_stages.py [root]` | Size what the matching decision costs: pairs split by the similarity cutoff that carry amounts on both sides (#368), changes recovered by the move pass, and match paths whose output is not a one-to-one relation. It measures the **current** engine — those three quantities survived the ADR 0020 separation, so its numbers are live, not a frozen snapshot. Written as the evidence behind [ADR 0020](../docs/decisions/0020-matching-stages.md); what has changed since is that the decision it sized is no longer fused, and the move pass now runs *before* classification rather than after. Read-only. Defaults to the committed `tests/corpus`, so it needs no downloads. |
 
-### ADR 0020 slice-2 evidence (historical: pre-separation)
+### ADR 0020 slice-2 evidence
 
-> **These probes measure the engine before the ADR 0020 separation, and are kept as the evidence
-> behind it — not as a description of how matching works now.** The question they were written to
-> answer, whether the move-assignment pass could be extracted as its own stage, is settled: it was,
-> and both retrieval rounds now run before classification. For the current architecture read
-> [ADR 0020](../docs/decisions/0020-matching-stages.md) and
-> [docs/architecture.md](../docs/architecture.md); the round-1 stages are bound by
-> `tests/test_round1_preservation.py`. Anything below describing a fused decision, or a move pass
-> running after classification, is describing the state that was changed.
+> **The question these were written for is answered; the probes still run.** Whether the
+> move-assignment pass could be extracted as its own stage was decided by shipping it — round 2 is
+> now `retrieve_move_candidates` → `move_correspondence_evidence` → `assign_moves`, and both
+> retrieval rounds run *before* classification. What the probes measure (split populations, move
+> candidates, provenance) survived that change, so their numbers describe the current engine and
+> are worth re-running. Read [ADR 0020](../docs/decisions/0020-matching-stages.md) and
+> [docs/architecture.md](../docs/architecture.md) for the architecture they informed; the round-1
+> stages are bound by `tests/test_round1_preservation.py`.
 
 Whether the move-assignment pass could be extracted as its own [ADR 0020](../docs/decisions/0020-matching-stages.md)
-stage turned on what the code then measurably did. These are the probes behind that.
+stage turned on what the code measurably did. These are the probes behind that.
 All are read-only,
 all run against the committed corpus via `tests.test_canonical_baseline.baseline_pairs`
 so the probe and the byte-identity gate always describe the same population, and all

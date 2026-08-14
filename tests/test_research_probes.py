@@ -9,13 +9,18 @@ scripts named in Appendix A" was false at review time in the strongest sense -- 
 executed at all.
 
 Excluding a directory from lint is a decision about *style*. It should not also be a decision to
-stop checking that the code resolves. These are the two checks that would have caught #492 and
-#308 the day they landed, and they are deliberately narrow so the exclusion keeps its meaning:
+stop checking that the code resolves. The first two checks below would have caught #492 and #308
+the day they landed, and they are deliberately narrow so the exclusion keeps its meaning:
 
 1. every ``from deltatrack... import`` in the probes still resolves (static, executes nothing);
 2. ``corpus_roots.py``, which every post-review probe reads its corpus through, is correct --
    because a stale or wrongly-ordered corpus view silently changes *every* research number
    downstream and raises nothing.
+3. the round-1 probes declared runnable actually **run** (section 4). ADR 0020 produced two
+   defects the static check is structurally unable to see -- a probe reaching a removed private
+   symbol by attribute rather than by import, and a probe calling a function whose signature
+   moved, which no symbol-existence check of any kind can catch. Both were invisible until
+   something executed them, and for months nothing did.
 
 Nothing here asserts a research RESULT. Results live in the review document with the probe output
 quoted; pinning them in CI would make an experiment into a regression test, which is the mistake
@@ -483,7 +488,7 @@ def test_the_execution_gate_does_not_simply_fail_everything(tmp_path):
 
 
 def test_the_execution_gate_reddens_on_a_removed_private_symbol(tmp_path):
-    """Defect 1: ``db._similarity_pair``, exactly as the seven removed probes reached it.
+    """Defect 1: ``db._similarity_pair``, exactly as six of the removed probes reached it.
 
     The static import gate is green on this script -- it imports ``diff_bill``, which exists.
     """
