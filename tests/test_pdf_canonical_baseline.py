@@ -6,8 +6,14 @@ owed: *"a PDF baseline is owed before any PDF-side stage extraction happens"*
 theoretical one. Four production mutations — ``SIMILARITY_THRESHOLD`` to 0.45 and 0.35,
 ``MOVE_THRESHOLD`` to 0.65 and 0.55, each changing real corpus output — were run against
 the full suite and **all four stayed green**, 3227 tests apiece. Not one test detected any
-of them. Reproduce with
-``docs/research/pdf-matching-convergence/probes/mutate_production_and_run_suite.py``.
+of them. All four now redden this module, which is what it exists for.
+
+The probe that measured the original blindness
+(``docs/research/pdf-matching-convergence/probes/mutate_production_and_run_suite.py``) was
+removed from HEAD at research closure and remains in Git history. Its question is settled and
+owned here: to re-measure, mutate a cutoff in ``diff_pdf`` and run this module. Mutate inside
+``diff_pdf`` rather than ``similarity`` — the latter reddens the XML baseline and says nothing
+about PDF — and never by monkeypatching, since both cutoffs bind at import.
 
 The claim this supports is exactly as wide as the XML baseline's:
 

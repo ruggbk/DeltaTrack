@@ -170,7 +170,7 @@ ANCHOR_RELATIONS = frozenset({ANCHOR_EQUAL, ANCHOR_DIFFERENT, ANCHOR_MISSING})
 #: **Provenance, deliberately not a legislative claim.** Slice 6's study established that neither
 #: name below is a measurement of relocation: 13 of the 20 round-1 bases are anchor line-wrap
 #: artifacts, and 9 of the 145 round-2 moves relocate with an unchanged anchor
-#: (``docs/research/pdf-matching-convergence/slice6-moved-semantics.md``). The semantic target
+#: (``docs/research/pdf-matching-convergence/moved-semantics.md``). The semantic target
 #: for canonical ``moved`` is "the same provision at a different legislative location", which
 #: needs a stable location identity the parser does not yet carry. These names therefore say how
 #: the correspondence was settled, and the question of what ``moved`` should *mean* stays open
@@ -1334,7 +1334,7 @@ def classify_pdf(
 
     The *policy* is unchanged and 6a is byte-preserving. What a PDF ``moved`` should mean is a
     separate, open question — see
-    ``docs/research/pdf-matching-convergence/slice6-moved-semantics.md``, whose recommendation
+    ``docs/research/pdf-matching-convergence/moved-semantics.md``, whose recommendation
     (6b) is deliberately **not** implemented here.
 
     **Record order is this stage's policy.** Output follows the round-1 stream slot, so a
@@ -1366,7 +1366,7 @@ def diff_pdfs(v1_pages: list[Page], v2_pages: list[Page]) -> PdfDiff:
 
     What is deliberately *not* settled is the semantics: ``moved`` still means what the legacy
     rule meant, and slice 6's study
-    (``docs/research/pdf-matching-convergence/slice6-moved-semantics.md``) argues that meaning is
+    (``docs/research/pdf-matching-convergence/moved-semantics.md``) argues that meaning is
     wrong on measured grounds. Changing it is a canonical behaviour change and a separate
     decision — the architecture now makes it a one-line policy change rather than a refactor.
     """
