@@ -25,8 +25,11 @@ block text. The classifier produces:
 - `moved` — block bodies similar but anchors differ (renumbered SEC.)
 - `modified` — paired blocks with different bodies
 
-Reuses amount matching (`match_amounts`) from diff_bill.py and text similarity
-(`text_similarity_at_least`, `move_candidates`) plus both cutoffs from similarity.py.
+Reuses amount matching (`match_amounts`) from diff_bill.py and text similarity from
+similarity.py: `text_similarity` for the round-1 similarity rule and `move_candidates` for
+round-2 retrieval, plus both cutoffs. Round 1 deliberately no longer uses the gated
+`text_similarity_at_least` — that call returns 0.0 below its bound, which put a correspondence
+cutoff inside the evidence stage; see `_pdf_similarity_signals`.
 """
 
 from __future__ import annotations
@@ -707,17 +710,23 @@ def _align_blocks(
     alignment: RetrieverInvocation,
     positional: RetrieverInvocation,
 ) -> list[_AlignedPairing]:
-    """ROUND 1, retrieval and assignment still fused: which blocks are provisionally paired.
+    """ROUND 1's opcode walk: which blocks are provisionally paired, and by which rule.
 
-    Unchanged from the pre-slice-4 opcode walk except that it produces pairings rather than
-    classified hunks. `_block_key` + `SequenceMatcher` decide what is *considered*, and the
-    positional zip inside a ``replace`` is retrieval too (research record §9).
+    Unchanged from the pre-slice-4 walk except in what it emits. `_block_key` +
+    ``SequenceMatcher`` decide what is *considered*, and the positional zip inside a ``replace``
+    is retrieval too (research record §9); each aligned pair is tagged with the invocation that
+    formed it, which is what lets the candidate set attribute a proposal rather than merely hold
+    it.
 
-    **Retrieval only, since slice 5.** Every aligned pair leaves here as a provisional 1:1; the
-    one round-1 act that can revoke a pairing now lives in
-    :func:`apply_pdf_similarity_revocation`, reading named evidence and owning its threshold.
-    What stays fused is the retrieval policy itself — the key, the aligner, and the positional
-    partner choice — which is slice 7's work.
+    **Retrieval only, and nothing is fused here any more.** Every aligned pair leaves as a
+    provisional 1:1: the one round-1 act that can revoke a pairing lives in
+    :func:`apply_pdf_similarity_revocation` (slice 5), and what was considered is materialised by
+    :func:`retrieve_pdf_round1_candidates`, which calls this (slice 7). This function is that
+    retriever's traversal and is not called from anywhere else.
+
+    The retrieval *policy* — the key, the aligner's ``autojunk=False``, and the positional
+    partner choice — is deliberately unchanged by either slice. Widening it is a matching-policy
+    experiment owing precision and recall evidence, not an extraction.
     """
     matcher = difflib.SequenceMatcher(
         a=[_block_key(b) for b in v1_blocks],

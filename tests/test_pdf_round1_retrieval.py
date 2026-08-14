@@ -33,15 +33,18 @@ import pytest
 from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
     BLOCK_KEY_ALIGNMENT,
+    PATH_ROUND,
     POSITIONAL_REPLACE,
+    PdfRound1StageOutputs,
     _AlignedPairing,
     _block_key,
     _round1_invocations,
+    diff_pdfs,
     pdf_round1_with_stage_outputs,
     pdf_similarity_correspondence_evidence,
     retrieve_pdf_round1_candidates,
 )
-from deltatrack.matching import NEW, OLD, CandidateSet, ObservationRef
+from deltatrack.matching import NEW, OLD, CandidateSet, ObservationRef, RetrieverInvocation
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from deltatrack.parsers.pdf_blocks import _Block, _flatten, _group_into_blocks, _IndexedLine
 from deltatrack.pdf_observations import PdfObservationRegistry
@@ -62,27 +65,56 @@ def _blocks(pdf: Path) -> list[_Block]:
 # --- The oracle: the legacy opcode walk, transcribed --------------------------------------
 
 
-def legacy_considered_pairs(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[tuple[int, int]]:
-    """Every (old index, new index) pair the pre-slice-7 aligner formed, in stream order.
+#: The two round-1 invocations, **stated here rather than imported from production**.
+#:
+#: ``ALIGNMENT``/``POSITIONAL`` above come from ``_round1_invocations()``, which makes them
+#: useless as an oracle for provenance: asking production what it recorded and then checking the
+#: answer against itself agrees whatever it recorded. These are written out independently, so a
+#: pair relabelled from ``positional_replace`` to ``block_key_alignment``, or a config that
+#: claims ``autojunk=True`` while the matcher actually ran with ``False``, is a disagreement
+#: rather than a matching pair of wrong values.
+#:
+#: The round is the literal 1 rather than ``PATH_ROUND`` for the same reason, with
+#: ``test_the_transcribed_round_number_matches_production`` pinning the two together — so a
+#: change to the constant reddens here instead of propagating into the expectation silently.
+EXPECTED_ALIGNMENT = RetrieverInvocation.of("block_key_alignment", round=1, autojunk=False)
+EXPECTED_POSITIONAL = RetrieverInvocation.of("positional_replace", round=1)
+
+
+def legacy_considered_pairs(
+    v1_blocks: list[_Block], v2_blocks: list[_Block]
+) -> list[tuple[int, int, RetrieverInvocation]]:
+    """Every pair the pre-slice-7 aligner formed, with the rule that formed it, in stream order.
 
     Transcribed from the opcode walk rather than imported: an oracle that asked
     ``retrieve_pdf_round1_candidates`` what it considered could not detect that what it considers
     changed, which is the one failure this slice can have.
+
+    **It returns provenance, not only membership.** Membership alone leaves a real false green:
+    relabel a pair the positional rule formed as ``block_key_alignment`` and the pairing stream,
+    the candidate set, admission and the canonical baseline all stay correct — the pairing and
+    the set simply agree on the same wrong attribution — while ``RetrieverInvocation`` has
+    stopped answering the question it exists for.
     """
     matcher = difflib.SequenceMatcher(
         a=[_block_key(b) for b in v1_blocks],
         b=[_block_key(b) for b in v2_blocks],
         autojunk=False,
     )
-    considered: list[tuple[int, int]] = []
+    considered: list[tuple[int, int, RetrieverInvocation]] = []
     for op, i1, i2, j1, j2 in matcher.get_opcodes():
         if op == "equal":
             for offset in range(min(i2 - i1, j2 - j1)):
-                considered.append((i1 + offset, j1 + offset))
+                considered.append((i1 + offset, j1 + offset, EXPECTED_ALIGNMENT))
         elif op == "replace":
             for k in range(min(i2 - i1, j2 - j1)):
-                considered.append((i1 + k, j1 + k))
+                considered.append((i1 + k, j1 + k, EXPECTED_POSITIONAL))
     return considered
+
+
+def test_the_transcribed_round_number_matches_production() -> None:
+    """The one production constant the expectations above inline, pinned rather than imported."""
+    assert PATH_ROUND == 1, "round 1 is no longer 1; the transcribed invocations above are stale"
 
 
 def test_the_corpus_pair_list_is_not_empty() -> None:
@@ -90,24 +122,37 @@ def test_the_corpus_pair_list_is_not_empty() -> None:
     assert len(_PAIRS) >= 20, f"only {len(_PAIRS)} adjacent PDF pairs discovered; the corpus holds more"
 
 
-# --- Membership equals the legacy considered population -----------------------------------
+# --- Membership AND provenance equal the legacy considered population ----------------------
+
+
+def _admitted_provenance(candidates) -> dict[tuple[int, int], frozenset[RetrieverInvocation]]:
+    """What the candidate set says: which invocations surfaced each ordinal pair."""
+    return {candidate.ordinal_pair: frozenset(candidate.invocations) for candidate in candidates.candidates()}
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize(("bill", "old_pdf", "new_pdf"), _PAIRS, ids=_PAIR_IDS)
-def test_candidate_membership_equals_the_legacy_considered_population(bill: str, old_pdf: Path, new_pdf: Path) -> None:
-    """Exactly the pairs the legacy aligner formed — no more, no fewer.
+def test_candidate_provenance_equals_the_legacy_considered_population(bill: str, old_pdf: Path, new_pdf: Path) -> None:
+    """Exactly the pairs the legacy aligner formed, each attributed to the rule that formed it.
 
-    ``CandidateSet`` membership is compared as a set of ordinal pairs against the transcribed
-    walk. Widening retrieval (a policy change slice 7 must not make) shows up here as extra
-    members; dropping the positional ``replace`` rule shows up as missing ones.
+    Membership alone is not enough, and that gap was a real false green. Relabelling a
+    positional pair as ``block_key_alignment`` leaves the pairing stream, the candidate set's
+    membership, admission and the canonical baseline all correct — the pairing and the set agree
+    on the same wrong attribution — while ``RetrieverInvocation`` stops answering the question it
+    exists for. So this compares the whole ``{pair: {invocations}}`` mapping against the
+    independently transcribed walk, which also catches a config that misreports ``autojunk``.
+
+    Widening retrieval shows up here as extra keys; dropping the positional rule as missing ones.
     """
     old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
     registry = PdfObservationRegistry(old_blocks, new_blocks)
     _pairings, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
 
-    admitted = {candidate.ordinal_pair for candidate in candidates.candidates()}
-    assert admitted == set(legacy_considered_pairs(old_blocks, new_blocks))
+    expected: dict[tuple[int, int], frozenset[RetrieverInvocation]] = {}
+    for old_ordinal, new_ordinal, invocation in legacy_considered_pairs(old_blocks, new_blocks):
+        expected[(old_ordinal, new_ordinal)] = frozenset({invocation})
+
+    assert _admitted_provenance(candidates) == expected
 
 
 @pytest.mark.slow
@@ -115,17 +160,29 @@ def test_candidate_membership_equals_the_legacy_considered_population(bill: str,
 def test_every_provisional_pairing_carries_its_retrievers_provenance(bill: str, old_pdf: Path, new_pdf: Path) -> None:
     """Each 1:1 names the rule that formed it, and each unmatched side names none.
 
-    The invocation is what makes the wrong-provenance refusal possible at all, so it has to be
-    populated on the real path rather than only in a fixture.
+    Checked against the independently transcribed expectation, pairing for pairing in stream
+    order, rather than against ``_round1_invocations()``. The earlier version asserted only that
+    the invocation was *one of the two production returned*, which agrees with production
+    whatever production recorded.
     """
     old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
     registry = PdfObservationRegistry(old_blocks, new_blocks)
     pairings, _candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
 
+    expected = legacy_considered_pairs(old_blocks, new_blocks)
+    aligned = [p for p in pairings if p.old is not None and p.new is not None]
+    assert len(aligned) == len(expected), f"{len(aligned)} aligned pairings against {len(expected)} expected"
+
+    for pairing, (old_ordinal, new_ordinal, invocation) in zip(aligned, expected):
+        assert registry.ref(OLD, pairing.old).ordinal == old_ordinal
+        assert registry.ref(NEW, pairing.new).ordinal == new_ordinal
+        assert pairing.invocation == invocation, (
+            f"pair ({old_ordinal}, {new_ordinal}) is attributed to {pairing.invocation}, but the "
+            f"transcribed opcode walk says {invocation} formed it"
+        )
+
     for pairing in pairings:
-        if pairing.old is not None and pairing.new is not None:
-            assert pairing.invocation in (ALIGNMENT, POSITIONAL), f"1:1 pairing carries {pairing.invocation}"
-        else:
+        if pairing.old is None or pairing.new is None:
             assert pairing.invocation is None, "an unmatched observation forms no pair and retrieves nothing"
 
 
@@ -312,22 +369,59 @@ def test_revoked_round_1_evidence_is_reachable_after_the_stage_completes() -> No
 
 
 @pytest.mark.slow
-def test_the_stage_outputs_reproduce_what_diff_pdfs_uses() -> None:
-    """The stage-output entry point is the implementation, not a parallel one.
+def test_diff_pdfs_consumes_the_stage_output_helper_rather_than_its_own_round_1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``pdf_round1_with_stage_outputs`` is the single implementation, proved by substitution.
 
-    ``diff_pdfs`` projects over ``pdf_round1_with_stage_outputs``; a second traversal would be a
-    second authority on candidate membership and order. Checked by rebuilding the post-revocation
-    stream from the stage outputs and comparing it against a fresh call.
+    The earlier version of this test called the helper twice and compared it with itself, which
+    is no control at all: ``diff_pdfs`` could inline an equivalent round 1, ignore the helper
+    entirely, and produce byte-identical canonical output while the stage-output API quietly
+    stopped being the implementation.
+
+    So this substitutes a **different** stage result and requires the diff to follow it. The
+    natural round 1 keeps one particular pairing as a surviving 1:1; the fake splits that pairing
+    into two unmatched observations, which no threshold or policy change would do. If
+    ``diff_pdfs`` builds its own round 1, the hunks come back matching the natural result and the
+    substitution goes unnoticed — which is exactly what this must refuse.
+
+    The call tripwire proves the helper was reached; the output comparison proves its return
+    value was used. Both halves are needed: a raise-only patch shows only the first.
     """
     _bill, old_pdf, new_pdf = _PAIRS[0]
-    old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
-    registry = PdfObservationRegistry(old_blocks, new_blocks)
+    v1_pages, v2_pages = cached_pages(old_pdf), cached_pages(new_pdf)
 
-    first = pdf_round1_with_stage_outputs(old_blocks, new_blocks, registry, threshold=SIMILARITY_THRESHOLD)
-    again = pdf_round1_with_stage_outputs(old_blocks, new_blocks, registry, threshold=SIMILARITY_THRESHOLD)
+    natural = diff_pdfs(v1_pages, v2_pages)
+    calls: list[int] = []
+    real = diff_pdf.pdf_round1_with_stage_outputs
 
-    assert [(p.old, p.new) for p in first.pairings] == [(p.old, p.new) for p in again.pairings]
-    assert first.evidence == again.evidence
-    assert {c.ordinal_pair for c in first.candidates.candidates()} == {
-        c.ordinal_pair for c in again.candidates.candidates()
-    }
+    def _substituted(v1_blocks, v2_blocks, registry, *, threshold):
+        calls.append(1)
+        outputs = real(v1_blocks, v2_blocks, registry, threshold=threshold)
+        split_at = next(
+            (i for i, p in enumerate(outputs.pairings) if p.old is not None and p.new is not None),
+            None,
+        )
+        assert split_at is not None, "this fixture must contain a surviving 1:1 to split"
+        victim = outputs.pairings[split_at]
+        mutated = (
+            *outputs.pairings[:split_at],
+            _AlignedPairing(victim.old, None),
+            _AlignedPairing(None, victim.new),
+            *outputs.pairings[split_at + 1 :],
+        )
+        return PdfRound1StageOutputs(
+            provisional=outputs.provisional,
+            candidates=outputs.candidates,
+            evidence=outputs.evidence,
+            pairings=mutated,
+        )
+
+    monkeypatch.setattr(diff_pdf, "pdf_round1_with_stage_outputs", _substituted)
+    substituted = diff_pdfs(v1_pages, v2_pages)
+
+    assert calls, "diff_pdfs never called pdf_round1_with_stage_outputs; it is running its own round 1"
+    assert substituted.hunks != natural.hunks, (
+        "diff_pdfs produced the natural result while the stage helper returned a different "
+        "pairing stream; the helper's return value is not what the diff is built from"
+    )
