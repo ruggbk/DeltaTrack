@@ -422,6 +422,27 @@ def part_handoff(root: Path) -> dict:
     # The literal R2-A4 mutation. Injected into `_control_record`, i.e. the canonical handoff
     # itself, NOT into a copy of its output -- a dict edited in the test would only prove that
     # the consumer dislikes a dict the test made up.
+    def g5_row() -> tuple[bool, str]:
+        """G5's own verdict AND its detail. The detail is what makes the mutation check honest.
+
+        Asserting only `G5 is red` would pass for ANY reason G5 can be red -- an uncommitted
+        surface file will do it -- so it would stay green if the handoff arm never fired at
+        all. The reason is therefore read, not just the boolean.
+        """
+        members = json.loads(X04.MEMBERSHIP.read_text())["members"]
+        row = next(r for r in X04.check_execution(members) if r[0].startswith("G5"))
+        return row[1], row[2]
+
+    # PAIRED READING, taken BEFORE the mutation: G5 must be GREEN here, or `red` below proves
+    # nothing about the injected fault.
+    g5_before, g5_before_detail = g5_row()
+    check(
+        "NON-VACUITY: G5 is GREEN on the repaired tree before the handoff fault is injected",
+        g5_before,
+        "G5 is already red, so the mutation below cannot be shown to have caused anything",
+        g5_before_detail,
+    )
+
     saved_record_fn = ES._control_record
     try:
         ES._control_record = lambda d: {"document": d.document_id, "pdf_path": d.pdf_path}
@@ -441,26 +462,27 @@ def part_handoff(root: Path) -> dict:
             not (root / "never.json").exists(),
             "a partial confirmatory artifact is left on disk by a failed handoff",
         )
-        # ...and the SAME mutation must turn READINESS red, not only this suite.
+        # ...and the SAME mutation must turn READINESS red, FOR THIS REASON, not only this suite.
         problems = ES.contract_report()
+        g5_after, g5_after_detail = g5_row()
         check(
-            "MUTATION delete document_sha256 from the canonical handoff -> G5 RED",
+            "MUTATION delete document_sha256 from the canonical handoff -> G5 RED, naming the handoff",
             any("REFUSED by its own consumer" in p for p in problems)
-            and any(
-                "G5" in r[0] and not r[1]
-                for r in X04.check_execution(json.loads(X04.MEMBERSHIP.read_text())["members"])
-            ),
+            and not g5_after
+            and "REFUSED by its own consumer" in g5_after_detail,
             "readiness stays GREEN while the canonical handoff cannot be consumed -- exactly the "
-            "state Run 1 was authorized in",
-            "; ".join(problems[:1]),
+            "state Run 1 was authorized in; or G5 is red for an unrelated reason and the handoff "
+            "arm never fired",
+            g5_after_detail,
         )
     finally:
         ES._control_record = saved_record_fn
+    g5_restored, g5_restored_detail = g5_row()
     check(
-        "NON-VACUITY: the handoff check is GREEN again once the producer is restored",
-        not ES.contract_report(),
+        "NON-VACUITY: the handoff check and G5 are GREEN again once the producer is restored",
+        not ES.contract_report() and g5_restored,
         "the check refuses the repaired handoff, which would make the mutation above meaningless",
-        "; ".join(ES.contract_report()[:1]),
+        g5_restored_detail,
     )
 
     # --- MUTATION B: a SUBSTITUTED but VALID SHA reaches the consumer ---------------------
