@@ -1,6 +1,6 @@
 {
  "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened by any extractor, nothing scored",
- "amendment": "A43",
+ "amendment": "A43 + A45",
  "canonical_frames_json_created": false,
  "holdout_extraction_performed": false,
  "development_documents": [
@@ -46,6 +46,22 @@
    "canonical_authority",
    "readback"
   ]
+ },
+ "handoff": {
+  "canonical_handoff_executes": true,
+  "record_fields": [
+   "document",
+   "document_sha256",
+   "pdf_path"
+  ],
+  "n_rows": 2,
+  "artifact_population": "NON-HOLDOUT (development / synthetic)",
+  "consumers_exercised": [
+   "cross_engine_control.write_cross_engine_control",
+   "s1_control.write_s1_control"
+  ],
+  "authority_gate": "cross_engine_control.assert_records_from_authority via execute_study.authority_index",
+  "canonical_records_accepted": 17
  },
  "authority": {
   "canonical_authority_verified_at": [
@@ -331,6 +347,174 @@
    "observed": "2 frames"
   },
   {
+   "check": "THE CANONICAL CALL RUNS: write_cross_engine_control(control_documents(pop)) -> artifact",
+   "ok": true,
+   "fails_when": "the canonical handoff raises, so no cross_engine_control.json exists and score_metrics has no cross-engine input -- the Run 1 failure",
+   "observed": "2 rows"
+  },
+  {
+   "check": "R2-A3: exactly one artifact row per canonical member, no omission, duplicate or extra",
+   "ok": true,
+   "fails_when": "the artifact's document set is not the population's -- score_metrics requires EXACT set equality with the scored frames, so a drift here moves the qualification denominator",
+   "observed": "['113-hr-3547', '118-hr-2882']"
+  },
+  {
+   "check": "R2-A2: every row's document_sha256 IS the canonical membership SHA",
+   "ok": true,
+   "fails_when": "the SHA reaching A39.2's page-sample identity is not the authority's, so the sampled pages are a different set for the same document -- silently and reproducibly",
+   "observed": ""
+  },
+  {
+   "check": "the probe stayed off the holdout: the artifact declares a NON-HOLDOUT population",
+   "ok": true,
+   "fails_when": "this control opened a confirmatory document",
+   "observed": "NON-HOLDOUT (development / synthetic)"
+  },
+  {
+   "check": "the SAME record also satisfies the OTHER consumer, write_s1_control",
+   "ok": true,
+   "fails_when": "control_documents' claim to serve S1 and cross-engine alike is false for one of them",
+   "observed": ""
+  },
+  {
+   "check": "NON-VACUITY: G5 is GREEN on the repaired tree before the handoff fault is injected",
+   "ok": true,
+   "fails_when": "G5 is already red, so the mutation below cannot be shown to have caused anything",
+   "observed": "all 15 result-bearing files committed; execution path live"
+  },
+  {
+   "check": "MUTATION delete document_sha256 from the canonical handoff -> the consumer REFUSES",
+   "ok": true,
+   "fails_when": "the producer may drop a result-bearing field its consumer requires and nothing notices until execution",
+   "observed": "DOCUMENT_RECORD_INCOMPLETE"
+  },
+  {
+   "check": "...and the refusal happens BEFORE any artifact is written",
+   "ok": true,
+   "fails_when": "a partial confirmatory artifact is left on disk by a failed handoff",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION delete document_sha256 from the canonical handoff -> G5 RED, naming the handoff",
+   "ok": true,
+   "fails_when": "readiness stays GREEN while the canonical handoff cannot be consumed -- exactly the state Run 1 was authorized in; or G5 is red for an unrelated reason and the handoff arm never fired",
+   "observed": "control_documents' record is REFUSED by its own consumer (cross_engine_control.document_inputs): CrossEngineError: DOCUMENT_RECORD_INCOMPLETE {'missing': ['document_sha256'], 'record_keys': ['document', 'pdf_path']}"
+  },
+  {
+   "check": "NON-VACUITY: the handoff check and G5 are GREEN again once the producer is restored",
+   "ok": true,
+   "fails_when": "the check refuses the repaired handoff, which would make the mutation above meaningless",
+   "observed": "all 15 result-bearing files committed; execution path live"
+  },
+  {
+   "check": "MUTATION substitute another member's SHA in the descriptor -> execute_study refuses",
+   "ok": true,
+   "fails_when": "a descriptor carrying another document's SHA is handed to the cross-engine producer",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "...and the WRITER refuses it too, at the authority gate, before any measurement",
+   "ok": true,
+   "fails_when": "a hand-assembled record carrying another member's SHA reaches the engines",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "...and INDEPENDENTLY, verified_sha256 still refuses the same swap at cross_engine_result",
+   "ok": true,
+   "fails_when": "the byte check was weakened or absorbed when the authority gate was added -- the two prove different facts and A45.6 may not cost us the older one",
+   "observed": "SOURCE_SHA256_MISMATCH"
+  },
+  {
+   "check": "MUTATION substitute another member's pdf_path in the descriptor -> execute_study refuses",
+   "ok": true,
+   "fails_when": "the cross-engine measurement is taken on the wrong document's bytes",
+   "observed": "DESCRIPTOR_METADATA_MISMATCH"
+  },
+  {
+   "check": "...and the WRITER refuses it too, at the authority gate, before any measurement",
+   "ok": true,
+   "fails_when": "a hand-assembled record pointing at another member's bytes reaches the engines",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "...and INDEPENDENTLY, verified_sha256 still refuses the same swap at cross_engine_result",
+   "ok": true,
+   "fails_when": "the byte check no longer sees a path pointing at different bytes than the recorded SHA",
+   "observed": "SOURCE_SHA256_MISMATCH"
+  },
+  {
+   "check": "MUTATION alter a source byte while keeping the recorded SHA -> the producer refuses",
+   "ok": true,
+   "fails_when": "hashing at load only proves what was true at load; a document swapped afterwards is measured anyway and the artifact reports the frozen SHA for mutated bytes",
+   "observed": "SOURCE_SHA256_MISMATCH"
+  },
+  {
+   "check": "the mutated source is restored byte-identically",
+   "ok": true,
+   "fails_when": "fault injection leaves the fixture modified",
+   "observed": ""
+  },
+  {
+   "check": "MUTATION omit one canonical member -> refused before the handoff is built",
+   "ok": true,
+   "fails_when": "a 1-of-2 cross-engine artifact is written and score_metrics' set-equality check is the only thing left standing between that and a moved qualification denominator",
+   "observed": "POPULATION_INCOMPLETE"
+  },
+  {
+   "check": "MUTATION duplicate one canonical member -> refused before the handoff is built",
+   "ok": true,
+   "fails_when": "one document is measured twice; a duplicate row is individually valid so no per-row check sees it",
+   "observed": "POPULATION_DUPLICATED"
+  },
+  {
+   "check": "MUTATION A's id + B's VALID path + B's VALID SHA -> RECORD_AUTHORITY_MISMATCH",
+   "ok": true,
+   "fails_when": "one member's qualification is measured on another member's pages and reported under the first member's name -- invisible to the byte check and to the scorer's set equality",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "...and NO canonical artifact was written by the refused call",
+   "ok": true,
+   "fails_when": "a substituted row is persisted before the refusal",
+   "observed": ""
+  },
+  {
+   "check": "...and the BYTE check accepts that very pair, so only the authority gate can have refused",
+   "ok": true,
+   "fails_when": "verified_sha256 also rejects this pair, so the control above does not isolate A45.6",
+   "observed": "verified_sha256(B.path, B.sha) -> accepted"
+  },
+  {
+   "check": "...and the gate refuses it directly, named, without going through the writer",
+   "ok": true,
+   "fails_when": "the refusal is a side effect of the writer rather than a stateable invariant",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "MUTATION a non-member id -> DOCUMENT_NOT_A_MEMBER, distinct from a field mismatch",
+   "ok": true,
+   "fails_when": "an outsider and a substituted member collapse to one refusal, hiding which happened",
+   "observed": "DOCUMENT_NOT_A_MEMBER"
+  },
+  {
+   "check": "MUTATION write the CANONICAL cross_engine_control.json against a synthetic membership -> refused",
+   "ok": true,
+   "fails_when": "a fixture population vouches for the canonical confirmatory artifact -- the A43.6 defect, in the writer A43.6 did not cover",
+   "observed": "NON_CANONICAL_AUTHORITY"
+  },
+  {
+   "check": "...and the canonical artifact still does not exist",
+   "ok": true,
+   "fails_when": "this probe created a canonical confirmatory artifact",
+   "observed": ""
+  },
+  {
+   "check": "POSITIVE: control_documents(canonical_population()) is ACCEPTED by the authority gate, for every frozen member",
+   "ok": true,
+   "fails_when": "the new gate refuses the real canonical composition, which would block Run 2 outright and make every refusal above meaningless",
+   "observed": "17 records accepted"
+  },
+  {
    "check": "NON-VACUITY: the clean committed authority is ACCEPTED by canonical_population",
    "ok": true,
    "fails_when": "the new check refuses the frozen authority, which would make the negative meaningless",
@@ -487,6 +671,6 @@
    "observed": ""
   }
  ],
- "n_checks": 68,
+ "n_checks": 96,
  "n_failed": 0
 }

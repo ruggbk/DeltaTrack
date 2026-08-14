@@ -5859,6 +5859,218 @@ metric or decision artifact exists.
 
 ---
 
+## A45 — SUBSTANTIVE. The canonical cross-engine handoff was not executable
+
+```json
+{"id": "A45", "class": "SUBSTANTIVE",
+ "commits": ["9817dcc", "5a3bfc7", "810af58"],
+ "confirmatory_output_at_time": "none",
+ "affects_membership": false, "affects_scoring_rule": false,
+ "files_touched": ["probes/execute_study.py", "probes/cross_engine_control.py",
+                   "probes/x29_execute_study.py"],
+ "supersedes_text_in": "none -- NO previously frozen rule changes. A39.2's sample fraction, deterministic ranking, page denominator, 0.95 document and 0.75 page thresholds, qualification wording and non-decision-blocking status are untouched, as are membership, every frame rule, every metric and the architecture rules. What changes is that the already-frozen A39.2 measurement can be produced at all",
+ "status": "IMPLEMENTATION COMPLETE. x29 96/96, SYNTHETIC + DEVELOPMENT. Boundary ABSENT, execution FORBIDDEN"}
+```
+
+**Why `affects_scoring_rule` is `false` while this is SUBSTANTIVE.** Nothing here computes,
+weights or thresholds anything, and A39.2's rule still has exactly one owner in `X09.gate`. But
+the field this adds is **result-bearing**, so the TOOLING test — *"must state the evidence that
+it cannot change a score"* — cannot be met: A39.2 ranks the cross-engine page sample over
+`(document_sha256, page_number)`, so the value handed over **selects which pages are measured**.
+A45 takes the same reading A43 took for the same reason: *the rules were already frozen; what was
+missing was a component able to execute them.*
+
+### A45.1 — the producer and its consumer disagreed about the record
+
+The canonical A39.2 call is
+
+```
+write_cross_engine_control(control_documents(population))
+```
+
+`execute_study.control_documents` returned `{"document", "pdf_path"}`.
+`cross_engine_control.write_cross_engine_control` reads `{"document", "document_sha256",
+"pdf_path"}`. Reproduced on a SYNTHETIC population over DEVELOPMENT documents, with the
+execution boundary ABSENT:
+
+```
+PRODUCER   control_documents            -> keys ['document', 'pdf_path']
+CONSUMER   write_cross_engine_control   -> cross_engine_result(doc['document'],
+                                              doc['document_sha256'], Path(doc['pdf_path']))
+MEASURED   KeyError('document_sha256')  -- artifact written? False
+```
+
+**The consequence.** `results/cross_engine_control.json` is a **mandatory `score_metrics`
+input** — `validate_inputs` requires `per_document` and enforces exact set equality between its
+document set and the scored frames — and it is the **only** source of the PDFIUM-CONDITIONED
+FRAME qualification. The canonical path could not produce it, so the study failed closed on the
+first confirmatory artifact it tried to write after extraction had already run.
+
+**Failing closed is the correct behaviour and is not the defect.** The defect is that the
+mismatch was **not detectable before authorization**.
+
+### A45.2 — the repair keeps the authority where A43 put it
+
+The field is read from the **same authority-checked `DocumentDescriptor`** as every other field
+in the record, in a `_control_record` function that `control_documents` maps over the
+population. `DocumentDescriptor.sha256` is computed by `load_population` from the file it
+resolved, and `assert_population_complete` — which `control_documents` calls before building
+anything — has just compared it against the authority's own record. So the SHA that reaches
+A39.2 is the canonical membership SHA, not a second opinion about the document.
+
+**Repairing this at the caller was explicitly rejected.** A hand-assembled list at the call site
+would reintroduce precisely the caller-supplied descriptor freedom A43 removed: a result-bearing
+producer may not depend on a human remembering which metadata its consumer happens to need, and
+that dependency is what failed here.
+
+**The producer's own verification is untouched.** `verified_sha256` still hashes the source bytes
+and refuses `SOURCE_SHA256_MISMATCH`. An upstream field arriving from the authority is a reason
+to trust it *less* casually, not more: the two checks compare against **different things** — the
+descriptor against the *authority*, the record against the *bytes* — so neither can stand in for
+the other, and A45.4 exercises both.
+
+### A45.3 — why readiness could not see it, and what now can
+
+G5 asked whether each result-bearing component **exists**, is **committed**, and whether
+`execute_study` still has its **required callables**. All of that was true. Existence and
+callability are properties of each side **alone**; compatibility is a property of the **pair**,
+and no component held it. That is the general form of the gap:
+
+> A gate that checks both ends of a handover separately cannot see a handover that does not join.
+
+Two things now close it, at their own layers:
+
+| layer | what it proves | how the mutation is caught |
+|---|---|---|
+| `cross_engine_control.document_inputs` | the consumer's read of a record, **callable without measuring** | the writer calls it on every record; a missing field is `DOCUMENT_RECORD_INCOMPLETE`, not a raw `KeyError` |
+| `execute_study.handoff_report` → G5 | the **real** `_control_record` is accepted by the **real** `document_inputs` | dropping the field from the canonical handoff turns **G5 RED** |
+
+**This is deliberately not a field-name comparison.** Neither side reads a shared declaration:
+the producer defines the record by constructing it and the consumer defines the requirement by
+which keys it reads, so the two can only agree by **actually agreeing**. `document_inputs` is
+also the **only** place the writer reads the measurement arguments from a record, so the
+requirement cannot drift from the use.
+
+**Nothing is opened and nothing is measured** by the gate. `execution_path_report`'s standing
+property that it never opens a PDF or reads the holdout is preserved: the handoff probe is a
+descriptor-shaped stand-in naming a file that does not exist, it never enters a population, and
+`document_inputs` only reads keys. **The guard order in the writer is unchanged** —
+`assert_source_permitted` still runs first, on the same fields, which is the same ordering ruling
+`execute_study.build_document_frame_for` records.
+
+### A45.4 — the falsification, executed
+
+`x29.part_handoff` runs the **real** producer into the **real** consumers on a SYNTHETIC
+population over DEVELOPMENT documents. The artifact's own `population` field is asserted to read
+`NON-HOLDOUT (development / synthetic)`, so the control cannot have touched a frozen member.
+
+| mutation | owner of the refusal | observed |
+|---|---|---|
+| *(none — the exact canonical descriptor set)* | — | **accepted**: artifact written, one row per member, every row's SHA equal to the authority's |
+| delete `document_sha256` from `_control_record` | `cross_engine_control.document_inputs` | `DOCUMENT_RECORD_INCOMPLETE`, **no artifact written**, and **G5 RED** |
+| substitute another member's SHA in the descriptor | `execute_study.assert_population_complete` | `DESCRIPTOR_METADATA_MISMATCH` |
+| ...the same swap, handed straight to the consumer | `cross_engine_control.verified_sha256` | `SOURCE_SHA256_MISMATCH` |
+| substitute another member's `pdf_path` | `execute_study.assert_population_complete` | `DESCRIPTOR_METADATA_MISMATCH` |
+| ...the same swap, handed straight to the consumer | `cross_engine_control.verified_sha256` | `SOURCE_SHA256_MISMATCH` |
+| alter a source byte, keep the recorded SHA | `cross_engine_control.verified_sha256` | `SOURCE_SHA256_MISMATCH` — `execute_study` **cannot** see this, having hashed at load |
+| omit one canonical member | `execute_study.assert_population_complete` | `POPULATION_INCOMPLETE`, before the handoff is built |
+| duplicate one canonical member | `execute_study.assert_population_complete` | `POPULATION_DUPLICATED`, before the handoff is built |
+
+The deletion mutation is injected into **`_control_record` itself**, not into a copy of its
+output: editing a dict inside the control would only prove that the consumer dislikes a dict the
+control made up. **Non-vacuity is established in both directions** — the unmutated handoff is
+accepted, and the handoff check is green again once the producer is restored.
+
+**The G5 arm reads the REASON, not the boolean, and the first spelling did not.** Asserting only
+*"G5 is RED while the fault is injected"* passes for **any** reason G5 can be red — an
+uncommitted surface file will do it — so the control would have been satisfied on a tree where
+the handoff arm never fired at all. That is not hypothetical: on the pre-commit run it passed
+while G5 was red for `MISSING 2/15: probes/cross_engine_control.py, probes/execute_study.py`.
+The control now takes a **paired reading** — G5 GREEN before the fault, RED *with a detail naming
+`REFUSED by its own consumer`* during it, GREEN again after — so a G5 that is red for an
+unrelated reason **fails** the control instead of satisfying it.
+
+The same record is also required to satisfy **`write_s1_control`**, which is the other consumer
+`control_documents` claims to serve and whose subset requirement was the reason the gap was
+survivable in one direction only.
+
+### A45.5 — what this deliberately does NOT do
+
+No threshold, fraction, denominator, ranking, metric, adjudication route or decision rule moves.
+`holdout_membership.json` is unmodified and membership is unchanged at 17. No canonical
+`frames.json`, `cross_engine_control.json`, oracle, key, adjudication, metric or decision
+artifact is created — the only cross-engine artifacts this work produced live in a per-run
+temporary directory over DEVELOPMENT documents. **No holdout document was opened by any
+extractor.** The boundary remains **ABSENT** and execution remains **FORBIDDEN**; nothing here
+authorizes anything.
+
+Three items found alongside this one are **deliberately left open**, because each is a separate
+decision with its own failure modes and none belongs in a handoff repair: the `frames.json`
+storage representation, whether the optional `dframe-descriptive` sampling is worth retaining and
+who would own it, and A38.2's unrounded per-glyph persisted representation.
+
+### A45.6 — the writer accepted a substituted tuple, and that was a caller obligation
+
+*Added at `810af58`, after A45.1–A45.5 had landed. A45 originally reported this as a residual
+risk; review ruled it a blocker, and the ruling was right — reproducing it showed it moves a
+reported qualification.*
+
+A45.2 argued that the canonical caller derives every field from the authority. **That is a
+property of the caller, not a gate on the writer**, and the difference is measurable.
+`write_cross_engine_control` accepted a hand-assembled record carrying member **A's id** with
+member **B's valid path** and **B's valid SHA**. Measured on SYNTHETIC/DEVELOPMENT material,
+boundary ABSENT:
+
+```
+record    {document: A, pdf_path: <B>, document_sha256: <B's sha>}
+result    ACCEPTED -- artifact written
+row       document = A,  document_sha256 = B's,  sampled_pages = [2],  pass = True
+A's own   measurement                            sampled_pages = [1],  pass = False
+```
+
+**The artifact reported B's verdict under A's name, and the direction matters**: A's own
+measurement FAILS the frozen gate, so the substituted row **withheld an earned
+`PDFIUM-CONDITIONED FRAME` qualification**. This is a reporting outcome the study exists to
+produce, moved by a record nothing validated.
+
+**Why every existing check was silent.** `verified_sha256` passes — B's SHA genuinely is B's
+bytes, which is the whole point of the pair. `score_metrics`' exact set-equality check passes —
+A's id **is** present, so `CROSS_ENGINE_DOCUMENT_MISSING`, `_EXTRA` and `_DUPLICATE` never fire.
+`assert_source_permitted` passes — both are permitted material. The row is internally consistent
+and describes the wrong document.
+
+**The repair is a gate, not a stronger caller.** `assert_records_from_authority` requires each
+record's **id, path and SHA to JOINTLY describe one member**, and runs over **all** records
+**before any is measured**, so a substituted tuple cannot reach an extractor at all. Refusals are
+distinguished — `DOCUMENT_NOT_A_MEMBER` for an outsider, `RECORD_AUTHORITY_MISMATCH` for a
+substituted field — because collapsing them would hide which happened.
+
+**No second authority is created.** The id → record mapping is `execute_study.authority_index`,
+the same function `assert_population_complete` and `load_frames` already compare against, and
+`assert_canonical_authority` (A43.8) is reused so a drifted authority is not trusted. The
+`membership_path` fixture seam mirrors `execute_study`'s and, per A43.6's pairing rule, may not
+be combined with the canonical `out_path` — a canonical artifact vouched for by a fixture is
+refused with `NON_CANONICAL_AUTHORITY`.
+
+**`verified_sha256` is untouched and deliberately not duplicated.** The two checks prove
+different facts and each catches a class the other cannot:
+
+| injected fault | authority gate | byte check |
+|---|---|---|
+| bytes changed, recorded SHA kept | **passes** — the record still describes its member | **refuses** `SOURCE_SHA256_MISMATCH` |
+| A's id + B's valid path + B's valid SHA | **refuses** `RECORD_AUTHORITY_MISMATCH` | **passes** — the bytes really do match |
+
+That second row is also the **isolation proof** for the new control: the byte check is measured
+accepting the very pair the writer refuses, so the refusal cannot be attributed to it. Both
+directions are exercised through the real writer.
+
+**The positive control is the real canonical composition.**
+`control_documents(canonical_population())` is checked against the real committed authority by
+the real gate and **all 17 frozen members are accepted** — pre-boundary, with no extractor
+opening any document and nothing measured, since the gate reads keys only.
+
+---
+
 ## A18 — the commit ↔ file accounting of record
 
 ```json
