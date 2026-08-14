@@ -1,9 +1,20 @@
 # Round-One Matching Audit
 
-**ADR 0020 · Phase 1 · Investigation report**
+**ADR 0020 · Phase 1 · retained measurements**
 
-What is left fused in `match_nodes` after PR #623, which ADR 0020 stage each rule belongs to,
-and the smallest sequence of changes that separates them without moving a single canonical byte.
+The measurements the round-1 separation was decided on, kept after the work closed. **Everything
+still here earns its place under one of four tests** — it reproduces a consequential result, is a
+frozen input, records a durable decision, or maps a retired artifact to the executable invariant
+that inherited its question. The investigation itself (the pre-work source survey, the pipeline
+walkthrough, the rule-by-rule stage map, the proposed signatures, the oracle design, the slice
+plan and the resolved blockers) was working material and was removed at closure; it is readable in
+full at `7fdbf62`, and git history holds the rest.
+
+Read this for *why a number is what it is*. For the architecture, read
+[ADR 0020](../../decisions/0020-matching-stages.md) and
+[docs/architecture.md](../../architecture.md); the invariants are enforced by
+`tests/test_round1_preservation.py`, not here. Section numbers are the originals, so the
+surviving cross-references and any external citation still resolve.
 
 | | |
 |---|---|
@@ -38,129 +49,6 @@ and the smallest sequence of changes that separates them without moving a single
 
 4. **No STOP condition fired.** Existing contracts express the behaviour with *one* new evidence
    signal. One vocabulary gap is flagged, not a policy conflict.
-
----
-
-## 1. Verified source state
-
-PR #623 was still in the merge queue when this investigation began; it merged at 19:36:40Z on
-2026-08-12. Every measurement below was re-run against the post-merge commit and reproduced
-identically, so the numbers belong to `0ff0eb1e` and not to the branch point.
-
-| Item | Value |
-|---|---|
-| `origin/develop` head | `0ff0eb1e016c0515b7e7251a635f7ecb3f1ecb3a` — 2026-08-12 19:31:07 +0000 |
-| #623 final merge commit | `0ff0eb1e` (the merge itself). Carries `6e2964f`, `c317abb`, `8ace371`. |
-| Worktree | `.claude/worktrees/adr0020-round1-audit`, branch `worktree-adr0020-round1-audit`, hard-reset to `0ff0eb1e`, clean |
-| Test state at this SHA | 186 passed, 1 skipped (`UPDATE_BASELINE` mode), rc=0 — canonical baseline, assignment/classification boundary, matching contracts, diff_bill |
-| Canonical gate | 27 SHA-256 digests in `tests/data/canonical_baseline.json` |
-
-### What #623 changed, and what it did not
-
-#623 touched 9 files. In `src/deltatrack/diff_bill.py` the diff is confined to the
-similarity-revocation region, which it replaced with a named evidence stage and an assignment
-owner. **It did not touch `match_nodes`, `_match_collision_group` or `_similarity_pair`.** Those
-three are byte-identical to their pre-#623 form, which is why the pre-merge measurements
-reproduced exactly.
-
-| Function | Line | Role after #623 |
-|---|---:|---|
-| `_similarity_pair` | 202 | **fused** — greedy claim, untouched by #623 |
-| `_match_collision_group` | 249 | **fused** — division subgrouping + cross fallback, untouched |
-| `match_nodes` | 340 | **fused** — path grouping + unique-path selection, untouched |
-| `_similarity_signals` | 617 | new in #623 — the two signals, computed conditionally |
-| `similarity_correspondence_evidence` | 646 | new — EVIDENCE for every 1:1 pairing |
-| `_evidence_by_link` | 682 | new — addresses evidence by `ObservationRef` pair, never by position |
-| `_similarity_rule_keeps` | 706 | new — ASSIGNMENT, owns the threshold |
-| `apply_similarity_assignment_rule` | 745 | new — replaces `apply_similarity_revocation` |
-| `_greedy_move_links` | 891 | round 2 — the pattern round 1 should copy |
-| `settle_correspondences` | 951 | now takes keyword-only `round1_evidence` |
-
-### Three precedents #623 sets that this work should reuse rather than re-litigate
-
-- **A round-1 similarity ratio is natively evidence**, not a promoted retrieval score — "the ratio
-  is computed for the express purpose of deciding the pairing". `WORD_OVERLAP` is now shared by
-  both rounds because it is one quantity by one measure.
-- **An uncomputed signal is absent, not `None`.** `Scalar` admits `None`, so omitting the name is
-  what keeps "not computed" distinguishable from "computed as null" through `.names`. The
-  conditional shape is preserved deliberately: computing unconditionally would skip nothing on
-  13,866 of 15,034 path-matched pairings and cost a measured +21% on `diff_bills`.
-- **The stage triple has a shape**: `X_correspondence_evidence(pairs, registry)` →
-  `_X_rule_keeps(evidence, threshold)` → `apply_X_assignment_rule(pairs, evidence, registry, *, threshold)`,
-  with the legacy ordering key held privately inside the assigner. Round 1 should be written
-  against this shape, not a new one.
-
----
-
-## 2. Current pipeline
-
-Round 1 is not one retrieval followed by one assignment. It is a structural grouping, then *two*
-retrieval/assignment rounds nested inside each collision group, then a single revocation rule
-applied across the whole stream. The nesting is what the separation has to reproduce.
-
-```
-ROUND 1a — inside each match_path collision group
-  RETRIEVAL    division_key subgroups; old x new within each
-       |
-  EVIDENCE     text_similarity per pair, skipped entirely on 1x1
-       |
-  ASSIGNMENT   greedy on (sim, oi, ni) descending, exclusive both sides
-
-ROUND 1b — cross-division fallback, same group
-  RETRIEVAL    leftovers from 1a  U  one-sided divisions
-               gated on both sides non-empty
-       |       ^-- population depends on round 1a's SELECTIONS
-       |           (the dependency this report is about)
-  EVIDENCE     text_similarity, recomputed
-       |
-  ASSIGNMENT   same greedy, NEW local index space
-
-ACROSS THE WHOLE STREAM — migrated by #623
-  EVIDENCE     similarity_correspondence_evidence: body_unchanged + word_overlap
-       |
-  ASSIGNMENT   apply_similarity_assignment_rule — may revoke a 1a or 1b selection
-       |
-  PRESERVATION emission order: group order, then
-               matched-within / matched-cross / left-old / left-new
-```
-
-> **Ordering consequence.** The revocation in the third band applies to selections made in the
-> first two. So a round-1a selection is *provisional* at the moment round 1b consults it — it is
-> not settled `Correspondence`, and `CorrespondenceSet` has no operation that could later revise
-> it. Nothing settles until `settle_correspondences`, after round 2. §14 treats this as a
-> vocabulary gap rather than a policy conflict.
-
----
-
-## 3. Rule-by-rule classification
-
-Every branch and rule inside the three functions, classified by what it *does* rather than where
-it sits. The test applied throughout: does this rule exclude a pairing from consideration
-(retrieval), describe a pairing without deciding (evidence), or declare that two observations
-correspond (assignment)?
-
-| # | Rule | Stage | Why this stage, not where it lives |
-|---:|---|---|---|
-| 1 | `match_path` grouping | RETRIEVAL | It decides what can *ever* be compared: a node whose counterpart sits at another path is never scored because no pair is formed. It never declares correspondence — a 1-old/1-new group still needs something to select it. This is the ADR's own example of implicit retrieval. |
-| 2 | Unique-path 1×1 direct pairing | ASSIGNMENT + preservation | Selecting the pair *is* a correspondence declaration, unthresholded and unconditional (invariant 6). But the *fast path* carrying it is measured redundant: routing these groups through `_match_collision_group` gives an identical stream on 27/27 pairs, including all 730 whose nodes are in different divisions. So the decision is assignment; the shortcut is preservation-only machinery worth 1.62×. |
-| 3 | One-sided unique-path output | PRESERVATION | Not a settled 1:0 or 0:1 and must not become one — round 2 may still pair the observation elsewhere. Current code is already correct here: nothing settles before `settle_correspondences`. Its only roles are stream position and membership in the next round's retrieval population. |
-| 4 | `division_key` subgrouping | RETRIEVAL | Pure structural bounding of consideration. It removes 1,852 pairs from the population that path grouping admitted and says nothing about whether the survivors correspond. Textbook retrieval policy under the ADR's "may bound" clause. |
-| 5 | Within-division candidate formation | RETRIEVAL | The full cross product of `div_old × div_new`. This is the candidate population of round 1a, and it is exactly what a `CandidateSet` would hold. |
-| 6 | 1×1 shortcut inside `_similarity_pair` | ASSIGNMENT + preservation | Selecting the sole candidate is assignment, and it is behaviourally identical to running the greedy over a one-candidate list — the greedy always claims it. The shortcut's real effect is that *no similarity is computed* on 593 invocations. That is a performance fact, and it forces the evidence design in §6. |
-| 7 | Pairwise `text_similarity` | EVIDENCE | A described quantity, not a verdict. #623 already ruled that a round-1 ratio is natively evidence rather than a promoted retrieval score, and named it `WORD_OVERLAP`. Reuse the name; it is one quantity by one measure. |
-| 8 | Descending `(similarity, oi, ni)` ordering | ASSIGNMENT + preservation | Competition policy, and live rather than incidental: 157 of 329 greedy invocations contain a similarity tie, and flipping the tiebreak to ascending changes the selected set on 97 of them. The `(oi, ni)` half is preservation-only machinery — it must be reconstructed explicitly and must not leave the assigner, exactly as `_greedy_move_links` keeps `(ri, ai)` private. |
-| 9 | Greedy old/new exclusivity | ASSIGNMENT | The competition rule itself. Note a structural property worth relying on: because every old × new pair inside an invocation is a candidate, the greedy always saturates — 0 of 329 invocations leave an observation unclaimed on the smaller side. Leftovers are pure size imbalance and always on one side per invocation. |
-| 10 | Within-division leftovers | PRESERVATION | Not correspondence of any kind. Their sole function is to be the retrieval population of round 1b, in a specific order. Their order is what makes the round-1b index space, so it is load-bearing. |
-| 11 | Cross-division fallback eligibility | RETRIEVAL *(assignment-conditioned)* | `if unmatched_old and unmatched_new` gates whether round 1b runs. It reads round 1a's *selections*, never round 1a's evidence, so it satisfies invariant 4 and the multi-round clause. §4 is entirely about this row. |
-| 12 | Cross-division candidate formation | RETRIEVAL | Round 1b's population: the concatenated leftovers, cross-producted. A second retriever invocation under a different configuration, in the ADR's sense. |
-| 13 | Cross-division greedy competition | ASSIGNMENT | Identical rule to row 8 over a different population and a *different local index space*. One implementation can serve both rounds; the index space must be rebuilt per invocation, not carried. |
-| 14 | Final leftovers | PRESERVATION | Unmatched observations, unsettled, feeding round 2. Their emission order (all old, then all new) is canonical output. |
-| 15 | Output / emission ordering | PRESERVATION | Composed of three orderings: `match_path` group first-appearance order; then within a group, matched-within-division (in division first-appearance order) ++ matched-cross ++ leftover-old ++ leftover-new. **Not derivable from ordinals** — `probe_ordinal_loss` shows the stream is out of parser order on 10 of 27 pairs for old nodes and 22 of 27 for new. It must be reconstructed, never inferred. |
-
-**Nothing classified as mixed or unresolved.** Every rule resolved to a stage. Three carry a
-second *preservation* tag because a real decision and a real piece of order-machinery are
-currently expressed by the same code — rows 2, 6 and 8. Those three are where the separation has
-to be careful; the rest are mechanical.
 
 ---
 
@@ -223,7 +111,10 @@ Never, in round 1 — and that is correct. A round-1a selection can still be rev
 `apply_similarity_assignment_rule`, and `CorrespondenceSet` refuses to revise a settled
 observation (already demonstrated by `probe_correspondence_revision.py`). So round 1b conditions
 on a *provisional selection*, which the ADR's phrase "Correspondence settled by an earlier round"
-does not literally cover. Treated in §14.
+does not literally cover. Reviewed 2026-08-12 and accepted as a wording gap rather than a policy
+conflict: no ADR amendment is required, round 1b consumes the ordered unclaimed population, and
+nothing creates settled `Correspondence` early. The prohibition ADR 0020 actually imposes is on
+consuming correspondence *evidence*, and round 1b consumes none.
 
 ---
 
@@ -288,172 +179,8 @@ removed in B4 and is readable at `7fdbf62`.
   stage boundary, following the precedent already set for `(ri, ai)`.
 - **Does materialising candidates change downstream pairing-stream order?** No, provided emission
   order is reconstructed separately. Emission order is a function of group iteration and the
-  four-phase append pattern, not of the candidate set — and it is not recoverable from ordinals
-  (§3 row 15).
-
----
-
-## 6. Evidence vocabulary
-
-The instruction was to identify what evidence actually selected each assignment act, and not to
-invent evidence merely because a value is available. Applying that strictly leaves **one** new
-signal.
-
-| Signal | Status | Describes or decides? | Already computed? | Needed by assignment? |
-|---|---|---|---|---|
-| `word_overlap` (float) | exists | Describes. One quantity, one measure, shared with round 2. | Yes, on 1,108 of the pairs formed | Yes — the greedy sorts on it |
-| `body_unchanged` (bool) | exists | Describes what `diff_text` produced. | Yes, by #623 | By the revocation rule only, not by the greedy |
-| `sole_candidate` (bool) | **new — the only addition** | Describes a structural fact about the candidate's group: it is the only member. It does not say the pair corresponds; assignment reads it as grounds to select without a ratio. | No — it is what licenses *not* computing the ratio | Yes — it is the whole content of the 1×1 shortcut, currently implicit in control flow |
-
-### Signals deliberately not added
-
-- **`same_match_path`** — constant `True` for every round-1 candidate, because path grouping is
-  what formed the candidate. Zero discriminating power; it is a retrieval fact, and recording it
-  as evidence would be exactly the "invented because a value is available" case the ADR warns
-  about.
-- **`same_division_key`** — constant `True` across round 1a and constant `False` across round 1b.
-  It restates which retriever invocation proposed the candidate, which `Proposal.invocation`
-  already records as provenance. Adding it would duplicate provenance as evidence and invite
-  assignment to read retriever identity as support, which "proposals are provenance, not votes"
-  forbids.
-
-**Contract sufficiency.** `CorrespondenceEvidence` represents all three signals with no change:
-they are named scalars, booleans are explicitly welcome, and the absent-not-`None` convention for
-`word_overlap` is already established. **No new shared contract is required.** Growing the
-vocabulary means adding a signal, never a field — and this adds one.
-
-### Why conditional computation must survive
-
-593 of 922 invocations take the 1×1 shortcut and compute no ratio. Emitting evidence for those
-links with `sole_candidate=True` and `word_overlap` absent preserves the exact set of
-`text_similarity` calls the engine makes today. Computing the ratio unconditionally would be a
-behaviour change dressed as a refactor — the same argument #623 made when it measured +21% for the
-equivalent tidying, and rejected it.
-
----
-
-## 7. Proposed stage signatures
-
-Written against #623's shape so round 1 and round 2 read the same way. Names follow ADR 0021: each
-names the job it performs, and none claims coverage it does not have.
-
-```python
-# ---- RETRIEVAL, round 1a -------------------------------------------------
-def retrieve_division_candidates(
-    group: PathGroup, registry: ObservationRegistry
-) -> tuple[GroupRetrieval, ...]:
-    """One GroupRetrieval per division present on both sides.
-
-    GroupRetrieval carries the ORDERED old/new Observation tuples (the index
-    space assignment will rebuild) and a CandidateSet holding their cross
-    product under RetrieverInvocation.of("path_division", round=PATH_ROUND).
-    """
-
-# ---- RETRIEVAL, round 1b -------------------------------------------------
-def retrieve_cross_division_candidates(
-    leftovers: GroupLeftovers, registry: ObservationRegistry
-) -> GroupRetrieval | None:
-    """None when either side is empty -- the eligibility gate, made explicit.
-
-    `leftovers` is ORDERED: within-division leftovers in division
-    first-appearance order, then one-sided divisions. That order IS round 1b's
-    index space; it is not recoverable from ObservationRef ordinals.
-    """
-
-# ---- CORRESPONDENCE EVIDENCE (shared by 1a and 1b) -----------------------
-def group_correspondence_evidence(
-    retrieval: GroupRetrieval,
-) -> tuple[CorrespondenceEvidence, ...]:
-    """sole_candidate=True with word_overlap ABSENT for a 1x1 population;
-    otherwise sole_candidate=False and word_overlap for every candidate.
-    Preserves today's exact set of text_similarity calls."""
-
-# ---- ASSIGNMENT (shared by 1a and 1b) ------------------------------------
-def assign_group(
-    retrieval: GroupRetrieval,
-    evidence: tuple[CorrespondenceEvidence, ...],
-) -> GroupAssignment:
-    """Greedy, exclusive on both sides, unthresholded.
-
-    Sorts on (word_overlap, oi, ni) DESCENDING, where (oi, ni) are positions in
-    `retrieval`'s ordered tuples, rebuilt here and NEVER leaving this function
-    -- the rule _greedy_move_links already follows for (ri, ai).
-
-    A sole_candidate population selects without reading word_overlap, which is
-    why the signal is absent rather than None.
-
-    Returns selected links in greedy order plus leftovers in ascending local
-    position -- both are canonical output.
-    """
-```
-
-**Why `GroupRetrieval` rather than a bare `CandidateSet`:** the assigner needs the ordered
-observation tuples to rebuild its index space, and `CandidateSet` deliberately does not carry
-order (§5: using its order changes 174/329). Bundling the population with its candidates is what
-keeps the ordering contract explicit instead of reconstructed by convention. This mirrors
-`UnmatchedPopulation`, which exists for precisely this reason in round 2.
-
-**Does `Proposal` need rank or score?** No. Round-1 retrieval is structural — it emits membership
-and provenance. A proposal with null rank and score is fully valid and is the honest
-representation; inventing a score here would be the ADR's named anti-pattern. The similarity ratio
-is evidence, not a retrieval score, per #623.
-
----
-
-## 8. Preservation oracle design
-
-The existing canonical gate (27 digests) is necessary and badly insufficient here: it observes
-only the final bytes, and §4 shows one whole behaviour it structurally cannot see. The oracle must
-be independent of the new production stages — it transcribes the *old* rule rather than calling
-the new helper.
-
-| # | Pinned quantity | Identity bridge | Source |
-|---:|---|---|---|
-| 1 | `match_nodes` pairing stream by observation identity | `ObservationRef` | corpus |
-| 2 | Stream *order*, as an ordered sequence | position + `ObservationRef` | corpus |
-| 3 | Unique-path direct selections | `ObservationRef` | corpus |
-| 4 | Every `_similarity_pair` invocation population, in order | ordered `ObservationRef` tuples | corpus |
-| 5a | Candidate identities per invocation | `ObservationRef` pairs | corpus |
-| 5b | Exact similarity values where computed | float, exact equality | corpus |
-| 5c | The `(similarity, oi, ni)` sort key | **local positions, kept separately** | corpus |
-| 5d | Selected links, in greedy order | ordered `ObservationRef` pairs | corpus |
-| 5e | Leftovers, in order | ordered `ObservationRef` | corpus |
-| 6 | Division-round selections | `ObservationRef` | corpus |
-| 7 | Exact observations entering the cross-division fallback | ordered `ObservationRef` | **corpus + synthetic** |
-| 8 | Cross-division candidates and selections | `ObservationRef` | **corpus + synthetic** |
-| 9 | Provisional stream before the similarity rule | ordered `ObservationRef` | corpus |
-| 10 | Post-rule stream | ordered `ObservationRef` | corpus |
-| 11 | Ordered round-2 unmatched population | `UnmatchedPopulation` | corpus, already gated |
-| 12 | Selected round-2 moves and order | `Correspondence` | corpus, already gated |
-| 13 | All 27 canonical digests | SHA-256 | corpus, already gated |
-
-### Two rules the oracle must follow
-
-- **Local positions are pinned as local positions.** Rows 5c and 7 must record the legacy index
-  space directly, not re-derive it from ordinals. §5 shows the two agree on this corpus and
-  diverge on constructible input; an oracle that pinned ordinals would be pinning the wrong thing
-  while looking rigorous.
-- **The oracle must not call the new production stages.** It wraps the pre-change
-  `_similarity_pair` / `_match_collision_group` by monkeypatch and records what production
-  computes. The probes written for this audit already do exactly that and can be promoted (§11).
-
-> **Rows 7 and 8 cannot be pinned from the corpus alone.** Both need a synthetic fixture
-> exercising the assignment-leftover path, because the corpus supplies 0 such participants. The
-> two constructions in §4 and §5 are minimal and already verified against the real functions —
-> they should ship as fixtures in the first slice, before any production change.
-
-> **Correction, after B0 review.** The "identity bridge" column above says `ObservationRef` for
-> every result-bearing row, and that was the right design. The first B0 implementation did not
-> follow it: it serialized the pairing stream and invocation populations by `element_id`, and
-> the frozen digests derived from that. ADR 0019 keeps `element_id` as traceability metadata and
-> refuses it as identity, because `bill_tree` reads it as `attrib.get("id", "")` and its
-> uniqueness is a sampled property of externally authored markup rather than a contract. The
-> consequence is a real false green: two observations sharing an id make the stream unable to
-> distinguish a matcher that exchanges their partners. The trace is now addressed by
-> complete-emitted-sequence ordinal, the artifact carries each side's `source_sha256` and the
-> derived `parser_revision` that scope those ordinals, and a duplicate-id fixture demonstrates
-> both halves — the element-id projection blind to a swap, the ordinal projection catching it.
-> Local `(oi, ni)` positions stay local positions, per the first bullet above.
+  four-phase append pattern, not of the candidate set — and it is not recoverable from ordinals,
+  which `scripts/probe_ordinal_loss.py` is the standing evidence for.
 
 ---
 
@@ -594,7 +321,7 @@ here; see §13, where B2 closed it.
 | Script | Status | Action |
 |---|---|---|
 | `probe_matching_stages.py` | valid | Reproduces ADR 0020's Context figures. Untouched by this work. |
-| `probe_ordinal_loss.py` | valid | Directly corroborates §3 row 15. Keep; it is the evidence that emission order is not ordinal-derivable. |
+| `probe_ordinal_loss.py` | valid | Keep; it is the evidence that emission order is not ordinal-derivable. |
 | `probe_node_identity.py` | valid | Already re-aimed at `apply_similarity_assignment_rule` by #623. |
 | `probe_correspondence_revision.py` | valid | Supplies §4's settlement constraint. Keep. |
 | `probe_round2_migration.py` | valid | Round 2. Its pinned figures are unaffected. |
@@ -602,7 +329,7 @@ here; see §13, where B2 closed it.
 | `probe_slice2.py`, `probe_splits.py`, `probe_provenance.py` | valid | Scoped to round 2 / population sizing. No change. |
 | `audit_source_signals.py` | **re-aim** | Calls `match_nodes` for its `@id`-lift comparison. Will still run, but its baseline becomes ambiguous once round 1 is staged; point it at the assignment output explicitly. |
 | `compare_selected.py`, `probe_move_assignment.py` | already deleted | Removed by #623. No action. |
-| Audit probes written for this report | **promote** | Seven probes covering invocation tracing, the flatten counterfactual, the fast-path equivalence, tie-direction controls and materialisation cost. They are the oracle of §8 in draft form and should be promoted into `scripts/` + tests by Slice B0 rather than rewritten. |
+| Audit probes written for this report | **promote** | Seven probes covering invocation tracing, the flatten counterfactual, the fast-path equivalence, tie-direction controls and materialisation cost. They are the preservation oracle in draft form and should be promoted into tests by Slice B0 rather than rewritten. |
 
 **Retired in B4, and where each question went.** §11 above ruled that these drafts should be
 *promoted* into tests by B0 rather than maintained, and B0–B3 did exactly that. Seven of them had
@@ -645,40 +372,6 @@ Adding a ninth is a decision, not a convenience: the manifest in `tests/test_res
 is closed against what is on disk, so a new probe is either executed by the gate or the gate
 fails. The bar is a **still-live research question** — a probe for a settled decision is what was
 just removed.
-
----
-
-## 12. Recommended slices
-
-Derived from the dependency structure, not from the example sequence in the brief. The key
-departure: **a preservation-harness slice must come first**, because three consequential mutations
-are invisible to every gate that exists today, and **the unique-path slice collapses**, because
-the measurement shows there is no separate policy to migrate.
-
-| Slice | Content | Why here | Gate |
-|---|---|---|---|
-| **B0** ✅ *shipped* | `tests/test_round1_preservation.py` + `tests/data/round1_legacy_trace.json`: independent legacy transcription, frozen trace, structural independence guard, both synthetic fixtures, 10 negative controls, production fault injection. No production change. | Every later slice's gate depends on it. Shipping B1 first would mean changing round 1 while three mutations are unobservable. | 75 passed, 1 skipped. Each control's red gate recorded in §9. |
-| **B1** | Name the two retrieval rounds inside `_match_collision_group`. Extract `retrieve_division_candidates` and `retrieve_cross_division_candidates` returning ordered populations. `_similarity_pair` stays the assigner. | Retrieval is extractable *per round* without touching selection. The ordered population is what B2 needs to address. | Oracle rows 4, 6, 7, 8; canonical digests. |
-| **B2** | Route the greedy through evidence + contracts: `group_correspondence_evidence`, `assign_group`, with the local index space rebuilt privately. One implementation serves both rounds. | Needs B1's named populations. Adds `sole_candidate`. | Oracle rows 5a–5e; tie-direction and CandidateSet-order controls. |
-| **B3** | Unique-path handling. Pin the fast path's equivalence with a test, and decide whether to keep it as a retrieval-side optimisation or retire it. | Last, because the measurement removes it from the critical path — it is not a policy that must be migrated before B2 can proceed. | Oracle rows 1, 2, 3; the 27/27 equivalence test. |
-| **B4** | Closure: probe re-aiming, remove the residual `diff_text` double-call #623 flagged. Candidate storage scope is settled in B1, not deferred to here (§13). | Cleanup with its own evidence, deliberately not bundled. | Canonical digests + runtime regression check. |
-
-**B4 as shipped, and one deliberate divergence from the row above.** B4 retired the eight probes
-whose questions B0–B3 had taken over (§11), gave the one survivor an executable gate in
-`tests/test_research_probes.py`, and closed the transitional statements B1–B3 left behind — this
-section's own storage-scope entry among them.
-
-It did **not** touch the `diff_text` double-call, and on review that row was framed wrongly. The
-duplication is **performance debt, not an unfinished ADR 0020 architecture requirement**: the two
-calls answer separate stage-owned questions, #591 quantified and accepted the cost deliberately,
-and no round-1 invariant depends on it. Optimization is deferred unless later end-to-end profiling
-justifies a separate change, and the call-count gate belongs with that change rather than ahead of
-it. §14 carries the reasoning. Round 1 is closed with this outstanding, not despite it.
-
-**On "can retrieval be extracted alone?"** Yes — *per round*. A single whole-round-1 retrieval
-stage producing one candidate population before any assignment is **not** behaviour-preserving:
-measured at 8 of 959 groups, ±9 links. The smallest coherent unit is therefore the round, and B1
-is exactly that unit.
 
 ---
 
@@ -776,9 +469,10 @@ code path. The cost that would argue against it does not exist at this scale.
 **Left open here on purpose.** The architectural requirement was fixed even though the container
 was not: *one observation pair is one candidate carrying all applicable proposal provenance, and
 assignment still receives the exact ordered per-invocation populations it needs to rebuild legacy
-local positions.* Those are compatible — the ordered populations travel beside the candidate set
-(§7's `GroupRetrieval`), not inside it — but which object owns which was a slice decision, to be
-made against real code rather than pre-committed here.
+local positions.* Those are compatible — the ordered populations travel beside the candidate set,
+not inside it — but which object owns which was a slice decision, to be made against real code
+rather than pre-committed here. It shipped as `RetrievedPopulation` beside a comparison-scoped
+`CandidateSet`.
 
 **Settled in B2: comparison-scoped, on the semantic argument rather than the cost one.** One
 `CandidateSet` per comparison accumulates all three round-1 retriever invocations, and
@@ -800,63 +494,6 @@ once, which is the state the intermediate value exists to make unreachable.
 - One assignment implementation for both rounds: **yes**, provided the index space is rebuilt per
   invocation.
 - Whether to flatten: **no**, measured non-preserving.
-
----
-
-## 14. Conflicts and blockers
-
-**No STOP condition fired.** Existing ADR 0020 contracts express the current behaviour without
-changing policy. `CandidateSet` semantics do not force a result-changing order, provided
-assignment imposes its own (§5). Faithful preservation does not require violating the
-retrieval/assignment boundary — the cross-division fallback reads selections, never evidence,
-which is exactly what invariant 4 permits. Every current policy is independently observable,
-*given* the two synthetic fixtures.
-
-### One vocabulary gap, flagged not blocking
-
-ADR 0020 says a later retrieval round "may use `Correspondence` settled by an earlier round".
-Round 1b uses something weaker: round 1a's *provisional selections*, which the similarity rule may
-still revoke and which `CorrespondenceSet` cannot represent without settling them prematurely. The
-behaviour is compliant — the prohibition is on consuming evidence, and round 1b consumes none —
-but the record's wording does not describe it.
-
-**Recommended handling:** name the provisional carrier explicitly in B1 (the ordered leftover
-population is already that object) rather than promoting round-1a output to `Correspondence`.
-Promoting it early would collide with `CorrespondenceSet`'s no-revision rule, which
-`probe_correspondence_revision.py` already demonstrates. Whether ADR 0020's sentence should be
-amended to say "settled or provisionally selected" is a documentation question for after the
-slices land, not a precondition.
-
-**Reviewed and accepted (2026-08-12).** No ADR amendment is required now: do not create settled
-`Correspondence` prematurely, let round 1b consume the ordered unclaimed population, and keep the
-wording issue open as a non-blocking vocabulary gap.
-
-### One residue #623 left, noted for B4
-
-`_similarity_signals` calls `diff_text` and `_paired_record` calls it again on the same pairing.
-#623 named this deliberately as visible residue of the fusion it did not remove, and said deleting
-it owes its own evidence. It is not this work's scope; B4 is the natural home.
-
-**Reclassified at B4 closure, and it is not an ADR 0020 gap.** The duplicate `diff_text`
-computation is known **performance debt, not an unfinished ADR 0020 architecture requirement**.
-Optimization is deferred unless later end-to-end profiling justifies a separate change.
-
-The two calls answer separate stage-owned questions, which is why the duplication is not a
-redundancy to delete:
-
-1. **correspondence evidence** computes `BODY_UNCHANGED` — it reads only whether the word-level
-   diff is empty (`_similarity_signals`);
-2. **classification** computes the actual textual diff carried in the output record
-   (`_paired_record`'s `text_diff`, and the `unchanged`/`modified` verdict).
-
-#591 already quantified and deliberately accepted this as preservation cost, rather than routing
-classification output back across the stage boundary. Nothing about round-1 stage ownership is
-waiting on it: no invariant in §9 or the closure inventory depends on the call count, and the
-correspondence the engine produces is identical either way.
-
-**No `diff_text` call-count gate is added here.** A call-count gate belongs with the PR that
-actually changes this behaviour — added beforehand it would pin a number no decision rests on,
-and would make an unrelated optimisation look like a regression the day someone takes it.
 
 ---
 

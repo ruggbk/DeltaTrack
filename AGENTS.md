@@ -85,6 +85,21 @@ A comment describes the code as it is **now**. History and rejected alternatives
 - **A number describing current state needs a gate or a repro.** Counts, percentages and corpus measurements decay silently and cannot be checked at read time. Prefer an assertion that fails when the number changes; otherwise name the command that reproduces it. This is the same reasoning as "Gate the decision you had to argue for" under Test conventions, applied to evidence rather than to design. A number inside a `History:` tail is exempt — a measurement of a past experiment stays true, which is precisely why it belongs there rather than in the lead.
 - **Past about six lines, ask whether it is a decision.** A defended design choice belongs in an ADR, reached by a **self-contained** pointer: `# Sections process independently (ADR 0006)` still carries its claim when the ADR is never opened, `# see ADR 0006` does not. The index below names every decision, but only its title; the argument is in the file, and a bare cross-reference still asks a reader to go and get it.
 
+## Research artifacts are working material
+
+Probes, audits, spikes and study write-ups are **working material, not automatically permanent repository material.** At closure, retain an artifact only if it does one of these:
+
+- **reproduces a consequential result** — a figure something else cites and a reader may need to re-derive;
+- **enforces an invariant** — but prefer moving that into a test, which cannot rot silently;
+- **documents a durable decision** — usually meaning it belongs in an ADR rather than in a research file;
+- **serves as a frozen input** — a fixture, a labelled dataset, an oracle's expectation.
+
+Everything else goes at closure. Git history preserves the investigative record, so deleting a probe loses nothing a reader can't recover with `git show <sha>:<path>` — and it is cheaper to recover one deleted file than to re-derive which of forty are still true. Retention is the exception that needs a reason; keeping something because it was expensive to produce is not one.
+
+Two failure modes this exists to prevent, both observed here. A probe that no longer runs still reads as evidence — eight in `provision-matching` referenced a private symbol removed a slice earlier, and nothing noticed because nothing ran them. And a probe that *does* run can publish a quantity the project has since disowned, which is worse, because passing a gate makes it look current. `tests/test_research_probes.py` executes the probes it declares runnable, against a closed manifest; a probe added later is either run or the gate fails.
+
+When retiring an artifact, record in the document that cited it **which executable test inherited its question**, and pin the commit it stays readable at. A reproduction claim pointing at a deleted file is the defect this is meant to avoid, not the price of avoiding it.
+
 ## Architecture decisions
 
 Every **accepted** ADR, title as written. The titles are claims, so this list is the decision set itself, not a table of contents: reading it tells you what has been settled without opening anything. Open the file for the argument, the alternatives and the consequences. `tests/test_adr_index.py` selects by `Status` and regenerates this from `docs/decisions/`, failing if the two disagree, so do not hand-edit an entry; change the ADR's heading and re-run. Adding a record means adding a line here (#481). Records that are proposed, superseded, deprecated or rejected are deliberately absent: they are listed with their status in [docs/decisions/README.md](docs/decisions/README.md), which is where history stays reachable without being presented as architecture in force.
