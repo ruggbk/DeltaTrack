@@ -888,21 +888,30 @@ gate can be shown to fire before it lands. Slice 0 is not optional — §6.2 is 
 | **3** | **DONE** (`142f7cd`). `PdfObservation` + `PdfObservationRegistry` + `pdf_parser_revision()` in `deltatrack/pdf_observations.py`. Nothing consumes them; no stored artifact records a PDF ordinal. | Gate 1 byte-identical (356 passed / 1 skipped, unchanged). Revision moves on any of the four parser modules and on the engine version, and does not move on `diff_pdf` / `similarity` / `matching` / `diff_bill`; the exclusion is proved non-vacuous by injecting a matcher import into `pdf_blocks` (§8.1). Registry totality, contiguity and round-trip over 23 corpus pairs, red under both a filtered and a re-sorted sequence. |
 | **4** | **DONE** (`5dac421`). `pdf_unmatched_population` → `retrieve_pdf_move_candidates` → `pdf_move_evidence` → `assign_pdf_moves`, plus `settle_pdf_correspondences` and `classify_pdf`, with round 2 moved **before** classification. `_emit_pair` now appends provisional pairings instead of classified hunks. This is the PDF #591. | Gate 1 byte-identical; a whole-output comparison against an independently transcribed pre-slice-4 pipeline agrees on all 23 adjacent pairs, including the six the baseline cannot cover. Four fault injections, two of which were informative no-ops (§8.3). |
 | **5** | **DONE** (`9eebcc5`, evidence-floor repair `61cc3fa`). `_pdf_similarity_signals` → `pdf_similarity_correspondence_evidence` → `pdf_pairing_survives_similarity_rule` → `apply_pdf_similarity_revocation`, mirroring `diff_bill`. `_align_blocks` is retrieval only; `_AlignedPairing` loses its similarity field. | Gate 1 byte-identical; gate 4 unchanged. Threshold sweep at 0.2/0.3/0.4/0.6/0.9 → 192/214/230/257/402, plus a corpus-wide exact-overlap invariant (§8.4, §8.5). The first version shipped a censored evidence floor that the original 0.0/0.4/0.99 sweep could not see — §8.5. |
-| **6** | Move the moved-vs-modified decision out of classification. Because 20 of 165 PDF moves are *not* round-2 provenance (§3.4), this needs assignment to record *why* a pair corresponds, not a classification threshold. **Design work, not extraction.** | **Q2 answered — design memo in [`slice6-moved-semantics.md`](slice6-moved-semantics.md), awaiting review.** Recommends splitting into 6a (assignment records a named reason; behaviour-preserving) and 6b (retire the round-1 changed-anchor reason; 20 rows flip, moves the pinned baseline, needs authorization). |
+| **6a** | **DONE.** The moved-vs-modified call is an assignment act: `anchor_relation` joins round-1 evidence, `pdf_round1_move_basis` applies the legacy rule to it, `assign_pdf_moves` records its own basis, and `PdfSettledCorrespondence.move_basis` carries the verdict. `_classified_pdf` reads it and consults neither the overlap nor `round`; `_hunk_for_paired_blocks` lost its `similarity` parameter. Policy unchanged. | Canonical baseline byte-identical; both transcribed pre-slice oracles still agree. Six fault injections, each with a named control (`tests/test_pdf_move_basis.py`). **Fault B — the threshold restored *beside* the basis in classification — leaves the baseline fully green**, which is why the controls are behavioural + static rather than another output comparison. Memo §14. |
+| **6b** | **NOT ADR 0020 WORK.** Retiring the round-1 changed-anchor basis is a canonical behaviour change (19 `moved`→`modified` + 1 suppressed) and is blocked on a stable location identity. Reviewer ruled H1 is internal provenance, **H2 is the semantic target**. | Not authorized. See memo §10.2 and [`issue-draft-anchor-identity.md`](issue-draft-anchor-identity.md). |
 | **7** | **DONE** (`11b822b`). `retrieve_pdf_round1_candidates` wraps `_block_key` + `SequenceMatcher` + the positional `replace` zip as two named invocations emitting a `CandidateSet`, with evidence gated on it and `PdfRound1StageOutputs` making round 1's outputs reachable. | Gate 1 byte-identical; gate 6 unchanged. Membership equals the transcribed legacy considered population on all 23 pairs; three fail-closed refusals; the set's canonical order pinned out of the emitted order (§8.7). |
 
 Slices 1–5 are wrap-and-extract with a byte-identical gate. Slice 6 changes semantics and
 owes precision/recall evidence under ADR 0020's second implementation rule. Slice 7 is
 bounded by §9's limitation rather than blocked by it.
 
-**State: slices 0, 1, 1a, 2, 3, 4, 5 and 7 complete. Slice 6 is the only one left, and it is
-design work, not extraction.**
+**State: PDF ADR 0020 architecture convergence is COMPLETE.** Slices 0, 1, 1a, 2, 3, 4, 5, 7 and
+6a are done. No stage boundary remains fused: retrieval admits, evidence describes, assignment
+decides, classification emits.
 
 Slice 7 ran before slice 6 on the reviewer's recommendation: it is still behaviour-preserving
 extraction, while slice 6 is the semantic moved-vs-modified decision, and completing round-1
-`CandidateSet` retrieval first removes that unfinished variable before the policy call. Slice 6
-still needs §10 Q2 answered — what a PDF `moved` should mean, given that 20 of 165 are threshold
-verdicts on round-1 pairs rather than round-2 provenance (§3.4).
+`CandidateSet` retrieval first removed that unfinished variable before the policy call. Q2 was
+then answered by the slice 6 study ([`slice6-moved-semantics.md`](slice6-moved-semantics.md)),
+and the reviewer split the answer: **6a** shipped the architecture with the legacy policy
+preserved byte for byte, while the *semantics* of `moved` remain open and leave this track.
+
+What stays open is not architecture. Canonical `moved` should mean "the same legislative
+provision changed legislative location" (H2), the current anchor-inequality proxy for that is
+falsified, and no stable location identity exists to implement it — see
+[`issue-draft-anchor-identity.md`](issue-draft-anchor-identity.md). The architecture now makes
+that a one-line policy change rather than a refactor, which is what 6a was for.
 
 ### 8.1 Slice 3's controls, and the faults that proved each one fires
 

@@ -1,14 +1,26 @@
 # Slice 6 design memo — what a PDF `moved` should mean
 
-**Status: design only. No production code changed, no threshold moved, no fixture or
-baseline regenerated.** Four probes were added under `probes/` and three result artifacts
-under `results/`. Returned for review before any implementation.
+**Status: RESEARCH APPROVED (2026-08-14). Slice 6a authorized and implemented; 6b explicitly
+NOT authorized — see §10 for the reviewer's policy correction, which supersedes this memo's
+original recommendation.**
+
+The memo as written recommended H1 as the semantic definition of canonical `moved`. That was
+**not accepted**. §10 now records the ruling: H2 is the semantic target, H1 is internal
+provenance only, and 6b leaves ADR 0020 convergence entirely. The measurements in §1–§9 stand
+as approved and are not to be re-run as a broad semantic study.
+
+**No production code was changed to produce this research**, no threshold moved, no fixture or
+baseline regenerated. **Five** probes were added under `probes/` and three result artifacts
+under `results/`.
 
 Everything below is measured on the current rebased branch (`worktree-pdf-adr0020-research`,
 `028a0aa` at the time of measurement) over the **17 production-accepted adjacent PDF pairs**.
 The historical 145/19/1/165 split was re-measured rather than inherited, and it still holds.
 
 ## How the numbers were produced, and why they are trustworthy
+
+**One probe owns the independent transcription; the others do not, and should not be read as
+if they did.**
 
 `probes/pdf_move_semantics_census.py` runs the **current** production stages
 (`pdf_round1_with_stage_outputs` → `settle_pdf_correspondences`) and then applies an
@@ -19,8 +31,22 @@ reported. That assertion is the control: importing `MOVE_THRESHOLD` or calling
 `_classified_pdf` would have made the census agree with production by construction, which is
 the false-green shape this thread has shipped twice.
 
+The other four are not independent reconstructions and do not need to be:
+
+| probe | what it actually does |
+|---|---|
+| `pdf_move_boundary_report.py` | read-only over the census artifact; decides nothing |
+| `pdf_move_anchor_adjudication.py` | reads the census artifact, then reads the real extracted pages |
+| `pdf_move_user_facing.py` | runs the **real** downstream production path (canonical + view model) |
+| `pdf_xml_move_comparison.py` | runs the **real** `diff_pdfs` and `diff_bills` and compares them |
+
 Phase E is measured at the consumed output — the real canonical conversion and the real view
 model — not inferred from the classifier.
+
+**The census transcription has since become a slice 6a preservation oracle.** It spells the
+*pre-6a* rule (anchor inequality + overlap ≥ 0.6, read from the settled round), and it still
+reproduces `diff_pdfs` element-for-element after 6a moved that rule into assignment. Re-running
+it is one of the cheapest checks that 6a preserved behaviour.
 
 **Population caveat, stated next to the results because it bounds every conclusion below:**
 16 of the 20 round-1 moves come from a single version pair (115-hr-5895
@@ -318,31 +344,72 @@ by relocation recovery — the same provision, found where the structural walk d
 it.* `move.kind` should be decided by a **stable heading identity**, not by raw anchor-string
 inequality; until that identity exists, `renumbered` is not a claim the data supports.
 
-## 10. Recommendation for Q2
+## 10. Recommendation for Q2 — SUPERSEDED BY THE REVIEWER RULING
 
-**Adopt H1 as the meaning, and land it as two slices, not one.**
+### 10.1 What was originally recommended
 
-**Slice 6a — mechanism, behaviour-preserving.** Assignment records a named reason on the
-settled correspondence; classification reads the reason and applies **no** threshold and reads
-**no** evidence. Ship it with the current three reasons, so output is byte-identical and the
-canonical baseline does not move. This is H3 as mechanism, and it satisfies ADR 0020's
-invariant 6 on its own.
+Adopt H1 as the meaning, landed as 6a (mechanism, behaviour-preserving) then 6b (policy,
+retire the round-1 changed-anchor route).
 
-**Slice 6b — policy, an intentional canonical behaviour change.** Retire the
-`round1_changed_anchor` reason. `moved` then means round-2 relocation recovery only; the 20
-round-1 rows become `modified`, and the partition-B row's unchanged-suppression is decided in
-the same change. This one needs Will's authorization: it moves `tests/test_pdf_canonical_baseline.py`,
-which is a byte digest, and regenerating a baseline is exactly what this branch has been
-forbidden to do casually. It should carry the §4 table as its evidence.
+### 10.2 The ruling, 2026-08-14 — H1 REJECTED as the semantic definition
 
-Splitting them is the point. Landing 6a alone would preserve a policy that the measurements
-above falsify; landing them together would bundle a semantic change into a refactor, so a
-reviewer could not tell which of the two moved a byte.
+**H1 is not accepted as the final semantics of canonical `moved`.** ADR 0006 holds that
+canonical JSON carries pipeline-neutral semantic facts, and round-2 provenance is an internal
+matcher fact. This memo's own measurements make the distinction, and they cut against its
+recommendation:
 
-**Separately, and not as part of slice 6:** file the anchor-fragmentation defect. It is the
-root cause of 13 of the 20 round-1 moves, of at least 9 further false `Renumbered:` sentences
-on round-2 moves, and it is what blocks H2 from ever being expressible. Filing is outward-facing
-on a public repo, so it is Will's to open — `issue-description` draft available on request.
+- H1 demotes four adjudicated genuine moves/renumberings to `modified` (§5);
+- some round-2 moves have no observable changed anchor or location (§3, §9 — two render
+  `Moved: X → X`);
+- the XML corroboration is secondary and incomplete (62/73, 11 disagreements) and covers only
+  the PDF **round-2** population (§8).
+
+The settled positions:
+
+| | |
+|---|---|
+| **H2** — *the same legislative provision changed legislative location* | the **semantic target** |
+| **H1** — round-2 provenance | useful **internal provenance**, not a canonical meaning |
+| **H3** — legacy rule as an assignment-recorded reason | **temporary mechanism**, shipped as 6a |
+
+H2's *concept* is accepted and its current *proxy* stays falsified: raw anchor-text inequality
+is not a stable location identity, and the parser carries no identity that could implement H2
+today (§6).
+
+**6b therefore leaves ADR 0020 convergence work entirely.** It is a separate
+product/matching-semantics decision, to be taken after the location-identity defect has an
+adequate solution, or after an explicit decision to ship a conservative interim reporting
+policy. It is **not** authorized, and this memo's §11 falsifiers are retained as inputs to that
+later decision rather than as a pending trigger.
+
+### 10.3 What was authorized and shipped: slice 6a only
+
+Assignment records a named basis; classification reads it and applies no threshold. The legacy
+policy is preserved exactly, and output is byte-identical. Implemented — see §14.
+
+### 10.4 Corrected 6b accounting, for whenever that decision is taken
+
+The original §5 figure of "20 moved → modified plus one suppression decision" double-counts the
+partition-B row. If that row is ultimately suppressed, the impact is:
+
+    19 moved -> modified
+     1 moved -> suppressed
+
+not 20 plus a suppression. **Not implemented, and unchanged suppression policy is explicitly
+out of scope for 6a**: there is no general production predicate that would suppress the
+partition-B row without also risking suppression of a future genuine exact-text renumbering.
+That belongs with the location-identity work.
+
+### 10.5 Separately, and not as part of slice 6
+
+File the anchor-fragmentation / stable-location-identity defect. It is the root cause of 13 of
+the 20 round-1 moves, of at least 9 further false `Renumbered:` sentences on round-2 moves, and
+it is what blocks H2 from being expressible at all. It should eventually cover stable heading
+identity across wrapping and hyphenation, the false canonical `Renumbered:` labels, the
+semantic `moved`/`renumbered`/`relocated` definitions, and the concentrated external-validity
+population this study identified. Filing is outward-facing on a public repo, so it is Will's to
+open — a ready draft is at
+[`issue-draft-anchor-identity.md`](issue-draft-anchor-identity.md).
 
 ## 11. Concrete falsification of this recommendation
 
@@ -365,17 +432,27 @@ on a public repo, so it is Will's to open — `issue-description` draft availabl
 
 ## 12. Architecture consequence — what assignment must record
 
-Today `classify_pdf` → `_classified_pdf` reads `_pdf_word_overlap(correspondence.evidence[0])`
-and hands it to `_hunk_for_paired_blocks`, which compares it against `MOVE_THRESHOLD`. Both
-must go.
+Before 6a, `classify_pdf` → `_classified_pdf` read `_pdf_word_overlap(correspondence.evidence[0])`
+and handed it to `_hunk_for_paired_blocks`, which compared it against `MOVE_THRESHOLD`. Both are
+gone as of §14.
 
-**Assignment must emit a named reason per settled correspondence**, sufficient on its own:
+**Assignment emits a named basis per settled correspondence**, sufficient on its own. The
+vocabulary is deliberately two names, not three — a settled correspondence with no basis is the
+ordinary non-move case and needs no name of its own:
 
 ```
-"structural_path"        round-1 pairing survived the similarity revocation
-"relocation_recovery"    round-2 assignment selected it
-"changed_anchor_similarity"   round-1 + anchors differ + overlap >= cutoff   [6a only; retired by 6b]
+None                          assignment reported no move
+"round1_anchor_similarity"    round-1 survivor, anchors differ, overlap >= cutoff
+"round2_unmatched_recovery"   round-2 assignment claimed two unmatched observations for each other
 ```
+
+**The names this memo originally proposed were rejected, and correctly.** `structural_path` is
+wrong because PDF round 1 is `_block_key` alignment and a positional `replace` zip, not a path —
+that is XML's vocabulary, and importing it here would name a mechanism PDF does not have.
+`relocation_recovery` is wrong because this study did not establish that a round-2
+correspondence is a legislative relocation; §3 measured nine that relocate nothing observable.
+Both replacements are algorithmic and describe how the correspondence was settled, which leaves
+the question of what `moved` should *mean* open instead of quietly answering it in a constant.
 
 Constraints this must respect, each of which has already cost a review round on this thread:
 
@@ -391,21 +468,64 @@ Constraints this must respect, each of which has already cost a review round on 
 - **`_hunk_for_paired_blocks` stops deciding and becomes an emitter**, taking the decided type
   — the shape `_hunk_for_move` already has. Its current docstring ("Classifies as `moved`
   when…") is the fused act being removed.
-- **Unchanged-suppression stays in classification.** `old.text == new.text and not
-  anchors_differ` is a statement about what changed, not about what corresponds. But its
-  anchor clause is entangled with the move rule (§5), so 6b must revisit it deliberately.
+- **Unchanged-suppression stays in classification, and stays UNCHANGED in 6a.** `old.text ==
+  new.text and not anchors_differ` is a statement about what changed, not about what
+  corresponds, so it is legitimately classification's. Its anchor clause is entangled with the
+  move rule (§5), and revisiting it belongs with the location-identity work, not here.
+- **The anchor relationship must arrive as evidence.** Assignment must not reread raw
+  `_Block.anchor` while claiming the decision came through the staged architecture. All three
+  states are represented — `equal` / `different` / `missing` — because the legacy boolean
+  collapsed "no anchor" into "different anchor" and nothing downstream could tell them apart.
 - **`_reconcile_moves` is still the round-2 oracle and must not be rewired** to consume the new
-  reason.
+  basis.
 
 ## 13. Is the recommendation behaviour-preserving?
 
-**Both, staged, and the second half is Will's call.**
-
 | | |
 |---|---|
-| **Slice 6a** (assignment records a reason; classification stops thresholding) | **behaviour-preserving** — 0 output flips, baseline untouched |
-| **Slice 6b** (retire the round-1 changed-anchor reason) | **intentional canonical behaviour change** — 20 `moved`→`modified`, plus 1 suppression decision; moves the pinned PDF canonical baseline |
-| **The `move.kind` / anchor-fragmentation defect** (§9) | **unresolved, and out of slice 6's scope** — a parser-identity problem, wider than the moved question, needs its own tracker issue |
+| **Slice 6a** (assignment records a basis; classification stops thresholding) | **behaviour-preserving** — 0 output flips, baseline byte-identical. **Shipped**, §14 |
+| **Slice 6b** (retire the round-1 changed-anchor basis) | **intentional canonical behaviour change** — 19 `moved`→`modified` + 1 `moved`→suppressed (§10.4); moves the pinned PDF canonical baseline. **Not authorized**, and no longer ADR 0020 work |
+| **The `move.kind` / anchor-fragmentation defect** (§9) | **unresolved, out of scope** — a parser-identity problem, wider than the moved question. Draft issue at [`issue-draft-anchor-identity.md`](issue-draft-anchor-identity.md) |
+
+## 14. Slice 6a as shipped
+
+Authorized 2026-08-14 and implemented on this branch.
+
+**The seam.** `_pdf_round1_signals` now describes `anchor_relation` alongside `text_identical`
+and `word_overlap`; `pdf_round1_move_basis` applies the legacy rule to that evidence and owns
+its own threshold parameter; `assign_pdf_round1_move_bases` runs it over the post-revocation
+pairings; `assign_pdf_moves` records `round2_unmatched_recovery` itself;
+`settle_pdf_correspondences` attaches both and decides nothing; `_classified_pdf` reads
+`move_basis` and consults neither the overlap nor `round`. `_hunk_for_paired_blocks` lost its
+`similarity` parameter and is now the `modified` emitter.
+
+**Why the existing gates could not be the control.** The policy is unchanged, so production is
+byte-identical whether the rule runs in assignment or in classification. Measured, not assumed:
+with the pre-6a threshold restored *in parallel* inside `_classified_pdf` (fault B below), the
+canonical PDF baseline stayed **fully green, 27 passed**. Only the new controls caught it.
+
+**Fault injection — every control shown able to fail** (`tests/test_pdf_move_basis.py`, 23
+tests, all green unfaulted; production restored and `git status` clean after each):
+
+| fault injected | controls red | canonical baseline |
+|---|---|---|
+| A — classification keys on `item.round` again | 5 | 3 pairs red |
+| B — the move threshold restored *beside* the basis in classification | 5, incl. the static guard | **green — 27 passed** |
+| C — the basis rule ignores its `anchor_relation` evidence | 2 | 16 pairs red |
+| D — `move_bases` computed, then discarded | — | 3 pairs red, + 3 legacy-oracle pairs |
+| E — `_reconcile_moves` wired back onto the production path | 1 | — |
+| F — `move_basis` vocabulary validation disabled | 4 | — |
+
+Fault D is the slice-7 lesson applied: a materialised intermediate that nothing reads is
+indistinguishable from a correct one. It reddens **exactly** the three pairs this study
+identified as carrying the 20 round-1 moves — 115-hr-5895 3→4, 118-hr-4366 3→4, 118-hr-4366
+4→5 — which is independent confirmation that the census population and the shipped stage
+describe the same rows.
+
+The static guard (`test_no_classification_function_mentions_the_move_cutoff_or_the_overlap_reader`)
+asserts an **absence**, so it carries its own positive control: it must also *find* the
+forbidden names in `_greedy_pdf_move_links` and `_pdf_round1_signals`, which legitimately use
+them. Without that, an empty result could not be told apart from a broken detector.
 
 ---
 
