@@ -30,12 +30,14 @@ covered by the hunk-stream comparison rather than asserted separately.
 from __future__ import annotations
 
 import difflib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
+    ROUND2_UNMATCHED_RECOVERY,
     PdfHunk,
     _AlignedPairing,
     _block_key,
@@ -68,6 +70,30 @@ _PAIR_IDS = [f"{bill}:{old.stem}->{new.stem}" for bill, old, new in _PAIRS]
 # --- The oracle: the pre-slice-4 pipeline, transcribed -------------------------------------
 
 
+def legacy_is_moved(v1_b: _Block, v2_b: _Block, similarity: float) -> bool:
+    """The pre-slice-6a moved-vs-modified rule, transcribed from ``_hunk_for_paired_blocks``.
+
+    That function used to own this condition; slice 6a moved it into
+    ``pdf_round1_move_basis``. The oracle transcribes it here rather than calling either, for
+    the reason this module's header gives: an oracle that asks a production helper what the rule
+    is cannot detect that the rule changed.
+
+    Transcribed **as it stood before 6a**, collapsed boolean and all — the missing-anchor and
+    different-anchor cases share one branch here exactly as they did then. Splitting them to
+    match production's new three-state evidence would make this agree with 6a by construction,
+    which is the whole failure this oracle exists to rule out.
+    """
+    if not (v1_b.anchor and v2_b.anchor):
+        return False
+    return v1_b.anchor.text != v2_b.anchor.text and similarity >= MOVE_THRESHOLD
+
+
+def _legacy_paired_hunk(v1_b: _Block, v2_b: _Block, similarity: float) -> PdfHunk:
+    """The hunk the pre-6a ``_hunk_for_paired_blocks`` built, with the type it decided itself."""
+    hunk = _hunk_for_paired_blocks(v1_b, v2_b)
+    return replace(hunk, change_type="moved") if legacy_is_moved(v1_b, v2_b, similarity) else hunk
+
+
 def legacy_emit_pair(v1_b: _Block, v2_b: _Block, sink: list[PdfHunk]) -> None:
     """The pre-slice-4 ``_emit_pair``, appending classified hunks as it did then.
 
@@ -76,14 +102,14 @@ def legacy_emit_pair(v1_b: _Block, v2_b: _Block, sink: list[PdfHunk]) -> None:
     """
     if v1_b.text == v2_b.text:
         if v1_b.anchor and v2_b.anchor and v1_b.anchor.text != v2_b.anchor.text:
-            sink.append(_hunk_for_paired_blocks(v1_b, v2_b, similarity=1.0))
+            sink.append(_legacy_paired_hunk(v1_b, v2_b, similarity=1.0))
         return
     sim = text_similarity_at_least(v1_b.text, v2_b.text, SIMILARITY_THRESHOLD)
     if sim < SIMILARITY_THRESHOLD:
         sink.append(_hunk_for_removed(v1_b))
         sink.append(_hunk_for_added(v2_b))
     else:
-        sink.append(_hunk_for_paired_blocks(v1_b, v2_b, similarity=sim))
+        sink.append(_legacy_paired_hunk(v1_b, v2_b, similarity=sim))
 
 
 def legacy_hunks_before_round2(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[PdfHunk]:
@@ -352,11 +378,13 @@ def test_a_settled_move_carries_the_evidence_that_selected_it() -> None:
     moves = assign_pdf_moves(population, evidence, threshold=MOVE_THRESHOLD)
 
     assert len(moves) == 1
-    move = moves[0]
+    move = moves[0].correspondence
     assert move.old == (ObservationRef(OLD, 0),) and move.new == (ObservationRef(NEW, 0),)
     assert len(move.evidence) == 1
     assert isinstance(move.evidence[0].get("word_overlap"), float)
+    assert moves[0].move_basis == ROUND2_UNMATCHED_RECOVERY, "round-2 assignment records its own basis"
 
-    settled = settle_pdf_correspondences(pairings, registry, moves, round1_evidence=())
+    settled = settle_pdf_correspondences(pairings, registry, moves, round1_evidence=(), round1_move_bases={})
     assert [item.round for item in settled] == [2]
+    assert [item.move_basis for item in settled] == [ROUND2_UNMATCHED_RECOVERY]
     assert [h.change_type for h in classify_pdf(settled, registry)] == ["moved"]

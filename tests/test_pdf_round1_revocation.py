@@ -27,10 +27,12 @@ import pytest
 
 from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
+    ANCHOR_MISSING,
+    ANCHOR_RELATION,
     TEXT_IDENTICAL,
     WORD_OVERLAP,
     _AlignedPairing,
-    _pdf_similarity_signals,
+    _pdf_round1_signals,
     _round1_invocations,
     apply_pdf_similarity_revocation,
     pdf_pairing_survives_similarity_rule,
@@ -284,8 +286,8 @@ def test_the_short_circuit_never_measures_identical_texts(monkeypatch: pytest.Mo
         raise AssertionError("identical block texts must not be measured")
 
     monkeypatch.setattr(diff_pdf, "text_similarity", _refuse)
-    signals = _pdf_similarity_signals(_block("same body", 1), _block("same body", 2))
-    assert signals == {TEXT_IDENTICAL: True, WORD_OVERLAP: 1.0}
+    signals = _pdf_round1_signals(_block("same body", 1), _block("same body", 2))
+    assert signals == {TEXT_IDENTICAL: True, WORD_OVERLAP: 1.0, ANCHOR_RELATION: ANCHOR_MISSING}
 
 
 #: A pair whose true word-level overlap is exactly 0.30 — strictly between a sub-production

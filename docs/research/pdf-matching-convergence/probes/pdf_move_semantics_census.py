@@ -118,13 +118,21 @@ def census(v1_pages, v2_pages) -> tuple[list[dict], list]:
     _with_front_matter(v2_blocks, v2_anchors)
 
     registry = PdfObservationRegistry(v1_blocks, v2_blocks)
-    round1 = pdf_round1_with_stage_outputs(v1_blocks, v2_blocks, registry, threshold=_SIMILARITY_CUTOFF)
+    round1 = pdf_round1_with_stage_outputs(
+        v1_blocks, v2_blocks, registry, threshold=_SIMILARITY_CUTOFF, move_threshold=_MOVE_CUTOFF
+    )
     pairings = list(round1.pairings)
     population = pdf_unmatched_population(pairings, registry)
     candidates = retrieve_pdf_move_candidates(population, bound=_MOVE_CUTOFF)
     evidence = pdf_move_evidence(candidates)
     moves = assign_pdf_moves(population, evidence, threshold=_MOVE_CUTOFF)
-    settled = settle_pdf_correspondences(pairings, registry, moves, round1_evidence=round1.evidence)
+    settled = settle_pdf_correspondences(
+        pairings,
+        registry,
+        moves,
+        round1_evidence=round1.evidence,
+        round1_move_bases=round1.move_bases,
+    )
 
     rows: list[dict] = []
     for item in sorted(settled, key=lambda s: s.position):

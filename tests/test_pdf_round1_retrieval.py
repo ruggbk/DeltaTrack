@@ -48,7 +48,7 @@ from deltatrack.matching import NEW, OLD, CandidateSet, ObservationRef, Retrieve
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from deltatrack.parsers.pdf_blocks import _Block, _flatten, _group_into_blocks, _IndexedLine
 from deltatrack.pdf_observations import PdfObservationRegistry
-from deltatrack.similarity import SIMILARITY_THRESHOLD
+from deltatrack.similarity import MOVE_THRESHOLD, SIMILARITY_THRESHOLD
 from tests.pdf_corpus import adjacent_pdf_pairs, cached_pages
 
 _PAIRS = adjacent_pdf_pairs()
@@ -351,7 +351,9 @@ def test_revoked_round_1_evidence_is_reachable_after_the_stage_completes() -> No
     for _bill, old_pdf, new_pdf in _PAIRS:
         old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
         registry = PdfObservationRegistry(old_blocks, new_blocks)
-        outputs = pdf_round1_with_stage_outputs(old_blocks, new_blocks, registry, threshold=SIMILARITY_THRESHOLD)
+        outputs = pdf_round1_with_stage_outputs(
+            old_blocks, new_blocks, registry, threshold=SIMILARITY_THRESHOLD, move_threshold=MOVE_THRESHOLD
+        )
         if len(outputs.revoked) > best[0]:
             best = (len(outputs.revoked), outputs)
 
@@ -395,9 +397,9 @@ def test_diff_pdfs_consumes_the_stage_output_helper_rather_than_its_own_round_1(
     calls: list[int] = []
     real = diff_pdf.pdf_round1_with_stage_outputs
 
-    def _substituted(v1_blocks, v2_blocks, registry, *, threshold):
+    def _substituted(v1_blocks, v2_blocks, registry, *, threshold, move_threshold):
         calls.append(1)
-        outputs = real(v1_blocks, v2_blocks, registry, threshold=threshold)
+        outputs = real(v1_blocks, v2_blocks, registry, threshold=threshold, move_threshold=move_threshold)
         split_at = next(
             (i for i, p in enumerate(outputs.pairings) if p.old is not None and p.new is not None),
             None,
@@ -415,6 +417,7 @@ def test_diff_pdfs_consumes_the_stage_output_helper_rather_than_its_own_round_1(
             candidates=outputs.candidates,
             evidence=outputs.evidence,
             pairings=mutated,
+            move_bases=outputs.move_bases,
         )
 
     monkeypatch.setattr(diff_pdf, "pdf_round1_with_stage_outputs", _substituted)
