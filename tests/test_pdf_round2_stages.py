@@ -37,7 +37,6 @@ import pytest
 from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
     PdfHunk,
-    _align_blocks,
     _AlignedPairing,
     _block_key,
     _hunk_for_added,
@@ -52,6 +51,7 @@ from deltatrack.diff_pdf import (
     pdf_similarity_correspondence_evidence,
     pdf_unmatched_population,
     retrieve_pdf_move_candidates,
+    retrieve_pdf_round1_candidates,
     settle_pdf_correspondences,
 )
 from deltatrack.matching import NEW, OLD, ObservationRef
@@ -133,8 +133,8 @@ def round1_stream(old_blocks: list[_Block], new_blocks: list[_Block], registry: 
     compared against is ``legacy_hunks_before_round2``, which is transcribed independently and
     calls none of this.
     """
-    provisional = _align_blocks(old_blocks, new_blocks)
-    evidence = pdf_similarity_correspondence_evidence(provisional, registry)
+    provisional, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
+    evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
     pairings = apply_pdf_similarity_revocation(provisional, evidence, registry, threshold=SIMILARITY_THRESHOLD)
     return pairings, evidence
 

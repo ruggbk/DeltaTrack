@@ -136,6 +136,29 @@ WORD_OVERLAP = "word_overlap"
 #: the rule, different measure, so a different name (ADR 0021 §3).
 TEXT_IDENTICAL = "text_identical"
 
+#: Round 1's two retrieval mechanisms, named so a proposal says which one surfaced a pair.
+#: ``_block_key`` + ``SequenceMatcher`` produce the ``equal`` runs; the positional zip inside a
+#: ``replace`` produces the rest. They are separate invocations rather than one because they are
+#: separate rules with separate failure modes — the aligner can pass over a true counterpart
+#: when a duplicate key draws the alignment elsewhere (§7.2), while the positional rule pairs by
+#: position alone and is what gate 6's crossing fixture pins.
+BLOCK_KEY_ALIGNMENT = "block_key_alignment"
+POSITIONAL_REPLACE = "positional_replace"
+
+
+def _round1_invocations() -> tuple[RetrieverInvocation, RetrieverInvocation]:
+    """The two round-1 retriever invocations, with their controls recorded.
+
+    ``autojunk=False`` is a genuine retrieval control: it changes which runs ``SequenceMatcher``
+    reports as ``equal`` and therefore which pairs are formed at all, so ADR 0020 requires it to
+    travel with the proposals rather than sit as an unrecorded argument. The positional rule has
+    no control to record — it pairs by position and nothing else.
+    """
+    return (
+        RetrieverInvocation.of(BLOCK_KEY_ALIGNMENT, round=PATH_ROUND, autojunk=False),
+        RetrieverInvocation.of(POSITIONAL_REPLACE, round=PATH_ROUND),
+    )
+
 
 @dataclass(frozen=True)
 class _AlignedPairing:
@@ -148,10 +171,16 @@ class _AlignedPairing:
     computed it while deciding the split; slice 5 makes the evidence a stage of its own, so the
     measurement travels as :class:`~deltatrack.matching.CorrespondenceEvidence` addressed by
     ADR 0019 refs rather than as a field on the pairing that produced it.
+
+    ``invocation`` names the retriever that proposed a 1:1, and is ``None`` for an unmatched
+    side, which no retriever proposed because it forms no pair. It is provenance rather than
+    policy: the evidence stage reads it to ask the candidate set whether *this* retriever
+    admitted *this* pair, which is a different question from "some retriever did".
     """
 
     old: _Block | None
     new: _Block | None
+    invocation: RetrieverInvocation | None = None
 
 
 @dataclass(frozen=True)
@@ -436,9 +465,51 @@ def _pdf_similarity_signals(v1_block: _Block, v2_block: _Block) -> dict[str, boo
     }
 
 
+def _refuse_a_pairing_retrieval_did_not_admit(
+    pairing: _AlignedPairing,
+    registry: PdfObservationRegistry,
+    candidates: CandidateSet,
+) -> None:
+    """One aligned pair, admitted by retrieval under its own invocation. Fails closed.
+
+    Three distinct failures, worth three messages. A pairing with no invocation reached the
+    evidence stage without provenance at all. A pair absent from the set is one retrieval never
+    proposed. A pair present but carrying no proposal from *this* pairing's invocation was
+    surfaced by some other retriever, which is a different fact — "considered by somebody" would
+    admit a pair the invocation about to describe it never formed.
+
+    **Refused, never reconstructed.** The tempting recovery — the pairing stream says the pair
+    exists, so describe it anyway — is exactly the hole this closes. It would let retrieval and
+    evidence disagree about what was considered while every resulting pairing still looked
+    correct, which is the shape a materialisation defect takes and the one no output comparison
+    can see.
+    """
+    if pairing.invocation is None:
+        raise ValueError(
+            f"a 1:1 pairing reached correspondence evidence with no retriever provenance "
+            f"({registry.ref(OLD, pairing.old)}->{registry.ref(NEW, pairing.new)}); evidence exists "
+            "only for pairs a named retriever admitted"
+        )
+    old_ref = registry.ref(OLD, pairing.old)
+    new_ref = registry.ref(NEW, pairing.new)
+    candidate = candidates.candidate_for(old_ref, new_ref)
+    if candidate is None:
+        raise ValueError(
+            f"retrieval never admitted {old_ref}->{new_ref}, which {pairing.invocation.retriever} is "
+            "describing; correspondence evidence exists only for pairs the candidate set holds"
+        )
+    if pairing.invocation not in candidate.invocations:
+        raise ValueError(
+            f"candidate {old_ref}->{new_ref} carries no proposal from {pairing.invocation}; it was "
+            f"surfaced by {[i.retriever for i in candidate.invocations]} and this invocation may not "
+            "describe a pair it did not retrieve"
+        )
+
+
 def pdf_similarity_correspondence_evidence(
     pairings: list[_AlignedPairing],
     registry: PdfObservationRegistry,
+    candidates: CandidateSet,
 ) -> tuple[CorrespondenceEvidence, ...]:
     """CORRESPONDENCE EVIDENCE for the similarity rule: one record per aligned 1:1.
 
@@ -454,11 +525,19 @@ def pdf_similarity_correspondence_evidence(
     :func:`pdf_move_evidence`'s output. Retained and unattached, never discarded.
 
     An unmatched pairing carries no record: it names no pair, so there is nothing to describe.
+
+    **Admission is checked for every pairing before anything is measured**, so a partial
+    description can never be handed on, and it is checked by lookup into the ``CandidateSet``
+    rather than by walking it — the set's canonical order must not leak into the sequence the
+    downstream stages read. The emitted order is the pairing stream's, which is what keeps it
+    reconstructible against round 2's ``(ri, ai)``.
     """
+    aligned = [pairing for pairing in pairings if pairing.old is not None and pairing.new is not None]
+    for pairing in aligned:
+        _refuse_a_pairing_retrieval_did_not_admit(pairing, registry, candidates)
+
     evidence: list[CorrespondenceEvidence] = []
-    for pairing in pairings:
-        if pairing.old is None or pairing.new is None:
-            continue
+    for pairing in aligned:
         evidence.append(
             CorrespondenceEvidence.of(
                 registry.ref(OLD, pairing.old),
@@ -574,7 +653,60 @@ def apply_pdf_similarity_revocation(
     return decided
 
 
-def _align_blocks(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[_AlignedPairing]:
+def retrieve_pdf_round1_candidates(
+    v1_blocks: list[_Block],
+    v2_blocks: list[_Block],
+    registry: PdfObservationRegistry,
+) -> tuple[list[_AlignedPairing], CandidateSet]:
+    """RETRIEVAL, round 1: which block pairs are considered, and in what order.
+
+    Returns the two things round 1 needs, kept apart because they answer different questions and
+    conflating them is the defect this slice exists to prevent.
+
+    **The ``CandidateSet`` is the admission authority.** Every pair the aligner forms is proposed
+    into it under the invocation that formed it, and
+    :func:`pdf_similarity_correspondence_evidence` describes nothing the set does not hold. That
+    puts the intermediate value on the result-bearing path rather than beside it: without it,
+    "retrieval never considered this pair" and "assignment nevertheless selected it" could both
+    be true at once, which is exactly the state a materialised candidate set exists to make
+    unreachable — and no pairing-stream comparison can see it.
+
+    **The pairing list is the order authority**, and the set is never iterated to recover order.
+    ``CandidateSet.candidates()`` is canonically ordered by ordinal pair; the order every
+    downstream stage depends on is the opcode walk's, which is what keeps round 2's ``(ri, ai)``
+    positions and the record order where they were. The two happen to coincide on a real document
+    — the aligner consumes both sides monotonically — and that coincidence is precisely why the
+    distinction has to be structural rather than observed.
+
+    Retrieval policy is untouched: ``_block_key``, ``SequenceMatcher(autojunk=False)``, the
+    ``equal`` zip, the positional ``replace`` zip, and delete/insert as unmatched observations.
+    Slice 7 names them and materialises what they considered; it reconsiders none of them.
+
+    A ``delete`` or ``insert`` observation forms no pair, so it is proposed to nothing and
+    carries no invocation.
+    """
+    alignment, positional = _round1_invocations()
+    pairings = _align_blocks(v1_blocks, v2_blocks, alignment, positional)
+
+    candidates = CandidateSet()
+    for pairing in pairings:
+        if pairing.old is None or pairing.new is None:
+            continue
+        assert pairing.invocation is not None  # every 1:1 leaves `_align_blocks` with one
+        candidates.propose(
+            registry.ref(OLD, pairing.old),
+            registry.ref(NEW, pairing.new),
+            pairing.invocation,
+        )
+    return pairings, candidates
+
+
+def _align_blocks(
+    v1_blocks: list[_Block],
+    v2_blocks: list[_Block],
+    alignment: RetrieverInvocation,
+    positional: RetrieverInvocation,
+) -> list[_AlignedPairing]:
     """ROUND 1, retrieval and assignment still fused: which blocks are provisionally paired.
 
     Unchanged from the pre-slice-4 opcode walk except that it produces pairings rather than
@@ -599,7 +731,7 @@ def _align_blocks(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[_Ali
             # Block keys match. Bodies might still differ (e.g. amendment
             # annotations appearing past the 80-char preview).
             for v1_b, v2_b in zip(v1_blocks[i1:i2], v2_blocks[j1:j2]):
-                pairings.append(_AlignedPairing(v1_b, v2_b))
+                pairings.append(_AlignedPairing(v1_b, v2_b, alignment))
         elif op == "delete":
             for v1_b in v1_blocks[i1:i2]:
                 pairings.append(_AlignedPairing(v1_b, None))
@@ -614,7 +746,7 @@ def _align_blocks(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[_Ali
                 v1_b = v1_slice[k] if k < len(v1_slice) else None
                 v2_b = v2_slice[k] if k < len(v2_slice) else None
                 if v1_b is not None and v2_b is not None:
-                    pairings.append(_AlignedPairing(v1_b, v2_b))
+                    pairings.append(_AlignedPairing(v1_b, v2_b, positional))
                 elif v1_b is not None:
                     pairings.append(_AlignedPairing(v1_b, None))
                 else:
@@ -845,6 +977,93 @@ def settle_pdf_correspondences(
     return tuple(settled)
 
 
+@dataclass(frozen=True)
+class PdfRound1StageOutputs:
+    """Round 1's pairing stream and every stage output behind it.
+
+    The PDF counterpart of ``diff_bill.match_nodes_with_stage_outputs``' third element, and it
+    exists for the same reason: ADR 0020 invariant 8 keeps the evidence for candidates that
+    reached assignment inspectable *after* the stage completes, and an internal local that the
+    orchestrator drops is not inspectable by anything.
+
+    ``evidence`` is every described pair's record, **revoked ones included**. That is the whole
+    point — the revoked records are precisely the ones no ``Correspondence`` will carry, so if
+    this tuple held only survivors, the reason a provision was split would exist nowhere. PDF
+    round 1 has no *losing* competitor to retain beyond that: the aligner proposes at most one
+    partner per observation (§9), so assignment has nothing to choose between and its only power
+    is revocation.
+
+    ``provisional`` is pre-revocation and ``pairings`` post-, so the two can be compared to
+    recover exactly which pairs the similarity rule revoked.
+
+    Not part of the canonical contract. :func:`diff_pdfs` projects to :class:`PdfDiff` and is
+    unchanged; this is reachable for research and debugging, and ADR 0006 is untouched.
+    """
+
+    provisional: tuple[_AlignedPairing, ...]
+    candidates: CandidateSet
+    evidence: tuple[CorrespondenceEvidence, ...]
+    pairings: tuple[_AlignedPairing, ...]
+
+    @property
+    def revoked(self) -> tuple[CorrespondenceEvidence, ...]:
+        """The evidence records whose pairings the similarity rule revoked.
+
+        Derived by difference rather than recorded separately, so it cannot drift from the two
+        streams it describes.
+        """
+        surviving = {
+            (id(pairing.old), id(pairing.new))
+            for pairing in self.pairings
+            if pairing.old is not None and pairing.new is not None
+        }
+        return tuple(
+            item
+            for pairing, item in zip(self._aligned(), self.evidence)
+            if (id(pairing.old), id(pairing.new)) not in surviving
+        )
+
+    def _aligned(self) -> tuple[_AlignedPairing, ...]:
+        """The provisional 1:1 pairings, in stream order — evidence's own iteration order."""
+        return tuple(p for p in self.provisional if p.old is not None and p.new is not None)
+
+    def __post_init__(self) -> None:
+        if len(self._aligned()) != len(self.evidence):
+            raise ValueError(
+                f"{len(self._aligned())} aligned pairings but {len(self.evidence)} evidence records; "
+                "every 1:1 the retriever formed is described exactly once, and `revoked` reads the "
+                "two as parallel sequences"
+            )
+
+
+def pdf_round1_with_stage_outputs(
+    v1_blocks: list[_Block],
+    v2_blocks: list[_Block],
+    registry: PdfObservationRegistry,
+    *,
+    threshold: float,
+) -> PdfRound1StageOutputs:
+    """Round 1 end to end: retrieve, describe, then apply the similarity rule.
+
+    The single implementation of round 1, so there is one authority on candidate membership and
+    one on order. :func:`diff_pdfs` is a projection over it.
+
+    The stage order is the ADR 0020 boundary and is not negotiable here: retrieval admits,
+    evidence describes what was admitted, assignment decides. The similarity revocation stays
+    strictly downstream of retrieval, which is what slice 5 established and slice 7 must not
+    disturb.
+    """
+    provisional, candidates = retrieve_pdf_round1_candidates(v1_blocks, v2_blocks, registry)
+    evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
+    pairings = apply_pdf_similarity_revocation(provisional, evidence, registry, threshold=threshold)
+    return PdfRound1StageOutputs(
+        provisional=tuple(provisional),
+        candidates=candidates,
+        evidence=evidence,
+        pairings=tuple(pairings),
+    )
+
+
 def _classified_pdf(item: PdfSettledCorrespondence, registry: PdfObservationRegistry) -> PdfHunk | None:
     """One settled correspondence as one hunk, or ``None`` where PDF emits no record.
 
@@ -931,14 +1150,13 @@ def diff_pdfs(v1_pages: list[Page], v2_pages: list[Page]) -> PdfDiff:
     v2_anchors = _with_front_matter(v2_blocks, v2_anchors)
 
     registry = PdfObservationRegistry(v1_blocks, v2_blocks)
-    provisional = _align_blocks(v1_blocks, v2_blocks)
-    round1_evidence = pdf_similarity_correspondence_evidence(provisional, registry)
-    pairings = apply_pdf_similarity_revocation(provisional, round1_evidence, registry, threshold=SIMILARITY_THRESHOLD)
+    round1 = pdf_round1_with_stage_outputs(v1_blocks, v2_blocks, registry, threshold=SIMILARITY_THRESHOLD)
+    pairings = list(round1.pairings)
     population = pdf_unmatched_population(pairings, registry)
     candidates = retrieve_pdf_move_candidates(population, bound=MOVE_THRESHOLD)
     evidence = pdf_move_evidence(candidates)
     moves = assign_pdf_moves(population, evidence, threshold=MOVE_THRESHOLD)
-    settled = settle_pdf_correspondences(pairings, registry, moves, round1_evidence=round1_evidence)
+    settled = settle_pdf_correspondences(pairings, registry, moves, round1_evidence=round1.evidence)
     hunks = classify_pdf(settled, registry)
 
     return PdfDiff(

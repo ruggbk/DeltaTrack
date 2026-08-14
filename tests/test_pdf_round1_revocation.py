@@ -29,14 +29,15 @@ from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
     TEXT_IDENTICAL,
     WORD_OVERLAP,
-    _align_blocks,
     _AlignedPairing,
     _pdf_similarity_signals,
+    _round1_invocations,
     apply_pdf_similarity_revocation,
     pdf_pairing_survives_similarity_rule,
     pdf_similarity_correspondence_evidence,
+    retrieve_pdf_round1_candidates,
 )
-from deltatrack.matching import NEW, OLD, CorrespondenceEvidence, ObservationRef
+from deltatrack.matching import NEW, OLD, CandidateSet, CorrespondenceEvidence, ObservationRef
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from deltatrack.parsers.pdf_blocks import _Block, _flatten, _group_into_blocks, _IndexedLine
 from deltatrack.pdf_observations import PdfObservationRegistry
@@ -52,6 +53,26 @@ def _blocks(pdf: Path) -> list[_Block]:
     return _group_into_blocks(_flatten(pages), extract_anchors(pages))
 
 
+#: The alignment invocation, for hand-built pairings that stand in for `equal`-opcode output.
+ALIGNMENT = _round1_invocations()[0]
+
+
+def _admitting(pairings: list[_AlignedPairing], registry: PdfObservationRegistry) -> CandidateSet:
+    """A ``CandidateSet`` admitting exactly the given 1:1 pairings, under their own invocations.
+
+    The synthetic equivalent of what ``retrieve_pdf_round1_candidates`` builds. Kept explicit
+    rather than reusing the retriever, so a test that means to describe an admitted pair says so
+    and a test that means to withhold admission can simply not call this.
+    """
+    candidates = CandidateSet()
+    for pairing in pairings:
+        if pairing.old is None or pairing.new is None:
+            continue
+        assert pairing.invocation is not None
+        candidates.propose(registry.ref(OLD, pairing.old), registry.ref(NEW, pairing.new), pairing.invocation)
+    return candidates
+
+
 def _unmatched(pairings: list[_AlignedPairing]) -> int:
     return sum(1 for p in pairings if p.old is None or p.new is None)
 
@@ -60,8 +81,8 @@ def _revocations_for(old_pdf: Path, new_pdf: Path, threshold: float) -> int:
     """How many aligned pairings the rule revokes on one pair, at ``threshold``."""
     old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
     registry = PdfObservationRegistry(old_blocks, new_blocks)
-    provisional = _align_blocks(old_blocks, new_blocks)
-    evidence = pdf_similarity_correspondence_evidence(provisional, registry)
+    provisional, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
+    evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
     decided = apply_pdf_similarity_revocation(provisional, evidence, registry, threshold=threshold)
     return (_unmatched(decided) - _unmatched(provisional)) // 2
 
@@ -78,8 +99,8 @@ def _revocations_by_threshold(thresholds: tuple[float, ...]) -> dict[float, int]
     for _bill, old_pdf, new_pdf in _PAIRS:
         old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
         registry = PdfObservationRegistry(old_blocks, new_blocks)
-        provisional = _align_blocks(old_blocks, new_blocks)
-        evidence = pdf_similarity_correspondence_evidence(provisional, registry)
+        provisional, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
+        evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
         before = _unmatched(provisional)
         for threshold in thresholds:
             decided = apply_pdf_similarity_revocation(provisional, evidence, registry, threshold=threshold)
@@ -147,8 +168,8 @@ def test_evidence_reports_the_true_overlap_for_every_aligned_pair() -> None:
     for _bill, old_pdf, new_pdf in _PAIRS:
         old_blocks, new_blocks = _blocks(old_pdf), _blocks(new_pdf)
         registry = PdfObservationRegistry(old_blocks, new_blocks)
-        provisional = _align_blocks(old_blocks, new_blocks)
-        evidence = pdf_similarity_correspondence_evidence(provisional, registry)
+        provisional, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
+        evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
         by_link = {item.link: item for item in evidence}
         for pairing in provisional:
             if pairing.old is None or pairing.new is None:
@@ -289,8 +310,8 @@ def test_evidence_does_not_censor_a_score_below_the_production_cutoff() -> None:
     """
     old_blocks, new_blocks = [_block(_FLOOR_OLD, 1)], [_block(_FLOOR_NEW, 2)]
     registry = PdfObservationRegistry(old_blocks, new_blocks)
-    provisional = [_AlignedPairing(old_blocks[0], new_blocks[0])]
-    evidence = pdf_similarity_correspondence_evidence(provisional, registry)
+    provisional = [_AlignedPairing(old_blocks[0], new_blocks[0], ALIGNMENT)]
+    evidence = pdf_similarity_correspondence_evidence(provisional, registry, _admitting(provisional, registry))
 
     assert text_similarity(_FLOOR_OLD, _FLOOR_NEW) == 0.3, "the fixture must sit between 0.2 and 0.4"
     assert evidence[0].get(WORD_OVERLAP) == 0.3, (
@@ -314,9 +335,9 @@ def test_evidence_is_retained_for_a_revoked_pairing() -> None:
     old_blocks = [_block("alpha beta gamma delta epsilon", 1)]
     new_blocks = [_block("wholly unrelated words entirely", 2)]
     registry = PdfObservationRegistry(old_blocks, new_blocks)
-    provisional = [_AlignedPairing(old_blocks[0], new_blocks[0])]
+    provisional = [_AlignedPairing(old_blocks[0], new_blocks[0], ALIGNMENT)]
 
-    evidence = pdf_similarity_correspondence_evidence(provisional, registry)
+    evidence = pdf_similarity_correspondence_evidence(provisional, registry, _admitting(provisional, registry))
     decided = apply_pdf_similarity_revocation(provisional, evidence, registry, threshold=SIMILARITY_THRESHOLD)
 
     assert [(p.old, p.new) for p in decided] == [(old_blocks[0], None), (None, new_blocks[0])], (
@@ -331,7 +352,7 @@ def test_an_unmatched_pairing_carries_no_evidence() -> None:
     """A ``(block, None)`` names no pair, so there is nothing for evidence to describe."""
     blocks = [_block("alpha", 1)]
     registry = PdfObservationRegistry(blocks, [])
-    assert pdf_similarity_correspondence_evidence([_AlignedPairing(blocks[0], None)], registry) == ()
+    assert pdf_similarity_correspondence_evidence([_AlignedPairing(blocks[0], None)], registry, CandidateSet()) == ()
 
 
 def test_a_surviving_pairing_without_evidence_is_refused() -> None:
@@ -356,7 +377,8 @@ def test_alignment_no_longer_revokes_anything() -> None:
     """
     old_blocks = [_block("alpha beta gamma delta epsilon", 1)]
     new_blocks = [_block("wholly unrelated words entirely", 2)]
-    pairings = _align_blocks(old_blocks, new_blocks)
+    registry = PdfObservationRegistry(old_blocks, new_blocks)
+    pairings, _candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
 
     assert [(p.old, p.new) for p in pairings] == [(old_blocks[0], new_blocks[0])], (
         "alignment split a dissimilar pair; the revocation rule has leaked back into retrieval"
