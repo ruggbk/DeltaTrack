@@ -657,29 +657,52 @@ def test_all_report_fixtures_committed() -> None:
 # the committee-report floor: that module's module-level ``pytestmark = pytest.mark.slow``
 # would confine this guarantee to the slow tier, and pytest has no per-test un-marking. The
 # completeness question belongs in the FAST tier on every CI run, and it is cheap there --
-# ``adjacent_pdf_pairs()`` only globs the committed fixture tree, extracting no PDF.
+# importing the smoke module for its ``_PAIRS`` runs only its module body, and
+# ``adjacent_pdf_pairs()`` just globs the committed fixture tree, extracting no PDF. Importing
+# a ``@slow`` module does not carry its marker over: marks come from collection, not import,
+# so this test stays in the fast tier and the smoke cases stay deselected there.
 
 
 def test_pdf_corpus_smoke_pairs_are_complete() -> None:
     """Completeness floor for test_pdf_corpus_smoke.py's parametrize list (#601).
 
-    ``_PAIRS = adjacent_pdf_pairs()`` is the whole case list for ``TestPdfCorpusSmoke``,
-    and nothing in that module asserts it is complete. Losing *every* pair is already
-    caught -- an empty parametrize is a skip, which the ``CI_SLOW_MODULES`` ceiling
-    watches -- but a partial collapse, 23 pairs down to 3 say, produces neither a skip nor
-    a failure: the suite compares fewer bills and stays green. This is the shape #598
-    closed for ``_DIVISION_VERSIONS`` in tests/test_pdf_division_recall.py, and the floor
-    below is that one's counterpart.
+    ``_PAIRS`` is the whole case list for ``TestPdfCorpusSmoke``, and nothing in that module
+    asserts it is complete. Losing *every* pair is already caught -- an empty parametrize is a
+    skip, which the ``CI_SLOW_MODULES`` ceiling watches -- but a partial collapse, 23 pairs down
+    to 3 say, produces neither a skip nor a failure: the suite compares fewer bills and stays
+    green. This is the shape #598 closed for ``_DIVISION_VERSIONS`` in
+    tests/test_pdf_division_recall.py, and the floor below is that one's counterpart.
 
-    The floor sits well under the current count (23 pairs across 10 bills) so adding or
-    removing an unrelated fixture does not force an edit here, while a wholesale loss
-    still reddens. It is deliberately sensitive to ANY narrowing of the collection,
-    ``TEST_BILL`` included: that selector is a developer loop, and a run narrowed to one
-    bill has not checked the corpus is complete. The #598 floor behaves the same way.
+    Two assertions, because a shrunken case list has two independent causes:
+
+    * ``len(_PAIRS) >= 15`` is the floor itself. It reddens when the committed corpus loses PDF
+      fixtures or ``adjacent_pdf_pairs()`` stops pairing them. 15 sits well under the current
+      count (23 pairs across 10 bills) so unrelated fixture churn does not force an edit here,
+      while a wholesale loss still reddens.
+    * ``len(_PAIRS) == len(adjacent_pdf_pairs())`` pins the module's list to the full collection,
+      so a slice, filter or truncation at the ``_PAIRS`` assignment reddens even with the corpus
+      intact. Both assertions read ``_PAIRS`` itself rather than a fresh ``adjacent_pdf_pairs()``
+      call, because a fresh call guards the collection and not the list the suite parametrizes
+      over: with the floor on a fresh call, ``_PAIRS = adjacent_pdf_pairs()[:3]`` cuts the smoke
+      suite from 138 collected cases to 18 and every fast test, this one included, stays green.
+
+    Both are deliberately sensitive to ANY narrowing of the collection, ``TEST_BILL`` included:
+    that selector is a developer loop, and a run narrowed to one bill has not checked that the
+    corpus is complete. The #598 floor behaves the same way.
     """
-    pairs = adjacent_pdf_pairs()
-    assert len(pairs) >= 15, (
-        f"expected >=15 adjacent PDF pairs, collected {len(pairs)} -- either the committed corpus "
-        "lost PDF fixtures or adjacent_pdf_pairs() stopped pairing them, which silently shrinks "
-        "tests/test_pdf_corpus_smoke.py's parametrize list without skipping or failing anything"
+    # Imported in-test, not at module scope: the smoke module is ``@slow`` and imports the PDF
+    # engine, and this keeps that off the fast module's collection-time import graph.
+    from tests.test_pdf_corpus_smoke import _PAIRS
+
+    assert len(_PAIRS) >= 15, (
+        f"expected >=15 adjacent PDF pairs, test_pdf_corpus_smoke.py collected {len(_PAIRS)} -- "
+        "either the committed corpus lost PDF fixtures or adjacent_pdf_pairs() stopped pairing "
+        "them, which silently shrinks that module's parametrize list without skipping or failing "
+        "anything"
+    )
+    collected = adjacent_pdf_pairs()
+    assert len(_PAIRS) == len(collected), (
+        f"test_pdf_corpus_smoke.py parametrizes over {len(_PAIRS)} of the {len(collected)} "
+        "adjacent PDF pairs in the corpus -- its _PAIRS assignment has sliced, filtered or "
+        "truncated the collection, so the suite silently compares fewer bills while staying green"
     )
