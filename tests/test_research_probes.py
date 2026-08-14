@@ -29,6 +29,8 @@ import importlib
 import importlib.util
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -328,4 +330,171 @@ def test_body_less_target_nodes_are_always_containers():
         f"{len(leaves)} body-less node(s) with no text-bearing descendant: {leaves[:3]}. "
         "`all-nodes-with-body` can no longer be said to cover every possible counterpart, so it "
         "must not grant complete-in-document — switch the coverage rule to `all-nodes`."
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# 4. the round-1 probes: executed, because a symbol check cannot see how they went stale
+# --------------------------------------------------------------------------------------------
+#
+# The static gate above checks that every ``from deltatrack... import`` still resolves. ADR 0020's
+# round-1 separation produced two defects it is structurally unable to see, and both survived
+# until someone ran the script:
+#
+#   1. **Attribute access.** Seven probes reached the fused matcher as ``db._similarity_pair``
+#      rather than importing it. B2 removed the function; the probes still imported only
+#      ``diff_bill`` and ``normalize_bill``, which both still exist, so the gate stayed green.
+#   2. **A signature change**, which no symbol-existence check of any kind can catch.
+#      ``round1_cost.py`` called ``db._match_collision_group(old, new)``. B1 and B2 gave that
+#      function a ``registry`` and a ``candidates`` parameter and a two-element return. The NAME
+#      still resolves. Only calling it fails.
+#
+# Defect 2 is why this section executes the probes instead of growing the AST check to cover
+# attribute access. An attribute-existence guard would have caught six of the seven and certified
+# the seventh, and the certificate would have been the misleading part.
+#
+# The cost is bounded three ways rather than by hoping the set stays small: the manifest is
+# closed (below), the probes run under ``DELTATRACK_PROBE_SMOKE`` on one corpus pair, and the
+# whole section is two subprocesses. It is a resolution check, not a benchmark and not a
+# research result -- see the flag's documentation in ``round1_b3_cost.py``.
+
+#: Every round-1 provision-matching probe this repository claims can be run today.
+#:
+#: A closed set, not an allowlist: :func:`test_every_round_1_probe_is_declared_runnable` requires
+#: it to equal what is on disk. So a probe added later is either executed by this gate or it fails
+#: it, which is the property the previous arrangement lacked -- seven probes sat in the tree for
+#: months in a state where running them raised, and nothing said so.
+#:
+#: The seven that went stale were removed rather than ported, in B4. Each asked a question a
+#: B0-B3 executable invariant now owns, and porting them would have produced a second, ungated
+#: answer to a question a test already answers. They remain readable at ``7fdbf62``; the audit's
+#: appendix records which invariant inherited each one.
+RUNNABLE_ROUND1_PROBES = (
+    "round1_b3_cost.py",
+    "round1_candidateset_cost.py",
+)
+
+#: Generous: the gate is asking whether the probe resolves its production dependencies, and a
+#: timeout is an inconclusive result rather than a pass. Both probes finish in about a second.
+PROBE_EXECUTION_TIMEOUT_SECONDS = 120
+
+
+def _execute(script: Path) -> subprocess.CompletedProcess[str]:
+    """Run one script the way a researcher would, in smoke mode, from the project root.
+
+    ``cwd`` is the project root because the probes resolve the corpus relative to it, and the
+    environment is inherited so the installed ``deltatrack`` is the one under test -- a probe run
+    against some other copy would prove nothing about this checkout.
+    """
+    return subprocess.run(  # noqa: S603
+        [sys.executable, str(script)],
+        cwd=PROJECT_ROOT,
+        env={**os.environ, "DELTATRACK_PROBE_SMOKE": "1"},
+        capture_output=True,
+        text=True,
+        timeout=PROBE_EXECUTION_TIMEOUT_SECONDS,
+    )
+
+
+def test_every_round_1_probe_is_declared_runnable():
+    """The manifest equals the round-1 probes on disk, and is not empty.
+
+    Two failures, deliberately in one assertion because they are the same mistake seen from
+    either side. A probe on disk but not in the manifest is one nothing runs -- the state the
+    seven stale probes were in. A probe in the manifest but not on disk is a gate parametrized
+    over nothing, which passes by collecting zero cases (ADR 0009).
+    """
+    on_disk = {path.name for path in PROBES.glob("round1_*.py")}
+    assert on_disk, "no round-1 probes found; the execution gate below would run nothing"
+    assert on_disk == set(RUNNABLE_ROUND1_PROBES), (
+        f"the round-1 probes on disk {sorted(on_disk)} are not the ones declared runnable "
+        f"{sorted(RUNNABLE_ROUND1_PROBES)}. A probe this gate does not execute is a probe nothing "
+        "checks: add it to RUNNABLE_ROUND1_PROBES, or remove it and record in the audit's "
+        "appendix which executable invariant inherited its question."
+    )
+
+
+@pytest.mark.parametrize("probe", RUNNABLE_ROUND1_PROBES)
+def test_a_runnable_round_1_probe_still_executes(probe: str):
+    """It runs to completion against the production it is written for. The gate is the exit code.
+
+    Not "it imports": both defects this exists to catch are invisible until the call happens.
+    """
+    result = _execute(PROBES / probe)
+    assert result.returncode == 0, (
+        f"{probe} no longer runs against this checkout (exit {result.returncode}). It is declared "
+        f"runnable in RUNNABLE_ROUND1_PROBES, so either repair it or retire it.\n"
+        f"--- stderr ---\n{result.stderr[-2000:]}"
+    )
+
+
+# --- Proving the execution gate can fire, on both defects it exists to catch ------------------
+#
+# Reproductions rather than descriptions: each script below is how a real probe reached
+# production, and the two failing ones are the two states real probes were actually found in.
+
+_REACHES_A_LIVE_SYMBOL = """
+from deltatrack import diff_bill as db
+
+captured = db._match_collision_group
+print("resolved", captured.__name__)
+"""
+
+_REACHES_A_REMOVED_SYMBOL = """
+from deltatrack import diff_bill as db
+
+captured = db._similarity_pair
+print("resolved", captured)
+"""
+
+_CALLS_A_LIVE_SYMBOL_WITH_THE_PRE_B1_SIGNATURE = """
+from deltatrack import diff_bill as db
+
+db._match_collision_group([], [])
+"""
+
+
+def _execute_source(source: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    script = tmp_path / "control_probe.py"
+    script.write_text(source)
+    return _execute(script)
+
+
+def test_the_execution_gate_does_not_simply_fail_everything(tmp_path):
+    """The control's positive half. Without it, the two red results below prove nothing.
+
+    A runner that reddened on any script at all would satisfy both failure controls while being
+    incapable of distinguishing a stale probe from a working one.
+    """
+    result = _execute_source(_REACHES_A_LIVE_SYMBOL, tmp_path)
+    assert result.returncode == 0, f"the runner failed a script that resolves cleanly:\n{result.stderr}"
+    assert "resolved _match_collision_group" in result.stdout
+
+
+def test_the_execution_gate_reddens_on_a_removed_private_symbol(tmp_path):
+    """Defect 1: ``db._similarity_pair``, exactly as the seven removed probes reached it.
+
+    The static import gate is green on this script -- it imports ``diff_bill``, which exists.
+    """
+    result = _execute_source(_REACHES_A_REMOVED_SYMBOL, tmp_path)
+    assert result.returncode != 0, "a probe reaching a removed private symbol was reported as runnable"
+    assert "_similarity_pair" in result.stderr and "AttributeError" in result.stderr, (
+        f"the script failed, but not for the reason this control is about:\n{result.stderr}"
+    )
+
+
+def test_the_execution_gate_reddens_on_a_stale_call_signature(tmp_path):
+    """Defect 2, and the reason this gate executes rather than inspecting.
+
+    ``round1_cost.py`` carried exactly this call. Every name in it resolves; the arity does not.
+    No symbol-existence check -- import-based, attribute-based or AST-based -- can go red here,
+    which is why one would have certified that probe as healthy.
+    """
+    result = _execute_source(_CALLS_A_LIVE_SYMBOL_WITH_THE_PRE_B1_SIGNATURE, tmp_path)
+    assert result.returncode != 0, (
+        "a probe calling _match_collision_group with its pre-B1 two-argument signature was "
+        "reported as runnable; the gate has stopped being behavioural"
+    )
+    assert "TypeError" in result.stderr and "_match_collision_group" in result.stderr, (
+        f"the script failed, but not for the reason this control is about:\n{result.stderr}"
     )

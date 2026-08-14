@@ -42,6 +42,7 @@ dwarfs matching and would bury the difference this exists to show.
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from collections import defaultdict
@@ -55,7 +56,16 @@ from deltatrack.bill_tree import normalize_bill  # noqa: E402
 from deltatrack.matching import CandidateSet  # noqa: E402
 from tests.conftest import manifest_version_pairs  # noqa: E402
 
-REPEATS = 5
+#: Smoke mode, set by ``tests/test_research_probes.py``'s execution gate. It shrinks the SAMPLE
+#: and never the code path: every arm still runs, every production symbol is still called with
+#: the arity it is called with in a real run, and the equivalence assertion still fires. That is
+#: the whole point -- a mode that skipped an arm would let the gate pass for the wrong reason,
+#: certifying a probe that can no longer reach the function whose staleness it exists to detect.
+#: The measurements it prints are NOT a result: one pair and one repeat is a resolution check,
+#: not a benchmark. Report figures only from a full run.
+SMOKE = os.environ.get("DELTATRACK_PROBE_SMOKE") == "1"
+
+REPEATS = 1 if SMOKE else 5
 
 
 def group_by_path(tree) -> dict[tuple[str, ...], list]:
@@ -225,6 +235,8 @@ def group_census(trees) -> dict[str, int]:
 def main() -> None:
     pairs = manifest_version_pairs()
     assert pairs, "no committed version pairs; there is nothing to measure"
+    if SMOKE:
+        pairs = pairs[:1]
     trees = [(normalize_bill(old), normalize_bill(new)) for old, new in pairs]
 
     census = group_census(trees)
