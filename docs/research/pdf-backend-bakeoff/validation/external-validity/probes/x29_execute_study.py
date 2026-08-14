@@ -1,4 +1,4 @@
-"""x29 -- test `execute_study` and the A43 holdout-guard repair. SYNTHETIC + DEVELOPMENT only.
+"""x29 -- test `execute_study`, the A43 holdout guard, and the A45 handoff. SYNTHETIC + DEVELOPMENT.
 
 NOT CONFIRMATORY. No holdout document is opened by any extractor, nothing is scored, and no
 canonical `results/frames.json` is produced. The evidence artifact is
@@ -38,7 +38,12 @@ sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 import build_frames as BF  # noqa: E402
 import build_oracle as BO  # noqa: E402
+
+# A45 -- the REAL consumers of `control_documents`. Imported so the handoff controls exercise
+# the actual canonical boundary rather than a restatement of what each side is believed to want.
+import cross_engine_control as CE  # noqa: E402
 import execute_study as ES  # noqa: E402
+import s1_control as S1  # noqa: E402
 import x04_freeze_check as X04  # noqa: E402
 
 OUT = EV / "results" / "x29_execute_study.json"
@@ -342,6 +347,231 @@ def part_frames(root: Path) -> dict:
         "n_frames": len(payload["frames"]),
         "c_frame_selected_p_head": c_head,
         "c_frame_selected_p_robust": c_robust,
+    }
+
+
+def part_handoff(root: Path) -> dict:
+    """A45 -- the canonical control handoff, executed into its REAL consumers.
+
+    THE DEFECT, REPRODUCED. `write_cross_engine_control(control_documents(population))` is the
+    canonical A39.2 call. `control_documents` emitted `{"document", "pdf_path"}`;
+    `write_cross_engine_control` reads `document_sha256` to seed A39.2's deterministic page
+    sample. The call failed closed with `KeyError('document_sha256')` and no
+    `cross_engine_control.json` was written -- a MANDATORY `score_metrics` input and the only
+    source of the PDFIUM-CONDITIONED FRAME qualification.
+
+    WHY NOTHING CAUGHT IT. x22 exercises `cross_engine_result` with a SHA it supplies ITSELF, so
+    it never sees a record. x29 compared only the document IDS `control_documents` returned. G5
+    proved both components existed and were callable. Existence and callability are properties
+    of each side alone; the mismatch is a property of the PAIR, and no control ran the pair.
+
+    So every control here runs the REAL producer into the REAL consumer and requires an actual
+    artifact out of it. SYNTHETIC population over DEVELOPMENT documents: no holdout is opened,
+    no canonical artifact is written, and the artifact's own `population` field is asserted to
+    say so.
+    """
+    print("\n== A45: control_documents -> write_cross_engine_control, actually executed ==")
+    mpath, droot = make_membership(root, DEV_DOCS)
+    pop = ES.load_population(mpath, droot)
+    out = root / "cross_engine_control.json"
+
+    # --- POSITIVE, FIRST: the exact canonical descriptor set is ACCEPTED -----------------
+    records = ES.control_documents(pop, mpath)
+    try:
+        artifact = CE.write_cross_engine_control(records, out)
+        ok, obs = True, f"{artifact['n_documents']} rows"
+    except Exception as exc:
+        artifact, ok, obs = None, False, f"{type(exc).__name__}: {exc}"
+    check(
+        "THE CANONICAL CALL RUNS: write_cross_engine_control(control_documents(pop)) -> artifact",
+        ok,
+        "the canonical handoff raises, so no cross_engine_control.json exists and score_metrics "
+        "has no cross-engine input -- the Run 1 failure",
+        obs,
+    )
+    if artifact is None:
+        return {"canonical_handoff_executes": False}
+
+    check(
+        "R2-A3: exactly one artifact row per canonical member, no omission, duplicate or extra",
+        sorted(r["document"] for r in artifact["per_document"]) == sorted(d.document_id for d in pop),
+        "the artifact's document set is not the population's -- score_metrics requires EXACT set "
+        "equality with the scored frames, so a drift here moves the qualification denominator",
+        f"{[r['document'] for r in artifact['per_document']]}",
+    )
+    authority = ES.authority_index(mpath)
+    check(
+        "R2-A2: every row's document_sha256 IS the canonical membership SHA",
+        all(r["document_sha256"] == authority[r["document"]]["sha256"] for r in artifact["per_document"]),
+        "the SHA reaching A39.2's page-sample identity is not the authority's, so the sampled "
+        "pages are a different set for the same document -- silently and reproducibly",
+    )
+    check(
+        "the probe stayed off the holdout: the artifact declares a NON-HOLDOUT population",
+        artifact["population"].startswith("NON-HOLDOUT"),
+        "this control opened a confirmatory document",
+        artifact["population"],
+    )
+    check(
+        "the SAME record also satisfies the OTHER consumer, write_s1_control",
+        S1.write_s1_control(records, root / "s1_control.json")["n_documents"] == len(pop),
+        "control_documents' claim to serve S1 and cross-engine alike is false for one of them",
+    )
+
+    # --- MUTATION A: delete document_sha256 AT THE PRODUCER ------------------------------
+    # The literal R2-A4 mutation. Injected into `_control_record`, i.e. the canonical handoff
+    # itself, NOT into a copy of its output -- a dict edited in the test would only prove that
+    # the consumer dislikes a dict the test made up.
+    saved_record_fn = ES._control_record
+    try:
+        ES._control_record = lambda d: {"document": d.document_id, "pdf_path": d.pdf_path}
+        ok, obs = refuses(
+            lambda: CE.write_cross_engine_control(ES.control_documents(pop, mpath), root / "never.json"),
+            CE.DOCUMENT_RECORD_INCOMPLETE,
+            CE.CrossEngineError,
+        )
+        check(
+            "MUTATION delete document_sha256 from the canonical handoff -> the consumer REFUSES",
+            ok,
+            "the producer may drop a result-bearing field its consumer requires and nothing notices until execution",
+            obs,
+        )
+        check(
+            "...and the refusal happens BEFORE any artifact is written",
+            not (root / "never.json").exists(),
+            "a partial confirmatory artifact is left on disk by a failed handoff",
+        )
+        # ...and the SAME mutation must turn READINESS red, not only this suite.
+        problems = ES.contract_report()
+        check(
+            "MUTATION delete document_sha256 from the canonical handoff -> G5 RED",
+            any("REFUSED by its own consumer" in p for p in problems)
+            and any(
+                "G5" in r[0] and not r[1]
+                for r in X04.check_execution(json.loads(X04.MEMBERSHIP.read_text())["members"])
+            ),
+            "readiness stays GREEN while the canonical handoff cannot be consumed -- exactly the "
+            "state Run 1 was authorized in",
+            "; ".join(problems[:1]),
+        )
+    finally:
+        ES._control_record = saved_record_fn
+    check(
+        "NON-VACUITY: the handoff check is GREEN again once the producer is restored",
+        not ES.contract_report(),
+        "the check refuses the repaired handoff, which would make the mutation above meaningless",
+        "; ".join(ES.contract_report()[:1]),
+    )
+
+    # --- MUTATION B: a SUBSTITUTED but VALID SHA reaches the consumer ---------------------
+    # Two INDEPENDENT owners, and they are independent because they compare against different
+    # things: execute_study compares the descriptor to the AUTHORITY, cross_engine_control
+    # compares the record to the SOURCE BYTES. Neither can stand in for the other.
+    a, b = pop[0], pop[1]
+    ok, obs = refuses(
+        lambda: ES.assert_population_complete((dataclasses.replace(a, sha256=b.sha256), b), mpath),
+        ES.DESCRIPTOR_METADATA_MISMATCH,
+    )
+    check(
+        "MUTATION substitute another member's SHA in the descriptor -> execute_study refuses",
+        ok,
+        "a descriptor carrying another document's SHA is handed to the cross-engine producer",
+        obs,
+    )
+    ok, obs = refuses(
+        lambda: CE.write_cross_engine_control([{**records[0], "document_sha256": b.sha256}], root / "never_b.json"),
+        CE.SOURCE_SHA256_MISMATCH,
+        CE.CrossEngineError,
+    )
+    check(
+        "...and INDEPENDENTLY, the producer's own source verification refuses the same swap",
+        ok,
+        "the SHA is trusted once it arrives, so a substituted one selects a different page "
+        "sample -- the verification A39.2 requires would be dead",
+        obs,
+    )
+
+    # --- MUTATION C: a SUBSTITUTED but VALID pdf_path ------------------------------------
+    ok, obs = refuses(
+        lambda: ES.assert_population_complete((dataclasses.replace(a, pdf_path=b.pdf_path), b), mpath),
+        ES.DESCRIPTOR_METADATA_MISMATCH,
+    )
+    check(
+        "MUTATION substitute another member's pdf_path in the descriptor -> execute_study refuses",
+        ok,
+        "the cross-engine measurement is taken on the wrong document's bytes",
+        obs,
+    )
+    ok, obs = refuses(
+        lambda: CE.write_cross_engine_control([{**records[0], "pdf_path": b.pdf_path}], root / "never_c.json"),
+        CE.SOURCE_SHA256_MISMATCH,
+        CE.CrossEngineError,
+    )
+    check(
+        "...and INDEPENDENTLY, the producer re-hashes the bytes it is about to measure",
+        ok,
+        "a path substituted after the descriptor was built reaches the engines",
+        obs,
+    )
+
+    # --- MUTATION D: the SOURCE BYTES change, the recorded SHA does not ------------------
+    # execute_study CANNOT see this: it hashed at load, and the records are already built. Only
+    # the consumer's immediate verification is between this and a measurement of mutated bytes.
+    victim = Path(records[0]["pdf_path"])
+    original = victim.read_bytes()
+    try:
+        victim.write_bytes(original + b"\n% mutated after the descriptors were built\n")
+        ok, obs = refuses(
+            lambda: CE.write_cross_engine_control(records, root / "never_d.json"),
+            CE.SOURCE_SHA256_MISMATCH,
+            CE.CrossEngineError,
+        )
+        check(
+            "MUTATION alter a source byte while keeping the recorded SHA -> the producer refuses",
+            ok,
+            "hashing at load only proves what was true at load; a document swapped afterwards is "
+            "measured anyway and the artifact reports the frozen SHA for mutated bytes",
+            obs,
+        )
+    finally:
+        victim.write_bytes(original)
+    check(
+        "the mutated source is restored byte-identically",
+        hashlib.sha256(victim.read_bytes()).hexdigest() == records[0]["document_sha256"],
+        "fault injection leaves the fixture modified",
+    )
+
+    # --- MUTATION E/F: omission and duplication never reach the handoff at all -----------
+    # The refusal is `assert_population_complete`, which x29 already exercises directly at
+    # `control_documents`; what is new here is that it fires BEFORE the consumer, so the
+    # cross-engine artifact can never be built on a subset. Same assertion, different claim.
+    ok, obs = refuses(
+        lambda: CE.write_cross_engine_control(ES.control_documents(pop[:1], mpath), root / "never_e.json"),
+        ES.POPULATION_INCOMPLETE,
+    )
+    check(
+        "MUTATION omit one canonical member -> refused before the handoff is built",
+        ok,
+        "a 1-of-2 cross-engine artifact is written and score_metrics' set-equality check is the "
+        "only thing left standing between that and a moved qualification denominator",
+        obs,
+    )
+    ok, obs = refuses(
+        lambda: CE.write_cross_engine_control(ES.control_documents((*pop, pop[0]), mpath), root / "never_f.json"),
+        ES.POPULATION_DUPLICATED,
+    )
+    check(
+        "MUTATION duplicate one canonical member -> refused before the handoff is built",
+        ok,
+        "one document is measured twice; a duplicate row is individually valid so no per-row check sees it",
+        obs,
+    )
+    return {
+        "canonical_handoff_executes": True,
+        "record_fields": sorted(records[0]),
+        "n_rows": artifact["n_documents"],
+        "artifact_population": artifact["population"],
+        "consumers_exercised": ["cross_engine_control.write_cross_engine_control", "s1_control.write_s1_control"],
     }
 
 
@@ -778,6 +1008,7 @@ def main() -> int:
         pop_ev = part_population(root / "pop")
         frame_ev = part_frames(root / "frames")
         identity_ev = part_identity(root / "identity")
+        handoff_ev = part_handoff(root / "handoff")
     authority_ev = part_authority()
     guard_ev = part_guard()
     boundary_ev = part_boundary()
@@ -785,7 +1016,7 @@ def main() -> int:
 
     doc = {
         "population": "SYNTHETIC + DEVELOPMENT -- no holdout opened by any extractor, nothing scored",
-        "amendment": "A43",
+        "amendment": "A43 + A45",
         "canonical_frames_json_created": False,
         "holdout_extraction_performed": False,
         "development_documents": [d for d, _ in DEV_DOCS],
@@ -794,6 +1025,7 @@ def main() -> int:
         "page_limit": ES.PAGE_LIMIT,
         "refusal_classes": sorted(v for k, v in vars(ES).items() if k.isupper() and isinstance(v, str) and k == v),
         "identity": identity_ev,
+        "handoff": handoff_ev,
         "authority": authority_ev,
         "guard": guard_ev,
         "boundary": boundary_ev,

@@ -617,10 +617,45 @@ def oracle_documents(
     return out
 
 
+def _control_record(descriptor: DocumentDescriptor) -> dict:
+    """ONE control-stage record, derived entirely from an authority-checked descriptor.
+
+    Factored out of `control_documents` so the record's SHAPE has a single executable owner.
+    `handoff_report` runs this exact function into the consumer's own reader, so a field
+    dropped here is refused by the readiness gate rather than at execution time.
+
+    A45 -- `document_sha256` IS RESULT-BEARING and is not decoration. A39.2 ranks the
+    cross-engine page sample over `(document_sha256, page_number)`, so the value chosen here
+    selects WHICH PAGES are measured, and `cross_engine_control.verified_sha256` then checks it
+    against the source bytes. It comes from `DocumentDescriptor.sha256`, which
+    `load_population` computed from the file it resolved and `assert_population_complete`
+    (called by every caller of this function) has just compared against the authority's own
+    record -- so it is the canonical membership SHA, not a second opinion about the document.
+    """
+    return {
+        "document": descriptor.document_id,
+        "document_sha256": descriptor.sha256,
+        "pdf_path": descriptor.pdf_path,
+    }
+
+
 def control_documents(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> list[dict]:
-    """The `documents` list `write_s1_control` and `write_cross_engine_control` both take."""
+    """The `documents` list `write_s1_control` and `write_cross_engine_control` both take.
+
+    A45 -- THE RECORD WAS INCOMPLETE FOR ONE OF ITS TWO CONSUMERS. It carried `document` and
+    `pdf_path`, which is exactly what `write_s1_control` reads, and `write_cross_engine_control`
+    additionally reads `document_sha256`. The canonical call
+    `write_cross_engine_control(control_documents(population))` therefore failed closed with
+    `KeyError('document_sha256')` and no `cross_engine_control.json` was written -- a MANDATORY
+    `score_metrics` input, and the sole source of the PDFIUM-CONDITIONED FRAME qualification.
+
+    The repair is not a longer list at the caller. A43 removed caller-supplied population and
+    descriptor freedom on purpose, so the missing field is read from the SAME authority-checked
+    descriptor as every other field: a result-bearing producer may not depend on a caller
+    remembering which metadata its consumer happens to need.
+    """
     assert_population_complete(population, membership_path)
-    return [{"document": d.document_id, "pdf_path": d.pdf_path} for d in population]
+    return [_control_record(d) for d in population]
 
 
 def document_strata(population: tuple[DocumentDescriptor, ...], membership_path: Path = MEMBERSHIP) -> dict[str, int]:
@@ -644,7 +679,63 @@ REQUIRED_CALLABLES = (
     "oracle_documents",
     "control_documents",
     "document_strata",
+    # A45 -- the handoff check is part of the surface. Deleting it must turn G5 RED rather than
+    # silently restoring the state in which readiness could not see an unusable handoff.
+    "handoff_report",
 )
+
+
+def _handoff_probe() -> DocumentDescriptor:
+    """A descriptor-shaped stand-in, used ONLY to exercise the record mapping.
+
+    It never enters a population -- `assert_population_complete` refuses it on sight -- and no
+    file is named that exists. Its only job is to be a legal input to `_control_record`, so the
+    shape check below needs neither the frozen population nor a single byte of the holdout.
+    """
+    return DocumentDescriptor(
+        document_id="HANDOFF-PROBE-NOT-A-MEMBER",
+        kind="bill",
+        population=sorted(BF.KNOWN_POPULATIONS)[0],
+        stratum=0,
+        pdf_path=Path("handoff-probe-not-a-file.pdf"),
+        sha256="0" * 64,
+        pages=0,
+    )
+
+
+def handoff_report() -> list[str]:
+    """A45 -- is the record this module hands the control stages one its CONSUMER can read?
+
+    THE DEFECT THIS CLOSES. G5 asked whether each result-bearing component existed and whether
+    this module still had its entrypoints. Both were true, and the canonical call
+    `write_cross_engine_control(control_documents(population))` still could not run: the
+    producer emitted `{"document", "pdf_path"}` and the consumer reads `document_sha256`.
+    Existence and callability are properties of each side alone; COMPATIBILITY is a property of
+    the pair, and nothing held it. Readiness read green and execution failed closed on the
+    first confirmatory artifact it tried to write.
+
+    THIS IS NOT A FIELD-NAME COMPARISON. `_control_record` is the same function the canonical
+    handoff maps over the population, and `document_inputs` is the same function
+    `write_cross_engine_control` calls on every record it processes. Neither side reads a shared
+    declaration, so the two can only agree by actually agreeing. Dropping `document_sha256` from
+    `_control_record` turns this report -- and therefore G5 -- RED.
+
+    NOTHING IS MEASURED AND NOTHING IS OPENED. `execution_path_report`'s standing property that
+    it never opens a PDF or reads the holdout is preserved: the probe descriptor names a file
+    that does not exist, and `document_inputs` only reads keys.
+    """
+    try:
+        import cross_engine_control as CE
+    except Exception as exc:
+        return [f"cross_engine_control does not import, so the handoff cannot be checked: {exc}"]
+    try:
+        CE.document_inputs(_control_record(_handoff_probe()))
+    except Exception as exc:
+        return [
+            "control_documents' record is REFUSED by its own consumer "
+            f"(cross_engine_control.document_inputs): {type(exc).__name__}: {exc}"
+        ]
+    return []
 
 
 def contract_report() -> list[str]:
@@ -656,4 +747,10 @@ def contract_report() -> list[str]:
     ]
     if PAGE_LIMIT is not None:
         problems.append(f"PAGE_LIMIT is {PAGE_LIMIT!r}; the canonical scope is the whole document")
+    # Called through `globals()` for the same reason it is in REQUIRED_CALLABLES: a deleted
+    # entrypoint must be REPORTED as a broken execution path, not raise a NameError out of the
+    # gate that was asking whether the path is broken.
+    fn = globals().get("handoff_report")
+    if callable(fn):
+        problems.extend(fn())
     return problems

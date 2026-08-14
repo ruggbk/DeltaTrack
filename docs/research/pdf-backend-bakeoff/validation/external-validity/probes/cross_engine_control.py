@@ -37,6 +37,7 @@ import methodology_contracts as MC  # noqa: E402
 import x09_skeleton_cross_engine as X09  # noqa: E402
 
 SOURCE_SHA256_MISMATCH = "SOURCE_SHA256_MISMATCH"
+DOCUMENT_RECORD_INCOMPLETE = "DOCUMENT_RECORD_INCOMPLETE"
 
 
 class CrossEngineError(Exception):
@@ -64,6 +65,39 @@ def verified_sha256(pdf_path: Path, expected_sha256: str) -> str:
             {"path": str(pdf_path), "expected": expected_sha256, "actual": actual},
         )
     return actual
+
+
+def document_inputs(record: dict) -> tuple[str, str, Path]:
+    """THIS PRODUCER'S OWN READ of one caller document record. The requirement, executable.
+
+    A45. `write_cross_engine_control` used to index the record inline, so "what this consumer
+    requires" existed only as three subscript expressions inside a loop body -- unreachable
+    without running the loop, which means running the measurement, which pre-boundary means not
+    at all. The canonical producer `execute_study.control_documents` emitted a record without
+    `document_sha256`, nothing compared the two shapes, and the mismatch surfaced as a raw
+    `KeyError` at execution time with no artifact written.
+
+    Naming the read here makes the requirement callable without measuring anything, which is
+    what lets a readiness gate exercise the real handoff on a real descriptor and go RED
+    instead of discovering the gap after authorization.
+
+    THIS IS THE ONLY PLACE THE WRITER READS THE MEASUREMENT ARGUMENTS from a record, so the
+    requirement cannot drift from the use: a fourth field would have to be read here to reach
+    `cross_engine_result`, and `handoff_report` would then exercise that too.
+
+    Deliberately NOT a shared constant imported by both sides. A field-name set that the
+    producer, the consumer and the test all read from one declaration agrees with itself by
+    construction and proves nothing about the boundary.
+    """
+    missing = [f for f in ("document", "document_sha256", "pdf_path") if record.get(f) in (None, "")]
+    if missing:
+        raise CrossEngineError(
+            DOCUMENT_RECORD_INCOMPLETE,
+            {"missing": missing, "record_keys": sorted(record) if isinstance(record, dict) else None},
+        )
+    # ORDERED AS `cross_engine_result`'s OWN PARAMETERS, so `cross_engine_result(*inputs)` is
+    # the only spelling and a silently transposed pair is not reachable.
+    return record["document"], record["document_sha256"], Path(record["pdf_path"])
 
 
 def _page_count(pdf_path: Path) -> int:
@@ -120,8 +154,9 @@ def cross_engine_result(document: str, document_sha256: str, pdf_path: Path, lim
 def write_cross_engine_control(documents: list[dict], out_path: Path | None = None) -> dict:
     """A39.2 -- the CANONICAL execution-time artifact. Refuses before a VALID boundary.
 
-    `documents` items: {"document", "document_sha256", "pdf_path"}. Guarded exactly as the
-    oracle key and the S1 artifact are, so no confirmatory artifact can be written under a
+    `documents` items: {"document", "document_sha256", "pdf_path"}, and on the canonical path
+    they come from `execute_study.control_documents` -- never hand-assembled. Guarded exactly as
+    the oracle key and the S1 artifact are, so no confirmatory artifact can be written under a
     weaker condition than the material it describes.
     """
     import build_oracle as BO
@@ -131,8 +166,13 @@ def write_cross_engine_control(documents: list[dict], out_path: Path | None = No
 
     rows = []
     for doc in documents:
+        # ORDER UNCHANGED BY A45. Authorization is the more fundamental question and is still
+        # asked first, on the same fields. `document_inputs` opens no file, so it could safely
+        # run earlier; it is left second so that a MALFORMED HOLDOUT record keeps reporting
+        # HOLDOUT_BEFORE_EXECUTION_BOUNDARY rather than a shape complaint, which is the same
+        # ordering ruling `execute_study.build_document_frame_for` records.
         BO.assert_source_permitted(doc["document"], doc.get("pdf_path"))
-        rows.append(cross_engine_result(doc["document"], doc["document_sha256"], Path(doc["pdf_path"])))
+        rows.append(cross_engine_result(*document_inputs(doc)))
 
     artifact = {
         "schema": "cross_engine_control/1",
