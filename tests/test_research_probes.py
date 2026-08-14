@@ -341,7 +341,7 @@ def test_body_less_target_nodes_are_always_containers():
 # round-1 separation produced two defects it is structurally unable to see, and both survived
 # until someone ran the script:
 #
-#   1. **Attribute access.** Seven probes reached the fused matcher as ``db._similarity_pair``
+#   1. **Attribute access.** Six probes reached the fused matcher as ``db._similarity_pair``
 #      rather than importing it. B2 removed the function; the probes still imported only
 #      ``diff_bill`` and ``normalize_bill``, which both still exist, so the gate stayed green.
 #   2. **A signature change**, which no symbol-existence check of any kind can catch.
@@ -354,9 +354,15 @@ def test_body_less_target_nodes_are_always_containers():
 # the seventh, and the certificate would have been the misleading part.
 #
 # The cost is bounded three ways rather than by hoping the set stays small: the manifest is
-# closed (below), the probes run under ``DELTATRACK_PROBE_SMOKE`` on one corpus pair, and the
-# whole section is two subprocesses. It is a resolution check, not a benchmark and not a
-# research result -- see the flag's documentation in ``round1_b3_cost.py``.
+# closed (below), each probe runs under ``DELTATRACK_PROBE_SMOKE`` on one corpus pair, and the
+# whole section is one subprocess. It is a resolution check, not a benchmark and not a research
+# result -- see the flag's documentation in ``round1_b3_cost.py``.
+#
+# **Executing a probe certifies that it resolves, and nothing about what it reports.** That is
+# the limit of this gate and it is worth stating, because B4 retired a probe that ran perfectly
+# while publishing a candidate count the audit disowns. A green execution badge on a stale
+# quantity is its own false green, so a probe whose question is closed belongs out of the tree
+# rather than in this manifest.
 
 #: Every round-1 provision-matching probe this repository claims can be run today.
 #:
@@ -365,17 +371,22 @@ def test_body_less_target_nodes_are_always_containers():
 #: it, which is the property the previous arrangement lacked -- seven probes sat in the tree for
 #: months in a state where running them raised, and nothing said so.
 #:
-#: The seven that went stale were removed rather than ported, in B4. Each asked a question a
-#: B0-B3 executable invariant now owns, and porting them would have produced a second, ungated
-#: answer to a question a test already answers. They remain readable at ``7fdbf62``; the audit's
-#: appendix records which invariant inherited each one.
-RUNNABLE_ROUND1_PROBES = (
-    "round1_b3_cost.py",
-    "round1_candidateset_cost.py",
-)
+#: Eight were retired in B4. Seven had stopped running; each asked a question a B0-B3 executable
+#: invariant now owns, and porting them would have produced a second, ungated answer to a question
+#: a test already answers. The eighth, ``round1_candidateset_cost.py``, still ran -- and that was
+#: the problem this gate would otherwise have made worse. It hard-coded a 14,899-candidate
+#: population that §10 of the audit disowns, so the gate would have certified that it *runs* while
+#: it published a quantity nobody should read as the round-1 candidate population. Running is not
+#: the same as informative, and a green execution badge on a stale number is a false green of its
+#: own. Its question -- what candidate storage scope costs -- was settled in B2 on the semantic
+#: argument rather than the cost one, so there is no live decision left for a benchmark to inform.
+#:
+#: All eight remain readable at ``7fdbf62``; the audit's appendix records which invariant
+#: inherited each one.
+RUNNABLE_ROUND1_PROBES = ("round1_b3_cost.py",)
 
 #: Generous: the gate is asking whether the probe resolves its production dependencies, and a
-#: timeout is an inconclusive result rather than a pass. Both probes finish in about a second.
+#: timeout is an inconclusive result rather than a pass. The probe finishes in about a second.
 PROBE_EXECUTION_TIMEOUT_SECONDS = 120
 
 

@@ -610,7 +610,18 @@ also stopped running: six wrapped `db._similarity_pair`, which B2 removed, and `
 called `_match_collision_group` with its pre-B1 two-argument signature. Porting them would have
 produced a second, ungated answer to a question a test already answers — and not the audit's
 answer either, since every figure here is scoped to the fused matcher at `0ff0eb1e`. So they were
-removed. All seven are readable at `7fdbf62`.
+removed.
+
+An eighth, `round1_candidateset_cost.py`, was retired for the opposite reason: it still ran. It
+hard-coded `N = 14899` and reported that as its candidate population, which is precisely the
+figure §10 disowns — so B4's execution gate would have certified that the probe *runs* while it
+published a quantity nobody should read as the round-1 candidate population. **Running is not the
+same as informative**, and an execution badge on a stale number is a false green of its own. Its
+question — what candidate storage scope costs — is closed: B2 shipped comparison-scoped, and §13
+records that the semantic argument decided it while the cost difference did not. A synthetic
+benchmark maintained for a settled implementation choice adds no closure value.
+
+All eight are readable at `7fdbf62`.
 
 | Retired probe | What it measured | The executable invariant that owns it now |
 |---|---|---|
@@ -620,15 +631,20 @@ removed. All seven are readable at `7fdbf62`.
 | `round1_controls.py` | Synthetic fallback fixture, tie-direction control, ordering controls | `test_assignment_leftovers_reach_the_cross_division_fallback`; `test_assignment_breaks_ties_on_invocation_local_position`; §9's `ascending_tie` (11/27 red) |
 | `round1_ordering_hazard.py` | Constructs the case where local-position/ordinal agreement breaks | `test_the_fallback_population_is_not_in_parser_ordinal_order`, the one gate §9's `ordinal_tiebreak` can redden |
 | `round1_cost.py` | Fast-path removal cost. Its candidate count is the FAST-PATH-RETIRED population (14,899), not what round-1 retrieval forms — see §10 | `round1_b3_cost.py`, which measures the same arm (`collision_routing`) with every arm in one process — the methodology this one lacked |
-| `round1_candidate_scope.py` | Comparison-scoped vs per-invocation storage, on the exact populations production forms | Settled in B2 and shipped comparison-scoped; the argument that decided it was semantic, not cost (§13), and it is held by `test_two_invocations_proposing_one_pair_keep_both_provenances` |
+| `round1_candidate_scope.py` | Comparison-scoped vs per-invocation storage, on the exact populations production forms | Settled in B2 and shipped comparison-scoped. The argument that decided it was semantic, not cost (§13): only comparison-scoped storage can hold one candidate carrying two invocations' proposals, and that is owned by `test_two_invocations_proposing_one_pair_keep_both_provenances`, `test_one_pair_yields_one_candidate` and `test_duplicate_proposals_add_no_multiplicity_and_no_weight`. That the shipped set materialises exactly what retrieval considered is `test_the_candidate_set_materialises_exactly_what_retrieval_considered` |
+| `round1_candidateset_cost.py` | Isolated `CandidateSet` propose/materialise micro-benchmark, at the candidate count §10 corrects | The same durable owners as the row above. There is no cost question left to ask: the storage decision is settled and executably owned, and this probe's only remaining output was a synthetic timing over a population the audit disowns |
 
-Still committed at `docs/research/provision-matching/probes/round1_*.py`, and executed by
-`tests/test_research_probes.py` on every run so they cannot rot the same way:
+**One runnable round-1 probe remains**, at `docs/research/provision-matching/probes/`, executed by
+`tests/test_research_probes.py` on every run so it cannot rot the way the others did:
 
 | Probe | What it measures |
 |---|---|
 | `round1_b3_cost.py` | The four arms B3 sits between, in one process. §13 carries its ratios |
-| `round1_candidateset_cost.py` | Isolated `CandidateSet` propose/materialise micro-benchmark, at a candidate count §10 corrects |
+
+Adding a ninth is a decision, not a convenience: the manifest in `tests/test_research_probes.py`
+is closed against what is on disk, so a new probe is either executed by the gate or the gate
+fails. The bar is a **still-live research question** — a probe for a settled decision is what was
+just removed.
 
 ---
 
@@ -647,14 +663,17 @@ the measurement shows there is no separate policy to migrate.
 | **B3** | Unique-path handling. Pin the fast path's equivalence with a test, and decide whether to keep it as a retrieval-side optimisation or retire it. | Last, because the measurement removes it from the critical path — it is not a policy that must be migrated before B2 can proceed. | Oracle rows 1, 2, 3; the 27/27 equivalence test. |
 | **B4** | Closure: probe re-aiming, remove the residual `diff_text` double-call #623 flagged. Candidate storage scope is settled in B1, not deferred to here (§13). | Cleanup with its own evidence, deliberately not bundled. | Canonical digests + runtime regression check. |
 
-**B4 as shipped, and one deliberate divergence from the row above.** B4 retired the seven probes
-that had stopped running (§11), gave the survivors an executable gate in
+**B4 as shipped, and one deliberate divergence from the row above.** B4 retired the eight probes
+whose questions B0–B3 had taken over (§11), gave the one survivor an executable gate in
 `tests/test_research_probes.py`, and closed the transitional statements B1–B3 left behind — this
-section's own storage-scope entry among them. It did **not** remove the `diff_text` double-call.
-That is a production change to what the engine computes, it needs its own call-count evidence
-beside the canonical digests, and bundling it into the slice whose job is to certify that round 1
-is closed would mean the closure evidence and an optimisation shared one result. It stays open;
-§14 carries it.
+section's own storage-scope entry among them.
+
+It did **not** touch the `diff_text` double-call, and on review that row was framed wrongly. The
+duplication is **performance debt, not an unfinished ADR 0020 architecture requirement**: the two
+calls answer separate stage-owned questions, #591 quantified and accepted the cost deliberately,
+and no round-1 invariant depends on it. Optimization is deferred unless later end-to-end profiling
+justifies a separate change, and the call-count gate belongs with that change rather than ahead of
+it. §14 carries the reasoning. Round 1 is closed with this outstanding, not despite it.
 
 **On "can retrieval be extracted alone?"** Yes — *per round*. A single whole-round-1 retrieval
 stage producing one candidate population before any assignment is **not** behaviour-preserving:
@@ -704,12 +723,28 @@ process (`probes/round1_b3_cost.py`), against the pre-B3 traversal:
 So B3 keeps about a fifth of the headroom, not most of it. The 1.62× above is a **pre-B1**
 measurement and no longer describes the alternative: B1 and B2 gave the collision path a candidate
 set, evidence records and a `GroupAssignment`, so the option this section priced got more
-expensive while it was being deferred. Per-stage attribution over the 14,001 paired unique groups
-puts ~16 µs/group roughly evenly across retrieval (3.2), propose (2.5), evidence (5.1) and
-assignment (5.2) — it is what the contracts cost to construct and validate, not one hot spot.
+expensive while it was being deferred.
+
+> **The ratios are the durable result; the absolute microsecond figures are not portable.**
+> `2.37×` is the reported figure. Per-stage attribution over the 14,001 paired unique groups
+> showed the cost spread roughly evenly across retrieval, propose, evidence and assignment rather
+> than sitting in one hot spot, and **that shape** is the finding.
+>
+> B4 re-ran the probe unchanged, twice, and the two kinds of number behave differently. The
+> absolute totals moved a long way — about 9.7 µs/group against the ~16 µs/group B3 recorded, on a
+> different machine state. The ratio moved a little: `2.37×` then `2.30×`, with the rejected
+> alternative at `2.93×` then `2.84×`. So the ratio is stable to a few percent rather than exact,
+> and what is genuinely invariant is the ordering and the gap — B3 sits between the pre-B3
+> traversal and collision-routing, keeping about a fifth of the headroom, on every run.
+>
+> Quote `2.37×` with that tolerance in mind. Do not cite an absolute µs figure on its own, and do
+> not read a few percent of movement in either as a regression: it takes a re-run of all four arms
+> in one process to say anything at all, which is what the probe exists to make easy.
+
 Two candidates for recovering some of it, both out of B3's scope because they change
 `matching.py`: an admission predicate that does not materialise a `Candidate` the caller discards,
-and skipping canonicalisation for 0- and 1-element inputs (~1.5 µs/group, measured).
+and skipping canonicalisation for 0- and 1-element inputs. Neither is to be taken unless later
+end-to-end profiling shows it matters.
 
 The optimisation property that *was* preserved is the one #623 measured: the unique path still
 computes **zero** similarities, and the frozen call count is unchanged.
@@ -802,14 +837,26 @@ wording issue open as a non-blocking vocabulary gap.
 #623 named this deliberately as visible residue of the fusion it did not remove, and said deleting
 it owes its own evidence. It is not this work's scope; B4 is the natural home.
 
-**Still open after B4, deliberately.** B4 declined it (§12). The two call sites are in different
-stages — one produces a `body_unchanged` signal for the similarity revocation rule, the other
-produces the `text_diff` a classified record carries — so removing the second call means routing a
-value across a stage boundary, which is a matching-architecture change and not a de-duplication.
-The evidence it owes is a diff_text call-count gate of the same kind
-`test_production_measures_exactly_the_frozen_set_of_similarities` already provides for
-`text_similarity`, plus unchanged canonical digests. Neither exists yet. This is the one known
-round-1 item ADR 0020 leaves unfinished, and it changes cost rather than correspondence.
+**Reclassified at B4 closure, and it is not an ADR 0020 gap.** The duplicate `diff_text`
+computation is known **performance debt, not an unfinished ADR 0020 architecture requirement**.
+Optimization is deferred unless later end-to-end profiling justifies a separate change.
+
+The two calls answer separate stage-owned questions, which is why the duplication is not a
+redundancy to delete:
+
+1. **correspondence evidence** computes `BODY_UNCHANGED` — it reads only whether the word-level
+   diff is empty (`_similarity_signals`);
+2. **classification** computes the actual textual diff carried in the output record
+   (`_paired_record`'s `text_diff`, and the `unchanged`/`modified` verdict).
+
+#591 already quantified and deliberately accepted this as preservation cost, rather than routing
+classification output back across the stage boundary. Nothing about round-1 stage ownership is
+waiting on it: no invariant in §9 or the closure inventory depends on the call count, and the
+correspondence the engine produces is identical either way.
+
+**No `diff_text` call-count gate is added here.** A call-count gate belongs with the PR that
+actually changes this behaviour — added beforehand it would pin a number no decision rests on,
+and would make an unrelated optimisation look like a regression the day someone takes it.
 
 ---
 
