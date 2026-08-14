@@ -888,7 +888,7 @@ gate can be shown to fire before it lands. Slice 0 is not optional — §6.2 is 
 | **3** | **DONE** (`142f7cd`). `PdfObservation` + `PdfObservationRegistry` + `pdf_parser_revision()` in `deltatrack/pdf_observations.py`. Nothing consumes them; no stored artifact records a PDF ordinal. | Gate 1 byte-identical (356 passed / 1 skipped, unchanged). Revision moves on any of the four parser modules and on the engine version, and does not move on `diff_pdf` / `similarity` / `matching` / `diff_bill`; the exclusion is proved non-vacuous by injecting a matcher import into `pdf_blocks` (§8.1). Registry totality, contiguity and round-trip over 23 corpus pairs, red under both a filtered and a re-sorted sequence. |
 | **4** | **DONE** (`5dac421`). `pdf_unmatched_population` → `retrieve_pdf_move_candidates` → `pdf_move_evidence` → `assign_pdf_moves`, plus `settle_pdf_correspondences` and `classify_pdf`, with round 2 moved **before** classification. `_emit_pair` now appends provisional pairings instead of classified hunks. This is the PDF #591. | Gate 1 byte-identical; a whole-output comparison against an independently transcribed pre-slice-4 pipeline agrees on all 23 adjacent pairs, including the six the baseline cannot cover. Four fault injections, two of which were informative no-ops (§8.3). |
 | **5** | **DONE** (`9eebcc5`, evidence-floor repair `61cc3fa`). `_pdf_similarity_signals` → `pdf_similarity_correspondence_evidence` → `pdf_pairing_survives_similarity_rule` → `apply_pdf_similarity_revocation`, mirroring `diff_bill`. `_align_blocks` is retrieval only; `_AlignedPairing` loses its similarity field. | Gate 1 byte-identical; gate 4 unchanged. Threshold sweep at 0.2/0.3/0.4/0.6/0.9 → 192/214/230/257/402, plus a corpus-wide exact-overlap invariant (§8.4, §8.5). The first version shipped a censored evidence floor that the original 0.0/0.4/0.99 sweep could not see — §8.5. |
-| **6** | Move the moved-vs-modified decision out of classification. Because 20 of 165 PDF moves are *not* round-2 provenance (§3.4), this needs assignment to record *why* a pair corresponds, not a classification threshold. **Design work, not extraction.** | Requires §10 Q2 answered first. |
+| **6** | Move the moved-vs-modified decision out of classification. Because 20 of 165 PDF moves are *not* round-2 provenance (§3.4), this needs assignment to record *why* a pair corresponds, not a classification threshold. **Design work, not extraction.** | **Q2 answered — design memo in [`slice6-moved-semantics.md`](slice6-moved-semantics.md), awaiting review.** Recommends splitting into 6a (assignment records a named reason; behaviour-preserving) and 6b (retire the round-1 changed-anchor reason; 20 rows flip, moves the pinned baseline, needs authorization). |
 | **7** | **DONE** (`11b822b`). `retrieve_pdf_round1_candidates` wraps `_block_key` + `SequenceMatcher` + the positional `replace` zip as two named invocations emitting a `CandidateSet`, with evidence gated on it and `PdfRound1StageOutputs` making round 1's outputs reachable. | Gate 1 byte-identical; gate 6 unchanged. Membership equals the transcribed legacy considered population on all 23 pairs; three fail-closed refusals; the set's canonical order pinned out of the emitted order (§8.7). |
 
 Slices 1–5 are wrap-and-extract with a byte-identical gate. Slice 6 changes semantics and
@@ -1233,9 +1233,15 @@ evidence under ADR 0020's second implementation rule.
 - **Q1.** Does the round-1 alignment ever pair blocks across divisions? Necessary condition
   measured (525 duplicate keys); the mispairing itself is not. Blocks §7.2 and any proposal
   to add division to `_block_key`. → slice 7.
-- **Q2.** What should a PDF `moved` mean? 20 of 165 are threshold verdicts on round-1 pairs,
-  not provenance (§3.4). Either assignment records a reason, or PDF and XML keep two
-  definitions of one canonical `change_type`. → slice 6.
+- **Q2.** What should a PDF `moved` mean? **ANSWERED — [`slice6-moved-semantics.md`](slice6-moved-semantics.md)**,
+  awaiting reviewer ruling. Re-measured on the current branch: the 145/1/19 split still holds,
+  the changed-anchor `modified` counterpopulation is **one row**, and the anchor-inequality
+  predicate the current rule turns on is a line-wrap detector — 13 of the 20 round-1 moves
+  print an identical heading on both sides. Recommends provenance semantics (H1), landed as
+  6a mechanism + 6b policy. Also surfaces a wider defect the memo keeps out of slice 6:
+  `canonical._pdf_move` applies the same broken predicate to decide `renumbered` vs
+  `relocated`, so at least 9 round-2 moves carry a false "Renumbered:" sentence that slice 6
+  does not touch.
 - **Q3.** Is PDF emission deterministic **across processes and platforms**? §4.1 establishes
   in-process only; the glyph-size sidecar reads FFI floats. → before any stored PDF ordinal.
   This is the surviving half of what a second review called its only hard ADR-level blocker;
