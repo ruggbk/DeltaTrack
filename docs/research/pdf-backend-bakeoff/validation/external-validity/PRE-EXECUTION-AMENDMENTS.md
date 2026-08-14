@@ -5863,13 +5863,13 @@ metric or decision artifact exists.
 
 ```json
 {"id": "A45", "class": "SUBSTANTIVE",
- "commits": ["9817dcc", "5a3bfc7"],
+ "commits": ["9817dcc", "5a3bfc7", "810af58"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/execute_study.py", "probes/cross_engine_control.py",
                    "probes/x29_execute_study.py"],
  "supersedes_text_in": "none -- NO previously frozen rule changes. A39.2's sample fraction, deterministic ranking, page denominator, 0.95 document and 0.75 page thresholds, qualification wording and non-decision-blocking status are untouched, as are membership, every frame rule, every metric and the architecture rules. What changes is that the already-frozen A39.2 measurement can be produced at all",
- "status": "IMPLEMENTATION COMPLETE. x29 86/86, SYNTHETIC + DEVELOPMENT. Boundary ABSENT, execution FORBIDDEN"}
+ "status": "IMPLEMENTATION COMPLETE. x29 96/96, SYNTHETIC + DEVELOPMENT. Boundary ABSENT, execution FORBIDDEN"}
 ```
 
 **Why `affects_scoring_rule` is `false` while this is SUBSTANTIVE.** Nothing here computes,
@@ -6008,6 +6008,66 @@ Three items found alongside this one are **deliberately left open**, because eac
 decision with its own failure modes and none belongs in a handoff repair: the `frames.json`
 storage representation, whether the optional `dframe-descriptive` sampling is worth retaining and
 who would own it, and A38.2's unrounded per-glyph persisted representation.
+
+### A45.6 — the writer accepted a substituted tuple, and that was a caller obligation
+
+*Added at `810af58`, after A45.1–A45.5 had landed. A45 originally reported this as a residual
+risk; review ruled it a blocker, and the ruling was right — reproducing it showed it moves a
+reported qualification.*
+
+A45.2 argued that the canonical caller derives every field from the authority. **That is a
+property of the caller, not a gate on the writer**, and the difference is measurable.
+`write_cross_engine_control` accepted a hand-assembled record carrying member **A's id** with
+member **B's valid path** and **B's valid SHA**. Measured on SYNTHETIC/DEVELOPMENT material,
+boundary ABSENT:
+
+```
+record    {document: A, pdf_path: <B>, document_sha256: <B's sha>}
+result    ACCEPTED -- artifact written
+row       document = A,  document_sha256 = B's,  sampled_pages = [2],  pass = True
+A's own   measurement                            sampled_pages = [1],  pass = False
+```
+
+**The artifact reported B's verdict under A's name, and the direction matters**: A's own
+measurement FAILS the frozen gate, so the substituted row **withheld an earned
+`PDFIUM-CONDITIONED FRAME` qualification**. This is a reporting outcome the study exists to
+produce, moved by a record nothing validated.
+
+**Why every existing check was silent.** `verified_sha256` passes — B's SHA genuinely is B's
+bytes, which is the whole point of the pair. `score_metrics`' exact set-equality check passes —
+A's id **is** present, so `CROSS_ENGINE_DOCUMENT_MISSING`, `_EXTRA` and `_DUPLICATE` never fire.
+`assert_source_permitted` passes — both are permitted material. The row is internally consistent
+and describes the wrong document.
+
+**The repair is a gate, not a stronger caller.** `assert_records_from_authority` requires each
+record's **id, path and SHA to JOINTLY describe one member**, and runs over **all** records
+**before any is measured**, so a substituted tuple cannot reach an extractor at all. Refusals are
+distinguished — `DOCUMENT_NOT_A_MEMBER` for an outsider, `RECORD_AUTHORITY_MISMATCH` for a
+substituted field — because collapsing them would hide which happened.
+
+**No second authority is created.** The id → record mapping is `execute_study.authority_index`,
+the same function `assert_population_complete` and `load_frames` already compare against, and
+`assert_canonical_authority` (A43.8) is reused so a drifted authority is not trusted. The
+`membership_path` fixture seam mirrors `execute_study`'s and, per A43.6's pairing rule, may not
+be combined with the canonical `out_path` — a canonical artifact vouched for by a fixture is
+refused with `NON_CANONICAL_AUTHORITY`.
+
+**`verified_sha256` is untouched and deliberately not duplicated.** The two checks prove
+different facts and each catches a class the other cannot:
+
+| injected fault | authority gate | byte check |
+|---|---|---|
+| bytes changed, recorded SHA kept | **passes** — the record still describes its member | **refuses** `SOURCE_SHA256_MISMATCH` |
+| A's id + B's valid path + B's valid SHA | **refuses** `RECORD_AUTHORITY_MISMATCH` | **passes** — the bytes really do match |
+
+That second row is also the **isolation proof** for the new control: the byte check is measured
+accepting the very pair the writer refuses, so the refusal cannot be attributed to it. Both
+directions are exercised through the real writer.
+
+**The positive control is the real canonical composition.**
+`control_documents(canonical_population())` is checked against the real committed authority by
+the real gate and **all 17 frozen members are accepted** — pre-boundary, with no extractor
+opening any document and nothing measured, since the gate reads keys only.
 
 ---
 

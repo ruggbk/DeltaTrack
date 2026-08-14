@@ -59,7 +59,9 @@
   "consumers_exercised": [
    "cross_engine_control.write_cross_engine_control",
    "s1_control.write_s1_control"
-  ]
+  ],
+  "authority_gate": "cross_engine_control.assert_records_from_authority via execute_study.authority_index",
+  "canonical_records_accepted": 17
  },
  "authority": {
   "canonical_authority_verified_at": [
@@ -411,9 +413,15 @@
    "observed": "DESCRIPTOR_METADATA_MISMATCH"
   },
   {
-   "check": "...and INDEPENDENTLY, the producer's own source verification refuses the same swap",
+   "check": "...and the WRITER refuses it too, at the authority gate, before any measurement",
    "ok": true,
-   "fails_when": "the SHA is trusted once it arrives, so a substituted one selects a different page sample -- the verification A39.2 requires would be dead",
+   "fails_when": "a hand-assembled record carrying another member's SHA reaches the engines",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "...and INDEPENDENTLY, verified_sha256 still refuses the same swap at cross_engine_result",
+   "ok": true,
+   "fails_when": "the byte check was weakened or absorbed when the authority gate was added -- the two prove different facts and A45.6 may not cost us the older one",
    "observed": "SOURCE_SHA256_MISMATCH"
   },
   {
@@ -423,9 +431,15 @@
    "observed": "DESCRIPTOR_METADATA_MISMATCH"
   },
   {
-   "check": "...and INDEPENDENTLY, the producer re-hashes the bytes it is about to measure",
+   "check": "...and the WRITER refuses it too, at the authority gate, before any measurement",
    "ok": true,
-   "fails_when": "a path substituted after the descriptor was built reaches the engines",
+   "fails_when": "a hand-assembled record pointing at another member's bytes reaches the engines",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "...and INDEPENDENTLY, verified_sha256 still refuses the same swap at cross_engine_result",
+   "ok": true,
+   "fails_when": "the byte check no longer sees a path pointing at different bytes than the recorded SHA",
    "observed": "SOURCE_SHA256_MISMATCH"
   },
   {
@@ -451,6 +465,54 @@
    "ok": true,
    "fails_when": "one document is measured twice; a duplicate row is individually valid so no per-row check sees it",
    "observed": "POPULATION_DUPLICATED"
+  },
+  {
+   "check": "MUTATION A's id + B's VALID path + B's VALID SHA -> RECORD_AUTHORITY_MISMATCH",
+   "ok": true,
+   "fails_when": "one member's qualification is measured on another member's pages and reported under the first member's name -- invisible to the byte check and to the scorer's set equality",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "...and NO canonical artifact was written by the refused call",
+   "ok": true,
+   "fails_when": "a substituted row is persisted before the refusal",
+   "observed": ""
+  },
+  {
+   "check": "...and the BYTE check accepts that very pair, so only the authority gate can have refused",
+   "ok": true,
+   "fails_when": "verified_sha256 also rejects this pair, so the control above does not isolate A45.6",
+   "observed": "verified_sha256(B.path, B.sha) -> accepted"
+  },
+  {
+   "check": "...and the gate refuses it directly, named, without going through the writer",
+   "ok": true,
+   "fails_when": "the refusal is a side effect of the writer rather than a stateable invariant",
+   "observed": "RECORD_AUTHORITY_MISMATCH"
+  },
+  {
+   "check": "MUTATION a non-member id -> DOCUMENT_NOT_A_MEMBER, distinct from a field mismatch",
+   "ok": true,
+   "fails_when": "an outsider and a substituted member collapse to one refusal, hiding which happened",
+   "observed": "DOCUMENT_NOT_A_MEMBER"
+  },
+  {
+   "check": "MUTATION write the CANONICAL cross_engine_control.json against a synthetic membership -> refused",
+   "ok": true,
+   "fails_when": "a fixture population vouches for the canonical confirmatory artifact -- the A43.6 defect, in the writer A43.6 did not cover",
+   "observed": "NON_CANONICAL_AUTHORITY"
+  },
+  {
+   "check": "...and the canonical artifact still does not exist",
+   "ok": true,
+   "fails_when": "this probe created a canonical confirmatory artifact",
+   "observed": ""
+  },
+  {
+   "check": "POSITIVE: control_documents(canonical_population()) is ACCEPTED by the authority gate, for every frozen member",
+   "ok": true,
+   "fails_when": "the new gate refuses the real canonical composition, which would block Run 2 outright and make every refusal above meaningless",
+   "observed": "17 records accepted"
   },
   {
    "check": "NON-VACUITY: the clean committed authority is ACCEPTED by canonical_population",
@@ -609,6 +671,6 @@
    "observed": ""
   }
  ],
- "n_checks": 86,
+ "n_checks": 96,
  "n_failed": 0
 }
