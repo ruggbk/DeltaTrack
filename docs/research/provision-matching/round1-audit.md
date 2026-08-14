@@ -648,6 +648,35 @@ is changing nothing, and 1.62× on the stage that ADR 0020 already flags for per
 (#356, #169) is not free. Revisit in B3 if maintaining both paths complicates the assignment
 contract.
 
+**Resolved in B3, and neither way round.** The fast path was neither kept nor retired: the unique
+group is now retrieved, proposed, described and assigned like any other, but by its own one-round
+orchestration (`_match_unique_path_group`) rather than through `_match_collision_group`. Keeping
+it would have left 14,001 of the corpus's pairings outside every ADR 0020 boundary — the reason
+the candidate set was not comparison-wide recall. Retiring it into the collision path would have
+paid for a division partition and a fallback round that a group of at most one observation per
+side can never use.
+
+The cost is real and is not what this section anticipated. Re-measured with every arm in one
+process (`probes/round1_b3_cost.py`), against the pre-B3 traversal:
+
+| arm | ratio |
+|---|---|
+| B3, as shipped | 2.37× |
+| routing every unique group through `_match_collision_group` | 2.96× |
+
+So B3 keeps about a fifth of the headroom, not most of it. The 1.62× above is a **pre-B1**
+measurement and no longer describes the alternative: B1 and B2 gave the collision path a candidate
+set, evidence records and a `GroupAssignment`, so the option this section priced got more
+expensive while it was being deferred. Per-stage attribution over the 14,001 paired unique groups
+puts ~16 µs/group roughly evenly across retrieval (3.2), propose (2.5), evidence (5.1) and
+assignment (5.2) — it is what the contracts cost to construct and validate, not one hot spot.
+Two candidates for recovering some of it, both out of B3's scope because they change
+`matching.py`: an admission predicate that does not materialise a `Candidate` the caller discards,
+and skipping canonicalisation for 0- and 1-element inputs (~1.5 µs/group, measured).
+
+The optimisation property that *was* preserved is the one #623 measured: the unique path still
+computes **zero** similarities, and the frozen call count is unchanged.
+
 ### 2. Candidate storage scope — NOT FROZEN, deferred into B1
 
 The earlier recommendation here (per-invocation sets, on a claimed 2.1× cost) is **withdrawn**:

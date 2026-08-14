@@ -109,6 +109,7 @@ from deltatrack.diff_bill import (
     match_nodes_with_stage_outputs,
     observation_registry,
     retrieve_cross_division_population,
+    retrieve_unique_path_population,
     retrieve_within_division_populations,
 )
 from deltatrack.matching import NEW, OLD, CandidateSet, CorrespondenceEvidence, RetrieverInvocation
@@ -883,7 +884,7 @@ def test_assignment_never_receives_the_candidate_set():
     """
     import inspect
 
-    from deltatrack.diff_bill import _match_collision_group
+    from deltatrack.diff_bill import _match_collision_group, _match_unique_path_group
 
     assert "candidates" not in inspect.signature(assign_group).parameters, (
         "assign_group takes the candidate set as a parameter; its canonical order is then one lookup "
@@ -894,29 +895,32 @@ def test_assignment_never_receives_the_candidate_set():
         "constrain what reaches assignment"
     )
 
+    # Both orchestrators, because B3 gave the unique path its own. A guard that inspected only the
+    # collision one would have gone on passing while the new call site handed assignment the set.
     staged = ("group_correspondence_evidence", "assign_group")
-    body = inspect.getsource(_match_collision_group)
-    tree = ast.parse(textwrap.dedent(body))
-    reached = set()
-    for call in ast.walk(tree):
-        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
-            continue
-        if call.func.id not in staged:
-            continue
-        reached.add(call.func.id)
-        if call.func.id != "assign_group":
-            continue
-        # The set may appear inside this call only as an argument of the nested evidence call.
-        # A bare `candidates` among assign_group's own arguments is the regression.
-        direct = {arg.id for arg in call.args if isinstance(arg, ast.Name)}
-        assert "candidates" not in direct, (
-            f"assign_group is called with the candidate set as a direct argument: {sorted(direct)}"
-        )
+    for orchestrator in (_match_collision_group, _match_unique_path_group):
+        tree = ast.parse(textwrap.dedent(inspect.getsource(orchestrator)))
+        reached = set()
+        for call in ast.walk(tree):
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+                continue
+            if call.func.id not in staged:
+                continue
+            reached.add(call.func.id)
+            if call.func.id != "assign_group":
+                continue
+            # The set may appear inside this call only as an argument of the nested evidence call.
+            # A bare `candidates` among assign_group's own arguments is the regression.
+            direct = {arg.id for arg in call.args if isinstance(arg, ast.Name)}
+            assert "candidates" not in direct, (
+                f"{orchestrator.__name__} calls assign_group with the candidate set as a direct "
+                f"argument: {sorted(direct)}"
+            )
 
-    assert reached == set(staged), (
-        f"the orchestrator no longer calls {sorted(set(staged) - reached)}; this guard is inspecting "
-        "a call site that has moved and would pass by finding nothing"
-    )
+        assert reached == set(staged), (
+            f"{orchestrator.__name__} no longer calls {sorted(set(staged) - reached)}; this guard is "
+            "inspecting a call site that has moved and would pass by finding nothing"
+        )
 
 
 def test_the_evidence_stage_reaches_the_candidate_set_by_lookup_and_never_iterates_it():
@@ -1025,6 +1029,11 @@ def test_the_measurement_guard_can_fire():
 EXPECTED_INVOCATION = {
     "within": RetrieverInvocation.of("path_division_group", round=1),
     "cross": RetrieverInvocation.of("path_group_cross_division", round=1),
+    # B3's unique-path retriever. Its population is a whole ``match_path`` group holding at most
+    # one observation per side, so it is neither of the two above -- and it must not be spelled as
+    # either, because a candidate's provenance is what makes a recall figure attributable to the
+    # rule that surfaced it.
+    "unique": RetrieverInvocation.of("path_unique_group", round=1),
 }
 
 
@@ -1041,13 +1050,27 @@ def expected_candidate_provenance(old_tree, new_tree) -> dict[tuple[int, int], s
     accumulating a SET of invocations is the checked-in ``CandidateSet`` semantics restated
     independently: one candidate per pair however many invocations proposed it, each retaining
     its own provenance.
+
+    **B3 added the unique-path population, and it is expanded from the oracle's own
+    ``unique_selections`` rather than from a re-walk of the groups.** That list is the ordered
+    record of every non-colliding ``match_path`` group the transcribed legacy composition paired,
+    and it is covered by the frozen trace digest exactly as the invocation trace is -- so the
+    expectation moved without the artifact being regenerated, which is what keeps this an
+    independent expectation rather than a restatement of the new code.
+
+    A unique 1x1 group forms exactly one candidate: the population is the group, so the cross
+    product is the pair itself. A one-sided unique group forms none and appears in neither list,
+    which is the same fact ``forms_candidates`` states on the production side.
     """
+    trace = oracle_trace(old_tree.nodes, new_tree.nodes)
     expected: dict[tuple[int, int], set] = defaultdict(set)
-    for invocation in oracle_trace(old_tree.nodes, new_tree.nodes)["invocations"]:
+    for invocation in trace["invocations"]:
         which = EXPECTED_INVOCATION[invocation["phase"]]
         for old_ordinal in invocation["old"]:
             for new_ordinal in invocation["new"]:
                 expected[(old_ordinal, new_ordinal)].add(which)
+    for old_ordinal, new_ordinal in trace["unique_selections"]:
+        expected[(old_ordinal, new_ordinal)].add(EXPECTED_INVOCATION["unique"])
     return dict(expected)
 
 
@@ -1438,11 +1461,21 @@ def test_the_evidence_stage_describes_exactly_the_candidates_retrieval_admitted(
 
     The sequence of calls is compared too, phase included, so flattening the within-division and
     cross-division rounds into one competition moves this even where it leaves the stream intact.
+
+    **Scoped to the collision path's two invocations, because that is what the frozen invocation
+    trace records.** B3 brought the unique path through the same evidence stage, so production
+    now also calls it once per non-colliding 1x1 group. Those calls are held to the oracle's
+    ``unique_selections`` instead, by
+    :func:`test_the_unique_path_evidence_stage_describes_the_frozen_unique_selections` -- a
+    separate frozen expectation covered by the same trace digest. Folding them in here would have
+    meant regenerating the artifact to make a refactor green, which is the one thing this file
+    exists to refuse. Their interleaving with these calls is not left unbound: the pairing stream
+    is emitted in traversal order, so a unique group resolved out of turn moves the durable gate.
     """
     checked = 0
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        observed = observed_group_evidence(old_tree, new_tree)
+        observed = [call for call in observed_group_evidence(old_tree, new_tree) if call["phase"] != "unique"]
         expected = expected_group_evidence(old_tree, new_tree)
         key = pair_key(old_path, new_path)
 
@@ -1459,14 +1492,23 @@ def test_the_evidence_stage_describes_exactly_the_candidates_retrieval_admitted(
 @pytest.mark.slow
 def test_the_evidence_comparison_is_non_vacuous():
     """The gate above would pass on two empty lists; this refuses that reading."""
-    scored = described = 0
+    scored = described = unique_calls = 0
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
         for call in observed_group_evidence(old_tree, new_tree):
+            if call["phase"] == "unique":
+                unique_calls += 1
+                continue
             described += len(call["links"])
             scored += sum(1 for link in call["links"] if link[2] is not None)
     assert described > 1000, f"only {described} candidates were described over the corpus; the gate is near-vacuous"
     assert scored, "no candidate carried a word_overlap, so the fidelity half of that gate compared nothing"
+    # And that the filter above is removing a real population rather than silently matching
+    # nothing -- if B3's calls stopped arriving, the gate it defers them to would be vacuous too.
+    assert unique_calls > 1000, (
+        f"only {unique_calls} unique-path evidence calls reached the stage; the phase filter in the "
+        "gate above is excluding a population that is no longer there"
+    )
 
 
 def production_similarity_calls(old_tree, new_tree) -> int:
@@ -2024,6 +2066,409 @@ def test_assignment_leftovers_are_what_the_cross_round_retrieves():
     assert (link.old.element_id, link.new.element_id) == ("oA2", "nB2")
 
 
+# --- B3: the unique path, brought under the same four stages ---------------------------------
+#
+# Before B3, a non-colliding `match_path` group was paired by a tuple construction: no candidate,
+# no evidence record, no assignment. That is 14,001 of the corpus's selected round-1 pairings --
+# the great majority -- reaching the stream without passing any ADR 0020 boundary, which is why
+# the candidate set was collision-path-complete and a recall figure read off it was wrong by the
+# size of that population.
+#
+# The frozen stream cannot see this slice at all: the unique path selected the only pairing
+# available before and still does. What these bind is that the selection now goes THROUGH the
+# stages -- admitted by the candidate set, described by the evidence stage, decided by
+# assignment -- and that the fast path's measured cost profile survived the migration.
+
+
+def unique_path_fixture() -> tuple[list[BillNode], list[BillNode]]:
+    """Two non-colliding ``match_path`` groups and one observation with no counterpart.
+
+    Every group here takes the unique path: ``sec-1`` and ``sec-2`` are 1x1, and ``sec-3`` is
+    old-side only. Nothing collides, so :func:`_match_collision_group` is never reached and a
+    claim proved on this fixture is a claim about the unique path alone.
+
+    The two 1x1 groups are deliberately in **different divisions** on either side. A unique path
+    pairs across division lines -- ``match_path`` is the grouping key and division is never
+    consulted -- and 730 committed corpus pairings do exactly this, so a migration that quietly
+    acquired a division constraint has somewhere to fail.
+    """
+    old_nodes = [
+        node(("sec-1",), "o1", "alpha alpha alpha appropriations for salaries and expenses", "A"),
+        node(("sec-2",), "o2", "bravo bravo bravo appropriations for construction accounts", "A"),
+        node(("sec-3",), "o3", "charlie charlie charlie with no counterpart at all", "A"),
+    ]
+    new_nodes = [
+        node(("sec-1",), "n1", "alpha alpha alpha appropriations for salaries and expenses", "B"),
+        node(("sec-2",), "n2", "bravo bravo bravo appropriations for construction accounts", "B"),
+    ]
+    return old_nodes, new_nodes
+
+
+def unique_path_populations(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> list[RetrievedPopulation]:
+    """The unique-path retrieval stage's populations for a synthetic fixture, one per group.
+
+    ``None`` results are dropped rather than represented: the stage's eligibility gate returns
+    one for a group that can form no pair, which is not a population at all. The count is
+    asserted where it matters, so a stage that started returning ``None`` for everything would
+    not quietly shorten this list into agreement.
+    """
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    old_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
+    new_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
+    for item in old_nodes:
+        old_groups[item.match_path].append(item)
+    for item in new_nodes:
+        new_groups[item.match_path].append(item)
+    populations = []
+    for path in dict.fromkeys(list(old_groups) + list(new_groups)):
+        group_old, group_new = old_groups.get(path, []), new_groups.get(path, [])
+        assert len(group_old) <= 1 and len(group_new) <= 1, f"{path} collides; this fixture is for the unique path"
+        population = retrieve_unique_path_population(group_old, group_new, registry)
+        if population is not None:
+            populations.append(population)
+    return populations
+
+
+def test_a_one_sided_unique_group_is_not_retrieved_at_all():
+    """The eligibility gate, and that it is a gate rather than an empty population.
+
+    A group with one observation and no counterpart forms no pair, so there is nothing to
+    consider and no invocation to record. Returning an empty-sided population instead would put
+    ``path_unique_group`` provenance on a retrieval that never happened -- and, at 15,587 such
+    groups on the committed corpus, would do it more often than for the ones that pair.
+
+    The lone observation still reaches the stream, which is the half a gate could plausibly
+    break, so both are asserted.
+    """
+    old_nodes, new_nodes = unique_path_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    lone = [item for item in old_nodes if item.element_id == "o3"]
+    assert lone, "the fixture stopped carrying an observation with no counterpart"
+
+    assert retrieve_unique_path_population(lone, [], registry) is None
+    assert retrieve_unique_path_population([], new_nodes[:1], registry) is None
+    assert retrieve_unique_path_population(old_nodes[:1], new_nodes[:1], registry) is not None
+
+    assert [2, None] in production_stream(old_nodes, new_nodes), (
+        "the unretrieved observation stopped reaching the pairing stream; a gate that drops it is "
+        "deleting an observation rather than routing it unclaimed"
+    )
+
+
+def refusing_candidate_set(refused: tuple[int, int]):
+    """A ``CandidateSet`` that declines to record ONE observation pair. Nothing else changes.
+
+    The B3 counterpart of :func:`dropping_propose_into`, and deliberately faulted at the other
+    end. ``dropping_propose_into`` mutates the *proposer*; this leaves ``propose_into`` and the
+    ``RetrievedPopulation`` completely untouched and refuses the entry inside the set itself. So
+    the population still says the pair was retrieved, every other pair is admitted normally, and
+    the only thing that has moved is whether the admission authority holds this one.
+
+    That is the exact shape of the defect the boundary exists to make unreachable: retrieval and
+    the candidate set disagreeing about what was considered, while the pairing that results still
+    looks correct.
+    """
+
+    class _Refusing(CandidateSet):
+        def propose(self, old, new, invocation, *, rank=None, score=None):
+            if (old.ordinal, new.ordinal) == refused:
+                return
+            super().propose(old, new, invocation, rank=rank, score=score)
+
+    return _Refusing
+
+
+@pytest.mark.slow
+def test_the_unique_path_evidence_stage_describes_the_frozen_unique_selections():
+    """B3's evidence calls, against the oracle's independently frozen unique-path record.
+
+    ``unique_selections`` is the transcribed legacy composition's ordered list of every
+    non-colliding group it paired, addressed by ADR 0019 ordinal and covered by the frozen trace
+    digest. It was recorded by B0, before any of this existed, so it is an expectation the
+    migration cannot have shaped.
+
+    Three claims, all of which a migration could get wrong while leaving the stream intact: the
+    unique path describes exactly those pairs, in that order, and each record carries **no
+    signal at all** -- the 1x1 shortcut reached through the stage rather than around it.
+    """
+    checked = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        key = pair_key(old_path, new_path)
+        observed = [call for call in observed_group_evidence(old_tree, new_tree) if call["phase"] == "unique"]
+        expected = oracle_trace(old_tree.nodes, new_tree.nodes)["unique_selections"]
+
+        assert [call["links"] for call in observed] == [
+            [[old_ordinal, new_ordinal, None]] for old_ordinal, new_ordinal in expected
+        ], (
+            f"{key}: the unique path's evidence records differ from the frozen unique selections "
+            f"({len(observed)} described vs {len(expected)} expected)"
+        )
+        checked += 1
+
+    assert checked, "the unique-path evidence comparison ran over zero version pairs"
+
+
+@pytest.mark.slow
+def test_no_round_1_pairing_reaches_the_stream_without_an_assignment_selecting_it():
+    """THE B3 completeness gate: no two-sided round-1 output is paired by a tuple construction.
+
+    The claim the slice exists to make true, and the one that fails silently. A bypass left in
+    place for any group shape produces an identical pairing stream -- it selected the same
+    pairing, just without passing a boundary -- so nothing else here can see it. This can: every
+    1:1 pairing in the round-1 stream must be a :class:`SelectedLink` of some
+    :class:`GroupAssignment`, and the two sets must agree exactly in both directions.
+
+    A pairing in the stream with no link behind it is a surviving bypass. A link with no pairing
+    in the stream is an assignment whose decision was discarded, which would be the same defect
+    inverted.
+    """
+    total = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        key = pair_key(old_path, new_path)
+        ordinals = complete_sequence_ordinals(old_tree.nodes, new_tree.nodes)
+        pairs, _candidates, assignments = match_nodes_with_stage_outputs(old_tree, new_tree)
+
+        streamed = [
+            (ordinals[id(old_node)], ordinals[id(new_node)])
+            for old_node, new_node in pairs
+            if old_node is not None and new_node is not None
+        ]
+        selected = [
+            (ordinals[id(link.old)], ordinals[id(link.new)]) for assignment in assignments for link in assignment.links
+        ]
+        assert sorted(streamed) == sorted(selected), (
+            f"{key}: {len(set(streamed) - set(selected))} round-1 pairings reached the stream with no "
+            f"assignment selecting them, and {len(set(selected) - set(streamed))} selected links never "
+            "reached the stream"
+        )
+        total += len(streamed)
+
+    assert total > 1000, f"only {total} round-1 pairings over the corpus; this gate is near-vacuous"
+
+
+def test_the_unique_path_selection_carries_the_record_admission_produced():
+    """The selected link's evidence IS the object the evidence stage built, not an equal copy.
+
+    ADR 0020 requires every selected link to carry the evidence that selected it. An
+    implementation that rebuilt an equivalent record on the way out would satisfy every equality
+    check in this file while severing the selection from its grounds -- and the rebuilt record
+    would not have passed through admission at all.
+
+    So this is an **identity** assertion, taken on the objects the stage returned. Captured by
+    spying on the evidence stage, which is the only point downstream of
+    ``candidate_for`` and upstream of assignment.
+    """
+    from deltatrack import diff_bill as db
+
+    old_nodes, new_nodes = unique_path_fixture()
+    produced: list[CorrespondenceEvidence] = []
+    real = db.group_correspondence_evidence
+
+    def spy(population, candidates):
+        evidence = real(population, candidates)
+        produced.extend(evidence)
+        return evidence
+
+    db.group_correspondence_evidence = spy
+    try:
+        _pairs, _candidates, assignments = match_nodes_with_stage_outputs(
+            _TreeStandIn(old_nodes), _TreeStandIn(new_nodes)
+        )
+    finally:
+        db.group_correspondence_evidence = real
+
+    assert len(produced) == 2, f"the evidence stage produced {len(produced)} records for two 1x1 groups"
+    links = [link for assignment in assignments for link in assignment.links]
+    assert len(links) == 2, f"the unique path selected {len(links)} of 2 available pairings"
+    for link in links:
+        assert any(link.evidence is item for item in produced), (
+            "a selected link carries an evidence record the evidence stage never returned; the "
+            "selection has been severed from the grounds admission produced"
+        )
+
+
+def test_the_unique_path_measures_nothing(monkeypatch):
+    """The fast path's cost property, preserved through the stages rather than around them.
+
+    ``text_similarity`` is bombed rather than counted, so a stage that measured would fail here
+    even if it discarded the result. The pairing stream cannot show this -- selecting the sole
+    candidate is what the greedy would do anyway -- and it is the property #623 measured the
+    tidy-up of at +21%.
+    """
+    from deltatrack import diff_bill as db
+
+    old_nodes, new_nodes = unique_path_fixture()
+    monkeypatch.setattr(db, "text_similarity", _refuse_to_measure)
+
+    assert production_stream(old_nodes, new_nodes) == [[0, 0], [1, 1], [2, None]], (
+        "the unique path stopped pairing both 1x1 groups, or stopped routing the one-sided group"
+    )
+
+
+def test_refusing_a_unique_pair_the_candidate_set_fails_closed(monkeypatch):
+    """THE B3 DECISIVE CONTROL: the admission authority made load-bearing on the unique path.
+
+    One fault, and it is a candidate-set-only fault: the entry for a real unique pair is refused
+    while :func:`retrieve_unique_path_population` still returns that pair, under that invocation,
+    in that order. Retrieval and the set then disagree about what was considered, which is
+    precisely the state ADR 0020's intermediate value exists to make unreachable.
+
+    Five claims:
+
+    **A.** the population is unchanged -- same nodes, same refs, same invocation -- so this is a
+    candidate defect and not a retrieval one wearing its name.
+    **B.** the clean run selects that pair, so refusing it withholds something that would
+    otherwise have been chosen rather than something that would have lost anyway.
+    **C.** the set really is missing exactly that entry and nothing else.
+    **D.** the evidence stage fails closed, naming the pair, rather than reconstructing it from
+    population membership -- which is the tempting recovery and the whole hole this closes.
+    **E.** production fails closed too, and **emits nothing**. The pair does not reappear through
+    a retained fast path, a caught exception, an unmatched ``(old, None)`` plus ``(None, new)``,
+    or any other fallback: no stream is returned at all. That is the half a "the pair is absent
+    from the output" assertion could not distinguish from a bypass that merely re-labelled it.
+    """
+    from deltatrack import diff_bill as db
+
+    old_nodes, new_nodes = unique_path_fixture()
+    paired = unique_path_populations(old_nodes, new_nodes)
+    assert len(paired) == 2, "the fixture stopped producing two 1x1 unique populations"
+
+    target = paired[0]
+    refused = (target.old_refs[0].ordinal, target.new_refs[0].ordinal)
+
+    # B. the clean run selects this exact pair.
+    clean = production_stream(old_nodes, new_nodes)
+    assert list(refused) in clean, (
+        f"the unfaulted run does not select {refused}, so refusing it proves nothing about a "
+        "pairing that would otherwise have been made"
+    )
+
+    monkeypatch.setattr(db, "CandidateSet", refusing_candidate_set(refused))
+
+    # A. the population the retrieval stage produces is untouched by the fault.
+    after = unique_path_populations(old_nodes, new_nodes)
+    assert [(p.old_refs, p.new_refs, p.invocation) for p in after] == [
+        (p.old_refs, p.new_refs, p.invocation) for p in paired
+    ], "the fault moved the retrieved population; it is no longer a candidate-set-only defect"
+
+    # C. the set is missing exactly that entry.
+    faulted = db.CandidateSet()
+    honest = CandidateSet()
+    for population in paired:
+        population.propose_into(faulted)
+        population.propose_into(honest)
+    assert faulted.candidate_for(target.old_refs[0], target.new_refs[0]) is None, "the fault refused nothing"
+    assert len(faulted) == len(honest) - 1, "the fault refused more than one pair; it is no longer isolating"
+
+    # D. the evidence stage refuses it rather than reconstructing it from the population.
+    with pytest.raises(ValueError, match="never admitted"):
+        group_correspondence_evidence(target, faulted)
+
+    # E. and production emits nothing at all rather than falling back.
+    with pytest.raises(ValueError, match="never admitted"):
+        match_nodes(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+
+
+@pytest.mark.slow
+def test_refusing_a_unique_pair_fails_closed_on_the_committed_corpus(monkeypatch):
+    """The same fault on real bills, where the unique path carries most of the pairings.
+
+    The synthetic control is exact about which pair and why; this answers the question it cannot,
+    which is whether the boundary is wired on the path the engine takes over real documents.
+
+    The refused pair is chosen from each comparison's own clean unique-path selections, so the
+    fault is aimed at a pairing that comparison really makes. Every committed pair must fail
+    closed: unlike the collision path, whose groups some comparisons may not have, every
+    comparison in this corpus has unique 1x1 groups.
+    """
+    from deltatrack import diff_bill as db
+
+    real_candidate_set = db.CandidateSet
+    failed_closed = 0
+    for old_path, new_path in manifest_version_pairs():
+        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
+        key = pair_key(old_path, new_path)
+
+        selections = oracle_trace(old_tree.nodes, new_tree.nodes)["unique_selections"]
+        assert selections, f"{key}: no unique-path selection to refuse"
+        refused = (selections[0][0], selections[0][1])
+
+        monkeypatch.setattr(db, "CandidateSet", refusing_candidate_set(refused))
+        try:
+            with pytest.raises(ValueError, match="never admitted"):
+                match_nodes(old_tree, new_tree)
+        finally:
+            monkeypatch.setattr(db, "CandidateSet", real_candidate_set)
+        failed_closed += 1
+
+    assert failed_closed == len(manifest_version_pairs()), (
+        f"only {failed_closed} committed comparisons failed closed under a refused unique candidate"
+    )
+
+
+def test_the_refusal_control_is_not_refusing_everything():
+    """The negative control for the control: an unfaulted set still admits the pair it targets.
+
+    Without this, a ``refusing_candidate_set`` that dropped every proposal -- or one whose ordinal
+    comparison never matched and which therefore reddened production for some unrelated reason --
+    would look exactly like a decisive result.
+    """
+    old_nodes, new_nodes = unique_path_fixture()
+    paired = unique_path_populations(old_nodes, new_nodes)
+    target, other = paired[0], paired[1]
+    refused = (target.old_refs[0].ordinal, target.new_refs[0].ordinal)
+
+    faulted = refusing_candidate_set(refused)()
+    for population in paired:
+        population.propose_into(faulted)
+
+    assert faulted.candidate_for(target.old_refs[0], target.new_refs[0]) is None
+    assert faulted.candidate_for(other.old_refs[0], other.new_refs[0]) is not None, (
+        "the refusal dropped a pair it was not aimed at, so a fail-closed result would not be "
+        "attributable to the pair the control names"
+    )
+    # And the untargeted group still resolves through the stages under the faulted set.
+    evidence = group_correspondence_evidence(other, faulted)
+    assert len(assign_group(other, evidence).links) == 1
+
+
+def test_the_unique_path_runs_no_collision_machinery():
+    """Structural: the migration reached the stages without reaching the expensive path.
+
+    ADR 0020 §13 ruled to keep the fast path's cost rather than route every unique group through
+    ``_match_collision_group``. B3 keeps that by orchestrating the SAME stages differently, not by
+    adding a second implementation of them -- so the guard is two-sided: the unique orchestrator
+    must call the shared stages, and must not reach the division partition or the cross-division
+    round, neither of which can do anything for a group holding at most one observation per side.
+
+    A structural guard rather than a timing assertion, deliberately. A wall-clock threshold in the
+    suite would be a flake on a loaded machine and would say nothing about *why* the cost moved;
+    the ratios live in ``docs/research/provision-matching/probes/round1_b3_cost.py``, which
+    measures every arm in one process so contention cannot masquerade as a regression.
+    """
+    import inspect
+
+    from deltatrack.diff_bill import _match_unique_path_group
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(_match_unique_path_group)))
+    called = {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+
+    assert {"group_correspondence_evidence", "assign_group", "retrieve_unique_path_population"} <= called, (
+        f"the unique path no longer runs the shared stages; it calls {sorted(called)}"
+    )
+    forbidden = called & {
+        "_match_collision_group",
+        "retrieve_within_division_populations",
+        "retrieve_cross_division_population",
+    }
+    assert not forbidden, (
+        f"the unique path reaches collision machinery {sorted(forbidden)}; the audit measured that "
+        "routing at 2.57x and §13 ruled to keep the fast path's cost"
+    )
+
+
 # --- Independence, enforced structurally --------------------------------------------------
 
 #: Every round-1 symbol the oracle must not reach, including the ones B1 and B2 will
@@ -2055,6 +2500,11 @@ FORBIDDEN_IN_ORACLE = frozenset(
         "SelectedLink",
         "match_nodes_with_stage_outputs",
         "_refuse_a_candidate_retrieval_did_not_admit",
+        # B3's unique-path retriever and its orchestrator, under the names they shipped with. The
+        # oracle transcribes the fast path as a tuple append and must keep doing so: wiring it to
+        # the migrated path is exactly how the expectation would come to move with the code.
+        "retrieve_unique_path_population",
+        "_match_unique_path_group",
         # and the module they would arrive through
         "diff_bill",
     }
@@ -2162,6 +2612,13 @@ def test_the_oracle_module_reaches_diff_bill_only_for_the_production_comparison(
         # refuses either name inside an oracle function.
         "deltatrack.diff_bill._match_collision_group",
         "deltatrack.diff_bill._refuse_a_candidate_retrieval_did_not_admit",
+        # B3's unique-path retriever, driven and inspected by the unique-path controls. Same
+        # standing as B1's and B2's stages: it is the code UNDER TEST, and the expectation it is
+        # held to is the oracle's `unique_selections`, which B0 froze before any of it existed.
+        "deltatrack.diff_bill.retrieve_unique_path_population",
+        # Read for its SOURCE only, by the guard that the unique orchestrator runs the shared
+        # stages without reaching the collision machinery.
+        "deltatrack.diff_bill._match_unique_path_group",
     }, f"the production import surface moved: {sorted(imported)}"
 
 
