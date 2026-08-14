@@ -245,8 +245,11 @@ the contents of one stage change.
 - **Let classification re-consult similarity.** Rejected with a carve-out: classification
   legitimately asks *how much* the corresponding texts differ, which is what
   `move.body_unchanged` records and needs no score. What it may not do is threshold a
-  correspondence score, which `diff_bill.diff_bills` and `diff_pdf._hunk_for_paired_blocks`
-  both do today.
+  correspondence score. On the XML side that separation now holds: `diff_bill.diff_bills` is
+  orchestration over the four stages, and the only round-1 cutoff lives in
+  `apply_similarity_assignment_rule`, an assignment act that runs before classification.
+  `diff_pdf._hunk_for_paired_blocks` still thresholds inside classification; the PDF track is
+  not migrated, and this record does not unify the two implementations.
 - **Keep `Correspondence` pair-shaped, and revisit if consolidation proves common.** Cost
   asymmetry: capability costs a type permitting N sides, while not having it turns any later
   change into a migration through every consumer of the matcher's output.

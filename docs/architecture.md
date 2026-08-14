@@ -53,7 +53,7 @@ Both paths reach the same canonical JSON, then the same renderer.
 | Stage | Owner | What it does |
 |---|---|---|
 | Parse | `bill_tree.normalize_bill` | Bill XML → `BillTree` of `BillNode`s: divisions, titles, structural containers, flat sections. |
-| Diff | `diff_bill.diff_bills` | Structural comparison. Division-aware matching, similarity checks, move reconciliation. |
+| Diff | `diff_bill.diff_bills` | Structural comparison, as four named stages: retrieval → correspondence evidence → assignment → classification ([ADR 0020](decisions/0020-matching-stages.md)), over observations addressed by parser ordinal ([ADR 0019](decisions/0019-observation-identity.md)). Round 1 matches by path and division, a later assignment act applies the similarity cutoff, and round 2 reconciles moves. |
 | Shape | `diff_bill.bill_diff_to_dict` | Diff → dict, including the extracted dollar amounts. |
 | Full text | `formatters.text_serializer` | Readable plaintext per side, for the report's full-bill view. |
 | Canonicalize | `formatters.canonical.xml_diff_to_canonical` | Dict → canonical JSON. |
