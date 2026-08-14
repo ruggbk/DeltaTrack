@@ -889,19 +889,20 @@ gate can be shown to fire before it lands. Slice 0 is not optional — §6.2 is 
 | **4** | **DONE** (`5dac421`). `pdf_unmatched_population` → `retrieve_pdf_move_candidates` → `pdf_move_evidence` → `assign_pdf_moves`, plus `settle_pdf_correspondences` and `classify_pdf`, with round 2 moved **before** classification. `_emit_pair` now appends provisional pairings instead of classified hunks. This is the PDF #591. | Gate 1 byte-identical; a whole-output comparison against an independently transcribed pre-slice-4 pipeline agrees on all 23 adjacent pairs, including the six the baseline cannot cover. Four fault injections, two of which were informative no-ops (§8.3). |
 | **5** | **DONE** (`9eebcc5`, evidence-floor repair `61cc3fa`). `_pdf_similarity_signals` → `pdf_similarity_correspondence_evidence` → `pdf_pairing_survives_similarity_rule` → `apply_pdf_similarity_revocation`, mirroring `diff_bill`. `_align_blocks` is retrieval only; `_AlignedPairing` loses its similarity field. | Gate 1 byte-identical; gate 4 unchanged. Threshold sweep at 0.2/0.3/0.4/0.6/0.9 → 192/214/230/257/402, plus a corpus-wide exact-overlap invariant (§8.4, §8.5). The first version shipped a censored evidence floor that the original 0.0/0.4/0.99 sweep could not see — §8.5. |
 | **6** | Move the moved-vs-modified decision out of classification. Because 20 of 165 PDF moves are *not* round-2 provenance (§3.4), this needs assignment to record *why* a pair corresponds, not a classification threshold. **Design work, not extraction.** | Requires §10 Q2 answered first. |
-| **7** | Wrap round-1 (`_block_key` + `SequenceMatcher` + the positional `replace` zip) as a source-specific **retriever** emitting a `CandidateSet`, preserving its exact candidate population. No longer architecture-blocked (§9, corrected). | Gate 1 byte-identical; gate 6's crossing fixture red under global best-similarity assignment. |
+| **7** | **DONE** (`11b822b`). `retrieve_pdf_round1_candidates` wraps `_block_key` + `SequenceMatcher` + the positional `replace` zip as two named invocations emitting a `CandidateSet`, with evidence gated on it and `PdfRound1StageOutputs` making round 1's outputs reachable. | Gate 1 byte-identical; gate 6 unchanged. Membership equals the transcribed legacy considered population on all 23 pairs; three fail-closed refusals; the set's canonical order pinned out of the emitted order (§8.7). |
 
 Slices 1–5 are wrap-and-extract with a byte-identical gate. Slice 6 changes semantics and
 owes precision/recall evidence under ADR 0020's second implementation rule. Slice 7 is
 bounded by §9's limitation rather than blocked by it.
 
-**State: slices 0, 1, 1a, 2, 3, 4 and 5 complete. Slice 7 is next.**
+**State: slices 0, 1, 1a, 2, 3, 4, 5 and 7 complete. Slice 6 is the only one left, and it is
+design work, not extraction.**
 
-Slice 7 before slice 6, on the reviewer's recommendation: slice 7 is still behaviour-preserving
-extraction, slice 6 is the semantic moved-vs-modified decision, and completing round-1
-`CandidateSet` retrieval first removes that unfinished variable before the policy call. Slice 7
-must use develop's *current* B2 staging as its reference — `CandidateSet` admission is now
-load-bearing before evidence there.
+Slice 7 ran before slice 6 on the reviewer's recommendation: it is still behaviour-preserving
+extraction, while slice 6 is the semantic moved-vs-modified decision, and completing round-1
+`CandidateSet` retrieval first removes that unfinished variable before the policy call. Slice 6
+still needs §10 Q2 answered — what a PDF `moved` should mean, given that 20 of 165 are threshold
+verdicts on round-1 pairs rather than round-2 provenance (§3.4).
 
 ### 8.1 Slice 3's controls, and the faults that proved each one fires
 
@@ -1081,6 +1082,35 @@ different populations and nothing further is outstanding. Pinned by
 `test_the_revocation_population_splits_as_224_accepted_plus_6_declined` rather than left as a
 plausible account.
 
+### 8.7 Slice 7: admission has to be load-bearing, and only three controls can tell
+
+The lesson carried over from XML B2, and the corpus proves it here rather than restating it: a
+`CandidateSet` that is **built and then ignored** is indistinguishable from a correct one by
+every gate that compares output. The pairings, the hunks and the canonical digest are identical
+whether evidence consults the set or reconstructs the pair from the pairing stream.
+
+Three fault injections, and what each one moved:
+
+| fault injected | what went red | canonical baseline |
+|---|---|---|
+| the admission check removed — the set is built, then ignored | the four fail-closed controls **only** | **green** |
+| retrieval widened with one neighbouring pair per candidate | the membership control, 17 pairs | **green** |
+| evidence ordered by the set's canonical order instead of the stream | the ordering control **only** | **green** |
+
+**All three leave the output untouched.** That is the whole argument for
+`tests/test_pdf_round1_retrieval.py` existing: without it, slice 7 could have shipped a candidate
+set that decided nothing and every preservation gate in the record would have agreed it was fine.
+
+The ordering control deserves its own note. On a real document the set's canonical ordinal-pair
+order and the pairing stream's order **coincide**, because the aligner consumes both sides
+monotonically — the same structural fact §8.3 recorded when a re-sort by ordinal turned out to be
+a no-op. A corpus sweep therefore cannot separate them, and the control is a unit test that hands
+the evidence stage a deliberately non-canonical stream and requires the output to follow it.
+
+Measured population: **2,981** pairs admitted by `block_key_alignment` and **426** by
+`positional_replace` across the committed corpus, both asserted as floors so neither invocation
+can silently stop firing.
+
 ---
 
 ## 9. Round-1 retrieval: a limitation, not a blocker
@@ -1130,9 +1160,13 @@ assignment has a genuine choice, is a **matching-policy experiment for later**, 
 precision and recall evidence under ADR 0020's second implementation rule. It is not a
 prerequisite for the architectural extraction.
 
-Slice 7 is therefore unblocked and can run as a behaviour-preserving wrap, with gate 6's
-crossing fixture (§6.4) pinning the positional rule against exactly the substitution a future
-shared assignment implementation might make.
+Slice 7 ran as exactly that behaviour-preserving wrap (§8.7), with gate 6's crossing fixture
+(§6.4) pinning the positional rule against exactly the substitution a future shared assignment
+implementation might make. **The limitation stated above survives the extraction unchanged**: the
+round-1 candidate set is still exclusive by construction, so it buys observability of round-1
+recall and not of round-1 competition, because there is none to observe. Widening retrieval over
+the 525 duplicate keys remains a matching-policy experiment for later, owing precision and recall
+evidence under ADR 0020's second implementation rule.
 
 ---
 
