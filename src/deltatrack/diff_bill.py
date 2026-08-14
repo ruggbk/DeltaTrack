@@ -356,7 +356,7 @@ def retrieve_unique_path_population(
     old_nodes: list[BillNode],
     new_nodes: list[BillNode],
     registry: "ObservationRegistry",
-) -> RetrievedPopulation:
+) -> RetrievedPopulation | None:
     """RETRIEVAL, round 1: the population of one NON-COLLIDING ``match_path`` group.
 
     The group holds at most one observation per side, so the population is the group. There is
@@ -377,16 +377,29 @@ def retrieve_unique_path_population(
     divisions. Naming either node's key here would assert a partition the group was not formed
     by -- the same reason :func:`retrieve_cross_division_population` carries ``None``.
 
-    A one-sided group is retrieved too, carrying an empty side. It forms no candidate, proposes
-    nothing and is assigned nothing; its observation is routed unclaimed, exactly as a
-    one-sided division's is. :attr:`~RetrievedPopulation.forms_candidates` is what the
-    orchestrator branches on, so that case stays a property of the population rather than a
-    shape the caller re-derives from two lengths.
+    **``None`` when either side is empty** -- the eligibility gate, made explicit rather than
+    left as an ``if`` in the caller, exactly as :func:`retrieve_cross_division_population`
+    makes it. With one side empty no pair can be formed, so there is nothing to consider and no
+    invocation to record; the lone observation is routed unclaimed by the caller, which already
+    holds it. That is the difference from ``retrieve_within_division_populations``, which does
+    emit its one-sided populations: there the partition *produced* them and the caller has no
+    other route to their contents. Here the group is the caller's own input.
+
+    It also matters for cost. A one-sided group is the corpus's most common shape by count --
+    15,587 against 14,001 that pair -- and recording an invocation for a population that can
+    never form a candidate would be provenance for a retrieval that did not happen.
+
+    ``UNIQUE_PATH_INVOCATION`` is a module constant rather than rebuilt per group.
+    :class:`~deltatrack.matching.RetrieverInvocation` is frozen, hashable and configuration-free
+    here, so one shared value is the same value; rebuilding it 14,001 times per corpus run was
+    measurably the largest single cost of this stage and bought nothing.
     """
+    if not old_nodes or not new_nodes:
+        return None
     old = tuple(old_nodes)
     new = tuple(new_nodes)
     return RetrievedPopulation(
-        invocation=RetrieverInvocation.of("path_unique_group", round=PATH_ROUND),
+        invocation=UNIQUE_PATH_INVOCATION,
         division_key=None,
         old=old,
         new=new,
@@ -727,7 +740,7 @@ def _match_unique_path_group(
 
     Orchestration only, and the same composition :func:`_match_collision_group` runs: retrieve,
     propose, describe, assign, route. What differs is that there is nothing for a second round to
-    do -- a 1x1 assignment leaves nothing over, and a one-sided group forms no candidate at all --
+    do -- a 1x1 assignment leaves nothing over, and a one-sided group is not retrieved at all --
     so the cross-division round has no population to be built from and is not run.
 
     **This is what B3 replaced, and the replacement is the point.** The pre-B3 fast path appended
@@ -737,13 +750,20 @@ def _match_unique_path_group(
     it was wrong by the size of this population. It is now round-1-complete.
 
     **Retaining the fast path's cost profile is deliberate and is not the same as retaining the
-    fast path.** ADR 0020's audit priced the alternative -- sending every unique group through
-    :func:`_match_collision_group` -- and it costs 2.57x on the committed corpus, because that path
-    partitions by division, forms one population per division, and runs a second retrieval round
-    over the leftovers. None of that is reachable for a group holding at most one observation per
-    side. So this stays a separate orchestration over the SAME stages rather than a second
-    implementation of them: no stage is duplicated here, and the two paths cannot diverge in what
-    they admit, describe or select.
+    fast path.** The alternative -- sending every unique group through
+    :func:`_match_collision_group` -- costs 2.96x the pre-B3 traversal on the committed corpus,
+    because that path partitions by division, forms one population per division, and runs a second
+    retrieval round over the leftovers. None of that is reachable for a group holding at most one
+    observation per side. So this stays a separate orchestration over the SAME stages rather than
+    a second implementation of them: no stage is duplicated here, and the two paths cannot diverge
+    in what they admit, describe or select.
+
+    ADR 0020's audit priced that same alternative at 1.62x, and the gap is not a contradiction:
+    the audit measured it against a *pre-B1* collision path, which had no candidate set, no
+    evidence records and no ``GroupAssignment``. B1 and B2 made that path cost more per group, so
+    the thing B3 declines to do got more expensive while B3 was being reached.
+    ``docs/research/provision-matching/probes/round1_b3_cost.py`` re-measures all the arms in one
+    process, which is how a stale cross-session ratio is kept out of this decision.
 
     **Zero ``text_similarity`` calls, preserved through the stages rather than around them.** A
     1x1 population takes :func:`group_correspondence_evidence`'s shortcut -- one record, no signals,
@@ -760,13 +780,14 @@ def _match_unique_path_group(
     just asked for.
     """
     population = retrieve_unique_path_population(old_nodes, new_nodes, registry)
-    if not population.forms_candidates:
-        # At most one observation, and no partner to consider it against. No invocation is
-        # recorded, nothing is described and nothing is assigned -- the observation passes to the
-        # next round unclaimed, which is what the fast path's one-sided tuple always meant.
+    if population is None:
+        # Retrieval found nothing to consider: at most one observation, and no partner to consider
+        # it against. Nothing is proposed, described or assigned -- the observation passes to the
+        # next round unclaimed, which is what the fast path's one-sided tuple always meant. It is
+        # NOT a settled 1:0 or 0:1; the move pass may still pair it with a different partner.
         pairs: list[tuple[BillNode | None, BillNode | None]] = []
-        pairs.extend((node, None) for node in population.old)
-        pairs.extend((None, node) for node in population.new)
+        pairs.extend((node, None) for node in old_nodes)
+        pairs.extend((None, node) for node in new_nodes)
         return pairs, []
 
     population.propose_into(candidates)
@@ -869,18 +890,20 @@ def match_nodes_with_stage_outputs(
     and order.
 
     The third element is what makes ADR 0020 invariant 8 reachable rather than merely true
-    internally: every :class:`GroupAssignment` the collision path produced, each carrying the
-    evidence for all of its candidates and the record that selected each link. Losing
-    competitors included -- see :class:`GroupAssignment`.
+    internally: every :class:`GroupAssignment` round 1 produced, each carrying the evidence for
+    all of its candidates and the record that selected each link. Losing competitors included --
+    see :class:`GroupAssignment`.
 
-    **It is collision-path-complete and nothing more**, for the same reason the candidate set
-    is: the unique-path fast path below pairs its observations directly without retrieving,
-    describing or assigning them, so most ``match_path`` groups contribute no assignment here.
+    **It is round-1-complete.** Every two-sided ``match_path`` group is resolved by an
+    assignment, whether it collides or not: B3 brought the unique path under the same four
+    stages, so no pairing reaches the stream from a tuple construction. A one-sided group
+    contributes no assignment because it forms no pair -- there is nothing to decide.
+    ``tests/test_round1_preservation.py`` binds both halves.
 
     ``registry`` is accepted so a caller that already built one does not build a second; when
     omitted it is derived from the two complete node sequences.
 
-    **The CandidateSet is comparison-scoped**, accumulated across both round-1 retriever
+    **The CandidateSet is comparison-scoped**, accumulated across all three round-1 retriever
     invocations, so one observation pair is one ``Candidate`` carrying every invocation that
     proposed it. That is the checked-in contract rather than a preference: per-invocation sets
     put two proposals for one pair in different objects where nothing can merge them, and a pair
@@ -895,14 +918,15 @@ def match_nodes_with_stage_outputs(
     canonical ordinal-pair order is deliberately not the order any decision is made in, and
     assignment consumes the ordered ``RetrievedPopulation`` tuples and never this set at all.
 
-    **The set is TRANSITIONAL and is not yet comparison-wide candidate recall.** It is complete
-    for the two collision-path retrieval stages this slice introduces, and nothing else: the
-    unique-path fast path still pairs its observations directly in the loop below without
-    forming a candidate, so on the committed corpus the great majority of ``match_path`` groups
-    contribute no entry here. Reading a candidate-recall figure off this set today would
-    therefore be wrong by roughly the size of that population, not by a rounding error. Bringing
-    the fast path under retrieval is a later slice; until it lands, treat this as observability
-    for the collision path alone.
+    **The set is now round-1 candidate recall, and B3 is what made it so.** Before B3 it held
+    the collision path's candidates and nothing else, so a recall figure read off it was wrong by
+    the size of the unique-path population -- 14,001 of the committed corpus's pairings against
+    the collision path's few thousand, which is not a rounding error. It is now every pair round 1
+    considered.
+
+    Still not *comparison-wide* recall, and the remaining gap is named rather than left implied:
+    round 2 keeps its own retrieval (:func:`retrieve_move_candidates`) and its candidates do not
+    accumulate here. A figure covering both rounds has to combine the two.
     """
     if registry is None:
         registry = observation_registry(old, new)
@@ -962,9 +986,9 @@ def match_nodes(
     - (old, None): removed (only in old)
     - (None, new): added (only in new)
 
-    For unique match_paths, pairs directly (fast path). For collision groups
-    (multiple nodes sharing one match_path), uses division-aware sub-grouping
-    with text similarity fallback.
+    Every two-sided group is resolved through the same four ADR 0020 stages. A unique
+    match_path takes a one-round orchestration; a collision group (multiple nodes sharing
+    one match_path) adds division-aware sub-grouping with a cross-division fallback round.
 
     The pairing stream alone, for the callers that want nothing else.
     :func:`match_nodes_with_stage_outputs` is the implementation and also returns the candidate
@@ -1062,14 +1086,26 @@ def _normalize_text(text: str) -> str:
 
 
 #: The assignment rounds this pipeline runs, in order. Round 1 is ``match_nodes`` followed by
-#: :func:`apply_similarity_assignment_rule`; its collision path now runs the separated stages
-#: (:func:`group_correspondence_evidence`, :func:`assign_group`), and its remaining fused
-#: assignment act is the unique-path direct selection inside ``match_nodes``. Round 2 is the
+#: :func:`apply_similarity_assignment_rule`; both its paths now run the separated stages
+#: (:func:`group_correspondence_evidence`, :func:`assign_group`), so it holds no fused assignment
+#: act -- B3 was the slice that closed the last one. Round 2 is the
 #: move pass below. These are provenance carried on a
 #: :class:`SettledCorrespondence` so classification can reproduce the legacy record order and
 #: label a move — not a ranking, and not a quality signal.
 PATH_ROUND = 1
 MOVE_ROUND = 2
+
+#: The invocation :func:`retrieve_unique_path_population` runs under. A module constant rather
+#: than a per-group construction because it is configuration-free and
+#: :class:`~deltatrack.matching.RetrieverInvocation` is frozen and hashable, so one shared value
+#: is indistinguishable from 14,001 equal ones -- and building those was the single largest cost
+#: of bringing the unique path under the stages.
+#:
+#: The other two round-1 retrievers build theirs inline, and the asymmetry is the point rather
+#: than an inconsistency: they run once per collision group (959 on the committed corpus) where
+#: this runs once per paired unique group (14,001). Declared here beside the round it names, so
+#: the constant and the round it is derived from cannot drift apart.
+UNIQUE_PATH_INVOCATION = RetrieverInvocation.of("path_unique_group", round=PATH_ROUND)
 
 #: Word-level overlap of two normalized bodies. Carried by BOTH rounds' correspondence evidence,
 #: because it is one quantity by one measure: ``text_similarity`` is
@@ -1241,11 +1277,11 @@ def similarity_correspondence_evidence(
     """CORRESPONDENCE EVIDENCE for the similarity rule: one record per 1:1 pairing.
 
     Named for the one rule these signals feed, not for round 1. ``match_nodes`` also decides
-    correspondence -- :func:`assign_group`'s unthresholded greedy claim and the unique-path
-    direct selection are both assignment acts under ADR 0020 invariant 6 -- and neither is
+    correspondence -- :func:`assign_group`'s unthresholded claim is an assignment act under ADR
+    0020 invariant 6, on the unique path as much as on the collision one -- and it is not
     described here. A name like ``round1_correspondence_evidence`` would claim coverage this
-    does not have: the group competition has its own evidence stage in
-    :func:`group_correspondence_evidence`, and the unique path still has none.
+    does not have: both of round 1's paths already describe their candidates through
+    :func:`group_correspondence_evidence`, and these are different signals for a later rule.
 
     **Every 1:1 pairing gets a record, including the ones the rule will revoke.** That is ADR
     0020 invariant 8: evidence for candidates that reach assignment stays retained and
@@ -1343,9 +1379,9 @@ def apply_similarity_assignment_rule(
 ) -> list[tuple[BillNode | None, BillNode | None]]:
     """Replace each revoked pairing with the two unmatched observations it becomes.
 
-    Named for the one rule it applies. It is **not** the whole of round-1 assignment: ``match_nodes``
-    still selects a unique-path pairing outright, and :func:`assign_group` has already run the
-    group competition, both of which decide correspondence.
+    Named for the one rule it applies. It is **not** the whole of round-1 assignment:
+    :func:`assign_group` has already decided correspondence for every two-sided group, unique and
+    colliding alike, and this runs afterwards on what that selected.
 
     **This rule and the group competition are two assignment acts in sequence, not one rule in
     two places.** :func:`assign_group` is unthresholded -- a 0.01 pairing wins its group if it is
@@ -1767,17 +1803,21 @@ def diff_bills(old: BillTree, new: BillTree) -> BillDiff:
     produced. Post-#591 that is a sequencing constraint inside matching, no longer a dependency
     on classification output.
 
-    What remains fused, said plainly: **the unique-path fast path.** ``match_nodes`` still pairs
-    a non-colliding ``match_path`` group outright, without retrieving, describing or assigning
-    it, which is assignment under ADR 0020 invariant 6 and is deferred to a later slice. The
-    collision path is separated: retrieval names the populations, evidence describes every
-    candidate they admit, and :func:`assign_group` decides which of them correspond, reading the
-    evidence and never the texts.
+    **Round 1 holds no fused assignment act, as of B3.** Both of its paths are separated the same
+    way: retrieval names the population, evidence describes every candidate it admits, and
+    :func:`assign_group` decides which of them correspond, reading the evidence and never the
+    texts. The unique path differs only in how much of that machinery a group of at most one
+    observation per side can reach -- one round, no division partition, no measurement -- not in
+    which stages decide.
 
-    Three round-1 assignment acts therefore run in sequence, and the order is the composition
-    rather than a redundancy: the unique-path direct selection, :func:`assign_group`'s
-    unthresholded group competition, and :func:`apply_similarity_assignment_rule`, which is the
-    one rule that can revoke a pairing and the only one that owns a threshold.
+    Two round-1 assignment acts therefore run in sequence, and the order is the composition
+    rather than a redundancy: :func:`assign_group`'s unthresholded claim, then
+    :func:`apply_similarity_assignment_rule`, which is the one rule that can revoke a pairing and
+    the only one that owns a threshold.
+
+    What remains fused, said plainly: **nothing in round 1.** Whatever ADR 0020 has left to
+    separate is outside this round, and naming it is that slice's job rather than this
+    docstring's.
     """
     registry = observation_registry(old, new)
     pairings = match_nodes(old, new)

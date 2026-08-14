@@ -2105,7 +2105,13 @@ def unique_path_fixture() -> tuple[list[BillNode], list[BillNode]]:
 
 
 def unique_path_populations(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> list[RetrievedPopulation]:
-    """The unique-path retrieval stage's output for every group of a synthetic fixture."""
+    """The unique-path retrieval stage's populations for a synthetic fixture, one per group.
+
+    ``None`` results are dropped rather than represented: the stage's eligibility gate returns
+    one for a group that can form no pair, which is not a population at all. The count is
+    asserted where it matters, so a stage that started returning ``None`` for everything would
+    not quietly shorten this list into agreement.
+    """
     registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
     old_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
     new_groups: dict[tuple[str, ...], list[BillNode]] = defaultdict(list)
@@ -2117,8 +2123,36 @@ def unique_path_populations(old_nodes: list[BillNode], new_nodes: list[BillNode]
     for path in dict.fromkeys(list(old_groups) + list(new_groups)):
         group_old, group_new = old_groups.get(path, []), new_groups.get(path, [])
         assert len(group_old) <= 1 and len(group_new) <= 1, f"{path} collides; this fixture is for the unique path"
-        populations.append(retrieve_unique_path_population(group_old, group_new, registry))
+        population = retrieve_unique_path_population(group_old, group_new, registry)
+        if population is not None:
+            populations.append(population)
     return populations
+
+
+def test_a_one_sided_unique_group_is_not_retrieved_at_all():
+    """The eligibility gate, and that it is a gate rather than an empty population.
+
+    A group with one observation and no counterpart forms no pair, so there is nothing to
+    consider and no invocation to record. Returning an empty-sided population instead would put
+    ``path_unique_group`` provenance on a retrieval that never happened -- and, at 15,587 such
+    groups on the committed corpus, would do it more often than for the ones that pair.
+
+    The lone observation still reaches the stream, which is the half a gate could plausibly
+    break, so both are asserted.
+    """
+    old_nodes, new_nodes = unique_path_fixture()
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    lone = [item for item in old_nodes if item.element_id == "o3"]
+    assert lone, "the fixture stopped carrying an observation with no counterpart"
+
+    assert retrieve_unique_path_population(lone, [], registry) is None
+    assert retrieve_unique_path_population([], new_nodes[:1], registry) is None
+    assert retrieve_unique_path_population(old_nodes[:1], new_nodes[:1], registry) is not None
+
+    assert [2, None] in production_stream(old_nodes, new_nodes), (
+        "the unretrieved observation stopped reaching the pairing stream; a gate that drops it is "
+        "deleting an observation rather than routing it unclaimed"
+    )
 
 
 def refusing_candidate_set(refused: tuple[int, int]):
@@ -2298,8 +2332,7 @@ def test_refusing_a_unique_pair_the_candidate_set_fails_closed(monkeypatch):
     from deltatrack import diff_bill as db
 
     old_nodes, new_nodes = unique_path_fixture()
-    populations = unique_path_populations(old_nodes, new_nodes)
-    paired = [p for p in populations if p.forms_candidates]
+    paired = unique_path_populations(old_nodes, new_nodes)
     assert len(paired) == 2, "the fixture stopped producing two 1x1 unique populations"
 
     target = paired[0]
@@ -2317,7 +2350,7 @@ def test_refusing_a_unique_pair_the_candidate_set_fails_closed(monkeypatch):
     # A. the population the retrieval stage produces is untouched by the fault.
     after = unique_path_populations(old_nodes, new_nodes)
     assert [(p.old_refs, p.new_refs, p.invocation) for p in after] == [
-        (p.old_refs, p.new_refs, p.invocation) for p in populations
+        (p.old_refs, p.new_refs, p.invocation) for p in paired
     ], "the fault moved the retrieved population; it is no longer a candidate-set-only defect"
 
     # C. the set is missing exactly that entry.
@@ -2383,7 +2416,7 @@ def test_the_refusal_control_is_not_refusing_everything():
     would look exactly like a decisive result.
     """
     old_nodes, new_nodes = unique_path_fixture()
-    paired = [p for p in unique_path_populations(old_nodes, new_nodes) if p.forms_candidates]
+    paired = unique_path_populations(old_nodes, new_nodes)
     target, other = paired[0], paired[1]
     refused = (target.old_refs[0].ordinal, target.new_refs[0].ordinal)
 
@@ -2404,12 +2437,16 @@ def test_the_refusal_control_is_not_refusing_everything():
 def test_the_unique_path_runs_no_collision_machinery():
     """Structural: the migration reached the stages without reaching the expensive path.
 
-    ADR 0020's audit priced routing every unique group through ``_match_collision_group`` at
-    2.57x on the committed corpus, and its §13 ruling was to keep the fast path's cost. B3 keeps
-    that by orchestrating the SAME stages differently, not by adding a second implementation of
-    them -- so the guard is two-sided: the unique orchestrator must call the shared stages, and
-    must not reach the division partition or the cross-division round, neither of which can do
-    anything for a group holding at most one observation per side.
+    ADR 0020 §13 ruled to keep the fast path's cost rather than route every unique group through
+    ``_match_collision_group``. B3 keeps that by orchestrating the SAME stages differently, not by
+    adding a second implementation of them -- so the guard is two-sided: the unique orchestrator
+    must call the shared stages, and must not reach the division partition or the cross-division
+    round, neither of which can do anything for a group holding at most one observation per side.
+
+    A structural guard rather than a timing assertion, deliberately. A wall-clock threshold in the
+    suite would be a flake on a loaded machine and would say nothing about *why* the cost moved;
+    the ratios live in ``docs/research/provision-matching/probes/round1_b3_cost.py``, which
+    measures every arm in one process so contention cannot masquerade as a regression.
     """
     import inspect
 
