@@ -352,6 +352,49 @@ def retrieve_cross_division_population(
     )
 
 
+def retrieve_unique_path_population(
+    old_nodes: list[BillNode],
+    new_nodes: list[BillNode],
+    registry: "ObservationRegistry",
+) -> RetrievedPopulation:
+    """RETRIEVAL, round 1: the population of one NON-COLLIDING ``match_path`` group.
+
+    The group holds at most one observation per side, so the population is the group. There is
+    nothing to partition and nothing to rank: the whole retrieval decision is "these two
+    observations were considered together because they share a match path", which is the same
+    structural fact ``retrieve_within_division_populations`` records one level down.
+
+    **Its own invocation, not the division retriever's.** ``path_unique_group`` and
+    ``path_division_group`` reach their populations by different rules, and a candidate's
+    provenance is meant to answer *which* rule surfaced it. Reusing the division retriever's
+    name would make a recall figure unattributable in exactly the way
+    :class:`~deltatrack.matching.RetrieverInvocation` exists to prevent, and would claim a
+    division partition that never ran.
+
+    **``division_key`` is ``None``, and that is a statement rather than a gap.** A unique path
+    pairs across division lines: ``match_path`` is the grouping key and division is never
+    consulted, so 730 of the committed corpus's unique pairings link observations in different
+    divisions. Naming either node's key here would assert a partition the group was not formed
+    by -- the same reason :func:`retrieve_cross_division_population` carries ``None``.
+
+    A one-sided group is retrieved too, carrying an empty side. It forms no candidate, proposes
+    nothing and is assigned nothing; its observation is routed unclaimed, exactly as a
+    one-sided division's is. :attr:`~RetrievedPopulation.forms_candidates` is what the
+    orchestrator branches on, so that case stays a property of the population rather than a
+    shape the caller re-derives from two lengths.
+    """
+    old = tuple(old_nodes)
+    new = tuple(new_nodes)
+    return RetrievedPopulation(
+        invocation=RetrieverInvocation.of("path_unique_group", round=PATH_ROUND),
+        division_key=None,
+        old=old,
+        new=new,
+        old_refs=tuple(registry.ref(OLD, node) for node in old),
+        new_refs=tuple(registry.ref(NEW, node) for node in new),
+    )
+
+
 @dataclass(frozen=True)
 class SelectedLink:
     """One pairing round-1 group ASSIGNMENT selected, and the evidence record that selected it.
@@ -674,6 +717,66 @@ def _refuse_evidence_that_is_not_one_record_per_candidate(
         described.add(item.link)
 
 
+def _match_unique_path_group(
+    old_nodes: list[BillNode],
+    new_nodes: list[BillNode],
+    registry: "ObservationRegistry",
+    candidates: CandidateSet,
+) -> tuple[list[tuple[BillNode | None, BillNode | None]], list[GroupAssignment]]:
+    """Resolve a non-colliding ``match_path`` group through the same four stages, one round.
+
+    Orchestration only, and the same composition :func:`_match_collision_group` runs: retrieve,
+    propose, describe, assign, route. What differs is that there is nothing for a second round to
+    do -- a 1x1 assignment leaves nothing over, and a one-sided group forms no candidate at all --
+    so the cross-division round has no population to be built from and is not run.
+
+    **This is what B3 replaced, and the replacement is the point.** The pre-B3 fast path appended
+    ``(old_nodes[0], new_nodes[0])`` directly, so the great majority of round-1 correspondences
+    were selected by a tuple construction that formed no candidate, described nothing and reached
+    no assignment stage. The candidate set was collision-path-complete and a recall figure read off
+    it was wrong by the size of this population. It is now round-1-complete.
+
+    **Retaining the fast path's cost profile is deliberate and is not the same as retaining the
+    fast path.** ADR 0020's audit priced the alternative -- sending every unique group through
+    :func:`_match_collision_group` -- and it costs 2.57x on the committed corpus, because that path
+    partitions by division, forms one population per division, and runs a second retrieval round
+    over the leftovers. None of that is reachable for a group holding at most one observation per
+    side. So this stays a separate orchestration over the SAME stages rather than a second
+    implementation of them: no stage is duplicated here, and the two paths cannot diverge in what
+    they admit, describe or select.
+
+    **Zero ``text_similarity`` calls, preserved through the stages rather than around them.** A
+    1x1 population takes :func:`group_correspondence_evidence`'s shortcut -- one record, no signals,
+    no ratio -- which is the behaviour the fused matcher had and #623 measured the tidy-up of at
+    +21%. It is preserved here by reaching the same branch, not by skipping the stage.
+
+    **The one-sided group is routed unclaimed, not settled.** A ``(node, None)`` here is an
+    unmatched observation exactly as it is on the collision path: round 2 may still pair it with a
+    different partner, and nothing settles before :func:`settle_correspondences`.
+
+    Leftovers are routed rather than assumed absent. A 1x1 assignment cannot produce one today,
+    but reading assignment's answer is what keeps assignment the authority on what corresponds; an
+    orchestrator that hardcoded "one link, no leftovers" would be re-deciding the cardinality it
+    just asked for.
+    """
+    population = retrieve_unique_path_population(old_nodes, new_nodes, registry)
+    if not population.forms_candidates:
+        # At most one observation, and no partner to consider it against. No invocation is
+        # recorded, nothing is described and nothing is assigned -- the observation passes to the
+        # next round unclaimed, which is what the fast path's one-sided tuple always meant.
+        pairs: list[tuple[BillNode | None, BillNode | None]] = []
+        pairs.extend((node, None) for node in population.old)
+        pairs.extend((None, node) for node in population.new)
+        return pairs, []
+
+    population.propose_into(candidates)
+    assignment = assign_group(population, group_correspondence_evidence(population, candidates))
+    pairs = [(link.old, link.new) for link in assignment.links]
+    pairs.extend((node, None) for node in assignment.leftover_old)
+    pairs.extend((None, node) for node in assignment.leftover_new)
+    return pairs, [assignment]
+
+
 def _match_collision_group(
     old_nodes: list[BillNode],
     new_nodes: list[BillNode],
@@ -822,21 +925,14 @@ def match_nodes_with_stage_outputs(
         old_nodes = old_groups.get(path, [])
         new_nodes = new_groups.get(path, [])
 
-        if len(old_nodes) <= 1 and len(new_nodes) <= 1:
-            # Fast path: no collision, preserve current behavior. Deliberately NOT routed
-            # through the retrieval, evidence and assignment stages -- its architecture
-            # treatment is a later slice, and sending it through new machinery here would be an
-            # unmeasured behaviour change wearing a refactor's clothes.
-            pairs.append(
-                (
-                    old_nodes[0] if old_nodes else None,
-                    new_nodes[0] if new_nodes else None,
-                )
-            )
-        else:
-            group_pairs, group_assignments = _match_collision_group(old_nodes, new_nodes, registry, candidates)
-            pairs.extend(group_pairs)
-            assignments.extend(group_assignments)
+        # Two orchestrations over one set of stages, chosen by whether the path collides. Neither
+        # branch pairs anything itself: both retrieve a population, propose it, describe it and
+        # let assignment decide, and the only difference is how much of that machinery a group of
+        # at most one observation per side can reach.
+        resolve = _match_unique_path_group if len(old_nodes) <= 1 and len(new_nodes) <= 1 else _match_collision_group
+        group_pairs, group_assignments = resolve(old_nodes, new_nodes, registry, candidates)
+        pairs.extend(group_pairs)
+        assignments.extend(group_assignments)
 
     return pairs, candidates, tuple(assignments)
 
