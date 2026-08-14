@@ -375,6 +375,12 @@
    "observed": ""
   },
   {
+   "check": "NON-VACUITY: G5 is GREEN on the repaired tree before the handoff fault is injected",
+   "ok": true,
+   "fails_when": "G5 is already red, so the mutation below cannot be shown to have caused anything",
+   "observed": "all 15 result-bearing files committed; execution path live"
+  },
+  {
    "check": "MUTATION delete document_sha256 from the canonical handoff -> the consumer REFUSES",
    "ok": true,
    "fails_when": "the producer may drop a result-bearing field its consumer requires and nothing notices until execution",
@@ -387,16 +393,16 @@
    "observed": ""
   },
   {
-   "check": "MUTATION delete document_sha256 from the canonical handoff -> G5 RED",
+   "check": "MUTATION delete document_sha256 from the canonical handoff -> G5 RED, naming the handoff",
    "ok": true,
-   "fails_when": "readiness stays GREEN while the canonical handoff cannot be consumed -- exactly the state Run 1 was authorized in",
+   "fails_when": "readiness stays GREEN while the canonical handoff cannot be consumed -- exactly the state Run 1 was authorized in; or G5 is red for an unrelated reason and the handoff arm never fired",
    "observed": "control_documents' record is REFUSED by its own consumer (cross_engine_control.document_inputs): CrossEngineError: DOCUMENT_RECORD_INCOMPLETE {'missing': ['document_sha256'], 'record_keys': ['document', 'pdf_path']}"
   },
   {
-   "check": "NON-VACUITY: the handoff check is GREEN again once the producer is restored",
+   "check": "NON-VACUITY: the handoff check and G5 are GREEN again once the producer is restored",
    "ok": true,
    "fails_when": "the check refuses the repaired handoff, which would make the mutation above meaningless",
-   "observed": ""
+   "observed": "all 15 result-bearing files committed; execution path live"
   },
   {
    "check": "MUTATION substitute another member's SHA in the descriptor -> execute_study refuses",
@@ -603,6 +609,6 @@
    "observed": ""
   }
  ],
- "n_checks": 85,
+ "n_checks": 86,
  "n_failed": 0
 }

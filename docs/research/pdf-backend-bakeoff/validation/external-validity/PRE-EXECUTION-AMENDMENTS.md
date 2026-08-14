@@ -5863,13 +5863,13 @@ metric or decision artifact exists.
 
 ```json
 {"id": "A45", "class": "SUBSTANTIVE",
- "commits": ["9817dcc"],
+ "commits": ["9817dcc", "5a3bfc7"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/execute_study.py", "probes/cross_engine_control.py",
                    "probes/x29_execute_study.py"],
  "supersedes_text_in": "none -- NO previously frozen rule changes. A39.2's sample fraction, deterministic ranking, page denominator, 0.95 document and 0.75 page thresholds, qualification wording and non-decision-blocking status are untouched, as are membership, every frame rule, every metric and the architecture rules. What changes is that the already-frozen A39.2 measurement can be produced at all",
- "status": "IMPLEMENTATION COMPLETE. x29 85/85, SYNTHETIC + DEVELOPMENT. Boundary ABSENT, execution FORBIDDEN"}
+ "status": "IMPLEMENTATION COMPLETE. x29 86/86, SYNTHETIC + DEVELOPMENT. Boundary ABSENT, execution FORBIDDEN"}
 ```
 
 **Why `affects_scoring_rule` is `false` while this is SUBSTANTIVE.** Nothing here computes,
@@ -5980,6 +5980,15 @@ The deletion mutation is injected into **`_control_record` itself**, not into a 
 output: editing a dict inside the control would only prove that the consumer dislikes a dict the
 control made up. **Non-vacuity is established in both directions** — the unmutated handoff is
 accepted, and the handoff check is green again once the producer is restored.
+
+**The G5 arm reads the REASON, not the boolean, and the first spelling did not.** Asserting only
+*"G5 is RED while the fault is injected"* passes for **any** reason G5 can be red — an
+uncommitted surface file will do it — so the control would have been satisfied on a tree where
+the handoff arm never fired at all. That is not hypothetical: on the pre-commit run it passed
+while G5 was red for `MISSING 2/15: probes/cross_engine_control.py, probes/execute_study.py`.
+The control now takes a **paired reading** — G5 GREEN before the fault, RED *with a detail naming
+`REFUSED by its own consumer`* during it, GREEN again after — so a G5 that is red for an
+unrelated reason **fails** the control instead of satisfying it.
 
 The same record is also required to satisfy **`write_s1_control`**, which is the other consumer
 `control_documents` claims to serve and whose subset requirement was the reason the gap was
