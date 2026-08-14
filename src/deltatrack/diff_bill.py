@@ -209,7 +209,7 @@ class RetrievedPopulation:
     **The order of ``old`` and ``new`` is policy, not presentation.** Legacy assignment sorts on
     ``(similarity, oi, ni)`` where those are positions in these two tuples, and #590 measured
     that substituting ADR 0019 ordinals for them changes the selected correspondence. So the
-    ordered tuples are the contract B2's assignment stage will consume, and ``old_refs`` /
+    ordered tuples are the contract :func:`assign_group` consumes, and ``old_refs`` /
     ``new_refs`` are the identities of the same observations at the same positions -- two
     parallel readings of one population, never a re-sort of it.
 

@@ -212,7 +212,10 @@ group result: [('oA1','nA1'), ('oB1','nB1'), ('oA2','nB2')]
 The fallback consumed an observation that within-division *assignment* left over. The dependency
 is not hypothetical; the corpus simply never presents the shape.
 
-Reproduce: `docs/research/provision-matching/probes/round1_controls.py`
+Reproduce: `tests/test_round1_preservation.py::test_assignment_leftovers_reach_the_cross_division_fallback`.
+B0 promoted this construction from a probe into a standing synthetic fixture, and §9's
+`no_assignment_leftovers` mutation is the control that proves it can go red. The probe it came
+from (`probes/round1_controls.py`) was removed in B4 and is readable at `7fdbf62`.
 
 ### When is correspondence settled enough to condition a later round?
 
@@ -260,7 +263,11 @@ cross-division OLD list ordinals: [2, 1]
 ascending parser-ordinal order?   False
 ```
 
-Reproduce: `docs/research/provision-matching/probes/round1_ordering_hazard.py`
+Reproduce: `tests/test_round1_preservation.py::test_the_fallback_population_is_not_in_parser_ordinal_order`,
+the interleaved fixture B0 built from this construction, and the only thing that can see §9's
+`ordinal_tiebreak` mutation — which moves 0 of 27 corpus pairs. `retrieve_cross_division_population`'s
+docstring cites it for exactly that reason. The probe (`probes/round1_ordering_hazard.py`) was
+removed in B4 and is readable at `7fdbf62`.
 
 > **The trap.** A Phase-1 implementation that replaced local positions with `ObservationRef`
 > ordinals "because the address exists" would be green on the whole corpus and wrong on the first
@@ -569,8 +576,16 @@ Two independent errors compounded, and they pointed the same way:
 The corrected comparison shows **A is cheaper in runtime** (one `CandidateSet` per comparison
 instead of 922) and both are negligible in memory at 0.23 MB against a 1.5 MB matching stage.
 The original argument — that comparison-scoped storage costs 2.1× the matching stage — does not
-survive measurement, and the recommendation it produced is withdrawn. Storage scope is
-**not frozen**; see §13.
+survive measurement, and the recommendation it produced is withdrawn. Storage scope was left open
+here; see §13, where B2 closed it.
+
+> **Both candidate figures in this section are pre-B3, and the smaller one has since moved.**
+> 1,701 (593 sole-candidate + 1,108 scored) is what round-1 retrieval materialised while the
+> unique path still paired by tuple construction. B3 brought that path under the same stages, so
+> round-1 retrieval now also materialises the 14,001 unique pairings — which is the whole reason
+> the set had not been comparison-wide candidate recall. The correction this section makes to
+> 14,899 stands unchanged: that figure counted every `match_path` group including one-sided ones,
+> which form no candidate under B3 either.
 
 ---
 
@@ -589,18 +604,31 @@ survive measurement, and the recommendation it produced is withdrawn. Storage sc
 | `compare_selected.py`, `probe_move_assignment.py` | already deleted | Removed by #623. No action. |
 | Audit probes written for this report | **promote** | Seven probes covering invocation tracing, the flatten counterfactual, the fast-path equivalence, tie-direction controls and materialisation cost. They are the oracle of §8 in draft form and should be promoted into `scripts/` + tests by Slice B0 rather than rewritten. |
 
-Committed at `docs/research/provision-matching/probes/round1_*.py`:
+**Retired in B4, and where each question went.** §11 above ruled that these drafts should be
+*promoted* into tests by B0 rather than maintained, and B0–B3 did exactly that. Seven of them had
+also stopped running: six wrapped `db._similarity_pair`, which B2 removed, and `round1_cost.py`
+called `_match_collision_group` with its pre-B1 two-argument signature. Porting them would have
+produced a second, ungated answer to a question a test already answers — and not the audit's
+answer either, since every figure here is scoped to the fused matcher at `0ff0eb1e`. So they were
+removed. All seven are readable at `7fdbf62`.
+
+| Retired probe | What it measured | The executable invariant that owns it now |
+|---|---|---|
+| `round1_trace.py` | Full per-invocation trace: populations, candidates, similarity values, sort keys, selections, leftovers, plus ordinal and CandidateSet-order counterfactuals | `tests/data/round1_legacy_trace.json` + `test_the_oracle_reproduces_the_frozen_trace`. B0's oracle records the same rows with ADR 0019 provenance, and the two counterfactuals are its `ordinal_tiebreak` / `candidate_set_order` variants (§9) rather than printed counts |
+| `round1_counterfactuals.py` | Flatten counterfactual, cross-division provenance, list-order monotonicity | §9's `flatten_divisions` mutation (18/27 red); `test_assignment_leftovers_reach_the_cross_division_fallback`; `test_the_fallback_population_is_not_in_parser_ordinal_order` |
+| `round1_decisive.py` | Fast-path redundancy (27/27) and the assignment-conditioned exercise question | `test_no_round_1_pairing_reaches_the_stream_without_an_assignment_selecting_it` — B3 resolved the redundancy question by migrating the path (§13), so equivalence is no longer a claim to re-measure. Corpus blindness is pinned by `test_the_corpus_cannot_see_the_two_fixture_bound_mutations` |
+| `round1_controls.py` | Synthetic fallback fixture, tie-direction control, ordering controls | `test_assignment_leftovers_reach_the_cross_division_fallback`; `test_assignment_breaks_ties_on_invocation_local_position`; §9's `ascending_tie` (11/27 red) |
+| `round1_ordering_hazard.py` | Constructs the case where local-position/ordinal agreement breaks | `test_the_fallback_population_is_not_in_parser_ordinal_order`, the one gate §9's `ordinal_tiebreak` can redden |
+| `round1_cost.py` | Fast-path removal cost. Its candidate count is the FAST-PATH-RETIRED population (14,899), not what round-1 retrieval forms — see §10 | `round1_b3_cost.py`, which measures the same arm (`collision_routing`) with every arm in one process — the methodology this one lacked |
+| `round1_candidate_scope.py` | Comparison-scoped vs per-invocation storage, on the exact populations production forms | Settled in B2 and shipped comparison-scoped; the argument that decided it was semantic, not cost (§13), and it is held by `test_two_invocations_proposing_one_pair_keep_both_provenances` |
+
+Still committed at `docs/research/provision-matching/probes/round1_*.py`, and executed by
+`tests/test_research_probes.py` on every run so they cannot rot the same way:
 
 | Probe | What it measures |
 |---|---|
-| `round1_trace.py` | Full per-invocation trace: populations, candidates, similarity values, sort keys, selections, leftovers, plus ordinal and CandidateSet-order counterfactuals |
-| `round1_counterfactuals.py` | Flatten counterfactual, cross-division provenance, list-order monotonicity |
-| `round1_decisive.py` | Fast-path redundancy (27/27) and the assignment-conditioned exercise question |
-| `round1_controls.py` | Synthetic fallback fixture, tie-direction control, ordering controls |
-| `round1_ordering_hazard.py` | Constructs the case where local-position/ordinal agreement breaks |
-| `round1_cost.py` | Fast-path removal cost. Its candidate count is the FAST-PATH-RETIRED population (14,899), not what round-1 retrieval forms — see §10 |
+| `round1_b3_cost.py` | The four arms B3 sits between, in one process. §13 carries its ratios |
 | `round1_candidateset_cost.py` | Isolated `CandidateSet` propose/materialise micro-benchmark, at a candidate count §10 corrects |
-| `round1_candidate_scope.py` | Comparison-scoped vs per-invocation storage, on the exact populations production forms. **Supersedes the two rows above for any storage decision.** |
 
 ---
 
@@ -618,6 +646,15 @@ the measurement shows there is no separate policy to migrate.
 | **B2** | Route the greedy through evidence + contracts: `group_correspondence_evidence`, `assign_group`, with the local index space rebuilt privately. One implementation serves both rounds. | Needs B1's named populations. Adds `sole_candidate`. | Oracle rows 5a–5e; tie-direction and CandidateSet-order controls. |
 | **B3** | Unique-path handling. Pin the fast path's equivalence with a test, and decide whether to keep it as a retrieval-side optimisation or retire it. | Last, because the measurement removes it from the critical path — it is not a policy that must be migrated before B2 can proceed. | Oracle rows 1, 2, 3; the 27/27 equivalence test. |
 | **B4** | Closure: probe re-aiming, remove the residual `diff_text` double-call #623 flagged. Candidate storage scope is settled in B1, not deferred to here (§13). | Cleanup with its own evidence, deliberately not bundled. | Canonical digests + runtime regression check. |
+
+**B4 as shipped, and one deliberate divergence from the row above.** B4 retired the seven probes
+that had stopped running (§11), gave the survivors an executable gate in
+`tests/test_research_probes.py`, and closed the transitional statements B1–B3 left behind — this
+section's own storage-scope entry among them. It did **not** remove the `diff_text` double-call.
+That is a production change to what the engine computes, it needs its own call-count evidence
+beside the canonical digests, and bundling it into the slice whose job is to certify that round 1
+is closed would mean the closure evidence and an optimisation shared one result. It stays open;
+§14 carries it.
 
 **On "can retrieval be extracted alone?"** Yes — *per round*. A single whole-round-1 retrieval
 stage producing one candidate population before any assignment is **not** behaviour-preserving:
@@ -677,7 +714,7 @@ and skipping canonicalisation for 0- and 1-element inputs (~1.5 µs/group, measu
 The optimisation property that *was* preserved is the one #623 measured: the unique path still
 computes **zero** similarities, and the frozen call count is unchanged.
 
-### 2. Candidate storage scope — NOT FROZEN, deferred into B1
+### 2. Candidate storage scope — deferred into B1, and settled there
 
 The earlier recommendation here (per-invocation sets, on a claimed 2.1× cost) is **withdrawn**:
 it rested on a corpus-total figure misread as a per-comparison one, over a population 11× larger
@@ -701,12 +738,23 @@ What the corrected data says, on the real populations:
 is what the contract describes, and it keeps candidate recall inspectable without a second
 code path. The cost that would argue against it does not exist at this scale.
 
-**Explicitly not frozen.** The architectural requirement B1 must satisfy is fixed even though
-the container is not: *one observation pair is one candidate carrying all applicable proposal
-provenance, and assignment still receives the exact ordered per-invocation populations it needs
-to rebuild legacy local positions.* Those are compatible — the ordered populations travel beside
-the candidate set (§7's `GroupRetrieval`), not inside it — but which object owns which is a B1
-decision, to be made against B1's own code rather than pre-committed here.
+**Left open here on purpose.** The architectural requirement was fixed even though the container
+was not: *one observation pair is one candidate carrying all applicable proposal provenance, and
+assignment still receives the exact ordered per-invocation populations it needs to rebuild legacy
+local positions.* Those are compatible — the ordered populations travel beside the candidate set
+(§7's `GroupRetrieval`), not inside it — but which object owns which was a slice decision, to be
+made against real code rather than pre-committed here.
+
+**Settled in B2: comparison-scoped, on the semantic argument rather than the cost one.** One
+`CandidateSet` per comparison accumulates all three round-1 retriever invocations, and
+`RetrievedPopulation` stays the invocation-local ordering authority beside it. The lean above was
+followed, but the reason that survived review is the third bullet, not the first two: only
+comparison-scoped storage can express one candidate carrying two invocations' proposals, and
+`test_two_invocations_proposing_one_pair_keep_both_provenances` is where that now lives. The cost
+difference is not what decided it and should not be cited as though it were. A first attempt made
+the set a cross-check beside the selection path instead of the admission authority on it, and was
+rejected: that shape lets "retrieval did not admit this pair" and "assignment selected it" hold at
+once, which is the state the intermediate value exists to make unreachable.
 
 ### Not deferred — settled by measurement
 
@@ -753,6 +801,15 @@ wording issue open as a non-blocking vocabulary gap.
 `_similarity_signals` calls `diff_text` and `_paired_record` calls it again on the same pairing.
 #623 named this deliberately as visible residue of the fusion it did not remove, and said deleting
 it owes its own evidence. It is not this work's scope; B4 is the natural home.
+
+**Still open after B4, deliberately.** B4 declined it (§12). The two call sites are in different
+stages — one produces a `body_unchanged` signal for the similarity revocation rule, the other
+produces the `text_diff` a classified record carries — so removing the second call means routing a
+value across a stage boundary, which is a matching-architecture change and not a de-duplication.
+The evidence it owes is a diff_text call-count gate of the same kind
+`test_production_measures_exactly_the_frozen_set_of_similarities` already provides for
+`text_similarity`, plus unchanged canonical digests. Neither exists yet. This is the one known
+round-1 item ADR 0020 leaves unfinished, and it changes cost rather than correspondence.
 
 ---
 

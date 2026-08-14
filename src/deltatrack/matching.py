@@ -3,15 +3,20 @@
 ADR 0020 splits one fused decision into retrieval, correspondence evidence, assignment and
 classification. This module holds the values that pass between them, and nothing else:
 no retriever, no measure, no threshold, no orchestration. It is the vocabulary the
-stages will be written against, introduced ahead of them so that moving behaviour is a
-separate, byte-identical change.
+stages are written against.
 
-**Nothing imports this yet, and that is the design.** ADR 0020's implementation rule is
-to introduce the contracts behaviour-preservingly before changing matching policy, with
+**Round 1 is now written against it**, through slices B1, B2 and B3: retrieval proposes
+into a :class:`CandidateSet`, that set admits what may be described,
+:class:`CorrespondenceEvidence` describes it, and assignment decides. Round 2 and the
+similarity revocation rule use the same types. ``deltatrack.diff_bill`` is the caller.
+
+These types were nevertheless introduced **before** anything imported them, and that was
+the design rather than an accident of sequencing. ADR 0020's implementation rule is to
+introduce the contracts behaviour-preservingly before changing matching policy, with
 canonical JSON byte-identical over the committed XML corpus as the acceptance criterion
 (``tests/test_canonical_baseline.py``). A slice that both defined the types and rewired
 the differ could not report that criterion as evidence of anything, because the two
-changes would be inseparable in the result.
+changes would be inseparable in the result. The same rule governs whatever moves next.
 
 The line the whole record turns on, restated here because every type below is placed by
 it:
@@ -74,8 +79,9 @@ because they would be exercising the one path that normalises.
 
 ## Deliberately absent
 
-- Any retriever, similarity measure or threshold. Retrieval and assignment policy are
-  the next slices' work; ``deltatrack.similarity`` remains the only home for a cutoff.
+- Any retriever, similarity measure or threshold. Retrieval and assignment policy live in
+  ``deltatrack.diff_bill``, where the stages are; ``deltatrack.similarity`` remains the
+  only home for a cutoff.
 - The canonical projection of a non-binary correspondence. ADR 0020 settles that it
   degrades explicitly and never duplicates a side's amounts, but no producer emits a
   non-binary correspondence yet, and a projection with no caller is a rule pinned by a

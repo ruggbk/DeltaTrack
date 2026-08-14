@@ -21,8 +21,9 @@ is emitted in. An inverted comparison, a dropped gate, a reordered branch or a s
 index space all surface here.
 
 :func:`test_the_oracle_names_no_round_1_production_symbol` enforces the independence
-structurally rather than by convention, and it lists the stage names B1 and B2 will
-introduce so that wiring the oracle to a *future* stage is refused in advance.
+structurally rather than by convention. Its refusal list was written ahead of the stages: it
+already named what B1, B2 and B3 went on to introduce, so wiring the oracle to a stage that
+did not exist yet was refused in advance rather than after the fact.
 
 ## Identity: ADR 0019, not ``element_id``
 
@@ -2471,9 +2472,10 @@ def test_the_unique_path_runs_no_collision_machinery():
 
 # --- Independence, enforced structurally --------------------------------------------------
 
-#: Every round-1 symbol the oracle must not reach, including the ones B1 and B2 will
-#: introduce. Naming the future stages here is the point: it refuses in advance the change
-#: that would quietly make this harness self-validating.
+#: Every round-1 symbol the oracle must not reach, B1's, B2's and B3's included. The set was
+#: written before those stages existed, and naming them ahead of time was the point: it refused
+#: in advance the change that would quietly make this harness self-validating. It is maintained
+#: the same way now -- a stage added later belongs here before it has a caller, not after.
 FORBIDDEN_IN_ORACLE = frozenset(
     {
         # today's production round 1
