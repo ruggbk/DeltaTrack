@@ -378,7 +378,7 @@ def part_handoff(root: Path) -> dict:
     # --- POSITIVE, FIRST: the exact canonical descriptor set is ACCEPTED -----------------
     records = ES.control_documents(pop, mpath)
     try:
-        artifact = CE.write_cross_engine_control(records, out)
+        artifact = CE.write_cross_engine_control(records, out, mpath)
         ok, obs = True, f"{artifact['n_documents']} rows"
     except Exception as exc:
         artifact, ok, obs = None, False, f"{type(exc).__name__}: {exc}"
@@ -447,7 +447,7 @@ def part_handoff(root: Path) -> dict:
     try:
         ES._control_record = lambda d: {"document": d.document_id, "pdf_path": d.pdf_path}
         ok, obs = refuses(
-            lambda: CE.write_cross_engine_control(ES.control_documents(pop, mpath), root / "never.json"),
+            lambda: CE.write_cross_engine_control(ES.control_documents(pop, mpath), root / "never.json", mpath),
             CE.DOCUMENT_RECORD_INCOMPLETE,
             CE.CrossEngineError,
         )
@@ -485,10 +485,7 @@ def part_handoff(root: Path) -> dict:
         g5_restored_detail,
     )
 
-    # --- MUTATION B: a SUBSTITUTED but VALID SHA reaches the consumer ---------------------
-    # Two INDEPENDENT owners, and they are independent because they compare against different
-    # things: execute_study compares the descriptor to the AUTHORITY, cross_engine_control
-    # compares the record to the SOURCE BYTES. Neither can stand in for the other.
+    # --- MUTATION B: a SUBSTITUTED but VALID SHA -----------------------------------------
     a, b = pop[0], pop[1]
     ok, obs = refuses(
         lambda: ES.assert_population_complete((dataclasses.replace(a, sha256=b.sha256), b), mpath),
@@ -501,15 +498,31 @@ def part_handoff(root: Path) -> dict:
         obs,
     )
     ok, obs = refuses(
-        lambda: CE.write_cross_engine_control([{**records[0], "document_sha256": b.sha256}], root / "never_b.json"),
+        lambda: CE.write_cross_engine_control(
+            [{**records[0], "document_sha256": b.sha256}], root / "never_b.json", mpath
+        ),
+        CE.RECORD_AUTHORITY_MISMATCH,
+        CE.CrossEngineError,
+    )
+    check(
+        "...and the WRITER refuses it too, at the authority gate, before any measurement",
+        ok,
+        "a hand-assembled record carrying another member's SHA reaches the engines",
+        obs,
+    )
+    # ...and the BYTE check is still independently live on the same swap, at the pure seam
+    # where it lives. A45.6's gate runs first in the writer, so this is where `verified_sha256`
+    # is demonstrated rather than assumed -- see MUTATION D for it firing through the writer.
+    ok, obs = refuses(
+        lambda: CE.cross_engine_result(a.document_id, b.sha256, a.pdf_path),
         CE.SOURCE_SHA256_MISMATCH,
         CE.CrossEngineError,
     )
     check(
-        "...and INDEPENDENTLY, the producer's own source verification refuses the same swap",
+        "...and INDEPENDENTLY, verified_sha256 still refuses the same swap at cross_engine_result",
         ok,
-        "the SHA is trusted once it arrives, so a substituted one selects a different page "
-        "sample -- the verification A39.2 requires would be dead",
+        "the byte check was weakened or absorbed when the authority gate was added -- the two "
+        "prove different facts and A45.6 may not cost us the older one",
         obs,
     )
 
@@ -525,26 +538,40 @@ def part_handoff(root: Path) -> dict:
         obs,
     )
     ok, obs = refuses(
-        lambda: CE.write_cross_engine_control([{**records[0], "pdf_path": b.pdf_path}], root / "never_c.json"),
+        lambda: CE.write_cross_engine_control([{**records[0], "pdf_path": b.pdf_path}], root / "never_c.json", mpath),
+        CE.RECORD_AUTHORITY_MISMATCH,
+        CE.CrossEngineError,
+    )
+    check(
+        "...and the WRITER refuses it too, at the authority gate, before any measurement",
+        ok,
+        "a hand-assembled record pointing at another member's bytes reaches the engines",
+        obs,
+    )
+    ok, obs = refuses(
+        lambda: CE.cross_engine_result(a.document_id, a.sha256, b.pdf_path),
         CE.SOURCE_SHA256_MISMATCH,
         CE.CrossEngineError,
     )
     check(
-        "...and INDEPENDENTLY, the producer re-hashes the bytes it is about to measure",
+        "...and INDEPENDENTLY, verified_sha256 still refuses the same swap at cross_engine_result",
         ok,
-        "a path substituted after the descriptor was built reaches the engines",
+        "the byte check no longer sees a path pointing at different bytes than the recorded SHA",
         obs,
     )
 
     # --- MUTATION D: the SOURCE BYTES change, the recorded SHA does not ------------------
-    # execute_study CANNOT see this: it hashed at load, and the records are already built. Only
-    # the consumer's immediate verification is between this and a measurement of mutated bytes.
+    # THE AUTHORITY GATE CANNOT SEE THIS. The record still describes its member exactly -- id,
+    # path and SHA all agree with the authority -- and only the BYTES moved. So this is the
+    # control that proves `verified_sha256` is still live THROUGH THE WRITER after A45.6, and
+    # it is the exact complement of MUTATION G below, where the bytes agree and the authority
+    # does not. Neither check can be removed without losing a class the other cannot see.
     victim = Path(records[0]["pdf_path"])
     original = victim.read_bytes()
     try:
         victim.write_bytes(original + b"\n% mutated after the descriptors were built\n")
         ok, obs = refuses(
-            lambda: CE.write_cross_engine_control(records, root / "never_d.json"),
+            lambda: CE.write_cross_engine_control(records, root / "never_d.json", mpath),
             CE.SOURCE_SHA256_MISMATCH,
             CE.CrossEngineError,
         )
@@ -568,7 +595,7 @@ def part_handoff(root: Path) -> dict:
     # `control_documents`; what is new here is that it fires BEFORE the consumer, so the
     # cross-engine artifact can never be built on a subset. Same assertion, different claim.
     ok, obs = refuses(
-        lambda: CE.write_cross_engine_control(ES.control_documents(pop[:1], mpath), root / "never_e.json"),
+        lambda: CE.write_cross_engine_control(ES.control_documents(pop[:1], mpath), root / "never_e.json", mpath),
         ES.POPULATION_INCOMPLETE,
     )
     check(
@@ -579,7 +606,9 @@ def part_handoff(root: Path) -> dict:
         obs,
     )
     ok, obs = refuses(
-        lambda: CE.write_cross_engine_control(ES.control_documents((*pop, pop[0]), mpath), root / "never_f.json"),
+        lambda: CE.write_cross_engine_control(
+            ES.control_documents((*pop, pop[0]), mpath), root / "never_f.json", mpath
+        ),
         ES.POPULATION_DUPLICATED,
     )
     check(
@@ -588,12 +617,116 @@ def part_handoff(root: Path) -> dict:
         "one document is measured twice; a duplicate row is individually valid so no per-row check sees it",
         obs,
     )
+
+    # --- MUTATION G: A45.6, THE SUBSTITUTED TUPLE -----------------------------------------
+    # A's id + B's VALID path + B's VALID SHA. Measured BEFORE the repair, this was ACCEPTED:
+    # the artifact reported B's verdict (sampled [2], pass=True) under A's name, while A's own
+    # measurement is sampled [1], pass=False -- so it WITHHELD an earned PDFIUM-CONDITIONED
+    # FRAME qualification. `verified_sha256` passes because B's SHA really is B's bytes, and
+    # score_metrics' set equality passes because A's id IS present.
+    substituted = {"document": a.document_id, "pdf_path": b.pdf_path, "document_sha256": b.sha256}
+    never_g = root / "never_g.json"
+    ok, obs = refuses(
+        lambda: CE.write_cross_engine_control([substituted], never_g, mpath),
+        CE.RECORD_AUTHORITY_MISMATCH,
+        CE.CrossEngineError,
+    )
+    check(
+        "MUTATION A's id + B's VALID path + B's VALID SHA -> RECORD_AUTHORITY_MISMATCH",
+        ok,
+        "one member's qualification is measured on another member's pages and reported under the "
+        "first member's name -- invisible to the byte check and to the scorer's set equality",
+        obs,
+    )
+    check(
+        "...and NO canonical artifact was written by the refused call",
+        not never_g.exists(),
+        "a substituted row is persisted before the refusal",
+    )
+    # PROOF THE INTENDED CHECK CAUSED IT, not some unrelated gate: the byte check ACCEPTS this
+    # exact pair, so it cannot be what refused. If it could, the control above would be passing
+    # for the wrong reason and A45.6 would be untested.
+    byte_check_verdict = "accepted"
+    try:
+        CE.verified_sha256(b.pdf_path, b.sha256)
+    except CE.CrossEngineError as exc:
+        byte_check_verdict = exc.reason
+    check(
+        "...and the BYTE check accepts that very pair, so only the authority gate can have refused",
+        byte_check_verdict == "accepted",
+        "verified_sha256 also rejects this pair, so the control above does not isolate A45.6",
+        f"verified_sha256(B.path, B.sha) -> {byte_check_verdict}",
+    )
+    ok, obs = refuses(
+        lambda: CE.assert_records_from_authority([substituted], mpath),
+        CE.RECORD_AUTHORITY_MISMATCH,
+        CE.CrossEngineError,
+    )
+    check(
+        "...and the gate refuses it directly, named, without going through the writer",
+        ok,
+        "the refusal is a side effect of the writer rather than a stateable invariant",
+        obs,
+    )
+    ok, obs = refuses(
+        lambda: CE.assert_records_from_authority([{**records[0], "document": "999-hr-999"}], mpath),
+        CE.DOCUMENT_NOT_A_MEMBER,
+        CE.CrossEngineError,
+    )
+    check(
+        "MUTATION a non-member id -> DOCUMENT_NOT_A_MEMBER, distinct from a field mismatch",
+        ok,
+        "an outsider and a substituted member collapse to one refusal, hiding which happened",
+        obs,
+    )
+
+    # --- MUTATION H: the CANONICAL artifact may not be vouched for by a FIXTURE -----------
+    ok, obs = refuses(
+        lambda: CE.write_cross_engine_control(records, CE.CANONICAL_ARTIFACT, mpath),
+        CE.NON_CANONICAL_AUTHORITY,
+        CE.CrossEngineError,
+    )
+    check(
+        "MUTATION write the CANONICAL cross_engine_control.json against a synthetic membership -> refused",
+        ok,
+        "a fixture population vouches for the canonical confirmatory artifact -- the A43.6 defect, "
+        "in the writer A43.6 did not cover",
+        obs,
+    )
+    check(
+        "...and the canonical artifact still does not exist",
+        not CE.CANONICAL_ARTIFACT.exists(),
+        "this probe created a canonical confirmatory artifact",
+    )
+
+    # --- POSITIVE, ON THE REAL CANONICAL COMPOSITION -------------------------------------
+    # `control_documents(canonical_population())` is the real thing, checked against the real
+    # authority by the real gate. No PDF is opened by an extractor and nothing is measured: the
+    # gate reads keys only, and `canonical_population` hashes the sources exactly as F2 does at
+    # gate time. This is the pre-boundary equivalent of the accepted canonical write.
+    try:
+        canonical_records = ES.control_documents(ES.canonical_population())
+        accepted = CE.assert_records_from_authority(canonical_records)
+        ok = sorted(accepted) == sorted(ES.frozen_member_ids())
+        obs = f"{len(accepted)} records accepted"
+    except Exception as exc:
+        ok, obs = False, f"{type(exc).__name__}: {exc}"
+    check(
+        "POSITIVE: control_documents(canonical_population()) is ACCEPTED by the authority gate, "
+        "for every frozen member",
+        ok,
+        "the new gate refuses the real canonical composition, which would block Run 2 outright "
+        "and make every refusal above meaningless",
+        obs,
+    )
     return {
         "canonical_handoff_executes": True,
         "record_fields": sorted(records[0]),
         "n_rows": artifact["n_documents"],
         "artifact_population": artifact["population"],
         "consumers_exercised": ["cross_engine_control.write_cross_engine_control", "s1_control.write_s1_control"],
+        "authority_gate": "cross_engine_control.assert_records_from_authority via execute_study.authority_index",
+        "canonical_records_accepted": len(ES.frozen_member_ids()),
     }
 
 

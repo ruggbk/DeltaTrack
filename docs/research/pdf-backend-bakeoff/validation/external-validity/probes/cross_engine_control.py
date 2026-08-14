@@ -38,6 +38,10 @@ import x09_skeleton_cross_engine as X09  # noqa: E402
 
 SOURCE_SHA256_MISMATCH = "SOURCE_SHA256_MISMATCH"
 DOCUMENT_RECORD_INCOMPLETE = "DOCUMENT_RECORD_INCOMPLETE"
+# A45.6 -- the record's three fields must JOINTLY describe one member of the authority.
+DOCUMENT_NOT_A_MEMBER = "DOCUMENT_NOT_A_MEMBER"
+RECORD_AUTHORITY_MISMATCH = "RECORD_AUTHORITY_MISMATCH"
+NON_CANONICAL_AUTHORITY = "NON_CANONICAL_AUTHORITY"
 
 
 class CrossEngineError(Exception):
@@ -100,6 +104,74 @@ def document_inputs(record: dict) -> tuple[str, str, Path]:
     return record["document"], record["document_sha256"], Path(record["pdf_path"])
 
 
+def assert_records_from_authority(documents: list[dict], membership_path=None) -> list[str]:
+    """A45.6 -- every record's id, PATH and SHA must JOINTLY describe ONE member. Returns ids.
+
+    THE DEFECT THIS CLOSES, measured before the repair on SYNTHETIC/DEVELOPMENT material. A
+    record carrying member A's id with member B's VALID path and B's VALID SHA was ACCEPTED:
+
+        row['document']        113-hr-3547        <- A
+        row['document_sha256'] 3824ac79f11f       <- B's, and it really is B's bytes
+        sampled_pages          [2]                <- ranked over B's SHA
+        A's OWN measurement    sampled [1], pass=False
+        the substituted row    sampled [2], pass=True
+
+    So the artifact reported a PASS for a document whose own measurement FAILS the frozen gate,
+    which WITHHOLDS AN EARNED `PDFIUM-CONDITIONED FRAME` qualification. Nothing downstream could
+    see it: `verified_sha256` passes because B's SHA genuinely is B's bytes, and `score_metrics`'
+    exact set-equality check passes because A's id IS present, so
+    `CROSS_ENGINE_DOCUMENT_MISSING`, `_EXTRA` and `_DUPLICATE` all stay silent.
+
+    WHY THE OTHER TWO CHECKS CANNOT COVER THIS, and why this is not a third authority.
+    `verified_sha256` compares the record to the SOURCE BYTES; this compares the record to the
+    COMMITTED AUTHORITY. Neither implies the other, and the pair above is exactly the case that
+    satisfies the first and violates the second. The authority is not re-defined here: the id ->
+    record mapping is `execute_study.authority_index`, the same function
+    `assert_population_complete` and `load_frames` already compare against. There is one
+    population authority and this reads it.
+
+    NOT A SUBSTITUTE FOR `control_documents` EITHER. That the canonical caller derives its
+    records from the authority is a CALLER OBLIGATION; this is a GATE on the writer, so a
+    hand-assembled tuple cannot reach a measurement whatever the caller intended.
+
+    NO FILE IS READ and no page is measured, so this can refuse before any extraction and can be
+    called on the canonical composition pre-boundary as a positive control.
+
+    The path is compared by its RECORDED SUFFIX, for the reason `assert_population_complete`
+    records: `docs_root` is a SYNTHETIC/DEVELOPMENT seam, so an absolute comparison would refuse
+    every fixture while proving nothing more about the canonical run.
+    """
+    import execute_study as ES
+
+    membership_path = Path(membership_path) if membership_path else ES.MEMBERSHIP
+    # A43.8, reused rather than restated: an authority is only worth comparing against while it
+    # is still the frozen artifact. A no-op for SYNTHETIC/DEVELOPMENT fixtures by construction.
+    ES.assert_canonical_authority(membership_path)
+    records = ES.authority_index(membership_path)
+
+    seen = []
+    for doc in documents:
+        document, sha, pdf_path = document_inputs(doc)
+        want = records.get(document)
+        if want is None:
+            raise CrossEngineError(
+                DOCUMENT_NOT_A_MEMBER,
+                {"document": document, "authority": str(membership_path), "n_members": len(records)},
+            )
+        mismatches = {}
+        if sha != want["sha256"]:
+            mismatches["document_sha256"] = (sha, want["sha256"])
+        if want["path"] and not str(pdf_path).endswith(str(want["path"])):
+            mismatches["pdf_path"] = (str(pdf_path), want["path"])
+        if mismatches:
+            raise CrossEngineError(
+                RECORD_AUTHORITY_MISMATCH,
+                {"document": document, "fields": mismatches, "authority": str(membership_path)},
+            )
+        seen.append(document)
+    return seen
+
+
 def _page_count(pdf_path: Path) -> int:
     import pymupdf
 
@@ -151,18 +223,51 @@ def cross_engine_result(document: str, document_sha256: str, pdf_path: Path, lim
     }
 
 
-def write_cross_engine_control(documents: list[dict], out_path: Path | None = None) -> dict:
+CANONICAL_ARTIFACT = HERE.parents[1] / "results" / "cross_engine_control.json"
+
+
+def write_cross_engine_control(documents: list[dict], out_path: Path | None = None, membership_path=None) -> dict:
     """A39.2 -- the CANONICAL execution-time artifact. Refuses before a VALID boundary.
 
     `documents` items: {"document", "document_sha256", "pdf_path"}, and on the canonical path
-    they come from `execute_study.control_documents` -- never hand-assembled. Guarded exactly as
-    the oracle key and the S1 artifact are, so no confirmatory artifact can be written under a
-    weaker condition than the material it describes.
+    they come from `execute_study.control_documents`. Guarded exactly as the oracle key and the
+    S1 artifact are, so no confirmatory artifact can be written under a weaker condition than
+    the material it describes.
+
+    A45.6 -- EVERY RECORD IS CHECKED AGAINST THE POPULATION AUTHORITY, and that check is a GATE
+    here rather than an obligation on the caller. "The canonical caller happens to use
+    `control_documents`" is not a property this writer can verify, and a hand-assembled record
+    carrying one member's id with another's valid path and valid SHA was accepted, producing a
+    row that reported the wrong document's verdict under the right document's name.
+
+    ALL RECORDS ARE VALIDATED BEFORE ANY IS MEASURED. Validating inside the measurement loop
+    would let a valid record ahead of a substituted one be extracted first, so "refused before
+    any measurement" would be true of the artifact and false of the run.
+
+    `membership_path` is the SYNTHETIC/DEVELOPMENT seam, and it is the same seam
+    `execute_study.load_population` and `write_frames` carry. It may NOT be combined with the
+    canonical `out_path`: the two are independently reasonable and their combination is a
+    canonical artifact vouched for by a fixture, which is the A43.6 defect.
     """
     import build_oracle as BO
 
-    out_path = Path(out_path) if out_path else (HERE.parents[1] / "results" / "cross_engine_control.json")
+    out_path = Path(out_path) if out_path else CANONICAL_ARTIFACT
+    # The pairing rule runs FIRST, before the boundary gate, exactly as `write_frames` orders it
+    # -- so it is testable pre-boundary rather than hidden behind an authorization refusal.
+    if out_path.resolve() == CANONICAL_ARTIFACT.resolve():
+        import execute_study as ES
+
+        if membership_path is not None and Path(membership_path).resolve() != ES.MEMBERSHIP.resolve():
+            raise CrossEngineError(
+                NON_CANONICAL_AUTHORITY,
+                {"out_path": str(out_path), "membership_path": str(membership_path), "required": str(ES.MEMBERSHIP)},
+            )
     BO.assert_write_permitted(out_path)
+    # NO MEASUREMENT HAS HAPPENED YET, and none may until every record is proven to describe a
+    # member. `verified_sha256` is deliberately NOT duplicated here: it compares the record to
+    # the BYTES and still runs inside `cross_engine_result`, where it catches the one case this
+    # cannot see -- bytes that changed while the recorded SHA did not.
+    assert_records_from_authority(documents, membership_path)
 
     rows = []
     for doc in documents:
