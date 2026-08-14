@@ -18,6 +18,7 @@ import pytest
 
 from tests import conftest
 from tests.corpus_paths import DATA_DIR
+from tests.pdf_corpus import adjacent_pdf_pairs
 from tests.validation_sources import JURISDICTIONS
 
 
@@ -648,4 +649,37 @@ def test_all_report_fixtures_committed() -> None:
         f"validation_sources.py but absent from tests/data/: {missing}. Each missing fixture "
         "silently removes its subcommittee from external validation. Restore the committed "
         "file(s) or rebuild with `uv run python scripts/build_validation.py --fetch`."
+    )
+
+
+# --- PDF corpus smoke pairs: collected-case floor (#601) --------------------------------
+# Placed here rather than in tests/test_pdf_corpus_smoke.py for the reason recorded above
+# the committee-report floor: that module's module-level ``pytestmark = pytest.mark.slow``
+# would confine this guarantee to the slow tier, and pytest has no per-test un-marking. The
+# completeness question belongs in the FAST tier on every CI run, and it is cheap there --
+# ``adjacent_pdf_pairs()`` only globs the committed fixture tree, extracting no PDF.
+
+
+def test_pdf_corpus_smoke_pairs_are_complete() -> None:
+    """Completeness floor for test_pdf_corpus_smoke.py's parametrize list (#601).
+
+    ``_PAIRS = adjacent_pdf_pairs()`` is the whole case list for ``TestPdfCorpusSmoke``,
+    and nothing in that module asserts it is complete. Losing *every* pair is already
+    caught -- an empty parametrize is a skip, which the ``CI_SLOW_MODULES`` ceiling
+    watches -- but a partial collapse, 23 pairs down to 3 say, produces neither a skip nor
+    a failure: the suite compares fewer bills and stays green. This is the shape #598
+    closed for ``_DIVISION_VERSIONS`` in tests/test_pdf_division_recall.py, and the floor
+    below is that one's counterpart.
+
+    The floor sits well under the current count (23 pairs across 10 bills) so adding or
+    removing an unrelated fixture does not force an edit here, while a wholesale loss
+    still reddens. It is deliberately sensitive to ANY narrowing of the collection,
+    ``TEST_BILL`` included: that selector is a developer loop, and a run narrowed to one
+    bill has not checked the corpus is complete. The #598 floor behaves the same way.
+    """
+    pairs = adjacent_pdf_pairs()
+    assert len(pairs) >= 15, (
+        f"expected >=15 adjacent PDF pairs, collected {len(pairs)} -- either the committed corpus "
+        "lost PDF fixtures or adjacent_pdf_pairs() stopped pairing them, which silently shrinks "
+        "tests/test_pdf_corpus_smoke.py's parametrize list without skipping or failing anything"
     )
