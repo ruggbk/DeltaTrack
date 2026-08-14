@@ -1111,6 +1111,33 @@ Measured population: **2,981** pairs admitted by `block_key_alignment` and **426
 `positional_replace` across the committed corpus, both asserted as floors so neither invocation
 can silently stop firing.
 
+**Two of the controls shipped false green, and the review caught both.** Recorded because they
+are the same defect class twice: a control that obtains its expectation from the thing it is
+checking.
+
+*The provenance assertion was circular.* The tests took `ALIGNMENT, POSITIONAL =
+_round1_invocations()` from production and asserted only that each 1:1 carried one of those two
+— which agrees with production whatever production recorded. Relabelling a pair the positional
+rule formed as `block_key_alignment` left membership, admission, the invocation floors and the
+canonical baseline all green, while `RetrieverInvocation` stopped answering the question it
+exists for. The transcribed oracle now returns `(old_ordinal, new_ordinal, expected_invocation)`
+with the invocations **written out test-side** — including `autojunk=False`, so a config that
+misreports the control is a disagreement rather than a matching pair of wrong values. The round
+number is the literal `1`, pinned against `PATH_ROUND` by its own test so a change to the
+constant reddens instead of propagating into the expectation. Mislabelling one positional pair
+now reddens 47 cases.
+
+*The wiring control never called `diff_pdfs`.* It called `pdf_round1_with_stage_outputs` twice
+and compared it with itself, so `diff_pdfs` inlining an equivalent round 1 and ignoring the
+helper stayed green with byte-identical output. It is now a **substitution** control: the fake
+stage result splits one surviving 1:1 into two unmatched observations — something no threshold
+or policy change would do — and the diff must follow it. A call tripwire proves the helper was
+reached; the output comparison proves its return value was used. Injecting the bypass reddens it
+while the canonical baseline stays green.
+
+Both repairs bring the total to five faults for this slice, and **all five leave canonical
+output unchanged**.
+
 ---
 
 ## 9. Round-1 retrieval: a limitation, not a blocker
