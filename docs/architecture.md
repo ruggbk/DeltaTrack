@@ -105,8 +105,15 @@ owns the only round-1 threshold, and folding the two together would delete a com
 leaving both names in place.
 
 The stages are pinned by `tests/test_round1_preservation.py` against a frozen trace generated
-from an independent transcription of the pre-refactor matcher. The PDF path is **not** migrated;
-ADR 0020 shares the boundary rule with it, not the implementation.
+from an independent transcription of the pre-refactor matcher.
+
+**The PDF path runs the same four stages, and reached them separately.** It has its own retrieval,
+evidence, assignment and classification stages in `diff_pdf.py`, its own byte-identity gate
+(`tests/test_pdf_canonical_baseline.py`), and its own boundary tests. What the two paths share is
+the *rule* — retrieval controls consideration, assignment controls correspondence — not an
+implementation, and ADR 0020 deliberately does not unify them: an XML observation is a parsed tree
+node and a PDF observation is a reconstructed block, so a shared matcher would have to pick one
+representation and lose the other.
 
 ### Why the two paths exist at all
 

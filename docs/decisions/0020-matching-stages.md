@@ -245,11 +245,15 @@ the contents of one stage change.
 - **Let classification re-consult similarity.** Rejected with a carve-out: classification
   legitimately asks *how much* the corresponding texts differ, which is what
   `move.body_unchanged` records and needs no score. What it may not do is threshold a
-  correspondence score. On the XML side that separation now holds: `diff_bill.diff_bills` is
-  orchestration over the four stages, and the only round-1 cutoff lives in
-  `apply_similarity_assignment_rule`, an assignment act that runs before classification.
-  `diff_pdf._hunk_for_paired_blocks` still thresholds inside classification; the PDF track is
-  not migrated, and this record does not unify the two implementations.
+  correspondence score. Both pipelines now hold that separation. On the XML side
+  `diff_bill.diff_bills` is orchestration over the four stages, and the only round-1 cutoff lives
+  in `apply_similarity_assignment_rule`, an assignment act that runs before classification. On the
+  PDF side `diff_pdf._hunk_for_paired_blocks` used to call a pair *moved* when the anchors differed
+  and the bodies cleared `MOVE_THRESHOLD` — a threshold over correspondence evidence, inside
+  classification. It no longer receives a similarity at all: the rule moved unchanged into
+  `pdf_round1_move_basis`, an assignment stage, and the function is now the `modified` emitter.
+  The two pipelines share this boundary rule; they do **not** share an implementation, and this
+  record does not unify them.
 - **Keep `Correspondence` pair-shaped, and revisit if consolidation proves common.** Cost
   asymmetry: capability costs a type permitting N sides, while not having it turns any later
   change into a migration through every consumer of the matcher's output.
