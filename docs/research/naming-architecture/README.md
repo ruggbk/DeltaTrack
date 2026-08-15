@@ -604,8 +604,11 @@ numbering is preserved so each objection stays traceable.
 ADR 0020 deliberately creates project-specific vocabulary — the four-stage boundary and the
 `Candidate` / `Proposal` / `Retriever invocation` distinction are this project's. The words
 are borrowed from IR and record linkage; the structure is not. Stated absolutely the
-principle is unfalsifiable-by-design and would be cited against good decisions later, which
-matters because ADRs are append-only.
+principle is unfalsifiable-by-design and would be cited against good decisions later. That
+mattered more when this was written, on the then-current append-only rule; `33d516e` has since
+replaced it, and an accepted record is now a living description that may be rewritten to stay
+accurate. The objection survives the change but weakens: a bad absolute is citable for as long
+as it stands, and rewriting it still depends on someone noticing.
 
 **Amend to:** *no unnecessary or undocumented dialect.*
 

@@ -53,7 +53,7 @@ Both paths reach the same canonical JSON, then the same renderer.
 | Stage | Owner | What it does |
 |---|---|---|
 | Parse | `bill_tree.normalize_bill` | Bill XML → `BillTree` of `BillNode`s: divisions, titles, structural containers, flat sections. |
-| Diff | `diff_bill.diff_bills` | Structural comparison. Division-aware matching, similarity checks, move reconciliation. |
+| Diff | `diff_bill.diff_bills` | Structural comparison, as four named stages: retrieval → correspondence evidence → assignment → classification ([ADR 0020](decisions/0020-matching-stages.md)), over observations addressed by parser ordinal ([ADR 0019](decisions/0019-observation-identity.md)). Round 1 matches by path and division, a later assignment act applies the similarity cutoff, and round 2 reconciles moves. |
 | Shape | `diff_bill.bill_diff_to_dict` | Diff → dict, including the extracted dollar amounts. |
 | Full text | `formatters.text_serializer` | Readable plaintext per side, for the report's full-bill view. |
 | Canonicalize | `formatters.canonical.xml_diff_to_canonical` | Dict → canonical JSON. |
@@ -77,6 +77,36 @@ Both paths reach the same canonical JSON, then the same renderer.
 Alongside these, `structure_tree.py` derives the leveled heading tree both pipelines feed
 ([ADR 0012](decisions/0012-pdf-heading-levels.md),
 [0014](decisions/0014-leveled-heading-tree-scope.md)).
+
+### Inside the XML diff stage: four boundaries, one rule
+
+`diff_bill.diff_bills` is not one decision. It is a sequence of named stages, and the whole
+point of [ADR 0020](decisions/0020-matching-stages.md) is which of them is allowed to decide
+what:
+
+```
+Observations -> RETRIEVAL -> CandidateSet -> CORRESPONDENCE EVIDENCE
+             -> ASSIGNMENT -> Correspondence -> CLASSIFICATION -> Changes -> canonical diff
+```
+
+**Retrieval policy controls consideration. Assignment policy controls correspondence.** Retrieval
+decides which pairs are *worth evaluating* and materialises them as a `CandidateSet` with the
+provenance of every retriever that proposed them; it settles nothing. Correspondence evidence
+*describes* an admitted candidate with named signals and carries no verdict. Assignment is the
+only stage that decides which observations correspond. Classification then asks what kind of
+change a settled correspondence represents, and may not re-open the question of whether the two
+provisions correspond at all.
+
+Two consequences worth knowing before touching this code. Every pair that reaches assignment
+first passes through candidate admission, so a pairing cannot be produced by constructing a tuple
+directly — that bypass is what slice B3 removed. And the similarity cutoff is not part of the
+group competition: `apply_similarity_assignment_rule` is a separate, later assignment act that
+owns the only round-1 threshold, and folding the two together would delete a composition while
+leaving both names in place.
+
+The stages are pinned by `tests/test_round1_preservation.py` against a frozen trace generated
+from an independent transcription of the pre-refactor matcher. The PDF path is **not** migrated;
+ADR 0020 shares the boundary rule with it, not the implementation.
 
 ### Why the two paths exist at all
 

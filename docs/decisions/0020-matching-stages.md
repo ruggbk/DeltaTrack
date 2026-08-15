@@ -245,8 +245,11 @@ the contents of one stage change.
 - **Let classification re-consult similarity.** Rejected with a carve-out: classification
   legitimately asks *how much* the corresponding texts differ, which is what
   `move.body_unchanged` records and needs no score. What it may not do is threshold a
-  correspondence score, which `diff_bill.diff_bills` and `diff_pdf._hunk_for_paired_blocks`
-  both do today.
+  correspondence score. On the XML side that separation now holds: `diff_bill.diff_bills` is
+  orchestration over the four stages, and the only round-1 cutoff lives in
+  `apply_similarity_assignment_rule`, an assignment act that runs before classification.
+  `diff_pdf._hunk_for_paired_blocks` still thresholds inside classification; the PDF track is
+  not migrated, and this record does not unify the two implementations.
 - **Keep `Correspondence` pair-shaped, and revisit if consolidation proves common.** Cost
   asymmetry: capability costs a type permitting N sides, while not having it turns any later
   change into a migration through every consumer of the matcher's output.
@@ -318,6 +321,16 @@ pull request**, from the ground-truth work rather than from the refactor.
 
 The data contracts are specified in the Decision. Module layout and pull-request sequencing
 are implementation preferences and belong in the tracker.
+
+**One duplicate computation is deliberately left in place, and it is not an unfinished
+requirement of this record.** `_similarity_signals` runs `diff_text` to decide
+`body_unchanged`, and `_paired_record` runs it again on the same pairing to produce the
+`text_diff` the output carries. That is **performance debt, not a stage-boundary defect**: the
+two calls answer questions owned by different stages, and removing the second means routing
+classification's output back across the boundary this record draws. #591 quantified the
+duplication and accepted it as preservation cost. Optimisation is deferred unless end-to-end
+profiling justifies it, and the call-count gate that would protect such a change belongs with
+the change rather than ahead of it. Nothing in this record is waiting on it.
 
 ## Invariants
 

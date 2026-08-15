@@ -297,6 +297,26 @@ uv run pytest -m slow tests/test_corpus_properties.py tests/test_corpus_tree_pro
 CORPUS_SWEEP=1 uv run pytest -m slow tests/test_corpus_properties.py
 ```
 
+### The frozen round-1 trace, and when you may regenerate it
+
+Round-1 matching (ADR 0020: retrieval → correspondence evidence → assignment) is pinned by
+`tests/test_round1_preservation.py` against a frozen artifact, `tests/data/round1_legacy_trace.json`.
+The expectation is generated from an **independent transcription** of the legacy matcher, never
+from production, and an AST guard refuses every round-1 production symbol inside that oracle — so
+the harness cannot quietly start agreeing with the code it is checking.
+
+That is also why regeneration is opt-in and not a fix:
+
+```bash
+UPDATE_ROUND1_TRACE=1 uv run pytest tests/test_round1_preservation.py
+```
+
+Reach for it only when round-1 behaviour changed **and you intend the change**. Regenerating to
+make a refactor green destroys the only evidence that the refactor preserved anything, and the
+trace is what several corpus-invisible behaviours are bound by. Two of them move zero of the 27
+committed pairs and are caught only by synthetic fixtures, so "the corpus is still green" is not
+a reason to rewrite it.
+
 ### The rest of the slow suite runs in CI too
 
 A further CI step runs the remaining slow modules (`CI_SLOW_MODULES` in

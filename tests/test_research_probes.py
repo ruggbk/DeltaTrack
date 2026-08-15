@@ -17,6 +17,12 @@ stop checking that the code resolves. These are the two checks that would have c
    because a stale or wrongly-ordered corpus view silently changes *every* research number
    downstream and raises nothing.
 
+Both are static. Neither can see a probe that reaches a symbol by attribute rather than by import,
+or one that calls a function whose signature moved -- the name still resolves, and only calling it
+fails. That is a real limit, accepted deliberately: these gates serve the probes that support live
+research, and a probe whose question has closed is deleted rather than kept running (AGENTS.md,
+"Research artifacts are working material").
+
 Nothing here asserts a research RESULT. Results live in the review document with the probe output
 quoted; pinning them in CI would make an experiment into a regression test, which is the mistake
 the review criticises elsewhere.

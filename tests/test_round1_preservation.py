@@ -21,8 +21,9 @@ is emitted in. An inverted comparison, a dropped gate, a reordered branch or a s
 index space all surface here.
 
 :func:`test_the_oracle_names_no_round_1_production_symbol` enforces the independence
-structurally rather than by convention, and it lists the stage names B1 and B2 will
-introduce so that wiring the oracle to a *future* stage is refused in advance.
+structurally rather than by convention. Its refusal list was written ahead of the stages: it
+already named what B1, B2 and B3 went on to introduce, so wiring the oracle to a stage that
+did not exist yet was refused in advance rather than after the fact.
 
 ## Identity: ADR 0019, not ``element_id``
 
@@ -69,8 +70,10 @@ Three tests form the triangle:
 
 ## The two behaviours the corpus cannot see
 
-Measured in the round-1 audit and reproduced by
-``docs/research/provision-matching/probes/round1_decisive.py``: over all 27 committed
+Measured in the round-1 audit (§4 and §5, which retain the figures) and now bound by the two
+synthetic fixtures below rather than by a probe -- the probe that first measured this was
+retired at closure, and :func:`test_the_corpus_cannot_see_the_two_fixture_bound_mutations` is
+what keeps the claim honest if the corpus ever grows a case that exercises either. Over all 27 committed
 version pairs, **no** observation left over by within-division assignment ever reaches the
 cross-division fallback (238 groups produce leftovers, 30 groups reach the fallback, the
 sets are disjoint), and **every** list handed to the greedy is already in ascending parser
@@ -2444,9 +2447,10 @@ def test_the_unique_path_runs_no_collision_machinery():
     round, neither of which can do anything for a group holding at most one observation per side.
 
     A structural guard rather than a timing assertion, deliberately. A wall-clock threshold in the
-    suite would be a flake on a loaded machine and would say nothing about *why* the cost moved;
-    the ratios live in ``docs/research/provision-matching/probes/round1_b3_cost.py``, which
-    measures every arm in one process so contention cannot masquerade as a regression.
+    suite would be a flake on a loaded machine and would say nothing about *why* the cost moved.
+    What this pins is the shape -- which stages the unique path may reach -- and that is the part
+    worth keeping; the cost comparison behind the B3 ruling was a closed question and lives in
+    PR #632 rather than in a benchmark this suite has to keep alive.
     """
     import inspect
 
@@ -2471,9 +2475,10 @@ def test_the_unique_path_runs_no_collision_machinery():
 
 # --- Independence, enforced structurally --------------------------------------------------
 
-#: Every round-1 symbol the oracle must not reach, including the ones B1 and B2 will
-#: introduce. Naming the future stages here is the point: it refuses in advance the change
-#: that would quietly make this harness self-validating.
+#: Every round-1 symbol the oracle must not reach, B1's, B2's and B3's included. The set was
+#: written before those stages existed, and naming them ahead of time was the point: it refused
+#: in advance the change that would quietly make this harness self-validating. It is maintained
+#: the same way now -- a stage added later belongs here before it has a caller, not after.
 FORBIDDEN_IN_ORACLE = frozenset(
     {
         # today's production round 1

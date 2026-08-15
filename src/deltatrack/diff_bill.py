@@ -192,7 +192,7 @@ class RetrievedPopulation:
     **The order of ``old`` and ``new`` is policy, not presentation.** Legacy assignment sorts on
     ``(similarity, oi, ni)`` where those are positions in these two tuples, and #590 measured
     that substituting ADR 0019 ordinals for them changes the selected correspondence. So the
-    ordered tuples are the contract B2's assignment stage will consume, and ``old_refs`` /
+    ordered tuples are the contract :func:`assign_group` consumes, and ``old_refs`` /
     ``new_refs`` are the identities of the same observations at the same positions -- two
     parallel readings of one population, never a re-sort of it.
 
@@ -741,12 +741,13 @@ def _match_unique_path_group(
     a second implementation of them: no stage is duplicated here, and the two paths cannot diverge
     in what they admit, describe or select.
 
-    ADR 0020's audit priced that same alternative at 1.62x, and the gap is not a contradiction:
-    the audit measured it against a *pre-B1* collision path, which had no candidate set, no
-    evidence records and no ``GroupAssignment``. B1 and B2 made that path cost more per group, so
-    the thing B3 declines to do got more expensive while B3 was being reached.
-    ``docs/research/provision-matching/probes/round1_b3_cost.py`` re-measures all the arms in one
-    process, which is how a stale cross-session ratio is kept out of this decision.
+    An early estimate priced that alternative at 1.62x against a *pre-B1* collision path, which had
+    no candidate set, no evidence records and no ``GroupAssignment``. B1 and B2 made that path cost
+    more per group, so the thing B3 declines to do got more expensive while B3 was being reached;
+    re-measured with every arm in one process it is roughly 2.9x, against roughly 2.4x for what
+    shipped. Treat those as the ordering rather than as figures to quote: they move a few percent
+    between runs, and the durable claim is that B3 sits between the two paths, nearer the cheaper
+    one. PR #632 carries the measurement.
 
     **Zero ``text_similarity`` calls, preserved through the stages rather than around them.** A
     1x1 population takes :func:`group_correspondence_evidence`'s shortcut -- one record, no signals,
@@ -1245,6 +1246,10 @@ def _similarity_signals(old_node: BillNode, new_node: BillNode) -> dict[str, boo
     """
     old_normalized = _normalize_text(old_node.body_text)
     new_normalized = _normalize_text(new_node.body_text)
+    # `_paired_record` runs `diff_text` again on the same pairing. Known performance debt, not an
+    # unfinished ADR 0020 boundary: this reads only whether the diff is empty, classification needs
+    # its value, and removing the second call routes classification's output back across the stage
+    # boundary. #591 quantified it and accepted it as preservation cost (ADR 0020, Implementation).
     if not diff_text(old_normalized, new_normalized):
         return {BODY_UNCHANGED: True}
     return {
@@ -1683,6 +1688,9 @@ def _removed_record(old_node: BillNode) -> NodeDiff:
 
 def _paired_record(old_node: BillNode, new_node: BillNode) -> NodeDiff:
     """A round-1 1:1: ``unchanged`` when the word-level diff is empty, else ``modified``."""
+    # The second of two `diff_text` calls on this pairing; `_similarity_signals` made the first.
+    # Deliberate -- see the note there and ADR 0020's Implementation section. This one needs the
+    # diff's VALUE, not just its emptiness, which is why the two cannot simply share a result.
     text_changes = diff_text(_normalize_text(old_node.body_text), _normalize_text(new_node.body_text))
     return NodeDiff(
         display_path_old=old_node.display_path,
