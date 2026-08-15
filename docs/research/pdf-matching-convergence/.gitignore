@@ -1,0 +1,8 @@
+# Probe output is generated, not committed. The probes here write into `results/` on every
+# run; those files are working material that git history already preserves, and committing
+# them made a multi-megabyte artifact out of numbers any reader can regenerate in minutes.
+#
+# A result that becomes a genuinely frozen input or oracle is the explicit exception: add it
+# with `git add -f`, and say in the retaining document why it is frozen. The default is
+# ephemeral.
+results/
