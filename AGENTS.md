@@ -97,7 +97,7 @@ The failure this prevents is subtler than rot. A probe that no longer runs at le
 
 Two rules that decide the ambiguous cases:
 
-- **Prove regenerability rather than assuming it.** Re-run the producer and confirm it rewrites the artifact byte-identically before deleting it; an artifact no surviving code can reproduce is a frozen input whatever it looks like.
+- **Prove claimed regenerability rather than assuming it.** If an artifact is being deleted because surviving machinery can reproduce it, re-run the producer and confirm that claim. Failure to regenerate is a reason to re-check the four criteria above; it is not, by itself, a retention reason — a one-off diagnostic that nothing needs is just as disposable when its producer is gone.
 - **A dangling reference is acceptable only where the referring document can be appended to.** If a byte-frozen document (a pre-registration, a sealed manifest) cites the artifact, it can never be given a pointer to git history — so retain the artifact instead. An append-only ledger can simply record where the removed file resolves, which is the one place a history pointer earns its keep.
 
 ## Architecture decisions
