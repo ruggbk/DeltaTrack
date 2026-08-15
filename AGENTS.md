@@ -89,13 +89,16 @@ A comment describes the code as it is **now**. History and rejected alternatives
 
 Probes, audits, spikes and study write-ups are **working material, not automatically permanent repository material.** At closure, retain an artifact only if it is needed to reproduce a consequential result, enforce an invariant, document a durable decision, or serve as a frozen input. **Delete the rest** — Git history preserves the investigative record. Retention is the exception that needs a reason, and "it was expensive to produce" is not one.
 
+Apply that strictly: "useful history", "might be interesting later", "shows how we got here" and "was once reviewed" are not retention reasons, because every one of them is satisfied by `git log`. Judge an artifact by the consequential role it plays **now**, never by its filename, its age, or how much history it carries. The inverse error is just as real, so decide by tracing consumers — under `docs/research/` a generated JSON that looks like a stale run log may be a committed expected-output oracle a gate reads, and a probe that looks superseded may be the only executable negative control of a rule still in force. Before removing one, check imports, direct path reads, subprocess calls, gate inputs, and any doc that names it as a *current* requirement.
+
 When deleting research, **remove or update live references to it**, and move any durable conclusion into its authoritative current home: an ADR, the architecture documentation, an executable test, or a frozen fixture. Do not write an archival summary, a tombstone map or a closure document whose only job is to record what was deleted — that is a new artifact with the same problem, and a pointer into history is one more thing that can be wrong.
 
-The failure this prevents is subtler than rot. A probe that no longer runs at least announces itself; a probe that still runs can publish a quantity the project has since disowned, and passing a check makes it look current. So the question at closure is not "does it work?" but "does it still answer a live question?"
+The failure this prevents is subtler than rot. A probe that no longer runs at least announces itself; a probe that still runs can publish a quantity the project has since disowned, and passing a check makes it look current. So the question at closure is not "does it work?" but "does it still answer a live question?" `tests/test_research_probes.py` runs the probes it declares runnable against a closed manifest, so a probe added later is either run or the gate fails.
 
-So the gate executes (which catches the first two), and retirement is judged on whether the artifact still answers a live question (which catches the third). `tests/test_research_probes.py` runs the probes it declares runnable against a closed manifest, so a probe added later is either run or the gate fails.
+Two rules that decide the ambiguous cases:
 
-When retiring an artifact, record in the document that cited it **which executable test inherited its question**, and pin the commit it stays readable at. A reproduction claim pointing at a deleted file is the defect this is meant to avoid, not the price of avoiding it.
+- **Prove regenerability rather than assuming it.** Re-run the producer and confirm it rewrites the artifact byte-identically before deleting it; an artifact no surviving code can reproduce is a frozen input whatever it looks like.
+- **A dangling reference is acceptable only where the referring document can be appended to.** If a byte-frozen document (a pre-registration, a sealed manifest) cites the artifact, it can never be given a pointer to git history — so retain the artifact instead. An append-only ledger can simply record where the removed file resolves, which is the one place a history pointer earns its keep.
 
 ## Architecture decisions
 
