@@ -758,12 +758,13 @@ def _match_unique_path_group(
     a second implementation of them: no stage is duplicated here, and the two paths cannot diverge
     in what they admit, describe or select.
 
-    ADR 0020's audit priced that same alternative at 1.62x, and the gap is not a contradiction:
-    the audit measured it against a *pre-B1* collision path, which had no candidate set, no
-    evidence records and no ``GroupAssignment``. B1 and B2 made that path cost more per group, so
-    the thing B3 declines to do got more expensive while B3 was being reached.
-    ``docs/research/provision-matching/probes/round1_b3_cost.py`` re-measures all the arms in one
-    process, which is how a stale cross-session ratio is kept out of this decision.
+    An early estimate priced that alternative at 1.62x against a *pre-B1* collision path, which had
+    no candidate set, no evidence records and no ``GroupAssignment``. B1 and B2 made that path cost
+    more per group, so the thing B3 declines to do got more expensive while B3 was being reached;
+    re-measured with every arm in one process it is roughly 2.9x, against roughly 2.4x for what
+    shipped. Treat those as the ordering rather than as figures to quote: they move a few percent
+    between runs, and the durable claim is that B3 sits between the two paths, nearer the cheaper
+    one. PR #632 carries the measurement.
 
     **Zero ``text_similarity`` calls, preserved through the stages rather than around them.** A
     1x1 population takes :func:`group_correspondence_evidence`'s shortcut -- one record, no signals,

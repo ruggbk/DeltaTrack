@@ -87,20 +87,11 @@ A comment describes the code as it is **now**. History and rejected alternatives
 
 ## Research artifacts are working material
 
-Probes, audits, spikes and study write-ups are **working material, not automatically permanent repository material.** At closure, retain an artifact only if it does one of these:
+Probes, audits, spikes and study write-ups are **working material, not automatically permanent repository material.** At closure, retain an artifact only if it is needed to reproduce a consequential result, enforce an invariant, document a durable decision, or serve as a frozen input. **Delete the rest** — Git history preserves the investigative record. Retention is the exception that needs a reason, and "it was expensive to produce" is not one.
 
-- **reproduces a consequential result** — a figure something else cites and a reader may need to re-derive;
-- **enforces an invariant** — but prefer moving that into a test, which cannot rot silently;
-- **documents a durable decision** — usually meaning it belongs in an ADR rather than in a research file;
-- **serves as a frozen input** — a fixture, a labelled dataset, an oracle's expectation.
+When deleting research, **remove or update live references to it**, and move any durable conclusion into its authoritative current home: an ADR, the architecture documentation, an executable test, or a frozen fixture. Do not write an archival summary, a tombstone map or a closure document whose only job is to record what was deleted — that is a new artifact with the same problem, and a pointer into history is one more thing that can be wrong.
 
-Everything else goes at closure. Git history preserves the investigative record, so deleting a probe loses nothing a reader can't recover with `git show <sha>:<path>` — and it is cheaper to recover one deleted file than to re-derive which of forty are still true. Retention is the exception that needs a reason; keeping something because it was expensive to produce is not one.
-
-Three failure modes this exists to prevent, all three observed in `provision-matching`, and each invisible to the check that catches the one before it:
-
-- **Six** probes reached a private symbol a later slice deleted. An import check cannot see it, because attribute access is not an import.
-- **One** called a function that still exists, with the signature it used to have. No symbol-existence check of any kind can see that — the name resolves; only calling it fails.
-- **One** ran perfectly, and published a candidate count the project had already disowned. That is the worst of the three, because an execution gate goes green and makes a stale number look current.
+The failure this prevents is subtler than rot. A probe that no longer runs at least announces itself; a probe that still runs can publish a quantity the project has since disowned, and passing a check makes it look current. So the question at closure is not "does it work?" but "does it still answer a live question?"
 
 So the gate executes (which catches the first two), and retirement is judged on whether the artifact still answers a live question (which catches the third). `tests/test_research_probes.py` runs the probes it declares runnable against a closed manifest, so a probe added later is either run or the gate fails.
 

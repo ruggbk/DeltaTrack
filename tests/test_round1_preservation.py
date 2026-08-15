@@ -2447,9 +2447,10 @@ def test_the_unique_path_runs_no_collision_machinery():
     round, neither of which can do anything for a group holding at most one observation per side.
 
     A structural guard rather than a timing assertion, deliberately. A wall-clock threshold in the
-    suite would be a flake on a loaded machine and would say nothing about *why* the cost moved;
-    the ratios live in ``docs/research/provision-matching/probes/round1_b3_cost.py``, which
-    measures every arm in one process so contention cannot masquerade as a regression.
+    suite would be a flake on a loaded machine and would say nothing about *why* the cost moved.
+    What this pins is the shape -- which stages the unique path may reach -- and that is the part
+    worth keeping; the cost comparison behind the B3 ruling was a closed question and lives in
+    PR #632 rather than in a benchmark this suite has to keep alive.
     """
     import inspect
 

@@ -317,22 +317,6 @@ trace is what several corpus-invisible behaviours are bound by. Two of them move
 committed pairs and are caught only by synthetic fixtures, so "the corpus is still green" is not
 a reason to rewrite it.
 
-### The research probes are executed, not just imported
-
-`tests/test_research_probes.py` checks that the provision-matching probes under
-`docs/research/provision-matching/probes/` still resolve, and that the ones declared runnable
-still *run*. The runnable set is a closed manifest, `RUNNABLE_ROUND1_PROBES`, which must equal the
-`round1_*.py` files on disk — so a probe added later is either executed by the gate or fails it.
-
-Adding a round-1 probe therefore means adding it to that manifest. The gate runs each one with
-`DELTATRACK_PROBE_SMOKE=1`, which shrinks the *sample* (one corpus pair, one repeat) and never the
-code path, so the whole check stays inside the fast suite. Run a probe without that variable to get
-a real measurement; its smoke output is a resolution check, not a result.
-
-An import check alone would not have been enough: probes rot by reaching a private symbol as an
-attribute, and by calling a function whose signature moved. The second is invisible to every
-symbol-existence check, which is why this one executes.
-
 ### The rest of the slow suite runs in CI too
 
 A further CI step runs the remaining slow modules (`CI_SLOW_MODULES` in
