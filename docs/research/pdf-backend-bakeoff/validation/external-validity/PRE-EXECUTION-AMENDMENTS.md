@@ -6075,7 +6075,7 @@ opening any document and nothing measured, since the gate reads keys only.
 
 ```json
 {"id": "A46", "class": "SUBSTANTIVE",
- "commits": ["4b94672"],
+ "commits": ["4b808e2"],
  "confirmatory_output_at_time": "none",
  "affects_membership": false, "affects_scoring_rule": false,
  "files_touched": ["probes/x06_m6_feasibility.py", "probes/x19_raster_edge_diagnostic.py",
@@ -6114,7 +6114,7 @@ link `results/x06_m6_feasibility.json`, `x07_neutral_geometry.json`,
 `x08_neutral_identity.json`, `x10_reconstruction_signature.json`,
 `x12_skeleton_eligibility.json` and `x27_score_metrics.json` as MEASURED evidence. Those
 amendments are **not rewritten** — the ledger is an append-only record, and editing a past
-entry to hide a removal would be the defect, not the fix. Read those links at **`4b94672~1`**.
+entry to hide a removal would be the defect, not the fix. Read those links at **`4b808e2~1`**.
 Each amendment already transcribes its numbers inline, so the reasoning stands without them.
 
 **What was deliberately NOT removed, and why.** The line is that a dangling reference is
