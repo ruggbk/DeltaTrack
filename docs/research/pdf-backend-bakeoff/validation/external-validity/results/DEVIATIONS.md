@@ -18,7 +18,7 @@ what the apparatus reads. This document is the reasoning; that file is the autho
 
 ```json
 {"id": "A47", "kind": "POST-BOUNDARY CONTINUATION",
- "commits": ["7b08b6f"],
+ "commits": ["7b08b6f", "e3ea131"],
  "prior_boundary_commit": "89360b30de480231efdc89157443779d45b37db2",
  "population_status": "EXPOSED",
  "results_already_visible": {
@@ -34,7 +34,9 @@ what the apparatus reads. This document is the reasoning; that file is the autho
  "affects_architecture_decision": false,
  "non_confirmatory_paths": ["cross-engine qualification channel (A45-dependent)"],
  "files_touched": ["probes/continuation_provenance.py", "probes/x04_freeze_check.py",
-                   "probes/cross_engine_control.py", "probes/score_metrics.py"],
+                   "probes/cross_engine_control.py", "probes/score_metrics.py",
+                   "probes/x27_score_metrics.py", "probes/x30_continuation_boundary.py",
+                   "probes/x30_labelling_fixture.py"],
  "why_not_an_amendment": "PRE-EXECUTION-AMENDMENTS.md requires confirmatory_output_at_time == 'none' on every record; a truthful post-boundary record cannot assert that without misleading a reader. Sections 4.7 and 11 already designate this register."}
 ```
 
