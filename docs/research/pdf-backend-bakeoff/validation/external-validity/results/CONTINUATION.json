@@ -98,7 +98,8 @@
   "python": "3.12.12",
   "pypdfium2": "5.12.1",
   "pymupdf": "1.28.2",
-  "enforcement_finding": "pypdfium2 is pinned exactly in uv.lock (and floored at >=5.12.1 in pyproject.toml). pymupdf is declared in NEITHER pyproject.toml NOR uv.lock, yet is imported by 9 study probes including two on the G5 result-bearing surface (cross_engine_control.py, control_fixtures.py). It is an ambient, unpinned, result-bearing dependency.",
+  "enforcement_finding": "NOT SUFFICIENTLY ENFORCED. pypdfium2 is pinned exactly in uv.lock (and floored at >=5.12.1 in pyproject.toml). pymupdf is declared in NEITHER pyproject.toml NOR uv.lock, yet is imported by 9 study probes including two on the G5 result-bearing surface (cross_engine_control.py, control_fixtures.py). VERIFIED: a clean `uv sync` does not install it, and `uv run python probes/x27_score_metrics.py` fails with ModuleNotFoundError: No module named 'pymupdf'. The study's result-bearing probes are therefore not runnable in the project's declared environment; Run 1 used an ambient interpreter.",
+  "recommendation_not_implemented": "Declaring pymupdf==1.28.2 in pyproject.toml and uv.lock is the durable fix, but it changes repository-wide dependency management outside the study tree and was left to the reviewer. G7 provides DETECTION, which is what this slice was scoped to.",
   "enforced_by": "G7 (x04) -- reads the versions above and compares against the live interpreter and installed packages"
  }
 }

@@ -309,8 +309,14 @@ def s1_artifact(fires: bool = True) -> dict:
     return {"schema": "s1_control/1", "advance_scale": 1.25, "fires": fires, "n_firing": 1 if fires else 0}
 
 
-def cross_engine_artifact(documents, failed=()) -> dict:
-    return {
+#: A47.6 -- the real `write_cross_engine_control` stamps this and `validate_inputs` REQUIRES
+#: it, so the fixture carries it too. A fixture that supplied a shape the producer never emits
+#: would validate a contract the producer was never held to.
+FIXTURE_CONFIRMATORY_STATUS = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A45 post-boundary deviation)"
+
+
+def cross_engine_artifact(documents, failed=(), confirmatory_status=FIXTURE_CONFIRMATORY_STATUS) -> dict:
+    artifact = {
         "schema": "cross_engine_control/1",
         "per_document": [
             {"document": d, "passed": d not in failed, "qualification": None if d not in failed else "Q"}
@@ -318,6 +324,10 @@ def cross_engine_artifact(documents, failed=()) -> dict:
         ],
         "n_documents": len(list(documents)),
     }
+    # `None` builds the pre-A47 shape, so the requirement can be shown to actually refuse.
+    if confirmatory_status is not None:
+        artifact["confirmatory_status"] = confirmatory_status
+    return artifact
 
 
 def inputs(
@@ -2919,7 +2929,19 @@ def part_qualification() -> dict:
     scored_docs = [frame([page_input(1)], document="SYNTHETIC/1")]
 
     def with_rows(rows):
-        return SM.score(inputs(scored_docs, cross_engine={"schema": "cross_engine_control/1", "per_document": rows}))
+        # `confirmatory_status` is carried so each fixture stays INDIVIDUALLY WELL-FORMED, per
+        # the note above: these arms test that the SET is wrong, and an artifact missing its
+        # A47.6 provenance would be refused for malformedness before the set was ever compared.
+        return SM.score(
+            inputs(
+                scored_docs,
+                cross_engine={
+                    "schema": "cross_engine_control/1",
+                    "per_document": rows,
+                    "confirmatory_status": FIXTURE_CONFIRMATORY_STATUS,
+                },
+            )
+        )
 
     ok_row = {"document": "SYNTHETIC/1", "passed": True, "qualification": None}
     fail_row = {"document": "SYNTHETIC/1", "passed": False, "qualification": "Q"}

@@ -63,7 +63,6 @@ sys.path.insert(0, str(BAKE / "probes"))
 sys.path.insert(0, str(BAKE / "probes" / "backends"))
 
 import build_frames as BF  # noqa: E402
-import continuation_provenance as CP  # noqa: E402
 import m3_boundaries as M3  # noqa: E402
 import methodology_contracts as MC  # noqa: E402
 import neutral_identity as NI  # noqa: E402
@@ -329,7 +328,11 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
 
     if not isinstance(inputs.s1, dict) or "fires" not in inputs.s1:
         raise ScoreInputError(S1_ARTIFACT_MISSING, {"got": sorted(inputs.s1) if isinstance(inputs.s1, dict) else None})
-    _require(inputs.cross_engine, ("per_document",), "cross-engine control")
+    # A47.6 adds `confirmatory_status` to the REQUIRED fields, not the optional ones. The
+    # cross-engine artifact is the head of the A45-affected path, so an artifact that cannot
+    # say what its section 4.7 status is must not be scorable at all -- a `.get()` default
+    # here would let a provenance-less artifact through as though it were confirmatory.
+    _require(inputs.cross_engine, ("per_document", "confirmatory_status"), "cross-engine control")
     # EXACT SET EQUALITY, not containment, and it is checked HERE -- before `qualification` runs.
     #
     # I13's consequence is a COUNT over documents ("failure on more than a third of sampled
@@ -1789,12 +1792,12 @@ def qualification(cross_engine: dict) -> dict:
         },
         "decision_blocking": False,
         "threshold_owner": "x09_skeleton_cross_engine.gate (document 0.95 / page 0.75)",
-        # A47.6 -- the section 4.7 status travels WITH the qualification, from the producer
-        # that stamped it. Read from the artifact rather than re-derived, so there is one
-        # owner of the status exactly as there is one owner of the thresholds. Falling back
-        # to the continuation record keeps it FAIL-CLOSED: a cross-engine artifact produced
-        # before this field existed still cannot be read as confirmatory.
-        "confirmatory_status": cross_engine.get("confirmatory_status") or CP.a45_status(CP.load()),
+        # A47.6 -- the section 4.7 status travels WITH the qualification, read from the
+        # artifact exactly as `passed` is. The scorer does NOT consult the continuation record
+        # itself: it is a CONSUMER of committed facts, and its frozen import allowlist exists
+        # to keep it one. `validate_inputs` requires the field, so a cross-engine artifact
+        # without provenance is refused rather than silently read as confirmatory.
+        "confirmatory_status": cross_engine["confirmatory_status"],
     }
 
 

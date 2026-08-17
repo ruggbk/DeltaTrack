@@ -198,6 +198,21 @@ Run 1's byte-identical rebuild claim is scoped to macOS/arm64, Python 3.12.12, p
   (`cross_engine_control.py`, `control_fixtures.py`). It was an **ambient, unpinned,
   result-bearing dependency**.
 
+  This is stronger than "unpinned", and it was verified rather than inferred. A clean
+  `uv sync` in this repository does **not** install PyMuPDF, and the documented invocation
+  form fails outright:
+
+      $ uv run python probes/x27_score_metrics.py
+      File "probes/build_oracle.py", line 41, in <module>
+          import pymupdf
+      ModuleNotFoundError: No module named 'pymupdf'
+
+  So the study's own result-bearing probes are **not runnable in the project's declared
+  environment at all**. Run 1 was executed against an interpreter carrying PyMuPDF from
+  outside the project's dependency management, at a version nothing recorded except the
+  closure report's prose. Whoever runs the continuation must do the same, and the version
+  they happen to have is what decides the oracle stimuli and the cross-engine qualification.
+
 PyMuPDF is not incidental here: it renders the oracle stimuli that adjudication reads, and the
 cross-engine control re-measures through it to decide the PDFIUM-CONDITIONED FRAME
 qualification. A silent version change is therefore result-bearing on both surfaces. G7 makes
