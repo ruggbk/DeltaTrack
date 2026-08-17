@@ -16,6 +16,29 @@ what the apparatus reads. This document is the reasoning; that file is the autho
 
 ## A47 — POST-BOUNDARY CONTINUATION / DEVIATION RULING
 
+```json
+{"id": "A47", "kind": "POST-BOUNDARY CONTINUATION",
+ "commits": ["7b08b6f"],
+ "prior_boundary_commit": "89360b30de480231efdc89157443779d45b37db2",
+ "population_status": "EXPOSED",
+ "results_already_visible": {
+  "d_frame_census_regions": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "frames": "17/17 members, 4190 pages"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "non_confirmatory_paths": ["cross-engine qualification channel (A45-dependent)"],
+ "files_touched": ["probes/continuation_provenance.py", "probes/x04_freeze_check.py",
+                   "probes/cross_engine_control.py", "probes/score_metrics.py"],
+ "why_not_an_amendment": "PRE-EXECUTION-AMENDMENTS.md requires confirmatory_output_at_time == 'none' on every record; a truthful post-boundary record cannot assert that without misleading a reader. Sections 4.7 and 11 already designate this register."}
+```
+
+
 **This is not a pre-execution amendment, and it is deliberately not recorded as one.**
 `PRE-EXECUTION-AMENDMENTS.md` is the pre-execution ledger: `x04.parse_amendments` requires
 every record in it to carry `confirmatory_output_at_time == "none"`, and rejects the file
