@@ -154,9 +154,12 @@ predicted: a package or granule is recorded only after govinfo is asked and answ
 
 ## PDF / rendering
 
+PDF↔XML parity is checked by eye with the two shipped CLIs rather than a script here:
+render the same version pair through `diff_pdf.py` and `diff_bill.py compare --format html`
+and open both reports ([TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
+
 | Script | What it does |
 |--------|--------------|
-| `serve_compare.py <bill> [--v1 V --v2 V] [--port N] [--no-browser]` | Render a bill's PDF-derived and XML-derived diffs side by side and serve them locally — the main PDF↔XML parity debugging aid. |
 | `heading_precision.py` | Measure PDF heading-anchor recovery against the XML hierarchy (DeltaTrack#89). |
 | `parity_table.py` | Print the PDF↔XML change-parity table for the four evidence bills — the snapshot [ADR 0014](../docs/decisions/0014-leveled-heading-tree-scope.md) records. Reporting only; `tests/test_pipeline_parity.py` is the gate that asserts the bands. |
 | `ugly_money_table.py <old.xml> <new.xml> -o <out>` | Emit a deliberately unstyled money-diff table for staffer validation (fidelity stripped so only the money diff is under test). |

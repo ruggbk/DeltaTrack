@@ -36,10 +36,9 @@ def label_from_stem(stem: str) -> str:
 def local_versions(bills_dir: Path, slug: str, ext: str = "xml") -> list[tuple[int, str]]:
     """``(ordinal, label)`` for every locally present version of ``slug``, ascending.
 
-    Reads ``{bills_dir}/{slug}/{n}_{label}.{ext}``. The sort key is the one
-    ``scripts/serve_compare.py`` already uses to pick versions — ordinal first, stem as
-    the tiebreak — so this listing orders identically to the tool a reader may already
-    have open, and ``10`` sorts after ``2`` rather than before it.
+    Reads ``{bills_dir}/{slug}/{n}_{label}.{ext}``. The sort key is ordinal first, stem as
+    the tiebreak, so the listing follows the order the versions were published and ``10``
+    sorts after ``2`` rather than before it.
 
     Stems carrying no ``{n}_`` prefix are left out: a version with no ordinal cannot be
     addressed by one, and the point of the listing is to be picked from. A bill folder

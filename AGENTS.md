@@ -10,7 +10,8 @@ uv sync                          # (what ./init runs to install dependencies)
 uv run pytest -m "not slow and not browser"  # Fast tests only (~1s)
 uv run pytest                    # All tests (no download needed; fixtures are committed)
 uv run pytest tests/test_diff_bill.py::TestMatchNodesIntegration  # Single test
-uv run python scripts/serve_compare.py 118-hr-8752  # PDF vs XML diff side by side (see TESTING.md)
+uv run python diff_pdf.py <v1.pdf> <v2.pdf> -o <out.html>              # Render the PDF-derived diff
+uv run python diff_bill.py compare <v1.xml> <v2.xml> --format html -o <out.html>  # ...and the XML-derived one (see TESTING.md)
 ```
 
 After `source ./init`, the top-level CLIs run directly (`./tools/fetch_bills.py`,
@@ -53,7 +54,7 @@ This repo follows the workflow in [CONTRIBUTING.md](CONTRIBUTING.md). The load-b
 - **A workflow owning a required status check must carry the `merge_group` trigger** (#416). The merge queue waits on *every* required context before it will merge, so a required check whose workflow never fires on `merge_group` is never reported and the queue stalls for the whole repository, not just the pull request that added it. Today that is both `ci.yml` (`test`) and `security.yml` (`pip-audit (production deps)`) — covering only one stalls it just as completely. `test_required_checks_report_to_a_merge_queue` (`tests/test_ci_workflow.py`) pins the trigger on the two workflows above, so a reformat or a merge resolution cannot quietly drop it — but the gate parametrizes over a hardcoded list, so **making a third check required means adding it to `REQUIRED_CHECK_WORKFLOWS` as well as adding the trigger**, or the new check is unwatched and the gate stays green while the queue stalls. The trigger is inert until the check is actually required, so it is safe to land first. Recovering from a stall needs an admin (untick "Require merge queue", merge, re-tick), because the fixing pull request would otherwise have to clear the queue it is fixing.
 - **Before pushing, run the CI gates locally** (lint, `ruff format --check`, fast, browser, external-validation) -- see CONTRIBUTING's "What CI checks." `ruff check` is not covered by the pre-commit format hook, so run it explicitly.
 - **For changes touching the parser, diff engine, or matcher, run every slow gate CI runs:** `uv run pytest -m slow --deselect tests/test_govinfo_corpus_parity.py` (the one deselection is a live-network gate). Selecting by marker rather than by module list is deliberate: the enumerated form drifted every time a module joined a CI step. The corpus gates within it parametrize over the committed manifest (`tests/corpus_manifest.toml`) and run in CI, so no fetch is needed and counts are reproducible; each fails closed if a manifested bill is uncommitted (ADR 0015 / #217). To sweep every locally-fetched bill (broader, non-CI exploration that has caught bugs a few clean bills didn't), add `CORPUS_SWEEP=1`.
-- **Before opening a PR, review and show evidence unprompted**: run a code review on the diff, then present visual before/after examples of the change (e.g. `scripts/serve_compare.py` or the diff HTML) for the maintainer's verification — don't wait to be asked.
+- **Before opening a PR, review and show evidence unprompted**: run a code review on the diff, then present visual before/after examples of the change (e.g. the rendered diff HTML — see TESTING.md's "Comparing the two pipelines by eye") for the maintainer's verification — don't wait to be asked.
 
 ### Sprints (biweekly, theme-driven)
 
