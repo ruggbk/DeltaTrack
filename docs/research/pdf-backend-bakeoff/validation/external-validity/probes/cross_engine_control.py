@@ -33,6 +33,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve()
 sys.path.insert(0, str(HERE.parent))
 
+import continuation_provenance as CP  # noqa: E402
 import methodology_contracts as MC  # noqa: E402
 import x09_skeleton_cross_engine as X09  # noqa: E402
 
@@ -297,6 +298,20 @@ def write_cross_engine_control(documents: list[dict], out_path: Path | None = No
         "n_qualified": sum(1 for r in rows if not r["passed"]),
         "decision_blocking": False,
         "qualification_applies": any(not r["passed"] for r in rows),
+        # A47.6 -- SECTION 4.7 STATUS, STAMPED AT THE PRODUCER.
+        #
+        # This artifact is the first point on the A45-affected path: A45 supplies the
+        # `document_sha256` that A39.2 ranks the page sample over, so it selects WHICH PAGES
+        # ARE MEASURED and can move a PDFIUM-CONDITIONED FRAME qualification (A45.6 measured
+        # exactly that, in the direction of withholding an earned one). Stamping here rather
+        # than in the scorer means the status originates where the dependency originates, and
+        # a consumer cannot forget to add it.
+        #
+        # It FAILS CLOSED: `load()` raises if the continuation record is missing, rather than
+        # defaulting to "confirmatory". A missing record must never silently upgrade a
+        # deviation-affected result.
+        "confirmatory_status": CP.a45_status(CP.load()),
+        "confirmatory_status_owner": "continuation_provenance (A47) -- value-dependent on the A45 post-boundary repair",
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(artifact, indent=1, default=str))
