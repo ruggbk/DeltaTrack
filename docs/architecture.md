@@ -110,10 +110,11 @@ from an independent transcription of the pre-refactor matcher.
 **The PDF path runs the same four stages, and reached them separately.** It has its own retrieval,
 evidence, assignment and classification stages in `diff_pdf.py`, its own byte-identity gate
 (`tests/test_pdf_canonical_baseline.py`), and its own boundary tests. What the two paths share is
-the *rule* — retrieval controls consideration, assignment controls correspondence — not an
-implementation, and ADR 0020 deliberately does not unify them: an XML observation is a parsed tree
-node and a PDF observation is a reconstructed block, so a shared matcher would have to pick one
-representation and lose the other.
+the *rule* — retrieval controls consideration, assignment controls correspondence — and they do not
+currently share an implementation. XML observations address parsed tree nodes while PDF
+observations address reconstructed blocks. **ADR 0020 deliberately leaves open whether the two
+pipelines should eventually share more of their matching implementation; doing so requires separate
+validation.**
 
 ### Why the two paths exist at all
 
