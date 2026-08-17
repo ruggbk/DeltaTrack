@@ -32,6 +32,13 @@ EXECUTION READINESS
 --self-test drives every gate that has a constructible known-bad case and requires each
 to fail, because a gate that has never produced a negative cannot tell "ready" from
 "blind".
+
+TWO EXCEPTIONS, OWNED ELSEWHERE RATHER THAN DUPLICATED. F12 (continuation record) and G7
+(result-bearing toolchain) are added by A47, and their known-bad cases live in
+`x30_continuation_boundary.py`: a suppressed prior-boundary record, an uncommitted one, a
+foreign population, and a version mutation per pinned dependency. They are not repeated
+here because two controls failing on the same mutation cost twice to maintain and diagnose.
+Named explicitly so the claim above stays true rather than quietly becoming false.
 """
 
 from __future__ import annotations
