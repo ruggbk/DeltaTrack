@@ -89,13 +89,11 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import importlib.util
 import inspect
 import json
 import os
 import textwrap
 from collections import defaultdict
-from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -119,6 +117,13 @@ from deltatrack.matching import NEW, OLD, CandidateSet, CorrespondenceEvidence, 
 from deltatrack.similarity import text_similarity
 from tests.conftest import assert_manifest_committed, manifest_version_pairs, manifest_xml_ids
 from tests.corpus_paths import DATA_DIR, PROJECT_ROOT
+from tests.round1_identity import (
+    complete_sequence_ordinals,
+    pair_key,
+    parser_revision,
+    source_sha256,
+    stream_digest,
+)
 
 _FROZEN = DATA_DIR / "round1_legacy_trace.json"
 _PROBES = PROJECT_ROOT / "docs" / "research" / "provision-matching" / "probes"
@@ -423,37 +428,6 @@ def legacy_match_nodes(old_nodes, new_nodes, rec: Recorder, variant: frozenset[s
 # --- Trace shape and digest -------------------------------------------------------------
 
 
-def complete_sequence_ordinals(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> dict[int, int]:
-    """The ADR 0019 address of every node, built from the COMPLETE emitted sequences.
-
-    The only place an ordinal is minted. It is ``enumerate`` over the whole ``tree.nodes`` list
-    for each side and nothing else -- never a collision subgroup, a division sublist, an
-    invocation population or a stream position, all of which are filtered or re-sorted views and
-    would yield an address that looks valid while naming a different node.
-
-    Keyed on ``id(node)`` for the duration of one run, which is a run-local mechanism for
-    recovering the ordinal and NOT ADR 0019 observation identity. Both trees hold every node
-    alive for the whole comparison, and nothing here is persisted; the artifact stores the
-    resulting integers alongside the source digest and parser revision that scope them.
-    ``scripts/probe_node_identity.py`` sets the precedent.
-
-    Two nodes of one side sharing an object would collapse two addresses onto one, so it is
-    refused rather than assumed away.
-    """
-    ordinals: dict[int, int] = {}
-    for side_nodes in (old_nodes, new_nodes):
-        seen: dict[int, int] = {}
-        for index, node in enumerate(side_nodes):
-            if id(node) in seen:
-                raise ValueError(
-                    f"one node object appears at ordinals {seen[id(node)]} and {index} of a single "
-                    "side; two observations would collapse onto one address"
-                )
-            seen[id(node)] = index
-        ordinals.update(seen)
-    return ordinals
-
-
 def oracle_trace(old_nodes, new_nodes, variant: frozenset[str] = frozenset()) -> dict:
     """The oracle's full ordered trace for one comparison, addressed by ADR 0019 ordinal.
 
@@ -510,53 +484,6 @@ def trace_counts(trace: dict) -> dict:
     }
 
 
-def stream_digest(stream: list) -> str:
-    """A digest over the ordered pairing stream alone, which is the durable production gate.
-
-    The literal stream is 31,908 rows over the committed corpus and serializes to ~2.8 MB,
-    which is not a reviewable committed artifact -- the same argument
-    ``test_canonical_baseline`` makes for storing a digest. Diagnosis does not depend on the
-    stored form: the oracle is right here, so a failing comparison recomputes the expected
-    stream and names the first row that moved.
-    """
-    return hashlib.sha256(json.dumps(stream, separators=(",", ":")).encode()).hexdigest()
-
-
-def source_sha256(path: Path) -> str:
-    """SHA-256 of the source bytes, per ADR 0019.
-
-    The file is committed under ``tests/corpus/``, so git already pins the bytes and this is
-    *recorded* rather than relied on for storage -- ADR 0015's reservation, cashed in here.
-    What it buys is that the stored judgment names the source it was made about, so a fixture
-    swapped underneath it fails closed instead of silently rebinding.
-    """
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-@lru_cache(maxsize=1)
-def parser_revision() -> str:
-    """The parser revision this trace's ordinals were derived under, DERIVED not declared.
-
-    ADR 0019 requires a revision that "changes whenever code capable of changing the emitted
-    observations changes", and accepts a content hash over the parser entry module and its
-    transitive ``deltatrack`` imports. That mechanism already exists in this repository, in
-    ``docs/research/provision-matching/probes/study2_frame.py``, and is reused rather than
-    reimplemented -- a second copy of an identity rule is how two artifacts come to disagree
-    about what parse they describe.
-
-    Loaded the same way ``tests/test_pass2_eval_contract.py`` loads it. Its transitive set is
-    ``bill_tree`` plus the two PDF parser modules ``bill_tree`` imports, and notably NOT
-    ``diff_bill``: a matching change does not move the revision, so the two failure modes stay
-    distinguishable. A matcher regression reddens the digests; a parser change reddens
-    provenance and says the stored judgment is about a different emitted sequence.
-    """
-    spec = importlib.util.spec_from_file_location("_probe_study2_frame", _PROBES / "study2_frame.py")
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.parser_revision()
-
-
 def frozen_record(old_path: Path, new_path: Path) -> dict:
     old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
     trace = oracle_trace(old_tree.nodes, new_tree.nodes)
@@ -569,10 +496,6 @@ def frozen_record(old_path: Path, new_path: Path) -> dict:
         "stream_sha256": stream_digest(trace["stream"]),
         "counts": trace_counts(trace),
     }
-
-
-def pair_key(old_path: Path, new_path: Path) -> str:
-    return f"{old_path.parent.name}/{old_path.stem}->{new_path.stem}"
 
 
 def load_frozen() -> dict:
