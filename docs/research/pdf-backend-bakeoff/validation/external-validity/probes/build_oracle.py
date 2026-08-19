@@ -57,6 +57,8 @@ PROMPT_MISSING = "PROMPT_MISSING"
 PROMPT_LEAKS = "PROMPT_LEAKS"
 PROMPT_ASKS_FORBIDDEN_QUESTION = "PROMPT_ASKS_FORBIDDEN_QUESTION"
 PROMPT_MISSING_REQUIRED_INSTRUCTION = "PROMPT_MISSING_REQUIRED_INSTRUCTION"
+#: A48 -- a frame that declares no D census cannot be built against.
+D_CENSUS_MISSING = "D_CENSUS_MISSING"
 BLIND_ARTIFACT_LEAKS = "BLIND_ARTIFACT_LEAKS"
 WRONG_DPI_FOR_STIMULUS = "WRONG_DPI_FOR_STIMULUS"
 R1_BBOX_DIFFERS_FROM_PRIMARY = "R1_BBOX_DIFFERS_FROM_PRIMARY"
@@ -937,7 +939,15 @@ def build(
     #
     # Applied before `apply_c_audit` and `plan_r1_repeats` so repeats inherit it through
     # `replace` rather than acquiring a route their primary does not have (A36.6).
-    d_census = sum(int((doc["frame"].get("counts") or {}).get("d_frame_census", 0)) for doc in documents)
+    # FAIL CLOSED. A missing count is NOT zero: zero is within budget, so a frame that simply
+    # forgot to declare its census would silently make the D decision route non-required and
+    # excuse the very evidence Rule 1 needs. Absent means unusable, not empty.
+    d_census = 0
+    for doc in documents:
+        counts = doc["frame"].get("counts") or {}
+        if "d_frame_census" not in counts:
+            raise OracleBuildError(D_CENSUS_MISSING, {"document": doc["frame"].get("document")})
+        d_census += int(counts["d_frame_census"])
     d_required = MC.d_decision_route_required(d_census)
     specs = [replace(s, d_decision_required=d_required) for s in specs]
     # A36.5 -- the audit is drawn over C base identities BEFORE repeats exist, and never sees

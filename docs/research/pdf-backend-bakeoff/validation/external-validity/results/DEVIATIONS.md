@@ -441,3 +441,48 @@ The real key was **not** regenerated and **not** hand-edited in this round.
 own fixture predated it, so the entire architecture-decider suite failed at input validation.
 Reproduced on clean `86e48de`. The fixture now carries the scorer's own constant. No decider
 rule was touched.
+
+### A48.7 — closure review: the first repair had only reached validation and R1
+
+**Chronology, recorded exactly.** The first A48 pass conditioned route *derivation*
+(`frame_routes`, `human_answer_purposes`, `_required_r1_routes`) and its control asserted
+through a helper that ran `validate_adjudicated` plus `r1_reliability`. That helper was named
+`full_path`, and it was not: `score_metrics.score` went on walking
+`(D_FRAME, PURPOSE_D_DECISION)` in `heading_metrics` and demanding a human answer for **every**
+D primary. So the 45-item workload had never traversed the result-bearing scorer, and the
+control read green because it never called it.
+
+Closure review caught this before merge. **Execution was still blocked throughout and no
+adjudication had occurred**, so nothing was scored on the false-green.
+
+**Measured before the second repair**, through the real `SM.score` at D=61 with exactly the
+A48-required adjudication (all required AI, 25 C-audit human, 20 control human, no D-only
+human): `ADJUDICATION_ROUTE_MISSING {route: 'human'}`.
+
+**Repairs.**
+
+1. `heading_metrics` consumes the D estimand only while the D route is result-bearing. The D
+   rows are **omitted, not zeroed**: a zero M1–M5 block would assert the arms were measured and
+   agreed on nothing, which this run never gathered. The payload states which it is, in
+   `d_estimand_status`.
+2. **The key may no longer self-certify its A27.3 state.** `validate_inputs` re-derives the
+   census by summing each committed frame's producer-declared `counts["d_frame_census"]`,
+   requires exact equality with `oracle_key["d_frame_census"]`, and requires the key's
+   `d_decision_route_required` to equal `MC.d_decision_route_required(committed census)`.
+   D membership is not re-derived from region contents; the committed counts remain the
+   producer's census. A coordinated key claiming 61 over a real 60-region census is refused
+   (`D_CENSUS_MISMATCH` / `D_BUDGET_CLAIM_MISMATCH`) before any metric is produced. This
+   matters because a true census of 60 is exactly where Rule 1 **may** select X.
+3. `build_oracle` **fails closed** on a frame with no declared `d_frame_census`. Absent is not
+   0: 0 is within budget and would silently excuse Rule 1's evidence.
+
+The helper is renamed `validation_and_r1` and kept only where validation and R1 really are the
+semantics under test. The end-to-end arms call the real scorer and the real decider.
+
+**`decided_by` is not invariant, and the enum-invariance claim needed this qualification.**
+Re-measured across all Rule 0 states at D>60: the outcome **enum** is identical under R1 PASS
+and R1 FAIL, as previously reported, but the **attribution** is not. Where Rule 0 decides,
+`decided_by` is `RULE_0_M9` either way. Where Rule 0 does not decide, the enum is
+`INSUFFICIENT_COMPARATIVE_EVIDENCE` either way while `decided_by` flips between
+`BUDGET_A10_A27_3` (R1 PASS) and `RULE_3_GATE` (R1 FAIL). A48 changes R1's required-route
+composition, so it can move that attribution. Reported rather than smoothed over.
