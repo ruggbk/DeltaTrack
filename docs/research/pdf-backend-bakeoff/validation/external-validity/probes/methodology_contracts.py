@@ -22,6 +22,35 @@ import math
 
 SELECTION_SEED = 20260807
 
+# ---------------------------------------------------------------- A27.3 / A48
+#: A10 as unit-fixed by A27.3. The D-frame adjudication item is a REGION.
+#: THE ONLY DEFINITION. `decide_architecture` and `build_oracle` both read it from here;
+#: a second copy of `<= 60` is what let the builder and the decider disagree about whether
+#: the D decision route was result-bearing at all (A48).
+D_FRAME_REGION_BUDGET = 60
+
+
+def d_decision_route_required(d_frame_census: int) -> bool:
+    """A27.3 -- is the D DECISION route result-bearing for this realized census?
+
+        <= 60 regions -> human-adjudicate the COMPLETE census; Rule 1 may be evaluated.
+        >  60 regions -> Rule 1 CANNOT choose X; the outcome is
+                         INSUFFICIENT_COMPARATIVE_EVIDENCE, and a 60-region sample is
+                         permitted for DESCRIPTIVE DIAGNOSIS ONLY.
+
+    THE ONE PREDICATE. Before A48 this question had no executable owner at all: the budget
+    lived in `decide_architecture` (applied at decision step 4) while `build_oracle`,
+    `validate_adjudicated` and `score_metrics._required_r1_routes` all derived "required
+    route" from RAW FRAME MEMBERSHIP. A census of 13,992 therefore made 15,372 human answers
+    a hard prerequisite for producing ANY metric, for a route A27.3 had already made
+    non-decision-bearing.
+
+    Read with A36.6: a repeat inherits its primary's REQUIRED routes, and "required" means
+    result-bearing. A route this predicate denies is NOT required, so it creates no human R1
+    arm and is NOT reported as NOT_EVALUABLE -- it is absent, not unevaluable.
+    """
+    return d_frame_census <= D_FRAME_REGION_BUDGET
+
 
 def canonical(obj) -> str:
     """One canonical serialization for every identity tuple. Tested, not assumed.

@@ -155,6 +155,18 @@ def synthetic_frame(
         "population": BF.P_HEAD,
         "region_size": SYNTHETIC_LINES_PER_REGION,
         "pages": [synthetic_page_frame(p + 1, c, d) for p, (c, d) in enumerate(memberships[:n_pages])],
+        # A48 -- the fixture must carry what `build_frames` really emits. `build_oracle` now
+        # reads the COMMITTED `counts["d_frame_census"]` to decide whether the D decision route
+        # is result-bearing (A27.3), and a fixture that omitted it would silently report a
+        # census of 0 -- always within budget, so the conditional could never be exercised.
+        # Derived from `memberships`, which is this fixture's own ground truth.
+        "counts": {"d_frame_census": sum(1 for c, d in memberships[:n_pages] if d)},
+        "d_frame_census": [
+            {"page_number": p + 1, "region_ordinal": 0}
+            for p, (c, d) in enumerate(memberships[:n_pages])
+            if d
+        ],
+        "d_frame_truncated": False,
         # A38.3/A38.5 -- the frame owns these; build_oracle takes them from here and nowhere else
         "architecture_occurrences": {
             arm: [

@@ -53,6 +53,8 @@ HERE = Path(__file__).resolve()
 EV = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 
+import methodology_contracts as MC  # noqa: E402
+
 SCHEMA = "architecture_decision/1"
 
 #: The metrics payload this decider is written against. A different schema REFUSES rather than
@@ -68,7 +70,12 @@ X_REGRESSES_MAX = 0
 
 #: A10 as unit-fixed by A27.3. The adjudication item is a REGION. `<= 60` -> the complete census
 #: is adjudicated and Rule 1 may be evaluated; `> 60` -> Rule 1 cannot choose X.
-D_FRAME_REGION_BUDGET = 60
+#:
+#: A48 -- RE-EXPORTED, NOT REDEFINED. The value now has one definition, in
+#: `methodology_contracts`, because the builder needs the same predicate to decide whether the
+#: D route is result-bearing at all. Two copies is precisely how `build_oracle` came to demand
+#: human answers for a census this module had already ruled Rule 1 ineligible on.
+D_FRAME_REGION_BUDGET = MC.D_FRAME_REGION_BUDGET
 
 #: A28.2's section 4.5 verdict that FAILS Rule 3. `LIMITED` explicitly does not fail it, and
 #: `GENERALISABLE` does not; only `INADEQUATE` is a blocker.

@@ -94,6 +94,25 @@ ADJUDICATION_NOT_NAMESPACED = "ADJUDICATION_NOT_NAMESPACED"
 C_FRAME_ROUTE = "ai"
 D_FRAME_ROUTE = "human"
 
+
+def frame_required_routes(frames, d_decision_required: bool) -> tuple:
+    """A36.4/A36.6's frame -> REQUIRED route map, conditioned by A27.3 (A48).
+
+    THE SINGLE OWNER. `score_metrics` calls this rather than restating it, exactly as it
+    already did for the constants, so the builder and the scorer cannot disagree about which
+    routes an R1 pair must be scored on.
+
+    `d_decision_required` is `MC.d_decision_route_required(realized D census)`. When it is
+    False the D route is not result-bearing, so D membership alone creates neither a human
+    decision requirement nor a human R1 arm. C is untouched: C -> AI always.
+    """
+    routes = set()
+    if C_FRAME in frames:
+        routes.add(C_FRAME_ROUTE)
+    if D_FRAME in frames and d_decision_required:
+        routes.add(D_FRAME_ROUTE)
+    return tuple(r for r in ROUTE_ORDER if r in routes)
+
 ROUTE_AI = "ai"
 ROUTE_HUMAN = "human"
 # Deterministic order, so a membership set can never serialize two ways.
@@ -413,6 +432,11 @@ class StimulusSpec:
     stratum: str
     is_r1_repeat: bool = False
     is_c_audit_selected: bool = False
+    #: A48 -- is the D DECISION route result-bearing for the realized census? Set once by
+    #: `build` from `MC.d_decision_route_required`, never per-document and never by a caller.
+    #: Defaults True so every existing construction keeps its pre-A48 meaning until `build`
+    #: conditions it on the census it actually realized.
+    d_decision_required: bool = True
     control_kind: str | None = None
     control_variant: str | None = None
     source_fixture_sha256: str | None = None
@@ -436,12 +460,7 @@ class StimulusSpec:
         This is what an R1 repeat inherits (A36.6). The audit is deliberately not here: it is a
         property of the primary presentation of a base identity, not of frame membership.
         """
-        routes = set()
-        if C_FRAME in self.frames:
-            routes.add(C_FRAME_ROUTE)
-        if D_FRAME in self.frames:
-            routes.add(D_FRAME_ROUTE)
-        return tuple(r for r in ROUTE_ORDER if r in routes)
+        return frame_required_routes(self.frames, self.d_decision_required)
 
     @property
     def is_control(self) -> bool:
@@ -474,7 +493,7 @@ class StimulusSpec:
         if self.is_control:
             return (PURPOSE_CONTROL_HUMAN,)
         purposes = []
-        if D_FRAME in self.frames:
+        if D_FRAME in self.frames and self.d_decision_required:
             purposes.append(PURPOSE_D_DECISION)
         if self.is_c_audit_selected:
             purposes.append(PURPOSE_C_AUDIT)
@@ -907,6 +926,20 @@ def build(
         assert_source_permitted(frame["document"], doc.get("pdf_path"))
         specs.extend(plan_document_stimuli(frame, doc.get("stratum", "UNSTRATIFIED")))
     specs.extend(controls or [])
+
+    # A48 -- CONDITION THE D DECISION ROUTE ON THE REALIZED CENSUS, once, here.
+    #
+    # The census is the COMMITTED per-document `counts["d_frame_census"]`, the same quantity
+    # `decide_architecture.d_frame_budget` reads, so the builder and the decider cannot be
+    # looking at different censuses. It is summed over the documents actually built, never
+    # over the specs: a spec set is post-audit and post-repeat, and A27.3's item is a region
+    # of the census enumerated BEFORE any sampling.
+    #
+    # Applied before `apply_c_audit` and `plan_r1_repeats` so repeats inherit it through
+    # `replace` rather than acquiring a route their primary does not have (A36.6).
+    d_census = sum(int((doc["frame"].get("counts") or {}).get("d_frame_census", 0)) for doc in documents)
+    d_required = MC.d_decision_route_required(d_census)
+    specs = [replace(s, d_decision_required=d_required) for s in specs]
     # A36.5 -- the audit is drawn over C base identities BEFORE repeats exist, and never sees
     # D membership. Repeats are added after, and do not inherit audit selection (A36.6).
     specs = apply_c_audit(specs, c_audit_size)
@@ -1020,6 +1053,12 @@ def build(
         "execution_boundary_state": execution_boundary_state(),
         "prompt_sha256": hashlib.sha256(question.encode()).hexdigest(),
         "n_stimuli": len(key_stimuli),
+        # A48 -- the realized census and the ONE predicate derived from it, recorded so a
+        # consumer reads the builder's own answer instead of re-deriving "required" from raw
+        # frame membership. `score_metrics` reads these; nothing recomputes the budget.
+        "d_frame_census": d_census,
+        "d_decision_route_required": d_required,
+        "d_decision_budget_owner": "methodology_contracts.d_decision_route_required (A27.3 / A48)",
         "frame_counts": frame_counts(key_stimuli),
         "stimuli": key_stimuli,
     }

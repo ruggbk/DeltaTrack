@@ -316,3 +316,127 @@ human-readable status; it may no longer decide it.
 **Redundancy removed.** The presence-only scorer control was replaced rather than kept
 alongside the new one: it proved only that `_require` fires, while the mutation that actually
 produced a mislabelled result was a nonempty wrong value. One control now covers both shapes.
+
+---
+
+## A48 — POST-BOUNDARY APPARATUS DEVIATION
+
+```json
+{"id": "A48", "kind": "DEVIATION",
+ "commits": [],
+ "classification": "POST-BOUNDARY APPARATUS DEVIATION",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "d_frame_census": 13992,
+  "oracle_route_composition": "ai_route 122 / human_route 15417 / c_audit 25 / controls 20",
+  "cross_engine": "17/17 measured, n_qualified 0, qualification_applies false",
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "files_touched": ["probes/methodology_contracts.py", "probes/build_oracle.py",
+                   "probes/score_metrics.py", "probes/decide_architecture.py",
+                   "probes/x21_build_oracle.py", "probes/x28_decide_architecture.py",
+                   "probes/x31_dframe_budget_routes.py"],
+ "why_not_an_amendment": "Made after the continuation boundary was committed, with the realized census and route composition already visible. PRE-EXECUTION-AMENDMENTS.md requires confirmatory_output_at_time == 'none' on every record and is the PRE-execution ledger."}
+```
+
+**This repair was made with the realized result in view, and says so.** The D census of
+13,992 and the full oracle route composition were already committed and visible when it was
+written. It is not a pre-execution amendment and is not recorded as one. A47 is unchanged.
+
+### A48.1 — the defect
+
+A27.3 fixes the D-frame budget: **≤ 60 regions** → human-adjudicate the complete census and
+Rule 1 may be evaluated; **> 60 regions** → **Rule 1 cannot choose X**, the outcome is
+`INSUFFICIENT_COMPARATIVE_EVIDENCE`, and a 60-region sample is permitted for **descriptive
+diagnosis only**.
+
+The budget had exactly one owner, `decide_architecture.D_FRAME_REGION_BUDGET`, applied at
+**decision step 4**. Every upstream component derived "required route" from **raw frame
+membership** instead:
+
+| site | behaviour |
+|---|---|
+| `build_oracle.StimulusSpec.frame_routes` | `D in frames` → human, unconditionally |
+| `human_answer_purposes` | `D in frames` → `PURPOSE_D_DECISION`, unconditionally |
+| `build_oracle.validate_adjudicated` | every route named in the key must have an answer |
+| `score_metrics.validate_inputs` | calls that validator **before any metric exists** |
+| `score_metrics._required_r1_routes` | a second frame→route implementation, same defect |
+
+So a census of 13,992 made **15,372** human answers a hard prerequisite for producing *any*
+metric, for a route A27.3 had already made non-decision-bearing. The evidence gate sat
+upstream of the rule that excused the evidence.
+
+**Measured before repair**, on real machinery with synthetic material at D = 61: dropping only
+the human answers whose sole purpose was the Rule 1 D decision produced
+`ADJUDICATION_ROUTE_MISSING`.
+
+### A48.2 — the reading, and the one owner
+
+Read with A36.6: a repeat inherits its primary's **required** routes, and "required" means
+**result-bearing**. A route A27.3 has made non-decision-bearing is therefore not required, it
+creates no human R1 arm, and it is **absent rather than `NOT_EVALUABLE`**.
+
+The budget and its predicate now have a single executable owner,
+`methodology_contracts.d_decision_route_required`, and the frame→route map has a single owner,
+`build_oracle.frame_required_routes`, which `score_metrics` calls rather than restating.
+`decide_architecture` **re-exports** the constant instead of redefining it. `build_oracle`
+reads the realized census from the same committed `counts["d_frame_census"]` the decider reads,
+so the two cannot be looking at different censuses.
+
+**Nothing else moves.** The numeric budget, D membership, the full census and its reporting, C
+membership and selection, C/D overlap, truth-source semantics, R1 selection identities and
+thresholds, C-audit selection, controls, metric definitions, Rule 0, Rule 1, Rule 3 and the
+decision ordering are untouched. The optional 60-region descriptive sample remains omitted.
+
+### A48.3 — realized consequence
+
+Derived from the already-committed real key, without opening any image:
+
+| | before | after |
+|---|---|---|
+| AI route | 122 | **122** |
+| human route | 15,417 | **45** (25 C-audit + 20 human-route controls) |
+| R1 required-route population | ai + human | **AI only, 6 pairs**; 1,395 D-only repeats require no route |
+
+### A48.4 — section 4.7 status
+
+A48 changes **which adjudication inputs are consumed**, so it is value-bearing for anything
+computed from that set. Its §4.7 status therefore travels with the same
+`NON-CONFIRMATORY` label A47 established for the A45-affected channel, and for the same reason:
+these are post-boundary apparatus deviations, not pre-execution amendments.
+
+**The final architecture outcome enum is invariant to A48.** Demonstrated executably over the
+real decider across all four Rule 0 states at D > 60: with R1 forced to PASS and to FAIL the
+outcome is identical in every state (`EXTENDED_BY_RULE_0_M9`, `HYBRID_BY_RULE_0_M9`, or
+`INSUFFICIENT_COMPARATIVE_EVIDENCE`). At D > 60 Rule 1 cannot choose X, so the enum is fixed by
+the committed M9 facts and the census alone. The decider was **not** reordered and no rule was
+changed to obtain this; it is a property of the frozen ordering.
+
+### A48.5 — the committed oracle key
+
+The key committed at `7afbc344` is semantically wrong in **private route metadata only**:
+`adjudication_routes`, `human_answer_purposes`, `n_human_tasks`, and the key-level
+`human_route` / `human_tasks` counts.
+
+**Proven by executable control**, building the same synthetic population twice with only the
+predicate differing: blind ID set, presentation order, canonical and base identities, R1 base
+identities, C/D membership, C-audit selection, repeat flags, bboxes, DPI, `png_sha256`,
+region–line bijection, image names, control kind and variant, `prompt_sha256`, **every PNG
+byte**, and the **entire blind artifact byte-for-byte** are identical. Only the three
+per-stimulus route fields and the two human counts differ.
+
+The real key was **not** regenerated and **not** hand-edited in this round.
+
+### A48.6 — an A47.12 regression found and fixed
+
+`x28_decide_architecture` could not run at all on `develop`: A47.12 made
+`confirmatory_status` a required, value-checked field on the cross-engine artifact, and x28's
+own fixture predated it, so the entire architecture-decider suite failed at input validation.
+Reproduced on clean `86e48de`. The fixture now carries the scorer's own constant. No decider
+rule was touched.

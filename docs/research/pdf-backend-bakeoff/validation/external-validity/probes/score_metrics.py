@@ -1062,20 +1062,18 @@ def _r1_status(numerator: int, denominator: int, threshold: float) -> dict:
     }
 
 
-def _frame_routes(frames) -> tuple:
-    """A36.4/A36.6's frozen frame -> route map: C -> AI, D -> human, C and D -> both.
+def _frame_routes(frames, d_decision_required: bool) -> tuple:
+    """A36.4/A36.6's frame -> REQUIRED route map, conditioned by A27.3 (A48).
 
-    Derived from `build_oracle`'s own constants rather than restated, so the two cannot drift.
+    Delegated to `build_oracle.frame_required_routes` rather than restated, for the reason the
+    previous spelling already gave about the constants: two copies drift. Before A48 this
+    function derived `human` from RAW D membership, so it demanded a human answer for every
+    D-frame R1 pair even when A27.3 had made that route non-decision-bearing.
     """
-    routes = set()
-    if _bo().C_FRAME in frames:
-        routes.add(_bo().C_FRAME_ROUTE)
-    if _bo().D_FRAME in frames:
-        routes.add(_bo().D_FRAME_ROUTE)
-    return tuple(r for r in _bo().ROUTE_ORDER if r in routes)
+    return _bo().frame_required_routes(frames, d_decision_required)
 
 
-def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bid: str) -> tuple:
+def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bid: str, d_decision_required: bool) -> tuple:
     """The routes an R1 pair MUST be scored on, enforced against A36.6 rather than declared.
 
     A36.6: "The repeat remains ONE canonical `r1-repeat` identity and INHERITS its primary's
@@ -1101,7 +1099,7 @@ def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bi
                 "primary_frames": primary.get("frames"),
             },
         )
-    expected = _frame_routes(repeat.get("frames") or [])
+    expected = _frame_routes(repeat.get("frames") or [], d_decision_required)
     if tuple(repeat.get("adjudication_routes") or ()) != expected:
         raise ScoreInputError(
             R1_ROUTE_SET_MISMATCH,
@@ -1115,7 +1113,8 @@ def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bi
     # The primary must at least carry its own frame routes; it may carry `human` on top when the
     # C audit drew it, which the repeat does not inherit.
     missing = [
-        r for r in _frame_routes(primary.get("frames") or []) if r not in (primary.get("adjudication_routes") or ())
+        r for r in _frame_routes(primary.get("frames") or [], d_decision_required)
+        if r not in (primary.get("adjudication_routes") or ())
     ]
     if missing:
         raise ScoreInputError(
@@ -1150,6 +1149,11 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
     NO SCALAR INPUT EXISTS. A PASS requires committed pair-level evidence, which is why the
     `r1_role_agreement` parameter was removed rather than defaulted.
     """
+    # A48 -- the builder's own answer, not a re-derivation. `.get(..., True)` keeps a
+    # pre-A48 key meaning exactly what it meant before, so an older artifact is not silently
+    # reinterpreted as having fewer required routes than it was built with.
+    d_required = key.get("d_decision_route_required", True)
+
     by_base = {}
     for bid, record in key["stimuli"].items():
         if record.get("control_kind") is not None or record.get("is_r1_repeat"):
@@ -1167,7 +1171,7 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
         # repeat's own declaration. A shortened repeat record plus a correspondingly shortened
         # answer set is internally coherent, so iterating what the repeat CLAIMS would let a
         # FAILING required route be deleted and the gate pass on the survivor.
-        required = _required_r1_routes(key["stimuli"][primary_bid], record, bid, primary_bid)
+        required = _required_r1_routes(key["stimuli"][primary_bid], record, bid, primary_bid, d_required)
         for route in required:
             if bid not in adjudicated.get(route, {}) or primary_bid not in adjudicated.get(route, {}):
                 raise ScoreInputError(
