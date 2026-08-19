@@ -52,6 +52,30 @@ not a field-for-field projection: it composes presentation from the contract. Th
 contract itself stays presentational-free, which is what lets one renderer family
 serve both pipelines and every output medium ([0007](0007-single-renderer.md)).
 
+**The document is a source format, optimal for no single consumer by design.** It
+carries what any consumer might need; each consumer takes the subset it wants and
+shapes it for its own reader. A person reads an HTML report, a language model reads a
+text export built for that purpose, other tooling reads the document itself. Every one
+of those is derived from the same document.
+
+**The fork happens downstream of the document, never upstream of it.** Deriving several
+artifacts from one document has a single source and cannot drift. Building two
+documents in parallel from one comparison and rendering part of a report from each is a
+second source of truth wearing the same shape, and the two diverge silently.
+
+**A consumer may derive by applying facts the document carries; it may not derive by
+re-inferring facts the document omits.** That line separates legitimate presentation
+work — composing a heading, laying out navigation, computing an inline word diff — from
+a consumer re-deciding a question the producer already settled. A consumer that parses
+rendered output to recover a structural fact is evidence the document omitted it.
+
+The document is therefore a superset rather than a minimum, and a bound follows:
+**carry facts the producer derived and would otherwise discard, not raw source
+material.** A parser's map from printed line to character offset is derived, used and
+currently dropped, and belongs in the document. Glyph geometry and font metrics are raw
+source and stay out. This is what keeps the contract presentation-free while letting a
+view be a pure consumer of it.
+
 Producers are expected to emit schema-valid documents and are tested against the
 schema. The schema defines validity; the DeltaTrack reader carries explicit
 compatibility guards but is not a general schema validator, so "invalid" is a
@@ -69,11 +93,11 @@ A `Change` carries exactly one exported money field, `amount_entries`.
 - **The obsolete changed-only money field is absent from the contract**, rather than
   retained beside `amount_entries` with prose declaring a winner. Two plausible
   machine-readable authorities for the same concept, one of them structurally
-  incomplete, is a correctness bug rather than untidiness: the report ships prompts
-  telling a staffer to hand `diff.json` to an AI assistant, and a machine holding only
-  the exported artifact cannot read this repository's documentation to learn which
-  field wins. Reading the incomplete one would answer questions about a bill's
-  appropriations while seeing a fraction of them — confidently, with every newly
+  incomplete, is a correctness bug rather than untidiness: the report directs a staffer
+  to hand an exported diff to an AI assistant, and a machine holding only that artifact
+  cannot read this repository's documentation to learn which field wins. Reading the
+  incomplete one would answer questions about a bill's appropriations while seeing a
+  fraction of them — confidently, with every newly
   funded or wholly defunded program invisible, and those are usually the changes a
   staffer most wants. The schema forbids the legacy field outright.
 - **Entries are self-describing**, distinguishing `changed`, `added` and `removed`, and
@@ -131,7 +155,9 @@ case so the probe cannot pass by rejecting everything.
 - One renderer family serves both input pipelines and every output medium, because
   they all meet at this shape. This is the enabler for the single-renderer decision.
 - The self-contained offline HTML report and the "hand the diff to an internal LLM as
-  an attachment" use case both fall out for free.
+  an attachment" use case both fall out for free. The second is served by an artifact
+  shaped for that reader and derived from this document, not by handing over the
+  document itself, which carries structure a model pays context for and cannot use.
 - The document repeats some information on purpose — the section number also appears
   in the breadcrumb path, and the full bill text is carried alongside the individual
   change fragments. That repetition keeps the file self-contained and is fine for a
