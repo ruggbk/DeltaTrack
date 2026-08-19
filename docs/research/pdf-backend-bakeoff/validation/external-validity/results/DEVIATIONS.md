@@ -323,7 +323,7 @@ produced a mislabelled result was a nonempty wrong value. One control now covers
 
 ```json
 {"id": "A48", "kind": "DEVIATION",
- "commits": ["aa0f4b05"],
+ "commits": ["aa0f4b05", "66d8b8b4"],
  "classification": "POST-BOUNDARY APPARATUS DEVIATION",
  "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
  "results_already_visible": {
@@ -341,7 +341,8 @@ produced a mislabelled result was a nonempty wrong value. One control now covers
  "files_touched": ["probes/methodology_contracts.py", "probes/build_oracle.py",
                    "probes/score_metrics.py", "probes/decide_architecture.py",
                    "probes/x21_build_oracle.py", "probes/x28_decide_architecture.py",
-                   "probes/x31_dframe_budget_routes.py"],
+                   "probes/x31_dframe_budget_routes.py",
+                   "probes/x27_score_metrics.py"],
  "why_not_an_amendment": "Made after the continuation boundary was committed, with the realized census and route composition already visible. PRE-EXECUTION-AMENDMENTS.md requires confirmatory_output_at_time == 'none' on every record and is the PRE-execution ledger."}
 ```
 
