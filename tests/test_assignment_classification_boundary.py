@@ -20,13 +20,12 @@ correspondence_cutoff`` catches exactly one regression: someone re-inlining the 
 correspondence and satisfy it. It is kept because it names the offending line, and because
 it costs nothing -- not because it establishes the architecture.
 
-**Retired in #659: the transcriptions and everything that consumed them.** This module used
-to carry ``legacy_pairing_was_revoked`` -- the pre-refactor revocation decision as it stood at
-``97f91ba`` -- and a transcription of the whole pre-slice-2 pipeline from the pairing seam
-onward (``legacy_change_records``, ``legacy_candidates``, ``legacy_selected_links``,
-``legacy_reconciled``, ``legacy_pipeline``), together with the corpus comparisons of change
-records, retrieved population, ordering key and selected links against them, and the guards
-that kept the transcriptions independent of the stages they checked.
+**Retired in #659: the transcriptions and everything that consumed them.** This module used to
+carry the pre-refactor revocation decision as it stood at ``97f91ba``, and a transcription of
+the whole pre-slice-2 pipeline from the pairing seam onward -- change records, filtered sides,
+move candidates, selected links, reconciliation -- together with the corpus comparisons run
+against them and the guards that kept them independent of the stages they checked. The commit
+that removed them names each one.
 
 They answered whether the extraction preserved behaviour. That question is closed, and after a
 legitimate change to matching policy the comparisons fail by construction -- keeping them means
@@ -92,31 +91,6 @@ from deltatrack.similarity import (
 from tests.corpus_paths import fixture_path
 
 _DIFF_BILL_SOURCE = Path(diff_bill.__file__)
-
-
-# --- The oracle: the rule as it stood before the extraction --------------------------
-
-
-# --- The slice-2 oracle: the whole pre-slice pipeline from the pairing seam onward -----
-#
-# Transcribed from `src/deltatrack/diff_bill.py` at `58816c1`, the base this slice was cut
-# from, where `diff_bills` ran a four-branch classification loop and then called
-# `reconcile_moves` over its output. The matching source at that commit is byte-identical to
-# `422ad69`, the SHA the audit was performed at.
-#
-# Independent by construction, and for the same reason `legacy_pairing_was_revoked` is: an
-# oracle that asked the new stages what they do could not detect that the extraction changed
-# them, which is the one failure this slice can actually have. So none of the functions below
-# may call `unmatched_population`, `retrieve_move_candidates`, `move_correspondence_evidence`,
-# `assign_moves`, `settle_correspondences` or `classify`, production must never import them,
-# and `test_the_slice_2_oracle_is_independent_of_the_new_stages` enforces the first half by
-# reading this module's own AST.
-#
-# It composes the same leaf primitives deliberately (`diff_text`, `move_candidates`,
-# `amount_text`, `NodeDiff`): what it guards is the COMPOSITION -- a dropped branch, an
-# inverted comparison, a reordered append, the wrong field on a rebuilt record. `_normalize_text`
-# is transcribed rather than imported because it is one line and the composition includes which
-# text gets normalized.
 
 
 # --- Reading the migrated stages, one intermediate at a time ---------------------------

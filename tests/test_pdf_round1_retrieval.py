@@ -21,7 +21,7 @@ Preservation of the population itself stays with the gates that already own it: 
 canonical baseline and gate 6's crossing fixture for the positional rule.
 
 **Retired in #659: the transcribed opcode walk.** Membership and provenance used to be compared
-against ``legacy_considered_pairs``, a transcription of the pre-slice-7 aligner. That answered
+against a transcription of the pre-slice-7 aligner's opcode walk. That answered
 whether slice 7 preserved behaviour -- a closed question -- and could not survive a deliberate
 change to PDF round-1 retrieval without someone re-transcribing a new "before".
 

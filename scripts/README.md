@@ -25,7 +25,7 @@ root.
 > candidates, provenance) survived that change, so their numbers describe the current engine and
 > are worth re-running. Read [ADR 0020](../docs/decisions/0020-matching-stages.md) and
 > [docs/architecture.md](../docs/architecture.md) for the architecture they informed; the round-1
-> stages are bound by `tests/test_round1_preservation.py`.
+> stages are bound by `tests/test_round1_stages.py`.
 
 Whether the move-assignment pass could be extracted as its own [ADR 0020](../docs/decisions/0020-matching-stages.md)
 stage turned on what the code measurably did. These are the probes behind that.

@@ -24,8 +24,8 @@ The three gates, and the mutation each is falsified by:
 ``test_greedy_*``           round-2 competition and exclusivity.
                             Falsified by four separate mutations, one at a time.
 
-**Retired in #659: the two transcribed rules and their corpus sweeps.** ``legacy_is_moved``
-and the corpus-wide comparisons of both rules against every committed hunk are gone, together
+**Retired in #659: the two transcribed rules and their corpus sweeps.** The transcribed move
+rule and the corpus-wide comparisons of both rules against every committed hunk are gone, together
 with ``test_the_transcribed_rules_can_fail``. They pinned the rules as they stood so that later
 slices had something to be behaviour-preserving against; that question is closed, and a
 transcription cannot survive a deliberate change to either cutoff without being rewritten to

@@ -191,7 +191,7 @@ jobs:
           tests/test_pdf_round2_stages.py
           tests/test_matching_contracts.py
           tests/test_assignment_classification_boundary.py
-          tests/test_round1_preservation.py
+          tests/test_round1_stages.py
           tests/test_round1_pairing_sentinel.py
 
   # Packaging gate: build wheel, install in clean env, run diff from outside checkout.

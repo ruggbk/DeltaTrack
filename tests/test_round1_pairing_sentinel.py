@@ -18,10 +18,10 @@ structural counts, no ``element_id`` projection.
 
 ## Why a digest of correspondence rather than a transcription of the matcher
 
-It replaces ``tests/data/round1_legacy_trace.json``, which pinned round 1 against a
-transcription of the pre-ADR-0020 implementation (#659). That artifact answered a closed
-question -- did the extraction preserve behaviour -- and could not survive a deliberate
-matching-policy change without someone re-transcribing a new "before" implementation.
+It replaces the frozen legacy trace retired in #659, which pinned round 1 against a
+transcription of the pre-ADR-0020 implementation. That artifact answered a closed question --
+did the extraction preserve behaviour -- and could not survive a deliberate matching-policy
+change without someone re-transcribing a new "before" implementation.
 
 What is recorded here is *which observations correspond*, addressed by ADR 0019 ordinal. It
 names no internal symbol, so renames, stage reshuffles and internal restructuring cannot

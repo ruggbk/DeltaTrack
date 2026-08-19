@@ -318,7 +318,7 @@ def retrieve_cross_division_population(
     **The concatenation order is load-bearing.** Both lists arrive in division-traversal order,
     mixing observations a one-sided division contributed with observations round 1a's assignment
     declined, and that sequence is this invocation's local index space. It is NOT sorted, and it
-    is not in parser-ordinal order in general: ``tests/test_round1_preservation.py`` constructs
+    is not in parser-ordinal order in general: ``tests/test_round1_stages.py`` constructs
     a group whose fallback population addresses ``[2, 1]``.
     """
     if not unmatched_old or not unmatched_new:
@@ -594,7 +594,7 @@ def assign_group(
     no normalization, no ``text_similarity``, no ``diff_text``, no ``Proposal.score``. Hand it
     evidence that disagrees with what recomputing the texts would say and it follows the
     evidence; that is what makes the boundary a fact rather than a comment, and
-    ``tests/test_round1_preservation.py`` bombs ``text_similarity`` while driving it to prove it.
+    ``tests/test_round1_stages.py`` bombs ``text_similarity`` while driving it to prove it.
 
     **There is no threshold here, and adding one would change matching policy.** The fused
     matcher's greedy claim was unthresholded: a 0.01 pairing wins its group if it is the best
@@ -882,7 +882,7 @@ def match_nodes_with_stage_outputs(
     assignment, whether it collides or not: B3 brought the unique path under the same four
     stages, so no pairing reaches the stream from a tuple construction. A one-sided group
     contributes no assignment because it forms no pair -- there is nothing to decide.
-    ``tests/test_round1_preservation.py`` binds both halves.
+    ``tests/test_round1_stages.py`` binds both halves.
 
     ``registry`` is accepted so a caller that already built one does not build a second; when
     omitted it is derived from the two complete node sequences.

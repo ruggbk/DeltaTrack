@@ -104,8 +104,9 @@ group competition: `apply_similarity_assignment_rule` is a separate, later assig
 owns the only round-1 threshold, and folding the two together would delete a composition while
 leaving both names in place.
 
-The stages are pinned by `tests/test_round1_preservation.py` against a frozen trace generated
-from an independent transcription of the pre-refactor matcher.
+The stages' invariants are bound by `tests/test_round1_stages.py`, and the correspondence they
+produce by `tests/test_round1_pairing_sentinel.py`, which pins one digest per committed version
+pair over the ordered pairing stream.
 
 **The PDF path runs the same four stages, and reached them separately.** It has its own retrieval,
 evidence, assignment and classification stages in `diff_pdf.py`, its own byte-identity gate

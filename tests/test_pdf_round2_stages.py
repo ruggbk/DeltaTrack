@@ -78,9 +78,11 @@ def round1_stream(old_blocks: list[_Block], new_blocks: list[_Block], registry: 
 
     The production side of every comparison below. Slice 5 split what used to be one call into
     align -> evidence -> revoke, so this runs the three in order rather than each test
-    re-spelling them. It is **not** an oracle and must never become one: the thing being
-    compared against is ``legacy_hunks_before_round2``, which is transcribed independently and
-    calls none of this.
+    re-spelling them.
+
+    It used to be the production half of a comparison against a transcription of the pre-slice-4
+    pipeline, retired in #659. The tests that read it now assert ADR 0019 addressing and the
+    corpus floor, so it is a driver rather than one side of an oracle comparison.
     """
     provisional, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
     evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
