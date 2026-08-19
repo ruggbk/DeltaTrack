@@ -102,6 +102,8 @@ def _bo():
 
 FRAMES_NOT_A_SEQUENCE = "FRAMES_NOT_A_SEQUENCE"
 MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
+#: A47.12 -- present but NOT the section 4.7 required value.
+WRONG_CONFIRMATORY_STATUS = "WRONG_CONFIRMATORY_STATUS"
 DUPLICATE_DOCUMENT_IDENTITY = "DUPLICATE_DOCUMENT_IDENTITY"
 UNKNOWN_POPULATION = "UNKNOWN_POPULATION"
 UNKNOWN_LINE_STATE = "UNKNOWN_LINE_STATE"
@@ -165,6 +167,11 @@ NOT_REPORTABLE_S1_DEAD = "NOT_REPORTABLE_S1_DEAD"
 
 #: I13's reporting qualification. Never blocks -- A27.6 keeps x09 out of the gate vector.
 PDFIUM_CONDITIONED_FRAME = "PDFIUM-CONDITIONED FRAME"
+
+#: A47.12 -- the section 4.7 status every A45-dependent result MUST carry. A REQUIREMENT the
+#: cross-engine artifact is validated against, never a value it supplies. Held independently of
+#: `continuation_provenance` because the allowlist forbids importing it; x30 asserts they agree.
+REQUIRED_CONFIRMATORY_STATUS = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A45 post-boundary deviation)"
 
 #: A24.2 / section 6 line states `build_frames` can commit. An unknown state REFUSES rather
 #: than falling through to "not BOTH_ABSENT", which would silently enlarge the M0 risk set.
@@ -333,6 +340,19 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
     # say what its section 4.7 status is must not be scorable at all -- a `.get()` default
     # here would let a provenance-less artifact through as though it were confirmatory.
     _require(inputs.cross_engine, ("per_document", "confirmatory_status"), "cross-engine control")
+    # ...and the VALUE must be the required one, not merely present. Presence alone let a
+    # cross-engine artifact carrying a fabricated "CONFIRMATORY" score cleanly, because every
+    # layer read the status from the same authority that supplied it. The expected value is a
+    # constant HERE, deliberately independent of the artifact and of the continuation record:
+    # the scorer's frozen consumer allowlist forbids importing the provenance module, and an
+    # expectation imported from the thing under test would not be an expectation at all.
+    # `x30` asserts this constant still equals `continuation_provenance.NON_CONFIRMATORY`, so
+    # the two cannot drift apart silently.
+    got = inputs.cross_engine["confirmatory_status"]
+    if got != REQUIRED_CONFIRMATORY_STATUS:
+        raise ScoreInputError(
+            WRONG_CONFIRMATORY_STATUS, {"got": got, "required": REQUIRED_CONFIRMATORY_STATUS}
+        )
     # EXACT SET EQUALITY, not containment, and it is checked HERE -- before `qualification` runs.
     #
     # I13's consequence is a COUNT over documents ("failure on more than a third of sampled

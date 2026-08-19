@@ -255,6 +255,14 @@ def continuation_state() -> tuple[dict | None, bool, str]:
 
     # ...and the historical boundary it claims must be the pinned one. Without this the record
     # is the ONLY witness to its own most load-bearing field.
+    # ...and the section 4.7 status it claims must be the REQUIRED one. 4.7 makes
+    # NON-CONFIRMATORY a requirement A45-dependent results are validated against, so a record
+    # that simply asserts a different status is not describing a lawful continuation at all.
+    try:
+        CP.a45_status(rec)
+    except Exception as exc:  # noqa: BLE001 -- a record that mis-states its own 4.7 status
+        return rec, False, f"continuation record's A45 status is not the required one: {exc}"
+
     claimed = CP.prior_boundary(rec)
     if claimed != PRIOR_EXECUTION_BOUNDARY:
         return rec, False, (
@@ -933,9 +941,11 @@ def g7_toolchain() -> tuple[str, bool, str]:
         but `pyproject.toml` only floors it at `>=5.12.1`, so the lock is what binds.
       * PyMuPDF renders the oracle stimuli that adjudication reads, AND the cross-engine
         control re-measures through it to decide the PDFIUM-CONDITIONED FRAME qualification.
-        It appears in NEITHER `pyproject.toml` NOR `uv.lock` -- an ambient, unpinned,
-        result-bearing dependency, which is why a version read at gate time is the only
-        thing that can see drift in it at all.
+        It was declared in NEITHER `pyproject.toml` NOR `uv.lock` when this gate was written,
+        so it was an ambient, unpinned, result-bearing dependency. A47.11 declared it
+        (`[dependency-groups].dev`, `pymupdf==1.28.2`, locked); this gate still reads the
+        version at gate time, because a declaration binds `uv run` and not an interpreter
+        someone invokes around it.
 
     Versions come from DISTRIBUTION METADATA, not module attributes: `pypdfium2` exposes no
     usable `__version__`, so an attribute probe returns "" and reports drift against every

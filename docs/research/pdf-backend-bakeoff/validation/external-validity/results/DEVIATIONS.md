@@ -273,3 +273,46 @@ The 193/194 previously reported for that suite was an artifact of an ad-hoc inte
 lacked the declared environment; the failing control is the renderer-free child-interpreter
 probe, which cannot be meaningful in an environment that was never constituted correctly. No
 x27 control was edited to achieve this.
+
+### A47.12 — the §4.7 status was self-supplied, and is now an invariant
+
+**The defect.** §4.7 makes NON-CONFIRMATORY a **requirement** that A45-dependent results are
+validated against. The machinery instead treated it as a **value the study supplied**:
+`CONTINUATION.json` carried the status, `a45_status()` returned that field verbatim, the
+cross-engine producer stamped whatever came back, the scorer required only that the field
+**exist**, and x30 took its expected value from the same record. Authority, result and oracle
+could therefore move together.
+
+**Measured before repair**, with the record's status changed to `"CONFIRMATORY"` and treated
+as committed. All five steps failed open:
+
+| step | as found |
+|---|---|
+| A `continuation_state()` / F12 | **GREEN** |
+| B `a45_status()` | returned **`CONFIRMATORY`** |
+| C real cross-engine producer | **stamped `CONFIRMATORY`** into an artifact |
+| D `score_metrics` | **accepted it**; the scored row carried `qualification_status='CONFIRMATORY'` |
+| E x30 oracle | **would have moved with the record** |
+
+A post-boundary deviation would have been reported as confirmatory with every gate green.
+
+**Repair, at four boundaries, each independent of the record.**
+
+| boundary | what now holds |
+|---|---|
+| accessor | `a45_status()` **validates** the claim against `NON_CONFIRMATORY` and returns the **constant**, raising `A45_STATUS_MISMATCH` otherwise |
+| authority | `continuation_state()` calls it, so a record claiming another status **fails F12** |
+| producer | stamps through the accessor, so it **cannot emit** a fabricated status |
+| scorer | `WRONG_CONFIRMATORY_STATUS` refuses a **present but incorrect** value, not only a missing one |
+
+The scorer holds its own constant, `REQUIRED_CONFIRMATORY_STATUS`, because its frozen consumer
+allowlist forbids importing the provenance module, and an expectation imported from the thing
+under test is not an expectation. x30 asserts the two constants agree so they cannot drift.
+
+**Post-repair, the same mutation is closed at every step:** F12 fails, the accessor raises, the
+producer writes no artifact, and the scorer refuses. The record may still carry the
+human-readable status; it may no longer decide it.
+
+**Redundancy removed.** The presence-only scorer control was replaced rather than kept
+alongside the new one: it proved only that `_require` fires, while the mutation that actually
+produced a mislabelled result was a nonempty wrong value. One control now covers both shapes.

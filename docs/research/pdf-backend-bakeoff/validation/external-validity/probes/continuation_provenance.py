@@ -46,6 +46,7 @@ SCHEMA = "continuation/1"
 # the deviation register exists to record.
 NON_CONFIRMATORY = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A45 post-boundary deviation)"
 
+A45_STATUS_MISMATCH = "A45_STATUS_MISMATCH"
 CONTINUATION_RECORD_MISSING = "CONTINUATION_RECORD_MISSING"
 CONTINUATION_RECORD_MALFORMED = "CONTINUATION_RECORD_MALFORMED"
 
@@ -114,8 +115,24 @@ def exposure_summary(rec: dict) -> str:
 
 
 def a45_status(rec: dict) -> str:
-    """The 4.7 status for results VALUE-DEPENDENT on A45."""
-    return rec.get("a45", {}).get("confirmatory_status", NON_CONFIRMATORY)
+    """The 4.7 status for results VALUE-DEPENDENT on A45, VALIDATED then returned.
+
+    THIS MUST NOT BE A PASS-THROUGH, and it was one. Section 4.7 makes NON-CONFIRMATORY a
+    REQUIREMENT that A45-dependent results are validated against, not a value the study gets
+    to choose. Returning `rec["a45"]["confirmatory_status"]` verbatim made the continuation
+    record the author of its own compliance: the authority, the stamped artifact, the scored
+    row and the test oracle all read the same mutable field, so they moved together and a
+    record saying "CONFIRMATORY" produced a scored row saying "CONFIRMATORY" with every gate
+    green. Measured end to end before this was closed.
+
+    So the record's copy is CHECKED against the module constant and the CONSTANT is what is
+    returned. A record may still carry the human-readable status for a reader; it may not
+    decide it.
+    """
+    claimed = rec.get("a45", {}).get("confirmatory_status")
+    if claimed != NON_CONFIRMATORY:
+        raise ContinuationError(A45_STATUS_MISMATCH, {"claimed": claimed, "required": NON_CONFIRMATORY})
+    return NON_CONFIRMATORY
 
 
 def continuation_claim(rec: dict) -> dict:

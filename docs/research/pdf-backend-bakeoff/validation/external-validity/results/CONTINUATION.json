@@ -4,17 +4,14 @@
  "classification": "POST-BOUNDARY CONTINUATION / DEVIATION RULING",
  "ruling_document": "results/DEVIATIONS.md",
  "why_not_an_amendment": "PRE-EXECUTION-AMENDMENTS.md is the PRE-execution ledger. x04.parse_amendments requires every record there to carry confirmatory_output_at_time == 'none'; a truthful post-boundary record cannot satisfy that without asserting a falsehood. PRE-REGISTRATION sections 4.7 and 11 already designate results/DEVIATIONS.md as the post-execution register, and F9_IGNORE already exempts it.",
-
  "population": {
   "population_freeze_commit": "4e2b520d993167fc4e2836ffa3f63f1a4de3d759",
   "membership_blob": "d2731d6a18137970cf363c1d2231e0eaf4bee926",
   "n_members": 17
  },
-
  "population_status": "EXPOSED",
  "continuation_claim": "COMPLETION OF THE INAUGURAL EXECUTION",
  "prohibited_claim": "a fresh, pristine, independent confirmatory execution over an unseen holdout",
-
  "prior_execution": {
   "run": 1,
   "boundary_commit": "89360b30de480231efdc89157443779d45b37db2",
@@ -30,12 +27,10 @@
    "contained_ref": "refs/heads/worktree-pdf-study-confirmatory-run",
    "prerequisite": "517d47d5d0321f6d7cc621bed3ea75cadee3d444"
   },
-
   "hx_extraction_performed": true,
   "hx_extraction_owner": "execute_study.build_document_frame_for -> run_hybrid.run (H) and run_extended.run (X)",
   "members_extracted": 17,
   "pages_extracted": 4190,
-
   "visible_results": {
    "d_frame_census_regions": 13992,
    "d_frame_budget": 60,
@@ -46,7 +41,6 @@
    "p_head_pages": 2864,
    "frames_sha256": "e33d9f7955b61af32f6dfd24f1d0a91368ef1aa5f701a7a24db95cc80ec91706"
   },
-
   "stopped_before": [
    "canonical cross_engine_control.json",
    "score_metrics / metrics.json",
@@ -57,7 +51,6 @@
   ],
   "failure_classification": "APPARATUS FAILURE / INCOMPLETE CONFIRMATORY EXECUTION"
  },
-
  "a45": {
   "status": "CLOSED -- the repair itself is not reopened",
   "character": "POST-BOUNDARY RESULT-BEARING APPARATUS REPAIR (deviation, not a pre-execution amendment)",
@@ -80,9 +73,9 @@
    "denominators": "the cross-engine artifact is exact-set-equality checked against the scored frames; it does not change the frames denominator",
    "population": "membership unchanged at 17"
   },
-  "availability_vs_value": "Without A45 score_metrics cannot run at all, so every score is ENABLED by A45. Only the qualification channel is VALUED by it. Section 4.7 labelling follows value dependence, not availability, which is why results are not globally re-labelled."
+  "availability_vs_value": "Without A45 score_metrics cannot run at all, so every score is ENABLED by A45. Only the qualification channel is VALUED by it. Section 4.7 labelling follows value dependence, not availability, which is why results are not globally re-labelled.",
+  "confirmatory_status_is_a_requirement": "The value here is HUMAN-READABLE ONLY. continuation_provenance.NON_CONFIRMATORY is the authority and score_metrics.REQUIRED_CONFIRMATORY_STATUS is the scorer's independent copy; this field is CHECKED against them and cannot decide the status. Before A47.12 it was read verbatim, so a record saying CONFIRMATORY produced a scored row saying CONFIRMATORY."
  },
-
  "a46": {
   "status": "CLOSED",
   "disclosed_chronologically": true,
@@ -91,15 +84,20 @@
   "confirmatory_consequence": "NONE ASSIGNED",
   "why_no_consequence": "No causal path was found from the cleanup to any reported quantity, gate, population, architecture decision, or reproducibility property. The two removed probes (x06_m6_feasibility, x19_raster_edge_diagnostic) own no live invariant: M6 was STRUCK by A20, and x19 states no pass threshold. Every removed evidence artifact was re-run and rewrote byte-identically before deletion. G5's surface remains 15 files with no member touched."
  },
-
  "toolchain": {
   "note": "Run 1's byte-identical rebuild claim is scoped to these exact versions. Drift is result-bearing for the oracle renderer and for the cross-engine qualification, both of which render or re-measure through PyMuPDF.",
   "platform": "macOS/arm64",
   "python": "3.12.12",
   "pypdfium2": "5.12.1",
   "pymupdf": "1.28.2",
-  "enforcement_finding": "NOT SUFFICIENTLY ENFORCED. pypdfium2 is pinned exactly in uv.lock (and floored at >=5.12.1 in pyproject.toml). pymupdf is declared in NEITHER pyproject.toml NOR uv.lock, yet is imported by 9 study probes including two on the G5 result-bearing surface (cross_engine_control.py, control_fixtures.py). VERIFIED: a clean `uv sync` does not install it, and `uv run python probes/x27_score_metrics.py` fails with ModuleNotFoundError: No module named 'pymupdf'. The study's result-bearing probes are therefore not runnable in the project's declared environment; Run 1 used an ambient interpreter.",
-  "recommendation_not_implemented": "Declaring pymupdf==1.28.2 in pyproject.toml and uv.lock is the durable fix, but it changes repository-wide dependency management outside the study tree and was left to the reviewer. G7 provides DETECTION, which is what this slice was scoped to.",
-  "enforced_by": "G7 (x04) -- reads the versions above and compares against the live interpreter and installed packages"
+  "enforcement_finding": "REPAIRED. AS FOUND: pymupdf was declared in NEITHER pyproject.toml NOR uv.lock while nine study probes imported it, two on the G5 result-bearing surface (cross_engine_control.py, control_fixtures.py); a clean `uv sync` did not install it and `uv run python probes/x27_score_metrics.py` failed with ModuleNotFoundError, so Run 1 used an ambient interpreter. AS NOW: pymupdf==1.28.2 is declared in [dependency-groups].dev, present in uv.lock, and enforced exactly by G7. pypdfium2 remains pinned at 5.12.1 in uv.lock (floored at >=5.12.1 in pyproject.toml).",
+  "enforced_by": "G7 (x04) -- reads the versions above and compares against the live interpreter and installed packages",
+  "repair": {
+   "pyproject": "[dependency-groups].dev -> pymupdf==1.28.2 (exact pin)",
+   "uv_lock": "pymupdf 1.28.2 entry added by `uv lock`",
+   "not_in_engine_dependencies": "deliberate -- the published engine must not gain a second PDF engine (#367)",
+   "enforced_by": "x04 G7 exact-version assertion, unchanged by the repair",
+   "verified": "clean `uv sync` installs it; metadata reports 1.28.2; the previously failing `uv run python probes/x27_score_metrics.py` now runs to 194/194"
+  }
  }
 }

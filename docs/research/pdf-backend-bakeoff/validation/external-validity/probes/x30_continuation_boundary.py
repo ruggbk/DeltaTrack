@@ -36,9 +36,9 @@ E. The continuation marker is TRUTHFUL.
    literal key in the marker dict would silently cause.
 
 F. G7 sees a result-bearing toolchain change.
-   Preserves: PyMuPDF is unpinned in both pyproject.toml and uv.lock while rendering oracle
-   stimuli and deciding the cross-engine qualification, so a version read at gate time is
-   the only thing that can see drift in it.
+   Preserves: PyMuPDF renders the oracle stimuli and decides the cross-engine qualification.
+   It is now declared and pinned (A47.11), but a declaration binds `uv run` and not an
+   interpreter invoked around it, so the gate-time version read still does real work.
    Mutation: a version bump that the gate reports as green.
 
 G. UNDER-LABELLING: every A45-affected surface carries the 4.7 status.
@@ -283,7 +283,12 @@ def part_labelling(results, payload_builder):
     payload = payload_builder()
     document = next(iter(payload["per_document"]))
     surfaces = _surfaces(payload, document)
-    status = CP.a45_status(CP.load())
+    # THE ORACLE IS THE CODE CONSTANT, not `a45_status(load())`. Reading the expected value
+    # from the same record the artifact was stamped from is how this control read green while a
+    # fabricated "CONFIRMATORY" flowed all the way into a scored row: the authority, the result
+    # and the oracle all moved together. Section 4.7 is a REQUIREMENT, so the expectation must
+    # be independent of the thing under test.
+    status = CP.NON_CONFIRMATORY
 
     check(
         results,
@@ -308,25 +313,37 @@ def part_labelling(results, payload_builder):
         f"{sum(1 for s in suppressed if s.get('qualification_status') == status)}/{len(suppressed)} still labelled",
     )
 
-    # G -- the scorer REFUSES a cross-engine artifact with no provenance, rather than reading
-    # it as confirmatory. This is what makes the status non-optional at the boundary of the
-    # scorer, given the scorer may not consult the continuation record itself.
+    # G -- the scorer refuses BOTH shapes of bad provenance. Merged into one control: the
+    # missing-field case alone proved only that `_require` fires, and said nothing about a
+    # nonempty but WRONG status, which is the shape that actually produced a mislabelled
+    # result. Two separate controls would fail on different mutations but cost two things to
+    # maintain for one property, so the older presence-only arm is gone.
     import x27_score_metrics as X27
 
-    frames = [X27.frame([X27.page_input(1)])]
-    docs = [f["document"] for f in frames]
-    try:
-        SM.score(X27.inputs(frames, cross_engine=X27.cross_engine_artifact(docs, confirmatory_status=None)))
-        refused, why = False, "accepted an artifact carrying no confirmatory_status"
-    except Exception as exc:  # noqa: BLE001
-        refused, why = True, f"{type(exc).__name__}: {exc}"
     check(
         results,
-        "G a cross-engine artifact with NO confirmatory_status is REFUSED by the scorer",
-        refused,
-        "a provenance-less artifact must not be scorable; a .get() default would read it as confirmatory",
-        why,
+        "G the scorer's required status is INDEPENDENT of the provenance module's constant",
+        SM.REQUIRED_CONFIRMATORY_STATUS == CP.NON_CONFIRMATORY,
+        "two constants held separately (the allowlist forbids the scorer importing CP) must "
+        "not drift apart silently",
+        SM.REQUIRED_CONFIRMATORY_STATUS,
     )
+    frames = [X27.frame([X27.page_input(1)])]
+    docs = [f["document"] for f in frames]
+    for label, bad in (("MISSING", None), ("WRONG (nonempty)", "CONFIRMATORY")):
+        ce = X27.cross_engine_artifact(docs, confirmatory_status=bad)
+        try:
+            SM.score(X27.inputs(frames, cross_engine=ce))
+            refused, why = False, f"ACCEPTED an artifact whose status was {bad!r}"
+        except Exception as exc:  # noqa: BLE001
+            refused, why = True, f"{type(exc).__name__}: {exc}"
+        check(
+            results,
+            f"G a cross-engine artifact with a {label} confirmatory_status is REFUSED",
+            refused,
+            "section 4.7 status is validated against a requirement, never accepted as supplied",
+            why,
+        )
 
     # H -- OVER-LABELLING. Surfaces with no A45 dependency must stay clean.
     unaffected = [payload["adequacy_4_5"], payload["s1"]]
@@ -414,6 +431,60 @@ def part_identity_anchor(results):
         X04.CONTINUATION.write_text(saved)
 
 
+def part_status_invariant(results):
+    """J: a committed record claiming a WRONG 4.7 status cannot authorize or produce.
+
+    The measured false-green this closes: with the status read verbatim from the record,
+    `confirmatory_status = "CONFIRMATORY"` left F12 GREEN, made `a45_status` return the
+    fabricated value, let the REAL cross-engine producer stamp it into an artifact, and
+    produced a scored row reading "CONFIRMATORY" -- while the test oracle moved with it.
+    """
+    saved = X04.CONTINUATION.read_text()
+    real_committed = X04.committed
+    X04.committed = lambda path: True
+    try:
+        m = json.loads(saved)
+        m["a45"]["confirmatory_status"] = "CONFIRMATORY"
+        X04.CONTINUATION.write_text(json.dumps(m, indent=1))
+
+        _r, ok, detail = X04.continuation_state()
+        check(
+            results,
+            "J MUTATION a committed record claiming CONFIRMATORY makes F12 FAIL",
+            not ok and not X04.population_exposed(),
+            "4.7 status is a requirement; a record asserting a different one is not a lawful "
+            "continuation authority",
+            detail,
+        )
+
+        try:
+            got = CP.a45_status(CP.load())
+            accessor_refused, observed = False, got
+        except Exception as exc:  # noqa: BLE001
+            accessor_refused, observed = True, f"{type(exc).__name__}: {exc}"
+        check(
+            results,
+            "J ...and the status accessor REFUSES rather than returning the fabricated value",
+            accessor_refused,
+            "the producer stamps through this accessor, so refusing here stops a fabricated "
+            "status reaching any artifact",
+            observed,
+        )
+    finally:
+        X04.committed = real_committed
+        X04.CONTINUATION.write_text(saved)
+
+    # The accessor returns the CONSTANT on a good record, so the producer cannot stamp a
+    # record-supplied string even when the record is otherwise valid.
+    check(
+        results,
+        "J the accessor returns the required CONSTANT on a valid record (non-vacuity)",
+        CP.a45_status(CP.load()) == CP.NON_CONFIRMATORY,
+        "must still say yes to a lawful record, or the refusals above mean nothing",
+        CP.a45_status(CP.load()),
+    )
+
+
 def main() -> int:
     results = []
     part_reauthorization(results)
@@ -421,6 +492,7 @@ def main() -> int:
     part_truthful_marker(results)
     part_toolchain(results)
     part_identity_anchor(results)
+    part_status_invariant(results)
 
     try:
         from x30_labelling_fixture import build_payload
