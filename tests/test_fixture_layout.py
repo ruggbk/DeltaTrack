@@ -26,6 +26,13 @@ Each rule below also proves it can fire, against a synthetic bad input — a lay
 that has never once gone red cannot distinguish "the layout is right" from "the check is
 broken". ``test_every_fixture_file_is_tracked_by_git`` is the exception: its fault has to
 be injected on disk (an unstaged file), so it is verified by hand rather than in-process.
+
+Which files the rules see is itself derived rather than listed (#654). The roster of
+directories this replaced was enumerated, so a directory that moved dropped out of the
+scan and one that was never listed was exempt from every rule the day it was created,
+with nothing to show for either. Proving the RULES fire says nothing about that; the
+scan is covered separately, by a control that pins the discovered set exactly against a
+synthetic repository, plus a bound on what the exclusion list may ever remove.
 """
 
 from __future__ import annotations
@@ -76,6 +83,35 @@ _DOWNLOAD_ROOT_NAMERS = frozenset(
         "src/deltatrack/diff_bill.py",
     }
 )
+
+# Trees whose Python these rules deliberately do not own, as repository-relative
+# path-component prefixes (#654).
+#
+# Research artifacts are a separate policy domain. AGENTS.md treats them as working
+# material; ``pyproject.toml`` holds the probes out of lint and format so they stay
+# verbatim as the artifacts of a study; and they read a two-root merged corpus through
+# ``docs/research/provision-matching/probes/corpus_roots.py``, whose ``ROOTS`` is
+# ``(tests/corpus, bills)`` in committed-first precedence — which is the very thing these
+# rules forbid the product to do. So the exclusion is a judgement about OWNERSHIP, not a
+# claim that the tree is equally policed elsewhere: ``tests/test_research_probes.py``
+# reaches one study's probes (39 of the 179 tracked ``.py`` under ``docs/`` when
+# measured), and the ownership of the rest was not audited here.
+#
+# Spelled ``docs/research/`` rather than ``docs/`` deliberately. ``docs/`` would exempt a
+# future ``docs/tooling/build_docs.py`` the day it was created, silently — the exact
+# failure #654 exists to remove. Under this spelling it is scanned instead, and a rule
+# that turns out to be wrong for it fails loudly, which is the direction
+# ``tests/test_surface_boundary.py`` already argues for. Two controls hold this in place:
+# ``test_exclusions_stay_within_the_research_tree`` pins the boundary, and
+# ``test_every_exclusion_is_live`` pins that the entry still matches something.
+_UNSCANNED_PREFIXES = ("docs/research/",)
+
+# The ceiling on what may ever be exempted. An exclusion list is the one lever that can
+# shrink the scan, so it gets a bound: anything at or beneath the research tree, nothing
+# else. This is deliberately NOT a roster of what must be scanned — that shape
+# under-scans invisibly, which is #654. A ceiling over-constrains instead, and failing it
+# is a loud, deliberate decision to widen the exemption.
+_EXCLUSION_CEILING = "docs/research/"
 
 _BILL_ID = r"\d{3}-[a-z]+-\d+"
 
@@ -163,32 +199,112 @@ def committed_fixture_refs() -> set[str]:
     return {f"{f.parent.name}/{f.name}" for f in FIXTURES_DIR.rglob("*") if f.is_file()}
 
 
-def _python_sources() -> list[Path]:
-    """Every module the rules police.
+def _path_components(prefix: str) -> tuple[str, ...]:
+    """``"docs/research/"`` -> ``("docs", "research")``. Empty segments dropped."""
+    return tuple(part for part in prefix.strip("/").split("/") if part)
 
-    Beyond ``tests/`` and ``scripts/``, the package directories are included even though
-    they hold no bill paths today: a helper imported *by* a test is exactly where a stale
-    path would hide from a scan limited to test files. ``docs/research/`` is deliberately
-    out — those probes are download-tier scratch, like the fetchers.
 
-    The ``is_dir()`` filter below tolerates a root that is absent, which makes a renamed
-    or moved package drop out of the scan with nothing to show for it. #367 did exactly
-    that: ``shared/``, ``server/`` and ``bill_index/`` moved under ``tools/`` and into
-    ``compare/``/``web/``, this roster kept naming their old locations, and every module
-    in them left the scan while the suite stayed green. Keep these paths in step with the
-    tree — the completeness floor below can catch a total collapse, but not a partial
-    shortfall, which is the shape a move produces.
+def _is_under(rel: str, prefix: tuple[str, ...]) -> bool:
+    """Is repo-relative ``rel`` at or beneath the path-component ``prefix``?
 
-    ``tools`` is named as a whole rather than subpackage by subpackage for the same reason
-    (#424). Naming ``tools/shared`` and ``tools/bill_index`` covered the two subpackages that
-    existed when the roster was written and silently excluded everything beside them — which
-    after #367 meant the fetch cluster, the code these rules most obviously apply to. A root
-    admits a new sibling automatically; a list of its children has to be remembered.
+    Compares COMPONENTS, never the string. ``rel.startswith("docs/research")`` also
+    swallows ``docs/researchers.py`` — a sibling that merely shares the spelling, and a
+    file these rules do own.
     """
-    roots = [PROJECT_ROOT / d for d in ("tests", "scripts", "src/deltatrack", "web", "tools")]
-    files = [f for r in roots if r.is_dir() for f in r.rglob("*.py")]
-    files += sorted(PROJECT_ROOT.glob("*.py"))
-    return files
+    return tuple(rel.split("/"))[: len(prefix)] == prefix
+
+
+def _python_sources(root: Path = PROJECT_ROOT) -> list[Path]:
+    """Every module the rules police: git-tracked ``.py``, minus the excluded prefixes.
+
+    Derived from git rather than from a roster of directories (#654). The roster it
+    replaced was enumerated, so a directory that moved dropped out silently and one that
+    was never listed was exempt from every rule below the day it was created — with the
+    suite green throughout. #367 moved ``shared/``/``server/``/``bill_index/`` and the
+    roster kept their old paths; #398 moved the engine to ``src/deltatrack`` while the
+    roster still named the old top-level packages, leaving the scan covering zero engine
+    files; #424 was the same shape again for ``tools/``. Measured before this change: a
+    package at ``src/sibling_pkg/`` holding a committed fixture addressed through
+    ``bills/`` left the module at 20 passed, while the identical line under ``scripts/``
+    failed — same content, opposite verdicts, decided only by the directory.
+
+    Membership comes from git because the contract is *scan everything a clean CI
+    checkout receives*. That is exactly what git tracks: it excludes local-only noise by
+    construction rather than by a deny-list somebody has to maintain (measured on one
+    machine: ``.claude/`` held 3348 ``.py`` in nested worktrees, each a full copy of this
+    repository, and ``.venv/`` 1886 — and a conventionally named ``venv/`` or ``build/``
+    carries no leading dot to catch it). It is also the source of truth the fixture
+    floors in this suite already use. No claim is made here about pre-commit, which runs
+    ruff and ruff-format and no pytest.
+
+    Both failure modes are loud, because a scan that cannot enumerate its own inputs
+    cannot police anything and a shrunken one passes every rule vacuously:
+
+    * git cannot answer -> raise. ``uncommitted_bill_files`` degrades gracefully instead,
+      citing an unpacked sdist, but that venue cannot reach this module: the sdist in
+      ``pyproject.toml`` deliberately omits ``tests/`` and the fixtures ("an sdist cannot
+      run the suite. Anyone who needs that clones the repository"). So the fallback would
+      serve only a broken environment, where silence is the one unacceptable outcome.
+    * a tracked path is missing from the working tree -> raise, naming it. ``git
+      ls-files`` reports the INDEX, so a file deleted without staging the deletion is
+      still listed. Filtering those out with ``is_file()`` is the tempting repair and it
+      silently shrinks the scan, which is this issue in miniature.
+
+    Takes ``root`` so the controls below can point it at a synthetic repository whose
+    expected set is written out by hand. Every caller in the suite uses the default.
+    """
+    tracked = _git_tracked_paths(root, "*.py")
+    assert tracked is not None, (
+        f"git cannot enumerate the sources under {root} (not a work tree, or git is "
+        "unavailable). The fixture-path rules below police whatever this returns, so an "
+        "empty or partial answer would make every one of them pass vacuously — the #654 "
+        "failure mode. These tests run only from a checkout; an sdist deliberately "
+        "carries neither them nor the fixtures."
+    )
+    excluded = tuple(_path_components(p) for p in _UNSCANNED_PREFIXES)
+    rels = sorted(r for r in tracked if not any(_is_under(r, e) for e in excluded))
+    missing = [r for r in rels if not (root / r).is_file()]
+    assert not missing, (
+        f"{len(missing)} path(s) are tracked by git but absent from the working tree: "
+        f"{missing}. The index and the tree disagree — a deletion staged only in one of "
+        "them, or an interrupted rebase. Refusing to skip them: dropping a file the "
+        "index still names would quietly shrink the scan every rule below depends on."
+    )
+    return [root / r for r in rels]
+
+
+def dead_exclusions(prefixes: tuple[str, ...], tracked: frozenset[str]) -> list[str]:
+    """Those of ``prefixes`` that match no tracked file, sorted.
+
+    An exclusion matching nothing is inert while still reading as policy — the #424 shape
+    one directory up. It is invisible in the direction a reader checks: the entry is
+    written down and commented, and says "this tree is deliberately out", while in fact it
+    selects nothing and the tree it meant to name is either gone or spelled differently.
+
+    Not covered by the discovery controls. Both sides of their comparison consult this
+    same list, so an inert entry is consistent on both and passes: measured on a synthetic
+    repository, a misspelt prefix left the exact-set control green.
+    """
+    return sorted(raw for raw in prefixes if not any(_is_under(t, _path_components(raw)) for t in tracked))
+
+
+def exclusions_outside_ceiling(prefixes: tuple[str, ...], ceiling: str) -> list[str]:
+    """Those of ``prefixes`` that are neither ``ceiling`` nor beneath it, sorted.
+
+    The exclusion list is the one lever that can shrink the scan, and the controls either
+    side of it are both blind to an exclusion that is too broad but still matches files:
+    measured on a synthetic repository, adding ``engine2/`` dropped a known-bad source out
+    of discovery while the exact-set control and :func:`dead_exclusions` both stayed green.
+    Widening ``docs/research/`` to ``docs/`` is the same failure in the shape most likely
+    to be reached for, and it would re-exempt exactly the tree #654 is about.
+
+    A ceiling rather than a roster, deliberately. A roster of directories that must be
+    scanned is what this issue removed: it under-scans invisibly when it drifts. A ceiling
+    can only over-constrain, so drifting from it is a loud failure someone resolves on
+    purpose.
+    """
+    bound = _path_components(ceiling)
+    return sorted(raw for raw in prefixes if not _is_under("/".join(_path_components(raw)), bound))
 
 
 def find_stale_fixture_paths(sources: dict[str, str], committed: set[str]) -> dict[str, list[str]]:
@@ -341,51 +457,225 @@ def test_data_tree_rule_can_fire() -> None:
     assert find_data_tree_names({"tests/corpus_paths.py": 'DATA_DIR = PROJECT_ROOT / "tests" / "data"'}) == {}
 
 
-def test_the_source_scan_actually_covers_the_engine() -> None:
-    """Completeness floor for `_python_sources`, which had none (#398).
+_SYNTHETIC_BILL = "118-hr-8752"
+_SYNTHETIC_STEM = "1_reported-in-house.xml"
 
-    The `is_dir()` filter in that function tolerates a root that is absent, so a package
-    that moves drops out of the scan silently and every rule below keeps passing over a
-    shrinking set. Its docstring already records #367 doing exactly this, and #398 then
-    did it again: the roster still named root `parsers`/`formatters`/`compare` after the
-    engine moved to `src/deltatrack`, and the scan covered **zero** engine files while the
-    module stayed green.
+# The synthetic tree the discovery controls run against, and the reason each file is in it.
+# `scratch.py` is written but never staged.
+_SYNTHETIC_TRACKED = {
+    # Repository root. The half a "top-level directory is represented" floor cannot see:
+    # dropping only root files leaves every directory represented and such a floor green.
+    "root_cli.py": "VERSION = 1\n",
+    # Depth 1 and depth 2 under one directory. The known-bad source is the DEEP one on
+    # purpose: at depth 1 it survives a loss of recursion and proves nothing.
+    "engine2/__init__.py": "",
+    "engine2/loader.py": "HELPER = 1\n",
+    "engine2/subpkg/loader.py": f'BILL = "bills/{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"\n',
+    # Excluded by _UNSCANNED_PREFIXES.
+    "docs/research/probe.py": f'BILL = "bills/{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"\n',
+    # The two files that separate a path-component prefix from a string one. Both are
+    # OUTSIDE `docs/research/` and both must be scanned: `docs/researchers.py` merely
+    # shares the spelling, and `docs/tooling/` is the future subtree that `docs/` would
+    # have exempted silently.
+    "docs/researchers.py": "NOTE = 1\n",
+    "docs/tooling/build_docs.py": "BUILD = 1\n",
+    # Not a .py, so it is tracked but never discovered.
+    f"tests/corpus/{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}": "<bill/>\n",
+}
 
-    The two `*_can_fire` tests below do not cover this. They feed the rules a synthetic
-    `sources` dict, so they prove the RULES work; nothing proved the SCAN reaches the code
-    the rules are meant to police. That gap is the whole reason a moved package was
-    invisible here.
+# Written out by hand rather than derived, so the control cannot agree with a broken
+# implementation by construction. Every tracked .py above, minus the excluded prefix.
+_SYNTHETIC_EXPECTED = {
+    "docs/researchers.py",
+    "docs/tooling/build_docs.py",
+    "engine2/__init__.py",
+    "engine2/loader.py",
+    "engine2/subpkg/loader.py",
+    "root_cli.py",
+}
 
-    Names load-bearing members rather than pinning a count, matching the floor in
-    `tests/test_surface_boundary.py`: a count passes while discovery returns the wrong set,
-    and a new module joins without editing this.
+_SYNTHETIC_KNOWN_BAD = "engine2/subpkg/loader.py"
+
+
+@pytest.fixture
+def synthetic_repo(tmp_path: Path) -> Path:
+    """A throwaway git repository holding :data:`_SYNTHETIC_TRACKED`, all staged but one.
+
+    Discovery has to be exercised against a tree whose contents are known exactly. The
+    real repository cannot serve: its expected set would have to be computed the same way
+    discovery computes it, which agrees with any implementation, and it holds no file at
+    the boundaries that matter (nothing outside the roster, nothing untracked-but-present).
     """
-    scanned = {p.relative_to(PROJECT_ROOT).as_posix() for p in _python_sources()}
+    for rel, body in _SYNTHETIC_TRACKED.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+    (tmp_path / "scratch.py").write_text(f'BILL = "bills/{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"\n')
 
-    for expected in (
-        # The engine, which is the half a move relocates and the half that reads bills.
-        "src/deltatrack/bill_tree.py",
-        "src/deltatrack/diff_bill.py",
-        "src/deltatrack/compare/pdf.py",
-        "src/deltatrack/formatters/diff_html.py",
-        "src/deltatrack/parsers/pdf_text.py",
-        # One member per remaining root, so a whole root going missing cannot pass.
-        "tests/conftest.py",
-        "scripts/serve_compare.py",
-        "web/app.py",
-        # The acquisition tier. Named at two depths deliberately: the roster reached
-        # `tools/shared/` while the fetchers beside it were outside the scan entirely
-        # (#424), so a member from a subpackage cannot stand in for one at the root.
-        "tools/fetch_bills.py",
-        "tools/shared/http.py",
-        # The repository root, which since #401 holds only the two command wrappers.
-        "diff_bill.py",
-    ):
-        assert expected in scanned, (
-            f"fixture-path scan missed {expected!r} -- the roster in `_python_sources` is out "
-            "of step with the tree, so the rules below are policing a subset. Discovery is "
-            "broken, not the code."
-        )
+    run = lambda *args: subprocess.run(  # noqa: E731 - one shape, used four ways below
+        ["git", "-C", str(tmp_path), *args], capture_output=True, check=True, text=True
+    )
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "fixture-layout@example.invalid")
+    run("config", "user.name", "fixture layout control")
+    for rel in _SYNTHETIC_TRACKED:
+        run("add", "--", rel)
+    run("commit", "-qm", "synthetic tree")
+
+    # Anti-vacuity: a repository that failed to initialise, or staged nothing, must not be
+    # able to produce a green control below.
+    staged = _git_tracked_paths(tmp_path, "*.py")
+    assert staged, f"synthetic repo staged no Python: git said {staged!r}"
+    assert "scratch.py" not in staged, "scratch.py was meant to stay untracked"
+    return tmp_path
+
+
+def test_discovery_returns_exactly_the_tracked_sources_outside_the_exclusions(
+    synthetic_repo: Path,
+) -> None:
+    """The scan is every tracked `.py` except those beneath an excluded prefix. Exactly.
+
+    This is the control the enumerated floor it replaced could not be (#654). That floor
+    asserted the scan reached a list of named modules, which a scan can satisfy while
+    missing whole classes of file: measured on this tree, dropping only repository-root
+    files, or only files below depth 1, leaves every named directory represented and a
+    "one file per root" floor green. The set here is literal, so any discovery that
+    returns something else fails whatever the shape of the loss.
+
+    Mutations this must go red for, each measured before the change:
+      * drop repository-root files -> `root_cli.py` missing;
+      * discover only depth 1 -> `engine2/subpkg/loader.py` missing, which is also the
+        known-bad source, so the rule below silently reports nothing;
+      * drop a whole directory, or return nothing at all;
+      * match the exclusion as a string rather than by path component ->
+        `docs/researchers.py` missing;
+      * filter out any file class the implementation should not judge, `__init__.py`
+        being the one most likely to be reached for.
+    """
+    found = {p.relative_to(synthetic_repo).as_posix() for p in _python_sources(synthetic_repo)}
+    assert found == _SYNTHETIC_EXPECTED, (
+        f"discovery returned the wrong set.\n"
+        f"  missing:    {sorted(_SYNTHETIC_EXPECTED - found)}\n"
+        f"  unexpected: {sorted(found - _SYNTHETIC_EXPECTED)}\n"
+        "Every rule in this module policies whatever this returns, so a shrunken set makes "
+        "all of them pass over less code with nothing to show for it."
+    )
+
+
+def test_discovery_over_this_repository_is_the_tracked_set_minus_the_exclusions() -> None:
+    """The same invariant against the real tree, computed without calling discovery.
+
+    The synthetic control above owns the boundaries; this one owns the actual repository,
+    where a filter keyed on something no synthetic file has would slip past. It also keeps
+    the coverage claim honest without pinning a number that every new module would break:
+    the two sides move together, so it stays true as the tree grows.
+    """
+    tracked = _git_tracked_paths(PROJECT_ROOT, "*.py")
+    assert tracked, "git could not enumerate this repository's Python"
+    excluded = tuple(_path_components(p) for p in _UNSCANNED_PREFIXES)
+    expected = {rel for rel in tracked if not any(_is_under(rel, e) for e in excluded)}
+    found = {p.relative_to(PROJECT_ROOT).as_posix() for p in _python_sources()}
+    assert found == expected, f"missing: {sorted(expected - found)}, unexpected: {sorted(found - expected)}"
+
+
+def test_discovery_refuses_a_tracked_path_missing_from_the_working_tree(
+    synthetic_repo: Path,
+) -> None:
+    """A file the index still names, absent on disk, is a loud failure — never a filter.
+
+    `git ls-files` reports the INDEX, so a file deleted without staging the deletion is
+    still listed and reading it raises. The obvious repair is to drop those with
+    `is_file()`, and that is the trap: it turns a broken working tree into a quietly
+    smaller scan, which is exactly the failure #654 exists to remove. Measured on this
+    tree: filtering left discovery green over one fewer file.
+    """
+    (synthetic_repo / "engine2" / "loader.py").unlink()
+    with pytest.raises(AssertionError, match=r"tracked by git but absent"):
+        _python_sources(synthetic_repo)
+
+
+def test_the_known_bad_source_is_reported_end_to_end(synthetic_repo: Path) -> None:
+    """Discovery and the stale-fixture rule together, on a tree built to be caught.
+
+    The `*_can_fire` tests feed the rules a synthetic `sources` dict, so they prove the
+    RULES work; nothing proved the SCAN reaches the code the rules are meant to police,
+    and that gap is why a moved package went unnoticed twice (#367, #398). This closes it
+    from the other end: a source in a directory no roster ever named, addressing a
+    committed fixture through the download tree, must be named in the failure.
+    """
+    found = _python_sources(synthetic_repo)
+    sources = {p.relative_to(synthetic_repo).as_posix(): p.read_text() for p in found}
+    committed = {f"{f.parent.name}/{f.name}" for f in (synthetic_repo / "tests" / "corpus").rglob("*") if f.is_file()}
+    assert committed == {f"{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"}, f"synthetic corpus built wrong: {committed}"
+    assert find_stale_fixture_paths(sources, committed) == {
+        _SYNTHETIC_KNOWN_BAD: [f"{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"]
+    }
+
+
+def test_every_exclusion_is_live() -> None:
+    """Each declared exclusion still selects something in this repository."""
+    tracked = _git_tracked_paths(PROJECT_ROOT, "*.py")
+    assert tracked, "git could not enumerate this repository's Python"
+    dead = dead_exclusions(_UNSCANNED_PREFIXES, tracked)
+    assert not dead, (
+        f"{len(dead)} exclusion(s) match no tracked file: {dead}. Either the tree moved and "
+        "the prefix needs repathing, or it is gone and the entry should be deleted. Until "
+        "then the entry reads as policy while selecting nothing."
+    )
+
+
+def test_exclusion_liveness_rule_can_fire() -> None:
+    """A prefix inside the ceiling but naming nothing is reported, and a live one is not.
+
+    `docs/research/nonexistent/` rather than a misspelling outside the tree, deliberately:
+    a misspelling would also trip the ceiling below, so it could not show that this rule
+    detects anything the other controls do not. A nonexistent DESCENDANT passes the
+    ceiling and is caught only here.
+    """
+    tracked = frozenset({"docs/research/probe.py", "engine2/loader.py"})
+    assert dead_exclusions(("docs/research/nonexistent/",), tracked) == ["docs/research/nonexistent/"]
+    assert dead_exclusions(("docs/research/",), tracked) == []
+
+
+def test_exclusions_stay_within_the_research_tree() -> None:
+    """Nothing outside `docs/research/` may be exempted from the rules."""
+    outside = exclusions_outside_ceiling(_UNSCANNED_PREFIXES, _EXCLUSION_CEILING)
+    assert not outside, (
+        f"{len(outside)} exclusion(s) reach outside {_EXCLUSION_CEILING}: {outside}. The "
+        "exclusion list is the only lever that shrinks the scan, so it is bounded to the "
+        "one tree these rules do not own. Widening it exempts product code silently."
+    )
+
+
+def test_exclusion_ceiling_rule_can_fire() -> None:
+    """Every way of reaching outside the research tree is reported; descendants are not."""
+    ceiling = _EXCLUSION_CEILING
+    # An unrelated top-level tree.
+    assert exclusions_outside_ceiling(("engine2/",), ceiling) == ["engine2/"]
+    # The widening most likely to be reached for, which re-exempts the whole docs tree.
+    assert exclusions_outside_ceiling(("docs/",), ceiling) == ["docs/"]
+    # A sibling subtree under the same parent.
+    assert exclusions_outside_ceiling(("docs/tooling/",), ceiling) == ["docs/tooling/"]
+    # A descendant is within the ceiling: liveness above is what catches it if inert.
+    assert exclusions_outside_ceiling(("docs/research/nonexistent/",), ceiling) == []
+    assert exclusions_outside_ceiling(_UNSCANNED_PREFIXES, ceiling) == []
+
+
+def test_exclusion_matching_is_by_path_component_not_by_string() -> None:
+    """`docs/researchers.py` is not under `docs/research/`, however the strings compare.
+
+    The decision this pins is the one that had to be argued for: matching components
+    rather than characters. `"docs/researchers.py".startswith("docs/research")` is True,
+    so the string spelling silently exempts a file these rules do own.
+    """
+    prefix = _path_components("docs/research/")
+    assert _is_under("docs/research/probe.py", prefix)
+    assert _is_under("docs/research/nested/deep.py", prefix)
+    assert not _is_under("docs/researchers.py", prefix)
+    assert not _is_under("docs/tooling/build_docs.py", prefix)
+    assert "docs/researchers.py".startswith("docs/research"), (
+        "if this ever stops being true the string trap is gone and so is the reason for component matching"
+    )
 
 
 def test_every_exemption_names_a_file_the_scan_reaches() -> None:
@@ -401,18 +691,23 @@ def test_every_exemption_names_a_file_the_scan_reaches() -> None:
     `bills/`, and therefore the code whose exemptions most need to be real — was policed by
     no rule at all.
 
-    The completeness floor above cannot see this: it asserts the scan reaches a set of named
-    modules, which says nothing about whether an *exemption* still resolves. The two failures
-    also point opposite ways — a missing root under-scans, a dead key over-exempts on paper
-    while the file is unscanned in fact — so neither substitutes for the other.
+    Since #654 the scan is derived from git rather than from a roster of directories, so
+    one of the three causes this used to have is gone: a key can no longer be stranded by
+    its directory dropping out of a hand-kept list. The remaining two are the ones that
+    still bite — the file moved, or the file is gone.
+
+    The discovery controls cannot see this. They assert what `_python_sources` returns,
+    which says nothing about whether an *exemption* still resolves. The failures also point
+    opposite ways: a shrunken scan under-polices, a dead key over-exempts on paper while
+    the file it names is scanned in fact. Neither substitutes for the other.
     """
     scanned = {p.relative_to(PROJECT_ROOT).as_posix() for p in _python_sources()}
     dead = sorted(k for k in _DOWNLOAD_TIER_FILES | _DOWNLOAD_ROOT_NAMERS if k not in scanned)
     assert not dead, (
         f"{len(dead)} exemption key(s) name a file the scan does not reach: {dead}. Either the "
-        "file moved and the key needs repathing, or the roster in `_python_sources` no longer "
-        "covers its directory, or the file is gone and the key should be deleted. Until then "
-        "the exemption is inert and the file it names is unpoliced — the #367/#424 shape."
+        "file moved and the key needs repathing, or the file is gone and the key should be "
+        "deleted. Until then the exemption is inert and the file it names is unpoliced — the "
+        "#367/#424 shape."
     )
 
 
