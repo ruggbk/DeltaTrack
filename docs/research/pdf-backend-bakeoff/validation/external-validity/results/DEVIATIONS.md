@@ -18,7 +18,7 @@ what the apparatus reads. This document is the reasoning; that file is the autho
 
 ```json
 {"id": "A47", "kind": "POST-BOUNDARY CONTINUATION",
- "commits": ["9ce9b6e", "cc69fc5", "381c2f6", "abbe780"],
+ "commits": ["9ce9b6e", "cc69fc5", "381c2f6", "abbe780", "8f28719"],
  "prior_boundary_commit": "89360b30de480231efdc89157443779d45b37db2",
  "population_status": "EXPOSED",
  "results_already_visible": {
