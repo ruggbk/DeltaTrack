@@ -82,6 +82,18 @@ EXECUTION_MARKER = EV / "results" / "EXECUTION-START.json"
 # that has been measured end to end, and a SECOND pristine boundary could be created for it.
 CONTINUATION = EV / "results" / "CONTINUATION.json"
 
+# A47 -- THE PRIOR EXECUTION BOUNDARY IS A HISTORICAL FACT, PINNED HERE, exactly as
+# POPULATION_FREEZE_COMMIT is and for the same reason. Taking it from the continuation record
+# alone would let the record CERTIFY ITSELF: the commit is not a reachable object on develop
+# (Run 1's branch was archived and deleted), so nothing else in the repository contradicts a
+# rewrite of it. Measured before this was pinned: mutating `prior_execution.boundary_commit`
+# in an otherwise valid, committed, internally consistent record left F12 GREEN.
+#
+# The other two identity fields were already anchored to independent facts and needed no
+# repair -- `population_freeze_commit` against the constant below, and `membership_blob`
+# against the live blob of the committed manifest.
+PRIOR_EXECUTION_BOUNDARY = "89360b30de480231efdc89157443779d45b37db2"
+
 # THE POPULATION FREEZE IS A HISTORICAL FACT, PINNED, not "whatever commit last touched
 # the manifest". Deriving it from last_commit(MEMBERSHIP) makes the boundary movable: a
 # later committed edit to the manifest would silently become the new freeze, move F3's
@@ -240,6 +252,15 @@ def continuation_state() -> tuple[dict | None, bool, str]:
     # must not inherit this one's exposure, and this one must not shed it by moving branches.
     if not CP.describes_population(rec, POPULATION_FREEZE_COMMIT, blob_sha(MEMBERSHIP)):
         return rec, False, "continuation record does not describe the currently frozen population"
+
+    # ...and the historical boundary it claims must be the pinned one. Without this the record
+    # is the ONLY witness to its own most load-bearing field.
+    claimed = CP.prior_boundary(rec)
+    if claimed != PRIOR_EXECUTION_BOUNDARY:
+        return rec, False, (
+            f"continuation record's prior boundary {claimed[:8] or 'ABSENT'} disagrees with the "
+            f"pinned historical fact {PRIOR_EXECUTION_BOUNDARY[:8]}"
+        )
     return rec, True, CP.exposure_summary(rec) if CP.is_exposed(rec) else "population not exposed"
 
 

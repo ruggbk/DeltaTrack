@@ -363,12 +363,71 @@ def part_labelling(results, payload_builder):
     )
 
 
+def part_identity_anchor(results):
+    """I: a COMMITTED, VALID historical rewrite must not pass F12 (no self-certification).
+
+    The threat is not malformed JSON and not an uncommitted edit -- both are already refused
+    by arm C/D and neither is interesting. It is a syntactically valid, internally consistent,
+    COMMITTED record whose historical identity has been quietly rewritten. If the record is
+    the only witness to its own identity, it certifies itself and F12 proves nothing.
+
+    So `committed` is STUBBED TRUE for the whole arm. That deliberately removes the check
+    that would otherwise do the rejecting, leaving the identity anchor as the only thing that
+    can refuse. A pass here therefore cannot be a pass for the wrong reason.
+    """
+    saved = X04.CONTINUATION.read_text()
+    real_committed = X04.committed
+    X04.committed = lambda path: True
+    try:
+        # POSITIVE CONTROL first: with `committed` stubbed, the UNMUTATED record is accepted.
+        # Without this the refusals below could all be an arm that refuses everything.
+        _rec, ok_clean, detail_clean = X04.continuation_state()
+        check(
+            results,
+            "I the unmutated committed record is ACCEPTED (non-vacuity)",
+            ok_clean and X04.population_exposed(),
+            "the arm must be able to say yes, or its refusals mean nothing",
+            detail_clean,
+        )
+
+        rec = json.loads(saved)
+        mutations = {
+            "prior_execution.boundary_commit": lambda r: r["prior_execution"].update(
+                {"boundary_commit": "1" * 40}
+            ),
+            "population.population_freeze_commit": lambda r: r["population"].update(
+                {"population_freeze_commit": "2" * 40}
+            ),
+            "population.membership_blob": lambda r: r["population"].update({"membership_blob": "3" * 40}),
+        }
+        for field, mutate in mutations.items():
+            m = json.loads(json.dumps(rec))
+            mutate(m)
+            # Syntactically valid and internally consistent: schema, every required key, and
+            # population_status all survive untouched. Only the historical identity moved.
+            X04.CONTINUATION.write_text(json.dumps(m, indent=1))
+            _r, ok, detail = X04.continuation_state()
+            authorizable = ok and X04.population_exposed()
+            check(
+                results,
+                f"I MUTATION committed rewrite of {field} makes the authority NON-AUTHORIZABLE",
+                not ok and not authorizable,
+                "a valid committed record must not be the only witness to its own historical "
+                "identity; F12 must fail and the population must not become authorizable",
+                detail,
+            )
+    finally:
+        X04.committed = real_committed
+        X04.CONTINUATION.write_text(saved)
+
+
 def main() -> int:
     results = []
     part_reauthorization(results)
     part_fail_closed(results)
     part_truthful_marker(results)
     part_toolchain(results)
+    part_identity_anchor(results)
 
     try:
         from x30_labelling_fixture import build_payload
