@@ -963,40 +963,81 @@ EXPECTED_INVOCATION = {
 }
 
 
-def expected_candidate_provenance(old_tree, new_tree) -> dict[tuple[int, int], set]:
-    """The candidate set B1 must have materialised, derived from the ORACLE's invocations.
+def production_retrieval_populations(old_tree, new_tree) -> tuple[list, CandidateSet]:
+    """Every population round-1 retrieval emitted, labelled by the stage that emitted it.
 
-    Independent by construction: it reads the transcribed invocation trace -- whose digest the
-    frozen artifact pins -- and expands each invocation's population into its full cross
-    product. It never calls ``RetrievedPopulation.propose_into``, which is the code under test;
-    building the expected side with the production helper would assert only that the helper
-    agrees with itself.
+    The candidate set is meant to materialise exactly what retrieval considered, and the two
+    sides of that claim are two different production components: the retrieval stages decide the
+    populations, and ``RetrievedPopulation.propose_into`` plus ``CandidateSet`` accumulation turn
+    them into candidates. Reading the first here and comparing against the second is
+    production-against-production without being production-against-itself -- the expected side is
+    expanded by this test, never by the code that does the proposing.
+
+    The three stages are wrapped for the duration of one ``match_nodes_with_stage_outputs`` call
+    and restored afterwards, so the populations recorded are the ones that call actually used.
+    A population is labelled by the STAGE that returned it rather than by the invocation it
+    carries: an implementation that ran the right stage under the wrong provenance would
+    otherwise move expectation and actual together, and provenance is what makes a recall figure
+    attributable to the rule that surfaced it.
+
+    ``None`` returns are dropped rather than represented. Both the cross-division and the
+    unique-path stage return one for a group that can form no pair, and that is a gate rather
+    than an empty population.
+    """
+    from deltatrack import diff_bill as db
+
+    recorded: list[tuple[str, RetrievedPopulation]] = []
+    real_within = db.retrieve_within_division_populations
+    real_cross = db.retrieve_cross_division_population
+    real_unique = db.retrieve_unique_path_population
+
+    def within(*args, **kwargs):
+        populations = real_within(*args, **kwargs)
+        recorded.extend(("within", population) for population in populations)
+        return populations
+
+    def cross(*args, **kwargs):
+        population = real_cross(*args, **kwargs)
+        if population is not None:
+            recorded.append(("cross", population))
+        return population
+
+    def unique(*args, **kwargs):
+        population = real_unique(*args, **kwargs)
+        if population is not None:
+            recorded.append(("unique", population))
+        return population
+
+    db.retrieve_within_division_populations = within
+    db.retrieve_cross_division_population = cross
+    db.retrieve_unique_path_population = unique
+    try:
+        _pairs, candidates, _assignments = match_nodes_with_stage_outputs(old_tree, new_tree)
+    finally:
+        db.retrieve_within_division_populations = real_within
+        db.retrieve_cross_division_population = real_cross
+        db.retrieve_unique_path_population = real_unique
+
+    return recorded, candidates
+
+
+def expected_candidate_provenance(recorded: list) -> dict[tuple[int, int], set]:
+    """The candidate set retrieval's own populations imply: each one's full cross product.
 
     Returns ``{(old_ordinal, new_ordinal): {invocation, ...}}``. Keying by observation pair and
     accumulating a SET of invocations is the checked-in ``CandidateSet`` semantics restated
     independently: one candidate per pair however many invocations proposed it, each retaining
     its own provenance.
 
-    **B3 added the unique-path population, and it is expanded from the oracle's own
-    ``unique_selections`` rather than from a re-walk of the groups.** That list is the ordered
-    record of every non-colliding ``match_path`` group the transcribed legacy composition paired,
-    and it is covered by the frozen trace digest exactly as the invocation trace is -- so the
-    expectation moved without the artifact being regenerated, which is what keeps this an
-    independent expectation rather than a restatement of the new code.
-
-    A unique 1x1 group forms exactly one candidate: the population is the group, so the cross
-    product is the pair itself. A one-sided unique group forms none and appears in neither list,
-    which is the same fact ``forms_candidates`` states on the production side.
+    A one-sided population contributes nothing, because one of its two ``*_refs`` tuples is
+    empty and the cross product of an empty side is empty. That is the same fact
+    ``forms_candidates`` states on the production side, arrived at without consulting it.
     """
-    trace = oracle_trace(old_tree.nodes, new_tree.nodes)
     expected: dict[tuple[int, int], set] = defaultdict(set)
-    for invocation in trace["invocations"]:
-        which = EXPECTED_INVOCATION[invocation["phase"]]
-        for old_ordinal in invocation["old"]:
-            for new_ordinal in invocation["new"]:
-                expected[(old_ordinal, new_ordinal)].add(which)
-    for old_ordinal, new_ordinal in trace["unique_selections"]:
-        expected[(old_ordinal, new_ordinal)].add(EXPECTED_INVOCATION["unique"])
+    for phase, population in recorded:
+        for old_ref in population.old_refs:
+            for new_ref in population.new_refs:
+                expected[(old_ref.ordinal, new_ref.ordinal)].add(EXPECTED_INVOCATION[phase])
     return dict(expected)
 
 
@@ -1016,17 +1057,39 @@ def actual_candidate_provenance(candidates) -> dict[tuple[int, int], set]:
 @pytest.mark.slow
 @pytest.mark.parametrize("old_path,new_path", manifest_version_pairs(), ids=lambda p: p.stem)
 def test_the_candidate_set_materialises_exactly_what_retrieval_considered(old_path: Path, new_path: Path):
-    """Membership, addressing, provenance and deduplication, against an independent expectation.
+    """Membership, addressing, provenance and deduplication, retrieval against the set.
 
     Binds all four at once because they fail together: a dropped pair moves membership, a
     mis-attributed proposal moves provenance, and a pair recorded twice moves deduplication.
+
+    De-coupled from the legacy oracle in #659. It used to expand the transcribed invocation
+    trace; it now expands the populations production's own retrieval stages emitted during the
+    same ``match_nodes_with_stage_outputs`` call, which is a claim about the stage boundary
+    rather than about agreement with a pre-ADR-0020 implementation. The assertions are unchanged.
+
+    **What this owns that production does not already refuse.**
+    ``_refuse_a_candidate_retrieval_did_not_admit`` fails closed on the two directions that
+    reach the evidence stage: a described pair the set does not hold, and a described pair
+    carrying no proposal from the describing invocation. Dropping a ``propose_into`` call
+    therefore raises there before any assertion here runs. What is left unguarded, and is what
+    this test is the owner of, is the opposite direction -- a candidate, or a provenance, the
+    set holds that no retrieval stage emitted. Nothing in production can see that: the resulting
+    pairings are all still correct, and only a recall figure attributed to the wrong rule is
+    wrong.
+
+    The mutation: make ``RetrievedPopulation.propose_into`` also propose its first pair under
+    ``path_group_cross_division`` whatever stage it belongs to. Every within-division population
+    then carries a cross-division proposal the cross stage never emitted, production admits it
+    without complaint, and the provenance assertion names the candidates. Observed red, then
+    restored.
     """
     old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-    _pairs, candidates = match_nodes_with_retrieval(old_tree, new_tree)
-
-    expected = expected_candidate_provenance(old_tree, new_tree)
-    actual = actual_candidate_provenance(candidates)
+    recorded, candidates = production_retrieval_populations(old_tree, new_tree)
     key = pair_key(old_path, new_path)
+    assert recorded, f"{key}: retrieval emitted no population at all, so this compares two empty sets"
+
+    expected = expected_candidate_provenance(recorded)
+    actual = actual_candidate_provenance(candidates)
 
     missing = sorted(set(expected) - set(actual))
     extra = sorted(set(actual) - set(expected))
@@ -1437,6 +1500,51 @@ def test_the_evidence_comparison_is_non_vacuous():
     )
 
 
+#: How many times ``match_nodes`` calls ``text_similarity`` on each committed version pair.
+#:
+#: **Literal, and deliberately not derived.** These were read off the legacy trace before #659
+#: retired it, and they are now committed here as the expectation itself. A count read out of a
+#: generated artifact is only as independent as the artifact; a literal is a claim this file
+#: makes and a reviewer can see move in a diff.
+#:
+#: Fourteen pairs measure nothing at all, which is not a defect: every one of their
+#: ``match_path`` groups is non-colliding or 1x1, and the 1x1 shortcut computes no ratio
+#: (#623, the +21 percent tidy-up). The gate has teeth on the other thirteen, and
+#: :data:`_TOTAL_SIMILARITY_CALLS` refuses a table that has quietly become all zeros.
+EXPECTED_SIMILARITY_CALLS = {
+    "113-hr-3547/1_introduced-in-house->2_engrossed-in-house": 0,
+    "113-hr-3547/2_engrossed-in-house->3_received-in-senate": 0,
+    "113-hr-3547/3_received-in-senate->4_engrossed-amendment-senate": 0,
+    "113-hr-3547/4_engrossed-amendment-senate->5_engrossed-amendment-house": 0,
+    "113-hr-3547/5_engrossed-amendment-house->6_enrolled-bill": 166,
+    "113-hr-83/6_engrossed-amendment-house->7_enrolled-bill": 177,
+    "114-hr-2029/1_reported-in-house->3_referred-in-senate": 0,
+    "114-hr-2029/3_referred-in-senate->4_reported-in-senate": 238,
+    "114-hr-2029/4_reported-in-senate->5_engrossed-amendment-senate": 236,
+    "114-hr-2029/5_engrossed-amendment-senate->6_engrossed-amendment-house": 27,
+    "114-hr-2029/6_engrossed-amendment-house->7_enrolled-bill": 150,
+    "115-hr-5895/1_reported-in-house->2_engrossed-in-house": 24,
+    "115-hr-5895/2_engrossed-in-house->4_engrossed-amendment-senate": 0,
+    "115-hr-5895/4_engrossed-amendment-senate->5_enrolled-bill": 0,
+    "117-hr-2471/1_introduced-in-house->6_enrolled-bill": 0,
+    "117-hr-4502/1_reported-in-house->2_engrossed-in-house": 19,
+    "118-hr-2882/1_introduced-in-house->4_engrossed-amendment-senate": 0,
+    "118-hr-2882/4_engrossed-amendment-senate->5_engrossed-amendment-house": 0,
+    "118-hr-4366/1_reported-in-house->2_engrossed-in-house": 0,
+    "118-hr-4366/2_engrossed-in-house->3_placed-on-calendar-senate": 0,
+    "118-hr-4366/3_placed-on-calendar-senate->4_engrossed-amendment-senate": 3,
+    "118-hr-4366/4_engrossed-amendment-senate->5_engrossed-amendment-house": 21,
+    "118-hr-4366/5_engrossed-amendment-house->6_enrolled-bill": 41,
+    "118-hr-8752/1_reported-in-house->2_engrossed-in-house": 0,
+    "118-hr-8774/1_reported-in-house->2_engrossed-in-house": 0,
+    "118-hr-9468/1_introduced-in-house->4_enrolled-bill": 4,
+    "119-hr-1/1_reported-in-house->2_engrossed-in-house": 2,
+}
+
+#: The floor that keeps the table above from passing while describing nothing.
+_TOTAL_SIMILARITY_CALLS = 1108
+
+
 def production_similarity_calls(old_tree, new_tree) -> int:
     """How many times ``match_nodes`` calls ``text_similarity``. A measurement, not a proxy.
 
@@ -1476,21 +1584,29 @@ def test_production_measures_exactly_the_frozen_set_of_similarities():
     - describing only the greedy winners deflates it;
     - describing a pair retrieval never admitted inflates it.
 
-    The frozen count comes from the oracle, so this is production measured against an
-    independent expectation rather than against its own intent.
+    De-coupled from the legacy oracle in #659: the expectation is now the committed literal
+    table :data:`EXPECTED_SIMILARITY_CALLS` rather than a count read out of a generated
+    artifact. Nothing else in this repository measures the 1x1 shortcut's cost (#623) or the
+    2.96x of routing every unique group through the collision path (ADR 0020 §13), so the gate
+    keeps its subject and changes only where its expectation is written down.
     """
-    frozen = load_frozen()
-    checked = 0
+    assert set(EXPECTED_SIMILARITY_CALLS) == {pair_key(o, n) for o, n in manifest_version_pairs()}, (
+        "the call-count table drifted from the manifest; a pair with no entry would be measured "
+        "against nothing while the loop below stayed green"
+    )
+    assert sum(EXPECTED_SIMILARITY_CALLS.values()) == _TOTAL_SIMILARITY_CALLS, (
+        f"the call-count table now totals {sum(EXPECTED_SIMILARITY_CALLS.values())} rather than "
+        f"{_TOTAL_SIMILARITY_CALLS}; a table edited down toward zero would satisfy every per-pair "
+        "equality below while asserting nothing"
+    )
+
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
         key = pair_key(old_path, new_path)
-        expected = frozen[key]["counts"]["similarity_calls"]
+        expected = EXPECTED_SIMILARITY_CALLS[key]
         assert production_similarity_calls(old_tree, new_tree) == expected, (
-            f"{key}: production's round-1 similarity calls differ from the frozen expectation of {expected}"
+            f"{key}: production's round-1 similarity calls differ from the expected {expected}"
         )
-        checked += 1
-
-    assert checked, "the call-count comparison ran over zero version pairs"
 
 
 @pytest.mark.slow
@@ -1526,12 +1642,11 @@ def test_the_call_count_gate_can_fire(monkeypatch):
 
     monkeypatch.setattr(db, "group_correspondence_evidence", scores_the_sole_candidate)
 
-    frozen = load_frozen()
     inflated = []
     for old_path, new_path in manifest_version_pairs():
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
         key = pair_key(old_path, new_path)
-        if production_similarity_calls(old_tree, new_tree) != frozen[key]["counts"]["similarity_calls"]:
+        if production_similarity_calls(old_tree, new_tree) != EXPECTED_SIMILARITY_CALLS[key]:
             inflated.append(key)
 
     assert inflated, (
@@ -2811,24 +2926,37 @@ def production_stream(old_nodes: list[BillNode], new_nodes: list[BillNode]) -> l
 
 
 def test_assignment_leftovers_reach_the_cross_division_fallback():
-    """The behaviour no corpus gate can observe, pinned exactly -- oracle and production.
+    """The behaviour no corpus gate can observe, pinned on production's own retrieval.
 
     ``oA2`` (old ordinal 1) is left over by within-division ASSIGNMENT in division A; ``nB2``
     (new ordinal 2) is left over in division B. They pair only because the fallback's population
     includes observations that assignment declined, which is the dependency the whole separation
-    has to preserve.
+    has to preserve. AGENTS.md records that an implementation feeding forward only the
+    structurally unmatched half is byte-identical on all 27 committed pairs and wrong.
+
+    De-coupled from the legacy oracle in #659. The three invocations are now read off the
+    populations production's retrieval stages emitted, in the order they emitted them, rather
+    than off a transcription running beside them; the expected literals are unchanged, and they
+    are literals rather than anything derived from production.
 
     Addresses are ordinals: old ``[oA1, oA2, oB1]`` = 0,1,2 and new ``[nA1, nB1, nB2]`` = 0,1,2.
+
+    The mutation: build the cross-division population from the structurally unmatched
+    observations alone, dropping the ones round 1a's assignment declined. The cross invocation
+    then retrieves nothing, the third row disappears and the stream leaves both over. Observed
+    red, then restored.
     """
     old_nodes, new_nodes = assignment_leftover_fixture()
-    trace = oracle_trace(old_nodes, new_nodes)
+    recorded, _candidates = production_retrieval_populations(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
 
-    assert [(i["phase"], i["old"], i["new"]) for i in trace["invocations"]] == [
+    assert [
+        (phase, [ref.ordinal for ref in population.old_refs], [ref.ordinal for ref in population.new_refs])
+        for phase, population in recorded
+    ] == [
         ("within", [0, 1], [0]),
         ("within", [2], [1, 2]),
         ("cross", [1], [2]),
     ]
-    assert trace["stream"] == [[0, 0], [2, 1], [1, 2]]
     assert production_stream(old_nodes, new_nodes) == [[0, 0], [2, 1], [1, 2]]
 
 
