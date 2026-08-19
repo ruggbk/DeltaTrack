@@ -195,19 +195,12 @@ def part_fail_closed(results):
             "a predicate that never accepts anything cannot distinguish populations",
             f"{pop['population_freeze_commit'][:8]} / {pop['membership_blob'][:8]}",
         )
-        for field, bad in (("population_freeze_commit", "0" * 40), ("membership_blob", "f" * 40)):
-            check(
-                results,
-                f"D MUTATION a record whose {field} differs does NOT describe this population",
-                not CP.describes_population(
-                    real_rec,
-                    bad if field == "population_freeze_commit" else pop["population_freeze_commit"],
-                    bad if field == "membership_blob" else pop["membership_blob"],
-                ),
-                "exposure is scoped to the frozen population, so a new study cannot inherit it "
-                "and this one cannot shed it by moving branches",
-                f"{field} -> {bad[:8]}",
-            )
+        # The two per-field MUTATION arms that stood here were REMOVED as redundant: arm I
+        # applies the same two mutations (population_freeze_commit, membership_blob) through the
+        # REAL F12 path rather than the predicate alone, so it fails on every mutation these did
+        # and on more of the path. What is kept here is what arm I cannot cover -- the positive
+        # control on the predicate itself, and the uncommitted-record layer, which arm I
+        # deliberately stubs out in order to isolate the identity anchor.
 
         # ...and the committed-file layer, asserted in its own right.
         X04.CONTINUATION.write_text(json.dumps({**real_rec, "population_status": "PRISTINE"}))
