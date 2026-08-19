@@ -6,31 +6,35 @@ Pre-slice-4, ``diff_pdfs`` built classified ``PdfHunk``s and then handed them to
 considered for a move. That is the ADR 0020 violation: a change to what classification emitted
 could silently change what matching considered.
 
-**The oracle is the whole legacy pipeline, transcribed here.** Not a spot check of the new
-stages against themselves, and not a call into ``_align_blocks``: ``legacy_diff`` below rebuilds
-the pre-slice-4 ``diff_pdfs`` from the parser output — its own opcode walk, its own split rule,
-its own emit order — and finishes with ``_reconcile_moves``, which slice 4 deliberately left in
-place for exactly this purpose. If the extraction changed which pairs correspond, or where a
-record lands, these comparisons say so.
+**The legacy transcription is gone (#659).** This module used to carry a rebuild of the
+pre-slice-4 ``diff_pdfs`` — its own opcode walk, split rule and emit order, finishing with
+``_reconcile_moves`` — and compare production's whole hunk stream and round-2 population
+against it. That comparison answered a closed question: whether slice 4 preserved behaviour.
+It could not answer whether the correspondence is right, and it could not survive a deliberate
+change to PDF matching policy without someone re-transcribing a new "before".
 
-Two things are compared, because they can fail apart:
+What remains is what still binds something durable, and none of it names a legacy symbol:
 
-``test_the_staged_path_reproduces_the_legacy_hunk_stream``
-    the whole output, hunk for hunk, over every adjacent committed pair.
-``test_the_population_projection_matches_the_legacy_filtered_hunk_lists``
-    the round-2 population specifically. The output could agree while the population was
-    derived differently and happened to select the same links; this pins the projection ADR
-    0020 actually cares about.
+``test_round_2_addresses_the_complete_parser_sequence``
+    every address entering round 2 is a complete-sequence ordinal, which is ADR 0019's hazard
+    at the one place slice 4 mints new addresses.
+``test_the_production_path_does_not_run_the_legacy_reconciler``
+    round 2 no longer passes through the function that consumed classification output. This is
+    slice 4's structural claim, and it is the reason ``_reconcile_moves`` is still in ``src``.
+``test_the_corpus_actually_exercises_round_2``
+    the floor that stops the above agreeing vacuously on a corpus with no moves.
+
+Whole-output preservation is owned by ``tests/test_pdf_canonical_baseline.py``. The one thing
+the transcription covered that the baseline does not is the six ``compare.pdf`` declines, which
+no user reaches and no baseline record covers; that loss is deliberate and is recorded here
+rather than left to be rediscovered.
 
 The record's §7.4 note — that PDF's move records land where the removal was, rather than
-appended as in XML — is why ``PdfSettledCorrespondence`` carries a slot. That ordering is
-covered by the hunk-stream comparison rather than asserted separately.
+appended as in XML — is why ``PdfSettledCorrespondence`` carries a slot.
 """
 
 from __future__ import annotations
 
-import difflib
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -38,13 +42,7 @@ import pytest
 from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
     ROUND2_UNMATCHED_RECOVERY,
-    PdfHunk,
     _AlignedPairing,
-    _block_key,
-    _hunk_for_added,
-    _hunk_for_paired_blocks,
-    _hunk_for_removed,
-    _reconcile_moves,
     apply_pdf_similarity_revocation,
     assign_pdf_moves,
     classify_pdf,
@@ -60,7 +58,7 @@ from deltatrack.matching import NEW, OLD, ObservationRef
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from deltatrack.parsers.pdf_blocks import _Block, _flatten, _group_into_blocks, _IndexedLine
 from deltatrack.pdf_observations import PdfObservationRegistry
-from deltatrack.similarity import MOVE_THRESHOLD, SIMILARITY_THRESHOLD, text_similarity_at_least
+from deltatrack.similarity import MOVE_THRESHOLD, SIMILARITY_THRESHOLD
 from tests.pdf_corpus import adjacent_pdf_pairs, cached_pages
 
 _PAIRS = adjacent_pdf_pairs()
@@ -68,81 +66,6 @@ _PAIR_IDS = [f"{bill}:{old.stem}->{new.stem}" for bill, old, new in _PAIRS]
 
 
 # --- The oracle: the pre-slice-4 pipeline, transcribed -------------------------------------
-
-
-def legacy_is_moved(v1_b: _Block, v2_b: _Block, similarity: float) -> bool:
-    """The pre-slice-6a moved-vs-modified rule, transcribed from ``_hunk_for_paired_blocks``.
-
-    That function used to own this condition; slice 6a moved it into
-    ``pdf_round1_move_basis``. The oracle transcribes it here rather than calling either, for
-    the reason this module's header gives: an oracle that asks a production helper what the rule
-    is cannot detect that the rule changed.
-
-    Transcribed **as it stood before 6a**, collapsed boolean and all — the missing-anchor and
-    different-anchor cases share one branch here exactly as they did then. Splitting them to
-    match production's new three-state evidence would make this agree with 6a by construction,
-    which is the whole failure this oracle exists to rule out.
-    """
-    if not (v1_b.anchor and v2_b.anchor):
-        return False
-    return v1_b.anchor.text != v2_b.anchor.text and similarity >= MOVE_THRESHOLD
-
-
-def _legacy_paired_hunk(v1_b: _Block, v2_b: _Block, similarity: float) -> PdfHunk:
-    """The hunk the pre-6a ``_hunk_for_paired_blocks`` built, with the type it decided itself."""
-    hunk = _hunk_for_paired_blocks(v1_b, v2_b)
-    return replace(hunk, change_type="moved") if legacy_is_moved(v1_b, v2_b, similarity) else hunk
-
-
-def legacy_emit_pair(v1_b: _Block, v2_b: _Block, sink: list[PdfHunk]) -> None:
-    """The pre-slice-4 ``_emit_pair``, appending classified hunks as it did then.
-
-    Transcribed from the commit before slice 4, not imported. Production's version now appends
-    pairings, so there is nothing left to import that would answer this question honestly.
-    """
-    if v1_b.text == v2_b.text:
-        if v1_b.anchor and v2_b.anchor and v1_b.anchor.text != v2_b.anchor.text:
-            sink.append(_legacy_paired_hunk(v1_b, v2_b, similarity=1.0))
-        return
-    sim = text_similarity_at_least(v1_b.text, v2_b.text, SIMILARITY_THRESHOLD)
-    if sim < SIMILARITY_THRESHOLD:
-        sink.append(_hunk_for_removed(v1_b))
-        sink.append(_hunk_for_added(v2_b))
-    else:
-        sink.append(_legacy_paired_hunk(v1_b, v2_b, similarity=sim))
-
-
-def legacy_hunks_before_round2(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[PdfHunk]:
-    """The pre-slice-4 classified hunk stream, before ``_reconcile_moves`` ran on it."""
-    matcher = difflib.SequenceMatcher(
-        a=[_block_key(b) for b in v1_blocks],
-        b=[_block_key(b) for b in v2_blocks],
-        autojunk=False,
-    )
-    hunks: list[PdfHunk] = []
-    for op, i1, i2, j1, j2 in matcher.get_opcodes():
-        if op == "equal":
-            for v1_b, v2_b in zip(v1_blocks[i1:i2], v2_blocks[j1:j2]):
-                legacy_emit_pair(v1_b, v2_b, hunks)
-        elif op == "delete":
-            for v1_b in v1_blocks[i1:i2]:
-                hunks.append(_hunk_for_removed(v1_b))
-        elif op == "insert":
-            for v2_b in v2_blocks[j1:j2]:
-                hunks.append(_hunk_for_added(v2_b))
-        else:
-            v1_slice, v2_slice = v1_blocks[i1:i2], v2_blocks[j1:j2]
-            for k in range(max(len(v1_slice), len(v2_slice))):
-                v1_b = v1_slice[k] if k < len(v1_slice) else None
-                v2_b = v2_slice[k] if k < len(v2_slice) else None
-                if v1_b is not None and v2_b is not None:
-                    legacy_emit_pair(v1_b, v2_b, hunks)
-                elif v1_b is not None:
-                    hunks.append(_hunk_for_removed(v1_b))
-                else:
-                    assert v2_b is not None
-                    hunks.append(_hunk_for_added(v2_b))
-    return hunks
 
 
 def blocks_for(pdf: Path) -> list[_Block]:
@@ -165,58 +88,12 @@ def round1_stream(old_blocks: list[_Block], new_blocks: list[_Block], registry: 
     return pairings, evidence
 
 
-def legacy_hunks(old_pdf: Path, new_pdf: Path) -> list[PdfHunk]:
-    """The pre-slice-4 pipeline end to end: classify, then reconcile moves on the records."""
-    hunks = legacy_hunks_before_round2(blocks_for(old_pdf), blocks_for(new_pdf))
-    return _reconcile_moves(hunks)
-
-
 def test_the_corpus_pair_list_is_not_empty() -> None:
     """A parametrization list that silently empties is the fail-open shape (#542)."""
     assert len(_PAIRS) >= 20, f"only {len(_PAIRS)} adjacent PDF pairs discovered; the corpus holds more"
 
 
 # --- Behaviour preservation over the corpus -----------------------------------------------
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(("bill", "old_pdf", "new_pdf"), _PAIRS, ids=_PAIR_IDS)
-def test_the_staged_path_reproduces_the_legacy_hunk_stream(bill: str, old_pdf: Path, new_pdf: Path) -> None:
-    """Every hunk, in order, identical to what the pre-slice-4 pipeline produced.
-
-    Broader than the canonical baseline, deliberately: this runs on **every** adjacent pair
-    including the six ``compare.pdf`` declines, which the baseline cannot cover because no user
-    reaches them. A move-selection change confined to a declined pair would be invisible there.
-    """
-    assert list(diff_pdfs(cached_pages(old_pdf), cached_pages(new_pdf)).hunks) == legacy_hunks(old_pdf, new_pdf)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(("bill", "old_pdf", "new_pdf"), _PAIRS, ids=_PAIR_IDS)
-def test_the_population_projection_matches_the_legacy_filtered_hunk_lists(
-    bill: str, old_pdf: Path, new_pdf: Path
-) -> None:
-    """Round 2's population, and its ``(ri, ai)`` order, derived without classification.
-
-    The output could agree while the population was built differently and happened to select
-    the same links, so this compares the population itself: the texts production's retriever
-    receives, in the order it receives them, against the texts the legacy filter produced from
-    the classified stream.
-
-    That equality is the whole claim of ``pdf_unmatched_population``. Measured rather than
-    argued, because the argument — "``_hunk_for_removed`` is the only producer of a ``removed``
-    hunk" — is a statement about code that a later edit could quietly falsify.
-    """
-    old_blocks, new_blocks = blocks_for(old_pdf), blocks_for(new_pdf)
-    legacy = legacy_hunks_before_round2(old_blocks, new_blocks)
-    legacy_removed = [h.v1_text for h in legacy if h.change_type == "removed"]
-    legacy_added = [h.v2_text for h in legacy if h.change_type == "added"]
-
-    registry = PdfObservationRegistry(old_blocks, new_blocks)
-    population = pdf_unmatched_population(round1_stream(old_blocks, new_blocks, registry)[0], registry)
-
-    assert [o.block.text for o in population.old] == legacy_removed
-    assert [o.block.text for o in population.new] == legacy_added
 
 
 @pytest.mark.slow
@@ -241,7 +118,7 @@ def test_round_2_addresses_the_complete_parser_sequence(bill: str, old_pdf: Path
 
 @pytest.mark.slow
 def test_the_corpus_actually_exercises_round_2() -> None:
-    """Floor. The three sweeps above would agree vacuously on a corpus with no moves at all.
+    """Floor. The sweeps above would agree vacuously on a corpus with no moves at all.
 
     Measured: 166 moved hunks, 8,182 unmatched observations, and 354 as the sum over pairs of
     ``min(len(old), len(new))`` — the count of moves round 2 could possibly make. Asserted as
