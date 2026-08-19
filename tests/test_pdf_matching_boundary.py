@@ -15,10 +15,8 @@ trusted. Each rule below is paired with a test that applies a NAMED mutation and
 the result changes. Those mutation tests are permanent, not one-off probes: if a future
 refactor makes a mutation stop mattering, the mutation test fails and says so.
 
-The four gates, and the mutation each is falsified by:
+The three gates, and the mutation each is falsified by:
 
-``test_transcribed_*``      the split and move rules, transcribed independently.
-                            Falsified by feeding a hunk that violates each rule.
 ``test_split_population*``  a real below-cutoff split carrying money on both sides.
                             Falsified by the boundary pair either side of the cutoff.
 ``test_positional_replace`` the positional ``replace`` zip.
@@ -26,12 +24,18 @@ The four gates, and the mutation each is falsified by:
 ``test_greedy_*``           round-2 competition and exclusivity.
                             Falsified by four separate mutations, one at a time.
 
-**The transcribed rules exist to disagree with production.** They compose the same
-primitives deliberately — what they guard is the *composition*: an inverted comparison, a
-dropped gate, the wrong constant. They must never be replaced by a call to
-``_emit_pair`` or ``_hunk_for_paired_blocks``, and production must never import them. An
-oracle that asked the production helper what the rule is could not detect that the rule
-changed, which is the one failure this slice can actually have.
+**Retired in #659: the two transcribed rules and their corpus sweeps.** ``legacy_is_moved``
+and the corpus-wide comparisons of both rules against every committed hunk are gone, together
+with ``test_the_transcribed_rules_can_fail``. They pinned the rules as they stood so that later
+slices had something to be behaviour-preserving against; that question is closed, and a
+transcription cannot survive a deliberate change to either cutoff without being rewritten to
+match it.
+
+What that costs, recorded here rather than left to be rediscovered: ``SIMILARITY_THRESHOLD``
+keeps an off-corpus owner in ``test_split_boundary_falsifies_the_cutoff``, which straddles the
+cutoff directly. ``MOVE_THRESHOLD`` does not — after this, a change to it is caught by
+``tests/test_pdf_canonical_baseline.py`` when it moves a committed pair, and by nothing when it
+does not.
 
 No production code is changed by this module. It pins current behaviour so that the stage
 extraction in later slices has something to be behaviour-preserving *against*.
@@ -50,35 +54,24 @@ from tests.pdf_corpus import adjacent_pdf_pairs, cached_pages
 pytestmark = pytest.mark.slow
 
 
-# --- The oracle: the two rules, transcribed, never imported from production -----------
+# --- The split rule, stated by this module for its own fixtures ------------------------
 
 
-def legacy_pair_survives(v1_text: str, v2_text: str) -> bool:
-    """Whether ``_emit_pair`` keeps an aligned pair rather than splitting it.
+def pair_survives_the_split_rule(v1_text: str, v2_text: str) -> bool:
+    """Whether an aligned pair is kept rather than split: identical, or at the cutoff.
 
-    Transcribed from ``diff_pdf._emit_pair`` as it stands: identical texts are kept, and
-    otherwise the word-level ratio must reach ``SIMILARITY_THRESHOLD``. Written in the
-    positive, and using ``text_similarity`` rather than ``text_similarity_at_least`` —
-    the gated form returns 0.0 below the cutoff, so composing the oracle from it would
-    make the oracle inherit the very short-circuit it is meant to check.
+    **Fixture machinery, not an oracle.** The corpus-wide comparison against production that
+    this predicate used to serve was retired in #659 along with the rest of the transcriptions.
+    What is left is the two gates below, which need to say which pairs their fixtures put on
+    each side of the cutoff, and this is where they say it.
+
+    Uses ``text_similarity`` rather than ``text_similarity_at_least``: the gated form returns
+    0.0 below the cutoff, so building the predicate from it would inherit the very short-circuit
+    the boundary gate exists to place a pair either side of.
     """
     if v1_text == v2_text:
         return True
     return text_similarity(v1_text, v2_text) >= SIMILARITY_THRESHOLD
-
-
-def legacy_is_moved(v1_anchor_text: str | None, v2_anchor_text: str | None, v1_text: str, v2_text: str) -> bool:
-    """Whether ``_hunk_for_paired_blocks`` calls an aligned pair moved rather than modified.
-
-    Transcribed: both anchors present, their texts differ, and body similarity reaches
-    ``MOVE_THRESHOLD``. Identical bodies score 1.0, which is how the renamed-account case
-    reaches ``moved``.
-    """
-    if v1_anchor_text is None or v2_anchor_text is None:
-        return False
-    if v1_anchor_text == v2_anchor_text:
-        return False
-    return text_similarity(v1_text, v2_text) >= MOVE_THRESHOLD
 
 
 def _page(page_number: int, *lines: tuple[int, str]) -> Page:
@@ -120,83 +113,9 @@ def _text_hunk(change_type: str, text: str, position: int) -> PdfHunk:
 _ALL_PAIRS = adjacent_pdf_pairs()
 
 
-@pytest.fixture(scope="module")
-def diff_for():
-    cache: dict[tuple, object] = {}
-
-    def _get(old, new):
-        key = (old, new)
-        if key not in cache:
-            cache[key] = diff_pdfs(cached_pages(old), cached_pages(new))
-        return cache[key]
-
-    return _get
-
-
 def test_the_corpus_pair_list_is_not_empty() -> None:
     """A parametrization list that silently empties is the fail-open shape (#542)."""
     assert len(_ALL_PAIRS) >= 15, f"only {len(_ALL_PAIRS)} PDF pairs collected; the committed corpus holds more"
-
-
-@pytest.mark.parametrize(("bill", "old", "new"), _ALL_PAIRS, ids=[f"{b}/{o.stem}->{n.stem}" for b, o, n in _ALL_PAIRS])
-def test_transcribed_split_rule_agrees_with_production(bill, old, new, diff_for) -> None:
-    """Every surviving pair clears the split cutoff, per the independently written rule.
-
-    A ``modified`` or ``moved`` hunk carrying text on both sides is a pair the split rule
-    kept. If production's cutoff moved, or its comparison inverted, a pair below the
-    transcribed cutoff would appear here.
-    """
-    for hunk in diff_for(old, new).hunks:
-        if hunk.change_type not in ("modified", "moved") or not (hunk.v1_text and hunk.v2_text):
-            continue
-        assert legacy_pair_survives(hunk.v1_text, hunk.v2_text), (
-            f"{bill}: a {hunk.change_type} pair scores below SIMILARITY_THRESHOLD "
-            f"({text_similarity(hunk.v1_text, hunk.v2_text):.4f} < {SIMILARITY_THRESHOLD}); "
-            "production kept a pair the transcribed split rule would have split"
-        )
-
-
-@pytest.mark.parametrize(("bill", "old", "new"), _ALL_PAIRS, ids=[f"{b}/{o.stem}->{n.stem}" for b, o, n in _ALL_PAIRS])
-def test_transcribed_move_rule_agrees_with_production(bill, old, new, diff_for) -> None:
-    """Every ``moved`` hunk clears MOVE_THRESHOLD, and no ``modified`` one should have.
-
-    The second half is the sharper direction: a ``modified`` hunk whose anchors differ and
-    whose bodies clear the move cutoff is exactly what ``_hunk_for_paired_blocks`` is
-    supposed to have labelled ``moved``, so its presence means the rule changed.
-    """
-    for hunk in diff_for(old, new).hunks:
-        if not (hunk.v1_text and hunk.v2_text):
-            continue
-        similarity = text_similarity(hunk.v1_text, hunk.v2_text)
-        if hunk.change_type == "moved":
-            assert similarity >= MOVE_THRESHOLD, (
-                f"{bill}: a moved hunk scores {similarity:.4f} < {MOVE_THRESHOLD}; both the "
-                "aligned-pair rule and round-2 assignment require the move cutoff"
-            )
-        elif hunk.change_type == "modified":
-            v1_anchor = hunk.v1_anchor.text if hunk.v1_anchor else None
-            v2_anchor = hunk.v2_anchor.text if hunk.v2_anchor else None
-            assert not legacy_is_moved(v1_anchor, v2_anchor, hunk.v1_text, hunk.v2_text), (
-                f"{bill}: a modified hunk ({v1_anchor} -> {v2_anchor}, similarity "
-                f"{similarity:.4f}) satisfies the transcribed moved rule; production and the "
-                "transcription disagree about what a move is"
-            )
-
-
-def test_the_transcribed_rules_can_fail() -> None:
-    """Prove both checks fire, rather than trusting two absence assertions (#299).
-
-    Feeds each rule the input it exists to reject. Without this the two corpus sweeps above
-    are green-by-default: they assert that nothing violates a rule, and a check structurally
-    incapable of matching would report exactly the same thing.
-    """
-    assert not legacy_pair_survives("alpha bravo charlie delta echo", "one two three four five")
-    assert legacy_pair_survives("alpha bravo charlie", "alpha bravo charlie")
-
-    assert legacy_is_moved("SEC. 101", "SEC. 202", "same body text here", "same body text here")
-    assert not legacy_is_moved("SEC. 101", "SEC. 101", "same body text here", "same body text here")
-    assert not legacy_is_moved(None, "SEC. 202", "same body text here", "same body text here")
-    assert not legacy_is_moved("SEC. 101", "SEC. 202", "alpha bravo charlie delta", "one two three four")
 
 
 # --- Gate 4: the split population, which no committed fixture exercised ----------------
@@ -243,7 +162,7 @@ def test_split_population_exists_and_carries_money_on_both_sides() -> None:
         else:
             continue
         for a, b in aligned:
-            if a.text == b.text or legacy_pair_survives(a.text, b.text):
+            if a.text == b.text or pair_survives_the_split_rule(a.text, b.text):
                 continue
             splits += 1
             if extract_amounts(a.text) and extract_amounts(b.text):
@@ -268,9 +187,9 @@ def test_split_boundary_falsifies_the_cutoff() -> None:
     just_below = (f"{shared} alpha bravo", " ".join(f"other{i}" for i in range(14)))
 
     assert text_similarity(*just_above) >= SIMILARITY_THRESHOLD
-    assert legacy_pair_survives(*just_above)
+    assert pair_survives_the_split_rule(*just_above)
     assert text_similarity(*just_below) < SIMILARITY_THRESHOLD
-    assert not legacy_pair_survives(*just_below)
+    assert not pair_survives_the_split_rule(*just_below)
 
 
 # --- Gate 6: the positional `replace` zip ----------------------------------------------
