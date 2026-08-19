@@ -32,6 +32,13 @@ EXECUTION READINESS
 --self-test drives every gate that has a constructible known-bad case and requires each
 to fail, because a gate that has never produced a negative cannot tell "ready" from
 "blind".
+
+TWO EXCEPTIONS, OWNED ELSEWHERE RATHER THAN DUPLICATED. F12 (continuation record) and G7
+(result-bearing toolchain) are added by A47, and their known-bad cases live in
+`x30_continuation_boundary.py`: a suppressed prior-boundary record, an uncommitted one, a
+foreign population, and a version mutation per pinned dependency. They are not repeated
+here because two controls failing on the same mutation cost twice to maintain and diagnose.
+Named explicitly so the claim above stays true rather than quietly becoming false.
 """
 
 from __future__ import annotations
@@ -69,6 +76,23 @@ AMENDMENTS = EV / "PRE-EXECUTION-AMENDMENTS.md"
 # pre-execution amendments are allowed. After it: confirmatory output may exist, and a
 # scoring-rule change is a DEVIATION, not an amendment.
 EXECUTION_MARKER = EV / "results" / "EXECUTION-START.json"
+# A47 -- the authoritative record that this frozen population ALREADY crossed an execution
+# boundary (Run 1, 89360b30, on a branch since archived and deleted). Exposure leaves no
+# repository trace, so without this file every invariant below reads green over a population
+# that has been measured end to end, and a SECOND pristine boundary could be created for it.
+CONTINUATION = EV / "results" / "CONTINUATION.json"
+
+# A47 -- THE PRIOR EXECUTION BOUNDARY IS A HISTORICAL FACT, PINNED HERE, exactly as
+# POPULATION_FREEZE_COMMIT is and for the same reason. Taking it from the continuation record
+# alone would let the record CERTIFY ITSELF: the commit is not a reachable object on develop
+# (Run 1's branch was archived and deleted), so nothing else in the repository contradicts a
+# rewrite of it. Measured before this was pinned: mutating `prior_execution.boundary_commit`
+# in an otherwise valid, committed, internally consistent record left F12 GREEN.
+#
+# The other two identity fields were already anchored to independent facts and needed no
+# repair -- `population_freeze_commit` against the constant below, and `membership_blob`
+# against the live blob of the committed manifest.
+PRIOR_EXECUTION_BOUNDARY = "89360b30de480231efdc89157443779d45b37db2"
 
 # THE POPULATION FREEZE IS A HISTORICAL FACT, PINNED, not "whatever commit last touched
 # the manifest". Deriving it from last_commit(MEMBERSHIP) makes the boundary movable: a
@@ -164,6 +188,98 @@ def marker_commit() -> str:
     """The immutable execution boundary, or "" if there is not a valid one."""
     state, boundary, _ = marker_state()
     return boundary if state == "VALID" else ""
+
+
+DEVIATIONS = EV / "results" / "DEVIATIONS.md"
+DEVIATION_KINDS = {"DEVIATION", "POST-BOUNDARY CONTINUATION"}
+
+
+def parse_deviations() -> tuple[list[dict], list[str]]:
+    """Post-boundary declarations, from the section 4.7 / 11 deviation register.
+
+    A SEPARATE parser from `parse_amendments`, deliberately. Every record in the
+    pre-execution ledger must carry `confirmatory_output_at_time: "none"`, so filing a
+    post-boundary change there would force a statement that is either false or, at best,
+    true only on a technicality nobody reading it would infer.
+
+    F9's property is *every post-freeze methodological commit is declared in a register a
+    reviewer reads* -- not *there is exactly one register*. Splitting the two keeps the
+    pre-execution ledger's meaning intact while leaving no commit undeclared.
+    """
+    if not DEVIATIONS.exists():
+        return [], []
+    records, errors = [], []
+    for block in re.findall(r"```json\s*(\{.*?\})\s*```", DEVIATIONS.read_text(), re.S):
+        try:
+            rec = json.loads(block)
+        except json.JSONDecodeError as exc:
+            errors.append(f"unparseable deviation block: {exc}")
+            continue
+        for key in ("id", "kind", "commits", "files_touched", "results_already_visible"):
+            if key not in rec:
+                errors.append(f"deviation {rec.get('id', '?')} missing {key}")
+        if rec.get("kind") not in DEVIATION_KINDS:
+            errors.append(f"deviation {rec.get('id', '?')} has kind {rec.get('kind')!r}")
+        # Section 11 requires this field explicitly, and a deviation that claims nothing was
+        # visible is the one shape that would quietly restore the pre-execution posture.
+        if rec.get("results_already_visible") in (None, "", [], {}):
+            errors.append(f"deviation {rec.get('id', '?')} does not record which results were already visible")
+        records.append(rec)
+    return records, errors
+
+
+def continuation_state() -> tuple[dict | None, bool, str]:
+    """(record, ok, detail) for the A47 continuation record.
+
+    FAILS CLOSED, and the direction matters more here than anywhere else in this file. A
+    missing, malformed, uncommitted or foreign-population record is NOT read as "this
+    population is pristine" -- that reading is the exact failure the record exists to
+    prevent, and it is reachable by simply deleting a file. So the absence of evidence is
+    reported as a FAILED invariant, never as evidence of absence.
+    """
+    if not CONTINUATION.exists():
+        return None, False, "results/CONTINUATION.json is absent -- prior-boundary state is UNKNOWN, not pristine"
+    if not committed(CONTINUATION):
+        return None, False, "continuation record exists on disk but is not committed unmodified"
+    try:
+        import continuation_provenance as CP
+
+        rec = CP.load(CONTINUATION)
+    except Exception as exc:  # noqa: BLE001 -- an unreadable record is not a pristine one
+        return None, False, f"continuation record unreadable: {type(exc).__name__}: {exc}"
+
+    # Scoped to the POPULATION, not the branch. A future study that freezes a new population
+    # must not inherit this one's exposure, and this one must not shed it by moving branches.
+    if not CP.describes_population(rec, POPULATION_FREEZE_COMMIT, blob_sha(MEMBERSHIP)):
+        return rec, False, "continuation record does not describe the currently frozen population"
+
+    # ...and the historical boundary it claims must be the pinned one. Without this the record
+    # is the ONLY witness to its own most load-bearing field.
+    # ...and the section 4.7 status it claims must be the REQUIRED one. 4.7 makes
+    # NON-CONFIRMATORY a requirement A45-dependent results are validated against, so a record
+    # that simply asserts a different status is not describing a lawful continuation at all.
+    try:
+        CP.a45_status(rec)
+    except Exception as exc:  # noqa: BLE001 -- a record that mis-states its own 4.7 status
+        return rec, False, f"continuation record's A45 status is not the required one: {exc}"
+
+    claimed = CP.prior_boundary(rec)
+    if claimed != PRIOR_EXECUTION_BOUNDARY:
+        return rec, False, (
+            f"continuation record's prior boundary {claimed[:8] or 'ABSENT'} disagrees with the "
+            f"pinned historical fact {PRIOR_EXECUTION_BOUNDARY[:8]}"
+        )
+    return rec, True, CP.exposure_summary(rec) if CP.is_exposed(rec) else "population not exposed"
+
+
+def population_exposed() -> bool:
+    """Has this frozen population already crossed an execution boundary?"""
+    rec, ok, _ = continuation_state()
+    if not ok or rec is None:
+        return False
+    import continuation_provenance as CP
+
+    return CP.is_exposed(rec)
 
 
 def amendment_commits(records: list[dict]) -> dict[str, str]:
@@ -599,10 +715,15 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
     # every methodological change after the freeze has an amendment describing THAT
     # change, so each protected-touching commit must be declared by SHA.
     records, errors = parse_amendments()
+    # A47 -- post-boundary changes are declared in the DEVIATIONS register, not the
+    # pre-execution ledger. Both count as declarations for F9; neither excuses the other.
+    dev_records, dev_errors = parse_deviations()
+    errors += dev_errors
+    decl_records = records + dev_records
     # Resolve declared refs through git rather than slicing strings: the ledger records
     # short SHAs and a fixed-width prefix comparison silently matches nothing.
     declared_commits = set()
-    for r in records:
+    for r in decl_records:
         for c in r.get("commits", []):
             full = git("rev-parse", str(c))
             if not full:
@@ -631,7 +752,7 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         # second slips in unrecorded under a legitimate-looking declaration.
         named = {
             f
-            for r in records
+            for r in decl_records
             if any(git("rev-parse", str(c)) == sha for c in r.get("commits", []))
             for f in r.get("files_touched", [])
         }
@@ -651,11 +772,20 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
             not errors and not undeclared_commits,
             "; ".join(errors + [f"UNDECLARED COMMIT {u}" for u in undeclared_commits])
             or (
-                f"{len(records)} amendments declaring {len(declared_commits)} commits; "
-                "all protected commits accounted for"
+                f"{len(records)} amendments + {len(dev_records)} deviations declaring "
+                f"{len(declared_commits)} commits; all protected commits accounted for"
             ),
         )
     )
+
+    # F12 (A47) -- BOUNDARY CONTINUITY. Every invariant above is satisfied by an EXPOSED
+    # population, because exposure leaves no repository trace: F2 passes precisely BECAUSE
+    # Run 1 did not modify the PDFs, and F5 passes because the run failed upstream of
+    # scores.json. Branch deletion, archival, rebasing or cherry-picking must never make
+    # these 17 members look pristine again, so the historical fact is carried in a committed
+    # record rather than derived from a git object that is not even reachable here.
+    _rec, cont_ok, cont_detail = continuation_state()
+    results.append(("F12 continuation record present and describes this population", cont_ok, cont_detail))
     return results
 
 
@@ -796,7 +926,45 @@ def check_execution(members: list[dict]) -> list[tuple[str, bool, str]]:
     # are Rule 3 blockers (A27.6), so a missing or malformed control set must keep execution
     # forbidden even when every producer file is present and committed.
     results.append(g6_control_fixtures())
+    results.append(g7_toolchain())
     return results
+
+
+def g7_toolchain() -> tuple[str, bool, str]:
+    """G7 (A47.9) -- the result-bearing toolchain matches the one Run 1's claim is scoped to.
+
+    NOT general environment reproducibility. Exactly three versions, because exactly three
+    are what the inaugural run's byte-identical rebuild claim was scoped to, and because two
+    of them are result-bearing in a way that is easy to miss:
+
+      * pypdfium2 drives the H and X extraction arms. It is pinned at 5.12.1 in `uv.lock`,
+        but `pyproject.toml` only floors it at `>=5.12.1`, so the lock is what binds.
+      * PyMuPDF renders the oracle stimuli that adjudication reads, AND the cross-engine
+        control re-measures through it to decide the PDFIUM-CONDITIONED FRAME qualification.
+        It was declared in NEITHER `pyproject.toml` NOR `uv.lock` when this gate was written,
+        so it was an ambient, unpinned, result-bearing dependency. A47.11 declared it
+        (`[dependency-groups].dev`, `pymupdf==1.28.2`, locked); this gate still reads the
+        version at gate time, because a declaration binds `uv run` and not an interpreter
+        someone invokes around it.
+
+    Versions come from DISTRIBUTION METADATA, not module attributes: `pypdfium2` exposes no
+    usable `__version__`, so an attribute probe returns "" and reports drift against every
+    version forever, including the correct one.
+    """
+    name = "G7 result-bearing toolchain matches the continuation record"
+    rec, ok, detail = continuation_state()
+    if not ok or rec is None:
+        return (name, False, f"cannot check toolchain: {detail}")
+    try:
+        import continuation_provenance as CP
+
+        observed = CP.observed_toolchain()
+        drift = CP.toolchain_drift(rec, observed)
+    except Exception as exc:  # noqa: BLE001
+        return (name, False, f"toolchain probe raised {type(exc).__name__}: {exc}")
+    if drift:
+        return (name, False, "; ".join(drift))
+    return (name, True, ", ".join(f"{k} {v}" for k, v in sorted(observed.items())))
 
 
 def execution_path_report() -> list[str]:
@@ -1208,9 +1376,10 @@ def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         return self_test(contam, exposure)
 
-    if "--authorize-execution" in argv:
+    if "--authorize-execution" in argv or "--authorize-continuation" in argv:
         # The ONE-WAY BOUNDARY is crossed here and nowhere else. Refused unless both gates
         # are open, so execution can never be authorized while a prerequisite is missing.
+        continuation = "--authorize-continuation" in argv
         members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
         lookup = exposure_ids(contam, exposure)
         f_res, g_res = check_freeze(members, lookup), check_execution(members)
@@ -1221,10 +1390,71 @@ def main(argv: list[str]) -> int:
         if EXECUTION_MARKER.exists():
             print(f"REFUSED: already authorized at {marker_commit()[:8]}")
             return 1
+
+        # A47 -- PRISTINE AUTHORIZATION IS REFUSED FOR AN EXPOSED POPULATION.
+        #
+        # Not a warning, and not a flag the operator can wave away: the marker is WRITE-ONCE
+        # and immutable once committed, so a false attestation inside it can never be
+        # corrected. These 17 members were extracted end to end during Run 1, which makes
+        # `--authorize-execution`'s attestation ("no confirmatory H/X extraction had been
+        # run") FALSE for them. Authorizing a continuation is still possible, but only under
+        # a flag that names it as one and writes a marker that says so.
+        rec, cont_ok, cont_detail = continuation_state()
+        if not cont_ok:
+            print(f"REFUSED: continuation state is not verifiable: {cont_detail}")
+            return 1
+        exposed = population_exposed()
+        if exposed and not continuation:
+            print(
+                "REFUSED: this frozen population has ALREADY crossed an execution boundary.\n"
+                f"  {cont_detail}\n"
+                "  A pristine execution marker would attest that no confirmatory H/X extraction\n"
+                "  had been run on any holdout member. That statement is FALSE for these members,\n"
+                "  and the marker is write-once, so it could never be corrected.\n"
+                "  This is a CONTINUATION of the inaugural execution. Use --authorize-continuation."
+            )
+            return 1
+        if continuation and not exposed:
+            print("REFUSED: --authorize-continuation is only for a population that has already been exposed.")
+            return 1
+
+        import continuation_provenance as CP
+
+        boundary_facts = (
+            {
+                "authorization_kind": "CONTINUATION OF THE INAUGURAL EXECUTION",
+                "population_status": "EXPOSED",
+                "prior_boundary_commit": CP.prior_boundary(rec),
+                "prior_execution": CP.exposure_summary(rec),
+                "ruling": f"{rec.get('ruling')} -- {rec.get('ruling_document')}",
+                "claim_permitted": rec.get("continuation_claim"),
+                "claim_forbidden": rec.get("prohibited_claim"),
+                # The false sentence the pristine path would have written, replaced by the
+                # true one. Kept verbatim so a reader can see WHAT was corrected.
+                "process_attestation": (
+                    "This population was ALREADY measured. All 17 frozen members underwent H/X "
+                    "extraction during Run 1 at boundary "
+                    f"{CP.prior_boundary(rec)}. This marker authorizes COMPLETION of that "
+                    "execution, not a fresh confirmatory run over an unseen holdout."
+                ),
+            }
+            if continuation
+            else {
+                "authorization_kind": "INAUGURAL EXECUTION",
+                "population_status": "PRISTINE",
+                "process_attestation": (
+                    "The maintainer attests that no confirmatory H/X extraction had been run "
+                    "on any holdout member before this marker. This is an ATTESTATION, not a "
+                    "repository proof: git cannot establish that a command was never executed."
+                ),
+            }
+        )
+
         EXECUTION_MARKER.write_text(
             json.dumps(
                 {
                     "authorized": True,
+                    **boundary_facts,
                     "head_at_authorization": git("rev-parse", "HEAD"),
                     # The marker IDENTIFIES the exact population and the exact
                     # result-bearing methodology being authorized, so that "this rule
@@ -1239,11 +1469,9 @@ def main(argv: list[str]) -> int:
                         "results/holdout_membership.json": blob_sha(MEMBERSHIP),
                     },
                     "repository_fact": "no canonical score artifact existed at this commit",
-                    "process_attestation": (
-                        "The maintainer attests that no confirmatory H/X extraction had been run "
-                        "on any holdout member before this marker. This is an ATTESTATION, not a "
-                        "repository proof: git cannot establish that a command was never executed."
-                    ),
+                    # `process_attestation` is supplied by `boundary_facts` above and is
+                    # DELIBERATELY not repeated here. A later literal key would override the
+                    # spread, silently restoring the pristine sentence on the continuation path.
                     "after_this_marker": [
                         "confirmatory output may exist",
                         "no further SUBSTANTIVE pre-execution amendment is permitted",
@@ -1270,6 +1498,16 @@ def main(argv: list[str]) -> int:
     print(f"EXECUTION BOUNDARY:  {state}" + (f" at {boundary[:8]}" if boundary else ""))
     for e in m_errors:
         print(f"                     ! {e}")
+
+    # A47 -- ABSENT MUST NEVER READ AS PRISTINE. The boundary line above describes THIS
+    # BRANCH; the population line below describes the POPULATION, which is the thing the
+    # methodology is actually about. Run 1's boundary lives on an archived, deleted branch,
+    # so a reader who saw only "ABSENT" would draw exactly the wrong conclusion.
+    _rec, _ok, cont_detail = continuation_state()
+    if population_exposed():
+        print(f"POPULATION STATUS:   EXPOSED -- {cont_detail}")
+    elif not _ok:
+        print(f"POPULATION STATUS:   UNKNOWN -- {cont_detail}")
     print()
 
     # THE STATE MACHINE. Writing the marker file is NOT authorization; only its committed,
@@ -1280,7 +1518,11 @@ def main(argv: list[str]) -> int:
         print("EXECUTION FORBIDDEN. Nothing may be scored.")
         return 1
     if state == "ABSENT":
-        print("READY TO AUTHORIZE. Run --authorize-execution, then COMMIT the marker.")
+        if population_exposed():
+            print("READY TO AUTHORIZE A CONTINUATION. Run --authorize-continuation, then COMMIT the marker.")
+            print("Pristine --authorize-execution is REFUSED: this population has already been measured.")
+        else:
+            print("READY TO AUTHORIZE. Run --authorize-execution, then COMMIT the marker.")
         print("EXECUTION FORBIDDEN. Nothing may be scored.")
         return 1
     if state == "UNCOMMITTED":

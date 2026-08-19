@@ -102,6 +102,8 @@ def _bo():
 
 FRAMES_NOT_A_SEQUENCE = "FRAMES_NOT_A_SEQUENCE"
 MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
+#: A47.12 -- present but NOT the section 4.7 required value.
+WRONG_CONFIRMATORY_STATUS = "WRONG_CONFIRMATORY_STATUS"
 DUPLICATE_DOCUMENT_IDENTITY = "DUPLICATE_DOCUMENT_IDENTITY"
 UNKNOWN_POPULATION = "UNKNOWN_POPULATION"
 UNKNOWN_LINE_STATE = "UNKNOWN_LINE_STATE"
@@ -165,6 +167,11 @@ NOT_REPORTABLE_S1_DEAD = "NOT_REPORTABLE_S1_DEAD"
 
 #: I13's reporting qualification. Never blocks -- A27.6 keeps x09 out of the gate vector.
 PDFIUM_CONDITIONED_FRAME = "PDFIUM-CONDITIONED FRAME"
+
+#: A47.12 -- the section 4.7 status every A45-dependent result MUST carry. A REQUIREMENT the
+#: cross-engine artifact is validated against, never a value it supplies. Held independently of
+#: `continuation_provenance` because the allowlist forbids importing it; x30 asserts they agree.
+REQUIRED_CONFIRMATORY_STATUS = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A45 post-boundary deviation)"
 
 #: A24.2 / section 6 line states `build_frames` can commit. An unknown state REFUSES rather
 #: than falling through to "not BOTH_ABSENT", which would silently enlarge the M0 risk set.
@@ -328,7 +335,24 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
 
     if not isinstance(inputs.s1, dict) or "fires" not in inputs.s1:
         raise ScoreInputError(S1_ARTIFACT_MISSING, {"got": sorted(inputs.s1) if isinstance(inputs.s1, dict) else None})
-    _require(inputs.cross_engine, ("per_document",), "cross-engine control")
+    # A47.6 adds `confirmatory_status` to the REQUIRED fields, not the optional ones. The
+    # cross-engine artifact is the head of the A45-affected path, so an artifact that cannot
+    # say what its section 4.7 status is must not be scorable at all -- a `.get()` default
+    # here would let a provenance-less artifact through as though it were confirmatory.
+    _require(inputs.cross_engine, ("per_document", "confirmatory_status"), "cross-engine control")
+    # ...and the VALUE must be the required one, not merely present. Presence alone let a
+    # cross-engine artifact carrying a fabricated "CONFIRMATORY" score cleanly, because every
+    # layer read the status from the same authority that supplied it. The expected value is a
+    # constant HERE, deliberately independent of the artifact and of the continuation record:
+    # the scorer's frozen consumer allowlist forbids importing the provenance module, and an
+    # expectation imported from the thing under test would not be an expectation at all.
+    # `x30` asserts this constant still equals `continuation_provenance.NON_CONFIRMATORY`, so
+    # the two cannot drift apart silently.
+    got = inputs.cross_engine["confirmatory_status"]
+    if got != REQUIRED_CONFIRMATORY_STATUS:
+        raise ScoreInputError(
+            WRONG_CONFIRMATORY_STATUS, {"got": got, "required": REQUIRED_CONFIRMATORY_STATUS}
+        )
     # EXACT SET EQUALITY, not containment, and it is checked HERE -- before `qualification` runs.
     #
     # I13's consequence is a COUNT over documents ("failure on more than a third of sampled
@@ -1547,7 +1571,27 @@ def document_discordance_event(frame: dict) -> dict:
     }
 
 
-def section8(frames, paired_metrics: dict, qualification_by_document: dict) -> dict:
+def _qual_keys(qualification_label: dict, document: str) -> dict:
+    """The I13 qualification and its A47.6 section 4.7 status, as ONE INSEPARABLE PAIR.
+
+    A single helper, because the two keys are attached at six different result surfaces and
+    the failure mode is that they drift apart at one of them. `qualification` is what a
+    consumer reads to decide whether a result is PDFIUM-conditioned; `qualification_status`
+    is what tells them the value arrived through the A45 post-boundary repair and is
+    therefore non-confirmatory under section 4.7. A surface carrying the first without the
+    second reads as an ordinary confirmatory result, which is exactly the mislabelling this
+    slice exists to prevent.
+
+    Takes the WHOLE label rather than the per-document map so the status cannot be dropped
+    by a caller that only remembered to pass the labels.
+    """
+    return {
+        "qualification": qualification_label.get("per_document", {}).get(document),
+        "qualification_status": qualification_label.get("confirmatory_status"),
+    }
+
+
+def section8(frames, paired_metrics: dict, qualification_label: dict) -> dict:
     """The section 8 block: the estimand, the exact bound, the bootstrap, and the pairing.
 
     P-HEAD ONLY. `SECTION8_DOCUMENT_DISCORDANCE` carries the population in the statistic's own
@@ -1566,8 +1610,13 @@ def section8(frames, paired_metrics: dict, qualification_by_document: dict) -> d
     events = sorted(
         (
             # I13 -- every RQ1/RQ2 result computed on a cross-engine-failing document carries the
-            # qualification, including this per-document event row.
-            {**document_discordance_event(f), "qualification": qualification_by_document.get(f["document"])}
+            # qualification, including this per-document event row. A47.6 adds the section 4.7
+            # status beside it: the label and its deviation status must never separate, or a row
+            # can be read as confirmatory by a consumer that only looks at `qualification`.
+            {
+                **document_discordance_event(f),
+                **_qual_keys(qualification_label, f["document"]),
+            }
             for f in frames
         ),
         key=lambda e: MC.canonical(e["document"]),
@@ -1642,7 +1691,7 @@ def section8(frames, paired_metrics: dict, qualification_by_document: dict) -> d
 PAIRED_M9_QUANTITIES = ("n_margin_numbered_lines", "coverage")
 
 
-def paired_differences(frames, qualification_by_document: dict) -> dict:
+def paired_differences(frames, qualification_label: dict) -> dict:
     """§8.3's paired comparison, over R9's two M9 basis quantities. Populations NEVER pooled.
 
     M9 is valid on P-head AND P-robust (§4.4.1 claims M0 and M9 on both), but the two populations
@@ -1686,8 +1735,9 @@ def paired_differences(frames, qualification_by_document: dict) -> dict:
                         "H": h,
                         "X": x,
                         "difference": difference,
-                        # I13 -- the qualification travels with every result row it applies to.
-                        "qualification": qualification_by_document.get(frame["document"]),
+                        # I13 -- the qualification travels with every result row it applies to,
+                        # and A47.6 keeps its section 4.7 status alongside it.
+                        **_qual_keys(qualification_label, frame["document"]),
                     }
                 )
                 values.append(difference)
@@ -1762,6 +1812,12 @@ def qualification(cross_engine: dict) -> dict:
         },
         "decision_blocking": False,
         "threshold_owner": "x09_skeleton_cross_engine.gate (document 0.95 / page 0.75)",
+        # A47.6 -- the section 4.7 status travels WITH the qualification, read from the
+        # artifact exactly as `passed` is. The scorer does NOT consult the continuation record
+        # itself: it is a CONSUMER of committed facts, and its frozen import allowlist exists
+        # to keep it one. `validate_inputs` requires the field, so a cross-engine artifact
+        # without provenance is refused rather than silently read as confirmatory.
+        "confirmatory_status": cross_engine["confirmatory_status"],
     }
 
 
@@ -1805,23 +1861,23 @@ def score(inputs: ScoreInputs) -> dict:
         # this" are distinguishable. It never reaches a decision input: cross-engine qualifies
         # REPORTING only (A27.6), which is why `decision_blocking` stays false and no gate or status
         # in this payload is derived from it.
-        conditioned = label["per_document"].get(document)
+        quals = _qual_keys(label, document)
         per_document[document] = {
             "population": frame["population"],
             "stratum": inputs.document_strata.get(document),
-            "qualification": conditioned,
-            "M0": {**block, "qualification": conditioned},
-            "M7": {**m7_block(frame), "qualification": conditioned},
-            "M9": {**rule0_facts(frame), "qualification": conditioned},
+            **quals,
+            "M0": {**block, **quals},
+            "M7": {**m7_block(frame), **quals},
+            "M9": {**rule0_facts(frame), **quals},
         }
 
     headings = heading_metrics(inputs)
     for document, metrics in headings["per_document"].items():
-        conditioned = label["per_document"].get(document)
+        quals = _qual_keys(label, document)
         per_document[document]["headings_by_frame"] = {
-            frame_name: {**block, "qualification": conditioned} for frame_name, block in metrics.items()
+            frame_name: {**block, **quals} for frame_name, block in metrics.items()
         }
-    paired = paired_differences(inputs.frames, label["per_document"])
+    paired = paired_differences(inputs.frames, label)
 
     return {
         "schema": SCHEMA,
@@ -1846,7 +1902,7 @@ def score(inputs: ScoreInputs) -> dict:
             "estimand_purposes": headings["estimand_purposes"],
             "pooling_rule": headings["pooling_rule"],
         },
-        "section8": section8(inputs.frames, paired, label["per_document"]),
+        "section8": section8(inputs.frames, paired, label),
         "adequacy_4_5": adequacy_facts(inputs.frames, inputs.document_strata),
         # Section 5.6's reliability facts, computed from the committed artifacts. A Rule 3 gate
         # INPUT, never a Rule 3 verdict -- and no caller scalar can reach it.
