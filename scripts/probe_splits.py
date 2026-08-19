@@ -9,9 +9,9 @@ not see them, so this sizes that part of the input population.
 SCOPE, stated because the number is easy to over-read:
 
     This measures the removal/addition INPUT population only. It does **not** measure
-    overlap with the 1054 move candidates or the 496 selected moves reported by
-    ``probe_round2_migration.py``, and nothing here says how many of those contain a
-    classification-created side.
+    overlap with the 1054 move candidates or the 496 selected moves the round-2 migration
+    probe reported (retired in #659; its figures are in git history at 6e2964fb), and
+    nothing here says how many of those contain a classification-created side.
 
     So it does not, on its own, establish what would change if the second retrieval pass
     moved before classification. It establishes only how much of the input to that pass
