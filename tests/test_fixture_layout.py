@@ -102,16 +102,18 @@ _DOWNLOAD_ROOT_NAMERS = frozenset(
 # failure #654 exists to remove. Under this spelling it is scanned instead, and a rule
 # that turns out to be wrong for it fails loudly, which is the direction
 # ``tests/test_surface_boundary.py`` already argues for. Two controls hold this in place:
-# ``test_exclusions_stay_within_the_research_tree`` pins the boundary, and
-# ``test_every_exclusion_is_live`` pins that the entry still matches something.
+# ``test_exclusions_stay_within_the_research_tree`` pins the boundary against a literal it
+# owns, and ``test_every_exclusion_is_live`` pins that the entry still matches something.
 _UNSCANNED_PREFIXES = ("docs/research/",)
 
-# The ceiling on what may ever be exempted. An exclusion list is the one lever that can
-# shrink the scan, so it gets a bound: anything at or beneath the research tree, nothing
-# else. This is deliberately NOT a roster of what must be scanned — that shape
-# under-scans invisibly, which is #654. A ceiling over-constrains instead, and failing it
-# is a loud, deliberate decision to widen the exemption.
-_EXCLUSION_CEILING = "docs/research/"
+# The bound on what may ever be exempted is deliberately NOT a constant beside the list it
+# bounds. It is written as a literal inside
+# ``test_exclusions_stay_within_the_research_tree``, because a second configuration value
+# lets the policy certify itself: widening both together passes. Measured on this module —
+# ``_UNSCANNED_PREFIXES = ("docs/research/", "src/")`` with the ceiling widened to match
+# left that invariant GREEN while the entire product engine left the scan. What caught it
+# was incidental (one exemption key happens to live under ``src/``), and incidental is not
+# a control.
 
 _BILL_ID = r"\d{3}-[a-z]+-\d+"
 
@@ -471,8 +473,10 @@ _SYNTHETIC_TRACKED = {
     "engine2/__init__.py": "",
     "engine2/loader.py": "HELPER = 1\n",
     "engine2/subpkg/loader.py": f'BILL = "bills/{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"\n',
-    # Excluded by _UNSCANNED_PREFIXES.
+    # Excluded by _UNSCANNED_PREFIXES, at two depths: a prefix match that only reached one
+    # level down would leave the nested one in the scan, and the expected set below says so.
     "docs/research/probe.py": f'BILL = "bills/{_SYNTHETIC_BILL}/{_SYNTHETIC_STEM}"\n',
+    "docs/research/nested/deep_probe.py": "DEEP = 1\n",
     # The two files that separate a path-component prefix from a string one. Both are
     # OUTSIDE `docs/research/` and both must be scanned: `docs/researchers.py` merely
     # shares the spelling, and `docs/tooling/` is the future subtree that `docs/` would
@@ -638,10 +642,22 @@ def test_exclusion_liveness_rule_can_fire() -> None:
 
 
 def test_exclusions_stay_within_the_research_tree() -> None:
-    """Nothing outside `docs/research/` may be exempted from the rules."""
-    outside = exclusions_outside_ceiling(_UNSCANNED_PREFIXES, _EXCLUSION_CEILING)
+    """Nothing outside `docs/research/` may be exempted from the rules.
+
+    The bound is written here as a literal, on purpose. Holding it in a module constant
+    beside the list it bounds lets the policy certify itself: widen both together and this
+    passes. Measured before it was inlined — `_UNSCANNED_PREFIXES = ("docs/research/",
+    "src/")` with a ceiling widened to match left this GREEN while every engine module
+    left the scan. The only things that noticed were incidental: one exemption key that
+    happens to live under `src/`, and the hardcoded examples in the rule's own can-fire
+    test. Neither is a control anyone chose.
+
+    So the literal is the anchor. Changing it is an edit to an assertion, which reads as
+    what it is; changing a constant reads as configuration.
+    """
+    outside = exclusions_outside_ceiling(_UNSCANNED_PREFIXES, "docs/research/")
     assert not outside, (
-        f"{len(outside)} exclusion(s) reach outside {_EXCLUSION_CEILING}: {outside}. The "
+        f"{len(outside)} exclusion(s) reach outside docs/research/: {outside}. The "
         "exclusion list is the only lever that shrinks the scan, so it is bounded to the "
         "one tree these rules do not own. Widening it exempts product code silently."
     )
@@ -649,33 +665,18 @@ def test_exclusions_stay_within_the_research_tree() -> None:
 
 def test_exclusion_ceiling_rule_can_fire() -> None:
     """Every way of reaching outside the research tree is reported; descendants are not."""
-    ceiling = _EXCLUSION_CEILING
     # An unrelated top-level tree.
-    assert exclusions_outside_ceiling(("engine2/",), ceiling) == ["engine2/"]
+    assert exclusions_outside_ceiling(("engine2/",), "docs/research/") == ["engine2/"]
     # The widening most likely to be reached for, which re-exempts the whole docs tree.
-    assert exclusions_outside_ceiling(("docs/",), ceiling) == ["docs/"]
+    assert exclusions_outside_ceiling(("docs/",), "docs/research/") == ["docs/"]
     # A sibling subtree under the same parent.
-    assert exclusions_outside_ceiling(("docs/tooling/",), ceiling) == ["docs/tooling/"]
-    # A descendant is within the ceiling: liveness above is what catches it if inert.
-    assert exclusions_outside_ceiling(("docs/research/nonexistent/",), ceiling) == []
-    assert exclusions_outside_ceiling(_UNSCANNED_PREFIXES, ceiling) == []
-
-
-def test_exclusion_matching_is_by_path_component_not_by_string() -> None:
-    """`docs/researchers.py` is not under `docs/research/`, however the strings compare.
-
-    The decision this pins is the one that had to be argued for: matching components
-    rather than characters. `"docs/researchers.py".startswith("docs/research")` is True,
-    so the string spelling silently exempts a file these rules do own.
-    """
-    prefix = _path_components("docs/research/")
-    assert _is_under("docs/research/probe.py", prefix)
-    assert _is_under("docs/research/nested/deep.py", prefix)
-    assert not _is_under("docs/researchers.py", prefix)
-    assert not _is_under("docs/tooling/build_docs.py", prefix)
-    assert "docs/researchers.py".startswith("docs/research"), (
-        "if this ever stops being true the string trap is gone and so is the reason for component matching"
-    )
+    assert exclusions_outside_ceiling(("docs/tooling/",), "docs/research/") == ["docs/tooling/"]
+    # The product engine, which is the tree whose silent exemption this bound exists for.
+    assert exclusions_outside_ceiling(("src/",), "docs/research/") == ["src/"]
+    # A descendant is within the bound: liveness above is what catches it if inert.
+    assert exclusions_outside_ceiling(("docs/research/nonexistent/",), "docs/research/") == []
+    # An empty bound admits everything, which is the shape a self-certifying ceiling took.
+    assert exclusions_outside_ceiling(("src/",), "") == []
 
 
 def test_every_exemption_names_a_file_the_scan_reaches() -> None:
