@@ -323,7 +323,7 @@ produced a mislabelled result was a nonempty wrong value. One control now covers
 
 ```json
 {"id": "A48", "kind": "DEVIATION",
- "commits": ["aa0f4b05", "66d8b8b4"],
+ "commits": ["55c35c04", "090716f8", "8a201a6f"],
  "classification": "POST-BOUNDARY APPARATUS DEVIATION",
  "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
  "results_already_visible": {
