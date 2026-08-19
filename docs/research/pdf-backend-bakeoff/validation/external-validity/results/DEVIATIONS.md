@@ -18,7 +18,7 @@ what the apparatus reads. This document is the reasoning; that file is the autho
 
 ```json
 {"id": "A47", "kind": "POST-BOUNDARY CONTINUATION",
- "commits": ["9ce9b6e", "cc69fc5", "381c2f6"],
+ "commits": ["9ce9b6e", "cc69fc5", "381c2f6", "abbe780"],
  "prior_boundary_commit": "89360b30de480231efdc89157443779d45b37db2",
  "population_status": "EXPOSED",
  "results_already_visible": {
@@ -37,6 +37,7 @@ what the apparatus reads. This document is the reasoning; that file is the autho
                    "probes/cross_engine_control.py", "probes/score_metrics.py",
                    "probes/x27_score_metrics.py", "probes/x30_continuation_boundary.py",
                    "probes/x30_labelling_fixture.py"],
+ "also_touched_outside_study_tree": ["pyproject.toml", "uv.lock"],
  "why_not_an_amendment": "PRE-EXECUTION-AMENDMENTS.md requires confirmatory_output_at_time == 'none' on every record; a truthful post-boundary record cannot assert that without misleading a reader. Sections 4.7 and 11 already designate this register."}
 ```
 
@@ -219,3 +220,56 @@ PyMuPDF is not incidental here: it renders the oracle stimuli that adjudication 
 cross-engine control re-measures through it to decide the PDFIUM-CONDITIONED FRAME
 qualification. A silent version change is therefore result-bearing on both surfaces. G7 makes
 the drift detectable at gate time instead of invisible.
+
+### A47.10 — the continuation record was certifying itself, and now does not
+
+**Found by trying to falsify the authority rather than to confirm it.** F12 checked that the
+record was committed, well-formed, and described the frozen population. Two of its three
+historical identity fields were anchored to facts outside the record:
+
+| field | independent fact it is checked against |
+|---|---|
+| `population.population_freeze_commit` | `POPULATION_FREEZE_COMMIT`, pinned in `x04` |
+| `population.membership_blob` | the live blob of the committed manifest |
+| `prior_execution.boundary_commit` | **nothing** |
+
+The third is the one the whole ruling rests on, and it was the one nothing checked. Because
+Run 1's branch was archived and deleted, the boundary commit is **not a reachable git object
+on `develop`**, so no other repository fact contradicts a rewrite of it. **Measured**: an
+otherwise valid, committed, internally consistent record with `boundary_commit` replaced left
+F12 **GREEN** and the population still reported EXPOSED under a fabricated boundary.
+
+**Repair, deliberately the smallest one.** The commit is now **pinned in `x04`** as
+`PRIOR_EXECUTION_BOUNDARY`, exactly as `POPULATION_FREEZE_COMMIT` is pinned and for the reason
+that constant's own comment already gives: a historical fact must not be derived from the
+thing it is supposed to constrain. No registry, no signing, no provenance framework.
+
+**Isolation proof.** With the pin in place the mutation is refused; with *only* the pin
+neutralised and every other check left standing, the identical record is **accepted**. The pin
+is therefore the sole reason for the refusal.
+
+**What would make the repaired check fail.** A single commit editing **both** `x04`'s pinned
+constant **and** the record. That is no longer an ordinary artifact mutation: it edits a
+protected file, so F9 requires it to be declared commit-by-commit in a register, and it
+appears in review as a change to gate code rather than to data. The check is not proof against
+a determined coordinated edit, and does not claim to be; it removes the *single-artifact*
+rewrite, which is what self-certification meant here.
+
+### A47.11 — the PyMuPDF defect is fixed, not only detected
+
+A47.9 recorded that PyMuPDF was undeclared and that G7 could detect the wrong version but
+could not supply the right one. That is now closed at the source:
+
+- `pymupdf==1.28.2` is declared in `[dependency-groups].dev` and locked.
+- It is **not** added to the published engine dependencies: shipping DeltaTrack to diff two
+  bill versions must not install a second PDF engine (#367).
+- G7's exact-version assertion is unchanged.
+
+**Verified from the declared environment**, not argued: a clean `uv sync` installs it,
+distribution metadata reports `1.28.2`, and `uv run python probes/x27_score_metrics.py` — the
+exact invocation that previously died on `ModuleNotFoundError` — now runs to **194/194**.
+
+The 193/194 previously reported for that suite was an artifact of an ad-hoc interpreter that
+lacked the declared environment; the failing control is the renderer-free child-interpreter
+probe, which cannot be meaningful in an environment that was never constituted correctly. No
+x27 control was edited to achieve this.
