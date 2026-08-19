@@ -88,6 +88,7 @@ other gate in this repository.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import hashlib
 import inspect
 import json
@@ -2432,9 +2433,10 @@ def test_refusing_a_unique_pair_fails_closed_on_the_committed_corpus(monkeypatch
         old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
         key = pair_key(old_path, new_path)
 
-        selections = oracle_trace(old_tree.nodes, new_tree.nodes)["unique_selections"]
-        assert selections, f"{key}: no unique-path selection to refuse"
-        refused = (selections[0][0], selections[0][1])
+        recorded, _candidates = production_retrieval_populations(old_tree, new_tree)
+        unique = [population for phase, population in recorded if phase == "unique"]
+        assert unique, f"{key}: no unique-path population to refuse"
+        refused = (unique[0].old_refs[0].ordinal, unique[0].new_refs[0].ordinal)
 
         monkeypatch.setattr(db, "CandidateSet", refusing_candidate_set(refused))
         try:
@@ -2738,11 +2740,11 @@ def test_an_ordinal_is_refused_for_a_node_outside_the_complete_sequence():
     ``element_id`` causes, arriving by a different route.
     """
     old_nodes, new_nodes = duplicate_element_id_fixture()
-    rec = Recorder(complete_sequence_ordinals(old_nodes, new_nodes))
+    registry = observation_registry(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
     stranger = node(MP, "not-in-this-parse", "text from another document", "D")
 
-    with pytest.raises(ValueError, match="absent from the complete emitted sequence"):
-        rec.ordinal(stranger)
+    with pytest.raises(ValueError, match="absent from that side's complete parser sequence"):
+        registry.ref(OLD, stranger)
 
 
 def test_ordinals_are_not_derived_from_an_invocation_population():
@@ -2757,20 +2759,21 @@ def test_ordinals_are_not_derived_from_an_invocation_population():
     the frozen artifact would silently name a different observation.
     """
     old_nodes, new_nodes = interleaved_division_fixture()
-    trace = oracle_trace(old_nodes, new_nodes)
-    cross = next(i for i in trace["invocations"] if i["phase"] == "cross")
+    recorded, _candidates = production_retrieval_populations(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+    cross = next(population for phase, population in recorded if phase == "cross")
+    cross_old = [ref.ordinal for ref in cross.old_refs]
 
     complete = complete_sequence_ordinals(old_nodes, new_nodes)
     by_complete_sequence = [complete[id(n)] for n in (old_nodes[2], old_nodes[1])]  # X2, Y1
-    by_population_position = list(range(len(cross["old"])))
+    by_population_position = list(range(len(cross_old)))
 
     assert by_complete_sequence == [2, 1]
     assert by_population_position == [0, 1]
     assert by_complete_sequence != by_population_position, (
         "the fixture no longer distinguishes the two numberings, so this proves nothing"
     )
-    assert cross["old"] == by_complete_sequence, (
-        f"the fallback population is addressed by {cross['old']}, which is not the complete "
+    assert cross_old == by_complete_sequence, (
+        f"the fallback population is addressed by {cross_old}, which is not the complete "
         "emitted sequence ordinal -- ADR 0019's filtered-view hazard"
     )
 
@@ -3011,8 +3014,9 @@ def test_the_duplicate_id_fixture_really_does_repeat_one_id():
 
     # Both pairs score 1.0, so the `(similarity, oi, ni)` descending tiebreak emits local 1
     # before local 0 -- the stream is [[1,1],[0,0]] rather than [[0,0],[1,1]].
-    trace = oracle_trace(*duplicate_element_id_fixture())
-    assert trace["stream"] == [[1, 1], [0, 0]], "the fixture must pair both old observations"
+    assert production_stream(*duplicate_element_id_fixture()) == [[1, 1], [0, 0]], (
+        "the fixture must pair both old observations"
+    )
 
 
 def test_a_swap_between_same_id_observations_is_invisible_to_element_ids():
@@ -3100,7 +3104,119 @@ CORPUS_CONTROLS = [
     "unique_path_needs_same_division",
 ]
 
+#: The three round-1 mutations the synthetic fixtures exist to catch, applied to PRODUCTION.
+#:
+#: They replace the oracle's ``variant`` mechanism, which simulated them on a transcription of
+#: the pre-ADR-0020 composition (#659). Each is now expressed as a wrapper around a production
+#: stage, so what runs is the real engine with one seam perturbed, which is where a regression
+#: would actually live. None of them re-implements a stage.
 SYNTHETIC_CONTROLS = ["ordinal_tiebreak", "no_assignment_leftovers", "extra_cross_candidate"]
+
+
+def inject_production_mutation(monkeypatch, mutation: str) -> None:
+    """Apply one round-1 mutation to production, using production's own stages only.
+
+    ``ordinal_tiebreak``
+        Assignment breaks a tie on descending INVOCATION-LOCAL position. Re-ordering the
+        population into ascending ADR 0019 ordinal before handing it to the real
+        :func:`assign_group` makes local-position rank equal ordinal rank, so the same
+        descending sort now breaks the tie on the ordinal -- the substitution #590 measured,
+        obtained without transcribing the competition. Leftovers are put back into the original
+        population's order afterwards, because feeding a re-ordered leftover list to round 1b
+        would be a second, different mutation riding along with this one.
+
+    ``no_assignment_leftovers``
+        The false green the assignment-leftover fixture exists for: the cross-division round
+        sees only observations no division ever paired, never one that within-division
+        assignment declined. Implemented by remembering which observations came from a
+        one-sided population -- the structural half -- and narrowing round 1b's input to those.
+        It narrows what the fallback SEES without removing anything from the unmatched lists,
+        because an observation the fallback never sees is still unmatched and still has to be
+        emitted; conflating the two would delete observations from the stream, which is a
+        different defect wearing this one's name.
+
+    ``extra_cross_candidate``
+        Admits to round 1b a pair it never considers, by offering it an observation a division
+        already paired.
+
+    ``monkeypatch`` restores every wrapper, including on failure.
+
+    **Inject once per comparison.** Two of the three carry state gathered from the comparison
+    they are running against -- which observations a division left structurally unmatched, and
+    which one a division already claimed -- and those are node objects belonging to that
+    comparison's registry. Re-using an injection across two comparisons offers the second one
+    the first one's nodes, whose addresses cannot be recovered, and the resulting ValueError
+    would read as the mutation being detected rather than as the harness being wrong.
+    """
+    from deltatrack import diff_bill as db
+
+    real_assign = db.assign_group
+    real_within = db.retrieve_within_division_populations
+    real_cross = db.retrieve_cross_division_population
+
+    if mutation == "ordinal_tiebreak":
+
+        def assign_on_ordinal_order(population, evidence):
+            old_order = sorted(range(len(population.old)), key=lambda i: population.old_refs[i].ordinal)
+            new_order = sorted(range(len(population.new)), key=lambda i: population.new_refs[i].ordinal)
+            reordered = dataclasses.replace(
+                population,
+                old=tuple(population.old[i] for i in old_order),
+                old_refs=tuple(population.old_refs[i] for i in old_order),
+                new=tuple(population.new[i] for i in new_order),
+                new_refs=tuple(population.new_refs[i] for i in new_order),
+            )
+            assignment = real_assign(reordered, evidence)
+            old_index = {id(item): index for index, item in enumerate(population.old)}
+            new_index = {id(item): index for index, item in enumerate(population.new)}
+            return dataclasses.replace(
+                assignment,
+                leftover_old=tuple(sorted(assignment.leftover_old, key=lambda item: old_index[id(item)])),
+                leftover_new=tuple(sorted(assignment.leftover_new, key=lambda item: new_index[id(item)])),
+            )
+
+        monkeypatch.setattr(db, "assign_group", assign_on_ordinal_order)
+        return
+
+    if mutation == "no_assignment_leftovers":
+        structural: set[int] = set()
+
+        def remember_one_sided(old_nodes, new_nodes, registry):
+            populations = real_within(old_nodes, new_nodes, registry)
+            for population in populations:
+                if not population.forms_candidates:
+                    structural.update(id(item) for item in population.old)
+                    structural.update(id(item) for item in population.new)
+            return populations
+
+        def narrow_to_structural(old_nodes, new_nodes, registry):
+            return real_cross(
+                [item for item in old_nodes if id(item) in structural],
+                [item for item in new_nodes if id(item) in structural],
+                registry,
+            )
+
+        monkeypatch.setattr(db, "retrieve_within_division_populations", remember_one_sided)
+        monkeypatch.setattr(db, "retrieve_cross_division_population", narrow_to_structural)
+        return
+
+    if mutation == "extra_cross_candidate":
+        claimed: list = []
+
+        def remember_selected(population, evidence):
+            assignment = real_assign(population, evidence)
+            claimed.extend(link.old for link in assignment.links)
+            return assignment
+
+        def widen_with_a_claimed_observation(old_nodes, new_nodes, registry):
+            extra = [item for item in claimed[:1] if not any(item is other for other in old_nodes)]
+            return real_cross(list(old_nodes) + extra, new_nodes, registry)
+
+        monkeypatch.setattr(db, "assign_group", remember_selected)
+        monkeypatch.setattr(db, "retrieve_cross_division_population", widen_with_a_claimed_observation)
+        return
+
+    raise AssertionError(f"unknown mutation {mutation!r}")
 
 
 @pytest.mark.slow
@@ -3228,17 +3344,19 @@ def test_a_corpus_invisible_mutation_reddens_a_synthetic_fixture(mutation: str):
     Without these fixtures every one of them ships green: the corpus supplies no fallback
     participant produced by assignment, and no greedy population out of ordinal order.
     """
-    variant = frozenset({mutation})
     fixtures = {
         "assignment_leftover": assignment_leftover_fixture(),
         "interleaved_division": interleaved_division_fixture(),
     }
+    baselines = {name: production_stream(*nodes) for name, nodes in fixtures.items()}
+
     moved = []
     for name, (old_nodes, new_nodes) in fixtures.items():
-        baseline = oracle_trace(old_nodes, new_nodes)
-        mutated = oracle_trace(old_nodes, new_nodes, variant)
-        if trace_digest(mutated) != trace_digest(baseline):
-            moved.append(name)
+        with pytest.MonkeyPatch.context() as patch:
+            inject_production_mutation(patch, mutation)
+            if production_stream(old_nodes, new_nodes) != baselines[name]:
+                moved.append(name)
+
     assert moved, f"the {mutation!r} mutation changed neither synthetic fixture; the fixtures do not bind it"
 
 
@@ -3250,14 +3368,19 @@ def test_the_corpus_cannot_see_the_two_fixture_bound_mutations():
     untouched. That is precisely why the fixtures are mandatory -- and if this test ever goes
     red, the corpus has grown a case that exercises them and the finding needs revisiting.
     """
-    frozen = load_frozen()
+    trees = [(pair_key(o, n), normalize_bill(o), normalize_bill(n)) for o, n in manifest_version_pairs()]
+    baselines = {
+        key: stream_digest(production_stream(old_tree.nodes, new_tree.nodes)) for key, old_tree, new_tree in trees
+    }
+    assert baselines, "the corpus comparison ran over zero version pairs"
+
     for mutation in ("ordinal_tiebreak", "no_assignment_leftovers"):
         moved = []
-        for old_path, new_path in manifest_version_pairs():
-            old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-            mutated = oracle_trace(old_tree.nodes, new_tree.nodes, frozenset({mutation}))
-            if trace_digest(mutated) != frozen[pair_key(old_path, new_path)]["sha256"]:
-                moved.append(pair_key(old_path, new_path))
+        for key, old_tree, new_tree in trees:
+            with pytest.MonkeyPatch.context() as patch:
+                inject_production_mutation(patch, mutation)
+                if stream_digest(production_stream(old_tree.nodes, new_tree.nodes)) != baselines[key]:
+                    moved.append(key)
         assert not moved, (
             f"{mutation!r} now moves the corpus on {moved}; the audit's claim that this behaviour is "
             "corpus-invisible no longer holds and the synthetic-fixture rationale needs restating"
@@ -3268,7 +3391,7 @@ def test_the_corpus_cannot_see_the_two_fixture_bound_mutations():
 
 
 @pytest.mark.slow
-def test_the_1x1_shortcut_computes_no_word_overlap():
+def test_the_1x1_shortcut_computes_no_word_overlap(monkeypatch):
     """An OPTIMISATION preservation gate, not a matching one.
 
     The shortcut selects the sole candidate, which is what the greedy would do anyway, so the
@@ -3276,22 +3399,45 @@ def test_the_1x1_shortcut_computes_no_word_overlap():
     ``text_similarity`` calls -- 593 invocations skip it today. #623 measured the equivalent
     tidy-up at +21% on ``diff_bills`` and rejected it; this keeps that decision visible.
     """
-    frozen = load_frozen()
-    total_calls = total_shortcuts = 0
-    for old_path, new_path in manifest_version_pairs():
-        counts = frozen[pair_key(old_path, new_path)]["counts"]
-        total_calls += counts["similarity_calls"]
-        total_shortcuts += counts["shortcut_1x1"]
+    from deltatrack import diff_bill as db
 
-    assert total_shortcuts, "no invocation took the shortcut, so its absence assertion proves nothing"
+    trees = [(normalize_bill(old_path), normalize_bill(new_path)) for old_path, new_path in manifest_version_pairs()]
+    assert trees, "the shortcut comparison ran over zero version pairs"
 
-    inflated = 0
-    for old_path, new_path in manifest_version_pairs():
-        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        mutated = oracle_trace(old_tree.nodes, new_tree.nodes, frozenset({"shortcut_computes_similarity"}))
-        inflated += mutated["similarity_calls"]
+    shortcuts = 0
+    for old_tree, new_tree in trees:
+        recorded, _candidates = production_retrieval_populations(old_tree, new_tree)
+        shortcuts += sum(
+            1 for _phase, population in recorded if len(population.old_refs) == 1 and len(population.new_refs) == 1
+        )
+    assert shortcuts, "no invocation took the shortcut, so its absence assertion proves nothing"
+
+    real_evidence = db.group_correspondence_evidence
+
+    def scores_the_sole_candidate(population, candidates):
+        """The tidy-up ADR 0020's audit rejected: measure the sole candidate like any other."""
+        if population.forms_candidates and len(population.old) == 1 and len(population.new) == 1:
+            old_text = " ".join(population.old[0].body_text.split())
+            new_text = " ".join(population.new[0].body_text.split())
+            return (
+                CorrespondenceEvidence.of(
+                    population.old_refs[0],
+                    population.new_refs[0],
+                    **{_WORD_OVERLAP: db.text_similarity(old_text, new_text)},
+                ),
+            )
+        return real_evidence(population, candidates)
+
+    total_calls = sum(production_similarity_calls(old_tree, new_tree) for old_tree, new_tree in trees)
+    assert total_calls == _TOTAL_SIMILARITY_CALLS, (
+        f"production made {total_calls} round-1 similarity calls against the expected "
+        f"{_TOTAL_SIMILARITY_CALLS}; the shortcut comparison below is against a moved baseline"
+    )
+
+    monkeypatch.setattr(db, "group_correspondence_evidence", scores_the_sole_candidate)
+    inflated = sum(production_similarity_calls(old_tree, new_tree) for old_tree, new_tree in trees)
 
     assert inflated > total_calls, (
-        "computing the ratio on every 1x1 did not raise the call count, so this gate cannot see the "
+        f"computing the ratio on every 1x1 left the call count at {inflated}; this gate cannot see the "
         "optimisation regression it exists for"
     )
