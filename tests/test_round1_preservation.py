@@ -2473,6 +2473,68 @@ def test_the_unique_path_runs_no_collision_machinery():
     )
 
 
+def test_a_non_colliding_group_resolves_under_only_the_unique_path_invocation():
+    """Behavioural: which retrieval provenance admits a group holding at most one per side.
+
+    ADR 0020 §13 ruled to keep the fast path's cost by orchestrating the shared stages
+    differently for a non-colliding ``match_path`` group, rather than routing it through
+    ``_match_collision_group``. Until now that routing was owned only by a structural guard over
+    ``_match_unique_path_group``'s AST and by preservation tests backed by the legacy oracle.
+    This owns it from the outside, on the stage outputs production actually produced.
+
+    **What makes the routing observable without reading an implementation.** The three round-1
+    retrievers are distinguishable by the invocation each records on the proposals it makes.
+    A collision group is partitioned by division and proposed under ``path_division_group``,
+    and its leftovers get a second round under ``path_group_cross_division``. Neither can do
+    anything for a group with at most one observation per side, so a unique group that reached
+    collision machinery would carry one of those two invocations on the candidate that admitted
+    it -- whatever pairing it went on to select. Provenance is the thing that moves; the pairing
+    stream is not, which is why the frozen stream never saw this and a stream comparison cannot
+    replace this test.
+
+    **Production against production.** The candidate set and the assignments are both elements of
+    one ``match_nodes_with_stage_outputs`` call, and the invocation is rebuilt from the literal
+    retriever name rather than imported from the module under test -- an implementation that
+    renamed the constant's *value* would move an imported expectation along with it.
+
+    **The mutation.** Delegate ``_match_unique_path_group`` to ``_match_collision_group``: the
+    two candidates are then proposed under ``path_division_group`` / ``path_group_cross_division``
+    and the first assertion fails. Observed red before this test was relied on (issue #659).
+
+    The link assertion is the premise control rather than decoration. A candidate set that
+    admitted nothing would satisfy every "no collision invocation" claim above vacuously, so what
+    the group actually decided is asserted alongside the provenance it decided under.
+    """
+    unique_path = RetrieverInvocation.of("path_unique_group", round=1)
+    collision_retrievers = {"path_division_group", "path_group_cross_division"}
+
+    old_nodes, new_nodes = unique_path_fixture()
+    _pairs, candidates, assignments = match_nodes_with_stage_outputs(_TreeStandIn(old_nodes), _TreeStandIn(new_nodes))
+
+    admitted = candidates.candidates()
+    assert len(admitted) == 2, (
+        f"the two 1x1 groups produced {len(admitted)} candidates; the fixture stopped presenting two "
+        "pairable non-colliding groups, so what this proves about the unique path is not what it says"
+    )
+    for candidate in admitted:
+        assert candidate.invocations == (unique_path,), (
+            f"candidate {candidate.ordinal_pair} was admitted by "
+            f"{[invocation.retriever for invocation in candidate.invocations]}; a non-colliding group "
+            "must be considered once, by the unique path, under its own provenance"
+        )
+    reached = {invocation.retriever for candidate in admitted for invocation in candidate.invocations}
+    assert not reached & collision_retrievers, (
+        f"the unique path reached collision machinery {sorted(reached & collision_retrievers)}; the audit "
+        "measured that routing at 2.96x and §13 ruled to keep the fast path's cost"
+    )
+
+    links = [link for assignment in assignments for link in assignment.links]
+    assert sorted((link.old.element_id, link.new.element_id) for link in links) == [("o1", "n1"), ("o2", "n2")], (
+        "the unique path stopped selecting the two available pairings, so the provenance asserted above "
+        "is the provenance of a group that decided nothing"
+    )
+
+
 # --- Independence, enforced structurally --------------------------------------------------
 
 #: Every round-1 symbol the oracle must not reach, B1's, B2's and B3's included. The set was
