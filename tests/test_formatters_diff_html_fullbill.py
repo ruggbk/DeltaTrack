@@ -13,6 +13,9 @@ import json
 import re
 from pathlib import Path
 
+# Declared dev dependency (pyproject.toml), imported unconditionally so a missing
+# install fails instead of silently skipping the fixture contract gate (#585).
+import jsonschema
 import pytest
 
 from deltatrack.formatters.diff_html import _LLM_PROMPTS, format_diff_html
@@ -347,6 +350,5 @@ def test_fixtures_satisfy_the_contract(fixture):
     actually hand over. Holding the fixtures to the schema is what stops a
     renderer test from certifying behaviour on a document that never arrives.
     """
-    jsonschema = pytest.importorskip("jsonschema")
     schema = json.loads((Path(__file__).resolve().parent.parent / "schema" / "canonical-diff.schema.json").read_text())
     jsonschema.validate(instance=fixture(), schema=schema)
