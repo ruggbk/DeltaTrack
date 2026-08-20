@@ -178,8 +178,10 @@ Useful once you are making changes; none of it is part of the shipped engine.
 [`scripts/README.md`](../scripts/README.md) is the full catalog — the entry points worth
 knowing on day one:
 
-- `scripts/serve_compare.py` — side-by-side view of a diff in the browser. The fastest way
-  to answer "is this report actually right?", which passing tests do not answer.
+- `diff_pdf.py` / `diff_bill.py compare --format html` — render a diff to HTML and read it.
+  The fastest way to answer "is this report actually right?", which passing tests do not
+  answer. Rendering the same version pair through both is how the PDF and XML pipelines get
+  checked against each other ([TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
 - `scripts/render_examples.py` — regenerate the committed example reports under `examples/`.
 - `tools/fetch_bills.py` — pull bills beyond the committed test corpus. Not needed to run
   the suite; see [CONTRIBUTING](../CONTRIBUTING.md#the-test-suite-needs-no-downloads).

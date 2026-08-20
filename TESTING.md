@@ -533,24 +533,35 @@ re-extracts.
 ## Comparing the two pipelines by eye
 
 The automated checks above don't diff the two pipelines against *each other*. To
-eyeball the PDF-derived and XML-derived reports for the same two versions side by
-side — to catch parity gaps in breadcrumbs, section grouping, financial callouts,
-or change counts — serve them together:
+eyeball the PDF-derived and XML-derived reports for the same two versions — to
+catch parity gaps in breadcrumbs, section grouping, financial callouts, or change
+counts — render each pipeline to its own HTML file and open both:
 
 ```bash
-uv run python scripts/serve_compare.py 118-hr-8752
-uv run python scripts/serve_compare.py 118-hr-8752 --v1 1_reported-in-house --v2 2_engrossed-in-house
-uv run python scripts/serve_compare.py path/to/bill-dir --port 8765 --no-browser
+uv run python diff_pdf.py \
+  tests/corpus/118-hr-8752/1_reported-in-house.pdf \
+  tests/corpus/118-hr-8752/2_engrossed-in-house.pdf \
+  -o /tmp/8752-pdf.html
+
+uv run python diff_bill.py compare \
+  tests/corpus/118-hr-8752/1_reported-in-house.xml \
+  tests/corpus/118-hr-8752/2_engrossed-in-house.xml \
+  --format html -o /tmp/8752-xml.html
 ```
 
-With no `--v1`/`--v2` it picks the two lowest-numbered versions that have both a
-`.pdf` and an `.xml`. A bare bill id resolves against the committed fixtures in
-`tests/corpus/`, 52 of whose 57 versions carry both formats since #126; the five
-single-format versions (all XML-only, the five #519 engrossed amendments) are each
-deliberate and each says why at its manifest entry. To view a bill you downloaded
-into `bills/` instead, pass its directory path (and fetch it with `--format
-both`). Rendered HTML goes to a temp dir, nothing committed. The panes reflect the current checkout, so run it on the branch whose
-diff output you're inspecting. This is a manual debugging aid, not a test.
+Pick the same two versions on both sides — comparing a different version pair
+across the two pipelines produces differences that say nothing about parity. The
+committed fixtures under `tests/corpus/` are the convenient source: 52 of their 57
+versions carry both formats since #126, and the five single-format versions (all
+XML-only, the five #519 engrossed amendments) are each deliberate and each say why
+at their manifest entry. A bill you downloaded into `bills/` works the same way
+once fetched with `--format both`.
+
+Write the reports somewhere scratch, not into the repo — `examples/` is generated
+by `scripts/render_examples.py` and asserted against by
+`tests/test_committed_examples.py`. Both commands reflect the current checkout, so
+run them on the branch whose diff output you are inspecting. This is a manual
+debugging aid, not a test.
 
 ## Measuring coverage
 

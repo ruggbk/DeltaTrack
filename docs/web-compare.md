@@ -74,7 +74,7 @@ uv run python scripts/render_examples.py   # rewrites examples/*.html and exampl
 | HTML renderer | `format_diff_html` via `view_from_canonical` | `format_diff_html` via `view_from_canonical` |
 | CLI entrypoint | `diff_bill.py compare … --format html` | `src/deltatrack/compare/pdf.py` (HTTP) or snippet above |
 
-XML and PDF paths can disagree on section boundaries and change counts for the same bill pair; compare like with like when validating. To inspect both diffs for the same two versions side by side, `scripts/serve_compare.py` serves them in two panes (see [TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
+XML and PDF paths can disagree on section boundaries and change counts for the same bill pair; compare like with like when validating. To inspect both diffs for the same two versions, render each pipeline to its own HTML file and open them together (see [TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
 
 ---
 

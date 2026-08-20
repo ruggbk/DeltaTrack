@@ -297,7 +297,7 @@ Review is how a small team shares context and catches the bugs tests miss. New t
 
 What to look at, roughly in priority order:
 
-- **Correctness of the diff itself.** This is the product. Passing tests are necessary, not sufficient: a diff can be green and still wrong. For any change that affects diff output, **run the tool on a real bill and eyeball the report** rather than trusting the suite alone. `scripts/serve_compare.py` gives a side-by-side view (see [TESTING.md](TESTING.md)).
+- **Correctness of the diff itself.** This is the product. Passing tests are necessary, not sufficient: a diff can be green and still wrong. For any change that affects diff output, **run the tool on a real bill and eyeball the report** rather than trusting the suite alone. To check the PDF and XML pipelines against each other, render each to its own HTML file (see [TESTING.md](TESTING.md#comparing-the-two-pipelines-by-eye)).
 - **The risk hotspots**, where a bug does the most damage:
   - **Parser accuracy** (`src/deltatrack/bill_tree.py`, `src/deltatrack/parsers/`) -- does the bill's structure come through intact? A missing or mis-nested section corrupts everything downstream. See [docs/parser-validation.md](docs/parser-validation.md).
   - **Financial diff** (`src/deltatrack/diff_bill.py` and its financial filtering) -- dollar amounts and their changes must be exact.
