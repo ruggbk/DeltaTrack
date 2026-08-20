@@ -49,6 +49,7 @@ import io
 import json
 import re
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -282,15 +283,56 @@ def population_exposed() -> bool:
     return CP.is_exposed(rec)
 
 
-def amendment_commits(records: list[dict]) -> dict[str, str]:
-    """Last-modifying commit of each amendment's touched files, by amendment id."""
-    out = {}
+def amendment_chronology(records: list[dict], marker: str) -> dict[str, list[str]]:
+    """Commits that DATE each amendment, by amendment id, for the one-way-boundary check.
+
+    A49. A pre-execution amendment's chronology is anchored to that amendment's own
+    historical implementation. The previous rule dated an amendment by the CURRENT
+    last-modifying commit of every path it once touched, which is not evidence about
+    when the amendment happened: it is evidence about who edited that file most
+    recently. Once lawful post-boundary deviations exist, the two diverge. A48
+    lawfully modified files that twelve genuinely pre-boundary amendments had touched,
+    and the gate then reported all twelve as landing after the marker -- refusing a
+    lawful integration on the strength of a later commit that says nothing about the
+    earlier amendment.
+
+    Two sources, in order:
+
+    1. The amendment's OWN declared `commits`, wherever present. Authoritative: the
+       ledger records where each amendment was implemented. EVERY declared commit is
+       returned rather than a single "latest", because collapsing them could hide a
+       post-boundary commit behind a pre-boundary one, and the boundary rule must see
+       each implementation commit individually.
+
+    2. Legacy records that predate the `commits` field: the last modification of the
+       amendment's touched files AS VISIBLE AT THE MARKER. Querying history at the
+       boundary rather than at HEAD is what makes the answer stable -- later history
+       cannot reach back and move it.
+
+    On the legacy path every candidate is by construction reachable from the marker,
+    so that path cannot by itself convict an amendment of being post-boundary. That is
+    honest rather than lax: a post-boundary SUBSTANTIVE record has to be WRITTEN into
+    the ledger to exist at all, and F9 seals PRE-EXECUTION-AMENDMENTS.md against any
+    commit after the marker. The enforcement lives there and in the per-commit
+    accounting below, neither of which A49 touches.
+
+    Unresolvable declared refs are dropped here rather than convicted: F9 already
+    fails closed on them where it resolves declared commits ("declares unknown
+    commit"), and two controls failing on one mutation cost twice to diagnose.
+    """
+    out: dict[str, list[str]] = {}
     for rec in records:
-        commits = [last_commit(EV / f) for f in rec.get("files_touched", []) if (EV / f).exists()]
+        rid = rec.get("id", "?")
+        declared = rec.get("commits", []) or []
+        if declared:
+            out[rid] = [full for full in (git("rev-parse", str(c)) for c in declared) if full]
+            continue
+        # Legacy: anchor to the boundary, never to HEAD.
+        commits = [c for c in (commit_at(marker, EV / f) for f in rec.get("files_touched", [])) if c]
         # `rev-list --count` returns a STRING, so an unconverted max() compares
         # lexicographically and "9" beats "1003" -- selecting the wrong commit as an
         # amendment's latest touch, which would silently misjudge the one-way boundary.
-        out[rec.get("id", "?")] = max(commits, key=lambda c: int(git("rev-list", "--count", c) or 0)) if commits else ""
+        out[rid] = [max(commits, key=lambda c: int(git("rev-list", "--count", c) or 0))] if commits else []
     return out
 
 
@@ -368,13 +410,15 @@ def parse_amendments() -> tuple[list[dict], list[str]]:
     # ONE-WAY BOUNDARY: no SUBSTANTIVE amendment after execution was authorized.
     marker = marker_commit()
     if marker:
-        commits = amendment_commits(records)
+        chronology = amendment_chronology(records, marker)
         for rec in records:
             if rec.get("class") != "SUBSTANTIVE":
                 continue
-            c = commits.get(rec.get("id", "?"), "")
-            if c and not is_ancestor(c, marker):
-                errors.append(f"SUBSTANTIVE amendment {rec.get('id', '?')} lands after the execution-start marker")
+            rid = rec.get("id", "?")
+            # EVERY dating commit must be pre-boundary. One post-boundary implementation
+            # commit convicts the amendment even if its siblings are all pre-boundary.
+            if any(not is_ancestor(c, marker) for c in chronology.get(rid, [])):
+                errors.append(f"SUBSTANTIVE amendment {rid} lands after the execution-start marker")
     return records, errors
 
 
@@ -407,6 +451,15 @@ def first_commit(path: Path) -> str:
 
 def last_commit(path: Path) -> str:
     return git("log", "-1", "--format=%H", "--", str(path.relative_to(REPO)))
+
+
+def commit_at(ref: str, path: Path) -> str:
+    """Last commit to touch `path` at or before `ref`. Empty if it did not exist there.
+
+    A49. The `ref`-scoped counterpart of `last_commit`: history AS OF a point, so a
+    later commit cannot change the answer.
+    """
+    return git("log", "-1", "--format=%H", ref, "--", str(path.relative_to(REPO)))
 
 
 def is_ancestor(a: str, b: str) -> bool:
@@ -505,6 +558,91 @@ def contaminated(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
             if mid in ids or mid.upper() in ids:
                 hits.append((mid, name))
     return hits
+
+
+def f9_result() -> tuple[str, bool, str]:
+    """F9 as a single callable result, so its semantics can be driven by a control.
+
+    A49 extracted this verbatim out of `check_freeze`. F9 owns three separable
+    properties -- amendment chronology, per-commit accounting, and the ledger seal --
+    and none of them could be exercised without also satisfying F1-F12 against the
+    real frozen population. Extraction is what lets the A49 controls build a
+    synthetic history and assert on F9 alone.
+    """
+    results: list[tuple[str, bool, str]] = []
+    # F9 -- anything in this study modified AFTER the population was frozen must be
+    # declared as an amendment. This is the general form of the defect above: code or
+    # prose changing under a frozen population without a record.
+    # BOUND TO COMMITS, NOT PATHS. The previous rule unioned every `files_touched` and
+    # subtracted it from the set of changed paths, so a path that had been declared ONCE
+    # excused every later change to it: x04_freeze_check.py has 9 modifying commits and
+    # "mentioned in some amendment" made all of them acceptable. The property is that
+    # every methodological change after the freeze has an amendment describing THAT
+    # change, so each protected-touching commit must be declared by SHA.
+    records, errors = parse_amendments()
+    # A47 -- post-boundary changes are declared in the DEVIATIONS register, not the
+    # pre-execution ledger. Both count as declarations for F9; neither excuses the other.
+    dev_records, dev_errors = parse_deviations()
+    errors += dev_errors
+    decl_records = records + dev_records
+    # Resolve declared refs through git rather than slicing strings: the ledger records
+    # short SHAs and a fixed-width prefix comparison silently matches nothing.
+    declared_commits = set()
+    for r in decl_records:
+        for c in r.get("commits", []):
+            full = git("rev-parse", str(c))
+            if not full:
+                errors.append(f"amendment {r.get('id', '?')} declares unknown commit {c!r}")
+            else:
+                declared_commits.add(full)
+
+    undeclared_commits = []
+    for sha in git("log", "--format=%H", f"{POPULATION_FREEZE_COMMIT}..HEAD").splitlines():
+        touched = [
+            str(Path(line).relative_to(EV.relative_to(REPO)))
+            for line in git("show", "--name-only", "--format=", "-r", sha, "--", str(EV.relative_to(REPO))).splitlines()
+            if line.strip()
+        ]
+        protected = [
+            t for t in touched if t.endswith(PROTECTED_SUFFIXES) and t not in PROTECTED_EXEMPT and t not in F9_IGNORE
+        ]
+        if protected and sha not in declared_commits:
+            undeclared_commits.append(f"{sha[:8]} ({', '.join(sorted(protected)[:3])})")
+            continue
+        if not protected:
+            continue
+        # BIDIRECTIONAL. Declaring the COMMIT is not enough: every protected file that commit
+        # touched must be named by a declaration FOR THAT COMMIT. Otherwise a commit changing
+        # score_metrics.py and build_frames.py passes while declaring only the first, and the
+        # second slips in unrecorded under a legitimate-looking declaration.
+        named = {
+            f
+            for r in decl_records
+            if any(git("rev-parse", str(c)) == sha for c in r.get("commits", []))
+            for f in r.get("files_touched", [])
+        }
+        for f in sorted(set(protected) - named):
+            undeclared_commits.append(f"{sha[:8]} declares the commit but not its file {f}")
+
+    # SEAL: after a valid marker, the ledger itself is immutable.
+    marker = marker_commit()
+    if marker:
+        rel_amd = str(AMENDMENTS.relative_to(REPO))
+        for sha in git("log", "--format=%H", f"{marker}..HEAD", "--", rel_amd).splitlines():
+            errors.append(f"PRE-EXECUTION-AMENDMENTS.md modified at {sha[:8]}, after the execution boundary")
+
+    results.append(
+        (
+            "F9 every post-freeze methodological COMMIT is declared",
+            not errors and not undeclared_commits,
+            "; ".join(errors + [f"UNDECLARED COMMIT {u}" for u in undeclared_commits])
+            or (
+                f"{len(records)} amendments + {len(dev_records)} deviations declaring "
+                f"{len(declared_commits)} commits; all protected commits accounted for"
+            ),
+        )
+    )
+    return results[0]
 
 
 def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple[str, bool, str]]:
@@ -705,78 +843,7 @@ def check_freeze(members: list[dict], lookup: dict[str, set[str]]) -> list[tuple
         )
     )
 
-    # F9 -- anything in this study modified AFTER the population was frozen must be
-    # declared as an amendment. This is the general form of the defect above: code or
-    # prose changing under a frozen population without a record.
-    # BOUND TO COMMITS, NOT PATHS. The previous rule unioned every `files_touched` and
-    # subtracted it from the set of changed paths, so a path that had been declared ONCE
-    # excused every later change to it: x04_freeze_check.py has 9 modifying commits and
-    # "mentioned in some amendment" made all of them acceptable. The property is that
-    # every methodological change after the freeze has an amendment describing THAT
-    # change, so each protected-touching commit must be declared by SHA.
-    records, errors = parse_amendments()
-    # A47 -- post-boundary changes are declared in the DEVIATIONS register, not the
-    # pre-execution ledger. Both count as declarations for F9; neither excuses the other.
-    dev_records, dev_errors = parse_deviations()
-    errors += dev_errors
-    decl_records = records + dev_records
-    # Resolve declared refs through git rather than slicing strings: the ledger records
-    # short SHAs and a fixed-width prefix comparison silently matches nothing.
-    declared_commits = set()
-    for r in decl_records:
-        for c in r.get("commits", []):
-            full = git("rev-parse", str(c))
-            if not full:
-                errors.append(f"amendment {r.get('id', '?')} declares unknown commit {c!r}")
-            else:
-                declared_commits.add(full)
-
-    undeclared_commits = []
-    for sha in git("log", "--format=%H", f"{POPULATION_FREEZE_COMMIT}..HEAD").splitlines():
-        touched = [
-            str(Path(line).relative_to(EV.relative_to(REPO)))
-            for line in git("show", "--name-only", "--format=", "-r", sha, "--", str(EV.relative_to(REPO))).splitlines()
-            if line.strip()
-        ]
-        protected = [
-            t for t in touched if t.endswith(PROTECTED_SUFFIXES) and t not in PROTECTED_EXEMPT and t not in F9_IGNORE
-        ]
-        if protected and sha not in declared_commits:
-            undeclared_commits.append(f"{sha[:8]} ({', '.join(sorted(protected)[:3])})")
-            continue
-        if not protected:
-            continue
-        # BIDIRECTIONAL. Declaring the COMMIT is not enough: every protected file that commit
-        # touched must be named by a declaration FOR THAT COMMIT. Otherwise a commit changing
-        # score_metrics.py and build_frames.py passes while declaring only the first, and the
-        # second slips in unrecorded under a legitimate-looking declaration.
-        named = {
-            f
-            for r in decl_records
-            if any(git("rev-parse", str(c)) == sha for c in r.get("commits", []))
-            for f in r.get("files_touched", [])
-        }
-        for f in sorted(set(protected) - named):
-            undeclared_commits.append(f"{sha[:8]} declares the commit but not its file {f}")
-
-    # SEAL: after a valid marker, the ledger itself is immutable.
-    marker = marker_commit()
-    if marker:
-        rel_amd = str(AMENDMENTS.relative_to(REPO))
-        for sha in git("log", "--format=%H", f"{marker}..HEAD", "--", rel_amd).splitlines():
-            errors.append(f"PRE-EXECUTION-AMENDMENTS.md modified at {sha[:8]}, after the execution boundary")
-
-    results.append(
-        (
-            "F9 every post-freeze methodological COMMIT is declared",
-            not errors and not undeclared_commits,
-            "; ".join(errors + [f"UNDECLARED COMMIT {u}" for u in undeclared_commits])
-            or (
-                f"{len(records)} amendments + {len(dev_records)} deviations declaring "
-                f"{len(declared_commits)} commits; all protected commits accounted for"
-            ),
-        )
-    )
+    results.append(f9_result())
 
     # F12 (A47) -- BOUNDARY CONTINUITY. Every invariant above is satisfied by an EXPOSED
     # population, because exposure leaves no repository trace: F2 passes precisely BECAUSE
@@ -1031,6 +1098,189 @@ def render(title: str, results: list[tuple[str, bool, str]]) -> list[str]:
     for name, ok, detail in results:
         print(f"[{'PASS' if ok else 'FAIL'}] {name:<{width}}  {detail}")
     return [n for n, ok, _ in results if not ok]
+
+
+def _head_sensitive_chronology(records: list[dict], marker: str) -> dict[str, list[str]]:
+    """The PRE-A49 dating rule. Kept solely as the mutation control A must detect.
+
+    Not reachable from the gate. If deleting this function does not turn control A red,
+    control A is not testing what it claims to.
+    """
+    out: dict[str, list[str]] = {}
+    for rec in records:
+        commits = [last_commit(EV / f) for f in rec.get("files_touched", []) if (EV / f).exists()]
+        out[rec.get("id", "?")] = (
+            [max(commits, key=lambda c: int(git("rev-list", "--count", c) or 0))] if commits else []
+        )
+    return out
+
+
+def _a49_git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.email=a49@control", "-c", "user.name=A49 control", *args],
+        cwd=root, capture_output=True, text=True, check=False,
+    ).stdout.strip()
+
+
+def _a49_build_history(root: Path) -> dict[str, str]:
+    """A minimal but REAL history with the shape A49 is about.
+
+        c0     population freeze; alpha.py and beta.py exist
+        cA     amendment A's implementation: modifies alpha.py
+        cL     the ledger declaring A, by SHA
+        cM     the execution marker  <-- the one-way boundary
+        cD     a later deviation: modifies alpha.py AGAIN, and beta.py
+        cV     the deviation register declaring cD
+
+    The point is cA and cD touching the SAME protected file on opposite sides of cM.
+    """
+    ev = root / "ev"
+    (ev / "probes").mkdir(parents=True)
+    (ev / "results").mkdir(parents=True)
+    _a49_git(root, "init", "-q", "-b", "main")
+
+    (ev / "probes" / "alpha.py").write_text("VALUE = 0\n")
+    (ev / "probes" / "beta.py").write_text("OTHER = 0\n")
+    (ev / "PRE-EXECUTION-AMENDMENTS.md").write_text("# ledger\n")
+    (ev / "results" / "DEVIATIONS.md").write_text("# deviations\n")
+    _a49_git(root, "add", "-A")
+    _a49_git(root, "commit", "-qm", "c0 population freeze")
+    c0 = _a49_git(root, "rev-parse", "HEAD")
+
+    (ev / "probes" / "alpha.py").write_text("VALUE = 1\n")
+    _a49_git(root, "add", "-A")
+    _a49_git(root, "commit", "-qm", "cA amendment A implementation")
+    cA = _a49_git(root, "rev-parse", "HEAD")
+
+    (ev / "PRE-EXECUTION-AMENDMENTS.md").write_text(
+        "```json\n" + json.dumps({
+            "id": "A", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+            "affects_membership": False, "commits": [cA], "files_touched": ["probes/alpha.py"],
+        }) + "\n```\n"
+    )
+    _a49_git(root, "add", "-A")
+    _a49_git(root, "commit", "-qm", "cL declare amendment A")
+
+    (ev / "results" / "EXECUTION-START.json").write_text(json.dumps({"authorized": True, "frozen_blobs": {}}))
+    _a49_git(root, "add", "-A")
+    _a49_git(root, "commit", "-qm", "cM cross the execution boundary")
+    cM = _a49_git(root, "rev-parse", "HEAD")
+
+    (ev / "probes" / "alpha.py").write_text("VALUE = 2\n")
+    (ev / "probes" / "beta.py").write_text("OTHER = 2\n")
+    _a49_git(root, "add", "-A")
+    _a49_git(root, "commit", "-qm", "cD lawful post-boundary deviation")
+    cD = _a49_git(root, "rev-parse", "HEAD")
+
+    return {"c0": c0, "cA": cA, "cM": cM, "cD": cD, "ev": str(ev)}
+
+
+def _a49_declare_deviation(ev: Path, cD: str, files: list[str]) -> None:
+    (ev / "results" / "DEVIATIONS.md").write_text(
+        "```json\n" + json.dumps({
+            "id": "D", "kind": "DEVIATION", "commits": [cD], "files_touched": files,
+            "results_already_visible": "census, S1, P-head",
+        }) + "\n```\n"
+    )
+
+
+def a49_chronology_controls() -> list[tuple[str, bool]]:
+    """Semantic controls for the A49 chronology rule, driven on a real synthetic history.
+
+    BEHAVIOUR PRESERVED
+        A lawful later deviation touching the same file must not retroactively redate a
+        pre-execution amendment, while undeclared or genuinely post-boundary substantive
+        changes remain forbidden.
+
+    MUTATION THAT MUST MAKE CONTROL A FAIL
+        Date the amendment by current HEAD's `last_commit(file)`, the pre-A49 rule. That
+        mutation is applied here for real, by swapping the chronology function the gate
+        calls, so control A cannot pass vacuously.
+
+    Control D (bidirectional file accounting) is deliberately NOT rebuilt here: the
+    existing "F9 rejects a declared commit whose other protected files are unnamed"
+    self-test already drives it decisively against a real four-file commit.
+    """
+    checks: list[tuple[str, bool]] = []
+    saved = {k: globals()[k] for k in
+             ("REPO", "EV", "AMENDMENTS", "DEVIATIONS", "EXECUTION_MARKER", "POPULATION_FREEZE_COMMIT")}
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        h = _a49_build_history(root)
+        ev = Path(h["ev"])
+        globals().update(
+            REPO=root, EV=ev,
+            AMENDMENTS=ev / "PRE-EXECUTION-AMENDMENTS.md",
+            DEVIATIONS=ev / "results" / "DEVIATIONS.md",
+            EXECUTION_MARKER=ev / "results" / "EXECUTION-START.json",
+            POPULATION_FREEZE_COMMIT=h["c0"],
+        )
+        saved_chronology = globals()["amendment_chronology"]
+        try:
+            _a49_declare_deviation(ev, h["cD"], ["probes/alpha.py", "probes/beta.py"])
+            _a49_git(root, "add", "-A")
+            _a49_git(root, "commit", "-qm", "cV declare the deviation")
+
+            # The synthetic history must actually be the shape the controls assume.
+            checks.append(("A49 control history: marker is VALID", marker_state()[0] == "VALID"))
+            checks.append(("A49 control history: marker is the boundary cM", marker_commit() == h["cM"]))
+
+            # A -- the primary control. Lawful later deviation on the SAME file.
+            _, errs = parse_amendments()
+            redated = [e for e in errs if "lands after the execution-start marker" in e]
+            checks.append(("A49-A a later declared deviation does not redate amendment A", not redated))
+            checks.append(("A49-A ...and F9 is green on that history", f9_result()[1]))
+
+            # A(mutated) -- restore the pre-A49 HEAD-sensitive dating; the control must go red.
+            globals()["amendment_chronology"] = _head_sensitive_chronology
+            try:
+                _, errs_mut = parse_amendments()
+                mutated = [e for e in errs_mut if "lands after the execution-start marker" in e]
+            finally:
+                globals()["amendment_chronology"] = saved_chronology
+            checks.append(("A49-A MUTATION: HEAD-sensitive dating falsely redates A", bool(mutated)))
+
+            # B -- same change, but the deviation is not declared anywhere.
+            (ev / "results" / "DEVIATIONS.md").write_text("# deviations\n")
+            _a49_git(root, "add", "-A")
+            _a49_git(root, "commit", "-qm", "withdraw the declaration")
+            ok_b, detail_b = f9_result()[1], f9_result()[2]
+            checks.append(("A49-B an UNDECLARED post-boundary change still fails F9", not ok_b))
+            checks.append(("A49-B ...as an undeclared commit", "UNDECLARED COMMIT" in detail_b))
+            _a49_declare_deviation(ev, h["cD"], ["probes/alpha.py", "probes/beta.py"])
+            _a49_git(root, "add", "-A")
+            _a49_git(root, "commit", "-qm", "restore the declaration")
+
+            # C -- a SUBSTANTIVE amendment whose OWN implementation commit is post-boundary.
+            # Written uncommitted, so this control sees the boundary rule and not the seal.
+            keep = AMENDMENTS.read_text()
+            try:
+                AMENDMENTS.write_text(
+                    keep + "```json\n" + json.dumps({
+                        "id": "LATE", "class": "SUBSTANTIVE", "confirmatory_output_at_time": "none",
+                        "affects_membership": False, "commits": [h["cD"]],
+                        "files_touched": ["probes/alpha.py"],
+                    }) + "\n```\n"
+                )
+                _, errs_c = parse_amendments()
+                checks.append(
+                    ("A49-C a post-boundary SUBSTANTIVE amendment is still refused",
+                     any("LATE lands after the execution-start marker" in e for e in errs_c))
+                )
+            finally:
+                AMENDMENTS.write_text(keep)
+
+            # E -- the ledger seal: no committed ledger edit after the marker.
+            AMENDMENTS.write_text(keep + "\n<!-- touched after the boundary -->\n")
+            _a49_git(root, "add", "-A")
+            _a49_git(root, "commit", "-qm", "edit the sealed ledger")
+            checks.append(
+                ("A49-E the ledger seal still fires on a post-boundary ledger commit",
+                 "after the execution boundary" in f9_result()[2])
+            )
+        finally:
+            globals().update(saved)
+    return checks
 
 
 def self_test(contam: dict, exposure: dict) -> int:
@@ -1353,6 +1603,7 @@ def self_test(contam: dict, exposure: dict) -> int:
         else:
             X2_EVIDENCE.write_text(saved)
 
+    checks.extend(a49_chronology_controls())
     width = max(len(n) for n, _ in checks)
     print("== SELF-TEST: every gate must fail on its known-bad case ==")
     for name, ok in checks:
