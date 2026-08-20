@@ -223,21 +223,85 @@ def _four_way_competition() -> tuple[list[_Block], list[_Block]]:
     return old, new
 
 
-def test_round_2_selection_competes_and_claims_exclusively() -> None:
-    """Round-2 assignment orders by descending ``(similarity, ri, ai)`` and claims one-to-one.
+#: One text, so every candidate built from it scores exactly 1.0 and the competition is decided
+#: by the ordering rule alone rather than by the measure.
+_TIE_TEXT = f"{_CORE} concerning migratory bird habitat conservation published in the Federal Register"
 
-    Both halves matter and both are off-corpus. **Ordering**: the highest-scoring pairing is
-    settled first, so ``X`` takes ``P`` and ``Y`` is left with ``Q``. **Exclusivity**: ``Y``
-    also scores above the cutoff against ``P``, so a stage that let each removal take its own
-    best partner independently would claim ``P`` twice and return three or four moves.
+
+@pytest.mark.parametrize(
+    ("label", "old_count", "new_count", "expected"),
+    [
+        ("two removals compete for one addition", 2, 1, (1, 0)),
+        ("one removal competes for two additions", 1, 2, (0, 1)),
+    ],
+)
+def test_round_2_breaks_an_equal_score_tie_on_the_higher_position(
+    label: str, old_count: int, new_count: int, expected: tuple[int, int]
+) -> None:
+    """Equal scores break on **descending** ``ri`` then ``ai``, and each side claims once.
+
+    ``_greedy_pdf_move_links`` sorts ``(similarity, ri, ai)`` with ``reverse=True``. Every
+    fixture here is one repeated text, so similarity is 1.0 for every pairing and the tuple's
+    second and third components are the only thing deciding the winner. That is what makes this
+    a test of the documented ordering rule rather than of the measure.
+
+    Deliberately asymmetric, and in both directions, because the two exclusivity checks fail
+    apart. Two removals against one addition can only conflict on the **new** side; one removal
+    against two additions can only conflict on the **old** side. A single square fixture proves
+    neither, which is how an earlier version of this module came to claim one-to-one exclusivity
+    while protecting only half of it.
+
+    MUTATIONS, each observed red on the case named beside it and restored:
+
+    - remove ``ri in claimed_old`` -> the 1x2 case selects both additions, 2 moves not 1;
+    - remove ``ai in claimed_new`` -> the 2x1 case selects both removals, 2 moves not 1;
+    - negate ``ri``/``ai`` in the sort key, keeping ``reverse=True`` and so keeping descending
+      similarity -> both cases select ordinal pair ``(0, 0)`` instead of the higher position.
+    """
+    old_blocks = [_block(_TIE_TEXT, page) for page in range(1, old_count + 1)]
+    new_blocks = [_block(_TIE_TEXT, page) for page in range(10, 10 + new_count)]
+    registry = PdfObservationRegistry(old_blocks, new_blocks)
+    population = pdf_unmatched_population(_pairings(old_blocks, new_blocks), registry)
+    evidence = pdf_move_evidence(retrieve_pdf_move_candidates(population, bound=MOVE_THRESHOLD))
+
+    assert len(evidence) == old_count * new_count, (
+        f"{label}: {len(evidence)} of {old_count * new_count} pairings were admitted; without the "
+        "full cross product there is no competition to order"
+    )
+    scores = {item.get("word_overlap") for item in evidence}
+    assert len(scores) == 1, (
+        f"{label}: the candidates no longer tie ({scores}), so the winner is being chosen by "
+        "similarity and this fixture says nothing about the tie-break"
+    )
+
+    moves = assign_pdf_moves(population, evidence, threshold=MOVE_THRESHOLD)
+    selected = [(move.correspondence.old[0].ordinal, move.correspondence.new[0].ordinal) for move in moves]
+
+    assert selected == [expected], (
+        f"{label}: assignment selected {selected}; descending (similarity, ri, ai) with one-to-one "
+        f"exclusivity selects exactly [{expected}]"
+    )
+
+
+def test_round_2_selection_competes_and_claims_exclusively() -> None:
+    """Round-2 assignment settles the highest-scoring pairing first, on distinct scores.
+
+    All four pairings clear the cutoff and every score differs, so what this fixture exercises is
+    the **similarity** component of the ordering: settling ``X``-``P`` first leaves ``Y`` with
+    ``Q``, whereas a stage that let each removal take its own best partner independently would
+    claim ``P`` twice.
 
     Driven through live ``assign_pdf_moves`` over a population and evidence built by production's
     own retrieval and evidence stages, so the only thing this fixture supplies is the text.
 
-    MUTATION: drop ``reverse=True`` from the sort in ``_greedy_pdf_move_links`` (or remove the
-    ``claimed_old``/``claimed_new`` exclusivity check). Observed red before this test was relied
-    on; the committed corpus catches the ordering half through the canonical PDF baseline, and
-    nothing else catches either half away from the corpus.
+    **Scope, stated because an earlier version of this docstring overclaimed it.** Distinct scores
+    mean the ``(ri, ai)`` tie-break never runs here, and the greedy never faces two additions
+    wanting one removal, so this fixture owns *neither* the tie-break *nor* old-side exclusivity.
+    Both are owned by
+    :func:`test_round_2_breaks_an_equal_score_tie_on_the_higher_position`.
+
+    MUTATION: drop ``reverse=True`` from the sort in ``_greedy_pdf_move_links``, which selects
+    ``[(0, 1), (1, 0)]``. Observed red before this test was relied on.
     """
     old_blocks, new_blocks = _four_way_competition()
     registry = PdfObservationRegistry(old_blocks, new_blocks)

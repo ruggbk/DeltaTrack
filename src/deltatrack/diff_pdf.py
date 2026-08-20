@@ -876,12 +876,10 @@ def pdf_unmatched_population(
     ``_hunk_for_added`` are the only producers of those two types and each was called exactly
     where a pairing names one side.
 
-    The order is the stream's, which is what keeps the legacy ``(ri, ai)`` positions the same
-    numbers. Production's ``(ri, ai)`` were *absolute hunk indices*; these are positions in
-    the filtered lists. The two order candidates identically, because the map from filtered
-    position to absolute index is strictly increasing — ``removed_idx`` was built by an
-    ascending ``enumerate`` scan — so any comparison of two candidates resolves the same way
-    under either. ``tests/test_pdf_round2_stages`` measures that rather than trusting it.
+    The order is the stream's, and that is load-bearing: ``(ri, ai)`` are positions in these
+    two lists, and :func:`_greedy_pdf_move_links` breaks an equal-score tie on them. Re-sorting
+    or filtering either list here would therefore change which correspondence is selected, not
+    merely how it is presented.
 
     A pairing naming neither side is refused: ``_align_blocks`` cannot emit one, and a silent
     one would break exactly the positional correspondence this projection depends on.

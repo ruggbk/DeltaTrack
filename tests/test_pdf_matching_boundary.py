@@ -15,14 +15,16 @@ trusted. Each rule below is paired with a test that applies a NAMED mutation and
 the result changes. Those mutation tests are permanent, not one-off probes: if a future
 refactor makes a mutation stop mattering, the mutation test fails and says so.
 
-The three gates, and the mutation each is falsified by:
+The two gates, and the mutation each is falsified by:
 
 ``test_split_population*``  a real below-cutoff split carrying money on both sides.
                             Falsified by the boundary pair either side of the cutoff.
 ``test_positional_replace`` the positional ``replace`` zip.
                             Falsified by global best-similarity assignment.
-``test_greedy_*``           round-2 competition and exclusivity.
-                            Falsified by four separate mutations, one at a time.
+
+Round-2 competition, ordering and one-to-one exclusivity are owned by
+``tests/test_pdf_round2_stages.py``, through live ``assign_pdf_moves`` rather than through a
+copy of the greedy kept here.
 
 **Retired in #659: the two transcribed rules and their corpus sweeps.** The transcribed move
 rule and the corpus-wide comparisons of both rules against every committed hunk are gone, together
@@ -37,8 +39,7 @@ cutoff directly. ``MOVE_THRESHOLD`` does not — after this, a change to it is c
 ``tests/test_pdf_canonical_baseline.py`` when it moves a committed pair, and by nothing when it
 does not.
 
-No production code is changed by this module. It pins current behaviour so that the stage
-extraction in later slices has something to be behaviour-preserving *against*.
+No production code is changed by this module.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from __future__ import annotations
 import pytest
 
 from deltatrack.diff_bill import extract_amounts
-from deltatrack.diff_pdf import PdfHunk, diff_pdfs
+from deltatrack.diff_pdf import diff_pdfs
 from deltatrack.parsers.pdf_text import Line, Page
 from deltatrack.similarity import SIMILARITY_THRESHOLD, text_similarity
 from tests.pdf_corpus import adjacent_pdf_pairs, cached_pages
@@ -78,21 +79,7 @@ def _page(page_number: int, *lines: tuple[int, str]) -> Page:
     return Page(page_number, tuple(Line(n, t) for n, t in lines))
 
 
-def _text_hunk(change_type: str, text: str, position: int) -> PdfHunk:
-    """A removed/added hunk carrying only what round-2 reads: its text and a range."""
-    removed = change_type == "removed"
-    return PdfHunk(
-        change_type=change_type,
-        v1_anchor=None,
-        v2_anchor=None,
-        v1_range=(position, 1, position, 1) if removed else None,
-        v2_range=(position, 1, position, 1) if not removed else None,
-        v1_text=text if removed else "",
-        v2_text=text if not removed else "",
-    )
-
-
-# --- Gate 2: the transcribed rules hold over the committed corpus ---------------------
+# --- The committed pair list these gates sweep -----------------------------------------
 
 #: EVERY adjacent committed PDF pair, including the six ``compare.pdf`` refuses.
 #:
