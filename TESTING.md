@@ -297,25 +297,32 @@ uv run pytest -m slow tests/test_corpus_properties.py tests/test_corpus_tree_pro
 CORPUS_SWEEP=1 uv run pytest -m slow tests/test_corpus_properties.py
 ```
 
-### The frozen round-1 trace, and when you may regenerate it
+### The round-1 pairing sentinel, and when you may regenerate it
 
-Round-1 matching (ADR 0020: retrieval → correspondence evidence → assignment) is pinned by
-`tests/test_round1_preservation.py` against a frozen artifact, `tests/data/round1_legacy_trace.json`.
-The expectation is generated from an **independent transcription** of the legacy matcher, never
-from production, and an AST guard refuses every round-1 production symbol inside that oracle — so
-the harness cannot quietly start agreeing with the code it is checking.
+Round-1 *correspondence* — which observations pair with which — is pinned by
+`tests/test_round1_pairing_sentinel.py` against `tests/data/round1_pairing_sentinel.json`. Per
+committed version pair it holds four fields: the two source digests, the parser revision, and one
+SHA-256 over the ordered pairing stream addressed by ADR 0019 ordinal.
 
-That is also why regeneration is opt-in and not a fix:
+It exists because the canonical baselines detect *rendered output*, and correspondence can move
+without reaching them: reversing the assignment tie direction moves the pairing stream on 11 of
+the 27 committed pairs while canonical output moves on 4. Provenance is checked before the digest,
+so a parser change fails closed as a parser change rather than being misread as a correspondence
+change.
+
+Regeneration is opt-in and is not a fix:
 
 ```bash
-UPDATE_ROUND1_TRACE=1 uv run pytest tests/test_round1_preservation.py
+UPDATE_ROUND1_SENTINEL=1 uv run pytest tests/test_round1_pairing_sentinel.py
 ```
 
-Reach for it only when round-1 behaviour changed **and you intend the change**. Regenerating to
-make a refactor green destroys the only evidence that the refactor preserved anything, and the
-trace is what several corpus-invisible behaviours are bound by. Two of them move zero of the 27
-committed pairs and are caught only by synthetic fixtures, so "the corpus is still green" is not
-a reason to rewrite it.
+Reach for it only when round-1 correspondence changed **and you intend the change**. Regenerating
+asserts that what corresponds *should* have moved, which ADR 0020 answers with independent
+precision and recall evidence in the same pull request — not with a digest that now agrees.
+
+Note what the sentinel cannot see. Two corpus-invisible behaviours move zero of the 27 committed
+pairs and are bound only by synthetic fixtures in `tests/test_round1_stages.py`, so "the corpus is
+still green" is not evidence about them.
 
 ### The rest of the slow suite runs in CI too
 

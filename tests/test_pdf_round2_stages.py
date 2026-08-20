@@ -1,50 +1,47 @@
 """Slice 4: PDF round 2 as four stages, running before classification.
 
-The extraction this module guards moved round 2 off the classified hunk stream.
-Pre-slice-4, ``diff_pdfs`` built classified ``PdfHunk``s and then handed them to
-``_reconcile_moves``, which filtered them on ``change_type`` to decide which pairs were even
-considered for a move. That is the ADR 0020 violation: a change to what classification emitted
-could silently change what matching considered.
+Round 2 runs before classification, through ``pdf_unmatched_population`` ->
+``retrieve_pdf_move_candidates`` -> ``pdf_move_evidence`` -> ``assign_pdf_moves``. Classification
+consumes settled correspondence and decides nothing about what corresponds, which is the ADR 0020
+property this module binds: a change to what classification emits cannot change what matching
+considered.
 
-**The oracle is the whole legacy pipeline, transcribed here.** Not a spot check of the new
-stages against themselves, and not a call into ``_align_blocks``: ``legacy_diff`` below rebuilds
-the pre-slice-4 ``diff_pdfs`` from the parser output — its own opcode walk, its own split rule,
-its own emit order — and finishes with ``_reconcile_moves``, which slice 4 deliberately left in
-place for exactly this purpose. If the extraction changed which pairs correspond, or where a
-record lands, these comparisons say so.
+What this module owns:
 
-Two things are compared, because they can fail apart:
+``test_round_2_addresses_the_complete_parser_sequence``
+    every address entering round 2 is a complete-sequence ordinal, ADR 0019's hazard at the one
+    place round 2 mints new addresses.
+``test_round_2_selection_competes_and_claims_exclusively``
+    assignment orders by descending ``(similarity, ri, ai)`` and claims one-to-one. The only
+    off-corpus owner of either half.
+``test_assignment_can_refuse_what_retrieval_admitted`` / ``..._withhold_...``
+    retrieval's bound and assignment's threshold are separate inputs.
+``test_a_settled_move_carries_the_evidence_that_selected_it``
+    every selected link carries exactly one evidence record, through to classification.
+``test_the_corpus_actually_exercises_round_2``
+    the floor that stops the corpus sweeps agreeing vacuously on a corpus with no moves.
 
-``test_the_staged_path_reproduces_the_legacy_hunk_stream``
-    the whole output, hunk for hunk, over every adjacent committed pair.
-``test_the_population_projection_matches_the_legacy_filtered_hunk_lists``
-    the round-2 population specifically. The output could agree while the population was
-    derived differently and happened to select the same links; this pins the projection ADR
-    0020 actually cares about.
+Whole-output preservation is owned by ``tests/test_pdf_canonical_baseline.py``.
+
+History: until #659 this module carried a rebuild of the pre-slice-4 ``diff_pdfs`` and compared
+production's whole hunk stream and round-2 population against it. That answered whether slice 4
+preserved behaviour, a closed question, and could not survive a deliberate change to PDF matching
+policy without a fresh transcription. Its one uncovered remainder is the six ``compare.pdf``
+declines, which no user reaches and no baseline record covers.
 
 The record's §7.4 note — that PDF's move records land where the removal was, rather than
-appended as in XML — is why ``PdfSettledCorrespondence`` carries a slot. That ordering is
-covered by the hunk-stream comparison rather than asserted separately.
+appended as in XML — is why ``PdfSettledCorrespondence`` carries a slot.
 """
 
 from __future__ import annotations
 
-import difflib
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from deltatrack import diff_pdf
 from deltatrack.diff_pdf import (
     ROUND2_UNMATCHED_RECOVERY,
-    PdfHunk,
     _AlignedPairing,
-    _block_key,
-    _hunk_for_added,
-    _hunk_for_paired_blocks,
-    _hunk_for_removed,
-    _reconcile_moves,
     apply_pdf_similarity_revocation,
     assign_pdf_moves,
     classify_pdf,
@@ -60,7 +57,7 @@ from deltatrack.matching import NEW, OLD, ObservationRef
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from deltatrack.parsers.pdf_blocks import _Block, _flatten, _group_into_blocks, _IndexedLine
 from deltatrack.pdf_observations import PdfObservationRegistry
-from deltatrack.similarity import MOVE_THRESHOLD, SIMILARITY_THRESHOLD, text_similarity_at_least
+from deltatrack.similarity import MOVE_THRESHOLD, SIMILARITY_THRESHOLD
 from tests.pdf_corpus import adjacent_pdf_pairs, cached_pages
 
 _PAIRS = adjacent_pdf_pairs()
@@ -68,81 +65,6 @@ _PAIR_IDS = [f"{bill}:{old.stem}->{new.stem}" for bill, old, new in _PAIRS]
 
 
 # --- The oracle: the pre-slice-4 pipeline, transcribed -------------------------------------
-
-
-def legacy_is_moved(v1_b: _Block, v2_b: _Block, similarity: float) -> bool:
-    """The pre-slice-6a moved-vs-modified rule, transcribed from ``_hunk_for_paired_blocks``.
-
-    That function used to own this condition; slice 6a moved it into
-    ``pdf_round1_move_basis``. The oracle transcribes it here rather than calling either, for
-    the reason this module's header gives: an oracle that asks a production helper what the rule
-    is cannot detect that the rule changed.
-
-    Transcribed **as it stood before 6a**, collapsed boolean and all — the missing-anchor and
-    different-anchor cases share one branch here exactly as they did then. Splitting them to
-    match production's new three-state evidence would make this agree with 6a by construction,
-    which is the whole failure this oracle exists to rule out.
-    """
-    if not (v1_b.anchor and v2_b.anchor):
-        return False
-    return v1_b.anchor.text != v2_b.anchor.text and similarity >= MOVE_THRESHOLD
-
-
-def _legacy_paired_hunk(v1_b: _Block, v2_b: _Block, similarity: float) -> PdfHunk:
-    """The hunk the pre-6a ``_hunk_for_paired_blocks`` built, with the type it decided itself."""
-    hunk = _hunk_for_paired_blocks(v1_b, v2_b)
-    return replace(hunk, change_type="moved") if legacy_is_moved(v1_b, v2_b, similarity) else hunk
-
-
-def legacy_emit_pair(v1_b: _Block, v2_b: _Block, sink: list[PdfHunk]) -> None:
-    """The pre-slice-4 ``_emit_pair``, appending classified hunks as it did then.
-
-    Transcribed from the commit before slice 4, not imported. Production's version now appends
-    pairings, so there is nothing left to import that would answer this question honestly.
-    """
-    if v1_b.text == v2_b.text:
-        if v1_b.anchor and v2_b.anchor and v1_b.anchor.text != v2_b.anchor.text:
-            sink.append(_legacy_paired_hunk(v1_b, v2_b, similarity=1.0))
-        return
-    sim = text_similarity_at_least(v1_b.text, v2_b.text, SIMILARITY_THRESHOLD)
-    if sim < SIMILARITY_THRESHOLD:
-        sink.append(_hunk_for_removed(v1_b))
-        sink.append(_hunk_for_added(v2_b))
-    else:
-        sink.append(_legacy_paired_hunk(v1_b, v2_b, similarity=sim))
-
-
-def legacy_hunks_before_round2(v1_blocks: list[_Block], v2_blocks: list[_Block]) -> list[PdfHunk]:
-    """The pre-slice-4 classified hunk stream, before ``_reconcile_moves`` ran on it."""
-    matcher = difflib.SequenceMatcher(
-        a=[_block_key(b) for b in v1_blocks],
-        b=[_block_key(b) for b in v2_blocks],
-        autojunk=False,
-    )
-    hunks: list[PdfHunk] = []
-    for op, i1, i2, j1, j2 in matcher.get_opcodes():
-        if op == "equal":
-            for v1_b, v2_b in zip(v1_blocks[i1:i2], v2_blocks[j1:j2]):
-                legacy_emit_pair(v1_b, v2_b, hunks)
-        elif op == "delete":
-            for v1_b in v1_blocks[i1:i2]:
-                hunks.append(_hunk_for_removed(v1_b))
-        elif op == "insert":
-            for v2_b in v2_blocks[j1:j2]:
-                hunks.append(_hunk_for_added(v2_b))
-        else:
-            v1_slice, v2_slice = v1_blocks[i1:i2], v2_blocks[j1:j2]
-            for k in range(max(len(v1_slice), len(v2_slice))):
-                v1_b = v1_slice[k] if k < len(v1_slice) else None
-                v2_b = v2_slice[k] if k < len(v2_slice) else None
-                if v1_b is not None and v2_b is not None:
-                    legacy_emit_pair(v1_b, v2_b, hunks)
-                elif v1_b is not None:
-                    hunks.append(_hunk_for_removed(v1_b))
-                else:
-                    assert v2_b is not None
-                    hunks.append(_hunk_for_added(v2_b))
-    return hunks
 
 
 def blocks_for(pdf: Path) -> list[_Block]:
@@ -155,20 +77,16 @@ def round1_stream(old_blocks: list[_Block], new_blocks: list[_Block], registry: 
 
     The production side of every comparison below. Slice 5 split what used to be one call into
     align -> evidence -> revoke, so this runs the three in order rather than each test
-    re-spelling them. It is **not** an oracle and must never become one: the thing being
-    compared against is ``legacy_hunks_before_round2``, which is transcribed independently and
-    calls none of this.
+    re-spelling them.
+
+    It used to be the production half of a comparison against a transcription of the pre-slice-4
+    pipeline, retired in #659. The tests that read it now assert ADR 0019 addressing and the
+    corpus floor, so it is a driver rather than one side of an oracle comparison.
     """
     provisional, candidates = retrieve_pdf_round1_candidates(old_blocks, new_blocks, registry)
     evidence = pdf_similarity_correspondence_evidence(provisional, registry, candidates)
     pairings = apply_pdf_similarity_revocation(provisional, evidence, registry, threshold=SIMILARITY_THRESHOLD)
     return pairings, evidence
-
-
-def legacy_hunks(old_pdf: Path, new_pdf: Path) -> list[PdfHunk]:
-    """The pre-slice-4 pipeline end to end: classify, then reconcile moves on the records."""
-    hunks = legacy_hunks_before_round2(blocks_for(old_pdf), blocks_for(new_pdf))
-    return _reconcile_moves(hunks)
 
 
 def test_the_corpus_pair_list_is_not_empty() -> None:
@@ -177,46 +95,6 @@ def test_the_corpus_pair_list_is_not_empty() -> None:
 
 
 # --- Behaviour preservation over the corpus -----------------------------------------------
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(("bill", "old_pdf", "new_pdf"), _PAIRS, ids=_PAIR_IDS)
-def test_the_staged_path_reproduces_the_legacy_hunk_stream(bill: str, old_pdf: Path, new_pdf: Path) -> None:
-    """Every hunk, in order, identical to what the pre-slice-4 pipeline produced.
-
-    Broader than the canonical baseline, deliberately: this runs on **every** adjacent pair
-    including the six ``compare.pdf`` declines, which the baseline cannot cover because no user
-    reaches them. A move-selection change confined to a declined pair would be invisible there.
-    """
-    assert list(diff_pdfs(cached_pages(old_pdf), cached_pages(new_pdf)).hunks) == legacy_hunks(old_pdf, new_pdf)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(("bill", "old_pdf", "new_pdf"), _PAIRS, ids=_PAIR_IDS)
-def test_the_population_projection_matches_the_legacy_filtered_hunk_lists(
-    bill: str, old_pdf: Path, new_pdf: Path
-) -> None:
-    """Round 2's population, and its ``(ri, ai)`` order, derived without classification.
-
-    The output could agree while the population was built differently and happened to select
-    the same links, so this compares the population itself: the texts production's retriever
-    receives, in the order it receives them, against the texts the legacy filter produced from
-    the classified stream.
-
-    That equality is the whole claim of ``pdf_unmatched_population``. Measured rather than
-    argued, because the argument — "``_hunk_for_removed`` is the only producer of a ``removed``
-    hunk" — is a statement about code that a later edit could quietly falsify.
-    """
-    old_blocks, new_blocks = blocks_for(old_pdf), blocks_for(new_pdf)
-    legacy = legacy_hunks_before_round2(old_blocks, new_blocks)
-    legacy_removed = [h.v1_text for h in legacy if h.change_type == "removed"]
-    legacy_added = [h.v2_text for h in legacy if h.change_type == "added"]
-
-    registry = PdfObservationRegistry(old_blocks, new_blocks)
-    population = pdf_unmatched_population(round1_stream(old_blocks, new_blocks, registry)[0], registry)
-
-    assert [o.block.text for o in population.old] == legacy_removed
-    assert [o.block.text for o in population.new] == legacy_added
 
 
 @pytest.mark.slow
@@ -241,7 +119,7 @@ def test_round_2_addresses_the_complete_parser_sequence(bill: str, old_pdf: Path
 
 @pytest.mark.slow
 def test_the_corpus_actually_exercises_round_2() -> None:
-    """Floor. The three sweeps above would agree vacuously on a corpus with no moves at all.
+    """Floor. The sweeps above would agree vacuously on a corpus with no moves at all.
 
     Measured: 166 moved hunks, 8,182 unmatched observations, and 354 as the sum over pairs of
     ``min(len(old), len(new))`` — the count of moves round 2 could possibly make. Asserted as
@@ -262,55 +140,7 @@ def test_the_corpus_actually_exercises_round_2() -> None:
     assert possible >= 250, f"round 2 could make only {possible} moves corpus-wide; retrieval is barely exercised"
 
 
-# --- Round 2 no longer reads classification ------------------------------------------------
-
-
-@pytest.mark.slow
-def test_the_production_path_does_not_run_the_legacy_reconciler(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The structural claim of slice 4, made executable.
-
-    ``_reconcile_moves`` is the function that consumed classification output. Replacing it with
-    a raise and running a real comparison end to end is what shows round 2 no longer passes
-    through it — a claim that a docstring alone cannot keep true.
-    """
-
-    def _refuse(*_args, **_kwargs):
-        raise AssertionError("diff_pdfs reached the legacy classified-hunk reconciler")
-
-    monkeypatch.setattr(diff_pdf, "_reconcile_moves", _refuse)
-    _bill, old_pdf, new_pdf = _PAIRS[0]
-    assert diff_pdfs(cached_pages(old_pdf), cached_pages(new_pdf)).hunks
-
-
 # --- The (ri, ai) equivalence the projection rests on --------------------------------------
-
-
-def test_filtered_positions_order_candidates_exactly_as_absolute_indices_did() -> None:
-    """``_reconcile_moves`` sorted on absolute hunk indices; the stages sort on positions.
-
-    They order identically because the map from filtered position to absolute index is strictly
-    increasing, so every pairwise comparison resolves the same way. Stated as an executable
-    check rather than as reasoning in a docstring, and built to be able to fail: a
-    non-monotonic map is included and must produce a different order.
-    """
-    absolute_removed = [3, 7, 11]  # ascending, as `enumerate` produces
-    absolute_added = [4, 9, 12]
-    candidates = [(0.9, 0, 1), (0.9, 2, 0), (0.7, 1, 2), (0.9, 0, 0)]
-
-    by_position = sorted(candidates, reverse=True)
-    by_absolute = sorted(
-        ((s, absolute_removed[r], absolute_added[a]) for s, r, a in candidates),
-        reverse=True,
-    )
-    assert [(r, a) for _s, r, a in by_position] == [
-        (absolute_removed.index(r), absolute_added.index(a)) for _s, r, a in by_absolute
-    ]
-
-    scrambled = [11, 3, 7]
-    by_scrambled = sorted(((s, scrambled[r], absolute_added[a]) for s, r, a in candidates), reverse=True)
-    assert [(scrambled.index(r), absolute_added.index(a)) for _s, r, a in by_scrambled] != [
-        (r, a) for _s, r, a in by_position
-    ], "a non-monotonic map must reorder, or this control cannot distinguish the two rules"
 
 
 # --- Retrieval and assignment read their own numbers ---------------------------------------
@@ -366,6 +196,131 @@ def test_retrieval_can_withhold_what_assignment_would_have_taken() -> None:
     evidence = pdf_move_evidence(retrieve_pdf_move_candidates(population, bound=0.999))
     assert evidence == (), "a near-1.0 bound should admit nothing on this fixture"
     assert assign_pdf_moves(population, evidence, threshold=0.1) == ()
+
+
+def _four_way_competition() -> tuple[list[_Block], list[_Block]]:
+    """Two removals against two additions, scoring so that only one pairing set can be right.
+
+    ``X`` and ``P`` share "Federal Register"; ``Y`` and ``Q`` do not. So ``X`` scores highest
+    against ``P``, and ``Y``'s best remaining partner is ``Q`` -- but ``Y`` also scores above the
+    move cutoff against ``P``, which is what forces a competition rather than two independent
+    best-partner lookups.
+    """
+    old = [
+        _block(
+            f"{_CORE} concerning migratory bird habitat conservation published in the Federal Register on March 1 2024",
+            1,
+        ),
+        _block(f"{_CORE} concerning migratory bird habitat conservation published in the Register on March 1 2024", 2),
+    ]
+    new = [
+        _block(
+            f"{_CORE} concerning migratory bird habitat conservation published in the Federal Register on March 8 2024",
+            3,
+        ),
+        _block(f"{_CORE} concerning migratory bird habitat conservation published in the Register", 4),
+    ]
+    return old, new
+
+
+#: One text, so every candidate built from it scores exactly 1.0 and the competition is decided
+#: by the ordering rule alone rather than by the measure.
+_TIE_TEXT = f"{_CORE} concerning migratory bird habitat conservation published in the Federal Register"
+
+
+@pytest.mark.parametrize(
+    ("label", "old_count", "new_count", "expected"),
+    [
+        ("two removals compete for one addition", 2, 1, (1, 0)),
+        ("one removal competes for two additions", 1, 2, (0, 1)),
+    ],
+)
+def test_round_2_breaks_an_equal_score_tie_on_the_higher_position(
+    label: str, old_count: int, new_count: int, expected: tuple[int, int]
+) -> None:
+    """Equal scores break on **descending** ``ri`` then ``ai``, and each side claims once.
+
+    ``_greedy_pdf_move_links`` sorts ``(similarity, ri, ai)`` with ``reverse=True``. Every
+    fixture here is one repeated text, so similarity is 1.0 for every pairing and the tuple's
+    second and third components are the only thing deciding the winner. That is what makes this
+    a test of the documented ordering rule rather than of the measure.
+
+    Deliberately asymmetric, and in both directions, because the two exclusivity checks fail
+    apart. Two removals against one addition can only conflict on the **new** side; one removal
+    against two additions can only conflict on the **old** side. A single square fixture proves
+    neither, which is how an earlier version of this module came to claim one-to-one exclusivity
+    while protecting only half of it.
+
+    MUTATIONS, each observed red on the case named beside it and restored:
+
+    - remove ``ri in claimed_old`` -> the 1x2 case selects both additions, 2 moves not 1;
+    - remove ``ai in claimed_new`` -> the 2x1 case selects both removals, 2 moves not 1;
+    - negate ``ri``/``ai`` in the sort key, keeping ``reverse=True`` and so keeping descending
+      similarity -> both cases select ordinal pair ``(0, 0)`` instead of the higher position.
+    """
+    old_blocks = [_block(_TIE_TEXT, page) for page in range(1, old_count + 1)]
+    new_blocks = [_block(_TIE_TEXT, page) for page in range(10, 10 + new_count)]
+    registry = PdfObservationRegistry(old_blocks, new_blocks)
+    population = pdf_unmatched_population(_pairings(old_blocks, new_blocks), registry)
+    evidence = pdf_move_evidence(retrieve_pdf_move_candidates(population, bound=MOVE_THRESHOLD))
+
+    assert len(evidence) == old_count * new_count, (
+        f"{label}: {len(evidence)} of {old_count * new_count} pairings were admitted; without the "
+        "full cross product there is no competition to order"
+    )
+    scores = {item.get("word_overlap") for item in evidence}
+    assert len(scores) == 1, (
+        f"{label}: the candidates no longer tie ({scores}), so the winner is being chosen by "
+        "similarity and this fixture says nothing about the tie-break"
+    )
+
+    moves = assign_pdf_moves(population, evidence, threshold=MOVE_THRESHOLD)
+    selected = [(move.correspondence.old[0].ordinal, move.correspondence.new[0].ordinal) for move in moves]
+
+    assert selected == [expected], (
+        f"{label}: assignment selected {selected}; descending (similarity, ri, ai) with one-to-one "
+        f"exclusivity selects exactly [{expected}]"
+    )
+
+
+def test_round_2_selection_competes_and_claims_exclusively() -> None:
+    """Round-2 assignment settles the highest-scoring pairing first, on distinct scores.
+
+    All four pairings clear the cutoff and every score differs, so what this fixture exercises is
+    the **similarity** component of the ordering: settling ``X``-``P`` first leaves ``Y`` with
+    ``Q``, whereas a stage that let each removal take its own best partner independently would
+    claim ``P`` twice.
+
+    Driven through live ``assign_pdf_moves`` over a population and evidence built by production's
+    own retrieval and evidence stages, so the only thing this fixture supplies is the text.
+
+    **Scope, stated because an earlier version of this docstring overclaimed it.** Distinct scores
+    mean the ``(ri, ai)`` tie-break never runs here, and the greedy never faces two additions
+    wanting one removal, so this fixture owns *neither* the tie-break *nor* old-side exclusivity.
+    Both are owned by
+    :func:`test_round_2_breaks_an_equal_score_tie_on_the_higher_position`.
+
+    MUTATION: drop ``reverse=True`` from the sort in ``_greedy_pdf_move_links``, which selects
+    ``[(0, 1), (1, 0)]``. Observed red before this test was relied on.
+    """
+    old_blocks, new_blocks = _four_way_competition()
+    registry = PdfObservationRegistry(old_blocks, new_blocks)
+    population = pdf_unmatched_population(_pairings(old_blocks, new_blocks), registry)
+    evidence = pdf_move_evidence(retrieve_pdf_move_candidates(population, bound=MOVE_THRESHOLD))
+
+    assert len(evidence) == 4, (
+        f"the fixture admitted {len(evidence)} of 4 pairings; without all four above the cutoff "
+        "there is no competition here and neither half of this test proves anything"
+    )
+
+    moves = assign_pdf_moves(population, evidence, threshold=MOVE_THRESHOLD)
+    selected = {(move.correspondence.old[0].ordinal, move.correspondence.new[0].ordinal) for move in moves}
+
+    assert selected == {(0, 0), (1, 1)}, (
+        f"round-2 assignment selected {sorted(selected)}; descending (similarity, ri, ai) with "
+        "one-to-one exclusivity selects [(0, 0), (1, 1)]"
+    )
+    assert len(moves) == 2, f"{len(moves)} moves for two removals and two additions; a claim was not exclusive"
 
 
 def test_a_settled_move_carries_the_evidence_that_selected_it() -> None:

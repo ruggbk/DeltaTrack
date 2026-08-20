@@ -8,11 +8,10 @@ injects a real correspondence change and watches the digests move.
 
 The fault is chosen to be the one #581 is most likely to introduce by accident:
 **substituting ADR 0019 ordinals for the legacy ``(ri, ai)`` component of the sort key.**
-``scripts/probe_round2_migration.py`` measures that this changes the selected move set on
-exactly 3 of the 16 selecting corpus pairs, so the prediction is sharp -- and it is
-enforced as a prediction rather than a remark: those exact three digests must move and no
-others. The pair keys are imported from that probe rather than respelled here, so the two
-cannot drift into disagreeing about which pairs matter.
+The original experiment measured that this changes the selected move set on exactly 3 of
+the 16 selecting corpus pairs, so the prediction is sharp -- and it is enforced as a
+prediction rather than a remark: those exact three digests must move and no others. The
+three pair keys are recorded below as observations from that experiment.
 
 RE-AIMED FOR SLICE 2. The fault used to be injected by replacing ``diff_bill.reconcile_moves``,
 a single post-classification function. That function is gone: round-2 retrieval, evidence and
@@ -61,9 +60,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import deltatrack.diff_bill as db  # noqa: E402
 from deltatrack.diff_bill import WORD_OVERLAP, UnmatchedPopulation  # noqa: E402
 from deltatrack.matching import CorrespondenceEvidence  # noqa: E402
-from scripts.probe_round2_migration import ORDINAL_SENSITIVE_PAIRS  # noqa: E402
 from tests.corpus_paths import DATA_DIR  # noqa: E402
 from tests.test_canonical_baseline import baseline_pairs, baseline_record  # noqa: E402
+
+#: The corpus pairs whose SELECTED MOVE SET changes when ADR 0019 parser ordinals are
+#: substituted for the legacy ``(ri, ai)`` component of the sort key.
+#:
+#: **Three recorded observations, not a maintained prediction.** They were measured by
+#: ``scripts/probe_round2_migration.py`` as it stood at 6e2964fb, and were imported from it
+#: until #659 retired that probe: its durable claim was a Phase-1 preservation baseline, whose
+#: own docstring declared its figures "HISTORICAL BEHAVIOUR, NOT ADR POLICY", and it could not
+#: survive a legitimate matching-policy change without re-transcribing a new pre-change
+#: implementation. Three literal strings carry no such burden.
+#:
+#: They are still enforced exactly, and a drift is still a review gate rather than a number to
+#: update in passing -- see :func:`main`. What changed is that this probe now stands entirely on
+#: production code plus these three recorded keys.
+ORDINAL_SENSITIVE_PAIRS = (
+    "114-hr-2029/5_engrossed-amendment-senate->6_engrossed-amendment-house",
+    "115-hr-5895/2_engrossed-in-house->4_engrossed-amendment-senate",
+    "118-hr-4366/4_engrossed-amendment-senate->5_engrossed-amendment-house",
+)
 
 REAL_GREEDY = db._greedy_move_links
 
@@ -162,8 +179,8 @@ def main() -> None:
             print(f"  UNEXPECTED (reddened, not predicted): {key}")
         raise SystemExit(
             "the gate's response does not match the measured prediction. Either the injected change no "
-            "longer reaches selection where probe_round2_migration says it does, or the baseline sees a "
-            "different set of pairs than it did -- both need a human before this is used as the ADR 0020 "
+            "longer reaches selection on the pairs the original experiment recorded, or the baseline sees "
+            "a different set of pairs than it did -- both need a human before this is used as the ADR 0020 "
             "acceptance gate."
         )
     print(f"RESULT: the gate is SENSITIVE to a move-correspondence change -- EXACTLY the predicted {len(expected)}")

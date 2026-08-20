@@ -16,16 +16,14 @@ code applied a rule"). So the controls below move the *decision* and watch class
 contradict the evidence and require the basis to win, and read the shipped source statically.
 
 The population itself is preserved by gates that already exist and are untouched:
-``tests/test_pdf_canonical_baseline.py`` (byte digest over the corpus),
-``tests/test_pdf_matching_boundary.py`` and ``tests/test_pdf_round2_stages.py`` (transcribed
-pre-slice oracles, which still spell the *old* collapsed rule and still agree).
+``tests/test_pdf_canonical_baseline.py`` (byte digest over the corpus), and the live-stage
+gates in ``tests/test_pdf_round1_retrieval.py`` and ``tests/test_pdf_round2_stages.py``.
 """
 
 from __future__ import annotations
 
 import ast
 import inspect
-from pathlib import Path
 
 import pytest
 
@@ -295,29 +293,3 @@ def test_the_move_basis_vocabulary_is_exactly_the_two_names_slice_6a_defines() -
     that a round-2 correspondence is a legislative relocation). Both names are provenance.
     """
     assert MOVE_BASES == frozenset({"round1_anchor_similarity", "round2_unmatched_recovery"})
-
-
-# --- Control 6: the preservation oracle stays out of production ----------------------------
-
-
-def test_reconcile_moves_is_unchanged_and_unreferenced_by_the_pipeline() -> None:
-    """``_reconcile_moves`` is the round-2 oracle. 6a must not wire it in or edit it.
-
-    ``tests/test_pdf_round2_stages.py`` already proves ``diff_pdfs`` does not *call* it, by
-    substituting a refusing version and running production. This adds the static half: no
-    production stage names it, so it cannot be reached indirectly either.
-    """
-    source = Path(diff_pdf.__file__).read_text()
-    tree = ast.parse(source)
-    callers = [
-        node.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
-        and node.name != "_reconcile_moves"
-        and any(
-            isinstance(call.func, ast.Name) and call.func.id == "_reconcile_moves"
-            for call in ast.walk(node)
-            if isinstance(call, ast.Call)
-        )
-    ]
-    assert callers == [], f"{callers} call the preservation oracle; it must stay off the production path"

@@ -20,17 +20,24 @@ correspondence_cutoff`` catches exactly one regression: someone re-inlining the 
 correspondence and satisfy it. It is kept because it names the offending line, and because
 it costs nothing -- not because it establishes the architecture.
 
-**Why an apparently duplicated rule lives here.** ``legacy_pairing_was_revoked`` is a
-transcription of the pre-refactor decision, taken from ``diff_bill.diff_bills`` as it stood
-at ``97f91ba`` (the classification loop's ``diff_text`` / ``SIMILARITY_THRESHOLD``
-branch). It exists to disagree with production. An oracle that asked the extracted helper
-what the rule is could not detect that the extraction changed it, which is the one failure
-this slice can actually have -- so this must never be replaced by a call to
-``_similarity_rule_keeps``, and production must never import it. It composes the
-same primitives (``_normalize_text``, ``diff_text``, ``text_similarity``,
-``SIMILARITY_THRESHOLD``) deliberately: what it guards is the *composition* -- an inverted
-comparison, a dropped gate, a reordered branch, the wrong constant. The primitives have
-their own tests, and the canonical baseline covers the composite.
+**Retired in #659: the transcriptions and everything that consumed them.** This module used to
+carry the pre-refactor revocation decision as it stood at ``97f91ba``, and a transcription of
+the whole pre-slice-2 pipeline from the pairing seam onward -- change records, filtered sides,
+move candidates, selected links, reconciliation -- together with the corpus comparisons run
+against them and the guards that kept them independent of the stages they checked. The commit
+that removed them names each one.
+
+They answered whether the extraction preserved behaviour. That question is closed, and after a
+legitimate change to matching policy the comparisons fail by construction -- keeping them means
+transcribing a new "before" each time, which is the burden ADR 0020's closure removes. What
+survives is what is still true after such a change: the shape contract, the threshold split,
+the assignment policy pins, the ADR 0019 addressing tests, and the record-order gates. Whole
+output is owned by ``tests/test_canonical_baseline.py``, and round-1 correspondence by
+``tests/test_round1_pairing_sentinel.py``.
+
+``migrated_stages`` stays. It was inventoried as oracle machinery, and it is not: it calls the
+real production stages in the real order and keeps each intermediate, so a control that
+perturbs one is seen exactly as ``diff_bills`` would see it. Five retained tests read it.
 
 **Element identity is checked here by ``element_id``**, which is traceability information
 and not ADR 0019 observation identity. It is used only to ask "is this the same node the
@@ -47,7 +54,7 @@ from pathlib import Path
 import pytest
 
 from deltatrack import diff_bill
-from deltatrack.bill_tree import BillNode, amount_text, normalize_bill
+from deltatrack.bill_tree import BillNode, normalize_bill
 from deltatrack.diff_bill import (
     BODY_UNCHANGED,
     MOVE_ROUND,
@@ -58,12 +65,10 @@ from deltatrack.diff_bill import (
     SettledCorrespondence,
     UnmatchedPopulation,
     _greedy_move_links,
-    _similarity_rule_keeps,
     apply_similarity_assignment_rule,
     assign_moves,
     classify,
     diff_bills,
-    diff_text,
     match_nodes,
     move_correspondence_evidence,
     observation_registry,
@@ -82,218 +87,13 @@ from deltatrack.matching import (
 from deltatrack.similarity import (
     MOVE_THRESHOLD,
     SIMILARITY_THRESHOLD,
-    move_candidates,
-    text_similarity,
 )
 from tests.corpus_paths import fixture_path
 
 _DIFF_BILL_SOURCE = Path(diff_bill.__file__)
 
 
-# --- The oracle: the rule as it stood before the extraction --------------------------
-
-
-def legacy_pairing_was_revoked(old_node: BillNode, new_node: BillNode) -> bool:
-    """Whether the PRE-REFACTOR ``diff_bills`` would have split this pairing.
-
-    Transcribed from ``src/deltatrack/diff_bill.py`` at ``97f91ba``, where the classification
-    loop read:
-
-        text_changes = diff_text(old_normalized, new_normalized)
-        if not text_changes:                                  -> unchanged (kept)
-        elif text_similarity(...) < SIMILARITY_THRESHOLD:     -> removed + added (revoked)
-        else:                                                 -> modified (kept)
-
-    Independent by construction: it must not call ``_similarity_rule_keeps``, and
-    production must not import this. See the module docstring for why the duplication is
-    the point rather than an oversight.
-    """
-    old_normalized = " ".join(old_node.body_text.split())
-    new_normalized = " ".join(new_node.body_text.split())
-    if not diff_text(old_normalized, new_normalized):
-        return False
-    return text_similarity(old_normalized, new_normalized) < SIMILARITY_THRESHOLD
-
-
-# --- The slice-2 oracle: the whole pre-slice pipeline from the pairing seam onward -----
-#
-# Transcribed from `src/deltatrack/diff_bill.py` at `58816c1`, the base this slice was cut
-# from, where `diff_bills` ran a four-branch classification loop and then called
-# `reconcile_moves` over its output. The matching source at that commit is byte-identical to
-# `422ad69`, the SHA the audit was performed at.
-#
-# Independent by construction, and for the same reason `legacy_pairing_was_revoked` is: an
-# oracle that asked the new stages what they do could not detect that the extraction changed
-# them, which is the one failure this slice can actually have. So none of the functions below
-# may call `unmatched_population`, `retrieve_move_candidates`, `move_correspondence_evidence`,
-# `assign_moves`, `settle_correspondences` or `classify`, production must never import them,
-# and `test_the_slice_2_oracle_is_independent_of_the_new_stages` enforces the first half by
-# reading this module's own AST.
-#
-# It composes the same leaf primitives deliberately (`diff_text`, `move_candidates`,
-# `amount_text`, `NodeDiff`): what it guards is the COMPOSITION -- a dropped branch, an
-# inverted comparison, a reordered append, the wrong field on a rebuilt record. `_normalize_text`
-# is transcribed rather than imported because it is one line and the composition includes which
-# text gets normalized.
-
-
-def legacy_normalize(text: str) -> str:
-    """`diff_bill._normalize_text`, transcribed."""
-    return " ".join(text.split())
-
-
-def legacy_change_records(pairs: list) -> list[NodeDiff]:
-    """The pre-slice `diff_bills` classification loop: one record per pairing, in order."""
-    changes: list[NodeDiff] = []
-    for old_node, new_node in pairs:
-        if old_node is None and new_node is not None:
-            changes.append(
-                NodeDiff(
-                    display_path_old=None,
-                    display_path_new=new_node.display_path,
-                    match_path=new_node.match_path,
-                    change_type="added",
-                    old_text=None,
-                    new_text=new_node.body_text,
-                    text_diff=None,
-                    section_number=new_node.section_number,
-                    element_id_old="",
-                    element_id_new=new_node.element_id,
-                    new_amount_text=amount_text(new_node),
-                )
-            )
-        elif old_node is not None and new_node is None:
-            changes.append(
-                NodeDiff(
-                    display_path_old=old_node.display_path,
-                    display_path_new=None,
-                    match_path=old_node.match_path,
-                    change_type="removed",
-                    old_text=old_node.body_text,
-                    new_text=None,
-                    text_diff=None,
-                    section_number=old_node.section_number,
-                    element_id_old=old_node.element_id,
-                    element_id_new="",
-                    old_amount_text=amount_text(old_node),
-                )
-            )
-        elif old_node is not None and new_node is not None:
-            old_normalized = legacy_normalize(old_node.body_text)
-            new_normalized = legacy_normalize(new_node.body_text)
-            text_changes = diff_text(old_normalized, new_normalized)
-            changes.append(
-                NodeDiff(
-                    display_path_old=old_node.display_path,
-                    display_path_new=new_node.display_path,
-                    match_path=old_node.match_path,
-                    change_type="unchanged" if not text_changes else "modified",
-                    old_text=old_node.body_text,
-                    new_text=new_node.body_text,
-                    text_diff=None if not text_changes else text_changes,
-                    section_number=new_node.section_number or old_node.section_number,
-                    element_id_old=old_node.element_id,
-                    element_id_new=new_node.element_id,
-                    old_amount_text=amount_text(old_node),
-                    new_amount_text=amount_text(new_node),
-                )
-            )
-    return changes
-
-
-def legacy_filtered_sides(changes: list[NodeDiff]) -> tuple[list, list]:
-    """The filtered removal/addition lists `reconcile_moves` built. Position here IS `(ri, ai)`."""
-    removed = [(i, c) for i, c in enumerate(changes) if c.change_type == "removed"]
-    added = [(i, c) for i, c in enumerate(changes) if c.change_type == "added"]
-    return removed, added
-
-
-def legacy_candidates(changes: list[NodeDiff], threshold: float = MOVE_THRESHOLD) -> list[tuple[float, int, int]]:
-    """The `(similarity, ri, ai)` triples the pre-slice retrieval produced."""
-    removed, added = legacy_filtered_sides(changes)
-    if not removed or not added:
-        return []
-    return move_candidates(
-        [legacy_normalize(rc.old_text or "") for _, rc in removed],
-        [legacy_normalize(ac.new_text or "") for _, ac in added],
-        threshold,
-    )
-
-
-def legacy_selected_links(changes: list[NodeDiff], threshold: float = MOVE_THRESHOLD) -> list[tuple[str, str]]:
-    """The pre-slice greedy selection, as `(element_id_old, element_id_new)` in selection order."""
-    removed, added = legacy_filtered_sides(changes)
-    candidates = legacy_candidates(changes, threshold)
-    candidates.sort(reverse=True)
-
-    claimed_removed: set[int] = set()
-    claimed_added: set[int] = set()
-    links: list[tuple[str, str]] = []
-    for _sim, ri, ai in candidates:
-        if ri in claimed_removed or ai in claimed_added:
-            continue
-        claimed_removed.add(ri)
-        claimed_added.add(ai)
-        links.append((removed[ri][1].element_id_old, added[ai][1].element_id_new))
-    return links
-
-
-def legacy_reconciled(changes: list[NodeDiff], threshold: float = MOVE_THRESHOLD) -> list[NodeDiff]:
-    """The pre-slice `reconcile_moves`, transcribed whole."""
-    removed, added = legacy_filtered_sides(changes)
-    if not removed or not added:
-        return changes
-    candidates = legacy_candidates(changes, threshold)
-    if not candidates:
-        return changes
-
-    candidates.sort(reverse=True)
-    claimed_removed: set[int] = set()
-    claimed_added: set[int] = set()
-    moved_indices: set[int] = set()
-    moved_entries: list[NodeDiff] = []
-
-    for _sim, ri, ai in candidates:
-        if ri in claimed_removed or ai in claimed_added:
-            continue
-        claimed_removed.add(ri)
-        claimed_added.add(ai)
-
-        orig_ri, rc = removed[ri]
-        orig_ai, ac = added[ai]
-        moved_indices.add(orig_ri)
-        moved_indices.add(orig_ai)
-
-        old_norm = legacy_normalize(rc.old_text or "")
-        new_norm = legacy_normalize(ac.new_text or "")
-        moved_entries.append(
-            NodeDiff(
-                display_path_old=rc.display_path_old,
-                display_path_new=ac.display_path_new,
-                match_path=rc.match_path,
-                change_type="moved",
-                old_text=rc.old_text,
-                new_text=ac.new_text,
-                text_diff=diff_text(old_norm, new_norm) if old_norm != new_norm else None,
-                section_number=ac.section_number or rc.section_number,
-                element_id_old=rc.element_id_old,
-                element_id_new=ac.element_id_new,
-                old_amount_text=rc.old_amount_text,
-                new_amount_text=ac.new_amount_text,
-            )
-        )
-
-    result = [c for i, c in enumerate(changes) if i not in moved_indices]
-    result.extend(moved_entries)
-    return result
-
-
-def legacy_pipeline(pairs: list) -> list[NodeDiff]:
-    """Everything the pre-slice engine did after the similarity rule had been applied."""
-    return legacy_reconciled(legacy_change_records(pairs))
-
-
-# --- Reading the migrated stages in the oracle's own vocabulary ------------------------
+# --- Reading the migrated stages, one intermediate at a time ---------------------------
 
 
 def migrated_stages(old_tree, new_tree) -> dict:
@@ -337,23 +137,17 @@ def decided_pairings(old_tree, new_tree) -> list:
 
 
 def element_ids(registry: ObservationRegistry, correspondence: Correspondence) -> tuple[str, str]:
-    """A 1:1 correspondence as the two element ids, for comparison against the oracle.
+    """A 1:1 correspondence as the two element ids, for reading an assertion.
 
-    `element_id` is a MEASUREMENT BRIDGE to the oracle's vocabulary, not identity: the oracle
-    holds `NodeDiff` records, which carry no address. ADR 0019 refuses `element_id` as identity
-    and production derives no ordinal from it.
+    `element_id` is a READING CONVENIENCE, not identity: it is what a fixture names its nodes,
+    so an expected value written as `("old-1", "new-0")` says which node without a reader having
+    to count ordinals. ADR 0019 refuses `element_id` as identity and production derives no
+    ordinal from it; nothing here is stored.
     """
     return (
         registry.node(correspondence.old[0]).element_id,
         registry.node(correspondence.new[0]).element_id,
     )
-
-
-def legacy_key_of(population: UnmatchedPopulation, evidence: CorrespondenceEvidence) -> tuple[float, int, int]:
-    """`(word_overlap, ri, ai)` with `ri`/`ai` taken ONLY from population positions."""
-    ri_of = {observation.ref: index for index, observation in enumerate(population.old)}
-    ai_of = {observation.ref: index for index, observation in enumerate(population.new)}
-    return (evidence.get(WORD_OVERLAP), ri_of[evidence.old], ai_of[evidence.new])
 
 
 # --- The shape invariant, as a checker so a caller can prove it rejects ---------------
@@ -458,10 +252,9 @@ def test_the_similarity_cutoff_is_pinned_for_phase_1():
     """A LEGACY BEHAVIOUR-PRESERVATION GUARD, not an architectural requirement.
 
     ADR 0020 deliberately does not prescribe a cutoff value; choosing one is a measurement
-    question it defers. This pin exists only because the Phase-1 extraction must not change
-    policy, and because the oracle above reads the constant -- so without a direct pin, a
-    changed cutoff would move production and oracle together and the agreement test would
-    stay green.
+    question it defers. This pin exists because the value is policy that Phase 1 must carry
+    across unchanged, and because every other gate reads the constant rather than the number --
+    so without a direct pin a changed cutoff would move production and its checks together.
 
     A later, evidence-backed matching-policy change is expected to update or delete this
     knowingly, in the pull request carrying its precision and recall evidence. Doing so is
@@ -568,36 +361,6 @@ def test_manifest_fixtures_committed():
     assert_manifest_committed(manifest_version_pairs(), "assignment-classification-boundary")
 
 
-@pytest.mark.slow
-def test_the_extracted_rule_agrees_with_the_pre_refactor_rule():
-    """Every path-matched pairing gets the same verdict from production and the oracle."""
-    from tests.conftest import manifest_version_pairs
-
-    checked = 0
-    revoked = 0
-    for old_path, new_path in manifest_version_pairs():
-        old_tree = normalize_bill(old_path)
-        new_tree = normalize_bill(new_path)
-        label = f"{old_path.parent.name} {old_path.stem}->{new_path.stem}"
-        registry = observation_registry(old_tree, new_tree)
-        pairings = match_nodes(old_tree, new_tree)
-        by_link = {item.link: item for item in similarity_correspondence_evidence(pairings, registry)}
-        for old_node, new_node in pairings:
-            if old_node is None or new_node is None:
-                continue
-            checked += 1
-            link = (registry.ref(OLD, old_node), registry.ref(NEW, new_node))
-            extracted_keeps = _similarity_rule_keeps(by_link[link], SIMILARITY_THRESHOLD)
-            revoked += not extracted_keeps
-            assert extracted_keeps == (not legacy_pairing_was_revoked(old_node, new_node)), (
-                f"{label}: the extracted rule and the pre-refactor rule disagree on "
-                f"{old_node.element_id} -> {new_node.element_id}"
-            )
-
-    assert checked, "the agreement measurement ran over zero pairings"
-    assert revoked, "no pairing was revoked anywhere in the corpus, so agreement proves nothing"
-
-
 def test_the_evidence_normalizes_before_asking_whether_the_body_changed():
     """Two bodies differing only in whitespace are `body_unchanged`, and carry no ratio.
 
@@ -626,69 +389,6 @@ def test_the_evidence_normalizes_before_asking_whether_the_body_changed():
         "reading body_text unnormalized reports a change that is not there"
     )
     assert WORD_OVERLAP not in evidence[0].names, "an unchanged body needs no ratio"
-
-
-def legacy_similarity_signals(old_node: BillNode, new_node: BillNode) -> dict:
-    """The signals the PRE-SLICE rule computed, and which it skipped, transcribed.
-
-    Independent by construction, like every other ``legacy_`` helper here: it must not call
-    ``_similarity_signals``. What it pins is not only the two values but *which of them the rule
-    bothered to compute* -- the short-circuit is behaviour, and it is the one part of this slice
-    that no output can reveal.
-    """
-    old_normalized = legacy_normalize(old_node.body_text)
-    new_normalized = legacy_normalize(new_node.body_text)
-    if not diff_text(old_normalized, new_normalized):
-        return {BODY_UNCHANGED: True}
-    return {BODY_UNCHANGED: False, WORD_OVERLAP: text_similarity(old_normalized, new_normalized)}
-
-
-@pytest.mark.slow
-def test_the_evidence_records_exactly_the_signals_the_legacy_rule_computed():
-    """Values AND presence, on every path-matched pairing of the corpus.
-
-    Exact float equality, no tolerance: a tolerance would hide a changed normalization, which is
-    the one way the ratio can silently move.
-
-    The presence half is the load-bearing half. ``word_overlap`` must be **absent** when the
-    bodies are unchanged, because production skips the ratio there -- on 13,866 of the corpus's
-    15,034 pairings. Computing it anyway changes no decision, no record and no canonical byte, so
-    this assertion is the only thing standing between the short-circuit and a silent +21% on
-    ``diff_bills``.
-    """
-    from tests.conftest import manifest_version_pairs
-
-    checked = both_signals = only_body = 0
-    for old_path, new_path in manifest_version_pairs():
-        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        label = f"{old_path.parent.name} {old_path.stem}->{new_path.stem}"
-        registry = observation_registry(old_tree, new_tree)
-        pairings = match_nodes(old_tree, new_tree)
-        by_link = {item.link: item for item in similarity_correspondence_evidence(pairings, registry)}
-
-        for old_node, new_node in pairings:
-            if old_node is None or new_node is None:
-                continue
-            checked += 1
-            item = by_link[(registry.ref(OLD, old_node), registry.ref(NEW, new_node))]
-            want = legacy_similarity_signals(old_node, new_node)
-            where = f"{label}: {old_node.element_id} -> {new_node.element_id}"
-
-            assert set(item.names) == set(want), f"{where}: recorded {item.names}, legacy computed {sorted(want)}"
-            assert item.get(BODY_UNCHANGED) == want[BODY_UNCHANGED], where
-            if WORD_OVERLAP in want:
-                both_signals += 1
-                assert item.get(WORD_OVERLAP) == want[WORD_OVERLAP], f"{where}: ratio moved"
-            else:
-                only_body += 1
-                assert WORD_OVERLAP not in item.names, (
-                    f"{where}: the bodies are unchanged, so the legacy rule never computed a ratio; "
-                    "recording one is a behaviour change the canonical gate cannot see"
-                )
-
-    assert checked, "the evidence measurement ran over zero pairings"
-    assert both_signals, "no pairing carried a ratio, so the two-signal branch was never exercised"
-    assert only_body, "no pairing took the short-circuit, so its absence assertion proves nothing"
 
 
 @pytest.mark.slow
@@ -774,22 +474,20 @@ def test_classification_preserves_the_shape_it_receives():
 def test_the_move_cutoff_is_pinned_for_phase_1():
     """A LEGACY BEHAVIOUR-PRESERVATION GUARD, the twin of the similarity pin above.
 
-    The slice-2 oracle reads ``MOVE_THRESHOLD`` too, so without a direct pin a changed cutoff
-    would move production and oracle together and every preservation test below would stay
-    green. ADR 0020 prescribes no value; a later evidence-backed change updates this knowingly.
+    Every gate that exercises round 2 reads ``MOVE_THRESHOLD`` rather than the number, so
+    without a direct pin a changed cutoff would move production and its checks together. ADR
+    0020 prescribes no value; a later evidence-backed change updates this knowingly.
     """
     assert MOVE_THRESHOLD == 0.6
 
 
 # --- ADR 0019: what an address means, pinned where round 2 actually reads it ------------
 #
-# These are lasting contracts rather than migration evidence, and they exist because every
-# other test in this module can be satisfied by the WRONG address. The preservation oracles
-# bridge to the pre-slice pipeline through `element_id`, and the candidate checks round-trip a
-# ref through the same registry that issued it -- so both would still agree if
-# `ObservationRef.ordinal` silently became a position in the filtered unmatched list. ADR 0019
-# names exactly that substitution as the hazard: the resulting address looks valid and points
-# at the wrong node.
+# These are lasting contracts, and they exist because every other test in this module can be
+# satisfied by the WRONG address: the candidate checks round-trip a ref through the same
+# registry that issued it, so they would still agree if `ObservationRef.ordinal` silently
+# became a position in the filtered unmatched list. ADR 0019 names exactly that substitution
+# as the hazard: the resulting address looks valid and points at the wrong node.
 
 
 def test_the_round_2_population_is_addressed_by_complete_parser_ordinal():
@@ -862,7 +560,7 @@ def test_a_registry_refuses_one_node_object_listed_twice():
         ObservationRegistry([shared, shared], [_node("new-0", "alpha")])
 
 
-# --- Slice 2: the preservation oracles, over the committed corpus ----------------------
+# --- Slice 2: the round-2 stages over the committed corpus -----------------------------
 
 
 def _baseline_pairs():
@@ -874,181 +572,6 @@ def _baseline_pairs():
     from tests.test_canonical_baseline import baseline_pairs
 
     return baseline_pairs()
-
-
-@pytest.mark.slow
-def test_the_migrated_stages_reproduce_the_pre_slice_change_records():
-    """The whole slice, end to end: identical change records, field for field, in order.
-
-    The left side is the frozen transcription of the pre-slice pipeline; the right is the live
-    ``diff_bills``. What they share is ``match_nodes``, the round-1 similarity seam (via
-    :func:`decided_pairings`) and the leaf primitives, so for everything downstream of the
-    pairing stream this is not two reconstructions that can carry the same bug.
-
-    **What it therefore cannot see, stated rather than implied:** a change to the round-1
-    similarity seam itself, because both sides now consume its output. That was already true when
-    the seam was one call, and it is why the seam has its own independent oracles --
-    ``legacy_pairing_was_revoked`` for the decision and ``legacy_similarity_signals`` for the
-    evidence, neither of which this test uses.
-    """
-    moved_seen = 0
-    for key, old_path, new_path in _baseline_pairs():
-        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        expected = legacy_pipeline(decided_pairings(old_tree, new_tree))
-        actual = diff_bills(old_tree, new_tree).changes
-
-        assert len(actual) == len(expected), f"{key}: {len(actual)} records, pre-slice produced {len(expected)}"
-        for index, (got, want) in enumerate(zip(actual, expected)):
-            assert got == want, f"{key}: record {index} differs.\n  pre-slice: {want}\n  migrated:  {got}"
-        moved_seen += sum(1 for c in actual if c.change_type == "moved")
-
-    assert moved_seen == 496, f"{moved_seen} moved records across the corpus; the pinned figure is 496"
-
-
-def candidate_maps(old_tree, new_tree) -> tuple[dict, dict]:
-    """`(migrated, pre-slice)` candidate populations as `{(element_id_old, element_id_new): score}`.
-
-    The pre-slice side reaches `move_candidates` through this module's own import, so a control
-    that patches `diff_bill.move_candidates` perturbs production alone and the oracle stays honest.
-    That asymmetry is the point: a fault both sides felt would move them together and pass.
-
-    `element_id` is the MEASUREMENT BRIDGE into the oracle's vocabulary -- a `NodeDiff` carries no
-    address -- so its uniqueness per side is asserted rather than assumed. A repeated id would
-    collapse two candidates onto one key on BOTH sides, which is the shape that reads as agreement.
-    ADR 0019 refuses `element_id` as identity, and nothing here derives an ordinal from it.
-    """
-    for side, nodes in (("old", old_tree.nodes), ("new", new_tree.nodes)):
-        ids = [node.element_id for node in nodes]
-        assert all(ids) and len(set(ids)) == len(ids), f"{side}-side element_id is empty or repeats; the bridge lies"
-
-    stages = migrated_stages(old_tree, new_tree)
-    registry = stages["registry"]
-    migrated = {
-        (registry.node(candidate.old).element_id, registry.node(candidate.new).element_id): candidate.proposals[0].score
-        for candidate in stages["candidates"].candidates()
-    }
-
-    changes = legacy_change_records(stages["pairs"])
-    removed, added = legacy_filtered_sides(changes)
-    expected = {
-        (removed[ri][1].element_id_old, added[ai][1].element_id_new): sim for sim, ri, ai in legacy_candidates(changes)
-    }
-    return migrated, expected
-
-
-def _selecting_pair() -> tuple:
-    """A committed pair that carries candidates, so a control over it cannot be vacuous."""
-    return (
-        normalize_bill(fixture_path("118-hr-4366", "4_engrossed-amendment-senate.xml")),
-        normalize_bill(fixture_path("118-hr-4366", "5_engrossed-amendment-house.xml")),
-    )
-
-
-@pytest.mark.slow
-def test_the_retrieved_candidate_population_is_identical():
-    """Candidate IDENTITY and SCORE, not the 1054 count.
-
-    Compared two ways on purpose: as a mapping, so a duplicate cannot cancel an omission, and by
-    total, so a wholesale collapse cannot pass by agreeing with itself.
-    """
-    total = pairs_carrying = 0
-    for key, old_path, new_path in _baseline_pairs():
-        migrated, expected = candidate_maps(normalize_bill(old_path), normalize_bill(new_path))
-        assert migrated == expected, (
-            f"{key}: candidate population differs. "
-            f"only migrated: {sorted(set(migrated) - set(expected))[:3]}; "
-            f"only pre-slice: {sorted(set(expected) - set(migrated))[:3]}"
-        )
-        total += len(migrated)
-        pairs_carrying += bool(migrated)
-
-    assert (total, pairs_carrying) == (1054, 16), f"{total} candidates over {pairs_carrying} pairs; pinned 1054 over 16"
-
-
-@pytest.mark.slow
-def test_the_population_comparison_rejects_a_dropped_candidate(monkeypatch):
-    """A checker that has never rejected anything cannot be told from one that accepts everything."""
-    old_tree, new_tree = _selecting_pair()
-    real = diff_bill.move_candidates
-    monkeypatch.setattr(diff_bill, "move_candidates", lambda removed, added, bound: real(removed, added, bound)[1:])
-
-    migrated, expected = candidate_maps(old_tree, new_tree)
-    assert len(expected) - len(migrated) == 1, "the control did not drop exactly one candidate"
-    assert migrated != expected
-
-
-@pytest.mark.slow
-def test_the_population_comparison_rejects_an_added_candidate(monkeypatch):
-    """The other direction: an extra pair that is otherwise perfectly well formed.
-
-    Scored at the bound itself and addressed at a position the real retrieval left free, so the
-    only thing wrong with it is that production did not retrieve it.
-    """
-    old_tree, new_tree = _selecting_pair()
-    real = diff_bill.move_candidates
-
-    def with_an_extra(removed, added, bound):
-        found = real(removed, added, bound)
-        taken = {(ri, ai) for _score, ri, ai in found}
-        spare = next(
-            ((ri, ai) for ri in range(len(removed)) for ai in range(len(added)) if (ri, ai) not in taken), None
-        )
-        assert spare is not None, "every position pair is already a candidate; the control cannot fire"
-        return [*found, (bound, *spare)]
-
-    monkeypatch.setattr(diff_bill, "move_candidates", with_an_extra)
-
-    migrated, expected = candidate_maps(old_tree, new_tree)
-    assert len(migrated) - len(expected) == 1, "the control did not add exactly one candidate"
-    assert migrated != expected
-
-
-@pytest.mark.slow
-def test_the_legacy_ordering_key_is_preserved_exactly():
-    """`(similarity, ri, ai)` equal as an ORDERED sequence, `ri`/`ai` from population positions only.
-
-    Ordered rather than set-equal because the key exists to order: a reordering that preserved the
-    multiset is exactly the failure that moves selected correspondence, which #590 measured on
-    three corpus pairs.
-    """
-    compared = 0
-    for key, old_path, new_path in _baseline_pairs():
-        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        stages = migrated_stages(old_tree, new_tree)
-        population = stages["population"]
-        if not stages["evidence"]:
-            continue
-
-        migrated = sorted((legacy_key_of(population, item) for item in stages["evidence"]), reverse=True)
-        expected = sorted(legacy_candidates(legacy_change_records(stages["pairs"])), reverse=True)
-
-        assert migrated == expected, (
-            f"{key}: legacy key sequence differs at index "
-            f"{next(i for i, (a, b) in enumerate(zip(migrated, expected)) if a != b)}"
-        )
-        compared += 1
-
-    assert compared == 16, f"the key comparison ran over {compared} pairs; 16 carry candidates"
-
-
-@pytest.mark.slow
-def test_the_selected_links_are_identical_and_in_greedy_order():
-    """All 496 selected links, same pairs, same selection order."""
-    total = 0
-    for key, old_path, new_path in _baseline_pairs():
-        old_tree, new_tree = normalize_bill(old_path), normalize_bill(new_path)
-        stages = migrated_stages(old_tree, new_tree)
-        registry = stages["registry"]
-
-        migrated = [element_ids(registry, move) for move in stages["moves"]]
-        expected = legacy_selected_links(legacy_change_records(stages["pairs"]))
-
-        assert migrated == expected, (
-            f"{key}: selected links differ.\n  pre-slice: {expected[:4]}\n  migrated:  {migrated[:4]}"
-        )
-        total += len(migrated)
-
-    assert total == 496, f"{total} selected links across the corpus; the pinned figure is 496"
 
 
 # --- Slice 2: the retrieval / assignment threshold split, proven separable --------------
@@ -1296,78 +819,6 @@ def test_moved_records_land_last_and_moving_them_is_visible():
     assert digest(moves_first) != digest(faithful), (
         "moving the appended moved records changed no canonical byte, so the canonical gate cannot see record position"
     )
-
-
-# --- Slice 2: the oracle must stay independent of the stages it checks -------------------
-
-
-#: Every production stage a ``legacy_`` oracle must not call. Covers both migrated slices: the
-#: round-2 stages (#612) and the similarity-rule stages this slice extracted.
-MIGRATED_STAGE_NAMES = frozenset(
-    {
-        "unmatched_population",
-        "retrieve_move_candidates",
-        "move_correspondence_evidence",
-        "assign_moves",
-        "settle_correspondences",
-        "classify",
-        "migrated_stages",
-        "decided_pairings",
-        "similarity_correspondence_evidence",
-        "apply_similarity_assignment_rule",
-        "_similarity_signals",
-        "_similarity_rule_keeps",
-        "_evidence_by_link",
-    }
-)
-
-
-def migrated_names_called_in(source: str) -> dict[str, set[str]]:
-    """Migrated stage names reached from any ``legacy_`` function in ``source``.
-
-    **Both spellings, and that is the point of the helper.** ``ast.Name`` catches a bare
-    ``settle_correspondences(...)``, but a module-qualified ``diff_bill.settle_correspondences(...)``
-    parses as an ``ast.Attribute`` whose ``attr`` holds the name, and the ``Name`` there is the
-    module. Scanning only ``Name`` therefore missed the qualified spelling entirely -- and that
-    spelling is in live use elsewhere in the repository, so it was a reachable hole rather than a
-    hypothetical one.
-    """
-    offenders: dict[str, set[str]] = {}
-    for node in ast.walk(ast.parse(source)):
-        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("legacy_")):
-            continue
-        reached = {c.id for c in ast.walk(node) if isinstance(c, ast.Name)}
-        reached |= {c.attr for c in ast.walk(node) if isinstance(c, ast.Attribute)}
-        if named := reached & MIGRATED_STAGE_NAMES:
-            offenders[node.name] = named
-    return offenders
-
-
-def test_the_legacy_oracles_are_independent_of_the_stages_they_check():
-    """An oracle that called the stages could not detect that they changed.
-
-    Reads this module's own AST rather than trusting the convention, because the failure it
-    guards -- someone simplifying a transcription into a call -- looks like a cleanup.
-    """
-    offenders = migrated_names_called_in(Path(__file__).read_text())
-    assert not offenders, f"a legacy oracle calls the code it is supposed to check: {offenders}"
-
-
-def test_the_independence_guard_catches_both_call_spellings():
-    """Proven able to fail, in both spellings, because it silently missed one of them before.
-
-    The attribute case is the one that mattered: the guard scanned ``ast.Name`` only, so
-    ``diff_bill.assign_moves(...)`` inside an oracle would have passed while defeating the
-    oracle's whole purpose.
-    """
-    bare = "def legacy_thing(x):\n    return settle_correspondences(x)\n"
-    assert migrated_names_called_in(bare) == {"legacy_thing": {"settle_correspondences"}}
-
-    qualified = "def legacy_thing(x):\n    return diff_bill.apply_similarity_assignment_rule(x)\n"
-    assert migrated_names_called_in(qualified) == {"legacy_thing": {"apply_similarity_assignment_rule"}}
-
-    innocent = "def legacy_thing(x):\n    return diff_text(x.a, x.b)\n"
-    assert migrated_names_called_in(innocent) == {}
 
 
 def test_classification_names_no_correspondence_cutoff():
