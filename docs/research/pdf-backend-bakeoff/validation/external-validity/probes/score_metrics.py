@@ -177,6 +177,13 @@ PDFIUM_CONDITIONED_FRAME = "PDFIUM-CONDITIONED FRAME"
 #: `continuation_provenance` because the allowlist forbids importing it; x30 asserts they agree.
 REQUIRED_CONFIRMATORY_STATUS = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A45 post-boundary deviation)"
 
+#: A48 -- the SAME section 4.7 status CLASS as A45/A47, but its own literal, because the label
+#: above names A45 and this deviation is not that one. Applied only where A48 actually changes
+#: a value: at D > 60 it changes which routes R1 is required to score, so R1's value can move.
+#: At D <= 60 the historical D -> human semantics are untouched and this label is NOT claimed
+#: merely because the code contains A48.
+A48_NON_CONFIRMATORY = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A48 post-boundary deviation)"
+
 #: A24.2 / section 6 line states `build_frames` can commit. An unknown state REFUSES rather
 #: than falling through to "not BOTH_ABSENT", which would silently enlarge the M0 risk set.
 KNOWN_LINE_STATES = frozenset({"SAME", "TEXT_DIFFERS", "H_ABSENT", "X_ABSENT", "BOTH_ABSENT"})
@@ -1252,6 +1259,15 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
         "aggregation": "heading-occurrence micro-average per route; worst required route (R6.4)",
         "ruled_by": "A41.2 R6",
         "decision_owner": "Rule 3 gate vector (A27.6); no consequence is applied here",
+        # A48 -- PROVENANCE ON THE VALUE THAT MOVED. Over the A27.3 budget the D decision route
+        # is not result-bearing, so A48 removes the human arm from R1's REQUIRED population and
+        # the gate is computed on a different set of pairs than it would have been. That is a
+        # value change caused by a post-boundary deviation, so section 4.7 attaches here.
+        #
+        # Within budget A48 changes nothing about which routes R1 requires, so no A48 status is
+        # claimed: labelling it there would be the global relabelling 4.7 exists to prevent.
+        "a48_required_routes_changed": not d_required,
+        "confirmatory_status": None if d_required else A48_NON_CONFIRMATORY,
     }
 
 

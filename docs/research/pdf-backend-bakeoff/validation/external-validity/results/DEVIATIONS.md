@@ -30,8 +30,10 @@ what the apparatus reads. This document is the reasoning; that file is the autho
  },
  "affects_membership": false,
  "affects_scoring_rule": false,
- "affects_metric_values": false,
- "affects_architecture_decision": false,
+ "affects_metric_values": true,
+ "affects_architecture_decision": true,
+ "affects_architecture_outcome_enum": false,
+ "narrowing": "affects_scoring_rule is FALSE because no frozen rule changed; A48 repairs the implementation of A27.3. affects_metric_values is TRUE because A48 changes which routes R1 is REQUIRED to score, so r1_reliability's value can move. affects_architecture_decision is TRUE only for the artifact's ATTRIBUTION field: the outcome ENUM is invariant to A48 at D>60, while decided_by can flip between BUDGET_A10_A27_3 and RULE_3_GATE where Rule 0 does not decide. A48 can NEVER move a Rule 0 outcome or its attribution.",
  "non_confirmatory_paths": ["cross-engine qualification channel (A45-dependent)"],
  "files_touched": ["probes/continuation_provenance.py", "probes/x04_freeze_check.py",
                    "probes/cross_engine_control.py", "probes/score_metrics.py",
@@ -408,9 +410,15 @@ Derived from the already-committed real key, without opening any image:
 ### A48.4 — section 4.7 status
 
 A48 changes **which adjudication inputs are consumed**, so it is value-bearing for anything
-computed from that set. Its §4.7 status therefore travels with the same
-`NON-CONFIRMATORY` label A47 established for the A45-affected channel, and for the same reason:
-these are post-boundary apparatus deviations, not pre-execution amendments.
+computed from that set. It takes the same §4.7 status **class** as A45/A47 but its **own
+literal**, because the A45 label names A45 and this is a different deviation:
+
+    NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A48 post-boundary deviation)
+
+Held as a constant in `score_metrics` and in `decide_architecture`, never read from this
+document or any other mutable record, so nothing under test supplies its own expected
+provenance. Applied to `r1_reliability` only where A48 actually moved it (census over budget)
+and to the decision artifact's **attribution** only where `decided_by` turns on that R1 gate.
 
 **The final architecture outcome enum is invariant to A48.** Demonstrated executably over the
 real decider across all four Rule 0 states at D > 60: with R1 forced to PASS and to FAIL the

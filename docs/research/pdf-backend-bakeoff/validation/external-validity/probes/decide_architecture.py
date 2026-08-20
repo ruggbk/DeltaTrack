@@ -77,6 +77,17 @@ X_REGRESSES_MAX = 0
 #: human answers for a census this module had already ruled Rule 1 ineligible on.
 D_FRAME_REGION_BUDGET = MC.D_FRAME_REGION_BUDGET
 
+#: A48 -- the section 4.7 status class for an ATTRIBUTION that depends on the A48 route repair.
+#: Its own literal, held here rather than read from any result record, so nothing the decider
+#: consumes can supply its own expected provenance.
+A48_NON_CONFIRMATORY = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A48 post-boundary deviation)"
+#: The decision artifact's attribution provenance. Deliberately NOT named like the outcome enum:
+#: it qualifies WHY the outcome was reached, never WHAT it is.
+ATTRIBUTION_INDEPENDENT = "A48-INDEPENDENT"
+ATTRIBUTION_A48_DEPENDENT = "A48-DEPENDENT"
+#: A48 -- the R1 block must carry its own A48 provenance where A48 moved it.
+R1_A48_PROVENANCE_MISSING = "R1_A48_PROVENANCE_MISSING"
+
 #: A28.2's section 4.5 verdict that FAILS Rule 3. `LIMITED` explicitly does not fail it, and
 #: `GENERALISABLE` does not; only `INADEQUATE` is a blocker.
 ADEQUACY_BLOCKING = "INADEQUATE"
@@ -748,11 +759,55 @@ def decide(inputs: DecisionInputs) -> dict:
     if outcome not in ARCHITECTURE_OUTCOMES:
         raise DecisionInputError(OUTCOME_NOT_IN_FROZEN_ENUM, {"outcome": outcome})
 
+    # A48 -- ATTRIBUTION PROVENANCE, computed from what actually decided this artifact.
+    #
+    # A48-DEPENDENT exactly when the attribution could have been different because of the A48
+    # route repair: the census is over budget (so A48 narrowed R1's required routes) AND Rule 0
+    # did not take the outcome (so `decided_by` turns on the R1 gate, flipping between
+    # RULE_3_GATE and BUDGET_A10_A27_3). Otherwise the attribution rests on committed frame
+    # facts and is independent.
+    r1_metrics = inputs.metrics.get("r1_reliability") or {}
+    a48_moved_r1 = bool(r1_metrics.get("a48_required_routes_changed"))
+    rule0_decided = decided_by == DECIDED_BY_RULE_0
+    attribution_is_a48_dependent = a48_moved_r1 and not rule0_decided
+    if attribution_is_a48_dependent and r1_metrics.get("confirmatory_status") != A48_NON_CONFIRMATORY:
+        # REFUSE rather than emit an apparently ordinary RULE_3_GATE / BUDGET_A10_A27_3
+        # attribution. Without the R1 block's own A48 provenance this artifact would read as an
+        # ordinary confirmatory attribution while resting on a post-boundary route repair.
+        raise DecisionInputError(
+            R1_A48_PROVENANCE_MISSING,
+            {"r1_status": r1_metrics.get("confirmatory_status"), "required": A48_NON_CONFIRMATORY},
+        )
+    attribution = {
+        "decided_by": decided_by,
+        "status": ATTRIBUTION_A48_DEPENDENT if attribution_is_a48_dependent else ATTRIBUTION_INDEPENDENT,
+        "confirmatory_status": A48_NON_CONFIRMATORY if attribution_is_a48_dependent else None,
+        "qualifies": "decided_by -- WHY this outcome was reached. The outcome ENUM is invariant "
+        "to A48 at D > 60 and is NOT qualified by this field.",
+        "why_dependent": (
+            "over the A27.3 budget A48 removes the human arm from R1's required routes, and with "
+            "Rule 0 undecided `decided_by` turns on the R1 gate"
+            if attribution_is_a48_dependent
+            else "the attribution rests on committed frame facts, not on any A48-affected value"
+        ),
+    }
+
     conclusion = render_conclusion(outcome, rule0_block, rule1_block or {}, budget, why)
     return {
         "schema": SCHEMA,
         "outcome": outcome,
         "decided_by": decided_by,
+        # A48 -- ATTRIBUTION PROVENANCE, and it qualifies `decided_by`, never `outcome`.
+        #
+        # The outcome ENUM is invariant to A48 at D > 60: Rule 1 cannot choose X, so the enum is
+        # fixed by the committed M9 facts and the census. The ATTRIBUTION is not. Where Rule 0
+        # does not decide, `decided_by` flips between BUDGET_A10_A27_3 (R1 PASS) and
+        # RULE_3_GATE (R1 FAIL), and A48 changed which routes R1 is required to score.
+        #
+        # Where Rule 0 decides, the attribution is RULE_0_M9 from committed frame facts and is
+        # independent of A48; labelling it A48-dependent would be the global relabelling
+        # section 4.7 exists to prevent.
+        "attribution": attribution,
         "conclusion": conclusion,
         "documents": checked["documents"],
         "rule0": rule0_block,

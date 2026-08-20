@@ -97,11 +97,11 @@ def real_decision(frame, key, adj):
     return DA.decide(DA.DecisionInputs(metrics=payload, frames=(frame,), x2a="PASS", x2b="PASS"))
 
 
-def scorable(n_d, n_c, tmp):
+def scorable(n_d, n_c, tmp, *, m9_h=None, m9_x=None):
     """A REAL frame + REAL oracle key that `score()` can actually consume, at a chosen census."""
     pages = ([X27.page_input(i + 1, start_gid=i * 100, text_differs={0}) for i in range(n_d)]
              + [X27.page_input(n_d + i + 1, start_gid=(n_d + i) * 100) for i in range(n_c)])
-    frame = X27.frame(pages)
+    frame = X27.frame(pages, m9_h=m9_h, m9_x=m9_x)
     built = BO.build([{"frame": frame, "pdf_path": X27.synthetic_pdf(tmp, len(pages)), "stratum": "SYNTHETIC"}])
     return frame, built.key, X27.synthesize_adjudication(built.key)
 
@@ -221,10 +221,89 @@ def part_real_scoring(tmp):
           "proves the end-to-end arm is caused by the budget predicate inside score()", obs)
 
 
+#: The LITERAL section 4.7 status this control expects. Written out here on purpose: deriving it
+#: from the object under test, or from DEVIATIONS.md, would let the thing being checked supply
+#: its own expected answer -- the exact defect the A47.12 round closed for the A45 label.
+A48_STATUS_LITERAL = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A48 post-boundary deviation)"
+
+
+def part_section_4_7(tmp):
+    """A48's own 4.7 provenance: attached where A48 moved a value, nowhere else."""
+    import decide_architecture as DA
+
+    frame61, key61, adj61 = scorable(61, 30, tmp)
+    frame60, key60, adj60 = scorable(60, 30, tmp)
+
+    # --- A: over budget, R1 carries the exact A48 status --------------------------
+    p61 = real_score(frame61, key61, adj61)
+    r1_61 = p61["r1_reliability"]
+    check("A D=61: r1_reliability carries the EXACT A48 4.7 status",
+          r1_61.get("confirmatory_status") == A48_STATUS_LITERAL
+          and r1_61.get("a48_required_routes_changed") is True,
+          "A48 changed which routes R1 is required to score, so its value moved",
+          r1_61.get("confirmatory_status"))
+    check("A ...and it is NOT the A45 literal (a different deviation)",
+          r1_61.get("confirmatory_status") != SM.REQUIRED_CONFIRMATORY_STATUS,
+          "same status CLASS as A45/A47, but the A45 literal names A45",
+          SM.REQUIRED_CONFIRMATORY_STATUS[:46])
+
+    # --- B: within budget, no A48 claim ------------------------------------------
+    p60 = real_score(frame60, key60, adj60)
+    r1_60 = p60["r1_reliability"]
+    check("B D<=60: NO A48 status is claimed for R1",
+          r1_60.get("confirmatory_status") is None and r1_60.get("a48_required_routes_changed") is False,
+          "A48 does not change D->human required-route semantics within budget; labelling it "
+          "there would be the global relabelling 4.7 forbids",
+          r1_60.get("confirmatory_status"))
+
+    # --- C: strip/alter the status -> the consumer path goes RED ------------------
+    for label, bad in (("REMOVED", None), ("WRONG", "CONFIRMATORY")):
+        broken = json.loads(json.dumps(p61))
+        broken["r1_reliability"]["confirmatory_status"] = bad
+        ok, obs = refuses(lambda: DA.decide(DA.DecisionInputs(
+            metrics=broken, frames=(frame61,), x2a="PASS", x2b="PASS")))
+        check(f"C MUTATION D=61 A48 status {label} -> the decider REFUSES", ok,
+              "without it the artifact would emit an ordinary RULE_3_GATE / BUDGET attribution "
+              "while resting on a post-boundary route repair",
+              obs)
+
+    # --- attribution semantics ----------------------------------------------------
+    d61 = DA.decide(DA.DecisionInputs(metrics=p61, frames=(frame61,), x2a="PASS", x2b="PASS"))
+    att = d61["attribution"]
+    check("D=61, Rule 0 undecided: attribution is A48-DEPENDENT and non-confirmatory",
+          att["status"] == "A48-DEPENDENT" and att["confirmatory_status"] == A48_STATUS_LITERAL,
+          "decided_by turns on the A48-affected R1 gate here",
+          f"{att['status']} / {d61['decided_by']}")
+    check("...and the OUTCOME ENUM itself is not labelled non-confirmatory",
+          "confirmatory_status" not in d61 and d61["outcome"] in DA.ARCHITECTURE_OUTCOMES,
+          "the enum is invariant to A48 at D>60; only the attribution is qualified",
+          d61["outcome"])
+
+    # --- Rule 0 decides -> independent of A48 -------------------------------------
+    # Rule 0 is made to fire AT THE FRAME, by giving H an asymmetric M9 loss, so the arm cannot
+    # pass vacuously on a payload where Rule 0 never decided.
+    f_r0, k_r0, a_r0 = scorable(61, 30, tmp, m9_h=X27.m9_facts(band=False))
+    d_r0 = DA.decide(DA.DecisionInputs(metrics=real_score(f_r0, k_r0, a_r0),
+                                       frames=(f_r0,), x2a="PASS", x2b="PASS"))
+    check("premise: Rule 0 REALLY fires on this fixture (non-vacuity)",
+          d_r0["decided_by"] == "RULE_0_M9",
+          "the arm below is meaningless unless Rule 0 actually took the outcome",
+          d_r0["decided_by"])
+    check("Rule 0 deciding makes the attribution A48-INDEPENDENT",
+          d_r0["attribution"]["status"] == "A48-INDEPENDENT"
+          and d_r0["attribution"]["confirmatory_status"] is None,
+          "a Rule 0 outcome rests on committed frame facts, so A48 cannot move its attribution",
+          f"{d_r0['attribution']['status']} / {d_r0['outcome']}")
+    check("...and its R1 block still carries A48 provenance (the value moved; the attribution did not)",
+          real_score(f_r0, k_r0, a_r0)["r1_reliability"]["confirmatory_status"] == A48_STATUS_LITERAL,
+          "A48 still changed R1's required routes even where Rule 0 decided the outcome",
+          "r1 labelled")
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
         part_real_scoring(tmp)
+        part_section_4_7(tmp)
         over, under = build(61, 30, tmp), build(60, 30, tmp)
 
         check("premise: D=61 is over budget, D=60 is within it",
