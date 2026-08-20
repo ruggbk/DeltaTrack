@@ -1,10 +1,10 @@
 """ADR 0019 addressing and provenance for round-1 artifacts, in one place.
 
-Round 1 has two committed judgments about the same emitted observation sequences --
-``tests/data/round1_pairing_sentinel.json`` and, until #659 retires it, the legacy trace --
-and both are only meaningful relative to the parse they were recorded against. The mechanics
-that establish that scope live here rather than in either module, because two copies of an
-identity rule is how two artifacts come to disagree about what parse they describe.
+``tests/data/round1_pairing_sentinel.json`` records a judgment about an emitted observation
+sequence, and that judgment is only meaningful relative to the parse it was recorded against.
+The mechanics that establish that scope live here rather than inside the module that reads the
+artifact, so the addressing rule has one home: two copies of an identity rule is how two
+artifacts come to disagree about what parse they describe.
 
 Nothing here decides anything about matching. These are the address space
 (:func:`complete_sequence_ordinals`), the provenance that scopes it
@@ -58,13 +58,16 @@ def complete_sequence_ordinals(old_nodes: list[BillNode], new_nodes: list[BillNo
 
 
 def stream_digest(stream: list) -> str:
-    """A digest over the ordered pairing stream alone, which is the durable production gate.
+    """A digest over the ordered pairing stream, which is how round-1 correspondence is pinned.
 
-    The literal stream is 31,908 rows over the committed corpus and serializes to ~2.8 MB,
-    which is not a reviewable committed artifact -- the same argument
-    ``test_canonical_baseline`` makes for storing a digest. Diagnosis does not depend on the
-    stored form: the oracle is right here, so a failing comparison recomputes the expected
-    stream and names the first row that moved.
+    The literal stream is 31,908 rows over the committed corpus and serialises to ~2.8 MB, which
+    is not a reviewable committed artifact -- the same argument ``test_canonical_baseline`` makes
+    for storing a digest.
+
+    **The stored form carries the digest and nothing else, so a failure cannot name the row that
+    moved.** That is the accepted cost: the diagnosis a reader needs first is *whether*
+    correspondence moved, and the population of pairs affected by a specific ordering fault is
+    what ``scripts/probe_canonical_sensitivity.py`` exists to enumerate.
     """
     return hashlib.sha256(json.dumps(stream, separators=(",", ":")).encode()).hexdigest()
 

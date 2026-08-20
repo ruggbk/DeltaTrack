@@ -252,10 +252,9 @@ def test_the_similarity_cutoff_is_pinned_for_phase_1():
     """A LEGACY BEHAVIOUR-PRESERVATION GUARD, not an architectural requirement.
 
     ADR 0020 deliberately does not prescribe a cutoff value; choosing one is a measurement
-    question it defers. This pin exists only because the Phase-1 extraction must not change
-    policy, and because the oracle above reads the constant -- so without a direct pin, a
-    changed cutoff would move production and oracle together and the agreement test would
-    stay green.
+    question it defers. This pin exists because the value is policy that Phase 1 must carry
+    across unchanged, and because every other gate reads the constant rather than the number --
+    so without a direct pin a changed cutoff would move production and its checks together.
 
     A later, evidence-backed matching-policy change is expected to update or delete this
     knowingly, in the pull request carrying its precision and recall evidence. Doing so is
@@ -475,22 +474,20 @@ def test_classification_preserves_the_shape_it_receives():
 def test_the_move_cutoff_is_pinned_for_phase_1():
     """A LEGACY BEHAVIOUR-PRESERVATION GUARD, the twin of the similarity pin above.
 
-    The slice-2 oracle reads ``MOVE_THRESHOLD`` too, so without a direct pin a changed cutoff
-    would move production and oracle together and every preservation test below would stay
-    green. ADR 0020 prescribes no value; a later evidence-backed change updates this knowingly.
+    Every gate that exercises round 2 reads ``MOVE_THRESHOLD`` rather than the number, so
+    without a direct pin a changed cutoff would move production and its checks together. ADR
+    0020 prescribes no value; a later evidence-backed change updates this knowingly.
     """
     assert MOVE_THRESHOLD == 0.6
 
 
 # --- ADR 0019: what an address means, pinned where round 2 actually reads it ------------
 #
-# These are lasting contracts rather than migration evidence, and they exist because every
-# other test in this module can be satisfied by the WRONG address. The preservation oracles
-# bridge to the pre-slice pipeline through `element_id`, and the candidate checks round-trip a
-# ref through the same registry that issued it -- so both would still agree if
-# `ObservationRef.ordinal` silently became a position in the filtered unmatched list. ADR 0019
-# names exactly that substitution as the hazard: the resulting address looks valid and points
-# at the wrong node.
+# These are lasting contracts, and they exist because every other test in this module can be
+# satisfied by the WRONG address: the candidate checks round-trip a ref through the same
+# registry that issued it, so they would still agree if `ObservationRef.ordinal` silently
+# became a position in the filtered unmatched list. ADR 0019 names exactly that substitution
+# as the hazard: the resulting address looks valid and points at the wrong node.
 
 
 def test_the_round_2_population_is_addressed_by_complete_parser_ordinal():
@@ -563,7 +560,7 @@ def test_a_registry_refuses_one_node_object_listed_twice():
         ObservationRegistry([shared, shared], [_node("new-0", "alpha")])
 
 
-# --- Slice 2: the preservation oracles, over the committed corpus ----------------------
+# --- Slice 2: the round-2 stages over the committed corpus -----------------------------
 
 
 def _baseline_pairs():

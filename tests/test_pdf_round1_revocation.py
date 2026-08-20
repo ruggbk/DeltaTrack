@@ -6,11 +6,10 @@ whether the aligned pair survived, and emit the records. Slice 5 separates them 
 (decides, owns the threshold) and ``apply_pdf_similarity_revocation`` (applies).
 
 **What gate 4 already covers, and is not repeated here.** ``test_pdf_matching_boundary`` pins
-the split *rule* against an independently transcribed oracle, over the corpus and at two
-synthetic points either side of the cutoff. That establishes what the rule is. It cannot
-establish that the extracted stages are what apply it, because it runs ``diff_pdfs`` end to end
-with the production constant — one number reaching one behaviour, with no way to tell which
-code read it.
+the split *cutoff* at two synthetic points either side of it. That establishes where the
+boundary sits. It cannot establish that the extracted stages are what apply it, because it runs
+``diff_pdfs`` end to end with the production constant — one number reaching one behaviour, with
+no way to tell which code read it.
 
 So the control this module adds is the one gate 4 structurally cannot: **move the threshold at
 the stage boundary and watch the split population respond**. A revocation rule that had been
@@ -162,9 +161,8 @@ def test_evidence_reports_the_true_overlap_for_every_aligned_pair() -> None:
     the exact word-level ratio. Evidence describes the fact; a value clipped to make the next
     stage's arithmetic come out right is not the fact.
 
-    Compared against ``similarity.text_similarity`` — the same function
-    ``test_pdf_matching_boundary``'s transcribed oracle has always used, and which has always
-    agreed with production at the 0.4 boundary.
+    Compared against ``similarity.text_similarity``, which is the measure the split cutoff is
+    expressed in and the one ``test_pdf_matching_boundary``'s boundary pair straddles.
     """
     checked = 0
     for _bill, old_pdf, new_pdf in _PAIRS:

@@ -380,8 +380,11 @@ def _hunk_for_removed(v1_block: _Block) -> PdfHunk:
 def _hunk_for_move(v1_block: _Block, v2_block: _Block) -> PdfHunk:
     """The `moved` emitter, for a correspondence assignment settled on some move basis.
 
-    Transcribed field for field from the hunk ``_reconcile_moves`` built when it consumed a
-    removed/added pair, so the record a move produces does not depend on which path settled it.
+    One emitter for every move, so the record a move produces does not depend on which path
+    settled it.
+
+    History: the field list came from the hunk the pre-slice-4 round-2 reconciler built when it
+    consumed a removed/added pair. That function was retired in #659.
 
     **Since slice 6a this serves both rounds.** It was round-2-only while
     ``_hunk_for_paired_blocks`` still decided moved-vs-modified for round-1 pairs from a
@@ -401,92 +404,6 @@ def _hunk_for_move(v1_block: _Block, v2_block: _Block) -> PdfHunk:
         amount_pairs=_extract_amount_pairs(v1_block.text, v2_block.text),
         has_amendment_annotations=_has_amendment_annotations(v1_block.text, v2_block.text),
     )
-
-
-def _reconcile_moves(hunks: list[PdfHunk], threshold: float = MOVE_THRESHOLD) -> list[PdfHunk]:
-    """Pair `removed`+`added` hunks whose bodies are highly similar into `moved` hunks.
-
-    Catches renumbered sections (e.g. SEC. 414 in v1 → SEC. 413 in v2) when block
-    keys diverge enough that SequenceMatcher emitted them as separate insert
-    and delete rather than aligning them.
-
-    **This is the pre-slice-4 round 2, retained unchanged as the preservation oracle.**
-    ``diff_pdfs`` no longer calls it: round 2 now runs before classification, through
-    ``pdf_unmatched_population`` -> ``retrieve_pdf_move_candidates`` -> ``pdf_move_evidence``
-    -> ``assign_pdf_moves``. This function is kept because it is the independent statement of
-    the rule those four must preserve, and ``tests/test_pdf_round2_stages`` asserts the two
-    produce the same output over the committed corpus.
-
-    Deliberately NOT rewired to delegate to the new stages. ``test_pdf_matching_boundary``
-    exercises the round-2 competition and its four named mutations *through this function*; a
-    thin wrapper would turn that gate from an oracle into a helper, leaving it unable to
-    detect the one failure the extraction can actually have. Same reasoning as that module's
-    own rule that its transcribed rules must never call ``_emit_pair``.
-    """
-    removed_idx = [i for i, h in enumerate(hunks) if h.change_type == "removed"]
-    added_idx = [i for i, h in enumerate(hunks) if h.change_type == "added"]
-    if not removed_idx or not added_idx:
-        return hunks
-
-    # Gated + matcher-reused pairwise similarity; move_candidates returns local
-    # indices, so map them back to absolute hunk indices. Identical result to the
-    # naive removed×added loop for every pair with text on both sides (same tuples;
-    # the sort below is what orders them).
-    #
-    # Text-free hunks yield no candidate, so they are never paired here (#357). That
-    # rule was added for the XML side, where a section whose subsections all became
-    # their own nodes keeps the SEC. heading and an empty body (#188); difflib scores
-    # two empty sequences as a perfect 1.0, so such pairs used to be claimed as moves
-    # on no evidence. Blocks here do not reach that state today -- `_strip_heading_lines`
-    # returns the lines untouched rather than empty a body -- and no committed PDF pair
-    # produces a text-free hunk, so this path is unchanged in practice. The rule is kept
-    # uniform across both callers because a hunk with no text carries no evidence of
-    # having moved anywhere either way.
-    local = move_candidates(
-        [hunks[ri].v1_text for ri in removed_idx],
-        [hunks[ai].v2_text for ai in added_idx],
-        threshold,
-    )
-    candidates = [(sim, removed_idx[r], added_idx[a]) for sim, r, a in local]
-    if not candidates:
-        return hunks
-
-    candidates.sort(reverse=True)
-    claimed_r: set[int] = set()
-    claimed_a: set[int] = set()
-    moved_pairs: list[tuple[int, int]] = []
-    for _, ri, ai in candidates:
-        if ri in claimed_r or ai in claimed_a:
-            continue
-        claimed_r.add(ri)
-        claimed_a.add(ai)
-        moved_pairs.append((ri, ai))
-
-    consumed = claimed_r | claimed_a
-    moved_lookup = {ri: ai for ri, ai in moved_pairs}
-    result: list[PdfHunk] = []
-    for i, h in enumerate(hunks):
-        if i in moved_lookup:
-            removed = h
-            added = hunks[moved_lookup[i]]
-            result.append(
-                PdfHunk(
-                    change_type="moved",
-                    v1_anchor=removed.v1_anchor,
-                    v2_anchor=added.v2_anchor,
-                    v1_range=removed.v1_range,
-                    v2_range=added.v2_range,
-                    v1_text=removed.v1_text,
-                    v2_text=added.v2_text,
-                    amount_pairs=_extract_amount_pairs(removed.v1_text, added.v2_text),
-                    has_amendment_annotations=_has_amendment_annotations(removed.v1_text, added.v2_text),
-                )
-            )
-        elif i in consumed:
-            continue
-        else:
-            result.append(h)
-    return result
 
 
 # ---- Public entry point ------------------------------------------------------
@@ -532,9 +449,11 @@ def _pdf_round1_signals(v1_block: _Block, v2_block: _Block) -> dict[str, bool | 
     (5.552s → 5.600s over 23 pairs), which is inside the 3.2% run-to-run spread, and produces
     byte-identical output. The gate saved little because the identical-text short-circuit above
     already removes the large majority of pairs before it, which is the population XML's
-    equivalent gate is actually paying for. ``test_pdf_matching_boundary``'s transcribed oracle
-    has always used exact ``text_similarity`` and has always agreed with production, which is
-    the same fact measured independently and committed long before this slice.
+    equivalent gate is actually paying for.
+
+    History: the measurement was corroborated by a transcribed split-rule oracle in
+    ``tests/test_pdf_matching_boundary.py`` that used exact ``text_similarity`` and always agreed
+    with production. That oracle was retired in #659; the figures above stand on the sweep.
 
     **``word_overlap`` is present even when the texts are identical**, which is where this
     diverges from ``diff_bill``'s equivalent, and the divergence is forced rather than chosen:
@@ -1044,10 +963,11 @@ def _greedy_pdf_move_links(
 ) -> list[CorrespondenceEvidence]:
     """The legacy competition, kept whole and kept private.
 
-    ``_reconcile_moves`` sorts ``(similarity, ri, ai)`` with ``reverse=True``, so a tie on
-    similarity breaks on **descending** ``ri`` then **descending** ``ai``. Sorting on
-    similarity alone and leaning on a stable secondary order is a different rule, and
-    ``test_pdf_matching_boundary``'s four named mutations are what pin that.
+    Sorts ``(similarity, ri, ai)`` with ``reverse=True``, so a tie on similarity breaks on
+    **descending** ``ri`` then **descending** ``ai``. Sorting on similarity alone and leaning on
+    a stable secondary order is a different rule, and
+    ``tests/test_pdf_round2_stages.py::test_round_2_selection_competes_and_claims_exclusively``
+    is what pins both that ordering and the one-to-one exclusivity below.
 
     ``(ri, ai)`` are positions in ``population`` and never leave this function.
     """
@@ -1117,10 +1037,10 @@ def settle_pdf_correspondences(
     into a move would be inexpressible — the round-1 stream stays provisional and round 2 runs
     before any of it is committed.
 
-    A round-2 move takes the **slot of its removal**, and the addition's slot is dropped. That
-    reproduces ``_reconcile_moves``' output placement, which rewrote the removed hunk in place
-    and skipped the consumed added one. Carrying the slot rather than sorting by round is the
-    difference from ``diff_bill``, whose legacy output appends moves instead.
+    A round-2 move takes the **slot of its removal**, and the addition's slot is dropped, which
+    is why a move record lands where the removal was rather than being appended. Carrying the
+    slot rather than sorting by round is the difference from ``diff_bill``, whose legacy output
+    appends moves instead.
 
     ``round1_evidence`` is keyword-only and required: it is the whole collection from
     :func:`pdf_similarity_correspondence_evidence`, revoked pairings included. This attaches the

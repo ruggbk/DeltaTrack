@@ -62,7 +62,7 @@ four now go red.
 | `test_pdf_observation_identity.py` | ADR 0019 addressing and `pdf_parser_revision()`: the revision moves on any parser module and on the engine, and not on the matcher |
 | `test_pdf_round1_retrieval.py` | round-1 retrieval is a named retriever emitting a `CandidateSet`; membership equals the transcribed considered population; the set's canonical order stays out of the emitted order |
 | `test_pdf_round1_revocation.py` | the similarity rule reads named evidence, owns its threshold, and evidence never censors at the next stage's cutoff |
-| `test_pdf_round2_stages.py` | the four round-2 stages reproduce the legacy reconciliation, in its order, and `_reconcile_moves` is off the production path |
+| `test_pdf_round2_stages.py` | the four round-2 stages address the complete parser sequence, compete and claim exclusively, and keep retrieval's bound separate from assignment's threshold |
 | `test_pdf_move_basis.py` | classification reads `move_basis` and applies no correspondence threshold; the basis vocabulary is closed and fails closed |
 
 ## Findings that explain the current design
