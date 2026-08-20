@@ -143,7 +143,7 @@ def test_xml_removed_changes_place_into_v2_groups(bill, v1, v2):
 @pytest.mark.parametrize(("bill", "v1", "v2"), [XML_PAIRS[0]])
 def test_xml_rendered_report_neither_drops_nor_duplicates_cards(bill, v1, v2):
     canonical, view = _xml_view(bill, v1, v2)
-    html = format_diff_html(view, canonical=canonical)
+    html = format_diff_html(canonical)
     assert len(view.changes) > 0
     for i in range(len(view.changes)):
         assert html.count(f'id="change-{i}"') == 1, f"change-{i} dropped or duplicated"

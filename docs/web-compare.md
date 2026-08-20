@@ -71,7 +71,7 @@ uv run python scripts/render_examples.py   # rewrites examples/*.html and exampl
 |---|---|---|
 | Input | govinfo XML on disk | User PDF bytes (upload) |
 | Diff engine | `src/deltatrack/diff_bill.py` | `src/deltatrack/diff_pdf.py` |
-| HTML renderer | `format_diff_html` via `view_from_canonical` | `format_diff_html` via `view_from_canonical` |
+| HTML renderer | `format_diff_html` (canonical in, report out) | `format_diff_html` (canonical in, report out) |
 | CLI entrypoint | `diff_bill.py compare … --format html` | `src/deltatrack/compare/pdf.py` (HTTP) or snippet above |
 
 XML and PDF paths can disagree on section boundaries and change counts for the same bill pair; compare like with like when validating. To inspect both diffs for the same two versions, render each pipeline to its own HTML file and open them together (see [TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
@@ -90,8 +90,8 @@ src/deltatrack/compare/pdf.py ← thin wrapper (bytes in → HTML out)
   │  extract_clean_pages()       src/deltatrack/parsers/pdf_text.py
   │  diff_pdfs()                 src/deltatrack/diff_pdf.py
   │  pdf_diff_to_canonical()     src/deltatrack/formatters/canonical.py
-  │  view_from_canonical()       src/deltatrack/formatters/canonical.py
   │  format_diff_html()          src/deltatrack/formatters/diff_html.py
+  │      └ view_from_canonical() src/deltatrack/formatters/canonical.py (internal to the renderer)
   ▼
 Standalone HTML report           ← opened in new tab by web/webapp/js/compare.js
 ```
