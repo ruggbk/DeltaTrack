@@ -494,3 +494,80 @@ and R1 FAIL, as previously reported, but the **attribution** is not. Where Rule 
 `INSUFFICIENT_COMPARATIVE_EVIDENCE` either way while `decided_by` flips between
 `BUDGET_A10_A27_3` (R1 PASS) and `RULE_3_GATE` (R1 FAIL). A48 changes R1's required-route
 composition, so it can move that attribution. Reported rather than smoothed over.
+
+---
+
+## A49 — POST-BOUNDARY APPARATUS DEVIATION
+
+```json
+{"id": "A49", "kind": "DEVIATION",
+ "commits": ["eea4fc40"],
+ "classification": "POST-BOUNDARY APPARATUS DEVIATION",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": true,
+ "narrowing": "A49 changes only how x04 establishes the CHRONOLOGY of already-declared pre-execution amendments. It reads no holdout byte, produces no metric, and touches no scoring rule, threshold, route, selection or architecture rule. affects_execution_authorization is TRUE because the gate's verdict changes: a lawful integration that x04 refused is no longer refused on this ground.",
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**State when the defect became observable.** The continuation boundary had already been
+crossed at `de60dddf`. The population was EXPOSED, and these results were already visible:
+D census 13,992; S1 17/17; P-head 12 documents / 2,864 pages; cross-engine 17/17 measured
+with `n_qualified` 0. The reviewed A48 apparatus had already been integrated into the
+preserved continuation execution branch by a history-preserving merge. x04 refused at that
+point, BEFORE oracle regeneration, before any adjudication, before any scoring, and before
+any new holdout exposure. No result-bearing stage was rerun and no holdout byte was read.
+
+**The defect.** `amendment_commits` dated an amendment by the CURRENT last-modifying commit
+of every path in its `files_touched`, and the one-way-boundary rule then required that
+commit to be an ancestor of the marker. The derived date therefore tracked whoever edited
+the file most recently rather than when the amendment was made. A48 lawfully modified four
+files that twelve pre-boundary amendments had also touched, and x04 reported A28, A29, A30,
+A35, A36, A37, A38, A39, A40, A41, A42 and A43 as landing after the marker. Measured on the
+real history: 0 violations at the pre-A48 execution HEAD `7afbc344`, 12 at `30a92586`, with
+every newly selected commit an A48 commit. A28 is the clearest case: it declares `0cf7daf`,
+which is an ancestor of the marker, so the ledger was correct and the derivation disagreed
+with it.
+
+**The invariant now enforced.** A pre-execution amendment's chronology is anchored to that
+amendment's own historical implementation. A later declared deviation touching the same path
+must never retroactively move the earlier amendment across the execution boundary. A genuine
+post-boundary methodological commit must still be independently declared, and must never be
+accepted as a pre-execution SUBSTANTIVE amendment.
+
+Chronology is taken from the amendment's own declared `commits` wherever present, and every
+declared commit is checked rather than a single latest one, so a post-boundary commit cannot
+be hidden behind a pre-boundary sibling. Of the 40 SUBSTANTIVE records, 24 carry explicit
+commits and 16 are legacy; all twelve formerly-flagged amendments are in the explicit set.
+Legacy records fall back to the last modification of their touched files AS VISIBLE AT THE
+MARKER, which later history cannot move.
+
+**What is deliberately not claimed.** On the legacy path every candidate is by construction
+reachable from the marker, so that path cannot by itself convict an amendment of being
+post-boundary. That is honest rather than lax: a post-boundary SUBSTANTIVE record has to be
+written into the ledger to exist, and the seal already forbids any committed ledger edit
+after the marker. Per-commit accounting, bidirectional file naming and that seal are
+unchanged.
+
+**Controls.** F9 is extracted into `f9_result()` so its properties can be driven on a
+synthetic history with a real marker. Nine controls were added, including the mutation that
+restores the pre-A49 HEAD-sensitive dating and must turn the primary control red. Bidirectional
+file accounting is left to the existing decisive self-test rather than duplicated.
+
+**A second blocker remains, and A49 does not address it.** Once F9 stopped failing first,
+x04 refused the same integration again on METHODOLOGY DRIFT: the marker pins 18 frozen blobs,
+and A48 lawfully changed three of them (`probes/build_oracle.py`, `probes/decide_architecture.py`,
+`probes/score_metrics.py`). Measured independently of A49: 0 drifted at `7afbc344`, 3 at
+`30a92586`. This is a consequence of integrating A48 under a marker that pins the pre-A48
+blobs, it is outside A49's authorized scope, and it is recorded here so that A49 is not read
+as having restored execution authorization on its own.
