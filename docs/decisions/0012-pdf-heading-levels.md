@@ -83,8 +83,8 @@ Alternatives considered:
 - **An XML cross-reference to label the PDF levels.** Rejected as automatic
   enrichment: auto-fetching the XML is a network call and input automation the engine
   forbids ([0005](0005-contained-two-version-tool.md) / [0008](0008-deterministic-engine.md)).
-  It counts only when the user supplies the XML — which is just the XML pipeline — or
-  as a BillTrax concern.
+  It counts only when the user supplies the XML, which is just the XML pipeline, or as
+  a concern for something built on top of DeltaTrack.
 - **A model to classify the ambiguous headings.** Rejected by
   [0008](0008-deterministic-engine.md): a model may read a finished diff, never
   compute one.

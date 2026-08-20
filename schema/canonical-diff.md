@@ -296,7 +296,7 @@ diff found, in document order, **losslessly**.
 item's identical value as a net-zero added/removed pair. Distinguishing that from
 two genuinely-distinct equal-value items needs within-list content alignment (#87),
 so the producer reports every entry honestly and leaves reorder handling to the
-consumer. A cross-version consumer (e.g. BillTrax) may apply its own alignment
+consumer. A cross-version consumer may apply its own alignment
 policy; any presentation-side collapse is a consumer concern, not baked into the
 contract.
 

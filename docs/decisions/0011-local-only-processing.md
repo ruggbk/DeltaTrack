@@ -12,14 +12,14 @@ is sensitive, pre-decisional material. A leaked draft appropriations bill — re
 what an office is proposing before it chooses to say so — is a real harm to the
 staffer and the office, not a hypothetical.
 
-[0005](0005-contained-two-version-tool.md) already made DeltaTrack local, offline,
-and stateless, but it framed the safety contract around **persistence**: no file
-writes, no stored state. There is a second axis that record did not spell out:
-**transmission.** A server that received an uploaded draft, diffed it, returned the
-result, and stored nothing would satisfy 0005's no-persistence rule and still violate
-the thing that actually matters here — the draft left the user's machine. Persistence
-and exfiltration are different risks, and the sensitive-draft case turns on the second
-one.
+[0005](0005-contained-two-version-tool.md) puts both halves of this in DeltaTrack's
+scope test: a feature is out of scope if it requires bill data to leave the user's
+local environment, or to be stored anywhere. That settles the principle. It does not
+settle what the principle costs, and the two halves are worth keeping distinct because
+a channel can honor one and breach the other. A server that received an uploaded
+draft, diffed it, returned the result, and stored nothing writes no file and keeps no
+state, yet the draft still left the user's machine. Persistence and exfiltration are
+different risks, and the sensitive-draft case turns on the second one.
 
 This question is live because the delivery channel is unsettled. Candidates include a
 static HTML file, a local native app, a packaged executable, a browser extension, and
@@ -72,10 +72,11 @@ Alternatives:
   transmitted, and the consequence of that one error is severe. The marginal benefit
   (offloading work for public bills) does not justify a classification step that can
   fail open.
-- **Lean on 0005 and write nothing.** Rejected. 0005's contract is about persistence;
-  read literally it does not forbid a stateless server that processes and forgets. The
-  draft-bill case needs the transmission axis stated explicitly, or the gap gets
-  rediscovered the next time a hosted channel is proposed.
+- **Lean on 0005 and write nothing.** Rejected. 0005 states the rule but not what it
+  rules out. Which delivery channels the rule forecloses, why a published-bill exception
+  fails open, and what it means for telemetry all follow from the rule rather than
+  restating it, and without them the same ground gets re-argued the next time a hosted
+  channel is proposed.
 
 ## Consequences
 
@@ -93,8 +94,8 @@ Alternatives:
   matters beyond convenience: it is what makes a browser channel able to honor this rule
   for the hardest input.
 - The rule is conservative on purpose and costs little, because the engine is already
-  local and stateless ([0005](0005-contained-two-version-tool.md)); this record adds
-  the transmission guarantee on top of 0005's persistence guarantee.
+  local and stateless ([0005](0005-contained-two-version-tool.md)); this record works
+  out what that commitment requires of the delivery channel.
 - Telemetry, crash reporting, or "send us the file that failed" diagnostics that would
   carry bill content off-device are foreclosed by this rule. Diagnostics must be local
   or content-free.

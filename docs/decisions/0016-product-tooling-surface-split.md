@@ -17,8 +17,8 @@ installing DeltaTrack to compare two bill versions installed a web server. Of th
 core dependencies, exactly one was the engine's.
 
 The layout also worked against [ADR 0005](0005-contained-two-version-tool.md), which
-puts automated input gathering on BillTrax's side of the line. The acquisition tooling sat
-in the product tree, blurring the boundary that record exists to protect.
+puts automated input gathering outside DeltaTrack's scope. The acquisition tooling sat in
+the product tree, blurring the boundary that record exists to protect.
 
 Two facts made the split cheaper than it looked. The fetch cluster is **closed**: it
 imports only itself, and no product module imports any of it. And of the three modules
@@ -64,8 +64,8 @@ them into silent skips — the green-by-skip pattern
 
 Alternatives considered:
 
-- **Moving the tooling to a separate repository or to BillTrax.** Still an open question.
-  This split deliberately does not foreclose it.
+- **Moving the tooling to a separate repository.** Still an open question. This split
+  deliberately does not foreclose it.
 - **Moving the whole of `server/` out as one unit.** Rejected: it would have left the
   product CLIs importing across the very boundary being drawn. Splitting it instead removed
   two reach-arounds that [#62](https://github.com/AgoraDMV/DeltaTrack/issues/62) tracks.

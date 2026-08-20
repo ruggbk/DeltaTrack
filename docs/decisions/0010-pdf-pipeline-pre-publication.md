@@ -74,8 +74,9 @@ Alternatives:
   version would exist, but it does **not** check whether one is available or fetch it.
   Doing so would require network access and state, crossing DeltaTrack's
   ephemeral/stateless/offline boundary ([0005](0005-contained-two-version-tool.md)):
-  auto-detecting availability and switching sources is BillTrax-shaped work, deliberately
-  out of scope here. The nudge is a human-readable pointer, not a runtime capability.
+  auto-detecting availability and switching sources needs network access and retained
+  state, so it is deliberately out of scope here. The nudge is a human-readable pointer,
+  not a runtime capability.
 - **Open risk: pre-publication PDFs are the least-tested input.** Validation to date
   leans on published bills, where an XML or committee report exists to check against. A
   true discussion draft has neither an upstream XML nor an independent report, so its
