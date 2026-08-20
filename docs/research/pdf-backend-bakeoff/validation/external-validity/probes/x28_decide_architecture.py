@@ -199,6 +199,11 @@ def scored(frames, *, s1_fires: bool = True, cross_failed=()) -> dict:
                 "schema": "cross_engine_control/1",
                 "per_document": [{"document": d, "passed": d not in cross_failed} for d in docs],
                 "n_documents": len(docs),
+                # A47.12 made this a REQUIRED, value-checked field on the cross-engine artifact.
+                # This fixture predated it and so could no longer be scored at all, which took
+                # the whole decider suite down on develop. Carried from the scorer's own
+                # constant rather than retyped, so the two cannot drift.
+                "confirmatory_status": SM.REQUIRED_CONFIRMATORY_STATUS,
             },
             s1={"schema": "s1_control/1", "advance_scale": 1.25, "fires": s1_fires, "n_firing": 1 if s1_fires else 0},
             document_strata={d: 1 for d in docs},
@@ -1148,7 +1153,10 @@ FAULTS = (
         lambda m: _faulted_outcome(m, corrects=6, regresses=1) == m.EXTENDED_BY_RULE_1,
     ),
     (
-        "D_FRAME_REGION_BUDGET = 60",
+        # A48 -- the budget now has ONE definition, in `methodology_contracts`, and this module
+        # re-exports it. The fault is therefore injected into the re-export: it still changes
+        # the budget the decider applies, which is what this control measures.
+        "D_FRAME_REGION_BUDGET = MC.D_FRAME_REGION_BUDGET",
         "D_FRAME_REGION_BUDGET = 120",
         "budget_relaxed_to_120",
         lambda m: _faulted_outcome(m, d_regions=61, corrects=6) == m.EXTENDED_BY_RULE_1,

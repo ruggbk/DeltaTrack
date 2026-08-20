@@ -104,6 +104,10 @@ FRAMES_NOT_A_SEQUENCE = "FRAMES_NOT_A_SEQUENCE"
 MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
 #: A47.12 -- present but NOT the section 4.7 required value.
 WRONG_CONFIRMATORY_STATUS = "WRONG_CONFIRMATORY_STATUS"
+#: A48 -- the key's A27.3 claim disagrees with the committed frames or the frozen predicate.
+D_CENSUS_MISSING = "D_CENSUS_MISSING"
+D_CENSUS_MISMATCH = "D_CENSUS_MISMATCH"
+D_BUDGET_CLAIM_MISMATCH = "D_BUDGET_CLAIM_MISMATCH"
 DUPLICATE_DOCUMENT_IDENTITY = "DUPLICATE_DOCUMENT_IDENTITY"
 UNKNOWN_POPULATION = "UNKNOWN_POPULATION"
 UNKNOWN_LINE_STATE = "UNKNOWN_LINE_STATE"
@@ -172,6 +176,13 @@ PDFIUM_CONDITIONED_FRAME = "PDFIUM-CONDITIONED FRAME"
 #: cross-engine artifact is validated against, never a value it supplies. Held independently of
 #: `continuation_provenance` because the allowlist forbids importing it; x30 asserts they agree.
 REQUIRED_CONFIRMATORY_STATUS = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A45 post-boundary deviation)"
+
+#: A48 -- the SAME section 4.7 status CLASS as A45/A47, but its own literal, because the label
+#: above names A45 and this deviation is not that one. Applied only where A48 actually changes
+#: a value: at D > 60 it changes which routes R1 is required to score, so R1's value can move.
+#: At D <= 60 the historical D -> human semantics are untouched and this label is NOT claimed
+#: merely because the code contains A48.
+A48_NON_CONFIRMATORY = "NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A48 post-boundary deviation)"
 
 #: A24.2 / section 6 line states `build_frames` can commit. An unknown state REFUSES rather
 #: than falling through to "not BOTH_ABSENT", which would silently enlarge the M0 risk set.
@@ -348,6 +359,38 @@ def validate_inputs(inputs: ScoreInputs) -> dict:
     # expectation imported from the thing under test would not be an expectation at all.
     # `x30` asserts this constant still equals `continuation_provenance.NON_CONFIRMATORY`, so
     # the two cannot drift apart silently.
+    # A48 -- THE KEY MAY NOT SELF-CERTIFY ITS A27.3 STATE.
+    #
+    # `d_frame_census` and `d_decision_route_required` are result-bearing: they decide whether
+    # the complete-census human decision evidence is required at all. Trusting them because the
+    # builder wrote them would let a key claim `61` over a real 60-region census, consistently
+    # shorten its own route metadata, and score with Rule 1's evidence simply absent -- and a
+    # true census of 60 is exactly the case where Rule 1 MAY select X.
+    #
+    # So both are re-derived here from facts the key does not own: the census by summing each
+    # COMMITTED frame's producer-declared count, and the predicate by calling the frozen owner.
+    # D membership is NOT re-derived from region contents; the committed counts remain the
+    # producer's census, which is the same quantity `decide_architecture` reads.
+    key = inputs.oracle_key
+    if "d_decision_route_required" in key or "d_frame_census" in key:
+        _require(key, ("d_frame_census", "d_decision_route_required"), "oracle key (A48)")
+        census = 0
+        for frame in inputs.frames:
+            counts = frame.get("counts") or {}
+            if "d_frame_census" not in counts:
+                raise ScoreInputError(D_CENSUS_MISSING, {"document": frame.get("document")})
+            census += int(counts["d_frame_census"])
+        if int(key["d_frame_census"]) != census:
+            raise ScoreInputError(
+                D_CENSUS_MISMATCH, {"key": key["d_frame_census"], "committed_frames": census}
+            )
+        want = MC.d_decision_route_required(census)
+        if bool(key["d_decision_route_required"]) != want:
+            raise ScoreInputError(
+                D_BUDGET_CLAIM_MISMATCH,
+                {"key_claims": key["d_decision_route_required"], "frozen_predicate": want, "census": census},
+            )
+
     got = inputs.cross_engine["confirmatory_status"]
     if got != REQUIRED_CONFIRMATORY_STATUS:
         raise ScoreInputError(
@@ -1062,20 +1105,18 @@ def _r1_status(numerator: int, denominator: int, threshold: float) -> dict:
     }
 
 
-def _frame_routes(frames) -> tuple:
-    """A36.4/A36.6's frozen frame -> route map: C -> AI, D -> human, C and D -> both.
+def _frame_routes(frames, d_decision_required: bool) -> tuple:
+    """A36.4/A36.6's frame -> REQUIRED route map, conditioned by A27.3 (A48).
 
-    Derived from `build_oracle`'s own constants rather than restated, so the two cannot drift.
+    Delegated to `build_oracle.frame_required_routes` rather than restated, for the reason the
+    previous spelling already gave about the constants: two copies drift. Before A48 this
+    function derived `human` from RAW D membership, so it demanded a human answer for every
+    D-frame R1 pair even when A27.3 had made that route non-decision-bearing.
     """
-    routes = set()
-    if _bo().C_FRAME in frames:
-        routes.add(_bo().C_FRAME_ROUTE)
-    if _bo().D_FRAME in frames:
-        routes.add(_bo().D_FRAME_ROUTE)
-    return tuple(r for r in _bo().ROUTE_ORDER if r in routes)
+    return _bo().frame_required_routes(frames, d_decision_required)
 
 
-def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bid: str) -> tuple:
+def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bid: str, d_decision_required: bool) -> tuple:
     """The routes an R1 pair MUST be scored on, enforced against A36.6 rather than declared.
 
     A36.6: "The repeat remains ONE canonical `r1-repeat` identity and INHERITS its primary's
@@ -1101,7 +1142,7 @@ def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bi
                 "primary_frames": primary.get("frames"),
             },
         )
-    expected = _frame_routes(repeat.get("frames") or [])
+    expected = _frame_routes(repeat.get("frames") or [], d_decision_required)
     if tuple(repeat.get("adjudication_routes") or ()) != expected:
         raise ScoreInputError(
             R1_ROUTE_SET_MISMATCH,
@@ -1115,7 +1156,8 @@ def _required_r1_routes(primary: dict, repeat: dict, repeat_bid: str, primary_bi
     # The primary must at least carry its own frame routes; it may carry `human` on top when the
     # C audit drew it, which the repeat does not inherit.
     missing = [
-        r for r in _frame_routes(primary.get("frames") or []) if r not in (primary.get("adjudication_routes") or ())
+        r for r in _frame_routes(primary.get("frames") or [], d_decision_required)
+        if r not in (primary.get("adjudication_routes") or ())
     ]
     if missing:
         raise ScoreInputError(
@@ -1150,6 +1192,11 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
     NO SCALAR INPUT EXISTS. A PASS requires committed pair-level evidence, which is why the
     `r1_role_agreement` parameter was removed rather than defaulted.
     """
+    # A48 -- the builder's own answer, not a re-derivation. `.get(..., True)` keeps a
+    # pre-A48 key meaning exactly what it meant before, so an older artifact is not silently
+    # reinterpreted as having fewer required routes than it was built with.
+    d_required = key.get("d_decision_route_required", True)
+
     by_base = {}
     for bid, record in key["stimuli"].items():
         if record.get("control_kind") is not None or record.get("is_r1_repeat"):
@@ -1167,7 +1214,7 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
         # repeat's own declaration. A shortened repeat record plus a correspondingly shortened
         # answer set is internally coherent, so iterating what the repeat CLAIMS would let a
         # FAILING required route be deleted and the gate pass on the survivor.
-        required = _required_r1_routes(key["stimuli"][primary_bid], record, bid, primary_bid)
+        required = _required_r1_routes(key["stimuli"][primary_bid], record, bid, primary_bid, d_required)
         for route in required:
             if bid not in adjudicated.get(route, {}) or primary_bid not in adjudicated.get(route, {}):
                 raise ScoreInputError(
@@ -1212,6 +1259,15 @@ def r1_reliability(key: dict, adjudicated: dict) -> dict:
         "aggregation": "heading-occurrence micro-average per route; worst required route (R6.4)",
         "ruled_by": "A41.2 R6",
         "decision_owner": "Rule 3 gate vector (A27.6); no consequence is applied here",
+        # A48 -- PROVENANCE ON THE VALUE THAT MOVED. Over the A27.3 budget the D decision route
+        # is not result-bearing, so A48 removes the human arm from R1's REQUIRED population and
+        # the gate is computed on a different set of pairs than it would have been. That is a
+        # value change caused by a post-boundary deviation, so section 4.7 attaches here.
+        #
+        # Within budget A48 changes nothing about which routes R1 requires, so no A48 status is
+        # claimed: labelling it there would be the global relabelling 4.7 exists to prevent.
+        "a48_required_routes_changed": not d_required,
+        "confirmatory_status": None if d_required else A48_NON_CONFIRMATORY,
     }
 
 
@@ -1449,7 +1505,23 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
     """
     per_document: dict[str, dict] = {}
     excluded = {"control": 0, "r1_repeat": 0}
-    frame_purposes = ((_bo().C_FRAME, _bo().PURPOSE_C_METRICS), (_bo().D_FRAME, _bo().PURPOSE_D_DECISION))
+    # A48 -- the D ESTIMAND IS CONSUMED ONLY WHILE ITS ROUTE IS RESULT-BEARING.
+    #
+    # A27.3: over the 60-region budget Rule 1 cannot choose X, so the complete-census human
+    # decision evidence is not required and, by A48, is not even a required route. Walking
+    # `(D_FRAME, PURPOSE_D_DECISION)` regardless demanded a human answer for every D primary
+    # and refused the whole scorer -- the same defect as the route derivation, one layer down,
+    # and the reason the first A48 pass read green: it exercised `validate_adjudicated` and
+    # `r1_reliability` but never `score()`.
+    #
+    # The D rows are OMITTED, not zeroed. A zero M1-M5 block would state that the arms were
+    # measured and agreed on nothing, which is empirical evidence this run never gathered.
+    # `pooled` already drops a frame with no stimuli, so absence stays absence. The full D
+    # census is untouched in the committed frames and in the decider's own budget reading.
+    d_required = inputs.oracle_key.get("d_decision_route_required", True)
+    frame_purposes = ((_bo().C_FRAME, _bo().PURPOSE_C_METRICS),)
+    if d_required:
+        frame_purposes += ((_bo().D_FRAME, _bo().PURPOSE_D_DECISION),)
     # R1 is computed from the same committed artifacts, not supplied. M5's section 6 gate reads
     # this and nothing else, so no caller can hand the gate a verdict.
     r1 = r1_reliability(inputs.oracle_key, inputs.oracle_adjudicated)
@@ -1489,6 +1561,11 @@ def heading_metrics(inputs: ScoreInputs) -> dict:
         },
         "excluded_stimuli": excluded,
         "routing": {purpose: _bo().PURPOSE_ROUTE[purpose] for _f, purpose in frame_purposes},
+        # A48 -- stated so a reader can tell "not measured because the budget forecloses Rule 1"
+        # from "measured and empty". Absence of the D block below means the former.
+        "d_decision_route_required": d_required,
+        "d_estimand_status": "SCORED" if d_required else "NOT_OBSERVED -- A27.3 budget exceeded, "
+        "Rule 1 cannot choose X and the complete-census human route is not result-bearing",
         "estimand_purposes": list(_bo().ESTIMAND_PURPOSES),
         "pooling_rule": "C and D are separate estimands (A36.3); they are never summed together",
         "r1": r1,

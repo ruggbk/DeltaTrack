@@ -1739,14 +1739,25 @@ def part_r1(tmp: Path) -> dict:
         "never agreement with the PRIMARY -- which is what A36.6 actually freezes",
     )
     check(
-        "the frozen frame->route map is derived from build_oracle's own constants",
+        "the frozen frame->route map is derived from build_oracle's own constants (within budget)",
         ((BO.ROUTE_AI,), (BO.ROUTE_HUMAN,), (BO.ROUTE_AI, BO.ROUTE_HUMAN)),
         (
-            SM._frame_routes([BO.C_FRAME]),
-            SM._frame_routes([BO.D_FRAME]),
-            SM._frame_routes([BO.C_FRAME, BO.D_FRAME]),
+            SM._frame_routes([BO.C_FRAME], True),
+            SM._frame_routes([BO.D_FRAME], True),
+            SM._frame_routes([BO.C_FRAME, BO.D_FRAME], True),
         ),
         "the C->AI / D->human / C&D->both mapping is restated here and can drift from A36.4's owner",
+    )
+    check(
+        "A48 -- OVER the A27.3 budget the D decision route is not required, and C is untouched",
+        ((BO.ROUTE_AI,), (), (BO.ROUTE_AI,)),
+        (
+            SM._frame_routes([BO.C_FRAME], False),
+            SM._frame_routes([BO.D_FRAME], False),
+            SM._frame_routes([BO.C_FRAME, BO.D_FRAME], False),
+        ),
+        "a D-only stimulus would still demand a human answer for a route A27.3 made "
+        "non-decision-bearing, or C would lose its AI route along with it",
     )
 
     # --- an orphaned repeat REFUSES rather than shrinking the reliability population.

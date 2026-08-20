@@ -316,3 +316,181 @@ human-readable status; it may no longer decide it.
 **Redundancy removed.** The presence-only scorer control was replaced rather than kept
 alongside the new one: it proved only that `_require` fires, while the mutation that actually
 produced a mislabelled result was a nonempty wrong value. One control now covers both shapes.
+
+---
+
+## A48 — POST-BOUNDARY APPARATUS DEVIATION
+
+```json
+{"id": "A48", "kind": "DEVIATION",
+ "commits": ["55c35c04", "090716f8", "8a201a6f", "f17cd4e4"],
+ "classification": "POST-BOUNDARY APPARATUS DEVIATION",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "d_frame_census": 13992,
+  "oracle_route_composition": "ai_route 122 / human_route 15417 / c_audit 25 / controls 20",
+  "cross_engine": "17/17 measured, n_qualified 0, qualification_applies false",
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": true,
+ "affects_architecture_decision": true,
+ "affects_architecture_outcome_enum": false,
+ "narrowing": "affects_scoring_rule is FALSE because no frozen rule changed; A48 repairs the implementation of A27.3. affects_metric_values is TRUE because A48 changes R1's required-route population and therefore its value can move. affects_architecture_decision is TRUE only because decided_by / attribution can move; the architecture outcome ENUM is invariant to A48 at D>60, and A48 cannot move a Rule 0 outcome or its attribution.",
+ "files_touched": ["probes/methodology_contracts.py", "probes/build_oracle.py",
+                   "probes/score_metrics.py", "probes/decide_architecture.py",
+                   "probes/x21_build_oracle.py", "probes/x28_decide_architecture.py",
+                   "probes/x31_dframe_budget_routes.py",
+                   "probes/x27_score_metrics.py"],
+ "why_not_an_amendment": "Made after the continuation boundary was committed, with the realized census and route composition already visible. PRE-EXECUTION-AMENDMENTS.md requires confirmatory_output_at_time == 'none' on every record and is the PRE-execution ledger."}
+```
+
+**This repair was made with the realized result in view, and says so.** The D census of
+13,992 and the full oracle route composition were already committed and visible when it was
+written. It is not a pre-execution amendment and is not recorded as one. A47 is unchanged.
+
+### A48.1 — the defect
+
+A27.3 fixes the D-frame budget: **≤ 60 regions** → human-adjudicate the complete census and
+Rule 1 may be evaluated; **> 60 regions** → **Rule 1 cannot choose X**, the outcome is
+`INSUFFICIENT_COMPARATIVE_EVIDENCE`, and a 60-region sample is permitted for **descriptive
+diagnosis only**.
+
+The budget had exactly one owner, `decide_architecture.D_FRAME_REGION_BUDGET`, applied at
+**decision step 4**. Every upstream component derived "required route" from **raw frame
+membership** instead:
+
+| site | behaviour |
+|---|---|
+| `build_oracle.StimulusSpec.frame_routes` | `D in frames` → human, unconditionally |
+| `human_answer_purposes` | `D in frames` → `PURPOSE_D_DECISION`, unconditionally |
+| `build_oracle.validate_adjudicated` | every route named in the key must have an answer |
+| `score_metrics.validate_inputs` | calls that validator **before any metric exists** |
+| `score_metrics._required_r1_routes` | a second frame→route implementation, same defect |
+
+So a census of 13,992 made **15,372** human answers a hard prerequisite for producing *any*
+metric, for a route A27.3 had already made non-decision-bearing. The evidence gate sat
+upstream of the rule that excused the evidence.
+
+**Measured before repair**, on real machinery with synthetic material at D = 61: dropping only
+the human answers whose sole purpose was the Rule 1 D decision produced
+`ADJUDICATION_ROUTE_MISSING`.
+
+### A48.2 — the reading, and the one owner
+
+Read with A36.6: a repeat inherits its primary's **required** routes, and "required" means
+**result-bearing**. A route A27.3 has made non-decision-bearing is therefore not required, it
+creates no human R1 arm, and it is **absent rather than `NOT_EVALUABLE`**.
+
+The budget and its predicate now have a single executable owner,
+`methodology_contracts.d_decision_route_required`, and the frame→route map has a single owner,
+`build_oracle.frame_required_routes`, which `score_metrics` calls rather than restating.
+`decide_architecture` **re-exports** the constant instead of redefining it. `build_oracle`
+reads the realized census from the same committed `counts["d_frame_census"]` the decider reads,
+so the two cannot be looking at different censuses.
+
+**Nothing else moves.** The numeric budget, D membership, the full census and its reporting, C
+membership and selection, C/D overlap, truth-source semantics, R1 selection identities and
+thresholds, C-audit selection, controls, metric definitions, Rule 0, Rule 1, Rule 3 and the
+decision ordering are untouched. The optional 60-region descriptive sample remains omitted.
+
+### A48.3 — realized consequence
+
+Derived from the already-committed real key, without opening any image:
+
+| | before | after |
+|---|---|---|
+| AI route | 122 | **122** |
+| human route | 15,417 | **45** (25 C-audit + 20 human-route controls) |
+| R1 required-route population | ai + human | **AI only, 6 pairs**; 1,395 D-only repeats require no route |
+
+### A48.4 — section 4.7 status
+
+A48 changes **which adjudication inputs are consumed**, so it is value-bearing for anything
+computed from that set. It takes the same §4.7 status **class** as A45/A47 but its **own
+literal**, because the A45 label names A45 and this is a different deviation:
+
+    NON-CONFIRMATORY (PRE-REGISTRATION 4.7 -- A48 post-boundary deviation)
+
+Held as a constant in `score_metrics` and in `decide_architecture`, never read from this
+document or any other mutable record, so nothing under test supplies its own expected
+provenance. Applied to `r1_reliability` only where A48 actually moved it (census over budget)
+and to the decision artifact's **attribution** only where `decided_by` turns on that R1 gate.
+
+**The final architecture outcome enum is invariant to A48.** Demonstrated executably over the
+real decider across all four Rule 0 states at D > 60: with R1 forced to PASS and to FAIL the
+outcome is identical in every state (`EXTENDED_BY_RULE_0_M9`, `HYBRID_BY_RULE_0_M9`, or
+`INSUFFICIENT_COMPARATIVE_EVIDENCE`). At D > 60 Rule 1 cannot choose X, so the enum is fixed by
+the committed M9 facts and the census alone. The decider was **not** reordered and no rule was
+changed to obtain this; it is a property of the frozen ordering.
+
+### A48.5 — the committed oracle key
+
+The key committed at `7afbc344` is semantically wrong in **private route metadata only**:
+`adjudication_routes`, `human_answer_purposes`, `n_human_tasks`, and the key-level
+`human_route` / `human_tasks` counts.
+
+**Proven by executable control**, building the same synthetic population twice with only the
+predicate differing: blind ID set, presentation order, canonical and base identities, R1 base
+identities, C/D membership, C-audit selection, repeat flags, bboxes, DPI, `png_sha256`,
+region–line bijection, image names, control kind and variant, `prompt_sha256`, **every PNG
+byte**, and the **entire blind artifact byte-for-byte** are identical. Only the three
+per-stimulus route fields and the two human counts differ.
+
+The real key was **not** regenerated and **not** hand-edited in this round.
+
+### A48.6 — an A47.12 regression found and fixed
+
+`x28_decide_architecture` could not run at all on `develop`: A47.12 made
+`confirmatory_status` a required, value-checked field on the cross-engine artifact, and x28's
+own fixture predated it, so the entire architecture-decider suite failed at input validation.
+Reproduced on clean `86e48de`. The fixture now carries the scorer's own constant. No decider
+rule was touched.
+
+### A48.7 — closure review: the first repair had only reached validation and R1
+
+**Chronology, recorded exactly.** The first A48 pass conditioned route *derivation*
+(`frame_routes`, `human_answer_purposes`, `_required_r1_routes`) and its control asserted
+through a helper that ran `validate_adjudicated` plus `r1_reliability`. That helper was named
+`full_path`, and it was not: `score_metrics.score` went on walking
+`(D_FRAME, PURPOSE_D_DECISION)` in `heading_metrics` and demanding a human answer for **every**
+D primary. So the 45-item workload had never traversed the result-bearing scorer, and the
+control read green because it never called it.
+
+Closure review caught this before merge. **Execution was still blocked throughout and no
+adjudication had occurred**, so nothing was scored on the false-green.
+
+**Measured before the second repair**, through the real `SM.score` at D=61 with exactly the
+A48-required adjudication (all required AI, 25 C-audit human, 20 control human, no D-only
+human): `ADJUDICATION_ROUTE_MISSING {route: 'human'}`.
+
+**Repairs.**
+
+1. `heading_metrics` consumes the D estimand only while the D route is result-bearing. The D
+   rows are **omitted, not zeroed**: a zero M1–M5 block would assert the arms were measured and
+   agreed on nothing, which this run never gathered. The payload states which it is, in
+   `d_estimand_status`.
+2. **The key may no longer self-certify its A27.3 state.** `validate_inputs` re-derives the
+   census by summing each committed frame's producer-declared `counts["d_frame_census"]`,
+   requires exact equality with `oracle_key["d_frame_census"]`, and requires the key's
+   `d_decision_route_required` to equal `MC.d_decision_route_required(committed census)`.
+   D membership is not re-derived from region contents; the committed counts remain the
+   producer's census. A coordinated key claiming 61 over a real 60-region census is refused
+   (`D_CENSUS_MISMATCH` / `D_BUDGET_CLAIM_MISMATCH`) before any metric is produced. This
+   matters because a true census of 60 is exactly where Rule 1 **may** select X.
+3. `build_oracle` **fails closed** on a frame with no declared `d_frame_census`. Absent is not
+   0: 0 is within budget and would silently excuse Rule 1's evidence.
+
+The helper is renamed `validation_and_r1` and kept only where validation and R1 really are the
+semantics under test. The end-to-end arms call the real scorer and the real decider.
+
+**`decided_by` is not invariant, and the enum-invariance claim needed this qualification.**
+Re-measured across all Rule 0 states at D>60: the outcome **enum** is identical under R1 PASS
+and R1 FAIL, as previously reported, but the **attribution** is not. Where Rule 0 decides,
+`decided_by` is `RULE_0_M9` either way. Where Rule 0 does not decide, the enum is
+`INSUFFICIENT_COMPARATIVE_EVIDENCE` either way while `decided_by` flips between
+`BUDGET_A10_A27_3` (R1 PASS) and `RULE_3_GATE` (R1 FAIL). A48 changes R1's required-route
+composition, so it can move that attribution. Reported rather than smoothed over.
