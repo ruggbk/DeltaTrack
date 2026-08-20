@@ -598,6 +598,34 @@ def test_discovery_refuses_a_tracked_path_missing_from_the_working_tree(
         _python_sources(synthetic_repo)
 
 
+def test_discovery_refuses_when_git_cannot_enumerate(tmp_path: Path) -> None:
+    """No work tree is a loud failure, never an empty scan.
+
+    `_git_tracked_paths` returns `None` when git cannot answer, distinct from the empty
+    set it returns when git answers "nothing tracked here". Collapsing the two — the
+    natural spelling is `... or frozenset()` — hands every rule below an empty `sources`
+    dict, and a rule with nothing to inspect passes. That is #654's failure mode in its
+    purest form: the whole module goes green while policing nothing.
+
+    Measured before this test existed: applying that one coercion left the module at
+    27 passed. Nothing owned the branch.
+
+    The precondition is load-bearing rather than decorative. It proves the directory
+    really is outside a work tree, so the test cannot pass because `pytest.raises` caught
+    an assertion raised for some unrelated reason — if `tmp_path` were ever created inside
+    a repository, git would answer and the branch under test would never be reached.
+    """
+    root = tmp_path / "not-a-repository"
+    root.mkdir()
+
+    assert _git_tracked_paths(root, "*.py") is None, (
+        f"{root} was expected to be outside a git work tree; git answered, so this test "
+        "would not have reached the branch it exists to cover"
+    )
+    with pytest.raises(AssertionError, match=r"git cannot enumerate"):
+        _python_sources(root)
+
+
 def test_the_known_bad_source_is_reported_end_to_end(synthetic_repo: Path) -> None:
     """Discovery and the stale-fixture rule together, on a tree built to be caught.
 
