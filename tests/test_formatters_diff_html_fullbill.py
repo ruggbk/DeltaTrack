@@ -99,21 +99,36 @@ def _canonical() -> dict:
     }
 
 
-def test_no_toggle_without_full_text():
-    """A document with no full text renders no toggle and no embed.
+def test_no_full_bill_ui_without_full_text_but_document_still_embedded():
+    """No full-bill UI without full text — but the document is embedded regardless.
 
-    Everything the embed exists to drive — the full-bill pane, find, navigation,
-    export — is gated on full text, so a document without it ships none of them
-    and carries no payload nothing would read.
+    Two separate rules, and conflating them is a live regression risk. The
+    *controls* (toggle, full-bill pane, find, navigation, export) are gated on
+    full text because none of them has anything to act on without it. The
+    *payload* is not gated on anything: the report carries the diff document it
+    was rendered from, which is what makes a standalone report self-describing
+    and what the export hands to a reader.
+
+    Gating the embed on `_has_full_bill` looks like a tidy-up — it stops shipping
+    bytes the in-report features would not read — and silently drops the document
+    from every report built from a canonical without full text. Neither committed
+    example can catch that, because both carry full text, so this test owns it.
 
     Note the shared stylesheet always carries the .view-toggle CSS (inert when
     unused, as with other pipeline-specific selectors), so assert on the toggle
     *markup* (data-view, only emitted on the buttons), not the bare substring.
     """
-    html = format_diff_html(_no_full_text())
+    document = _no_full_text()
+    html = format_diff_html(document)
+
+    # No full-bill UI: nothing to drive it.
     assert "data-view=" not in html
-    assert 'id="diff-data"' not in html
     assert 'class="view view-full"' not in html
+
+    # The document travels with the report anyway, intact.
+    m = re.search(r'<script type="application/json" id="diff-data">(.*?)</script>', html, re.DOTALL)
+    assert m, "embed missing: the report must carry its own diff document"
+    assert json.loads(m.group(1).replace("<\\/", "</")) == document
 
 
 def test_toggle_and_both_views_present():

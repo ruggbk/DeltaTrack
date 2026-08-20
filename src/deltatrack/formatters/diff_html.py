@@ -1030,10 +1030,12 @@ def format_diff_html(
     from ``canonical``; callers pass the document, not a view they assembled
     themselves (DeltaTrack#653).
 
-    The report offers the full-bill view and the client-side export download
-    when the document carries full text (``_has_full_bill``) and embeds the
-    document to drive them. Both pipelines carry it today; a document without it
-    renders the change cards alone and embeds nothing.
+    The document is always embedded, so the standalone report carries the diff it
+    was rendered from. The full-bill view and the client-side export download are
+    separate: they appear only when the document carries full text
+    (``_has_full_bill``), because without it they have nothing to act on. Both
+    pipelines carry full text today; a document without it renders the change
+    cards alone, still carrying its payload.
 
     ``display_canonical``, when given, supplies the print-faithful text + spans
     the on-screen full-bill view renders from (the PDF path passes one built
@@ -1057,10 +1059,12 @@ def format_diff_html(
     else:
         heading = "Bill Comparison"
         doc_title = "Bill Comparison — Diff"
-    # The embed exists to drive the in-browser find, navigation, full-bill view and
-    # export, and every one of those is gated on full text being present, so a
-    # document without it embeds nothing rather than shipping data nothing reads.
-    data_script = _embed_canonical(canonical) if _has_full_bill(canonical) else ""
+    # Unconditional, and deliberately not gated on `_has_full_bill` like the controls
+    # below: the report carries the diff document it was rendered from, whatever that
+    # document happens to contain. Gating it on full text reads as a tidy-up (the
+    # in-report features would not touch the payload without it) and silently strips
+    # the document from every report built from a canonical that carries no full text.
+    data_script = _embed_canonical(canonical)
     # The TOC/full-bill anchors must come from the same canonical the full-bill view
     # renders from (display_canonical when given), so their offsets line up.
     sidebar_canonical = (display_canonical or canonical) if _has_full_bill(canonical) else None
