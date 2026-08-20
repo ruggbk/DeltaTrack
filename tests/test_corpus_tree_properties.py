@@ -8,7 +8,7 @@ of in production. It asserts on the **contract-shaped tree** (the canonical JSON
 nodes both pipelines emit), not an internal ``TreeNode`` dump — the consumed output
 (``feedback_measure_at_consumed_output``).
 
-Four invariants per bill version:
+Five invariants per bill version (the fifth is PDF-only):
 
 1. **Schema-valid** — every node validates against the published ``TreeNode`` def.
 2. **Valid level** — every node's ``level`` is in the shared GPO enum.
@@ -21,6 +21,9 @@ Four invariants per bill version:
 4. **No blank-label TOC rows** — the leveled TOC the tree renders carries no blank
    clickable rows or empty groups (``feedback_validate_against_hard_fixture``: the
    consumed-output form of the blank-row invariant).
+5. **The money is the bill's own** (PDF) — no floor-amendment delta is read as an
+   appropriation. Conservation (3) cannot see this: it compares the tree against the
+   same extraction the tree was built from, so a phantom conserves perfectly. #670.
 
 The gates parametrize over the COMMITTED corpus manifest (tests/corpus_manifest.toml),
 so the collected set is identical on every machine and runs in CI; the completeness
@@ -38,6 +41,7 @@ from pathlib import Path
 
 import pytest
 
+from deltatrack.amounts import strip_amendment_annotations
 from deltatrack.bill_tree import extract_text_content, find_bill_bodies, find_bill_body, normalize_bill
 from deltatrack.diff_bill import extract_amounts
 from deltatrack.formatters.canonical import _pdf_tree_payload
@@ -354,6 +358,36 @@ def _assert_money_conserves(roots: list[dict], reference: Counter, max_drop: int
     assert dropped <= max_drop, f"{label}: dropped {dropped} > documented budget {max_drop}"
 
 
+# --- Invariant 5: the amounts are the bill's own (#670) --------------------------
+#
+# Conservation asks whether the tree counts each extracted amount once. It cannot ask
+# whether the amount was ever the bill's to appropriate, because both sides of it read
+# the same extraction: a floor-amendment delta counted as money passes conservation
+# exactly, on both sides, and the report then shows a bill spending money it does not.
+#
+# The detector below never reads the annotation's KEYWORD. It keys on the tail — "by",
+# then whitespace or a line-number gutter, then a dollar amount and the closing paren —
+# which is the one part of an annotation the printed page never breaks. That is what
+# makes it a usable oracle for a strip whose failures are all breakages of the front
+# half: a detector spelled like the strip would share the strip's blind spots and read
+# as permanent compliance, which is how the leak survived a first audit pass.
+_ANNOTATION_TAIL = re.compile(r"\bby(?:[^\S\n]|\n[^\S\n]*\d*[^\S\n]*)+\$[\d,]+\)")
+
+
+def _surviving_annotations(full_text: str) -> list[str]:
+    """Annotation tails still present after the strip that is supposed to remove them."""
+    return [m.group() for m in _ANNOTATION_TAIL.finditer(strip_amendment_annotations(full_text))]
+
+
+def _assert_no_annotation_is_read_as_money(full_text: str, label: str) -> None:
+    survivors = _surviving_annotations(full_text)
+    assert survivors == [], (
+        f"{label}: {len(survivors)} floor-amendment annotation(s) survive the strip and are "
+        f"read as appropriated money: {survivors[:5]}. A wrapped annotation is still an "
+        "annotation — see deltatrack.amounts.strip_print_furniture (#670)."
+    )
+
+
 def test_manifest_fixtures_committed() -> None:
     """Fail-closed completeness floor for the tree property gates (#217, ADR 0015).
 
@@ -410,12 +444,44 @@ def test_pdf_tree_invariants_hold_corpus_wide(pdf_path: Path) -> None:
 
     _assert_schema_and_levels(roots)
     _assert_no_blank_toc_rows(roots, full_text)
+    # Invariant 5 runs before the money skip below: a document whose extraction is too
+    # degraded to measure conservation on can still be measured for phantoms, and this is
+    # the rendering (guttered, hard-wrapped) where the phantoms come from.
+    _assert_no_annotation_is_read_as_money(full_text, test_id)
     # Carve-out: PDF has no independent ground truth, so it measures against its own
     # rendered full_text (a labeled span-coverage check, weaker by construction).
     if test_id in _PDF_MONEY_SKIP:
         return  # known degraded extraction — see _PDF_MONEY_SKIP for the reason
     reference = Counter(extract_amounts(full_text))
     _assert_money_conserves(roots, reference, _PDF_DROP_BUDGET.get(test_id, 0), test_id)
+
+
+def test_the_annotation_gate_is_actually_exercised() -> None:
+    """Floor for invariant 5, which is an absence assertion over the whole PDF corpus.
+
+    Most committed bills carry no floor amendments at all, so "no annotation survives"
+    holds on them for reasons that have nothing to do with the strip. Without a floor, a
+    detector that had stopped matching would look identical to a clean corpus.
+
+    Counts the annotations the detector finds BEFORE the strip. Measured at 1100 across 9
+    documents; asserted as a floor so adding a bill cannot force a fixture edit. On
+    ``develop`` at 648f8612, 428 of those 1100 survived the strip, 27 of them on the one
+    committed PDF example -- the count #670 reports.
+    """
+    found = 0
+    documents = 0
+    for pdf_path in ALL_PDF_FILES:
+        if not pdf_path.exists():
+            continue
+        pages = cached_pages(pdf_path)
+        text, _ = pdf_full_text(pages)
+        n = len(_ANNOTATION_TAIL.findall(text))
+        found += n
+        documents += bool(n)
+    assert found >= 900 and documents >= 5, (
+        f"the annotation detector finds only {found} annotation(s) across {documents} "
+        "document(s); invariant 5 would be close to asserting nothing"
+    )
 
 
 _ENROLLED_PDF = fixture_path("115-hr-5895", "5_enrolled-bill.pdf")

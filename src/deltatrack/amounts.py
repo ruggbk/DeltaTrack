@@ -46,9 +46,74 @@ import re
 #: preserves amounts written without thousands separators ("$5000000").
 DOLLAR_RE = re.compile(r"\$\d{1,3}(?:,\d{3})+|\$\d+")
 
+#: The GPO line-number gutter, as ``parsers.pdf_text._render_lines`` writes it: every line of
+#: rendered PDF text is ``f"{line_number:>5}  {content}"``, so a line break carries a
+#: right-aligned number and exactly two spaces before the text resumes. ``_render_lines`` is
+#: the only producer of that shape, which is why it can be spelled once here.
+#:
+#: Unnumbered lines pad the same field with spaces instead and so leave nothing to strip;
+#: ordinary whitespace handling already covers them.
+GUTTER_RE = re.compile(r"\n[^\S\n]*\d+[^\S\n]{2}")
+
+
+#: A word the printer soft-hyphenated across a PAGE break, which is the one such break the
+#: parser cannot close. ``parsers.pdf_text._SOFT_HYPHEN_BREAK`` rejoins ``"word-\nrest"``
+#: while cleaning a page, but the two halves of a page-spanning word are cleaned as separate
+#: pages and only meet later, once ``pdf_full_text`` has joined the pages with a blank line.
+#:
+#: Applied after the gutter is gone, so the gap is a bare ``"\n\n"`` here. The continuation
+#: must start with a lowercase letter -- the same test the parser uses -- which is also what
+#: makes this incapable of creating or destroying a dollar amount: a digit is not a lowercase
+#: letter, so no half of a split number can be rejoined into one.
+PAGE_HYPHEN_RE = re.compile(r"(\w)-\n\n([a-z])")
+
+
+def strip_print_furniture(text: str) -> str:
+    """Undo the printed-page furniture that can land in the middle of one phrase.
+
+    A line break in the printed text means one thing to a reader -- a word separator -- and
+    the line number in the margin is furniture, not part of the sentence. Removing it restores
+    that reading, so a pattern spanning two tokens sees the same text whether or not the wrap
+    it crosses happened to carry a line number. A word the printer split across a page break
+    is rejoined for the same reason, and both together are what an annotation needs to be
+    recognised however it wrapped (#670).
+
+    No-op on text that never carried either (XML paragraph flow, the match-normalised change
+    text, a single line of PDF text), so a caller does not have to know which rendering it
+    holds. Idempotent. It never welds two tokens together: the gutter strip leaves the line
+    break behind, and the hyphen rejoin only closes a word the printer itself broke.
+    """
+    return PAGE_HYPHEN_RE.sub(r"\1\2", GUTTER_RE.sub("\n", text))
+
+
 #: A floor amendment annotation, stripped before scanning so the delta it announces is not
 #: read as an appropriation in its own right.
-AMENDMENT_RE = re.compile(r"\((?:increased|reduced|decreased) by\s+\$[\d,]+\)")
+#:
+#: Both gaps are whitespace classes because the annotation wraps: the House prints these next
+#: to the amount they modify, and a long run of them crosses a line break, and sometimes a
+#: page break. The gap before ``by`` was a literal space until #670, which made a wrap there
+#: unmatchable. Widening it is necessary but not sufficient -- in PDF text the wrap also
+#: carries the line-number gutter, which no whitespace class can cross, and that was the
+#: majority shape: of 27 annotations that leaked on ``examples/hr8752_pdf_diff.html``, 21 put
+#: the gutter inside the annotation. :func:`strip_print_furniture` is what reaches those, so
+#: this pattern does not try to model the gutter itself.
+AMENDMENT_RE = re.compile(r"\((?:increased|reduced|decreased)\s+by\s+\$[\d,]+\)")
+
+
+def strip_amendment_annotations(text: str) -> str:
+    """Remove every floor amendment annotation, gutter and all.
+
+    The two steps are paired here rather than left to each caller because they are one rule,
+    and a caller that applies ``AMENDMENT_RE`` alone silently leaks on guttered text -- which
+    is #670, arrived at by exactly that route. Both surfaces the leak reached (the per-node
+    amount inventory, the change-level amount entries) now go through this.
+    """
+    return AMENDMENT_RE.sub("", strip_print_furniture(text))
+
+
+def has_amendment_annotation(text: str) -> bool:
+    """Whether text carries a floor amendment annotation, recognised the same way."""
+    return bool(AMENDMENT_RE.search(strip_print_furniture(text)))
 
 
 def extract_amounts(text: str) -> tuple[int, ...]:
@@ -59,8 +124,12 @@ def extract_amounts(text: str) -> tuple[int, ...]:
     no diff noise (multiset equality), so keeping it only surfaces $0 when it
     actually changes (#60). Strips floor amendment annotations like
     (increased by $X) before scanning.
+
+    Stripping the gutter first cannot add or drop a dollar amount on its own: what it removes
+    is a bare line number, which carries no ``$`` and so was never a match, and it leaves the
+    line break in place, so it cannot weld two tokens into a new one.
     """
-    text = AMENDMENT_RE.sub("", text)
+    text = strip_amendment_annotations(text)
     results = []
     for match in DOLLAR_RE.finditer(text):
         value = int(match.group().replace("$", "").replace(",", ""))
