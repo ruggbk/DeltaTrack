@@ -16,7 +16,7 @@ Packaging carried the same fusion. `[project.dependencies]` listed `fastapi`, `u
 installing DeltaTrack to compare two bill versions installed a web server. Of the seven
 core dependencies, exactly one was the engine's.
 
-The layout also worked against [ADR 0005](0005-deltatrack-billtrax-boundary.md), which
+The layout also worked against [ADR 0005](0005-contained-two-version-tool.md), which
 puts automated input gathering on BillTrax's side of the line. The acquisition tooling sat
 in the product tree, blurring the boundary that record exists to protect.
 
@@ -86,7 +86,7 @@ Alternatives considered:
   outside this repository that hardcoded pre-split paths has to follow the split.
 
 References: [#367](https://github.com/AgoraDMV/DeltaTrack/issues/367),
-[ADR 0005](0005-deltatrack-billtrax-boundary.md),
+[ADR 0005](0005-contained-two-version-tool.md),
 [ADR 0011](0011-local-only-processing.md),
 [ADR 0017](0017-installable-engine-package.md),
 [#62](https://github.com/AgoraDMV/DeltaTrack/issues/62),

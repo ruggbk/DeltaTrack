@@ -12,7 +12,7 @@ is sensitive, pre-decisional material. A leaked draft appropriations bill — re
 what an office is proposing before it chooses to say so — is a real harm to the
 staffer and the office, not a hypothetical.
 
-[0005](0005-deltatrack-billtrax-boundary.md) already made DeltaTrack local, offline,
+[0005](0005-contained-two-version-tool.md) already made DeltaTrack local, offline,
 and stateless, but it framed the safety contract around **persistence**: no file
 writes, no stored state. There is a second axis that record did not spell out:
 **transmission.** A server that received an uploaded draft, diffed it, returned the
@@ -93,7 +93,7 @@ Alternatives:
   matters beyond convenience: it is what makes a browser channel able to honor this rule
   for the hardest input.
 - The rule is conservative on purpose and costs little, because the engine is already
-  local and stateless ([0005](0005-deltatrack-billtrax-boundary.md)); this record adds
+  local and stateless ([0005](0005-contained-two-version-tool.md)); this record adds
   the transmission guarantee on top of 0005's persistence guarantee.
 - Telemetry, crash reporting, or "send us the file that failed" diagnostics that would
   carry bill content off-device are foreclosed by this rule. Diagnostics must be local

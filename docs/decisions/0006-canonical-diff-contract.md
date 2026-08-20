@@ -165,7 +165,7 @@ case so the probe cannot pass by rejecting everything.
 - The contract does not by itself answer questions that span many diffs, and that is
   deliberate. DeltaTrack stays the simple, local, offline engine that compares two
   versions; analyzing diffs over time, storing them, or running them through an LLM is
-  BillTrax's job ([0005](0005-deltatrack-billtrax-boundary.md)). This JSON is the
+  BillTrax's job ([0005](0005-contained-two-version-tool.md)). This JSON is the
   boundary between the two: the per-comparison record of truth lives here, anything
   spanning many comparisons lives one layer up.
 

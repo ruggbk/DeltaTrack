@@ -86,7 +86,7 @@ presents itself as the architecture in force.
 | [0002](0002-pdfium-single-engine.md) | Accepted | Use pypdfium2 (PDFium) as the single PDF text engine |
 | [0003](0003-pdfjs-client-side-viability.md) | Accepted | Client-side PDF.js extraction is viable for published bills |
 | [0004](0004-govinfo-bulk-data.md) | Accepted | Fetch bill discovery and text from govinfo bulk data, not the Congress.gov API |
-| [0005](0005-deltatrack-billtrax-boundary.md) | Accepted | Keep DeltaTrack a contained two-version tool; put analysis in BillTrax |
+| [0005](0005-contained-two-version-tool.md) | Accepted | Keep DeltaTrack a contained two-version tool |
 | [0006](0006-canonical-diff-contract.md) | Accepted | Make a versioned JSON document the contract between the diff engine and its consumers |
 | [0007](0007-single-renderer.md) | Accepted | Render every diff with one renderer, whatever source pipeline produced it |
 | [0008](0008-deterministic-engine.md) | Accepted | Keep the diff engine deterministic; a language model may read a diff, never compute one |

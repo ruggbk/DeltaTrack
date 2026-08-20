@@ -73,7 +73,7 @@ Alternatives:
   The tool may carry text or prompts that steer a user toward the XML when a published
   version would exist, but it does **not** check whether one is available or fetch it.
   Doing so would require network access and state, crossing DeltaTrack's
-  ephemeral/stateless/offline boundary ([0005](0005-deltatrack-billtrax-boundary.md)):
+  ephemeral/stateless/offline boundary ([0005](0005-contained-two-version-tool.md)):
   auto-detecting availability and switching sources is BillTrax-shaped work, deliberately
   out of scope here. The nudge is a human-readable pointer, not a runtime capability.
 - **Open risk: pre-publication PDFs are the least-tested input.** Validation to date
