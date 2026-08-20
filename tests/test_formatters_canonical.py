@@ -18,6 +18,9 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+# Declared dev dependency (pyproject.toml), imported unconditionally so a missing
+# install fails instead of silently skipping the schema contract tests (#585).
+import jsonschema
 import pytest
 
 from deltatrack.diff_pdf import PdfDiff, PdfHunk
@@ -574,7 +577,6 @@ def _load_schema() -> dict:
 
 
 def test_xml_canonical_validates_against_json_schema():
-    jsonschema = pytest.importorskip("jsonschema")
     diff_dict = _xml_diff_dict(
         changes=[
             {
@@ -629,7 +631,6 @@ def test_schema_rejects_a_change_carrying_the_removed_amounts_field():
     would stay green while the field it removes became legal again. This asserts
     the rejection itself.
     """
-    jsonschema = pytest.importorskip("jsonschema")
     canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
     canonical["changes"][0]["amounts"] = [{"old": 100, "new": 200}]
     with pytest.raises(jsonschema.ValidationError):
@@ -642,7 +643,6 @@ def test_schema_requires_amount_entries_on_every_change():
     Optional-and-sole would still leave a consumer distinguishing "no money on this
     change" from "field absent"; the producer always writes it, so the schema says so.
     """
-    jsonschema = pytest.importorskip("jsonschema")
     canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
     del canonical["changes"][0]["amount_entries"]
     with pytest.raises(jsonschema.ValidationError):
@@ -652,7 +652,6 @@ def test_schema_requires_amount_entries_on_every_change():
 def test_schema_accepts_the_unmodified_producer_output():
     """Both rejections above must come from the specific defect, not a schema that
     rejects everything: the same probe document validates untouched."""
-    jsonschema = pytest.importorskip("jsonschema")
     canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
     jsonschema.validate(canonical, _load_schema())
 
@@ -916,7 +915,6 @@ def test_card_pdf_source_is_not_sliced():
 def test_xml_full_text_spans_never_serialized_and_schema_valid():
     """full_text_spans is a build-time anchor input only — it must not leak into the
     canonical JSON, and the result must still validate against the schema."""
-    jsonschema = pytest.importorskip("jsonschema")
     change = {
         "change_type": "modified",
         "display_path_old": ["A"],
@@ -1004,7 +1002,6 @@ def test_full_text_invalid_shape_rejected():
 
 
 def test_pdf_canonical_validates_against_json_schema():
-    jsonschema = pytest.importorskip("jsonschema")
     hunks = (
         PdfHunk("modified", SEC_101, SEC_101, (1, 10, 1, 20), (2, 5, 2, 8), "x", "y", amount_pairs=((100, 200),)),
         PdfHunk("moved", SEC_101, SEC_201, (1, 10, 1, 20), (5, 1, 5, 12), "same", "same"),
