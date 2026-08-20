@@ -5,22 +5,6 @@ that pin through ``uv run ruff``. The pre-commit hook does NOT: pre-commit build
 isolated virtualenv per hook repo (``language: python``, no ``additional_dependencies``),
 installing whatever ``ruff==`` release the ``rev`` tag of ruff-pre-commit declares. The tag
 therefore *is* the Ruff version, and the two can disagree while both files look correct.
-
-That is not hypothetical drift. The two were consistent when both were introduced, then the
-dependency moved to an exact pin and the hook tag stayed where it was, and Dependabot's
-``uv`` ecosystem has carried the pin forward twice more since. Nothing watches the hook tag:
-Dependabot is not configured for the ``pre-commit`` ecosystem, and adding it would keep the
-tag *current* without keeping it *equal*, since each ecosystem is raised in its own pull
-request. Equality is the property that matters, so it is asserted here.
-
-The failure this prevents is quiet. Formatter output varies by version, so a contributor
-following CONTRIBUTING can commit through a green hook and have CI reject the same file. On
-the versions that were live when this was written the divergence needed a specific construct
-(a lambda long enough to wrap), which is the point: the suite stays green, and the gap only
-shows up in someone else's pull request.
-
-Deliberately narrow. This says nothing about which Ruff version is correct, only that one
-answer is given in both places.
 """
 
 from __future__ import annotations
