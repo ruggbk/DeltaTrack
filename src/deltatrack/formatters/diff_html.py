@@ -1120,34 +1120,30 @@ def format_diff_html(
 # inert when their classes aren't applied, so both pipelines share one stylesheet.
 # ---------------------------------------------------------------------------
 
-# Canonical brand tokens — mirrored verbatim from BillTrax's src/app/globals.css :root,
-# so the block is drop-in and CI can guard drift (BillTrax owns the brand; DeltaTrack
-# consumes — see DeltaTrack#37). Names and values match BillTrax exactly, with two
-# documented exceptions:
-#   - The DeltaTrack-local group (font stacks, shadow) below: fonts use system fallbacks
-#     because reports are zero-egress and must not fetch webfonts; BillTrax keeps shadows
-#     in its tailwind config rather than :root.
-#   - --diff-modified/--diff-moved are new diff-state tokens not yet in BillTrax; the
-#     matching addition on the BillTrax side is tracked in DeltaTrack#37.
+# DeltaTrack's report palette, owned here. The reports this tool writes are the
+# product, so how they look is a decision this repository makes rather than inherits
+# (#667). Every report embeds this block at render time, which is what keeps a report
+# zero-egress (ADR 0011): nothing is fetched when one is opened, so the font stacks
+# below are system fallbacks rather than webfonts.
+#
+# Keep the set to what the stylesheet below actually uses. An unreferenced token ships
+# in every report and styles nothing. The four diff states (added, removed, modified,
+# moved) are the vocabulary bill comparison needs, each with a background and a
+# foreground.
 _DESIGN_TOKENS_CSS = """\
 :root {
   --background: #f9f7f5; --foreground: #1c1c3a;
-  --card: #ffffff; --card-foreground: #1c1c3a;
-  --popover: #ffffff; --popover-foreground: #1c1c3a;
+  --card: #ffffff; --border: #e3ddd7;
   --primary: #2c2c5c; --primary-foreground: #f9f7f5;
-  --secondary: #eef0f8; --secondary-foreground: #2c2c5c;
-  --muted: #f2f0ed; --muted-foreground: #686881;
-  --accent: #ede8df; --accent-foreground: #2c2c5c;
-  --gold: #c9944e; --gold-foreground: #1c1c3a;
-  --destructive: #c04040; --destructive-foreground: #f9f7f5;
-  --success: #3d9b6d; --success-foreground: #f9f7f5;
+  --secondary: #eef0f8; --muted: #f2f0ed; --muted-foreground: #686881;
+  --accent: #ede8df; --gold: #c9944e;
+  --destructive: #c04040; --success: #3d9b6d;
   --diff-add: #d3f0e2; --diff-add-foreground: #1a6647;
   --diff-remove: #f5ddd8; --diff-remove-foreground: #8a2828;
   --diff-modified: #f1e6d2; --diff-modified-foreground: #8a6320;
   --diff-moved: #eef0f8; --diff-moved-foreground: #2c2c5c;
-  --border: #e3ddd7; --input: #e3ddd7; --ring: #2c2c5c; --chart-5: #3b6fa0;
   --radius: 0.625rem;
-  /* DeltaTrack-local (not synced from BillTrax): system font stacks + soft shadow */
+  /* System font stacks and a soft shadow. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-serif: ui-serif, Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

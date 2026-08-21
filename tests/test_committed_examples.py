@@ -116,13 +116,14 @@ def _css_tokens(css: str) -> dict[str, str]:
 
 
 def test_index_page_tokens_match_the_report_tokens():
-    """The landing page and the reports it links use the same brand values.
+    """The landing page and the reports it links use the same palette values.
 
     `render_examples.INDEX_TOKENS` is a hand-copied subset of the report stylesheet, so
-    it can fall behind a brand change and leave the demo's front door looking like a
+    it can fall behind a palette change and leave the demo's front door looking like a
     different product than everything behind it — the mismatch #42 was filed over. Read
     from a *rendered report* rather than the module source, so this compares what a
-    visitor actually gets. (Upstreaming both to BillTrax is epic #37.)
+    visitor actually gets. `formatters/diff_html.py` is the one place these values are
+    decided (#667); this test keeps the copy honest, it does not make it a second source.
     """
     report_css = (EXAMPLES / "hr8752_xml_diff.html").read_text()
     report_tokens = _css_tokens(
