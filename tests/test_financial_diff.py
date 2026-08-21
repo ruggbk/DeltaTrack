@@ -143,12 +143,29 @@ class TestAmendmentAnnotationsThatWrap:
 
         Real text from 119-hr-1, one of five parentheticals in the corpus that open with a
         vocabulary word and mean something else entirely.
+
+        Asserted through ``compute_financial_change`` because misclassification is what
+        reaches a consumer: ``has_amendment_annotations`` is exported on the change, and a
+        recogniser broad enough to claim this parenthetical also DELETES it, taking with it
+        the context the pairer aligns amounts against. Checking only that the $500,000
+        outside the parenthetical survives cannot see either harm. Measured: under a
+        recogniser that accepts any text between ``by`` and the closing paren, this prose is
+        stripped to "the credit allowable , $500,000" and flagged as an amendment, while its
+        extracted amounts remain exactly ``(500_000,)``.
         """
         text = (
             "    7  the credit allowable (reduced by the amount of any\n"
             "    8  income with respect to which an election applies), $500,000"
         )
-        assert extract_amounts(text) == (500_000,)
+        result = compute_financial_change(None, text)
+        assert result is not None
+        assert result.has_amendment_annotations is False, (
+            "ordinary legislative prose was classified as a floor amendment annotation"
+        )
+        # Kept, because it is a different mutation: the flag comes from a `search` and the
+        # amounts from the `sub` beside it, so a strip that swallowed the paragraph would
+        # redden this line while leaving the assertion above green.
+        assert result.new_amounts == (500_000,)
 
     def test_removing_the_gutter_cannot_remove_an_amount(self):
         """The negative direction: a line number goes, every dollar figure stays.
