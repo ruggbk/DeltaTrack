@@ -169,13 +169,23 @@ class TestFormatHtml:
         assert "added" in html
         assert "modified" in html
 
-    def test_contains_financial_table(self):
+    def test_renders_no_financial_presentation(self):
+        """#671 — the report makes no paired-amount claim, even when the diff carries one.
+
+        The sample diff DOES carry `financial.paired_amounts`, so this is not a
+        vacuous absence check: it goes red if any of the Financial Summary table,
+        the per-card callout or the `data-financial` filter attribute is rendered
+        again. Until amounts can be typed to accounts (#115, #175), the report
+        presents no dollar figure as a change.
+        """
         html = format_html(_sample_diff_dict())
-        assert "financial-table" in html
-        # Whole cells (#264): a bare "$1,000,000" also matches the prose body of
-        # the card, and is a prefix of "$1,000,000,000" if the table is wrong.
-        assert '<td class="amount">$1,000,000</td>' in html
-        assert '<td class="amount">$2,000,000</td>' in html
+        assert "Financial Summary" not in html
+        assert "financial-table" not in html
+        assert "financial-callout" not in html
+        assert "data-financial" not in html
+        # The prose bodies still show the bill's own text, amounts included.
+        assert "$1,000,000" in html
+        assert "$2,000,000" in html
 
     def test_contains_sidebar(self):
         html = format_html(_sample_diff_dict())
@@ -194,14 +204,6 @@ class TestFormatHtml:
     def test_contains_inline_js(self):
         html = format_html(_sample_diff_dict())
         assert "<script>" in html
-
-    def test_no_financial_data_omits_table(self):
-        diff = _sample_diff_dict()
-        # Remove financial data from all changes
-        for c in diff["changes"]:
-            c.pop("financial", None)
-        html = format_html(diff)
-        assert "Financial Summary" not in html
 
     def test_empty_changes(self):
         diff = _sample_diff_dict(
@@ -253,29 +255,16 @@ class TestCliIntegration:
         assert out.read_text().startswith("<!DOCTYPE html>")
 
     @pytest.mark.slow
-    def test_format_html_v1_v2_no_phantom_financial(self, tmp_path, monkeypatch, fast_normalize_diff):
-        """v1 vs v2 has no real financial changes after amendment stripping."""
-        import sys
+    def test_format_html_real_bill_renders_no_financial_presentation(
+        self, tmp_path, monkeypatch, fast_normalize_diff
+    ):
+        """#671 — end to end on a real bill with genuine amount changes.
 
-        from conftest import HR4366_V1_PATH, HR4366_V2_PATH
-
-        from deltatrack.diff_bill import main
-
-        out = tmp_path / "report.html"
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            ["diff_bill.py", "compare", str(HR4366_V1_PATH), str(HR4366_V2_PATH), "--format", "html", "-o", str(out)],
-        )
-        main()
-        # Floor amendment annotations reference the budget request baseline,
-        # not the previous bill version, so base amounts are unchanged v1->v2
-        # and no Financial Summary should appear.
-        assert "Financial Summary" not in out.read_text()
-
-    @pytest.mark.slow
-    def test_format_html_v1_v6_has_financial_summary(self, tmp_path, monkeypatch, fast_normalize_diff):
-        """v1 vs v6 (enrolled) has genuine financial changes."""
+        v1 -> v6 (enrolled) is the comparison that DID render a Financial Summary,
+        so it is the case with something to lose: this is the same absence check as
+        the unit test above, run through the CLI on real appropriations text rather
+        than a hand-built diff dict.
+        """
         import sys
 
         from conftest import HR4366_V1_PATH, HR4366_V6_PATH
@@ -289,4 +278,8 @@ class TestCliIntegration:
             ["diff_bill.py", "compare", str(HR4366_V1_PATH), str(HR4366_V6_PATH), "--format", "html", "-o", str(out)],
         )
         main()
-        assert "Financial Summary" in out.read_text()
+        html = out.read_text()
+        assert "Financial Summary" not in html
+        assert "financial-table" not in html
+        assert "financial-callout" not in html
+        assert "data-financial" not in html
