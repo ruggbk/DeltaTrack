@@ -13,6 +13,7 @@ These are fast (non-slow) on purpose, for two reasons:
 """
 
 import json
+from collections import Counter
 
 import pytest
 
@@ -663,46 +664,51 @@ def test_all_report_fixtures_committed() -> None:
 # so this test stays in the fast tier and the smoke cases stay deselected there.
 
 
-def test_pdf_corpus_smoke_pairs_are_complete() -> None:
-    """Completeness floor for test_pdf_corpus_smoke.py's parametrize list (#601).
+def _collect_pdf_smoke_parameters() -> dict[str, Counter]:
+    """Collect the smoke module and return each test's actual parameter multiset."""
 
-    ``_PAIRS`` is the whole case list for ``TestPdfCorpusSmoke``, and nothing in that module
-    asserts it is complete. Losing *every* pair is already caught -- an empty parametrize is a
-    skip, which the ``CI_SLOW_MODULES`` ceiling watches -- but a partial collapse, 23 pairs down
-    to 3 say, produces neither a skip nor a failure: the suite compares fewer bills and stays
-    green. This is the shape #598 closed for ``_DIVISION_VERSIONS`` in
-    tests/test_pdf_division_recall.py, and the floor below is that one's counterpart.
+    class _CollectionRecorder:
+        items = []
 
-    Two assertions, because a shrunken case list has two independent causes:
+        def pytest_collection_modifyitems(self, session, config, items) -> None:
+            self.items = list(items)
 
-    * ``len(_PAIRS) >= 15`` is the floor itself. It reddens when the committed corpus loses PDF
-      fixtures or ``adjacent_pdf_pairs()`` stops pairing them. 15 sits well under the current
-      count (23 pairs across 10 bills) so unrelated fixture churn does not force an edit here,
-      while a wholesale loss still reddens.
-    * ``len(_PAIRS) == len(adjacent_pdf_pairs())`` pins the module's list to the full collection,
-      so a slice, filter or truncation at the ``_PAIRS`` assignment reddens even with the corpus
-      intact. Both assertions read ``_PAIRS`` itself rather than a fresh ``adjacent_pdf_pairs()``
-      call, because a fresh call guards the collection and not the list the suite parametrizes
-      over: with the floor on a fresh call, ``_PAIRS = adjacent_pdf_pairs()[:3]`` cuts the smoke
-      suite from 138 collected cases to 18 and every fast test, this one included, stays green.
-
-    Both are deliberately sensitive to ANY narrowing of the collection, ``TEST_BILL`` included:
-    that selector is a developer loop, and a run narrowed to one bill has not checked that the
-    corpus is complete. The #598 floor behaves the same way.
-    """
-    # Imported in-test, not at module scope: the smoke module is ``@slow`` and imports the PDF
-    # engine, and this keeps that off the fast module's collection-time import graph.
-    from tests.test_pdf_corpus_smoke import _PAIRS
-
-    assert len(_PAIRS) >= 15, (
-        f"expected >=15 adjacent PDF pairs, test_pdf_corpus_smoke.py collected {len(_PAIRS)} -- "
-        "either the committed corpus lost PDF fixtures or adjacent_pdf_pairs() stopped pairing "
-        "them, which silently shrinks that module's parametrize list without skipping or failing "
-        "anything"
+    recorder = _CollectionRecorder()
+    result = pytest.main(
+        ["--collect-only", "-qq", "-n", "0", "tests/test_pdf_corpus_smoke.py"],
+        plugins=[recorder],
     )
-    collected = adjacent_pdf_pairs()
-    assert len(_PAIRS) == len(collected), (
-        f"test_pdf_corpus_smoke.py parametrizes over {len(_PAIRS)} of the {len(collected)} "
-        "adjacent PDF pairs in the corpus -- its _PAIRS assignment has sliced, filtered or "
-        "truncated the collection, so the suite silently compares fewer bills while staying green"
+    assert result == pytest.ExitCode.OK, f"smoke-suite collection failed with exit code {result}"
+
+    collected: dict[str, Counter] = {}
+    prefix = "tests/test_pdf_corpus_smoke.py::TestPdfCorpusSmoke::"
+    for item in recorder.items:
+        if not item.nodeid.startswith(prefix):
+            continue
+        params = tuple(item.callspec.params[name] for name in ("bill", "old_pdf", "new_pdf"))
+        collected.setdefault(item.originalname, Counter())[params] += 1
+    return collected
+
+
+def test_pdf_corpus_smoke_pairs_are_complete() -> None:
+    """The smoke suite collects every adjacent PDF pair (#601).
+
+    The floor is deliberately split into two independent checks. The canonical discovery
+    floor catches a corpus or pairing collapse, while the collection invariant compares the
+    actual ``pytest`` parameter values for every smoke test to that canonical multiset. Reading
+    collected ``callspec.params`` closes the coordinated false green where the module's
+    ``_PAIRS`` remains complete but the parametrization decorator consumes ``_PAIRS[:3]``.
+    """
+    canonical = adjacent_pdf_pairs()
+    assert len(canonical) >= 15, (
+        f"expected >=15 adjacent PDF pairs, adjacent_pdf_pairs() found {len(canonical)} -- "
+        "either the committed corpus lost PDF fixtures or the pairing helper stopped finding "
+        "them"
+    )
+
+    expected = Counter(canonical)
+    collected = _collect_pdf_smoke_parameters()
+    assert collected, "the PDF smoke suite collected no parameterized tests"
+    assert all(parameters == expected for parameters in collected.values()), (
+        "the PDF smoke suite's collected (bill, old_pdf, new_pdf) multiset differs from adjacent_pdf_pairs()"
     )
