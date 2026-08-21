@@ -578,7 +578,7 @@ as having restored execution authorization on its own.
 
 ```json
 {"id": "A50", "kind": "DEVIATION",
- "commits": ["4518998a", "97cead5a", "0474b950", "42c1b95f"],
+ "commits": ["4518998a", "97cead5a", "0474b950", "42c1b95f", "53b55846"],
  "classification": "POST-BOUNDARY APPARATUS DEVIATION",
  "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
  "results_already_visible": {
@@ -687,6 +687,20 @@ was incomplete. Requiring a deviation record for it would mean inventing a ficti
 change that never happened. Measured on the integrated history: eight post-boundary commits
 touch surface paths, all eight are declared in the A48 register and name the exact path, and
 the five files outside the study directory have no post-boundary commit at all.
+
+**Merges are attributed too, because a merge can be the only commit that ever carried a
+byte.** `git log --name-only` prints no file list for a merge, which is correct for an
+ordinary integration — the commit that made the change is the one that must declare it — but
+a merge's tree is not obliged to match any parent. Content written while resolving a
+conflict, or staged between `git merge --no-commit` and the commit, belongs to the merge
+alone, and was therefore attributed to nothing. So for every post-boundary merge, the merge's
+blob for each surface path is compared against every parent's blob, with **absence treated as
+a value** so a path the merge deletes while every parent has it is caught like a rewritten
+one. Equality with any parent means the merge introduced nothing novel and demands no
+duplicate record; difference from all of them requires the exact merge SHA and the exact path
+in this register. Swept across the marker to `30a92586`, to `origin/develop`, and to the
+repair head: **0 merge-introduced surface paths**, so the rule adds no demand the real
+history cannot meet.
 
 **The surface reaches further than it did, and its coverage is now executable.** A bounded
 one-hop dependency audit over the
