@@ -578,7 +578,7 @@ as having restored execution authorization on its own.
 
 ```json
 {"id": "A50", "kind": "DEVIATION",
- "commits": ["4518998a"],
+ "commits": ["4518998a", "97cead5a"],
  "classification": "POST-BOUNDARY APPARATUS DEVIATION",
  "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
  "results_already_visible": {
@@ -664,7 +664,32 @@ are write-once by the same test (exactly one modifying commit, and the current b
 the blob that commit introduced). A future deviation therefore fails closed and requires a new
 explicit review and ruling. There is deliberately no automatic rolling authorization chain.
 
-**The surface is now the actual surface.** A bounded one-hop dependency audit over the
+**The authorization records REVIEWED current methodology; it cannot legalize an undeclared
+change by snapshotting it.** This is the rule the first draft of A50 was missing, and the
+omission mattered: every other clause asks whether the artifact agrees with the tree, and
+none asked whether the tree's differences had ever been declared for review. A committed
+change to a result-bearing file could therefore be written into a fresh authorization and
+thereby legalized, with no deviation record ever existing. F9 did not close it either — F9
+scans only paths under EV, so a change to result-bearing code outside the study directory
+was green there by construction.
+
+So for every current authorization-surface path, each commit that modified it after the
+boundary must be declared in the deviation register, and that declaration must name that
+exact path. The correspondence is derived from git history and the register, never from the
+authorization's own account of what changed: an artifact that inventories its own drift is
+describing itself. `acknowledged_deviations` is checked the same way — the deviations that
+matter are those declaring the commits that actually changed the surface, so naming some
+other record while the relevant one is absent acknowledges nothing.
+
+A file with **no** post-boundary commit needs no declaration. It is unchanged since the
+boundary, and the only reason it is missing from the original manifest is that the manifest
+was incomplete. Requiring a deviation record for it would mean inventing a fiction about a
+change that never happened. Measured on the integrated history: eight post-boundary commits
+touch surface paths, all eight are declared in the A48 register and name the exact path, and
+the five files outside the study directory have no post-boundary commit at all.
+
+**The surface reaches further than it did, and its coverage is now executable.** A bounded
+one-hop dependency audit over the
 result-bearing components asked of each direct import whether mutating it could change C/D
 membership or selection, a route requirement, R1 selection or status, blind stimulus identity
 or presentation order, what an adjudicator sees, a metric value, or the architecture outcome
@@ -675,22 +700,45 @@ files to 27: `methodology_contracts.py`, `neutral_identity.py`, `anchor_provenan
 result-bearing code does not stop at the study directory — `src/deltatrack/parsers/pdf_text.py`,
 `src/deltatrack/parsers/pdf_anchors.py`, and the H arm's `contract_hybrid.py`,
 `reconstruct_hybrid.py` and `backends/pdfium_hybrid.py`. The rest of the import graph was not
-recursively frozen. Coverage is enforced rather than assumed: an authorization whose manifest
-does not name the whole current surface cannot authorize, which is why the pre-A50 marker
-cannot silently speak for A48's apparatus.
+recursively frozen.
+
+One **data** input was added under the same criterion, kept in its own list so the category
+stays auditable: `results/control_fixtures.json`. `build_oracle.control_specs` builds every
+field of the N-A/N-B/N-C stimuli from that committed manifest — "nothing is re-derived,
+nothing is searched for" — and those expected truths are what Rule 3 is evaluated against.
+G6 and this pin are different claims and neither substitutes for the other: G6 proves the
+manifest is COHERENT, the authorization proves it is the manifest that was AUTHORIZED, and a
+coherent replacement set would satisfy G6 while changing what Rule 3 is scored against. The
+audit was bounded to data the listed methodology READS; the study's own outputs
+(`frames.json`, `oracle_*.json`, `metrics.json`, `scores.json`) and gate evidence such as
+`x26_control_oracle.json`, which `validate_manifest` consumes rather than the result-bearing
+path, are deliberately excluded. The authorization manifest is therefore 31 entries: 27 code,
+1 data, and the protocol, ledger and population.
+
+Coverage is enforced rather than assumed: an authorization whose manifest does not name the
+whole current surface cannot authorize, which is why the pre-A50 marker cannot silently speak
+for A48's apparatus.
 
 **`D_FRAME_REGION_BUDGET` is unchanged at 60.** A50 changes only whether a change to it would
 be *seen*.
 
-**Controls.** Twenty-one controls run on a synthetic history carrying both failure modes at
-once — a file that drifted from the marker, and a result-bearing file the marker never named.
-They drive the real generator rather than a hand-written lookalike, and cover: a declared
+**Controls.** They run on a synthetic history carrying every failure mode at once — a file
+that drifted from the marker, a result-bearing file the marker never named, and a committed
+change to result-bearing code outside EV that nothing declares. That last one is asserted to
+leave F9 GREEN, so the hole the provenance rule closes is demonstrated rather than assumed.
+The controls drive the real generator rather than a hand-written lookalike, and the
+provenance pair is red-then-green on a single mutation: with the change undeclared,
+generation is refused and no authorization file is written; once its exact commit and its
+`repo:`-namespaced path are declared, the same generator writes the artifact and the
+committed result permits continuation. They also cover: a declared
 deviation with no authorization (forbidden); a valid committed authorization (permitted as
 continuation); a foreign original marker commit and a foreign marker blob; a foreign
 population freeze and a foreign membership blob; an incomplete surface manifest; an
 authorization claiming a pristine execution; an acknowledged deviation absent from the
-register; undeclared post-authorization drift; drift in the previously-uncovered budget
-predicate; drift in a `repo:`-namespaced file; an edited or recommitted authorization; an
+register; acknowledging a real but irrelevant deviation while omitting the relied-on one;
+undeclared post-authorization drift; drift in the previously-uncovered budget
+predicate; drift in a `repo:`-namespaced file; drift in the committed control manifest; an
+edited or recommitted authorization; an
 edited or recommitted original marker; and a further change that is properly declared but not
 re-authorized. Every red state is followed by a restore and a re-assertion that the good state
 is green again, so a failure is attributable to the mutation rather than to leftover state.
