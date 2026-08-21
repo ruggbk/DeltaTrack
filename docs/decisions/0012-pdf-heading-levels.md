@@ -11,7 +11,7 @@ carries the levels as tags. The PDF pipeline has to *infer* them, and the engine
 must do so deterministically and offline ([0008](0008-deterministic-engine.md)) —
 no LLM, no network, and in particular no auto-fetching the XML to enrich a PDF diff
 (that is input automation plus a network call the engine forbids,
-[0005](0005-deltatrack-billtrax-boundary.md) / [0010](0010-pdf-pipeline-pre-publication.md)).
+[0005](0005-contained-two-version-tool.md) / [0010](0010-pdf-pipeline-pre-publication.md)).
 
 GPO prints carry less level information than the XML, so the question is not "how do
 we recover every level" but "which levels are recoverable from the print at all, and
@@ -82,9 +82,9 @@ Alternatives considered:
   is preferable to a lexical rule that fails silently on unseen vocabulary.
 - **An XML cross-reference to label the PDF levels.** Rejected as automatic
   enrichment: auto-fetching the XML is a network call and input automation the engine
-  forbids ([0005](0005-deltatrack-billtrax-boundary.md) / [0008](0008-deterministic-engine.md)).
-  It counts only when the user supplies the XML — which is just the XML pipeline — or
-  as a BillTrax concern.
+  forbids ([0005](0005-contained-two-version-tool.md) / [0008](0008-deterministic-engine.md)).
+  It counts only when the user supplies the XML, which is just the XML pipeline, or as
+  a concern for something built on top of DeltaTrack.
 - **A model to classify the ambiguous headings.** Rejected by
   [0008](0008-deterministic-engine.md): a model may read a finished diff, never
   compute one.

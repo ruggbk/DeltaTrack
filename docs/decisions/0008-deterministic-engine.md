@@ -23,9 +23,9 @@ similarity thresholds). Models are good at that kind of fuzzy correspondence, so
 
 We are not opposed to LLMs. The outputs support and *encourage* LLM use: the
 report ships ready-made questions a staffer can paste into their own assistant
-alongside the diff (`formatters/diff_html.py`), and BillTrax, the analysis product,
-uses LLMs by design ([0005](0005-deltatrack-billtrax-boundary.md)). So "no LLM"
-cannot be a blanket ban. It needs a precise line.
+alongside the diff (`formatters/diff_html.py`), and a product built on DeltaTrack's
+output is free to analyze it with a model ([0005](0005-contained-two-version-tool.md)).
+So "no LLM" cannot be a blanket ban. It needs a precise line.
 
 ## Decision
 
@@ -40,8 +40,8 @@ never **compute** one.
 
 - Downstream of the diff, LLM use is welcome and even helped along: the staffer's own
   assistant can consume the diff (the canonical JSON, [0006](0006-canonical-diff-contract.md),
-  plus the ready-made questions in the report), and BillTrax builds LLM analysis on
-  top of DeltaTrack's output ([0005](0005-deltatrack-billtrax-boundary.md)).
+  plus the ready-made questions in the report), and any consumer may build LLM analysis
+  on top of DeltaTrack's output ([0005](0005-contained-two-version-tool.md)).
 - Inside the engine, the matching and money problems are solved with deterministic
   heuristics, even where a model might score better on fuzzy cases.
 
@@ -58,7 +58,7 @@ Alternatives:
   traced to a fixed rule, so the diff stops being reproducible and auditable. It
   would also pull in a network call or a bundled model, breaking the offline,
   no-install, no-key operation the staffer audience depends on
-  ([0005](0005-deltatrack-billtrax-boundary.md)). The matching problem is real, but
+  ([0005](0005-contained-two-version-tool.md)). The matching problem is real, but
   it is being solved with deterministic heuristics (#56), not by trading away
   reproducibility.
 

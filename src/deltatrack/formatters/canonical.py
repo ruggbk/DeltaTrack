@@ -52,7 +52,7 @@ def _amount_entries(
     net-zero added/removed pair; distinguishing that from two genuinely distinct
     equal-value items needs within-list content alignment (#87), so this producer
     reports every entry honestly and leaves reorder handling to the consumer /
-    #87. A cross-version consumer (BillTrax, ADR 0005/0006) can apply its own
+    #87. A cross-version consumer (ADR 0005/0006) can apply its own
     alignment; presentation-side collapse stays consumer policy.
     """
     entries: list[dict] = []

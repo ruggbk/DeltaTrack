@@ -9,7 +9,7 @@ New to the codebase or to congressional bills? Two things are worth reading firs
 
 ## Community
 
-DeltaTrack is built by the Congressional Tech team at [Civic Tech DC](https://luma.com/civic-tech-dc). The work focuses on diffing draft versions of bills for congressional staffers, across two repos: **BillTrax** (online) and **DeltaTrack** (local). The fastest way to get oriented and find people to pair with:
+DeltaTrack is built by the Congressional Tech team at [Civic Tech DC](https://luma.com/civic-tech-dc). The work focuses on diffing draft versions of bills for congressional staffers. The fastest way to get oriented and find people to pair with:
 
 - **Join the Slack** -- the [`#congressional-tech` channel](https://civictechdc.slack.com/archives/C0AT13U25V2) in the Civic Tech DC workspace. Day-to-day questions and coordination happen here.
 - **Come to the biweekly meetup** -- in person, via [Civic Tech DC on Luma](https://luma.com/civic-tech-dc). The single best way to get started: come, say hello, and pick up a first issue with someone alongside you.

@@ -6,9 +6,9 @@
 ## Context
 
 A comparison of two bill versions has to travel from the diff engine to several
-different consumers: BillTrax (the analysis product that uses DeltaTrack as its
-diff engine), the HTML report, a future browser extension, a CSV/Markdown export,
-a staffer's internal LLM tool (i.e., CoPilot), and possible third-party tooling.
+different consumers: the HTML report, a future browser extension, a CSV/Markdown
+export, a staffer's internal LLM tool (i.e., CoPilot), external analysis products
+that use DeltaTrack as their diff engine, and possible third-party tooling.
 There are two input pipelines (XML and PDF) that must converge so consumers do
 not care which one produced a diff (see [0002](0002-pdfium-single-engine.md),
 [0003](0003-pdfjs-client-side-viability.md)).
@@ -165,16 +165,17 @@ case so the probe cannot pass by rejecting everything.
 - The contract does not by itself answer questions that span many diffs, and that is
   deliberate. DeltaTrack stays the simple, local, offline engine that compares two
   versions; analyzing diffs over time, storing them, or running them through an LLM is
-  BillTrax's job ([0005](0005-deltatrack-billtrax-boundary.md)). This JSON is the
-  boundary between the two: the per-comparison record of truth lives here, anything
-  spanning many comparisons lives one layer up.
+  outside its scope ([0005](0005-contained-two-version-tool.md)). This JSON is the
+  boundary: the per-comparison record of truth lives here, anything spanning many
+  comparisons lives one layer up, in whatever consumes it.
 
 Two format questions are open, and they are separate:
 
 - **More than two bill versions in one document.** The schema notes N-way comparison
-  as a possible future major break, but cross-version analysis may belong in BillTrax
-  while DeltaTrack stays strictly two-at-a-time. Undecided; when it is decided, the
-  question is the format's scope, not whether to keep JSON.
+  as a possible future major break, but cross-version analysis needs the retained state
+  DeltaTrack forgoes, so it may belong to a consumer while DeltaTrack stays strictly
+  two-at-a-time. Undecided; when it is decided, the question is the format's scope, not
+  whether to keep JSON.
 - **Grouping binary changes that come from one non-binary correspondence.** A `Change`
   is a binary row, so a 1:N or N:1 correspondence has no faithful representation;
   [0020](0020-matching-stages.md) deliberately degrades it into binary rows, which

@@ -26,7 +26,7 @@ inside #54 would have coupled a structural feature to an open NLP problem.
 
 The engine constraints bound the options: deterministic and offline
 ([0008](0008-deterministic-engine.md)), no auto-fetching a bill's XML to enrich a
-PDF diff ([0005](0005-deltatrack-billtrax-boundary.md)), and every consumer-visible
+PDF diff ([0005](0005-contained-two-version-tool.md)), and every consumer-visible
 level flows through the one canonical contract ([0006](0006-canonical-diff-contract.md) /
 [0007](0007-single-renderer.md)).
 
