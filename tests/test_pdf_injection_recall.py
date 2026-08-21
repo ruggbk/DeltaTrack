@@ -21,15 +21,15 @@ import pytest
 from recall_text import normalize_for_recall
 
 from deltatrack.diff_pdf import PdfDiff, diff_pdfs
-from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
+from deltatrack.formatters.canonical import pdf_diff_to_canonical
 from deltatrack.formatters.diff_html import format_diff_html
 from deltatrack.parsers.pdf_anchors import extract_anchors
 from deltatrack.parsers.pdf_text import Line, Page
 
 
-def pdf_diff_to_view(diff: PdfDiff, **meta):
-    """Route the PdfDiff through canonical -> view, the sole production path."""
-    return view_from_canonical(pdf_diff_to_canonical(diff, **meta))
+def pdf_diff_to_html(diff: PdfDiff, **meta) -> str:
+    """Route the PdfDiff through canonical -> report, the sole production path."""
+    return format_diff_html(pdf_diff_to_canonical(diff, **meta))
 
 
 # ---- Injection helpers (operate on the frozen Page/Line dataclasses) ---------
@@ -156,8 +156,7 @@ def injected_diff(hr8752_v1_pages) -> PdfDiff:
 
 @pytest.fixture(scope="module")
 def injected_html(injected_diff: PdfDiff) -> str:
-    view = pdf_diff_to_view(injected_diff, bill_type="hr", bill_number=8752, congress=118)
-    return format_diff_html(view)
+    return pdf_diff_to_html(injected_diff, bill_type="hr", bill_number=8752, congress=118)
 
 
 # ---- Cases: (sentinel, allowed change types) ---------------------------------
@@ -293,8 +292,7 @@ class TestAmountMovedBetweenAccounts:
         assert src_key != dst_key, "loss and gain collapsed onto the same account block"
 
     def test_move_shown_in_html(self, moved):
-        view = pdf_diff_to_view(moved.diff, bill_type="hr", bill_number=8752, congress=118)
-        html = format_diff_html(view)
+        html = pdf_diff_to_html(moved.diff, bill_type="hr", bill_number=8752, congress=118)
         assert _MOVE_SENTINEL in html, "moved amount detected but not rendered in HTML"
 
 
@@ -309,6 +307,5 @@ class TestClauseDeletion:
         assert hits, "deleted clause did not surface as a removal in any hunk"
 
     def test_deletion_shown_in_html(self, deleted):
-        view = pdf_diff_to_view(deleted.diff, bill_type="hr", bill_number=8752, congress=118)
-        html = format_diff_html(view)
+        html = pdf_diff_to_html(deleted.diff, bill_type="hr", bill_number=8752, congress=118)
         assert _DEL_SENTINEL in html, "deleted clause detected but not rendered in HTML"

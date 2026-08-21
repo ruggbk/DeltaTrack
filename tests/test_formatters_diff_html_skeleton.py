@@ -9,10 +9,17 @@ come in later steps.
 from __future__ import annotations
 
 from deltatrack.formatters.diff_html import format_diff_html
-from deltatrack.formatters.view_model import DiffView
 
 
-def _empty(**overrides) -> DiffView:
+def _empty(**overrides) -> dict:
+    """A change-free canonical document, the renderer's only input.
+
+    Written literally rather than produced by a pipeline: these tests pin chrome
+    against specific bill metadata and summary counts, and a producer would have to
+    be fed a synthetic diff to reach each combination. The renderer builds its own
+    view from whatever document it is handed (DeltaTrack#653), so overriding a field
+    here exercises the same path production takes.
+    """
     base = dict(
         bill_type="hr",
         bill_number=1234,
@@ -25,7 +32,16 @@ def _empty(**overrides) -> DiffView:
         changes=(),
     )
     base.update(overrides)
-    return DiffView(**base)
+    return {
+        "schema_version": "2.0",
+        "bill": {"type": base["bill_type"], "number": base["bill_number"], "congress": base["congress"]},
+        "versions": {
+            "v1": {"label": base["v1_label"], "version_number": base["v1_version_number"], "source": "xml"},
+            "v2": {"label": base["v2_label"], "version_number": base["v2_version_number"], "source": "xml"},
+        },
+        "summary": base["summary"],
+        "changes": list(base["changes"]),
+    }
 
 
 def test_returns_html_document():

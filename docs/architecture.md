@@ -71,8 +71,8 @@ Both paths reach the same canonical JSON, then the same renderer.
 
 | Stage | Owner | What it does |
 |---|---|---|
-| View model | `formatters.canonical.view_from_canonical` | Canonical JSON → `DiffView` (`formatters.view_model`). |
-| Render | `formatters.diff_html.format_diff_html` | One renderer for both pipelines ([ADR 0007](decisions/0007-single-renderer.md)). |
+| Render | `formatters.diff_html.format_diff_html` | Canonical JSON → standalone report. One renderer for both pipelines ([ADR 0007](decisions/0007-single-renderer.md)). |
+| View model | `formatters.canonical.view_from_canonical` | Canonical JSON → `DiffView` (`formatters.view_model`). Called by the renderer, not by its callers, so the view cannot be assembled differently by different callers ([ADR 0006](decisions/0006-canonical-diff-contract.md)). |
 
 Alongside these, `structure_tree.py` derives the leveled heading tree both pipelines feed
 ([ADR 0012](decisions/0012-pdf-heading-levels.md),

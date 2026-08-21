@@ -99,11 +99,11 @@ def _render_report_with_toc() -> str:
     import re
 
     from deltatrack.diff_pdf import PdfDiff
-    from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
+    from deltatrack.formatters.canonical import pdf_diff_to_canonical
     from deltatrack.formatters.diff_html import _build_toc_from_tree, format_diff_html
 
     canonical = pdf_diff_to_canonical(PdfDiff(hunks=()), bill_type="hr", bill_number=8752, congress=118)
-    full_report = format_diff_html(view_from_canonical(canonical))
+    full_report = format_diff_html(canonical)
     style = re.search(r"<style>.*?</style>", full_report, re.DOTALL).group(0)
     # A labeled parent with one labeled child is the shape that renders a
     # <details class="toc-group"> toggle; a childless node renders a plain leaf.
@@ -172,7 +172,6 @@ def _render_grouped_report() -> str:
     change directly under TITLE I, two non-financial changes under its
     SALARIES / OPERATIONS accounts. Exercises the real _JS.
     """
-    from deltatrack.formatters.canonical import view_from_canonical
     from deltatrack.formatters.diff_html import format_diff_html
 
     def node(label, level, span, children=()):
@@ -227,7 +226,7 @@ def _render_grouped_report() -> str:
         "full_text": {"v1": "x" * 120, "v2": "TITLE I\n" + "y" * 112},
         "tree": {"v1": [], "v2": tree_v2},
     }
-    return format_diff_html(view_from_canonical(canonical), canonical=canonical)
+    return format_diff_html(canonical)
 
 
 def _render_full_bill_report() -> str:
@@ -239,7 +238,6 @@ def _render_full_bill_report() -> str:
     below it, and TITLE IV deliberately has no change after it, which is the
     case where "first change at or after this heading" has no answer.
     """
-    from deltatrack.formatters.canonical import view_from_canonical
     from deltatrack.formatters.diff_html import format_diff_html
 
     lines = [
@@ -305,7 +303,7 @@ def _render_full_bill_report() -> str:
             "v2": [title_node(label, i) for i, label in enumerate(lines) if i % 2 == 0],
         },
     }
-    return format_diff_html(view_from_canonical(canonical), canonical=canonical)
+    return format_diff_html(canonical)
 
 
 def test_counter_follows_full_bill_navigation(chromium, tmp_path):
@@ -1025,7 +1023,6 @@ def _render_find_report() -> str:
     split across sibling text nodes by the tracked-change mark — the in-line
     counterpart of the cross-row case.
     """
-    from deltatrack.formatters.canonical import view_from_canonical
     from deltatrack.formatters.diff_html import format_diff_html
 
     printed_text, _ = _find_fixture_texts()
@@ -1054,7 +1051,7 @@ def _render_find_report() -> str:
             }
         ],
     }
-    return format_diff_html(view_from_canonical(canonical), canonical=canonical)
+    return format_diff_html(canonical)
 
 
 def _open_full_bill(chromium, tmp_path, name="find_report.html"):

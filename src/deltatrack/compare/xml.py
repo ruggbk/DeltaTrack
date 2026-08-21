@@ -9,8 +9,7 @@ deleted before return), nothing is persisted.
     bill_diff_to_dict()    (diff_bill)            — diff → dict (+ financial)
     serialize_tree()       (formatters.text_serializer) — full bill text per side
     xml_diff_to_canonical()(formatters.canonical) — dict → canonical JSON
-    view_from_canonical()  (formatters.canonical) — canonical → DiffView (HTML path)
-    format_diff_html()     (formatters.diff_html) — HTML path (view + canonical)
+    format_diff_html()     (formatters.diff_html) — HTML path (canonical → report)
 
 The XML pipeline resolves changes structurally (no page/line coordinates), and
 its full_text is gutterless paragraph flow — the renderer keys off
@@ -31,7 +30,7 @@ from pathlib import Path
 
 from deltatrack.bill_tree import BillTree, bill_title, normalize_bill
 from deltatrack.diff_bill import bill_diff_to_dict, diff_bills, filter_diff
-from deltatrack.formatters.canonical import view_from_canonical, xml_diff_to_canonical
+from deltatrack.formatters.canonical import xml_diff_to_canonical
 from deltatrack.formatters.diff_html import format_diff_html
 from deltatrack.formatters.text_serializer import build_xml_full_text
 from deltatrack.version_stems import label_from_stem, version_number_from_stem
@@ -124,8 +123,8 @@ def compare_xml_html(
 ) -> str:
     """Diff two bill XML documents and return a standalone HTML report.
 
-    The DiffView is rebuilt from the canonical (``view_from_canonical``) so the
-    rendered report and the embedded ``diff.json`` come from one source of truth.
+    The renderer builds its own view from the canonical, so the rendered report and
+    the embedded ``diff.json`` come from one source of truth.
     The XML full-bill view renders gutterless (no PDF line-number column), with a
     section TOC and bill-title heading matching the PDF report.
     """
@@ -134,12 +133,8 @@ def compare_xml_html(
 
 
 def _render(canonical: dict, title: str) -> str:
-    """Canonical diff JSON → standalone HTML report.
-
-    The DiffView is rebuilt from the canonical (``view_from_canonical``) so the rendered
-    report and the embedded ``diff.json`` come from one source of truth.
-    """
-    return format_diff_html(view_from_canonical(canonical), canonical=canonical, title=title)
+    """Canonical diff JSON → standalone HTML report."""
+    return format_diff_html(canonical, title)
 
 
 def compare_xml_trees_html(

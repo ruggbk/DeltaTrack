@@ -1,9 +1,12 @@
 """Unified HTML renderer for both XML and PDF bill diffs.
 
-Consumes a DiffView produced by formatters.canonical.view_from_canonical. The
-renderer does not branch on which pipeline produced the view — pipeline-specific
-data (citations, degraded styling, section numbers) is rendered when present and
-omitted when absent.
+Takes a canonical diff document and returns a report. The DiffView it renders
+from is built here, by ``view_from_canonical`` — a caller hands over the
+document and nothing else, so the view cannot be assembled differently by
+different callers (ADR 0006, DeltaTrack#653). The renderer does not branch on
+which pipeline produced the document — pipeline-specific data (citations,
+degraded styling, section numbers) is rendered when present and omitted when
+absent.
 
 The HTML output and CSS are deliberately shared across both pipelines so
 staffers see one consistent product regardless of source format.
@@ -15,6 +18,7 @@ import json
 from html import escape
 
 from deltatrack.formatters._text import fmt_dollar, word_diff
+from deltatrack.formatters.canonical import view_from_canonical
 from deltatrack.formatters.view_model import ChangeView, DiffView
 
 __all__ = ["format_diff_html"]
@@ -1015,27 +1019,36 @@ def _export_modal_html(canonical: dict | None) -> str:
 
 
 def format_diff_html(
-    view: DiffView,
-    canonical: dict | None = None,
+    canonical: dict,
     title: str | None = None,
     *,
     display_canonical: dict | None = None,
 ) -> str:
-    """Assemble a complete standalone HTML report from a DiffView.
+    """Assemble a complete standalone HTML report from a canonical diff document.
 
-    When ``canonical`` is provided (PDF path), the canonical diff JSON is
-    embedded so the report can offer the full-bill view and the export
-    download client-side. When omitted (XML path), the report is unchanged.
+    One document in, one report out. The renderer builds its own ``DiffView``
+    from ``canonical``; callers pass the document, not a view they assembled
+    themselves (DeltaTrack#653).
+
+    The document is always embedded, so the standalone report carries the diff it
+    was rendered from. The full-bill view and the client-side export download are
+    separate: they appear only when the document carries full text
+    (``_has_full_bill``), because without it they have nothing to act on. Both
+    pipelines carry full text today; a document without it renders the change
+    cards alone, still carrying its payload.
 
     ``display_canonical``, when given, supplies the print-faithful text + spans
     the on-screen full-bill view renders from (the PDF path passes one built
     from the original printed lines); the embedded/exported ``canonical`` keeps
-    the merged whole-word text regardless.
+    the merged whole-word text regardless. This is the second upstream artifact
+    DeltaTrack#653 removes; it stays until the document itself carries the
+    printed text and the join points needed to reflow it.
 
     ``title``, when given, sets the report heading (the PDF path passes a bill
     title derived from the document); otherwise it falls back to the bill
     label, or a generic heading when no label is available.
     """
+    view = view_from_canonical(canonical)
     bill_label = _bill_label(view)
     if title and title.strip():
         heading = escape(title.strip())
@@ -1046,13 +1059,18 @@ def format_diff_html(
     else:
         heading = "Bill Comparison"
         doc_title = "Bill Comparison — Diff"
-    data_script = _embed_canonical(canonical) if canonical else ""
+    # Unconditional, and deliberately not gated on `_has_full_bill` like the controls
+    # below: the report carries the diff document it was rendered from, whatever that
+    # document happens to contain. Gating it on full text reads as a tidy-up (the
+    # in-report features would not touch the payload without it) and silently strips
+    # the document from every report built from a canonical that carries no full text.
+    data_script = _embed_canonical(canonical)
     # The TOC/full-bill anchors must come from the same canonical the full-bill view
     # renders from (display_canonical when given), so their offsets line up.
     sidebar_canonical = (display_canonical or canonical) if _has_full_bill(canonical) else None
     # One order map for both panes, from the join's canonical — guarantees the
     # sidebar and cards can never sort their shared groups from different trees.
-    order_map = _node_order_map((canonical.get("tree") or {}).get("v2") if canonical else None)
+    order_map = _node_order_map((canonical.get("tree") or {}).get("v2"))
     sidebar = _build_sidebar(view, sidebar_canonical, order_map)
     return f"""<!DOCTYPE html>
 <html lang="en">

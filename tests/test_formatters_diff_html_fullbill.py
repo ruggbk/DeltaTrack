@@ -1,33 +1,66 @@
 """Tests for the full-bill tracked-changes view + Changes/Full toggle.
 
-The view is driven by the canonical dict passed alongside the DiffView (PDF
-path). Without a canonical (XML path), the report is unchanged — no toggle,
-no embed — which the backward-compat test pins.
+The renderer takes one canonical document and builds its own view from it
+(DeltaTrack#653), so these tests hand it a document and nothing else. A document
+carrying full text gets the toggle, the full-bill pane and the embed; a document
+without it (metadata only) renders the change cards alone, which the
+no-full-text tests pin.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
+
+# Declared dev dependency (pyproject.toml), imported unconditionally so a missing
+# install fails instead of silently skipping the fixture contract gate (#585).
+import jsonschema
+import pytest
 
 from deltatrack.formatters.diff_html import _LLM_PROMPTS, format_diff_html
-from deltatrack.formatters.view_model import DiffView
+
+_BILL = {"type": "hr", "number": 4366, "congress": 118}
+_SUMMARY = {"added": 1, "removed": 1, "modified": 1, "moved": 0}
 
 
-def _view(**overrides) -> DiffView:
-    base = dict(
-        bill_type="hr",
-        bill_number=4366,
-        congress=118,
-        v1_label="Reported",
-        v2_label="Engrossed",
-        v1_version_number=None,
-        v2_version_number=None,
-        summary={"added": 1, "removed": 1, "modified": 1, "moved": 0},
-        changes=(),
-    )
-    base.update(overrides)
-    return DiffView(**base)
+def _versions(source: str) -> dict:
+    return {
+        "v1": {"label": "Reported", "version_number": None, "source": source},
+        "v2": {"label": "Engrossed", "version_number": None, "source": source},
+    }
+
+
+def _change(change_id: str, change_type: str, **fields) -> dict:
+    """One change carrying every field the contract requires of a producer.
+
+    Spelled out rather than trimmed to what the renderer happens to read: a
+    fixture the producers could not emit would let a renderer test pass against a
+    document that never reaches it. `test_fixtures_satisfy_the_contract` holds
+    these to the schema.
+    """
+    return {
+        "id": change_id,
+        "change_type": change_type,
+        "section_number": None,
+        "location": None,
+        "anchor_resolution": "resolved",
+        "amount_entries": [],
+        "move": None,
+        **fields,
+    }
+
+
+def _no_full_text() -> dict:
+    """A document carrying no full text — the report the renderer produces without
+    a full-bill pane, an embed, find, navigation or export."""
+    return {
+        "schema_version": "2.0",
+        "bill": _BILL,
+        "versions": _versions("xml"),
+        "summary": _SUMMARY,
+        "changes": [],
+    }
 
 
 def _canonical() -> dict:
@@ -39,48 +72,70 @@ def _canonical() -> dict:
     v1 = "    1  OLD0\n    2  OLD1\n    3  GONE"  # "GONE" content at 31..35
     return {
         "schema_version": "2.0",
+        "bill": _BILL,
+        "versions": _versions("pdf"),
+        "summary": _SUMMARY,
         "full_text": {"v1": v1, "v2": v2},
         "changes": [
-            {
-                "id": "c-1",
-                "change_type": "added",
-                "text": {"old": None, "new": "ADD0"},
-                "path": {"v1": None, "v2": ["TITLE I"]},
-                "full_text_span": {"v1": None, "v2": {"start": 7, "end": 11}},
-            },
-            {
-                "id": "c-2",
-                "change_type": "modified",
-                "text": {"old": "old1", "new": "MOD1"},
-                "path": {"v1": ["TITLE I"], "v2": ["TITLE I"]},
-                "full_text_span": {"v1": {"start": 7, "end": 11}, "v2": {"start": 19, "end": 23}},
-            },
-            {
-                "id": "c-3",
-                "change_type": "removed",
-                "text": {"old": "GONE", "new": None},
-                "path": {"v1": ["TITLE I", "SEC 2"], "v2": None},
-                "full_text_span": {"v1": {"start": 31, "end": 35}, "v2": None},
-            },
+            _change(
+                "c-1",
+                "added",
+                text={"old": None, "new": "ADD0"},
+                path={"v1": None, "v2": ["TITLE I"]},
+                full_text_span={"v1": None, "v2": {"start": 7, "end": 11}},
+            ),
+            _change(
+                "c-2",
+                "modified",
+                text={"old": "old1", "new": "MOD1"},
+                path={"v1": ["TITLE I"], "v2": ["TITLE I"]},
+                full_text_span={"v1": {"start": 7, "end": 11}, "v2": {"start": 19, "end": 23}},
+            ),
+            _change(
+                "c-3",
+                "removed",
+                text={"old": "GONE", "new": None},
+                path={"v1": ["TITLE I", "SEC 2"], "v2": None},
+                full_text_span={"v1": {"start": 31, "end": 35}, "v2": None},
+            ),
         ],
     }
 
 
-def test_no_toggle_without_canonical():
-    """XML path (no canonical) is unchanged: no toggle markup, no embed.
+def test_no_full_bill_ui_without_full_text_but_document_still_embedded():
+    """No full-bill UI without full text — but the document is embedded regardless.
+
+    Two separate rules, and conflating them is a live regression risk. The
+    *controls* (toggle, full-bill pane, find, navigation, export) are gated on
+    full text because none of them has anything to act on without it. The
+    *payload* is not gated on anything: the report carries the diff document it
+    was rendered from, which is what makes a standalone report self-describing
+    and what the export hands to a reader.
+
+    Gating the embed on `_has_full_bill` looks like a tidy-up — it stops shipping
+    bytes the in-report features would not read — and silently drops the document
+    from every report built from a canonical without full text. Neither committed
+    example can catch that, because both carry full text, so this test owns it.
 
     Note the shared stylesheet always carries the .view-toggle CSS (inert when
     unused, as with other pipeline-specific selectors), so assert on the toggle
     *markup* (data-view, only emitted on the buttons), not the bare substring.
     """
-    html = format_diff_html(_view())
+    document = _no_full_text()
+    html = format_diff_html(document)
+
+    # No full-bill UI: nothing to drive it.
     assert "data-view=" not in html
-    assert 'id="diff-data"' not in html
     assert 'class="view view-full"' not in html
+
+    # The document travels with the report anyway, intact.
+    m = re.search(r'<script type="application/json" id="diff-data">(.*?)</script>', html, re.DOTALL)
+    assert m, "embed missing: the report must carry its own diff document"
+    assert json.loads(m.group(1).replace("<\\/", "</")) == document
 
 
 def test_toggle_and_both_views_present():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'class="view-toggle"' in html
     assert 'data-view="changes"' in html
     assert 'data-view="full"' in html
@@ -89,7 +144,7 @@ def test_toggle_and_both_views_present():
 
 
 def test_action_bar_has_nav_controls_and_counter():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'class="action-bar"' in html
     assert 'class="nav-controls"' in html
     assert 'id="nav-counter"' in html
@@ -99,14 +154,14 @@ def test_action_bar_has_nav_controls_and_counter():
     assert 'class="nav-buttons"' not in html
 
 
-def test_no_nav_controls_without_canonical():
-    html = format_diff_html(_view())
+def test_no_nav_controls_without_full_text():
+    html = format_diff_html(_no_full_text())
     assert 'class="nav-controls"' not in html
     assert 'id="nav-counter"' not in html
 
 
 def test_find_bar_present():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'id="find-input"' in html
     assert 'id="find-counter"' in html
     assert 'id="find-prev"' in html
@@ -115,8 +170,8 @@ def test_find_bar_present():
     assert 'id="sidebar-filter"' not in html
 
 
-def test_no_find_bar_without_canonical():
-    html = format_diff_html(_view())
+def test_no_find_bar_without_full_text():
+    html = format_diff_html(_no_full_text())
     assert 'id="find-input"' not in html
 
 
@@ -133,7 +188,7 @@ def test_treeless_canonical_renders_the_toc_empty_state():
     it replaced passed identically on both, because the removed builder returned the
     same string for an empty list.
     """
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'class="sidebar-toc"' in html
     assert "No sections detected." in html
 
@@ -146,17 +201,17 @@ def test_full_bill_rows_carry_no_orphan_section_ids():
     without the links would put anchors on the page that nothing can reach, which is
     unobservable from the rendered output unless something asserts on it.
     """
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'id="sec-' not in html
 
 
-def test_no_toc_without_canonical():
-    html = format_diff_html(_view())
+def test_no_toc_without_full_text():
+    html = format_diff_html(_no_full_text())
     assert 'class="sidebar-toc"' not in html
 
 
 def test_added_and_modified_marks_projected():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     # Added: just an <ins> around the v2 slice.
     assert '<ins class="diff-add" id="attr-c-1">ADD0</ins>' in html
     # Modified: new text highlighted in place; old text is not shown inline (it
@@ -183,16 +238,18 @@ def _xml_canonical() -> dict:
     v1 = "DEPARTMENT OF DEFENSE\n\narmy construction"
     return {
         "schema_version": "2.0",
-        "versions": {"v1": {"source": "xml"}, "v2": {"source": "xml"}},
+        "bill": _BILL,
+        "versions": _versions("xml"),
+        "summary": _SUMMARY,
         "full_text": {"v1": v1, "v2": v2},
         "changes": [
-            {
-                "id": "x-1",
-                "change_type": "modified",
-                "text": {"old": "army construction", "new": "Military construction, army"},
-                "path": {"v1": ["DOD"], "v2": ["DOD"]},
-                "full_text_span": {"v1": {"start": 23, "end": 40}, "v2": {"start": 23, "end": 50}},
-            },
+            _change(
+                "x-1",
+                "modified",
+                text={"old": "army construction", "new": "Military construction, army"},
+                path={"v1": ["DOD"], "v2": ["DOD"]},
+                full_text_span={"v1": {"start": 23, "end": 40}, "v2": {"start": 23, "end": 50}},
+            ),
         ],
     }
 
@@ -201,7 +258,7 @@ def test_xml_full_bill_gutterless_no_truncation():
     """XML full_text has no line-number gutter; the renderer must not strip a
     fixed 7-char prefix off every line (the PDF-path bug that turned
     "Military" into "y" and "DEPARTMENT" into "ENT OF DEFENSE")."""
-    html = format_diff_html(_view(), _xml_canonical())
+    html = format_diff_html(_xml_canonical())
     # Heading and body survive intact — no leading characters chopped.
     assert "DEPARTMENT OF DEFENSE" in html
     assert "Military construction, army" in html
@@ -217,7 +274,7 @@ def test_xml_full_bill_gutterless_no_truncation():
 
 def test_full_bill_rows_carry_line_number_gutter():
     """Each source line renders as a row with its line number in the gutter."""
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     # Page marker precedes the rows; line numbers sit in the gutter column.
     assert '<div class="fb-page">p. 1</div>' in html
     assert '<span class="fb-gutter">1</span>' in html
@@ -229,14 +286,14 @@ def test_full_bill_rows_carry_line_number_gutter():
 def test_modified_highlighted_in_place_without_old_text():
     """A modified change highlights its new text in place; the old text stays in
     the Changes cards (not echoed into the full-bill view)."""
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'title="modified — see Changes for the old text"' in html
     assert "fb-del-row" not in html
     assert '<del class="diff-del">old1</del>' not in html
 
 
 def test_removed_appendix_lists_removals():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'class="removed-appendix"' in html
     assert "TITLE I &gt; SEC 2" in html
     # The removed v1 slice is shown struck through.
@@ -244,14 +301,14 @@ def test_removed_appendix_lists_removals():
 
 
 def test_meta_accounts_for_placed_and_removed():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     meta = re.search(r'<div class="full-bill-meta">(.*?)</div>', html).group(1)
     assert "2 of 3 changes shown inline" in meta
     assert "1 removed below" in meta
 
 
 def test_export_button_and_modal_present():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     assert 'id="export-open"' in html
     assert 'id="export-modal"' in html
     assert 'id="dl-json"' in html
@@ -259,7 +316,7 @@ def test_export_button_and_modal_present():
 
 
 def test_export_prompts_shown_immediately():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     # Prompts are visible as soon as the modal opens — not gated on a download.
     assert 'id="export-prompts" class="export-prompts"' in html
     assert 'id="export-prompts" class="export-prompts" hidden' not in html
@@ -268,16 +325,30 @@ def test_export_prompts_shown_immediately():
         assert prompt in html
 
 
-def test_no_export_without_canonical():
-    html = format_diff_html(_view())
+def test_no_export_without_full_text():
+    html = format_diff_html(_no_full_text())
     assert 'id="export-open"' not in html
     assert 'id="export-modal"' not in html
 
 
 def test_canonical_json_embedded_and_valid():
-    html = format_diff_html(_view(), _canonical())
+    html = format_diff_html(_canonical())
     m = re.search(r'<script type="application/json" id="diff-data">(.*?)</script>', html, re.DOTALL)
     assert m, "embed missing"
     data = json.loads(m.group(1).replace("<\\/", "</"))
     assert data["schema_version"] == "2.0"
     assert len(data["changes"]) == 3
+
+
+@pytest.mark.parametrize("fixture", [_no_full_text, _canonical, _xml_canonical])
+def test_fixtures_satisfy_the_contract(fixture):
+    """Every document these tests render from is one a producer could emit.
+
+    The renderer is not a validator, so it happily renders a document missing
+    fields the contract requires — and a fixture trimmed to what the renderer
+    reads would keep passing while drifting away from the shape the pipelines
+    actually hand over. Holding the fixtures to the schema is what stops a
+    renderer test from certifying behaviour on a document that never arrives.
+    """
+    schema = json.loads((Path(__file__).resolve().parent.parent / "schema" / "canonical-diff.schema.json").read_text())
+    jsonschema.validate(instance=fixture(), schema=schema)

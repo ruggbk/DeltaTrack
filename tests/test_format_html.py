@@ -8,13 +8,13 @@ modules; word_diff lives in formatters._text.
 import pytest
 
 from deltatrack.formatters._text import word_diff
-from deltatrack.formatters.canonical import view_from_canonical, xml_diff_to_canonical
+from deltatrack.formatters.canonical import xml_diff_to_canonical
 from deltatrack.formatters.diff_html import format_diff_html
 
 
 def format_html(diff_dict):
     """Local helper preserving the historical dict -> HTML entry point."""
-    return format_diff_html(view_from_canonical(xml_diff_to_canonical(diff_dict)))
+    return format_diff_html(xml_diff_to_canonical(diff_dict))
 
 
 class TestWordDiff:

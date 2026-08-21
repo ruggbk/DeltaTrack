@@ -7,8 +7,7 @@ from uploaded bytes instead of files on disk:
     diff_pdfs()            (diff_pdf)
     pdf_full_text()        (parsers.pdf_text)   — both paths (full text + offsets)
     pdf_diff_to_canonical()(formatters.canonical) — both paths (JSON out / embedded)
-    view_from_canonical()  (formatters.canonical) — canonical → DiffView (HTML path)
-    format_diff_html()     (formatters.diff_html) — HTML path (view + canonical)
+    format_diff_html()     (formatters.diff_html) — HTML path (canonical → report)
 
 No subprocess; no persistence. The temp files exist only long enough for
 pypdfium2 to open them and are deleted before this function returns.
@@ -21,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 from deltatrack.diff_pdf import PdfDiff, diff_pdfs
-from deltatrack.formatters.canonical import pdf_diff_to_canonical, view_from_canonical
+from deltatrack.formatters.canonical import pdf_diff_to_canonical
 from deltatrack.formatters.diff_html import format_diff_html
 from deltatrack.parsers.pdf_text import Page, extract_clean_pages, pdf_full_text, pdf_full_text_print
 
@@ -245,7 +244,16 @@ def compare_pdfs_html(
     """Diff two PDF documents and return a standalone HTML report.
 
     The canonical dict is computed and handed to the renderer so the report can
-    carry the full-bill view and an embedded ``diff.json`` for export.
+    carry the full-bill view and an embedded ``diff.json`` for export. The
+    renderer builds its own view from that document, so the cards and the
+    embedded ``diff.json`` cannot come from different sources.
+
+    A second document is also built from the same diff with the printer's line
+    breaks and handed over as ``display_canonical``, because the on-screen
+    full-bill view renders from it while the embedded ``diff.json`` keeps the
+    merged whole-word text. That is the upstream fork DeltaTrack#653 removes, and
+    it stays until the document itself carries the printed text plus the join
+    points needed to reflow it.
 
     Pass the version numbers when the caller knows the bill's legislative ordinals
     (rendering a numbered corpus file, not an upload) so the report heads itself
@@ -255,12 +263,8 @@ def compare_pdfs_html(
     congress = _derive_congress(new_pages)
     numbers = {"start_version_number": start_version_number, "end_version_number": end_version_number}
     canonical = _build_canonical(pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress, **numbers)
-    # Per-change card text comes from the hunks, so it is identical regardless of the
-    # printed flag; derive the view from the (non-printed) canonical for consistency
-    # with the embedded diff.json.
-    view = view_from_canonical(canonical)
     display_canonical = _build_canonical(
         pdf_diff, old_pages, new_pages, start_label, end_label, congress=congress, printed=True, **numbers
     )
     title = _derive_bill_title(canonical)
-    return format_diff_html(view, canonical=canonical, display_canonical=display_canonical, title=title)
+    return format_diff_html(canonical, title, display_canonical=display_canonical)
