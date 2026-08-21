@@ -110,9 +110,19 @@ def test_no_committed_example_is_orphaned(tmp_path, monkeypatch):
 _TOKEN_DECL = re.compile(r"(--[\w-]+)\s*:\s*([^;{}]+)")
 
 
+#: A `var(--name)` reference, however the reference is spaced.
+_VAR_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)")
+
+
 def _css_tokens(css: str) -> dict[str, str]:
     """`--name: value` declarations in a stylesheet fragment, whitespace-normalized."""
     return {name: " ".join(value.split()) for name, value in _TOKEN_DECL.findall(css)}
+
+
+def _root_block(html: str) -> str:
+    """The `:root { ... }` declarations of a rendered report's embedded stylesheet."""
+    start = html.index(":root {")
+    return html[start : html.index("}", start)]
 
 
 def test_index_page_tokens_match_the_report_tokens():
@@ -125,10 +135,7 @@ def test_index_page_tokens_match_the_report_tokens():
     visitor actually gets. `formatters/diff_html.py` is the one place these values are
     decided (#667); this test keeps the copy honest, it does not make it a second source.
     """
-    report_css = (EXAMPLES / "hr8752_xml_diff.html").read_text()
-    report_tokens = _css_tokens(
-        report_css[report_css.index(":root {") : report_css.index("}", report_css.index(":root {"))]
-    )
+    report_tokens = _css_tokens(_root_block((EXAMPLES / "hr8752_xml_diff.html").read_text()))
     index_tokens = _css_tokens(render_examples.INDEX_TOKENS)
 
     assert index_tokens, "no tokens parsed from INDEX_TOKENS; this comparison would vacuously pass"
@@ -143,6 +150,45 @@ def test_index_page_tokens_match_the_report_tokens():
         "examples/index.html uses brand tokens that differ from the reports it links "
         f"(name: index value vs report value): {mismatched}. Re-copy the values into "
         "render_examples.INDEX_TOKENS and re-run the script."
+    )
+
+
+def test_the_report_palette_declares_exactly_what_it_uses():
+    """No token a report declares is unused, and no `var()` it uses is undeclared (#667).
+
+    The palette is DeltaTrack's own and ships in full inside every report, so a token
+    nothing references is weight carried by every reader for no effect. Eleven had
+    accumulated while the block was held identical to another product's, which is the
+    pressure this pins against: the cheapest way to satisfy a copy is to take the whole
+    source, and nothing then objects to the parts that style nothing here.
+
+    Read from a *rendered report* rather than `_DESIGN_TOKENS_CSS`, for the same reason
+    as the token comparison above — the report is what ships, so the check covers
+    anything that reaches the stylesheet, not just the one constant.
+
+    The undeclared half is the safety catch on the unused half: the cheap way to satisfy
+    a dead-token check is to delete a token something actually uses, and a `var()` with
+    no declaration behind it fails silently in a browser rather than loudly here.
+    """
+    html = (EXAMPLES / "hr8752_pdf_diff.html").read_text()
+    declared = set(_css_tokens(_root_block(html)))
+    used = set(_VAR_REFERENCE.findall(html))
+
+    assert declared, "no tokens parsed from the rendered report; this check would vacuously pass"
+    assert used, "no var() references parsed from the rendered report; this check would vacuously pass"
+
+    unused = sorted(declared - used)
+    assert not unused, (
+        f"the report stylesheet declares tokens nothing references: {unused}. They ship "
+        "in every report and style nothing. Either use them or drop them from "
+        "`_DESIGN_TOKENS_CSS`."
+    )
+
+    undeclared = sorted(used - declared)
+    assert not undeclared, (
+        f"the report stylesheet uses var() names it never declares: {undeclared}. Each "
+        "resolves to nothing when the report is opened, so whatever they style falls "
+        "back silently rather than failing here."
     )
 
 

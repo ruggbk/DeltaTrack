@@ -1120,16 +1120,12 @@ def format_diff_html(
 # inert when their classes aren't applied, so both pipelines share one stylesheet.
 # ---------------------------------------------------------------------------
 
-# DeltaTrack's report palette, owned here. The reports this tool writes are the
-# product, so how they look is a decision this repository makes rather than inherits
-# (#667). Every report embeds this block at render time, which is what keeps a report
-# zero-egress (ADR 0011): nothing is fetched when one is opened, so the font stacks
-# below are system fallbacks rather than webfonts.
-#
-# Keep the set to what the stylesheet below actually uses. An unreferenced token ships
-# in every report and styles nothing. The four diff states (added, removed, modified,
-# moved) are the vocabulary bill comparison needs, each with a background and a
-# foreground.
+# DeltaTrack's report palette, decided here (#667). Every report embeds this block at
+# render time, which is what keeps a report zero-egress (ADR 0011): nothing is fetched
+# when one is opened, so the font stacks below are system fallbacks, not webfonts.
+# The set stays exactly what the stylesheet uses — an unreferenced token ships in every
+# report and styles nothing. Gated by
+# `test_the_report_palette_declares_exactly_what_it_uses`.
 _DESIGN_TOKENS_CSS = """\
 :root {
   --background: #f9f7f5; --foreground: #1c1c3a;
