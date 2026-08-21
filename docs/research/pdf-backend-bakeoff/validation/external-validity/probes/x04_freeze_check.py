@@ -445,12 +445,13 @@ def post_marker_commits_by_path(marker_boundary: str) -> dict[str, list[str]]:
     ONE `git log`, not one per path: the surface is 31 entries and the range is the whole
     post-boundary history, so per-path queries would be 31 traversals of the same commits.
 
-    MERGES CONTRIBUTE NO PATHS, which is deliberate and matches what F9 already does. `git
-    log --name-only` prints no file list for a merge commit (there is no combined diff by
-    default), so an integration commit does not have to be declared as though it were an
-    independent methodological change -- the commit that actually made the change does. The
-    alternative, `--full-history` with a path limit, reports every merge whose parents differ
-    at that path and would demand a deviation record for each integration.
+    MERGES CONTRIBUTE NO PATHS HERE, and that is only half of the rule. `git log
+    --name-only` prints no file list for a merge commit, so an ordinary integration does not
+    have to be declared as though it were an independent methodological change -- the commit
+    that actually made the change does. But a merge CAN introduce content that exists in no
+    parent, through conflict resolution or an edit staged before the merge is committed, and
+    such a merge is the only commit that ever carried those bytes. `merge_introduced_paths`
+    supplies exactly that case; use `surface_attribution`, which is both halves.
     """
     out: dict[str, list[str]] = {}
     raw = git("log", "--format=%x00%H", "--name-only", f"{marker_boundary}..HEAD")
@@ -464,6 +465,74 @@ def post_marker_commits_by_path(marker_boundary: str) -> dict[str, list[str]]:
             if path:
                 out.setdefault(path, []).append(sha)
     return out
+
+
+def _tree_blobs(commit: str, paths: list[str]) -> dict[str, str]:
+    """path -> blob sha at `commit`, for `paths` only. Absent paths are simply missing.
+
+    ONE `ls-tree` for the whole surface rather than a `rev-parse` per path, because this runs
+    once per parent of every post-boundary merge.
+    """
+    out: dict[str, str] = {}
+    if not paths:
+        return out
+    for line in git("ls-tree", commit, "--", *paths).splitlines():
+        meta, _, path = line.partition("\t")
+        parts = meta.split()
+        if len(parts) >= 3 and parts[1] == "blob":
+            out[path] = parts[2]
+    return out
+
+
+def merge_introduced_paths(marker_boundary: str, paths: list[str]) -> dict[str, list[str]]:
+    """path -> post-boundary MERGE commits whose content for it exists in no parent.
+
+    THE EVIL MERGE. A merge commit's tree is not obliged to match any parent: a conflict
+    resolution, or an edit staged between `git merge --no-commit` and the commit, writes
+    bytes that were never reviewed on either side. `git log --name-only` reports no files for
+    a merge, so such a change is attributed to NO commit at all -- and a continuation
+    authorization would then snapshot it and permit execution under methodology that no
+    deviation record ever described.
+
+    The test is per path and per parent, exactly as specified: compare the merge's blob with
+    every parent's blob and treat ABSENCE AS A VALUE. A path the merge deleted while every
+    parent had it is as much a merge-introduced change as a rewritten one, and comparing only
+    present blobs would silently forgive the deletion.
+
+    Equality with ANY parent means the merge introduced nothing novel for that path -- it
+    carried a change that its own commit already has to declare -- so an ordinary integration
+    never demands a duplicate record. That is what keeps this from firing on every merge that
+    brings a lawfully declared change forward.
+    """
+    out: dict[str, list[str]] = {}
+    for line in git("log", "--format=%H %P", "--merges", f"{marker_boundary}..HEAD").splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        merge, parents = parts[0], parts[1:]
+        merged = _tree_blobs(merge, paths)
+        parent_blobs = [_tree_blobs(p, paths) for p in parents]
+        for path in paths:
+            have = merged.get(path, "")
+            if parent_blobs and all(have != pb.get(path, "") for pb in parent_blobs):
+                out.setdefault(path, []).append(merge)
+    return out
+
+
+def surface_attribution(marker_boundary: str) -> dict[str, list[str]]:
+    """repo-relative surface path -> every post-boundary commit that INTRODUCED its content.
+
+    ONE OWNER for "who is answerable for this file", so the pre-write refusal in the
+    generator and the later validation of a committed authorization cannot drift apart and
+    enforce different rules.
+    """
+    paths = sorted(str(surface_path(entry).relative_to(REPO)) for entry in authorization_surface())
+    wanted = set(paths)
+    attributed = {p: list(shas) for p, shas in post_marker_commits_by_path(marker_boundary).items() if p in wanted}
+    for path, merges in merge_introduced_paths(marker_boundary, paths).items():
+        seen = attributed.setdefault(path, [])
+        seen.extend(m for m in merges if m not in seen)
+    return attributed
 
 
 def declared_paths_by_commit() -> dict[str, set[str]]:
@@ -510,7 +579,7 @@ def surface_provenance_errors(marker_boundary: str) -> list[str]:
     file actually added or modified after the boundary has to be accounted for.
     """
     errors: list[str] = []
-    touched = post_marker_commits_by_path(marker_boundary)
+    touched = surface_attribution(marker_boundary)
     declared = declared_paths_by_commit()
     # `entry`, not `key`: these are manifest ENTRIES, and CodeQL's sensitive-data heuristic
     # reads a value flowing from a variable named `key` into a print as a leaked credential.
@@ -531,12 +600,8 @@ def required_deviation_ids(marker_boundary: str) -> set[str]:
     Derived, not taken from the artifact. Without this, `acknowledged_deviations` could name
     any record that happens to exist while the one covering the real change was removed.
     """
-    touched = post_marker_commits_by_path(marker_boundary)
-    surface_commits = {
-        sha
-        for entry in authorization_surface()
-        for sha in touched.get(str(surface_path(entry).relative_to(REPO)), [])
-    }
+    touched = surface_attribution(marker_boundary)
+    surface_commits = {sha for shas in touched.values() for sha in shas}
     required: set[str] = set()
     for rec in parse_deviations()[0]:
         for c in rec.get("commits", []) or []:
@@ -1867,6 +1932,20 @@ def _a50_build_history(root: Path) -> dict[str, str]:
     return {"c0": c0, "cM": cM, "cD": cD, "cG": cG, "ev": str(ev)}
 
 
+def _a50_declare_extra(ev: Path, dev_id: str, commit: str, files: list[str]) -> None:
+    """Append one deviation record to the synthetic register."""
+    path = ev / "results" / "DEVIATIONS.md"
+    path.write_text(
+        path.read_text()
+        + "```json\n"
+        + json.dumps({
+            "id": dev_id, "kind": "DEVIATION", "commits": [commit], "files_touched": files,
+            "results_already_visible": "census, S1, P-head",
+        })
+        + "\n```\n"
+    )
+
+
 def _a50_try_authorize() -> tuple[int, bool]:
     """Drive the REAL generator, and report (exit code, did it write a file).
 
@@ -1989,6 +2068,59 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
             _a50_git(root, "add", "-A")
             _a50_git(root, "commit", "-qm", "cW declare the repo: change")
             checks.append(("A50-15 declaring the exact commit and repo: path clears provenance",
+                           not surface_provenance_errors(cM)))
+
+            # ---- MERGE-INTRODUCED CONTENT --------------------------------------------
+            # A merge's tree need not match any parent: bytes written while resolving a
+            # conflict, or staged between `git merge --no-commit` and the commit, are carried
+            # by the merge and by nothing else. `git log --name-only` reports no files for a
+            # merge, so before this rule such a change was attributed to no commit at all and
+            # a fresh authorization would have snapshotted it.
+            #
+            # ONE merge exercises both directions. The side branch carries a LAWFUL, declared
+            # change to alpha.py, so the merge result for alpha EQUALS a parent and must not
+            # demand a duplicate record; gamma is rewritten during the merge to content in
+            # NEITHER parent and must.
+            _a50_git(root, "checkout", "-q", "-b", "a50side")
+            (ev / "probes" / "alpha.py").write_text("VALUE = 3\n")
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cS lawful declared change on the side branch")
+            cS = _a50_git(root, "rev-parse", "HEAD")
+            _a50_git(root, "checkout", "-q", "main")
+            (root / "unrelated.py").write_text("U = 1\n")
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cO main touches an unrelated file")
+            # Declared BEFORE the merge, so the only provenance complaint left is the merge.
+            _a50_declare_extra(ev, "S", cS, ["probes/alpha.py"])
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cSD declare the side change")
+            _a50_git(root, "merge", "--no-commit", "--no-ff", "a50side")
+            (root / "src" / "gamma.py").write_text("SEGMENT = 42\n")
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cX merge introducing content present in no parent")
+            cX = _a50_git(root, "rev-parse", "HEAD")
+
+            merge_paths = sorted(str(surface_path(e).relative_to(REPO)) for e in authorization_surface())
+            introduced = merge_introduced_paths(cM, merge_paths)
+            gamma_rel = str(surface_path("repo:src/gamma.py").relative_to(REPO))
+            alpha_rel = str(surface_path("probes/alpha.py").relative_to(REPO))
+            checks.append(("A50-18 the merge blob for gamma differs from EVERY parent",
+                           cX in introduced.get(gamma_rel, [])))
+            checks.append(("A50-18 ...while alpha EQUALS a parent, so the merge demands no duplicate record",
+                           cX not in introduced.get(alpha_rel, [])))
+            prov_merge = surface_provenance_errors(cM)
+            checks.append(("A50-19 provenance names the UNDECLARED merge and the exact path",
+                           any(cX[:8] in e and "repo:src/gamma.py" in e for e in prov_merge)))
+            checks.append(("A50-19 ...and complains about nothing else",
+                           len(prov_merge) == 1))
+            rc_m, wrote_m = _a50_try_authorize()
+            checks.append(("A50-19 generation is REFUSED on merge-introduced content", rc_m != 0))
+            checks.append(("A50-19 ...and NO authorization file was written", not wrote_m))
+
+            _a50_declare_extra(ev, "X", cX, ["repo:src/gamma.py"])
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cXD declare the merge and the exact path it introduced")
+            checks.append(("A50-20 declaring the exact MERGE SHA and repo: path clears provenance",
                            not surface_provenance_errors(cM)))
 
             # 1 -- THE MANDATORY CONTROL. Declared deviation, no secondary authorization.
