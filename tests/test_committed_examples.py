@@ -113,10 +113,31 @@ _TOKEN_DECL = re.compile(r"(--[\w-]+)\s*:\s*([^;{}]+)")
 #: A `var(--name)` reference, however the reference is spaced.
 _VAR_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)")
 
+#: The contents of the report's one `<style>` element, and a `/* ... */` CSS comment.
+_STYLE_BLOCK = re.compile(r"<style[^>]*>(.*?)</style>", re.S)
+_CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
 
 def _css_tokens(css: str) -> dict[str, str]:
     """`--name: value` declarations in a stylesheet fragment, whitespace-normalized."""
     return {name: " ".join(value.split()) for name, value in _TOKEN_DECL.findall(css)}
+
+
+def _live_stylesheet(html: str) -> str:
+    """A rendered report's embedded CSS: `<style>` only, with comments stripped.
+
+    Both narrowings are load-bearing for the palette census below, which reads a
+    `var()` as evidence that a token is *used*. Text that never executes as CSS is not
+    evidence: a report is mostly bill content, and this stylesheet carries prose
+    comments that mention the properties they explain. Counting either lets a dead
+    token look used — the exact false green this scoping closes, since the census is
+    the only thing standing between the palette and the dead declarations #667 removed.
+
+    Stripping comments before the declarations are read matters too: a `--name: value`
+    or a `}` inside a comment would otherwise be taken for a declaration, or truncate
+    the `:root` block early.
+    """
+    return _CSS_COMMENT.sub("", "\n".join(_STYLE_BLOCK.findall(html)))
 
 
 def _root_block(html: str) -> str:
@@ -164,16 +185,19 @@ def test_the_report_palette_declares_exactly_what_it_uses():
 
     Read from a *rendered report* rather than `_DESIGN_TOKENS_CSS`, for the same reason
     as the token comparison above — the report is what ships, so the check covers
-    anything that reaches the stylesheet, not just the one constant.
+    anything that reaches the stylesheet, not just the one constant. Narrowed to the
+    CSS that actually runs, via `_live_stylesheet`: counting `var()` text from report
+    content or a comment would let a dead token pass as used.
 
     The undeclared half is the safety catch on the unused half: the cheap way to satisfy
     a dead-token check is to delete a token something actually uses, and a `var()` with
     no declaration behind it fails silently in a browser rather than loudly here.
     """
-    html = (EXAMPLES / "hr8752_pdf_diff.html").read_text()
-    declared = set(_css_tokens(_root_block(html)))
-    used = set(_VAR_REFERENCE.findall(html))
+    css = _live_stylesheet((EXAMPLES / "hr8752_pdf_diff.html").read_text())
+    declared = set(_css_tokens(_root_block(css)))
+    used = set(_VAR_REFERENCE.findall(css))
 
+    assert css, "no <style> block parsed from the rendered report; this check would vacuously pass"
     assert declared, "no tokens parsed from the rendered report; this check would vacuously pass"
     assert used, "no var() references parsed from the rendered report; this check would vacuously pass"
 
