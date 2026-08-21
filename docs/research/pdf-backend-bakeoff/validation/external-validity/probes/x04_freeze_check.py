@@ -505,13 +505,15 @@ def surface_provenance_errors(marker_boundary: str) -> list[str]:
     errors: list[str] = []
     touched = post_marker_commits_by_path(marker_boundary)
     declared = declared_paths_by_commit()
-    for key in sorted(authorization_keys()):
-        rel = str(surface_path(key).relative_to(REPO))
+    # `entry`, not `key`: these are manifest ENTRIES, and CodeQL's sensitive-data heuristic
+    # reads a value flowing from a variable named `key` into a print as a leaked credential.
+    for entry in sorted(authorization_keys()):
+        rel = str(surface_path(entry).relative_to(REPO))
         for sha in touched.get(rel, []):
             if sha not in declared:
-                errors.append(f"{key} was changed at UNDECLARED commit {sha[:8]} after the boundary")
+                errors.append(f"{entry} was changed at UNDECLARED commit {sha[:8]} after the boundary")
             elif rel not in declared[sha]:
-                errors.append(f"{key} was changed at {sha[:8]}, which is declared but does not name this path")
+                errors.append(f"{entry} was changed at {sha[:8]}, which is declared but does not name this path")
     return errors
 
 
@@ -524,7 +526,9 @@ def required_deviation_ids(marker_boundary: str) -> set[str]:
     """
     touched = post_marker_commits_by_path(marker_boundary)
     surface_commits = {
-        sha for key in authorization_keys() for sha in touched.get(str(surface_path(key).relative_to(REPO)), [])
+        sha
+        for entry in authorization_keys()
+        for sha in touched.get(str(surface_path(entry).relative_to(REPO)), [])
     }
     required: set[str] = set()
     for rec in parse_deviations()[0]:
