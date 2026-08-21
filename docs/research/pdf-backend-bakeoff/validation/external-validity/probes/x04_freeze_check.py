@@ -197,9 +197,24 @@ def surface_path(rel: str) -> Path:
     return REPO / rel[len(REPO_KEY_PREFIX) :] if rel.startswith(REPO_KEY_PREFIX) else EV / rel
 
 
+# A50 (review) -- DIRECT DATA INPUTS consumed by the result-bearing code above. Not code,
+# but a change to one moves a result exactly as surely, so the authorization has to pin it.
+# Kept as its own dict rather than folded into METHODOLOGY_SURFACE so the category stays
+# auditable: this list is bounded to data the listed methodology READS, never to the study's
+# own outputs (frames.json, oracle_*.json, metrics.json, scores.json) or to gate evidence.
+RESULT_BEARING_DATA = {
+    # `build_oracle.control_specs` builds every field of the N-A/N-B/N-C stimuli FROM this
+    # manifest -- "Nothing is re-derived, nothing is searched for" -- and those expected
+    # truths are what Rule 3 is evaluated against. G6 and this pin are different claims and
+    # neither substitutes for the other: G6 proves the manifest is COHERENT, the
+    # authorization proves it is the manifest that was AUTHORIZED.
+    "results/control_fixtures.json": "the N-A/N-B/N-C control truths -> build_oracle.control_specs -> Rule 3",
+}
+
+
 def authorization_keys() -> set[str]:
     """Every key an authorization must name to speak for the CURRENT apparatus."""
-    return set(METHODOLOGY_SURFACE) | set(AUTHORIZATION_EXTRAS)
+    return set(METHODOLOGY_SURFACE) | set(RESULT_BEARING_DATA) | set(AUTHORIZATION_EXTRAS)
 
 
 def authorization_manifest() -> dict[str, str]:
@@ -417,6 +432,109 @@ def continuation_auth_state() -> tuple[str, str, list[str]]:
     return ("VALID" if not errors else "MUTATED"), authorizing, errors
 
 
+def post_marker_commits_by_path(marker_boundary: str) -> dict[str, list[str]]:
+    """repo-relative path -> the commits after the boundary that modified it.
+
+    ONE `git log`, not one per path: the surface is 31 entries and the range is the whole
+    post-boundary history, so per-path queries would be 31 traversals of the same commits.
+
+    MERGES CONTRIBUTE NO PATHS, which is deliberate and matches what F9 already does. `git
+    log --name-only` prints no file list for a merge commit (there is no combined diff by
+    default), so an integration commit does not have to be declared as though it were an
+    independent methodological change -- the commit that actually made the change does. The
+    alternative, `--full-history` with a path limit, reports every merge whose parents differ
+    at that path and would demand a deviation record for each integration.
+    """
+    out: dict[str, list[str]] = {}
+    raw = git("log", "--format=%x00%H", "--name-only", f"{marker_boundary}..HEAD")
+    for block in raw.split("\x00"):
+        if not block.strip():
+            continue
+        lines = block.splitlines()
+        sha = lines[0].strip()
+        for path in lines[1:]:
+            path = path.strip()
+            if path:
+                out.setdefault(path, []).append(sha)
+    return out
+
+
+def declared_paths_by_commit() -> dict[str, set[str]]:
+    """commit -> the repo-relative paths the DEVIATION register names FOR THAT COMMIT.
+
+    Deviations only. A change after the boundary cannot be a pre-execution amendment -- F9
+    seals `PRE-EXECUTION-AMENDMENTS.md` against any commit after the marker -- so reading the
+    pre-execution ledger here would let a sealed record excuse a post-boundary change.
+
+    Paths are normalized through `surface_path`, so a declaration may name either an
+    EV-relative path (the existing convention) or a `repo:`-namespaced one.
+    """
+    out: dict[str, set[str]] = {}
+    for rec in parse_deviations()[0]:
+        for c in rec.get("commits", []) or []:
+            full = git("rev-parse", str(c))
+            if not full:
+                continue
+            named = out.setdefault(full, set())
+            for f in rec.get("files_touched", []) or []:
+                named.add(str(surface_path(f).relative_to(REPO)))
+    return out
+
+
+def surface_provenance_errors(marker_boundary: str) -> list[str]:
+    """Result-bearing changes since the boundary that were never declared for review.
+
+    THE HOLE THIS CLOSES. Everything else about the continuation authorization asks whether
+    the artifact agrees with the tree. Nothing asked whether the tree's DIFFERENCES had been
+    reviewed. So a committed change to a result-bearing file could be snapshotted into a
+    fresh authorization and thereby legalized, with no deviation record ever written -- the
+    authorization would faithfully record an apparatus nobody had agreed to. F9 does not
+    close it either: F9 scans only paths under EV, so a change to result-bearing code
+    outside the study directory stayed green there by construction.
+
+    The correspondence is derived from GIT HISTORY and the REGISTER, never from the
+    authorization's own account of what changed. An artifact that inventories its own drift
+    is describing itself.
+
+    THE DISTINCTION THAT MAKES THIS HONEST. A surface file with NO post-boundary commit
+    needs no declaration: it is unchanged since the boundary, and the only reason it is not
+    in the original manifest is that the manifest was incomplete. Demanding a deviation
+    record for it would mean inventing a fiction about a change that never happened. Only a
+    file actually added or modified after the boundary has to be accounted for.
+    """
+    errors: list[str] = []
+    touched = post_marker_commits_by_path(marker_boundary)
+    declared = declared_paths_by_commit()
+    for key in sorted(authorization_keys()):
+        rel = str(surface_path(key).relative_to(REPO))
+        for sha in touched.get(rel, []):
+            if sha not in declared:
+                errors.append(f"{key} was changed at UNDECLARED commit {sha[:8]} after the boundary")
+            elif rel not in declared[sha]:
+                errors.append(f"{key} was changed at {sha[:8]}, which is declared but does not name this path")
+    return errors
+
+
+def required_deviation_ids(marker_boundary: str) -> set[str]:
+    """The deviations an authorization actually RELIES ON: those declaring a commit that
+    changed a current surface path after the boundary.
+
+    Derived, not taken from the artifact. Without this, `acknowledged_deviations` could name
+    any record that happens to exist while the one covering the real change was removed.
+    """
+    touched = post_marker_commits_by_path(marker_boundary)
+    surface_commits = {
+        sha for key in authorization_keys() for sha in touched.get(str(surface_path(key).relative_to(REPO)), [])
+    }
+    required: set[str] = set()
+    for rec in parse_deviations()[0]:
+        for c in rec.get("commits", []) or []:
+            if git("rev-parse", str(c)) in surface_commits:
+                required.add(rec.get("id"))
+                break
+    return required
+
+
 def continuation_auth_errors(marker_boundary: str) -> list[str]:
     """Everything that must hold for a continuation authorization to actually authorize.
 
@@ -505,12 +623,25 @@ def continuation_auth_errors(marker_boundary: str) -> list[str]:
             f"but the register is now {dev_blob[:8] or 'ABSENT'}"
         )
     declared_ids = {r.get("id") for r in parse_deviations()[0]}
-    acknowledged = rec.get("acknowledged_deviations") or []
+    acknowledged = set(rec.get("acknowledged_deviations") or [])
     if not acknowledged:
         errors.append("authorization acknowledges no reviewed deviation")
-    for dev_id in acknowledged:
-        if dev_id not in declared_ids:
-            errors.append(f"authorization acknowledges deviation {dev_id!r}, which is not in the register")
+    for dev_id in sorted(acknowledged - declared_ids, key=str):
+        errors.append(f"authorization acknowledges deviation {dev_id!r}, which is not in the register")
+    # EXACT, not merely non-empty. The deviations that matter are the ones DECLARING the
+    # commits that changed the current surface; a list naming some other record while the
+    # relevant one is missing acknowledges nothing. Derived from history, not from the file.
+    for dev_id in sorted(required_deviation_ids(marker_boundary) - acknowledged, key=str):
+        errors.append(
+            f"authorization does not acknowledge deviation {dev_id!r}, which declares a "
+            "post-boundary change to a current result-bearing file"
+        )
+
+    # AND THE CHANGES THEMSELVES MUST HAVE BEEN DECLARED FOR REVIEW. Everything above asks
+    # whether the artifact agrees with the tree; this asks whether the tree's differences
+    # were ever reviewed. Without it a committed change could be legalized simply by
+    # snapshotting it into a new authorization.
+    errors.extend(surface_provenance_errors(marker_boundary))
 
     # TRUTHFULNESS. These are the sentences a reader relies on to know what the results
     # are, so a wrong one is not cosmetic: it is the artifact claiming a posture the study
@@ -716,7 +847,11 @@ def parse_amendments() -> tuple[list[dict], list[str]]:
 
     for rec in records:
         for f in rec.get("files_touched", []):
-            if (EV / f).exists():
+            # A50 (review) -- resolved through `surface_path`, not `EV / f`. A declaration may
+            # legitimately name a result-bearing file outside the study directory, and
+            # resolving every entry under EV turned such a path into a phantom that "neither
+            # exists nor was deleted" while the real file sat untouched one level up.
+            if surface_path(f).exists():
                 continue
             # A path may legitimately be absent if the amendment DELETED it -- but only
             # when it is actually gone from the tree AND was present in history.
@@ -736,7 +871,7 @@ def parse_amendments() -> tuple[list[dict], list[str]]:
                 "--format=%H",
                 "-1",
                 "--",
-                str((EV / f).relative_to(REPO)),
+                str(surface_path(f).relative_to(REPO)),
             )
             if not deleted:
                 errors.append(f"amendment {rec.get('id', '?')} touches {f}, which neither exists nor was deleted")
@@ -1667,6 +1802,7 @@ def _a50_build_history(root: Path) -> dict[str, str]:
     (ev / "PRE-EXECUTION-AMENDMENTS.md").write_text("# ledger\n")
     (ev / "results" / "DEVIATIONS.md").write_text("# deviations\n")
     (ev / "results" / "holdout_membership.json").write_text(json.dumps({"members": [{"id": "x", "files": []}]}))
+    (ev / "results" / "control_fixtures.json").write_text(json.dumps({"fixtures": [], "counts": {"N-A": 0}}))
     _a50_git(root, "add", "-A")
     _a50_git(root, "commit", "-qm", "c0 population freeze")
     c0 = _a50_git(root, "rev-parse", "HEAD")
@@ -1682,6 +1818,7 @@ def _a50_build_history(root: Path) -> dict[str, str]:
                 "frozen_blobs": {
                     "probes/alpha.py": h("ev/probes/alpha.py"),
                     "repo:src/gamma.py": h("src/gamma.py"),
+                    "results/control_fixtures.json": h("ev/results/control_fixtures.json"),
                     "PRE-REGISTRATION.md": h("ev/PRE-REGISTRATION.md"),
                     "PRE-EXECUTION-AMENDMENTS.md": h("ev/PRE-EXECUTION-AMENDMENTS.md"),
                     "results/holdout_membership.json": h("ev/results/holdout_membership.json"),
@@ -1707,7 +1844,46 @@ def _a50_build_history(root: Path) -> dict[str, str]:
     )
     _a50_git(root, "add", "-A")
     _a50_git(root, "commit", "-qm", "cV declare the deviation")
-    return {"c0": c0, "cM": cM, "cD": cD, "ev": str(ev)}
+
+    # cG -- THE PRE-AUTHORIZATION HOLE. A committed change to result-bearing code that lives
+    # OUTSIDE the study directory, with nothing written to the register. F9 scans only EV, so
+    # it stays green here; before the provenance rule, generating an authorization at this
+    # point would have snapshotted the change and thereby legalized it.
+    (root / "src" / "gamma.py").write_text("SEGMENT = 1\n")
+    _a50_git(root, "add", "-A")
+    _a50_git(root, "commit", "-qm", "cG undeclared post-boundary change to result-bearing code")
+    cG = _a50_git(root, "rev-parse", "HEAD")
+    return {"c0": c0, "cM": cM, "cD": cD, "cG": cG, "ev": str(ev)}
+
+
+def _a50_try_authorize() -> tuple[int, bool]:
+    """Drive the REAL generator, and report (exit code, did it write a file).
+
+    Only the gates that cannot hold over a synthetic population are stubbed -- freeze,
+    readiness, and the continuation record. The provenance rule under test is NOT stubbed,
+    so a pass here is a statement about the generator rather than about the stubs.
+    """
+    real = {
+        k: globals()[k]
+        for k in (
+            "check_freeze", "check_execution", "continuation_state",
+            "population_exposed", "exposure_summary_for_authorization",
+        )
+    }
+    try:
+        globals().update(
+            check_freeze=lambda m, lk: [("F-stub", True, "")],
+            check_execution=lambda m: [("G-stub", True, "")],
+            continuation_state=lambda: ({"synthetic": True}, True, "synthetic"),
+            population_exposed=lambda: True,
+            exposure_summary_for_authorization=lambda rec: "synthetic: census 13992, S1 17/17, P-head",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = authorize_apparatus_continuation({"classes": {}}, {"design_exposed": []})
+        return rc, CONTINUATION_AUTH.exists()
+    finally:
+        globals().update(real)
 
 
 def a50_authorization_controls() -> list[tuple[str, bool]]:
@@ -1771,6 +1947,39 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
                  uncovered == ["probes/contracts.py"])
             )
 
+            # ---- THE PRE-AUTHORIZATION DECLARATION HOLE -------------------------------
+            # The hole must be REAL before the repair can be said to close it: F9 is green
+            # over an undeclared committed change to result-bearing code outside EV.
+            checks.append(("A50-12 F9 is GREEN on the undeclared repo: change (the hole is real)", f9_result()[1]))
+            prov = surface_provenance_errors(cM)
+            checks.append(
+                ("A50-13 surface provenance CATCHES the undeclared repo: change",
+                 any("gamma" in e and "UNDECLARED" in e for e in prov))
+            )
+            checks.append(
+                ("A50-13 ...and says nothing about files that are merely uncovered but unchanged",
+                 not any("contracts.py" in e for e in prov))
+            )
+            rc_undeclared, wrote_undeclared = _a50_try_authorize()
+            checks.append(("A50-14 generation is REFUSED while a result-bearing change is undeclared",
+                           rc_undeclared != 0))
+            checks.append(("A50-14 ...and NO authorization file was written", not wrote_undeclared))
+
+            # Declare cG's EXACT commit and its repo:-namespaced path, and the same generator
+            # must now proceed. Red then green on one mutation, so neither is vacuous.
+            text_v = DEVIATIONS.read_text()
+            DEVIATIONS.write_text(
+                text_v + "```json\n" + json.dumps({
+                    "id": "G", "kind": "DEVIATION", "commits": [h["cG"]],
+                    "files_touched": ["repo:src/gamma.py"],
+                    "results_already_visible": "census, S1, P-head",
+                }) + "\n```\n"
+            )
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cW declare the repo: change")
+            checks.append(("A50-15 declaring the exact commit and repo: path clears provenance",
+                           not surface_provenance_errors(cM)))
+
             # 1 -- THE MANDATORY CONTROL. Declared deviation, no secondary authorization.
             dec, reasons = continuation_decision(cM)
             checks.append(("A50-1 declared deviation with NO secondary authorization is FORBIDDEN", dec == "FORBIDDEN"))
@@ -1779,10 +1988,10 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
                  any("does NOT authorize executing it" in r for r in reasons))
             )
 
-            # 2 -- a real, committed authorization built by the REAL generator.
-            CONTINUATION_AUTH.write_text(
-                json.dumps(build_continuation_authorization(cM, "synthetic: census, S1, P-head"), indent=1)
-            )
+            # 2 -- generation is now allowed, and the committed artifact permits continuation.
+            rc_declared, wrote_declared = _a50_try_authorize()
+            checks.append(("A50-15 ...and the generator then WRITES the authorization",
+                           rc_declared == 0 and wrote_declared))
             _a50_git(root, "add", "-A")
             _a50_git(root, "commit", "-qm", "cA authorize the post-boundary apparatus continuation")
             good_auth = CONTINUATION_AUTH.read_text()
@@ -1836,6 +2045,18 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
                 ("A50-10c acknowledging a deviation absent from the register is refused",
                  any("not in the register" in e for e in variant(acknowledged_deviations=["NOT-A-DEVIATION"])))
             )
+            # EXACTNESS: "D" is a genuine register entry, so this variant raises no
+            # not-in-the-register complaint. It must still fail, because the deviation the
+            # authorization actually relies on for the repo: change is "G".
+            ack_errs = variant(acknowledged_deviations=["D"])
+            checks.append(
+                ("A50-16 acknowledging a real but IRRELEVANT deviation, omitting the relied-on one, is refused",
+                 any("does not acknowledge deviation 'G'" in e for e in ack_errs))
+            )
+            checks.append(
+                ("A50-16 ...and not merely because the acknowledged id was unknown",
+                 not any("not in the register" in e for e in ack_errs))
+            )
             checks.append(
                 ("A50-10d dropping the 4.7-in-force statement is refused",
                  any("4.7 in force" in e for e in variant(section_4_7_in_force=_DROP)))
@@ -1876,6 +2097,15 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
                 root / "src" / "gamma.py", "SEGMENT = 99\n",
                 "A50-11 drift in a repo:-namespaced surface file is FORBIDDEN",
                 "CURRENT-METHODOLOGY DRIFT repo:src/gamma.py",
+            )
+            # The control manifest is DATA, not code, and G6 already validates it. G6 asks
+            # whether it is COHERENT; this asks whether it is the one that was AUTHORIZED.
+            # A coherent replacement set would pass G6 and change what Rule 3 is scored against.
+            drift_control(
+                ev / "results" / "control_fixtures.json",
+                json.dumps({"fixtures": [], "counts": {"N-A": 99}}),
+                "A50-17 drift in the committed control manifest is FORBIDDEN",
+                "CURRENT-METHODOLOGY DRIFT results/control_fixtures.json",
             )
 
             # 4a / 3a -- neither artifact may be edited, even uncommitted.
@@ -2278,6 +2508,18 @@ def self_test(contam: dict, exposure: dict) -> int:
     return 0
 
 
+def exposure_summary_for_authorization(rec: dict) -> str:
+    """The already-visible results, DERIVED from the continuation record rather than typed.
+
+    A module-level seam so a control can drive the real generator on a synthetic history
+    that has no `CONTINUATION.json`, without the generator's truthfulness depending on the
+    control. On the real path this is the same string F12 prints.
+    """
+    import continuation_provenance as CP
+
+    return CP.exposure_summary(rec)
+
+
 def authorize_apparatus_continuation(contam: dict, exposure: dict) -> int:
     """Write the A50 secondary authorization: continue under the REVIEWED CURRENT apparatus.
 
@@ -2332,10 +2574,22 @@ def authorize_apparatus_continuation(contam: dict, exposure: dict) -> int:
         print("  covers the whole current surface. There is nothing to continue under.")
         return 1
 
-    import continuation_provenance as CP
+    # AN AUTHORIZATION MAY ONLY SNAPSHOT REVIEWED CHANGES, and this is checked BEFORE the
+    # file is written rather than only when it is later validated. Writing first would
+    # produce an artifact that records an apparatus nobody reviewed, and the operator would
+    # have to notice the refusal on the next run and delete it.
+    unreviewed = surface_provenance_errors(boundary)
+    if unreviewed:
+        print("REFUSED: these result-bearing changes since the boundary were never declared for review:")
+        for e in unreviewed[:8]:
+            print(f"  - {e}")
+        print("  An authorization records REVIEWED current methodology. It cannot legalize an")
+        print("  undeclared committed change by snapshotting it. Declare each commit and the exact")
+        print("  path it touched in results/DEVIATIONS.md, have it reviewed, then authorize.")
+        return 1
 
     CONTINUATION_AUTH.write_text(
-        json.dumps(build_continuation_authorization(boundary, CP.exposure_summary(rec)), indent=1)
+        json.dumps(build_continuation_authorization(boundary, exposure_summary_for_authorization(rec)), indent=1)
     )
     print(f"Original boundary {boundary[:8]} is untouched; this is a separate artifact.")
     print(f"Answering {len(drifted)} drifted and {len(uncovered)} previously uncovered result-bearing file(s).")
