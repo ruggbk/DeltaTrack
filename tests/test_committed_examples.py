@@ -155,9 +155,15 @@ def test_index_page_tokens_match_the_report_tokens():
     from a *rendered report* rather than the module source, so this compares what a
     visitor actually gets. `formatters/diff_html.py` is the one place these values are
     decided (#667); this test keeps the copy honest, it does not make it a second source.
+
+    Both sides are read comment-free, for the reason `_live_stylesheet` gives: a value
+    kept only in a comment is not the value anything renders with. Since `_css_tokens`
+    lets the last declaration win, a commented copy sitting after a changed live one
+    would otherwise answer this comparison in its place and hide the drift.
     """
-    report_tokens = _css_tokens(_root_block((EXAMPLES / "hr8752_xml_diff.html").read_text()))
-    index_tokens = _css_tokens(render_examples.INDEX_TOKENS)
+    report_css = _live_stylesheet((EXAMPLES / "hr8752_xml_diff.html").read_text())
+    report_tokens = _css_tokens(_root_block(report_css))
+    index_tokens = _css_tokens(_CSS_COMMENT.sub("", render_examples.INDEX_TOKENS))
 
     assert index_tokens, "no tokens parsed from INDEX_TOKENS; this comparison would vacuously pass"
     assert report_tokens, "no tokens parsed from the rendered report; this comparison would vacuously pass"
