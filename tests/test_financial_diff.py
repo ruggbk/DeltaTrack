@@ -1036,6 +1036,14 @@ class TestCbpAccountIsNotCutByItsOwnAmendmentNotes:
         gave the new side one amount more than the old, so the refusal fired on a paragraph
         whose money had not moved and the appropriation split into a removal plus an
         addition -- indistinguishable downstream from a genuine 100% cut.
+
+        This used to have a sibling restating the same thing at the export
+        (``amount_entries == []``). #671 removed that field, and the restatement would
+        have gone vacuous rather than red -- ``change.get("amount_entries") or []`` is
+        ``[]`` for every change once nothing writes it. It is deleted rather than
+        adapted, because it added nothing here: on the PDF path the export field was
+        built by ``_extract_amount_pairs``, which is ``tuple(match_amounts(...))`` over
+        the very texts this asserts on. The pairing IS the guarantee.
         """
         change = self._cbp_change(canonical)
         assert change is not None, "no change carries the CBP appropriation; the assertions here would be vacuous"
@@ -1043,16 +1051,17 @@ class TestCbpAccountIsNotCutByItsOwnAmendmentNotes:
         assert (16_566_247_000, 16_566_247_000) in pairs, f"the appropriation did not pair with itself: {pairs}"
         assert all(old == new for old, new in pairs), f"an amount in this paragraph moved, and none did: {pairs}"
 
-    def test_the_account_shows_no_money_change_at_all(self, canonical):
-        """What a reader is shown: the nine amendments net to zero, so nothing moved.
+    def test_the_export_makes_no_money_claim_about_this_account(self, canonical):
+        """What a reader is handed: the export states nothing about this account's money.
 
-        ``amount_entries`` is the export's only money field since schema 2.0 and drops
-        unchanged pairs, so "empty" is the correct rendering of a paragraph whose amounts
-        all pair with themselves. On ``develop`` this read
-        ``removed $16,566,247,000 / added $16,566,247,000 / added $1,000,000``.
+        Since #671 that is true of every change, so this is deliberately NOT written as
+        "the money did not move" -- an absence that holds unconditionally proves nothing
+        about the amendment strip. It is written as a contract check on the change object
+        instead, which is a claim about the schema and does go red if a money field
+        returns. The amendment-strip guarantee itself is asserted above, on the pairing.
         """
         change = self._cbp_change(canonical)
         assert change is not None
-        assert (change.get("amount_entries") or []) == [], (
-            f"the account's money is reported as changed: {change['amount_entries']}"
+        assert not [k for k in change if "amount" in k], (
+            f"a change object carries no money field since 3.0 (#671): {sorted(change)}"
         )

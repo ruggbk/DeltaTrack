@@ -177,7 +177,7 @@ def _render_grouped_report() -> str:
     directly under the parent node. That is what makes the filter tests below
     prove a *recount* of a nested subtree rather than a blanket hide. Before
     #671 the same shape was expressed with the Financial filter and one card
-    carrying amounts.
+    carrying amount entries, a field the canonical no longer has.
     """
     from deltatrack.formatters.diff_html import format_diff_html
 
@@ -190,7 +190,7 @@ def _render_grouped_report() -> str:
             "children": list(children),
         }
 
-    def change(i, start, end, amount_entries, change_type="modified"):
+    def change(i, start, end, change_type="modified"):
         return {
             "id": f"c{i}",
             "change_type": change_type,
@@ -201,7 +201,6 @@ def _render_grouped_report() -> str:
             # The appended token survives word_diff as ONE contiguous <ins>
             # text node, so the find bar (which scans text nodes) can hit it.
             "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
-            "amount_entries": amount_entries,
             "move": None,
             "full_text_span": {"v1": None, "v2": {"start": start, "end": end}},
         }
@@ -218,7 +217,7 @@ def _render_grouped_report() -> str:
         ),
     ]
     canonical = {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "bill": {"type": "hr", "number": 1, "congress": 119},
         "versions": {
             "v1": {"label": "v1", "version_number": 1, "source": "xml"},
@@ -226,9 +225,9 @@ def _render_grouped_report() -> str:
         },
         "summary": {"added": 1, "removed": 0, "modified": 2, "moved": 0},
         "changes": [
-            change(0, 2, 5, [{"old": 100, "new": 200, "kind": "changed"}], "added"),  # TITLE I direct
-            change(1, 20, 30, []),  # SALARIES
-            change(2, 70, 80, []),  # OPERATIONS
+            change(0, 2, 5, "added"),  # TITLE I direct
+            change(1, 20, 30),  # SALARIES
+            change(2, 70, 80),  # OPERATIONS
         ],
         "full_text": {"v1": "x" * 120, "v2": "TITLE I\n" + "y" * 112},
         "tree": {"v1": [], "v2": tree_v2},
@@ -285,7 +284,6 @@ def _render_full_bill_report() -> str:
             "location": None,
             "anchor_resolution": "resolved",
             "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
-            "amount_entries": [],
             "move": None,
             "full_text_span": {
                 "v1": None,
@@ -294,7 +292,7 @@ def _render_full_bill_report() -> str:
         }
 
     canonical = {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "bill": {"type": "hr", "number": 1, "congress": 119},
         "versions": {
             "v1": {"label": "v1", "version_number": 1, "source": "xml"},
@@ -1023,7 +1021,7 @@ def _render_find_report() -> str:
     printed_text, _ = _find_fixture_texts()
     start = printed_text.index("vehicles")
     canonical = {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "bill": {"type": "hr", "number": 8752, "congress": 118},
         "versions": {
             "v1": {"label": "Reported", "version_number": 1, "source": "pdf"},
@@ -1040,7 +1038,6 @@ def _render_find_report() -> str:
                 "location": None,
                 "anchor_resolution": "resolved",
                 "text": {"old": "cars", "new": "vehicles"},
-                "amount_entries": [],
                 "move": None,
                 "full_text_span": {"v1": None, "v2": {"start": start, "end": start + len("vehicles")}},
             }

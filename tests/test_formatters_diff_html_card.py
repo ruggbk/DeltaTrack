@@ -23,7 +23,6 @@ def _change(**overrides) -> ChangeView:
         move_info_html="",
         old_text="",
         new_text="",
-        amount_pairs=(),
     )
     base.update(overrides)
     return ChangeView(**base)
