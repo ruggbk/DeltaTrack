@@ -281,6 +281,13 @@ class TestComputeFinancialChange:
 
 class TestFinancialChangeToDict:
     def test_serialize(self):
+        """Exact dict, so a field ADDED back is as red as a field lost (#671).
+
+        `paired_amounts` is populated on the dataclass here and must still not appear
+        in the output: the pairing is computed, it is simply not published. Written as
+        an equality rather than a `not in` for that reason -- `not in` would pass just
+        as well if the serializer had quietly stopped emitting `old_amounts` too.
+        """
         fc = FinancialChange(
             old_amounts=(1876875000,),
             new_amounts=(2022775000,),
@@ -292,7 +299,6 @@ class TestFinancialChangeToDict:
             "old_amounts": [1876875000],
             "new_amounts": [2022775000],
             "amounts_changed": True,
-            "paired_amounts": [[1876875000, 2022775000]],
             "has_amendment_annotations": False,
         }
 

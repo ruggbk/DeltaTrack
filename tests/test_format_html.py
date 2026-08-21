@@ -172,11 +172,15 @@ class TestFormatHtml:
     def test_renders_no_financial_presentation(self):
         """#671 — the report makes no paired-amount claim, even when the diff carries one.
 
-        The sample diff DOES carry `financial.paired_amounts`, so this is not a
-        vacuous absence check: it goes red if any of the Financial Summary table,
-        the per-card callout or the `data-financial` filter attribute is rendered
-        again. Until amounts can be typed to accounts (#115, #175), the report
-        presents no dollar figure as a change.
+        The sample diff still carries `financial.paired_amounts` on purpose. That is
+        now more input than the producer emits (the `--financial` JSON dropped the
+        field in #671 too), which is deliberate: it means the whole chain from a
+        hostile input to rendered HTML is covered, so re-adding EITHER the canonical
+        field or the renderer that read it turns this red. It cannot pass vacuously
+        for want of data.
+
+        Until amounts can be typed to accounts (#115, #175), the report presents no
+        dollar figure as a change.
         """
         html = format_html(_sample_diff_dict())
         assert "Financial Summary" not in html
