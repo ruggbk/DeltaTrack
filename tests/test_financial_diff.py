@@ -91,6 +91,96 @@ class TestExtractAmounts:
         assert extract_amounts("a fee of $500 applies") == (500,)
 
 
+class TestAmendmentAnnotationsThatWrap:
+    """An annotation the printed page broke in half is still an annotation (#670).
+
+    The cases above all sit on one line, which is why the strip could fail on wrapped ones
+    for as long as it did: a paragraph whose annotation was missed looks exactly like one
+    that never had an annotation, and the delta then reads as money the bill appropriates.
+
+    Every excerpt here is real text from the committed corpus, spelled the way
+    ``parsers.pdf_text.pdf_full_text`` renders it -- a five-column right-aligned line number
+    and two spaces after each line break. That the renderer really writes that shape is not
+    something these can establish (they supply their own input); the corpus gate in
+    ``tests/test_corpus_tree_properties.py`` is what holds the producer to it.
+    """
+
+    def test_gutter_between_by_and_the_amount(self):
+        """The majority shape: 21 of the 27 leaks measured on the committed PDF example."""
+        text = (
+            "    4  individuals for personal services abroad; $16,566,247,000\n"
+            "    5  (increased by\n"
+            "    6  $5,000,000); of which $3,274,000 shall be derived from"
+        )
+        assert extract_amounts(text) == (16_566_247_000, 3_274_000)
+
+    def test_gutter_between_the_keyword_and_by(self):
+        """The gap that was a literal space, so no whitespace ever matched it."""
+        text = "    5  (increased by $1,000,000) (reduced\n    8  by $1,000,000); of which $3,274,000 shall be"
+        assert extract_amounts(text) == (3_274_000,)
+
+    def test_annotation_split_by_a_page_break(self):
+        """A page break puts a blank line in front of the gutter as well."""
+        text = "   24  Administration, $129,087,000 (increased by\n\n    1  $15,000,000), to remain available."
+        assert extract_amounts(text) == (129_087_000,)
+
+    def test_keyword_soft_hyphenated_across_a_page_break(self):
+        """The one break the parser cannot close, because the two halves are on two pages.
+
+        ``pdf_text._SOFT_HYPHEN_BREAK`` rejoins a hyphenated word while cleaning a page; a
+        word spanning two pages is cleaned twice and only meets after the pages are joined.
+        """
+        text = "   25  tribes, and others, $1,381,992,000 (re-\n\n    1  duced by $2,000,000) (increased by $2,000,000)"
+        assert extract_amounts(text) == (1_381_992_000,)
+
+    def test_wrap_with_no_gutter_at_all(self):
+        """The match-normalised change text wraps too, but carries no line numbers."""
+        text = "personal services abroad; $16,566,247,000\n(reduced\nby $1,000,000); of which $3,274,000 shall be"
+        assert extract_amounts(text) == (16_566_247_000, 3_274_000)
+
+    def test_wrapped_prose_reduction_is_not_an_annotation(self):
+        """Widening the gaps must not turn ordinary legislative English into an annotation.
+
+        Real text from 119-hr-1, one of five parentheticals in the corpus that open with a
+        vocabulary word and mean something else entirely.
+
+        Asserted through ``compute_financial_change`` because misclassification is what
+        reaches a consumer: ``has_amendment_annotations`` is exported on the change, and a
+        recogniser broad enough to claim this parenthetical also DELETES it, taking with it
+        the context the pairer aligns amounts against. Checking only that the $500,000
+        outside the parenthetical survives cannot see either harm. Measured: under a
+        recogniser that accepts any text between ``by`` and the closing paren, this prose is
+        stripped to "the credit allowable , $500,000" and flagged as an amendment, while its
+        extracted amounts remain exactly ``(500_000,)``.
+        """
+        text = (
+            "    7  the credit allowable (reduced by the amount of any\n"
+            "    8  income with respect to which an election applies), $500,000"
+        )
+        result = compute_financial_change(None, text)
+        assert result is not None
+        assert result.has_amendment_annotations is False, (
+            "ordinary legislative prose was classified as a floor amendment annotation"
+        )
+        # Kept, because it is a different mutation: the flag comes from a `search` and the
+        # amounts from the `sub` beside it, so a strip that swallowed the paragraph would
+        # redden this line while leaving the assertion above green.
+        assert result.new_amounts == (500_000,)
+
+    def test_removing_the_gutter_cannot_remove_an_amount(self):
+        """The negative direction: a line number goes, every dollar figure stays.
+
+        A bare line number carries no ``$``, so it was never a match to begin with -- but a
+        transformation that runs before extraction is exactly the kind that can quietly eat
+        one, so it is pinned rather than argued.
+        """
+        text = (
+            "   16  $281,358,000, of which $22,151,000 shall remain available\n"
+            "   18  until September 30, 2026: Provided, That $5,000,000 shall be withheld"
+        )
+        assert extract_amounts(text) == (281_358_000, 22_151_000, 5_000_000)
+
+
 class TestComputeFinancialChange:
     def test_amounts_changed(self):
         result = compute_financial_change(
@@ -855,4 +945,114 @@ class TestAmountSourceCorpusRegression:
         assert len(with_money) > 100, (
             f"only {len(with_money)} entries carry an amount change on this pair; "
             f"the agreement assertion above is close to vacuous"
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not fixture_path("118-hr-8752", "1_reported-in-house.pdf").exists()
+    or not fixture_path("118-hr-8752", "2_engrossed-in-house.pdf").exists(),
+    reason="118-hr-8752 PDFs not present",
+)
+class TestCbpAccountIsNotCutByItsOwnAmendmentNotes:
+    """The two symptoms #670 was filed for, pinned on the pair that produced them.
+
+    U.S. Customs and Border Protection, Operations and Support is appropriated
+    $16,566,247,000 in both versions of 118-hr-8752. Between them the House adopted nine
+    floor amendments that net to zero, printed as parentheticals beside that figure, and
+    the run of them wraps across three lines and a page.
+
+    Two things went wrong when the strip missed a wrapped one, and they are separate
+    surfaces reached by separate code, which is why both are pinned here:
+
+      * the account's own dollar inventory gained two amounts the bill never appropriates;
+      * the appropriation itself, unchanged between the versions, was reported as removed
+        in full and separately re-added -- a -100% cut on an account nobody cut.
+
+    Built through ``compare.pdf``, the entry point the web app and CLI both call, so these
+    assert what a reader is actually shown rather than what a helper returns in isolation.
+    The unit cases in ``TestAmendmentAnnotationsThatWrap`` supply their own text and so
+    cannot see a renderer that stopped producing the shape they encode; this can.
+    """
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def canonical():
+        from deltatrack.compare.pdf import compare_pdfs
+
+        return compare_pdfs(
+            fixture_path("118-hr-8752", "1_reported-in-house.pdf").read_bytes(),
+            fixture_path("118-hr-8752", "2_engrossed-in-house.pdf").read_bytes(),
+            start_label="reported-in-house",
+            end_label="engrossed-in-house",
+        )
+
+    @staticmethod
+    def _cbp_operations_and_support(canonical, side):
+        def walk(nodes, path=()):
+            for n in nodes:
+                here = (*path, n["label"])
+                yield here, n
+                yield from walk(n.get("children") or [], here)
+
+        for path, node in walk(canonical["tree"][side]):
+            if len(path) >= 2 and "CUSTOMS AND BORDER" in path[-2] and path[-1] == "OPERATIONS AND SUPPORT":
+                return node
+        return None
+
+    def test_the_account_inventory_holds_only_money_the_bill_appropriates(self, canonical):
+        node = self._cbp_operations_and_support(canonical, "v2")
+        assert node is not None, "CBP Operations and Support not found; the assertions below would be vacuous"
+        amounts = node["own_amounts"]
+        assert 16_566_247_000 in amounts, "the base appropriation is missing, so this is measuring the wrong block"
+        assert 1_000_000 not in amounts and 5_000_000 not in amounts, (
+            f"amendment deltas are counted as appropriations: {amounts}"
+        )
+
+    def test_the_inventory_is_identical_on_both_sides(self, canonical):
+        """The amendments net to zero, so the account's money did not move at all.
+
+        Stated as equality rather than as two absences: it also catches a strip that
+        removes an annotation on one side only, which is what turns a nil change into a
+        reported one.
+        """
+        v1 = self._cbp_operations_and_support(canonical, "v1")
+        v2 = self._cbp_operations_and_support(canonical, "v2")
+        assert v1 is not None and v2 is not None
+        assert v1["own_amounts"] == v2["own_amounts"]
+
+    @staticmethod
+    def _cbp_change(canonical):
+        for change in canonical["changes"]:
+            if 16_566_247_000 in extract_amounts((change["text"] or {}).get("new") or ""):
+                return change
+        return None
+
+    def test_the_unchanged_appropriation_pairs_with_itself(self, canonical):
+        """Verification target 2, stated as a presence so it cannot pass vacuously.
+
+        The pairer declines to pair positionally when the two sides of a replaced block hold
+        different numbers of amounts, which is right given its inputs. A leaked annotation
+        gave the new side one amount more than the old, so the refusal fired on a paragraph
+        whose money had not moved and the appropriation split into a removal plus an
+        addition -- indistinguishable downstream from a genuine 100% cut.
+        """
+        change = self._cbp_change(canonical)
+        assert change is not None, "no change carries the CBP appropriation; the assertions here would be vacuous"
+        pairs = match_amounts(change["text"].get("old"), change["text"].get("new"))
+        assert (16_566_247_000, 16_566_247_000) in pairs, f"the appropriation did not pair with itself: {pairs}"
+        assert all(old == new for old, new in pairs), f"an amount in this paragraph moved, and none did: {pairs}"
+
+    def test_the_account_shows_no_money_change_at_all(self, canonical):
+        """What a reader is shown: the nine amendments net to zero, so nothing moved.
+
+        ``amount_entries`` is the export's only money field since schema 2.0 and drops
+        unchanged pairs, so "empty" is the correct rendering of a paragraph whose amounts
+        all pair with themselves. On ``develop`` this read
+        ``removed $16,566,247,000 / added $16,566,247,000 / added $1,000,000``.
+        """
+        change = self._cbp_change(canonical)
+        assert change is not None
+        assert (change.get("amount_entries") or []) == [], (
+            f"the account's money is reported as changed: {change['amount_entries']}"
         )

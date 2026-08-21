@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import re
 import sys
 from collections import Counter
 from collections.abc import Mapping
@@ -44,6 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from deltatrack.amounts import has_amendment_annotation
 from deltatrack.diff_bill import match_amounts
 from deltatrack.matching import (
     NEW,
@@ -74,8 +74,6 @@ from deltatrack.similarity import (
 from deltatrack.version_stems import label_from_stem
 
 ChangeType = Literal["added", "removed", "modified", "moved"]
-
-_AMENDMENT_RE_DETAIL = re.compile(r"\((increased|reduced|decreased) by\s+\$([\d,]+)\)")
 
 # What the two shared cutoffs mean HERE (they are defined in deltatrack.similarity,
 # #492, and were re-declared in this module until then — two copies kept in step by a
@@ -311,9 +309,12 @@ def _extract_amount_pairs(v1_text: str, v2_text: str) -> tuple[tuple[int | None,
 def _has_amendment_annotations(v1_text: str, v2_text: str) -> bool:
     """True if either side carries a floor amendment annotation.
 
-    Mirrors `FinancialChange.has_amendment_annotations` in diff_bill.py.
+    Mirrors `FinancialChange.has_amendment_annotations` in diff_bill.py, and now by calling
+    the same recogniser rather than a second copy of the pattern. The copy that used to live
+    here carried the #670 defect independently, which is what a second home for one rule
+    costs: the fix has to be found twice.
     """
-    return bool(_AMENDMENT_RE_DETAIL.search(v1_text) or _AMENDMENT_RE_DETAIL.search(v2_text))
+    return has_amendment_annotation(v1_text) or has_amendment_annotation(v2_text)
 
 
 def _hunk_for_paired_blocks(v1_block: _Block, v2_block: _Block) -> PdfHunk:

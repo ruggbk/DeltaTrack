@@ -15,7 +15,12 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from deltatrack.amounts import AMENDMENT_RE, DOLLAR_RE, extract_amounts
+from deltatrack.amounts import (
+    DOLLAR_RE,
+    extract_amounts,
+    has_amendment_annotation,
+    strip_amendment_annotations,
+)
 from deltatrack.bill_tree import BillNode, BillTree, amount_text, normalize_bill
 from deltatrack.matching import (
     NEW,
@@ -80,8 +85,8 @@ def match_amounts(
     Uses SequenceMatcher to align old/new words, then traces dollar amounts
     through the diff opcodes to determine pairing.
     """
-    old_clean = AMENDMENT_RE.sub("", old_text) if old_text else ""
-    new_clean = AMENDMENT_RE.sub("", new_text) if new_text else ""
+    old_clean = strip_amendment_annotations(old_text) if old_text else ""
+    new_clean = strip_amendment_annotations(new_text) if new_text else ""
     old_words = old_clean.split()
     new_words = new_clean.split()
 
@@ -153,7 +158,9 @@ def compute_financial_change(
 
     Returns None if no amounts on either side (non-financial section).
     """
-    has_annotations = bool((old_text and AMENDMENT_RE.search(old_text)) or (new_text and AMENDMENT_RE.search(new_text)))
+    has_annotations = (bool(old_text) and has_amendment_annotation(old_text)) or (
+        bool(new_text) and has_amendment_annotation(new_text)
+    )
 
     old_amounts = extract_amounts(old_text) if old_text else ()
     new_amounts = extract_amounts(new_text) if new_text else ()
