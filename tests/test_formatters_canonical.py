@@ -23,9 +23,9 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+from deltatrack.amounts import amounts_changed_in_text
 from deltatrack.diff_pdf import PdfDiff, PdfHunk
 from deltatrack.formatters.canonical import (
-    _amounts_changed,
     pdf_diff_to_canonical,
     view_from_canonical,
     xml_diff_to_canonical,
@@ -539,7 +539,7 @@ def test_amounts_changed_predicate(old, new, expected, why):
     changes where no figure moved at all (all 51 such disagreements are `modified`
     changes whose amendment parentheticals churn around a stable appropriation).
     """
-    assert _amounts_changed(old, new) is expected, why
+    assert amounts_changed_in_text(old, new) is expected, why
 
 
 # ---------- Schema validation -------------------------------------------------

@@ -20,10 +20,9 @@ parity tests something to assert against.
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections import Counter
 from html import escape
 
-from deltatrack.amounts import extract_amounts
+from deltatrack.amounts import amounts_changed_in_text, extract_amounts
 from deltatrack.diff_pdf import PdfDiff, PdfHunk
 from deltatrack.formatters.view_model import ChangeView, DiffView
 from deltatrack.parsers.pdf_anchors import Anchor, breadcrumb_for
@@ -34,35 +33,6 @@ GENERATOR_NAME = "deltatrack"
 
 
 # ---------- Shared helpers ---------------------------------------------------
-
-
-def _amounts_changed(text_old: str | None, text_new: str | None) -> bool:
-    """Whether the MULTISET of dollar figures differs between the two sides (#671).
-
-    The one money statement a change object makes, and it is an observation rather
-    than a claim: the set of figures in this block is not the same on both sides.
-    Added, removed and modified all fall out of the comparison without pairing
-    anything -- a figure only on the new side is an addition, one only on the old
-    side a removal, and $1M -> $2M is both at once. What it deliberately cannot say
-    is WHICH figure became which, or what any figure means; that needs the
-    account-level model in #115, and asserting it without one is what this schema
-    major removed.
-
-    Multiset, not set: two identical figures collapsing to one is a real change.
-
-    Computed from the PUBLISHED text rather than from an upstream `financial` dict,
-    for three reasons. It is pipeline-neutral (XML and PDF reach it identically); it
-    is flag-independent (`bill_diff_to_dict(financial=...)` used to decide whether a
-    canonical carried money at all, so the same bill exported money through
-    `compare_xml` and silently none through `diff_bill.py compare --format html`);
-    and it is VERIFIABLE by a consumer holding nothing but the document, which is the
-    property the removed `amount_entries` never had.
-
-    Amendment annotations are already stripped by `extract_amounts` (#670), so a run
-    of floor amendments that nets to zero beside an unchanged appropriation reads as
-    False here -- which is the whole point.
-    """
-    return Counter(extract_amounts(text_old or "")) != Counter(extract_amounts(text_new or ""))
 
 
 def _make_id(index: int) -> str:
@@ -97,7 +67,7 @@ def _xml_change_to_canonical(
         "location": None,  # XML carries no source coordinates
         "anchor_resolution": "resolved",  # XML pipeline always resolves structurally
         "text": {"old": text_old, "new": text_new},
-        "amounts_changed": _amounts_changed(text_old, text_new),
+        "amounts_changed": amounts_changed_in_text(text_old, text_new),
         "move": _xml_move(change) if change_type == "moved" else None,
         "full_text_span": _search_span(full_text, full_text_spans, text_old, text_new, id_old, id_new, search_state),
     }
@@ -332,7 +302,7 @@ def _pdf_hunk_to_canonical(
             "old": hunk.v1_text if hunk.v1_range is not None else None,
             "new": hunk.v2_text if hunk.v2_range is not None else None,
         },
-        "amounts_changed": _amounts_changed(
+        "amounts_changed": amounts_changed_in_text(
             hunk.v1_text if hunk.v1_range is not None else None,
             hunk.v2_text if hunk.v2_range is not None else None,
         ),

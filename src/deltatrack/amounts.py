@@ -39,6 +39,8 @@ across two texts, and moving them would have widened a dependency repair into th
 from __future__ import annotations
 
 import re
+from collections import Counter
+from collections.abc import Sequence
 
 #: A comma-grouped amount must use groups of exactly three digits, so a trailing
 #: run of digits (e.g. a percentage abutting with no space: "$17,40022%") falls
@@ -135,3 +137,44 @@ def extract_amounts(text: str) -> tuple[int, ...]:
         value = int(match.group().replace("$", "").replace(",", ""))
         results.append(value)
     return tuple(results)
+
+
+def amounts_changed(old_amounts: Sequence[int], new_amounts: Sequence[int]) -> bool:
+    """Whether two sides hold a different MULTISET of dollar figures.
+
+    The one definition of "the money moved", shared by both published contracts: the
+    canonical diff's per-change `amounts_changed` tag and the `--financial` JSON's
+    field of the same name. It lives here, beside :func:`extract_amounts`, because the
+    two are one rule -- what counts as an amount, and what counts as a change to the
+    set of them -- and a second copy of either is a second thing to keep in step.
+    (#671; the same reasoning that moved the annotation strip into
+    :func:`strip_amendment_annotations` after #670 was found in a divergent copy.)
+
+    **Multiset, not set.** Two identical figures collapsing to one is a real change,
+    and set semantics would call it no change at all.
+
+    Takes extracted figures rather than text so a caller that already has them does
+    not pay for a second extraction; both callers extract with `extract_amounts`, so
+    the annotation strip applies either way.
+
+    It deliberately says nothing about WHICH figure became which, in which direction,
+    or by how much. That is a claim about an account, it needs the typing layer in
+    #115, and asserting it without one is what schema 3.0 removed.
+    """
+    return Counter(old_amounts) != Counter(new_amounts)
+
+
+def amounts_changed_in_text(old_text: str | None, new_text: str | None) -> bool:
+    """:func:`amounts_changed` over two raw texts, extracting each side first.
+
+    For callers holding text rather than figures -- the canonical producer, which
+    computes the change-level tag from the published `text` so a consumer holding only
+    the document can verify it. Callers that have already extracted (the `--financial`
+    path, which publishes the figures themselves) use :func:`amounts_changed` directly
+    rather than paying for a second extraction.
+
+    Both spellings resolve to one comparison, which is the point: the tag in the
+    canonical diff and the field of the same name in the `--financial` JSON are the
+    same statement about the same bill, and must not be able to drift apart.
+    """
+    return amounts_changed(extract_amounts(old_text or ""), extract_amounts(new_text or ""))

@@ -2,8 +2,12 @@
 
 import pytest
 
+from deltatrack.amounts import amounts_changed_in_text
+from deltatrack.bill_tree import normalize_bill
 from deltatrack.diff_bill import (
     FinancialChange,
+    bill_diff_to_dict,
+    diff_bills,
     compute_financial_change,
     extract_amounts,
     financial_change_to_dict,
@@ -1144,3 +1148,45 @@ class TestFinancialFilterSelectsMovedMoneyNotMentionedMoney:
         """Required by the schema, so a consumer never distinguishes absent from false."""
         missing = [c["id"] for c in canonical["changes"] if "amounts_changed" not in c]
         assert missing == [], f"changes missing the required tag: {missing[:5]}"
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not (_HR4366_V1.exists() and _HR4366_V2.exists()),
+    reason="118-hr-4366 XML corpus not present",
+)
+def test_the_two_published_amounts_changed_fields_agree():
+    """One name, one meaning, on both published surfaces (#671).
+
+    `amounts_changed` appears twice in the public output: on each change of the
+    canonical diff, and inside each `financial` object of the `--financial` JSON.
+    Both now call :func:`deltatrack.amounts.amounts_changed`, so the multiset RULE
+    cannot drift. What sharing the rule does NOT guarantee is that they see the same
+    text -- the CLI reads `amount_source_old/new` (the readable rendering), the
+    canonical reads the published `text` -- so agreement is an empirical property and
+    this is what holds it.
+
+    Read off ONE change dict rather than joined by path: a first version of this check
+    joined the two surfaces on `match_path`, matched nothing, and would have reported
+    "0 disagreements" as a pass had it not asserted a non-empty comparison first.
+    """
+    diff = bill_diff_to_dict(
+        diff_bills(normalize_bill(_HR4366_V1), normalize_bill(_HR4366_V2)), financial=True
+    )
+    disagree = []
+    compared = 0
+    for change in diff["changes"]:
+        financial = change.get("financial")
+        if not financial or "amounts_changed" not in financial:
+            continue  # no figures either side: the CLI emits no financial object
+        compared += 1
+        if financial["amounts_changed"] != amounts_changed_in_text(
+            change.get("old_text"), change.get("new_text")
+        ):
+            disagree.append(change.get("match_path"))
+
+    assert compared > 0, "no change carries money on both surfaces; this check would be vacuous"
+    assert disagree == [], (
+        f"{len(disagree)} of {compared} changes disagree between the --financial JSON and the "
+        f"canonical tag, e.g. {disagree[:3]}"
+    )
+
