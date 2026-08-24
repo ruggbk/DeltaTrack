@@ -61,13 +61,16 @@ class ChangeView:
     could not place the change (no tree, null span, uncovered position) — the
     renderer then falls back to group_label for that card."""
 
-    # The view model carries NO money field (#671). `amount_pairs` and
-    # `amount_entries` fed the Financial Summary table and the per-card callout,
-    # and both are gone: the report presents no dollar figure as a change until an
-    # amount can be typed to an account (#115, #175). This is a view model, so a
-    # field here is presentation by definition — the observations themselves are
-    # untouched, in `amounts.py`, `tree[].own_amounts`, `FinancialChange` and
-    # `PdfHunk.amount_pairs`, which is where a future typing layer reads them.
+    amounts_changed: bool = False
+    """Whether the set of dollar figures differs between this change's two sides.
+
+    READ from the canonical `amounts_changed` tag, never recomputed here (#671): the
+    contract is the single source of truth, so the report and any other consumer of
+    the same document filter identically. It carries no dollar VALUE and makes no
+    claim about direction, magnitude or account — the per-card callout and the
+    Financial Summary table that did are gone, pending #115/#175. The observations
+    themselves live in `amounts.py`, `tree[].own_amounts`, `FinancialChange` and
+    `PdfHunk.amount_pairs`, untouched."""
 
 
 @dataclass(frozen=True)

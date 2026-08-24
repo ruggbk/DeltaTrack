@@ -1057,17 +1057,90 @@ class TestCbpAccountIsNotCutByItsOwnAmendmentNotes:
         assert (16_566_247_000, 16_566_247_000) in pairs, f"the appropriation did not pair with itself: {pairs}"
         assert all(old == new for old, new in pairs), f"an amount in this paragraph moved, and none did: {pairs}"
 
-    def test_the_export_makes_no_money_claim_about_this_account(self, canonical):
-        """What a reader is handed: the export states nothing about this account's money.
+    def test_the_export_reports_no_money_movement_for_this_account(self, canonical):
+        """What a reader is handed: the export says this account's money did not move.
 
-        Since #671 that is true of every change, so this is deliberately NOT written as
-        "the money did not move" -- an absence that holds unconditionally proves nothing
-        about the amendment strip. It is written as a contract check on the change object
-        instead, which is a claim about the schema and does go red if a money field
-        returns. The amendment-strip guarantee itself is asserted above, on the pairing.
+        The nine floor amendments net to zero, so `amounts_changed` must be **false**
+        -- and it is a real assertion again, not a vacuous one. Between #671 removing
+        `amount_entries` and this commit adding `amounts_changed`, the export carried
+        no money field at all and the only honest check here was a schema-shape one.
+        Now the tag exists and can be wrong, so this states the guarantee directly.
+
+        It goes red if the amendment strip regresses (the annotation deltas re-enter
+        `extract_amounts`, so the two sides' multisets diverge), which is exactly the
+        #670 defect. Its sibling above pins the same guarantee at the pairing; this
+        one pins what the published document tells a consumer.
         """
         change = self._cbp_change(canonical)
         assert change is not None
-        assert not [k for k in change if "amount" in k], (
-            f"a change object carries no money field since 3.0 (#671): {sorted(change)}"
+        assert change["amounts_changed"] is False, (
+            "the export reports this account's money as changed; the nine amendments net to zero"
         )
+
+_HR4366_V1 = fixture_path("118-hr-4366", "1_reported-in-house.xml")
+_HR4366_V2 = fixture_path("118-hr-4366", "2_engrossed-in-house.xml")
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not (_HR4366_V1.exists() and _HR4366_V2.exists()),
+    reason="118-hr-4366 XML corpus not present",
+)
+class TestFinancialFilterSelectsMovedMoneyNotMentionedMoney:
+    """What the report's Financial filter selects, pinned on a real comparison (#671).
+
+    118-hr-4366 reported-vs-engrossed is the case the whole predicate choice rests on:
+    **14 of its 25 changes mention a dollar figure, and not one of them moves a
+    figure.** Every one is a `modified` change whose floor-amendment parentheticals
+    churn around an appropriation that is identical on both sides -- the #670 shape.
+
+    So the two candidate predicates give opposite answers here. `amounts_changed`
+    (multiset of figures differs) says 0; the simpler "the changed text mentions a $"
+    says 14 and would show a reader fourteen cards with nothing to find. This pins the
+    contrast rather than only the number, because the number alone would still pass if
+    someone swapped the predicate on a comparison where the two happen to agree.
+
+    Measured across all 42 pinned corpus pairs, the two disagree on 51 changes, every
+    one of them `modified`.
+    """
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def canonical():
+        from deltatrack.compare.xml import compare_xml
+
+        return compare_xml(
+            _HR4366_V1.read_bytes(),
+            _HR4366_V2.read_bytes(),
+            start_label="reported-in-house",
+            end_label="engrossed-in-house",
+        )
+
+    def test_no_change_moves_a_dollar_figure(self, canonical):
+        changes = canonical["changes"]
+        assert changes, "no changes at all; every assertion here would be vacuous"
+        tagged = [c for c in changes if c["amounts_changed"]]
+        assert tagged == [], f"{len(tagged)} changes claim moved money on a comparison where none did"
+
+    def test_but_many_changes_do_mention_a_dollar_figure(self, canonical):
+        """The other half of the contrast, stated as a presence so it cannot pass vacuously.
+
+        Without this, `amounts_changed == 0` above would be satisfied just as well by a
+        comparison containing no money at all, and the test would prove nothing about
+        the predicate.
+        """
+        mentions = [
+            c
+            for c in canonical["changes"]
+            if extract_amounts((c["text"] or {}).get("old") or "")
+            or extract_amounts((c["text"] or {}).get("new") or "")
+        ]
+        assert len(mentions) >= 10, (
+            f"only {len(mentions)} changes mention a figure; this comparison no longer "
+            "exercises the mentions-vs-moves distinction the predicate exists for"
+        )
+
+    def test_every_change_carries_the_tag(self, canonical):
+        """Required by the schema, so a consumer never distinguishes absent from false."""
+        missing = [c["id"] for c in canonical["changes"] if "amounts_changed" not in c]
+        assert missing == [], f"changes missing the required tag: {missing[:5]}"

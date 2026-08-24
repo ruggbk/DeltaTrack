@@ -118,6 +118,7 @@
         "location",
         "anchor_resolution",
         "text",
+        "amounts_changed",
         "move"
       ],
       "additionalProperties": false,
@@ -171,6 +172,11 @@
             "old": { "type": ["string", "null"] },
             "new": { "type": ["string", "null"] }
           }
+        },
+        "amounts_changed": {
+          "type": "boolean",
+          "description": "Whether the MULTISET of dollar figures in this change differs between the two sides (v3.0, #671). The only money field on a change, and an observation rather than a claim: added, removed and modified amounts all make it true, without pairing any figure to any other. It carries no value and says nothing about direction, magnitude, or which account money belongs to -- an appropriations block mixes top-line appropriations, sub-allocations, ceilings and commitment limitations, and typing them is deferred to #115. Computed from this object's own `text.old` and `text.new`, so a consumer holding only this document can verify it. Required: every change carries it, false when the figures are unchanged or absent.",
+          "$comment": "Replaces `amount_entries`, removed in the same major. See canonical-diff.md."
         },
         "move": {
           "anyOf": [

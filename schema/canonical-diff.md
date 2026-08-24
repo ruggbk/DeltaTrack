@@ -12,9 +12,8 @@ Top-level field: `schema_version: "3.0"`.
 
 ## Changelog
 
-- **3.0** — **Breaking:** removed `amount_entries` from each change object and from
-  its `required` list (#671). No field replaces it: a change object now carries no
-  money at all. The field paired a dollar figure on one side with a figure on the
+- **3.0** — **Breaking:** replaced `amount_entries` on each change object with a
+  boolean `amounts_changed`, both in `required` (#671). The old field paired a dollar figure on one side with a figure on the
   other and published the difference as a change, and the pipeline has no
   account-level model to say what either figure *is*. An appropriations paragraph
   carries several kinds of number — a top-line appropriation, sub-allocations carved
@@ -38,6 +37,17 @@ Top-level field: `schema_version: "3.0"`.
   it needs first is #115 and #175, so an amount can be attached to an account and
   classified as appropriation, sub-allocation, ceiling or limitation before it is
   shown as a number in a Change column.
+
+  What replaces it is deliberately weaker and therefore supportable:
+  `amounts_changed` says only that the **multiset** of dollar figures differs between
+  the two sides. Added, removed and modified amounts all make it true, and none of
+  them requires pairing one figure to another — a figure present only on the new side
+  is an addition, one present only on the old side a removal, and $1M → $2M is both at
+  once. The tag carries no value, no direction and no account. It is computed from the
+  change's own `text.old` and `text.new`, so a consumer holding nothing but the
+  document can verify it, which `amount_entries` never allowed. A consumer that
+  offered a "financial changes" filter over `amount_entries` should read this instead:
+  it is the same question asked honestly.
 - **2.0** — **Breaking:** removed the deprecated `amounts` field from each change
   object and from its `required` list (#274). `amount_entries` fully supersedes it.
   `amounts` held only the `changed`-kind subset, so it structurally could not
@@ -206,6 +216,7 @@ that need a different order MUST resort.
   },
   "anchor_resolution": "resolved",
   "text":    { "old": "...", "new": "..." },
+  "amounts_changed": true,
   "move":    null,
   "full_text_span": {                            // optional, v1.2+
     "v1": { "start": 4823, "end": 4961 },
@@ -299,10 +310,47 @@ Plain text bodies. `null` on the side that doesn't exist (`added`: `old=null`;
 `removed`: `new=null`). Word-level inline diffs are NOT carried in the JSON;
 renderers compute them at render time.
 
-### Money fields: none (removed in v3.0)
+### `amounts_changed` (v3.0+; the only money field)
 
-A change object carries **no** money field. `amounts` was removed in v2.0 and
-`amount_entries` in v3.0 (#671); nothing replaces either.
+```jsonc
+"amounts_changed": true
+```
+
+**Whether the multiset of dollar figures in this change differs between its two
+sides.** Required on every change; `false` when the figures are identical or when the
+change carries none.
+
+```
+amounts_changed  ==  multiset(amounts in text.old)  !=  multiset(amounts in text.new)
+```
+
+- A figure only on the new side → an amount was **added**.
+- A figure only on the old side → an amount was **removed**.
+- `$1,000,000` → `$2,000,000` → the first drops out and the second appears, so the
+  multisets differ: **modified**.
+- Multiset rather than set, so two identical figures collapsing to one still counts.
+
+**What it deliberately does not say.** Which figure became which, by how much, in
+which direction, or for which account. That is the claim `amount_entries` made and
+v3.0 removed: an appropriations block mixes top-line appropriations, sub-allocations
+carved out of them, "not to exceed" ceilings and loan guarantee commitment
+limitations, and nothing in the pipeline yet distinguishes them (#115, #175, ADR
+0018). A consumer wanting to show a reader money should use this tag to *find* the
+blocks, then present the figures **in the sentence they appear in**, via
+`full_text_span` into `full_text`.
+
+**Verifiable from this document alone.** It is computed from this change object's own
+`text.old` and `text.new`, so a consumer can recompute it and check. Note the
+amount-extraction rule it depends on: floor-amendment annotations (`(reduced by
+$1,000,000)`) are not amounts, so a run of them that nets to zero beside an unchanged
+appropriation leaves `amounts_changed` **false** — the block's text changed, its money
+did not.
+
+**Not a filter on prose.** "The changed text mentions a dollar sign" is a different,
+much weaker question, and not what this answers: on one committed comparison 14 of 25
+changes mention a figure while none of them moved one.
+
+### The observe / claim line
 
 The line the contract draws is between what the pipeline **observes** and what it
 **claims**. Extracting the dollar figures in a block of text, and inventorying them
