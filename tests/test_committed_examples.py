@@ -150,11 +150,14 @@ def test_index_page_tokens_match_the_report_tokens():
     """The landing page and the reports it links use the same palette values.
 
     Both derive from `deltatrack.palette`, so this compares a *committed rendered report*
-    against what that module produces today. It catches the two ways they can still come
-    apart: the committed examples going stale against a palette change, or a surface
-    ceasing to derive from the module at all. The second is what let the demo's front
-    door look like a different product from everything behind it, the mismatch #42 was
-    filed over.
+    against what that module produces today. What it detects is the surfaces emitting
+    different palette values, which happens when the committed examples go stale against
+    a palette change, or when one surface stops taking its values from the module and
+    carries different ones. Diverging values are what let the demo's front door look like
+    a different product from everything behind it, the mismatch #42 was filed over.
+
+    It does not detect derivation itself, and should not: a hand-written literal holding
+    the same values passes, because nothing a reader sees has changed.
 
     Read from a rendered report rather than the renderer's module, so what a visitor
     actually gets is what is compared.
@@ -183,8 +186,8 @@ def test_index_page_tokens_match_the_report_tokens():
         "examples/index.html uses palette values that differ from the reports it links "
         f"(name: index value vs report value): {mismatched}. Both should come from "
         "`deltatrack.palette`. Regenerate with `uv run python scripts/render_examples.py` "
-        "and commit the result; if that does not clear it, a surface has stopped deriving "
-        "from the module."
+        "and commit the result; if that does not clear it, `INDEX_TOKENS` is no longer "
+        "emitting the palette's values for those names."
     )
 
 
