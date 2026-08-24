@@ -709,10 +709,12 @@ def test_a_module_named_beside_a_real_invocation_is_not_covered(tmp_path: Path) 
 
 
 # --- Every weekly failure reaches a person, whatever failed --------------------
-# `corpus-parity.yml` is the only scheduled workflow and the only one that files an issue,
-# and that report is what makes the gate worth having: a red weekly run emails whoever
-# last edited the cron expression and nobody else, which the workflow's own comment
-# explains at the reporting step. The report was gated on
+# `corpus-parity.yml` is the only workflow that files an issue, and therefore the only
+# scheduled workflow with tracker-backed failure reporting. (`security.yml` also runs on a
+# Monday cron, 17 minutes earlier, and reports nowhere but the run list.) That report is
+# what makes the gate worth having: a red weekly run emails whoever last edited the cron
+# expression and nobody else, which the workflow's own comment explains at the reporting
+# step. The report was gated on
 #
 #     if: failure() && steps.parity.outcome == 'failure'
 #
@@ -740,6 +742,13 @@ PARITY_WORKFLOW = WORKFLOWS / "corpus-parity.yml"
 # onto an open corpus-drift report every time the runner broke, misattributing the cause.
 _DRIFT_TITLE = "Corpus filenames diverge from govinfo enumeration"
 _SETUP_TITLE = "Weekly corpus-parity check could not run"
+
+# A phrase carried by one report body and absent from the other. The titles alone do not
+# pin the diagnosis: copying the drift body under the setup title would hand a reader an
+# infrastructure failure described as an upstream corpus rename, telling them to re-fetch
+# bills that are not the problem, with every title assertion still green.
+_DRIFT_PHRASE = "bill filenames on disk that govinfo enumeration no longer produces"
+_SETUP_PHRASE = "never reached its assertion"
 
 # The reporting step is located by what it DOES -- `gh issue create` inside an executable
 # `run:` block -- never by its `name`. Matching the name would let a rename drop the step
@@ -937,24 +946,32 @@ def _argument(call: list[str], flag: str) -> str:
 
 
 @pytest.mark.parametrize(
-    ("parity_outcome", "expected_title"),
+    ("parity_outcome", "expected_title", "expected_phrase", "wrong_phrase"),
     [
-        ("failure", _DRIFT_TITLE),
-        ("skipped", _SETUP_TITLE),
-        ("", _SETUP_TITLE),
+        ("failure", _DRIFT_TITLE, _DRIFT_PHRASE, _SETUP_PHRASE),
+        ("skipped", _SETUP_TITLE, _SETUP_PHRASE, _DRIFT_PHRASE),
+        ("", _SETUP_TITLE, _SETUP_PHRASE, _DRIFT_PHRASE),
     ],
     ids=["check-failed", "check-skipped", "check-never-existed"],
 )
-def test_failure_report_titles_the_two_conditions_apart(
-    tmp_path: Path, parity_outcome: str, expected_title: str
+def test_failure_report_titles_and_explains_each_condition(
+    tmp_path: Path, parity_outcome: str, expected_title: str, expected_phrase: str, wrong_phrase: str
 ) -> None:
     """Corpus drift and a broken runner file separate reports, and reuse separate reports.
 
-    Protects the behaviour the split titles exist for: the reuse search matches on title,
-    so sharing one would comment "Still failing as of the weekly run" onto an open
-    corpus-drift report whenever the runner broke, blaming upstream data for an
-    infrastructure fault and leaving the real state buried. The mutation that turns this
-    red is giving both branches the same title, or dropping the branch entirely.
+    Two things are pinned, and the title alone is not enough for either.
+
+    The TITLE is what the reuse search matches on, so sharing one would comment "Still
+    failing as of the weekly run" onto an open corpus-drift report whenever the runner
+    broke, blaming upstream data for an infrastructure fault and leaving the real state
+    buried. The mutation is giving both branches the same title.
+
+    The BODY is what a reader acts on, and it can be wrong while the title is right.
+    Copying the drift body under the setup title would tell someone whose runner broke to
+    re-download bills and edit `_ACCEPTED_EXTRA_STEMS`, none of which is the problem, and
+    a title-only assertion stays green throughout. So each case asserts a phrase its own
+    body carries AND that the other body's phrase is absent; presence alone would still
+    pass if the two bodies were concatenated.
 
     The three cases are the three values CI can actually produce. `failure` is the check
     itself; `skipped` is a step that failed ahead of it; the empty string is the checkout
@@ -976,6 +993,16 @@ def test_failure_report_titles_the_two_conditions_apart(
         f"PARITY_OUTCOME={parity_outcome!r} filed the wrong report title: {create}"
     )
     assert _argument(create, "--repo") == "AgoraDMV/DeltaTrack", f"filed against the wrong repository: {create}"
-    assert "https://example.invalid/actions/runs/1" in _argument(create, "--body"), (
+
+    body = _argument(create, "--body")
+    assert "https://example.invalid/actions/runs/1" in body, (
         f"the report body does not carry the run log link, which is all a reader has: {create}"
+    )
+    assert expected_phrase in body, (
+        f"PARITY_OUTCOME={parity_outcome!r} filed {expected_title!r} without the explanation that "
+        f"condition calls for; expected a body saying {expected_phrase!r}, got: {body!r}"
+    )
+    assert wrong_phrase not in body, (
+        f"PARITY_OUTCOME={parity_outcome!r} filed a body describing the OTHER condition "
+        f"({wrong_phrase!r}), which sends the reader after the wrong cause: {body!r}"
     )
