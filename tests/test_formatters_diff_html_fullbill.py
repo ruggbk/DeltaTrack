@@ -324,6 +324,47 @@ def test_export_prompts_shown_immediately():
         assert prompt in html
 
 
+#: The exact wording the export must offer, spelled out as a literal rather than read
+#: from `_LLM_PROMPTS`. A test that iterates the tuple asserts only that the tuple
+#: renders, so it follows the prompt wherever it goes and cannot catch it being changed
+#: back to something the pipeline cannot support.
+_OBSERVATION_ONLY_PROMPT = (
+    "Identify changes that mention dollar figures. Show the surrounding old and new bill "
+    "text. Do not classify the figures as appropriations, account-level funding changes, "
+    "or funding increases or decreases."
+)
+
+#: Negative control. This is the retired prompt, kept here ONLY so the gate below has a
+#: known-bad string to prove it can detect. It must not appear in any shipped surface.
+_RETIRED_FUNDING_PROMPT = "Which programs or accounts had their funding increased or decreased"
+
+
+def test_export_prompt_locates_dollar_figures_without_classifying_them():
+    """#671 — the export may help a reader FIND money, not tell them what it means.
+
+    The report ships prompts telling a staffer to upload `diff.json` to an AI assistant.
+    The retired prompt asked which programs or accounts had funding increased or
+    decreased and to put it in a table, which is a question the pipeline cannot answer:
+    an appropriations block mixes top-line appropriations, sub-allocations carved out of
+    them, "not to exceed" ceilings and loan guarantee commitment limitations, and nothing
+    yet distinguishes them (#115). An assistant holding only the export cannot read this
+    repository to learn the question was leading, so the wording is the whole safeguard.
+
+    Asserted at the rendered boundary, not against `_LLM_PROMPTS`: the modal and prompt
+    list must genuinely render before the absence check means anything, otherwise this
+    would pass just as well on a report that shows no prompts at all.
+    """
+    html = format_diff_html(_canonical())
+
+    # Presence first, so the absence assertion below cannot pass vacuously.
+    assert 'id="export-modal"' in html
+    assert 'id="export-prompts" class="export-prompts"' in html
+    assert 'class="prompt-text"' in html
+
+    assert _OBSERVATION_ONLY_PROMPT in html
+    assert _RETIRED_FUNDING_PROMPT not in html
+
+
 def test_no_export_without_full_text():
     html = format_diff_html(_no_full_text())
     assert 'id="export-open"' not in html

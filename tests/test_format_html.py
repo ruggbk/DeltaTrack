@@ -259,9 +259,7 @@ class TestCliIntegration:
         assert out.read_text().startswith("<!DOCTYPE html>")
 
     @pytest.mark.slow
-    def test_format_html_real_bill_renders_no_financial_presentation(
-        self, tmp_path, monkeypatch, fast_normalize_diff
-    ):
+    def test_format_html_real_bill_renders_no_financial_presentation(self, tmp_path, monkeypatch, fast_normalize_diff):
         """#671 — end to end on a real bill with genuine amount changes.
 
         v1 -> v6 (enrolled) is the comparison that DID render a Financial Summary,

@@ -57,10 +57,7 @@ def _build_card(change: ChangeView, index: int) -> str:
     # output. Escape so a stray value can't break attribute quoting.
     ct = escape(change.change_type)
 
-    parts = [
-        f'<div class="change-card {ct}{extra_card_class}" id="change-{index}"'
-        f' data-type="{ct}">'
-    ]
+    parts = [f'<div class="change-card {ct}{extra_card_class}" id="change-{index}" data-type="{ct}">']
     parts.append('<div class="change-header">')
     parts.append(f'<span class="badge badge-{ct}">{ct}</span>')
     parts.append(f"<h3{h3_class}>{change.heading_html}</h3>")
@@ -760,11 +757,25 @@ def _views_html(
     return f'<div class="view view-changes">{changes_inner}</div><div class="view view-full" hidden>{full_bill}</div>'
 
 
-# Ready-made questions a staffer can paste into an LLM alongside the diff.json.
-# Tailored to the canonical schema (sections, amounts) and appropriations bills.
+# Ready-made questions a staffer can paste into an LLM alongside the diff.json,
+# tailored to the canonical schema (sections, amounts) and appropriations bills.
+#
+# They may help a reader LOCATE dollar figures and inspect the text around them; they
+# must not invite conclusions about program or account funding, because the pipeline
+# cannot yet say what a figure means (#671). An appropriations block mixes top-line
+# appropriations, sub-allocations carved out of them, "not to exceed" ceilings and loan
+# guarantee commitment limitations, and #115 is where the typing that separates them
+# gets built.
+#
+# That constraint bites harder here than in on-screen copy: the export exists to be
+# handed to a machine, and an assistant holding only diff.json cannot read this
+# repository to learn a question was leading. The prompt is the whole instruction it
+# receives.
 _LLM_PROMPTS = (
     "Summarize the most significant changes between these two versions of the bill in plain English.",
-    "Which programs or accounts had their funding increased or decreased, and by how much? Put it in a table.",
+    "Identify changes that mention dollar figures. Show the surrounding old and new bill "
+    "text. Do not classify the figures as appropriations, account-level funding changes, or "
+    "funding increases or decreases.",
     "List every section that was added or removed between the two versions.",
     "Beyond dollar amounts, are there any policy, legal, or eligibility changes I should be aware of?",
     "Explain what changed in a specific section (give me the section number) and why it might matter.",
