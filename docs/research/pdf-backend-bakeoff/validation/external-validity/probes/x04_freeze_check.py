@@ -700,17 +700,34 @@ def continuation_auth_errors(marker_boundary: str) -> list[str]:
         )
     declared_ids = {r.get("id") for r in parse_deviations()[0]}
     acknowledged = set(rec.get("acknowledged_deviations") or [])
+    required = required_deviation_ids(marker_boundary)
     if not acknowledged:
         errors.append("authorization acknowledges no reviewed deviation")
     for dev_id in sorted(acknowledged - declared_ids, key=str):
         errors.append(f"authorization acknowledges deviation {dev_id!r}, which is not in the register")
-    # EXACT, not merely non-empty. The deviations that matter are the ones DECLARING the
-    # commits that changed the current surface; a list naming some other record while the
-    # relevant one is missing acknowledges nothing. Derived from history, not from the file.
-    for dev_id in sorted(required_deviation_ids(marker_boundary) - acknowledged, key=str):
+    # EXACT, and exact in BOTH directions (A52). The deviations that matter are the ones
+    # DECLARING the commits that changed the current surface. Derived from history, not from
+    # the file.
+    #
+    # OMISSION was always refused: a list naming some other record while the relied-on one is
+    # missing acknowledges nothing. PADDING is refused for a reason that is easy to miss,
+    # because a superset looks harmless: the field then asserts the authorization rests on
+    # records it does not rest on, and it degenerates into a second copy of the register --
+    # which `deviations_blob` already pins, completely and by content, above. Two mechanisms
+    # for one fact means the weaker one eventually disagrees, and this is the one a human
+    # reads to learn what was relied on.
+    for dev_id in sorted(required - acknowledged, key=str):
         errors.append(
             f"authorization does not acknowledge deviation {dev_id!r}, which declares a "
             "post-boundary change to a current result-bearing file"
+        )
+    # Only ids that ARE in the register are named here. An unknown id is already reported
+    # above as not-in-the-register, and reporting it twice would let that control pass on
+    # this error instead of its own.
+    for dev_id in sorted((acknowledged & declared_ids) - required, key=str):
+        errors.append(
+            f"authorization acknowledges deviation {dev_id!r}, which declares no post-boundary "
+            "change to a current result-bearing file"
         )
 
     # AND THE CHANGES THEMSELVES MUST HAVE BEEN DECLARED FOR REVIEW. Everything above asks
@@ -757,7 +774,12 @@ def build_continuation_authorization(marker_boundary: str, results_already_visib
         # The reviewed post-boundary record this answers, pinned so a later addition to the
         # register closes the gate rather than riding on this authorization.
         "deviations_blob": blob_sha(DEVIATIONS),
-        "acknowledged_deviations": [r.get("id") for r in parse_deviations()[0]],
+        # EXACTLY the deviations this authorization RELIES ON, derived from history (A52).
+        # Not the register's contents: `deviations_blob` above already binds the register
+        # completely, so restating it here added no evidence while asserting a reliance
+        # history does not support. A reader asking "what is this authorization standing on?"
+        # must get the relied-on set, not a copy of every record that happened to exist.
+        "acknowledged_deviations": sorted(required_deviation_ids(marker_boundary)),
         # The exact inventory that made a secondary authorization necessary, kept verbatim
         # so a reader can see WHAT changed rather than being told that something did.
         "drifted_from_original_marker": drifted,
@@ -2090,10 +2112,17 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
             (root / "unrelated.py").write_text("U = 1\n")
             _a50_git(root, "add", "-A")
             _a50_git(root, "commit", "-qm", "cO main touches an unrelated file")
+            cO = _a50_git(root, "rev-parse", "HEAD")
             # Declared BEFORE the merge, so the only provenance complaint left is the merge.
             _a50_declare_extra(ev, "S", cS, ["probes/alpha.py"])
+            # A52 -- a LAWFUL deviation the authorization does not rely on. cO changed nothing
+            # on the result-bearing surface, which is the shape a real non-result-bearing
+            # deviation has: A51 declared a change to self-test isolation only. Declaring it is
+            # correct and leaves it out of the relied-on set, which is what gives the exactness
+            # control below a real pad to test with instead of an invented one.
+            _a50_declare_extra(ev, "O", cO, ["repo:unrelated.py"])
             _a50_git(root, "add", "-A")
-            _a50_git(root, "commit", "-qm", "cSD declare the side change")
+            _a50_git(root, "commit", "-qm", "cSD declare the side change and the unrelated one")
             _a50_git(root, "merge", "--no-commit", "--no-ff", "a50side")
             (root / "src" / "gamma.py").write_text("SEGMENT = 42\n")
             _a50_git(root, "add", "-A")
@@ -2199,6 +2228,34 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
             checks.append(
                 ("A50-16 ...and not merely because the acknowledged id was unknown",
                  not any("not in the register" in e for e in ack_errs))
+            )
+
+            # A52 -- EXACTNESS IS TWO-SIDED. A50-16 above proves the field cannot OMIT a
+            # relied-on deviation. It could still be PADDED with real-but-unrelated register
+            # entries, and that is not the harmless superset it looks like: it asserts a
+            # reliance history does not support, and it makes the field a copy of the register
+            # -- which `deviations_blob` already pins, completely, immediately above. Both
+            # operands are derived from the fixture rather than hardcoded, so the control
+            # cannot rot into asserting against ids the fixture no longer has.
+            fixture_required = required_deviation_ids(cM)
+            fixture_declared = {r.get("id") for r in parse_deviations()[0]}
+            fixture_irrelevant = sorted(fixture_declared - fixture_required, key=str)
+            checks.append(
+                ("A52-0 the fixture offers a real deviation the authorization does NOT rely on",
+                 bool(fixture_required) and bool(fixture_irrelevant))
+            )
+            padded_errs = variant(acknowledged_deviations=sorted(fixture_required) + fixture_irrelevant[:1])
+            checks.append(
+                ("A52-1 acknowledging the relied-on deviation PLUS an irrelevant declared one is refused",
+                 any("declares no post-boundary change" in e and repr(fixture_irrelevant[0]) in e for e in padded_errs))
+            )
+            checks.append(
+                ("A52-1 ...and not because a relied-on deviation was missing",
+                 not any("does not acknowledge deviation" in e for e in padded_errs))
+            )
+            checks.append(
+                ("A52-1 ...and not because the acknowledged id was unknown",
+                 not any("not in the register" in e for e in padded_errs))
             )
             checks.append(
                 ("A50-10d dropping the 4.7-in-force statement is refused",
