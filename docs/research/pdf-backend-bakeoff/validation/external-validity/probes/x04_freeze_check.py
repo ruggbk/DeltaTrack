@@ -90,6 +90,14 @@ CONTINUATION = EV / "results" / "CONTINUATION.json"
 # files. A DEVIATIONS.md row is disclosure and does NOT stand in for this one.
 CONTINUATION_AUTH = EV / "results" / "EXECUTION-CONTINUATION-AUTHORIZATION.json"
 CONTINUATION_AUTH_KIND = "POST-BOUNDARY APPARATUS CONTINUATION"
+# A53 -- THE CANONICAL CROSS-ENGINE CONTROL IS AN EXPOSURE FACT, not merely a result. It is
+# read here ONLY to answer "what had already been seen when the authorization was written",
+# never to re-decide anything it measured. `CONTINUATION.json` cannot answer that question:
+# it is the truthful Run 1 record and Run 1 stopped BEFORE this artifact existed, so an
+# authorization built from it alone understates prior exposure -- which is the one direction
+# that matters, because understating exposure falsely strengthens the apparent independence
+# of whatever the study still has left to do.
+CROSS_ENGINE_CONTROL = EV / "results" / "cross_engine_control.json"
 
 # A47 -- THE PRIOR EXECUTION BOUNDARY IS A HISTORICAL FACT, PINNED HERE, exactly as
 # POPULATION_FREEZE_COMMIT is and for the same reason. Taking it from the continuation record
@@ -439,6 +447,134 @@ def continuation_auth_state() -> tuple[str, str, list[str]]:
     return ("VALID" if not errors else "MUTATED"), authorizing, errors
 
 
+def _show_at(commit: str, path: Path) -> tuple[bool, str]:
+    """(present, text) for a path AS COMMITTED at `commit`. Never reads the working tree.
+
+    `git()` discards the exit status, which cannot distinguish "the file is absent at that
+    commit" from "the file is there and empty" -- and those must not be conflated when the
+    answer decides whether an exposure fact is omitted or refused.
+    """
+    rel = str(path.relative_to(REPO))
+    proc = subprocess.run(
+        ["git", "show", f"{commit}:{rel}"], cwd=REPO, capture_output=True, text=True, check=False
+    )
+    return proc.returncode == 0, proc.stdout
+
+
+def authorizing_commit() -> str:
+    """The commit that INTRODUCED the continuation authorization, from history alone.
+
+    Deliberately not `continuation_auth_state()`, which returns "" for the authorizing commit
+    as soon as the file on disk differs from its committed blob. The validator has to keep
+    working on exactly that state -- a tampered working copy over an intact history -- because
+    that is what every mutation control produces.
+    """
+    if not CONTINUATION_AUTH.exists():
+        return ""
+    rel = str(CONTINUATION_AUTH.relative_to(REPO))
+    commits = git("log", "--format=%H", "--", rel).splitlines()
+    return commits[-1] if commits else ""
+
+
+def pre_authorization_commit() -> str:
+    """The commit the authorization was generated AGAINST: the authorizing commit's parent.
+
+    THE SNAPSHOT HAS A FIXED LIFETIME, and this is what fixes it. Exposure is reconstructed
+    from this tree and no other, so results committed AFTER the authorization cannot
+    retroactively falsify a summary that was truthful when written -- and, in the other
+    direction, the operator cannot widen the snapshot by running more of the study before
+    committing the artifact. Derived, never read from the record: a `head_at_authorization`
+    the record asserts about itself is the self-certifying field A47 had to remove from
+    `CONTINUATION.json`.
+    """
+    commit = authorizing_commit()
+    return git("rev-parse", f"{commit}^") if commit else ""
+
+
+def population_size_at(commit: str) -> int | None:
+    """The frozen population size AS COMMITTED at `commit`, or None if unreadable."""
+    present, raw = _show_at(commit, MEMBERSHIP)
+    if not present:
+        return None
+    try:
+        members = json.loads(raw).get("members")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    return len(members) if isinstance(members, list) else None
+
+
+def cross_engine_exposure_at(commit: str) -> tuple[str, list[str]]:
+    """(phrase, errors) for the canonical cross-engine control AS COMMITTED at `commit`.
+
+    DERIVED FROM THE ARTIFACT, never from prose. A number typed into DEVIATIONS.md or into
+    this function would agree with the measurement only until the measurement changed, and
+    the whole point of the field is to be checkable against the thing it describes.
+
+    ABSENT IS NOT AN ERROR -- a study that has not run the control has nothing to disclose --
+    but PRESENT-AND-UNTRUSTWORTHY is, and it is refused rather than silently omitted. Omission
+    is the failure mode under repair: it reads exactly like "nothing was visible".
+    """
+    present, raw = _show_at(commit, CROSS_ENGINE_CONTROL)
+    if not present:
+        return "", []
+    where = f"canonical cross-engine control at {commit[:8]}"
+    try:
+        rec = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return "", [f"{where} is unreadable: {exc}"]
+    if not isinstance(rec, dict):
+        return "", [f"{where} is not a JSON object"]
+
+    rows, n_documents, n_qualified = rec.get("per_document"), rec.get("n_documents"), rec.get("n_qualified")
+    if not isinstance(rows, list) or not isinstance(n_documents, int) or not isinstance(n_qualified, int):
+        return "", [f"{where} is incomplete: it needs per_document, n_documents and n_qualified"]
+    if any(not isinstance(r, dict) or not isinstance(r.get("passed"), bool) for r in rows):
+        return "", [f"{where} carries a document row with no boolean 'passed'"]
+    if len(rows) != n_documents:
+        return "", [f"{where} says n_documents={n_documents} but carries {len(rows)} document row(s)"]
+    # The producer's own rule (`cross_engine_control.summarise`): a document qualifies when it
+    # did NOT pass. Re-derived from the rows so a summary that disagrees with its own evidence
+    # is caught here rather than repeated into the authorization as fact.
+    from_rows = sum(1 for r in rows if not r["passed"])
+    if from_rows != n_qualified:
+        return "", [f"{where} says n_qualified={n_qualified} but its document rows show {from_rows}"]
+
+    population = population_size_at(commit)
+    if population is None:
+        return "", [f"cannot size the frozen population at {commit[:8]} to report cross-engine coverage"]
+    return f"cross-engine {len(rows)}/{population} measured, n_qualified {n_qualified}", []
+
+
+def continuation_record_at(commit: str) -> dict:
+    """The Run 1 continuation record AS COMMITTED at `commit`, or {} if absent/unreadable."""
+    present, raw = _show_at(commit, CONTINUATION)
+    if not present:
+        return {}
+    try:
+        rec = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return rec if isinstance(rec, dict) else {}
+
+
+def authorization_exposure_summary(rec: dict, commit: str) -> tuple[str, list[str]]:
+    """(summary, errors) -- everything already visible AT THE AUTHORIZATION BOUNDARY.
+
+    TWO PHASES, ONE SENTENCE, and they are kept separate on purpose. The historical phase is
+    Run 1 and is owned by `CONTINUATION.json`, which must keep saying that Run 1 stopped
+    before the cross-engine control; rewriting it to cover a later measurement would destroy
+    the historical record to fix a reporting bug. The authorization-time phase is everything
+    committed since. `results_already_visible` is the union, because the reader's question is
+    "what had been seen when this was authorized", not "what did Run 1 see".
+    """
+    parts, errors = [historical_exposure_summary(rec)], []
+    phrase, phrase_errors = cross_engine_exposure_at(commit)
+    errors.extend(phrase_errors)
+    if phrase:
+        parts.append(phrase)
+    return "; ".join(p for p in parts if p), errors
+
+
 def post_marker_commits_by_path(marker_boundary: str) -> dict[str, list[str]]:
     """repo-relative path -> the commits after the boundary that modified it.
 
@@ -744,14 +880,49 @@ def continuation_auth_errors(marker_boundary: str) -> list[str]:
         errors.append("authorization does not state that this is a continuation of the inaugural execution")
     if rec.get("fresh_pristine_execution") is not False:
         errors.append("authorization does not deny being a fresh, pristine, independent execution")
-    if not rec.get("results_already_visible"):
-        errors.append("authorization does not record which results were already visible when it was written")
+    # A53 -- EXACT, AND INDEPENDENTLY DERIVED. This was a non-empty check, and non-empty is
+    # satisfied by any true-but-incomplete sentence: an authorization naming only Run 1 passed
+    # while a committed canonical cross-engine measurement over the same frozen population went
+    # unmentioned. Understating prior exposure is not a cosmetic defect -- it is the artifact
+    # claiming more independence for the remaining study than the record supports, and it is
+    # the one direction a reader cannot detect from the file itself.
+    #
+    # The comparison is against exposure RECONSTRUCTED FROM THE PRE-AUTHORIZATION TREE, so it
+    # stays stable for the life of the artifact: later authorized results do not invalidate a
+    # summary that was true when written, and no unwritten result can be smuggled into it.
+    snapshot = pre_authorization_commit()
+    claimed_head = rec.get("head_at_authorization")
+    if snapshot:
+        if claimed_head != snapshot:
+            errors.append(
+                "authorization records head_at_authorization "
+                f"{str(claimed_head or '')[:8] or 'ABSENT'}, but the commit that introduced it "
+                f"has parent {snapshot[:8]}"
+            )
+    else:
+        # Not committed anywhere yet (generation-time preview). There is no parent to derive,
+        # so the record's own claim is the only anchor available -- and `continuation_auth_state`
+        # already reports this state as UNCOMMITTED, which is what stops it authorizing anything.
+        snapshot = claimed_head if isinstance(claimed_head, str) else ""
+    if not snapshot:
+        errors.append("authorization names no pre-authorization commit to reconstruct exposure from")
+    else:
+        expected, exposure_errors = authorization_exposure_summary(continuation_record_at(snapshot), snapshot)
+        errors.extend(exposure_errors)
+        if rec.get("results_already_visible") != expected:
+            errors.append(
+                "authorization records results_already_visible "
+                f"{rec.get('results_already_visible')!r}, but the exposure committed at "
+                f"{snapshot[:8]} was {expected!r}"
+            )
     if rec.get("section_4_7_in_force") is not True:
         errors.append("authorization does not keep PRE-REGISTRATION section 4.7 in force")
     return errors
 
 
-def build_continuation_authorization(marker_boundary: str, results_already_visible: str) -> dict:
+def build_continuation_authorization(
+    marker_boundary: str, results_already_visible: str, head_at_authorization: str
+) -> dict:
     """The exact content of the secondary authorization.
 
     Factored out so the controls drive the REAL generator instead of a hand-written
@@ -768,7 +939,9 @@ def build_continuation_authorization(marker_boundary: str, results_already_visib
         "population_freeze_commit": POPULATION_FREEZE_COMMIT,
         "membership_blob": blob_sha(MEMBERSHIP),
         "population_status": "EXPOSED",
-        "head_at_authorization": git("rev-parse", "HEAD"),
+        # PASSED IN, not re-read. Exposure is reconstructed from this exact commit, so the
+        # tree that was summarised and the commit that is recorded must be the same one.
+        "head_at_authorization": head_at_authorization,
         # What is being authorized NOW: the complete current result-bearing surface.
         "current_methodology_blobs": authorization_manifest(),
         # The reviewed post-boundary record this answers, pinned so a later addition to the
@@ -1875,6 +2048,36 @@ A50_SURFACE = {
 }
 
 
+# A53 -- THE RUN 1 PHASE, as the synthetic history attests it. It says explicitly that Run 1
+# STOPPED BEFORE the cross-engine control, which is the real record's shape too: the later
+# measurement is a separate, committed fact and the historical record must not be rewritten to
+# absorb it. Stubbed for the whole A50 block so the HISTORICAL half is fixed and the
+# AUTHORIZATION-TIME half -- the half A53 repairs -- is derived for real.
+A50_HISTORICAL_EXPOSURE = (
+    "Run 1 boundary 89360b30; H/X extraction on 1 members / 4 pages; "
+    "visible: D census 13992, S1 1/1, P-head 1 docs / 2 pages; stopped before the cross-engine control"
+)
+
+
+def _a50_write_cross_engine(ev: Path, n_documents: int = 1, n_qualified: int = 0, passed: bool = True) -> None:
+    """The synthetic canonical cross-engine control -- a result measured AFTER Run 1 stopped.
+
+    Deliberately carries only the fields the exposure reader consumes. A fuller lookalike would
+    invite the control to drift into asserting things about a schema it does not own.
+    """
+    (ev / "results" / "cross_engine_control.json").write_text(
+        json.dumps(
+            {
+                "schema": "cross_engine_control/1",
+                "per_document": [{"document": f"d{i}", "passed": passed} for i in range(n_documents)],
+                "n_documents": n_documents,
+                "n_qualified": n_qualified,
+            },
+            indent=1,
+        )
+    )
+
+
 def _a50_build_history(root: Path) -> dict[str, str]:
     """A real history with the shape A50 is about.
 
@@ -1934,6 +2137,14 @@ def _a50_build_history(root: Path) -> dict[str, str]:
     _a50_git(root, "commit", "-qm", "cD lawful post-boundary deviation")
     cD = _a50_git(root, "rev-parse", "HEAD")
 
+    # cC -- THE LATER CANONICAL RESULT, and the whole reason A53 exists. Run 1 stopped before
+    # this measurement; it was taken afterwards and committed. An authorization written from
+    # here on must disclose it, and before this repair it did not: the summary was built from
+    # the Run 1 record alone and a reader saw a study far more independent than it is.
+    _a50_write_cross_engine(ev)
+    _a50_git(root, "add", "-A")
+    _a50_git(root, "commit", "-qm", "cC the canonical cross-engine control, measured after Run 1")
+
     (ev / "results" / "DEVIATIONS.md").write_text(
         "```json\n" + json.dumps({
             "id": "D", "kind": "DEVIATION", "commits": [cD], "files_touched": ["probes/alpha.py"],
@@ -1979,7 +2190,7 @@ def _a50_try_authorize() -> tuple[int, bool]:
         k: globals()[k]
         for k in (
             "check_freeze", "check_execution", "continuation_state",
-            "population_exposed", "exposure_summary_for_authorization",
+            "population_exposed",
         )
     }
     try:
@@ -1988,7 +2199,6 @@ def _a50_try_authorize() -> tuple[int, bool]:
             check_execution=lambda m: [("G-stub", True, "")],
             continuation_state=lambda: ({"synthetic": True}, True, "synthetic"),
             population_exposed=lambda: True,
-            exposure_summary_for_authorization=lambda rec: "synthetic: census 13992, S1 17/17, P-head",
         )
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -2026,7 +2236,8 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
         for k in (
             "REPO", "EV", "MEMBERSHIP", "PREREG", "AMENDMENTS", "DEVIATIONS",
             "EXECUTION_MARKER", "CONTINUATION_AUTH", "POPULATION_FREEZE_COMMIT",
-            "METHODOLOGY_SURFACE",
+            "METHODOLOGY_SURFACE", "CROSS_ENGINE_CONTROL", "CONTINUATION",
+            "historical_exposure_summary",
         )
     }
     with tempfile.TemporaryDirectory() as td:
@@ -2044,6 +2255,12 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
             CONTINUATION_AUTH=ev / "results" / "EXECUTION-CONTINUATION-AUTHORIZATION.json",
             POPULATION_FREEZE_COMMIT=h["c0"],
             METHODOLOGY_SURFACE=A50_SURFACE,
+            CROSS_ENGINE_CONTROL=ev / "results" / "cross_engine_control.json",
+            # Absent in the synthetic tree on purpose: the Run 1 phase is supplied by the stub
+            # below, so the control exercises the AUTHORIZATION-TIME derivation for real rather
+            # than re-testing `continuation_provenance`, which owns the historical half.
+            CONTINUATION=ev / "results" / "CONTINUATION.json",
+            historical_exposure_summary=lambda rec: A50_HISTORICAL_EXPOSURE,
         )
         try:
             # The synthetic history must be the shape the controls assume.
@@ -2159,6 +2376,37 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
                 ("A50-1 ...and says a declaration does not authorize execution",
                  any("does NOT authorize executing it" in r for r in reasons))
             )
+
+            # ---- A53 -- EXPOSURE IS ESTABLISHED, NOT ASSUMED ---------------------------
+            # Both mutations are COMMITTED before they are tested, because generation reads the
+            # tree as committed at the head being authorized; a working-tree-only mutation would
+            # test a path the generator never takes. Each is restored, so the successful
+            # generation immediately below is attributable to the repair and not to leftovers.
+            ce_path = ev / "results" / "cross_engine_control.json"
+            good_ce = ce_path.read_text()
+            _a50_write_cross_engine(ev, n_qualified=1)  # every row passed, so the count is a lie
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cCbad a cross-engine summary that disagrees with its rows")
+            rc_bad, wrote_bad = _a50_try_authorize()
+            checks.append(
+                ("A53-5 generation is REFUSED when the cross-engine summary disagrees with its rows",
+                 rc_bad != 0)
+            )
+            checks.append(("A53-5 ...and NO authorization file was written", not wrote_bad))
+            ce_path.write_text(good_ce)
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cCfix restore the canonical cross-engine control")
+
+            # UNCOMMITTED is refused for a different reason and must be stated separately: the
+            # measurement is visible but the repository cannot anchor it, so it can be neither
+            # summarised honestly nor left out honestly.
+            ce_path.write_text(good_ce + "\n")
+            rc_unc, wrote_unc = _a50_try_authorize()
+            checks.append(
+                ("A53-6 generation is REFUSED while the cross-engine control is uncommitted", rc_unc != 0)
+            )
+            checks.append(("A53-6 ...and NO authorization file was written", not wrote_unc))
+            ce_path.write_text(good_ce)
 
             # 2 -- generation is now allowed, and the committed artifact permits continuation.
             rc_declared, wrote_declared = _a50_try_authorize()
@@ -2324,6 +2572,61 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
             checks.append(("A50-3 ...and the marker is VALID again once restored", marker_state()[0] == "VALID"))
             checks.append(("A50-2r2 ...and the state machine still permits the continuation",
                            continuation_decision(cM)[0] == "PERMITTED AS CONTINUATION"))
+
+            # ---- A53 -- THE SUMMARY IS EXACT, AND ITS SNAPSHOT HAS A FIXED LIFETIME ------
+            # The generated summary must carry BOTH phases. Asserted against the fixture's own
+            # constants rather than a typed literal, so the control cannot rot into agreeing
+            # with a summary the fixture no longer produces.
+            visible = json.loads(good_auth)["results_already_visible"]
+            checks.append(("A53-1 the generated summary carries the historical Run 1 phase",
+                           A50_HISTORICAL_EXPOSURE in visible))
+            checks.append(("A53-1 ...AND the later committed cross-engine measurement",
+                           "cross-engine 1/1 measured, n_qualified 0" in visible))
+
+            # THE NAMED FAILURE. Deleting the cross-engine fact leaves a sentence that is still
+            # non-empty and still true about Run 1 -- which is exactly why the old non-empty
+            # check passed on it. It must now be refused.
+            ce_errs = variant(results_already_visible=A50_HISTORICAL_EXPOSURE)
+            checks.append(
+                ("A53-2 deleting the cross-engine fact from results_already_visible is REFUSED",
+                 any("results_already_visible" in e and "cross-engine" in e for e in ce_errs))
+            )
+            checks.append(("A53-2 ...and the unmutated authorization is green again",
+                           not continuation_auth_errors(cM)))
+
+            # THE ANCHOR. `head_at_authorization` is checked against the parent DERIVED from the
+            # commit that introduced the artifact, so the record cannot nominate the tree it
+            # will be judged against.
+            head_errs = variant(head_at_authorization=h["c0"])
+            checks.append(
+                ("A53-3 a head_at_authorization that is not the derived pre-authorization parent is REFUSED",
+                 any("has parent" in e for e in head_errs))
+            )
+            checks.append(
+                ("A53-3 ...and the summary still verifies, so the refusal is attributable to the anchor",
+                 not any("results_already_visible" in e for e in head_errs))
+            )
+
+            # THE LIFETIME. A result committed AFTER the authorization must not reach back and
+            # falsify a summary that was truthful when written. Without the fixed snapshot the
+            # artifact would decay into invalidity simply because the study continued -- and the
+            # operator's only repair would be to edit a write-once file.
+            _a50_write_cross_engine(ev, n_qualified=1, passed=False)
+            _a50_git(root, "add", "-A")
+            _a50_git(root, "commit", "-qm", "cL a later cross-engine measurement, after authorization")
+            checks.append(("A53-4 a result committed AFTER the authorization does not invalidate it",
+                           not continuation_auth_errors(cM)))
+            checks.append(("A53-4 ...and the state machine still permits the continuation",
+                           continuation_decision(cM)[0] == "PERMITTED AS CONTINUATION"))
+            checks.append(
+                ("A53-4 ...because exposure is reconstructed from the pre-authorization tree",
+                 cross_engine_exposure_at(pre_authorization_commit())[0] == "cross-engine 1/1 measured, n_qualified 0")
+            )
+            checks.append(
+                ("A53-4 ...which is NOT what the live tree now says",
+                 cross_engine_exposure_at(_a50_git(root, "rev-parse", "HEAD"))[0]
+                 == "cross-engine 1/1 measured, n_qualified 1")
+            )
 
             # 8 -- THE CLAUSE THAT PREVENTS A ROLLING LICENCE. A further change, properly
             # declared in the register, must still fail: the existing authorization pins the
@@ -2717,12 +3020,17 @@ def self_test(contam: dict, exposure: dict) -> int:
     return 0
 
 
-def exposure_summary_for_authorization(rec: dict) -> str:
-    """The already-visible results, DERIVED from the continuation record rather than typed.
+def historical_exposure_summary(rec: dict) -> str:
+    """The RUN 1 phase of exposure, DERIVED from the continuation record rather than typed.
 
     A module-level seam so a control can drive the real generator on a synthetic history
     that has no `CONTINUATION.json`, without the generator's truthfulness depending on the
     control. On the real path this is the same string F12 prints.
+
+    Renamed from `exposure_summary_for_authorization` by A53, because it is no longer the
+    whole answer: the authorization-time summary is this PLUS everything committed since
+    (`authorization_exposure_summary`). Keeping the old name on the Run-1-only half is what
+    made an incomplete summary look complete at the call site.
     """
     import continuation_provenance as CP
 
@@ -2797,8 +3105,27 @@ def authorize_apparatus_continuation(contam: dict, exposure: dict) -> int:
         print("  path it touched in results/DEVIATIONS.md, have it reviewed, then authorize.")
         return 1
 
+    # A53 -- EXPOSURE MUST BE ESTABLISHED BEFORE ANYTHING IS WRITTEN, and it is established
+    # from committed bytes at the head being authorized. An uncommitted canonical result is
+    # refused rather than summarised: it is a visible measurement the repository cannot
+    # anchor, so a summary naming it would be unverifiable and one omitting it would be false.
+    head = git("rev-parse", "HEAD")
+    if CROSS_ENGINE_CONTROL.exists() and not committed(CROSS_ENGINE_CONTROL):
+        print("REFUSED: the canonical cross-engine control exists on disk but is not committed.")
+        print("  An authorization snapshots exposure that is COMMITTED at its boundary, so this")
+        print("  result can be neither summarised nor honestly left out. Commit it, then authorize.")
+        return 1
+    summary, exposure_errors = authorization_exposure_summary(continuation_record_at(head) or rec, head)
+    if exposure_errors:
+        print("REFUSED: the exposure already visible at this boundary cannot be established:")
+        for e in exposure_errors:
+            print(f"  - {e}")
+        print("  Omitting it would understate prior exposure, which is the one error a reader")
+        print("  of this artifact cannot detect. Repair the evidence, then authorize.")
+        return 1
+
     CONTINUATION_AUTH.write_text(
-        json.dumps(build_continuation_authorization(boundary, exposure_summary_for_authorization(rec)), indent=1)
+        json.dumps(build_continuation_authorization(boundary, summary, head), indent=1)
     )
     print(f"Original boundary {boundary[:8]} is untouched; this is a separate artifact.")
     print(f"Answering {len(drifted)} drifted and {len(uncovered)} previously uncovered result-bearing file(s).")
