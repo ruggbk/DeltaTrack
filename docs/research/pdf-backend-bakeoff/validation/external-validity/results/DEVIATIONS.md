@@ -811,3 +811,62 @@ two failures and no others.
 oracle, adjudicate, score, or produce an architecture decision. It does not touch the
 preserved execution branch. It does not alter any authorization semantics, any section 4.7
 NON-CONFIRMATORY status, or any value established by A47, A48, A49 or A50.
+
+## A52 — POST-BOUNDARY AUTHORIZATION-FIELD DEVIATION
+
+```json
+{"id": "A52", "kind": "DEVIATION",
+ "commits": ["75d1e3fd"],
+ "classification": "POST-BOUNDARY AUTHORIZATION-FIELD DEVIATION (APPARATUS)",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "members": 17,
+  "pages": 4190,
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": true,
+ "affects_reproducibility_surface": false,
+ "narrowing": "A52 changes ONE field of the continuation authorization -- `acknowledged_deviations` -- and the validation of that one field. It reads no holdout byte, produces no metric, and changes no threshold, route, selection rule, scoring rule or architecture rule. It does not touch the original marker, the population, the manifest, the deviations blob, provenance, merge attribution, or any write-once rule. affects_execution_authorization is TRUE, deliberately and unlike A51: the contract an authorization must satisfy to be VALID is narrower after this change than before it, so an artifact that would have passed can now be refused. No authorization artifact exists at the time of this record, so nothing already issued is invalidated by it.",
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The defect.** `acknowledged_deviations` was built as `[r.get("id") for r in
+parse_deviations()[0]]` -- every record in the register -- while the field's stated purpose
+is to name the deviations the authorization RELIES ON. On the real tree those differ: the
+register declares A47, A48, A49, A50 and A51, and history supports A48 alone. Validation
+agreed with the generator rather than with the purpose, requiring only
+`required_deviation_ids(...) <= acknowledged`, so the padded field passed.
+
+**Why it stayed invisible.** A50-16 already proved the field cannot OMIT a relied-on
+deviation, which reads as exactness and is half of it. The subset check is green for every
+superset, and the generator only ever produced the largest superset there is, so the two
+halves of the contract were never in tension. The register and the relied-on set also
+coincide whenever every declared deviation happens to be result-bearing -- true of the A50
+synthetic fixture, which is why no control caught this.
+
+**Why padding is not harmless.** A superset asserts the authorization rests on records it
+does not rest on, and this is the field a human reads to learn what was relied on. It also
+restates `deviations_blob`, which already binds the complete register by content: two
+mechanisms for one fact, where the weaker one eventually disagrees.
+
+**Evidence.** With the exactness control added and the repair withheld, the self-test
+returns 103/104, failing exactly `A52-1 acknowledging the relied-on deviation PLUS an
+irrelevant declared one is refused` and nothing else; its companion assertions confirm the
+refusal is absent rather than arriving for the wrong reason. After the repair the same
+control returns 104/104. A50-10c (unknown id) and both A50-16 assertions (omission) stay
+green, so neither existing rejection was absorbed into the new one. On the real tree
+`required_deviation_ids()` is `["A48"]` before and after, so the repaired generator emits
+`["A48"]`.
+
+**What A52 does not do.** It does not create the continuation authorization, regenerate the
+oracle, adjudicate, score, or produce an architecture decision. It does not touch the
+preserved execution branch. It does not alter any section 4.7 NON-CONFIRMATORY status, or
+any value established by A47, A48, A49, A50 or A51.
