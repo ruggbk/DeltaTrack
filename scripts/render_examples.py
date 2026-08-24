@@ -153,10 +153,10 @@ def render_pdf_diff(spec: ExampleSpec) -> Path:
 
 RENDERERS = {"xml": render_xml_diff, "pdf": render_pdf_diff}
 
-#: Brand tokens, kept to the subset the landing page uses. Copied from the report
-#: stylesheet in `formatters/diff_html.py` so the page a visitor lands on and the
-#: reports it links look like one product. `tests/test_committed_examples.py` fails if
-#: they drift apart. (Sharing the values with BillTrax upstream is epic #37.)
+#: DeltaTrack's palette, kept to the subset the landing page uses. Copied from the
+#: report stylesheet in `formatters/diff_html.py`, which owns these values, so the page
+#: a visitor lands on and the reports it links look like one product.
+#: `tests/test_committed_examples.py` fails if they drift apart.
 INDEX_TOKENS = """  --background: #f9f7f5; --foreground: #1c1c3a;
   --card: #ffffff; --primary: #2c2c5c; --muted-foreground: #686881;
   --border: #e3ddd7; --radius: 0.625rem;
