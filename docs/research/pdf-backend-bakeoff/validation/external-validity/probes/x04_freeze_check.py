@@ -2516,24 +2516,30 @@ def self_test(contam: dict, exposure: dict) -> int:
 
     # --- execution state machine -------------------------------------------------
     # Writing the marker must NOT authorize anything; only a committed write-once file.
+    #
+    # CONTROL LIFETIME. Every assertion in this group describes a repository with NO
+    # marker, so the absent state is CONSTRUCTED and held for the whole group instead of
+    # being inherited from the working tree. Restoring the ambient marker midway left the
+    # remaining assertions reading whatever the branch happened to carry: green on a
+    # branch that never had a marker, red on one holding a valid committed marker -- which
+    # is precisely the branch a continuation is authorized on, so the controls were mute
+    # exactly where they had to hold. Same controls and same count; they now own the state
+    # they claim to test, and the ambient marker is restored byte-for-byte once, at the end.
     saved_marker = EXECUTION_MARKER.read_text() if EXECUTION_MARKER.exists() else None
+    real_f, real_g = check_freeze, check_execution
     try:
         EXECUTION_MARKER.parent.mkdir(parents=True, exist_ok=True)
         EXECUTION_MARKER.write_text(json.dumps({"authorized": True}))
         st, _, _ = marker_state()
         checks.append(("marker written but uncommitted is NOT authorization", st == "UNCOMMITTED"))
         checks.append(("...and yields no boundary commit", marker_commit() == ""))
-    finally:
-        EXECUTION_MARKER.unlink(missing_ok=True)
-        if saved_marker is not None:
-            EXECUTION_MARKER.write_text(saved_marker)
-    st_absent, _, _ = marker_state()
-    checks.append(("absent marker reports ABSENT, not VALID", st_absent == "ABSENT"))
 
-    # F/G green with no marker must still forbid execution -- the defect that let
-    # EXECUTION PERMITTED print with no boundary in existence.
-    real_f, real_g = check_freeze, check_execution
-    try:
+        EXECUTION_MARKER.unlink(missing_ok=True)
+        st_absent, _, _ = marker_state()
+        checks.append(("absent marker reports ABSENT, not VALID", st_absent == "ABSENT"))
+
+        # F/G green with no marker must still forbid execution -- the defect that let
+        # EXECUTION PERMITTED print with no boundary in existence.
         globals()["check_freeze"] = lambda m, lk: [("F-stub", True, "")]
         globals()["check_execution"] = lambda m: [("G-stub", True, "")]
         buf = io.StringIO()
@@ -2543,6 +2549,9 @@ def self_test(contam: dict, exposure: dict) -> int:
         checks.append(("...and says READY TO AUTHORIZE", "READY TO AUTHORIZE" in buf.getvalue()))
     finally:
         globals()["check_freeze"], globals()["check_execution"] = real_f, real_g
+        EXECUTION_MARKER.unlink(missing_ok=True)
+        if saved_marker is not None:
+            EXECUTION_MARKER.write_text(saved_marker)
 
     # F11: the population must be the one frozen at the pinned commit.
     frozen_ok = blob_sha(MEMBERSHIP) == blob_sha(MEMBERSHIP, POPULATION_FREEZE_COMMIT)

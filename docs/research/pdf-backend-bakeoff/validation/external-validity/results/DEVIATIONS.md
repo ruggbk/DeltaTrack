@@ -763,3 +763,51 @@ withdraw or alter the section 4.7 NON-CONFIRMATORY status of any A45- or A48-dep
 and it does not change any semantics A48 established: the real D census remains 13,992, the
 required adjudication workload remains AI 122 / human 45 with 6 R1 AI pairs, and the D-human
 Rule 1 route remains not result-bearing.
+
+## A51 — POST-BOUNDARY TEST-ISOLATION DEVIATION
+
+```json
+{"id": "A51", "kind": "DEVIATION",
+ "commits": ["fc9287b5"],
+ "classification": "POST-BOUNDARY TEST-ISOLATION DEVIATION (TOOLING)",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "members": 17,
+  "pages": 4190,
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": false,
+ "affects_reproducibility_surface": false,
+ "narrowing": "A51 changes the LIFETIME of an existing self-test control group and nothing else. The absent-marker controls now construct the absent state they assert and hold it for the whole group, restoring the ambient marker byte-for-byte at the end. It adds no control, removes none, and leaves the 100 count unchanged. It reads no holdout byte, produces no metric, and changes no threshold, route, selection rule, scoring rule or architecture rule. affects_execution_authorization is FALSE: the state machine, its states, its refusals and every authorization artifact are untouched -- only the test's own setup and teardown moved.",
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The defect.** The absent-marker controls inherited their precondition from the working
+tree rather than constructing it. `saved_marker` was restored inside the first `finally`,
+so the ambient marker was back on disk before the group asserted `marker_state() ==
+"ABSENT"` and before the stubbed `main([])` was checked for READY TO AUTHORIZE.
+
+**Why it stayed invisible.** On a branch that never carried a marker, `saved_marker` is
+None, nothing is restored, and both assertions hold. On a branch carrying a valid committed
+marker the restore puts it back, `marker_state()` returns VALID, and `main([])` never
+reaches the ABSENT arm of the state machine. A continuation is only ever authorized on the
+second kind of branch, so the controls were silent precisely where they had to hold.
+
+**Evidence.** On a clean tree with a committed valid marker the unrepaired self-test returns
+98/100, failing exactly `absent marker reports ABSENT, not VALID` and `...and says READY TO
+AUTHORIZE`. On a clean tree with no marker the same code returns 100/100. After the repair
+both environments return 100/100, and neutralizing the isolation reproduces exactly those
+two failures and no others.
+
+**What A51 does not do.** It does not create the continuation authorization, regenerate the
+oracle, adjudicate, score, or produce an architecture decision. It does not touch the
+preserved execution branch. It does not alter any authorization semantics, any section 4.7
+NON-CONFIRMATORY status, or any value established by A47, A48, A49 or A50.
