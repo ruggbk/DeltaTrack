@@ -9,12 +9,31 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from bill_index import BillIndex
 from fetch_bill_archives import DEFAULT_BILLS_DIR
 from shared.bill_types import BILL_TYPES
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FETCH_ARCHIVES_SCRIPT = REPOSITORY_ROOT / "tools" / "fetch_bill_archives.py"
+
+PROXY_ENVIRONMENT_KEYS = (
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
+)
+SSL_CERTIFICATE_ENVIRONMENT_KEYS = (
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+)
 
 # The smallest BILLSTATUS record that extract_bill_metadata_from_archive_xml accepts.
 BILLSTATUS_XML = b"<billStatus><bill><congress>119</congress><type>S</type><number>1</number></bill></billStatus>"
@@ -30,6 +49,25 @@ class OfflineNetworkAccess(BaseException):
 
 
 pathlib.Path(os.environ["DELTA_OFFLINE_GUARD_MARKER"]).write_text("loaded", encoding="utf-8")
+_ENVIRONMENT_KEYS = (
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "PYTHONPATH",
+)
+pathlib.Path(os.environ["DELTA_OFFLINE_GUARD_ENVIRONMENT"]).write_text(
+    "\\n".join(f"{key}={os.environ.get(key, '<missing>')}" for key in _ENVIRONMENT_KEYS),
+    encoding="utf-8",
+)
 
 
 def _deny_network(*args, **kwargs):
@@ -41,6 +79,15 @@ socket.getaddrinfo = _deny_network
 socket.socket.connect = _deny_network
 socket.socket.connect_ex = _deny_network
 """
+
+
+@pytest.fixture(autouse=True)
+def _poison_caller_environment(monkeypatch):
+    for key in PROXY_ENVIRONMENT_KEYS:
+        monkeypatch.setenv(key, "socks5h://127.0.0.1:9")
+    for key in SSL_CERTIFICATE_ENVIRONMENT_KEYS:
+        monkeypatch.setenv(key, "/caller-controlled-certificate")
+    monkeypatch.setenv("PYTHONPATH", "/caller-controlled-pythonpath")
 
 
 def _stage_saved_archives(project: Path, *, include_bad_archive: bool) -> Path:
@@ -90,9 +137,10 @@ def _run_command(tmp_path: Path, *, include_bad_archive: bool) -> subprocess.Com
 
     env = os.environ.copy()
     env["DELTA_OFFLINE_GUARD_MARKER"] = str(guard_marker)
-    env["PYTHONPATH"] = os.pathsep.join(
-        part for part in (str(guard_dir), str(REPOSITORY_ROOT / "tools"), env.get("PYTHONPATH")) if part
-    )
+    env["DELTA_OFFLINE_GUARD_ENVIRONMENT"] = str(guard_dir / "environment")
+    for key in (*PROXY_ENVIRONMENT_KEYS, *SSL_CERTIFICATE_ENVIRONMENT_KEYS):
+        env.pop(key, None)
+    env["PYTHONPATH"] = os.pathsep.join((str(guard_dir), str(REPOSITORY_ROOT / "tools")))
     return subprocess.run(
         [sys.executable, str(script)],
         cwd=project,
@@ -102,10 +150,22 @@ def _run_command(tmp_path: Path, *, include_bad_archive: bool) -> subprocess.Com
     )
 
 
+def _assert_child_environment_isolated(tmp_path: Path) -> None:
+    values = dict(
+        line.split("=", 1)
+        for line in (tmp_path / "offline_guard" / "environment").read_text(encoding="utf-8").splitlines()
+    )
+
+    for key in (*PROXY_ENVIRONMENT_KEYS, *SSL_CERTIFICATE_ENVIRONMENT_KEYS):
+        assert values[key] == "<missing>", f"{key} leaked into the child environment"
+    assert values["PYTHONPATH"] == os.pathsep.join((str(tmp_path / "offline_guard"), str(REPOSITORY_ROOT / "tools")))
+
+
 def test_a_bad_saved_archive_fails_the_process_after_indexing_a_healthy_archive(tmp_path):
     result = _run_command(tmp_path, include_bad_archive=True)
 
     assert (tmp_path / "offline_guard" / "loaded").exists()
+    _assert_child_environment_isolated(tmp_path)
     index = BillIndex(tmp_path / "project" / DEFAULT_BILLS_DIR.name / (DEFAULT_BILLS_DIR.name + ".csv"))
     assert [record["id"] for record in index.bills] == ["119-s-1"]
     assert result.returncode != 0, result.stderr
@@ -115,4 +175,5 @@ def test_a_completely_successful_run_exits_zero(tmp_path):
     result = _run_command(tmp_path, include_bad_archive=False)
 
     assert (tmp_path / "offline_guard" / "loaded").exists()
+    _assert_child_environment_isolated(tmp_path)
     assert result.returncode == 0, result.stderr
