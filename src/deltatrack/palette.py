@@ -1,12 +1,17 @@
-"""DeltaTrack's palette: the one place a colour, font, radius or shadow is decided.
+"""The palette for DeltaTrack's report and its examples landing page.
 
-Every surface DeltaTrack renders takes its values from here. The report embeds them
-(`formatters/diff_html.py`), and the published examples landing page embeds a subset
-(`scripts/render_examples.py`). Both *embed* rather than link, which is deliberate and
-not negotiable: a report has to render with no network at all (ADR 0011), so it cannot
-fetch a stylesheet, and the loading tab in `webapp/js/compare.js` is written via
-`document.write` and can resolve no URLs either. "One palette" therefore means one
-source generated into each surface, never one file they all link.
+Two surfaces take their values from here: the report (`formatters/diff_html.py`), and the
+published examples landing page (`scripts/render_examples.py`), which embeds a subset.
+Nothing else does yet. The web app declares its own values in `webapp/css/styles.css`,
+and the loading tab in `webapp/js/compare.js` hardcodes four of them, so editing this
+module reaches neither and no test would report the divergence. Consolidating those is
+separate, later work.
+
+Both surfaces *embed* rather than link, and any surface wired up later will have to as
+well. A report has to render with no network at all (ADR 0011), so it cannot fetch a
+stylesheet, and the loading tab is written via `document.write` and can resolve no URLs.
+"One palette" can therefore only mean one source generated into each surface, never one
+file they all link.
 
 Keep the set to what the stylesheets actually use. An unreferenced token ships in every
 report and styles nothing, which is how eleven of them accumulated with the whole suite
@@ -15,9 +20,8 @@ green (#667). `tests/test_committed_examples.py` gates that against a rendered r
 The four diff states (added, removed, modified, moved) are the vocabulary bill
 comparison needs, and each carries a background and a foreground.
 
-History: #667 took ownership of these values; #676 is the epic that made DeltaTrack's
-UI its own. The values here are the report's, which is the palette DeltaTrack shipped
-first; unifying the web app onto one set is tracked separately.
+History: #667 took ownership of these values; #676 is the epic that made DeltaTrack's UI
+its own.
 """
 
 from __future__ import annotations
