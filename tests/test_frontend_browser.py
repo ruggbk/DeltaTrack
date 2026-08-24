@@ -168,16 +168,16 @@ def _render_grouped_report() -> str:
     """A full standalone report whose cards group under tree nodes (#172).
 
     Hand-built canonical (the consumed contract) with a v2 tree and change
-    spans in one offset space, so the own-span join is live: three changes, one
-    directly under TITLE I and two under its SALARIES / OPERATIONS accounts.
-    Exercises the real _JS.
+    spans in one offset space, so the own-span join is live: one ADDED change
+    directly under TITLE I, two MODIFIED changes under its SALARIES /
+    OPERATIONS accounts. Exercises the real _JS.
 
-    ``amounts_changed`` is load-bearing: exactly one change carries it (the one
-    directly under TITLE I), so the Financial filter has one survivor under the
-    parent node. That is what makes the filter tests below prove a *recount* of a
-    nested subtree rather than a blanket hide. That change's text carries a real
-    money change ($1,000,000 -> $2,000,000), so the tag is what the producer would
-    emit for it rather than a flag the fixture asserts about itself.
+    The change types are load-bearing: the Structural filter selects on
+    ``data-type !== 'modified'``, so this shape gives it exactly one survivor,
+    directly under the parent node. That is what makes the filter tests below
+    prove a *recount* of a nested subtree rather than a blanket hide. Before
+    #671 the same shape was expressed with the Financial filter and one card
+    carrying amount entries, a field the canonical no longer has.
     """
     from deltatrack.formatters.diff_html import format_diff_html
 
@@ -190,21 +190,17 @@ def _render_grouped_report() -> str:
             "children": list(children),
         }
 
-    def change(i, start, end, amounts_changed=False, money=False):
+    def change(i, start, end, change_type="modified"):
         return {
             "id": f"c{i}",
-            "change_type": "modified",
+            "change_type": change_type,
             "section_number": "",
             "path": {"v1": ["TITLE I"], "v2": ["TITLE I"]},
             "location": None,
             "anchor_resolution": "resolved",
             # The appended token survives word_diff as ONE contiguous <ins>
             # text node, so the find bar (which scans text nodes) can hit it.
-            "text": {
-                "old": f"shared {i}" + (" $1,000,000" if money else ""),
-                "new": f"shared {i} added{i}" + (" $2,000,000" if money else ""),
-            },
-            "amounts_changed": amounts_changed,
+            "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
             "move": None,
             "full_text_span": {"v1": None, "v2": {"start": start, "end": end}},
         }
@@ -227,9 +223,9 @@ def _render_grouped_report() -> str:
             "v1": {"label": "v1", "version_number": 1, "source": "xml"},
             "v2": {"label": "v2", "version_number": 2, "source": "xml"},
         },
-        "summary": {"added": 0, "removed": 0, "modified": 3, "moved": 0},
+        "summary": {"added": 1, "removed": 0, "modified": 2, "moved": 0},
         "changes": [
-            change(0, 2, 5, amounts_changed=True, money=True),  # TITLE I direct
+            change(0, 2, 5, "added"),  # TITLE I direct
             change(1, 20, 30),  # SALARIES
             change(2, 70, 80),  # OPERATIONS
         ],
@@ -288,7 +284,6 @@ def _render_full_bill_report() -> str:
             "location": None,
             "anchor_resolution": "resolved",
             "text": {"old": f"shared {i}", "new": f"shared {i} added{i}"},
-            "amounts_changed": False,
             "move": None,
             "full_text_span": {
                 "v1": None,
@@ -372,7 +367,7 @@ def test_counter_follows_full_bill_navigation(chromium, tmp_path):
 
 
 def test_filtering_hides_empty_card_groups_and_updates_nav_counts(chromium, tmp_path):
-    """Financial filter empties the account groups: their card-group headings
+    """Structural filter empties the account groups: their card-group headings
     hide, and the TITLE I nav-group count recounts to the visible subtree (#172).
     Browser-level because the contract lives in applyFilters' runtime behavior,
     which string-level _JS assertions can't prove."""
@@ -386,9 +381,9 @@ def test_filtering_hides_empty_card_groups_and_updates_nav_counts(chromium, tmp_
     title_count = page.locator(".nav-group__count").first
     assert title_count.inner_text() == "(3)"
 
-    page.locator("#filter-financial").check()
-    # The two account groups hold no card whose figures moved -> hidden; the
-    # TITLE I group keeps its direct tagged card and its count recounts.
+    page.locator('input[name="change-filter"][value="structural"]').check()
+    # The two account groups hold only `modified` cards -> hidden; the TITLE I
+    # group keeps its direct `added` card and its count recounts.
     assert page.locator(".card-group:visible").count() == 1
     assert title_count.inner_text() == "(1)"
     assert page.locator("#change-0").is_visible()
@@ -465,9 +460,6 @@ def test_counter_follows_explicit_card_navigation(chromium, tmp_path):
     in #671 — along with the case where a jump target outlives its own card,
     which only the table could produce (applyFilters hides cards and their
     sidebar nav items together, so no surviving gesture points at a hidden card).
-    The type filter it exercises is now the Financial checkbox; the All/Structural
-    radios went with the table (Structural hid a median of 5% of cards on the 21
-    corpus pairs with 100+ changes, so it was not doing the work a control costs).
     """
     report = tmp_path / "grouped_sync.html"
     report.write_text(_render_grouped_report(), encoding="utf-8")
@@ -494,17 +486,17 @@ def test_counter_follows_explicit_card_navigation(chromium, tmp_path):
     page.keyboard.press("ArrowRight")
     assert counter.inner_text() == "3 / 3"
 
-    # The index is against the *visible* targets: with the Financial filter on,
-    # change-0 (the one card whose figures moved) is the only target, so jumping
-    # to it is 1 / 1, not 1 / 3.
-    page.locator("#filter-financial").check()
+    # The index is against the *visible* targets: with the Structural filter on,
+    # change-0 (the one `added` card) is the only target, so jumping to it is
+    # 1 / 1, not 1 / 3.
+    page.locator('input[name="change-filter"][value="structural"]').check()
     assert counter.inner_text() == "0 / 1"
     page.locator("#change-0").click(position={"x": 5, "y": 5})
     assert counter.inner_text() == "1 / 1"
 
     # A jump into a collapsed group still resolves to the right index: the card
     # is revealed first, so it is a visible target when indexOf runs.
-    page.locator("#filter-financial").uncheck()
+    page.locator('input[name="change-filter"][value="all"]').check()
     salaries = page.locator(".card-group .card-group").first
     salaries.evaluate("el => el.open = false")
     page.locator('.sidebar a[href="#change-1"]').click()

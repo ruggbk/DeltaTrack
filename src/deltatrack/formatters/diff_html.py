@@ -56,13 +56,10 @@ def _build_card(change: ChangeView, index: int) -> str:
     # adapter pulls it from a dict that ultimately reflects upstream parser
     # output. Escape so a stray value can't break attribute quoting.
     ct = escape(change.change_type)
-    # Read from the canonical tag, never recomputed here (#671): the report and any
-    # other consumer of the same document must filter identically.
-    amt = "1" if change.amounts_changed else "0"
 
     parts = [
         f'<div class="change-card {ct}{extra_card_class}" id="change-{index}"'
-        f' data-type="{ct}" data-amounts-changed="{amt}">'
+        f' data-type="{ct}">'
     ]
     parts.append('<div class="change-header">')
     parts.append(f'<span class="badge badge-{ct}">{ct}</span>')
@@ -140,9 +137,8 @@ def _build_nav_item(change: ChangeView, index: int) -> str:
     if change.section_number:
         label = f"{escape(change.section_number)} — {label}"
     ct = escape(change.change_type)
-    amt = "1" if change.amounts_changed else "0"
     return (
-        f'<li class="{nav_class}" data-type="{ct}" data-amounts-changed="{amt}">'
+        f'<li class="{nav_class}" data-type="{ct}">'
         f'<a href="#change-{index}">'
         f'<span class="badge badge-{ct}">{ct}</span> '
         f"{label}"
@@ -370,7 +366,8 @@ def _build_sidebar(
         '<div class="sidebar-changes">\n'
         '<div class="filters">\n'
         '<div class="filters__title">Filter changes</div>\n'
-        f"{_financial_filter_html(view)}\n"
+        '<label class="filter-row"><input type="radio" name="change-filter" value="all" checked> All</label>\n'
+        '<label class="filter-row"><input type="radio" name="change-filter" value="structural"> Structural</label>\n'
         "</div>\n"
         f"{_build_change_groups(view, order_map)}\n"
         "</div>"
@@ -431,35 +428,6 @@ def _summary_bar_html(summary: dict[str, int]) -> str:
 def _bill_label(view: DiffView) -> str:
     """Pre-escaped "{BILL_TYPE} {N}" string."""
     return f"{escape(str(view.bill_type).upper())} {escape(str(view.bill_number))}"
-
-
-def _financial_filter_html(view: DiffView) -> str:
-    """The one filter control: show only changes whose dollar figures moved (#671).
-
-    A checkbox rather than a radio group. The Structural radio it replaces
-    (``data-type != "modified"``) was measured across all 42 pinned corpus pairs and
-    hid a median of 5% of cards on the 21 reports with 100+ changes -- the reports
-    where filtering is for. This filter hides a median of 62% on those same pairs, and
-    more than Structural on 21 of 21. Structural earned its space on small reports
-    only, which is where no filter is needed.
-
-    The count is rendered into the label because zero is a real and useful answer: on
-    118-hr-4366 reported-vs-engrossed no change moves a figure at all. A bare checkbox
-    that hides every card reads as broken; "Financial changes (0)", disabled, reads as
-    information. The count is of CHANGES, matching what the checkbox reveals.
-    """
-    n = sum(1 for c in view.changes if c.amounts_changed)
-    disabled = " disabled" if n == 0 else ""
-    title = (
-        ' title="No change in this comparison alters a dollar figure"'
-        if n == 0
-        else ' title="Show only changes where the set of dollar amounts differs between versions"'
-    )
-    return (
-        f'<label class="filter-row{" filter-row--off" if n == 0 else ""}"{title}>'
-        f'<input type="checkbox" id="filter-financial"{disabled}> '
-        f'Financial changes <span class="filter-row__count">({n})</span></label>'
-    )
 
 
 def _cards_section_html(view: DiffView, order_map: dict[tuple, int] | None = None) -> str:
@@ -1072,9 +1040,6 @@ summary:hover .disclosure::before, summary.disclosure:hover::before { color: var
   font-size: 13px; cursor: pointer; border-radius: var(--radius); }
 .filter-row:hover { background: var(--secondary); }
 .filter-row input { width: auto; margin: 0; }
-.filter-row__count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.filter-row--off { opacity: 0.55; cursor: default; }
-.filter-row--off:hover { background: none; }
 .filter-empty { color: var(--muted-foreground); padding: 16px 2px; font-size: 14px; }
 .filter-empty[hidden] { display: none; }
 
@@ -1383,13 +1348,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Financial-changes filter: one checkbox, reading the canonical's amounts_changed
-  // tag off each element. The renderer never recomputes the predicate (#671).
-  var finBox = document.getElementById('filter-financial');
+  // Change-type filter: All / Structural (radios only).
   function applyFilters() {
-    var only = !!(finBox && finBox.checked);
+    var typeEl = document.querySelector('input[name="change-filter"]:checked');
+    var mode = typeEl ? typeEl.value : 'all';
     var typeOk = function(el) {
-      return !only || el.dataset.amountsChanged === '1';
+      if (mode === 'structural') return el.dataset.type !== 'modified';
+      return true;
     };
     var visible = 0;
     document.querySelectorAll('.change-card').forEach(function(c) {
@@ -1424,7 +1389,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var empty = document.getElementById('filter-empty');
     if (empty) empty.hidden = visible !== 0;
   }
-  if (finBox) finBox.addEventListener('change', applyFilters);
+  document.querySelectorAll('input[name="change-filter"]').forEach(function(r) {
+    r.addEventListener('change', applyFilters);
+  });
 
   // Collapsible sidebar (and off-canvas on small screens).
   var sidebarToggle = document.getElementById('sidebar-toggle');
@@ -1539,7 +1506,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Recompute targets (and reset position) when the view or filter changes.
   function resetNav() { current = -1; refreshNav(); }
   toggleBtns.forEach(function(b) { b.addEventListener('click', resetNav); });
-  if (finBox) finBox.addEventListener('change', resetNav);
+  document.querySelectorAll('input[name="change-filter"]').forEach(function(r) {
+    r.addEventListener('change', resetNav);
+  });
   refreshNav();
 
   // In-page find: highlight matches in the active view and step through them.
@@ -1787,6 +1756,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (findNext) findNext.addEventListener('click', function() { setCurrentHit(findIdx + 1); });
   // Re-scope find to whatever's now visible when the view or filter changes.
   toggleBtns.forEach(function(b) { b.addEventListener('click', function() { setTimeout(runFind, 0); }); });
-  if (finBox) finBox.addEventListener('change', function() { setTimeout(runFind, 0); });
+  document.querySelectorAll('input[name="change-filter"]').forEach(function(r) {
+    r.addEventListener('change', function() { setTimeout(runFind, 0); });
+  });
 });
 """

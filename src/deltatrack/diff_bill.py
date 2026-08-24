@@ -17,7 +17,6 @@ from pathlib import Path
 
 from deltatrack.amounts import (
     DOLLAR_RE,
-    amounts_changed,
     extract_amounts,
     has_amendment_annotation,
     strip_amendment_annotations,
@@ -173,7 +172,7 @@ def compute_financial_change(
     return FinancialChange(
         old_amounts=old_amounts,
         new_amounts=new_amounts,
-        amounts_changed=amounts_changed(old_amounts, new_amounts),
+        amounts_changed=Counter(old_amounts) != Counter(new_amounts),
         paired_amounts=tuple(paired),
         has_amendment_annotations=has_annotations,
     )

@@ -22,7 +22,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from html import escape
 
-from deltatrack.amounts import amounts_changed_in_text, extract_amounts
+from deltatrack.amounts import extract_amounts
 from deltatrack.diff_pdf import PdfDiff, PdfHunk
 from deltatrack.formatters.view_model import ChangeView, DiffView
 from deltatrack.parsers.pdf_anchors import Anchor, breadcrumb_for
@@ -67,7 +67,6 @@ def _xml_change_to_canonical(
         "location": None,  # XML carries no source coordinates
         "anchor_resolution": "resolved",  # XML pipeline always resolves structurally
         "text": {"old": text_old, "new": text_new},
-        "amounts_changed": amounts_changed_in_text(text_old, text_new),
         "move": _xml_move(change) if change_type == "moved" else None,
         "full_text_span": _search_span(full_text, full_text_spans, text_old, text_new, id_old, id_new, search_state),
     }
@@ -302,10 +301,6 @@ def _pdf_hunk_to_canonical(
             "old": hunk.v1_text if hunk.v1_range is not None else None,
             "new": hunk.v2_text if hunk.v2_range is not None else None,
         },
-        "amounts_changed": amounts_changed_in_text(
-            hunk.v1_text if hunk.v1_range is not None else None,
-            hunk.v2_text if hunk.v2_range is not None else None,
-        ),
         "move": _pdf_move(hunk) if hunk.change_type == "moved" else None,
         "full_text_span": _pdf_span(hunk, line_offsets_v1, line_offsets_v2),
     }
@@ -741,7 +736,6 @@ def _change_view_from_canonical(
         new_text=new_text,
         group_label=_group_label_from_path(canonical_change),
         node_path=_node_path_for_change(canonical_change, join_index, v2_lookup),
-        amounts_changed=bool(canonical_change.get("amounts_changed")),
     )
 
 

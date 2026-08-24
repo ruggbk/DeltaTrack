@@ -126,7 +126,7 @@ def test_no_changes_message_canonical_text():
 def test_sidebar_present_even_with_no_changes():
     html = format_diff_html(_empty())
     assert '<nav class="sidebar">' in html
-    assert 'id="filter-financial"' in html  # the one filter; text search moved to the action bar
+    assert 'name="change-filter"' in html  # filter radios remain; text search moved to the action bar
 
 
 def test_includes_css_and_js_blocks():

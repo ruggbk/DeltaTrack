@@ -44,7 +44,7 @@ def _view(changes) -> DiffView:
 
 def test_nav_item_basic():
     item = _build_nav_item(_change(), 0)
-    assert item.startswith('<li class="nav-item" data-type="modified" data-amounts-changed="0">')
+    assert item.startswith('<li class="nav-item" data-type="modified">')
     assert 'href="#change-0"' in item
     assert '<span class="badge badge-modified">modified</span>' in item
     assert "TITLE I &gt; Customs" in item
@@ -68,7 +68,7 @@ def test_nav_item_degraded_adds_unanchored_class():
         _change(degraded=True, nav_label_html="(uncategorized) — p.2 L5"),
         0,
     )
-    assert '<li class="nav-item unanchored" data-type="modified" data-amounts-changed="0">' in item
+    assert '<li class="nav-item unanchored" data-type="modified">' in item
 
 
 def test_sidebar_emits_one_li_per_change():
@@ -78,19 +78,9 @@ def test_sidebar_emits_one_li_per_change():
     assert sidebar.index('href="#change-0"') < sidebar.index('href="#change-1"')
 
 
-def test_sidebar_offers_the_financial_filter():
-    """One checkbox, not a radio group (#671). Text search lives in the action bar.
-
-    With no changes the count is 0 and the control is disabled: a checkbox that would
-    hide every card reads as broken, a disabled "(0)" reads as information.
-    """
+def test_sidebar_filter_radios_present():
     sidebar = _build_sidebar(_view([]))
-    assert 'id="filter-financial"' in sidebar
-    assert 'type="checkbox"' in sidebar
-    assert "Financial changes" in sidebar
-    assert '<span class="filter-row__count">(0)</span>' in sidebar
-    assert "disabled" in sidebar
-    assert 'name="change-filter"' not in sidebar  # the All/Structural radios are gone
+    assert 'name="change-filter"' in sidebar  # text search moved to the action bar
     assert "<ul></ul>" in sidebar  # empty when no changes
 
 

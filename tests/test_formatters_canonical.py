@@ -23,7 +23,6 @@ from pathlib import Path
 import jsonschema
 import pytest
 
-from deltatrack.amounts import amounts_changed_in_text
 from deltatrack.diff_pdf import PdfDiff, PdfHunk
 from deltatrack.formatters.canonical import (
     pdf_diff_to_canonical,
@@ -93,10 +92,7 @@ def test_xml_modified_change_canonical_fields():
     assert c["location"] is None
     assert c["anchor_resolution"] == "resolved"
     assert c["text"] == {"old": "old prose", "new": "new prose"}
-    assert [k for k in c if "amount" in k] == ["amounts_changed"], (
-        f"`amounts_changed` is the ONE money field since 3.0 (#671): {sorted(c)}"
-    )
-    assert c["amounts_changed"] is False  # this change's prose carries no figures
+    assert not [k for k in c if "amount" in k], f"a change object carries no money field since 3.0 (#671): {sorted(c)}"
     assert c["move"] is None
 
 
@@ -492,54 +488,7 @@ def test_pdf_change_carries_no_deprecated_amounts_field():
     canonical = pdf_diff_to_canonical(diff, **_pdf_meta())
     change = canonical["changes"][0]
     money_fields = sorted(k for k in change if "amount" in k)
-    assert money_fields == ["amounts_changed"], (
-        f"`amounts_changed` is the ONE money field since 3.0 (#671), got {money_fields}"
-    )
-
-
-# ---------- The amounts_changed predicate (#671) ------------------------------
-
-
-@pytest.mark.parametrize(
-    ("old", "new", "expected", "why"),
-    [
-        ("appropriated $1,000,000", "appropriated $2,000,000", True, "modified: figure replaced"),
-        ("appropriated $1,000,000", "appropriated $1,000,000 and $500,000", True, "added figure"),
-        ("appropriated $1,000,000 and $500,000", "appropriated $1,000,000", True, "removed figure"),
-        ("appropriated $1,000,000", "appropriated $1,000,000", False, "identical figures"),
-        ("no money here", "still no money", False, "no figures either side"),
-        (None, "new block with $5,000,000", True, "whole block added, carrying money"),
-        ("old block with $5,000,000", None, True, "whole block removed, carrying money"),
-        (
-            "reworded entirely, $1,000,000 intact",
-            "$1,000,000 intact, wholly reworded",
-            False,
-            "text churn around a stable figure: the case a 'mentions a $' predicate gets wrong",
-        ),
-        (
-            "pay $1,000,000 and $1,000,000",
-            "pay $1,000,000",
-            True,
-            "MULTISET not set: a duplicate collapsing is a real change",
-        ),
-        (
-            "$16,566,247,000",
-            "$16,566,247,000 (reduced by $1,000,000) (increased by $1,000,000)",
-            False,
-            "#670: annotation deltas are not amounts, and the appropriation did not move",
-        ),
-    ],
-)
-def test_amounts_changed_predicate(old, new, expected, why):
-    """The predicate the whole financial filter rests on, case by case.
-
-    Every case is one it could plausibly get wrong; the last is the one the design
-    turns on. `amounts_changed` is deliberately NOT "the changed text mentions a
-    dollar sign" -- measured across the pinned corpus, that weaker predicate fires on
-    changes where no figure moved at all (all 51 such disagreements are `modified`
-    changes whose amendment parentheticals churn around a stable appropriation).
-    """
-    assert amounts_changed_in_text(old, new) is expected, why
+    assert money_fields == [], f"a change object carries no money field since 3.0 (#671), got {money_fields}"
 
 
 # ---------- Schema validation -------------------------------------------------
@@ -621,29 +570,6 @@ def test_schema_rejects_a_change_carrying_amount_entries():
     """
     canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
     canonical["changes"][0]["amount_entries"] = [{"old": 100, "new": 200, "kind": "changed"}]
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(canonical, _load_schema())
-
-
-def test_schema_requires_amounts_changed_on_every_change():
-    """Required, not merely allowed: absent and `false` must not be the same document.
-
-    Same reasoning 2.0 used to make its money field required -- an optional tag leaves
-    a consumer distinguishing "no money moved here" from "this producer predates the
-    field", and the whole point of the tag is that a consumer can filter on it without
-    knowing which producer wrote the document.
-    """
-    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
-    del canonical["changes"][0]["amounts_changed"]
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(canonical, _load_schema())
-
-
-def test_schema_rejects_a_non_boolean_amounts_changed():
-    """It is a flag, not a count or a list. A producer emitting the old shape under
-    the new name would otherwise validate."""
-    canonical = xml_diff_to_canonical(_xml_diff_dict(changes=[_schema_probe_change()]))
-    canonical["changes"][0]["amounts_changed"] = [{"old": 100, "new": 200}]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(canonical, _load_schema())
 

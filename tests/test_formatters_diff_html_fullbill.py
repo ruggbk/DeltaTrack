@@ -45,7 +45,6 @@ def _change(change_id: str, change_type: str, **fields) -> dict:
         "section_number": None,
         "location": None,
         "anchor_resolution": "resolved",
-        "amounts_changed": False,
         "move": None,
         **fields,
     }

@@ -83,9 +83,8 @@ statement about the schema, not a promise that every reader will reject it.
 
 ### The money contract
 
-A `Change` carries exactly one money field, the boolean `amounts_changed`: whether the
-multiset of dollar figures differs between the change's two sides. `amounts` was
-removed in schema 2.0 and `amount_entries` in 3.0 (#671).
+A `Change` carries **no** money field. `amounts` was removed in schema 2.0 and
+`amount_entries` in 3.0 (#671); nothing replaces either.
 
 The contract draws its line between what the pipeline **observes** and what it
 **claims**.
@@ -94,15 +93,6 @@ The contract draws its line between what the pipeline **observes** and what it
   published per side and unpaired as `tree[].own_amounts`, with a conservation
   invariant tested against real bills. This makes no statement about change, so no
   interpretation is needed to read it honestly.
-- **Difference is an observation; the tag publishes it.** That the set of figures is
-  not the same on both sides can be established by reading the two texts, and a
-  consumer can verify it from the document alone — the tag is computed from the
-  change's own `text`, not from an upstream flag-dependent dict. Added, removed and
-  modified amounts all fall out of the comparison **without pairing anything**, which
-  is what makes it supportable today: the pipeline need not decide which figure
-  became which in order to say the set moved. It is *required* rather than optional
-  for the reason 2.0 made its money field required — an absent key and a `false`
-  would otherwise be indistinguishable.
 - **Pairing is a claim, and the pipeline cannot yet support it.** `amount_entries`
   paired a figure on one side with a figure on the other and published the
   difference. An appropriations paragraph carries several kinds of number — a
@@ -127,9 +117,7 @@ The contract draws its line between what the pipeline **observes** and what it
 - **What is not affected.** Amount extraction, the per-node inventory, and the
   `--financial` CLI filter with its `old_amounts` / `new_amounts` / `amounts_changed`
   multiset facts are all untouched. "The set of dollar figures in this section differs
-  between versions" is a true statement that needs no type model — which is precisely
-  why the canonical now states it too, under the same name, so the two contracts do
-  not describe one concept two ways.
+  between versions" is a true statement that needs no type model.
 
 Re-adding a typed money field is planned, not abandoned. It needs the account-level
 model in #115 and the leveled tree in #175 first, so an amount can be attached to an
