@@ -334,8 +334,29 @@ def parse_deviations() -> tuple[list[dict], list[str]]:
     """
     if not DEVIATIONS.exists():
         return [], []
+    return _parse_deviations_text(DEVIATIONS.read_text())
+
+
+def parse_deviations_at(commit: str) -> tuple[list[dict], list[str]]:
+    """The register AS COMMITTED at `commit`.
+
+    A55 -- historical validation reads the register the authorization was written AGAINST,
+    never today's. Reading the live register to judge an old authorization would make an entry
+    that was truthful when committed fail simply because the study continued, and would make a
+    false one pass as soon as the register caught up with it.
+    """
+    if not commit:
+        return parse_deviations()
+    present, raw = _show_at(commit, DEVIATIONS)
+    if not present:
+        return [], [f"deviation register is absent at {commit[:8]}"]
+    return _parse_deviations_text(raw)
+
+
+def _parse_deviations_text(text: str) -> tuple[list[dict], list[str]]:
+    """Shared parser, so the live and at-a-commit readings cannot drift apart."""
     records, errors = [], []
-    for block in re.findall(r"```json\s*(\{.*?\})\s*```", DEVIATIONS.read_text(), re.S):
+    for block in re.findall(r"```json\s*(\{.*?\})\s*```", text, re.S):
         try:
             rec = json.loads(block)
         except json.JSONDecodeError as exc:
@@ -638,7 +659,7 @@ def authorization_exposure_summary(rec: dict, commit: str) -> tuple[str, list[st
     return "; ".join(p for p in parts if p), errors
 
 
-def post_marker_commits_by_path(marker_boundary: str) -> dict[str, list[str]]:
+def post_marker_commits_by_path(marker_boundary: str, head: str = "HEAD") -> dict[str, list[str]]:
     """repo-relative path -> the commits after the boundary that modified it.
 
     ONE `git log`, not one per path: the surface is 31 entries and the range is the whole
@@ -653,7 +674,7 @@ def post_marker_commits_by_path(marker_boundary: str) -> dict[str, list[str]]:
     supplies exactly that case; use `surface_attribution`, which is both halves.
     """
     out: dict[str, list[str]] = {}
-    raw = git("log", "--format=%x00%H", "--name-only", f"{marker_boundary}..HEAD")
+    raw = git("log", "--format=%x00%H", "--name-only", f"{marker_boundary}..{head}")
     for block in raw.split("\x00"):
         if not block.strip():
             continue
@@ -683,7 +704,7 @@ def _tree_blobs(commit: str, paths: list[str]) -> dict[str, str]:
     return out
 
 
-def merge_introduced_paths(marker_boundary: str, paths: list[str]) -> dict[str, list[str]]:
+def merge_introduced_paths(marker_boundary: str, paths: list[str], head: str = "HEAD") -> dict[str, list[str]]:
     """path -> post-boundary MERGE commits whose content for it exists in no parent.
 
     THE EVIL MERGE. A merge commit's tree is not obliged to match any parent: a conflict
@@ -704,7 +725,7 @@ def merge_introduced_paths(marker_boundary: str, paths: list[str]) -> dict[str, 
     brings a lawfully declared change forward.
     """
     out: dict[str, list[str]] = {}
-    for line in git("log", "--format=%H %P", "--merges", f"{marker_boundary}..HEAD").splitlines():
+    for line in git("log", "--format=%H %P", "--merges", f"{marker_boundary}..{head}").splitlines():
         parts = line.split()
         if not parts:
             continue
@@ -718,7 +739,7 @@ def merge_introduced_paths(marker_boundary: str, paths: list[str]) -> dict[str, 
     return out
 
 
-def surface_attribution(marker_boundary: str) -> dict[str, list[str]]:
+def surface_attribution(marker_boundary: str, head: str = "HEAD") -> dict[str, list[str]]:
     """repo-relative surface path -> every post-boundary commit that INTRODUCED its content.
 
     ONE OWNER for "who is answerable for this file", so the pre-write refusal in the
@@ -727,14 +748,18 @@ def surface_attribution(marker_boundary: str) -> dict[str, list[str]]:
     """
     paths = sorted(str(surface_path(entry).relative_to(REPO)) for entry in authorization_surface())
     wanted = set(paths)
-    attributed = {p: list(shas) for p, shas in post_marker_commits_by_path(marker_boundary).items() if p in wanted}
-    for path, merges in merge_introduced_paths(marker_boundary, paths).items():
+    attributed = {
+        p: list(shas)
+        for p, shas in post_marker_commits_by_path(marker_boundary, head).items()
+        if p in wanted
+    }
+    for path, merges in merge_introduced_paths(marker_boundary, paths, head).items():
         seen = attributed.setdefault(path, [])
         seen.extend(m for m in merges if m not in seen)
     return attributed
 
 
-def declared_paths_by_commit() -> dict[str, set[str]]:
+def declared_paths_by_commit(at: str = "") -> dict[str, set[str]]:
     """commit -> the repo-relative paths the DEVIATION register names FOR THAT COMMIT.
 
     Deviations only. A change after the boundary cannot be a pre-execution amendment -- F9
@@ -745,7 +770,7 @@ def declared_paths_by_commit() -> dict[str, set[str]]:
     EV-relative path (the existing convention) or a `repo:`-namespaced one.
     """
     out: dict[str, set[str]] = {}
-    for rec in parse_deviations()[0]:
+    for rec in parse_deviations_at(at)[0]:
         for c in rec.get("commits", []) or []:
             full = git("rev-parse", str(c))
             if not full:
@@ -756,7 +781,7 @@ def declared_paths_by_commit() -> dict[str, set[str]]:
     return out
 
 
-def surface_provenance_errors(marker_boundary: str) -> list[str]:
+def surface_provenance_errors(marker_boundary: str, head: str = "HEAD", at: str = "") -> list[str]:
     """Result-bearing changes since the boundary that were never declared for review.
 
     THE HOLE THIS CLOSES. Everything else about the continuation authorization asks whether
@@ -778,8 +803,8 @@ def surface_provenance_errors(marker_boundary: str) -> list[str]:
     file actually added or modified after the boundary has to be accounted for.
     """
     errors: list[str] = []
-    touched = surface_attribution(marker_boundary)
-    declared = declared_paths_by_commit()
+    touched = surface_attribution(marker_boundary, head)
+    declared = declared_paths_by_commit(at)
     # `entry`, not `key`: these are manifest ENTRIES, and CodeQL's sensitive-data heuristic
     # reads a value flowing from a variable named `key` into a print as a leaked credential.
     for entry in sorted(authorization_surface()):
@@ -792,17 +817,17 @@ def surface_provenance_errors(marker_boundary: str) -> list[str]:
     return errors
 
 
-def required_deviation_ids(marker_boundary: str) -> set[str]:
+def required_deviation_ids(marker_boundary: str, head: str = "HEAD", at: str = "") -> set[str]:
     """The deviations an authorization actually RELIES ON: those declaring a commit that
     changed a current surface path after the boundary.
 
     Derived, not taken from the artifact. Without this, `acknowledged_deviations` could name
     any record that happens to exist while the one covering the real change was removed.
     """
-    touched = surface_attribution(marker_boundary)
+    touched = surface_attribution(marker_boundary, head)
     surface_commits = {sha for shas in touched.values() for sha in shas}
     required: set[str] = set()
-    for rec in parse_deviations()[0]:
+    for rec in parse_deviations_at(at)[0]:
         for c in rec.get("commits", []) or []:
             if git("rev-parse", str(c)) in surface_commits:
                 required.add(rec.get("id"))
@@ -1103,6 +1128,77 @@ def _successor_binding_errors(
     return errors
 
 
+def authorization_historical_errors(marker_boundary: str, path: Path, snapshot: str) -> list[str]:
+    """Was this authorization TRUE ABOUT ITS OWN TREE at the moment it was committed?
+
+    THE LAUNDERING HOLE THIS CLOSES. Chain validation deliberately does not compare a
+    predecessor with today's tree, because going stale is precisely what made its successor
+    necessary. But "not judged against today" was implemented as "not judged against
+    ANYTHING": the manifest, the pinned register blob, the relied-on deviation set and surface
+    provenance were checked only for the LATEST entry and only against the LIVE tree. The
+    moment that entry acquired a successor it stopped being checked at all. So a sequence 2
+    whose payload was FALSE WHEN WRITTEN -- a manifest blob that never matched its own
+    snapshot -- became permanent as soon as a correctly bound sequence 3 sat on top of it.
+    Write-once guarantees the bytes cannot change afterwards; it says nothing whatever about
+    whether they were true to begin with, and the binding checks only prove the entries point
+    at each other.
+
+    Every entry is therefore re-validated against its OWN immutable pre-authorization commit,
+    derived from history as the authorizing commit's parent and never read from the artifact.
+    Staleness stays legitimate; falsehood does not, and does not become legitimate by being
+    inherited.
+    """
+    if not snapshot:
+        return [f"authorization {path.name} has no pre-authorization commit to be validated against"]
+    try:
+        rec = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"authorization {path.name} is unreadable: {exc}"]
+    if not isinstance(rec, dict):
+        return [f"authorization {path.name} is not a JSON object"]
+
+    label = f"authorization {path.name} at its own snapshot {snapshot[:8]}"
+    errors: list[str] = []
+    manifest = rec.get("current_methodology_blobs")
+    if not isinstance(manifest, dict) or not manifest:
+        return [f"{label}: carries no current_methodology_blobs manifest"]
+
+    # COVERAGE AS IT STOOD THEN, not as it stands now. A surface member that did not exist at
+    # the snapshot cannot have been named by an authorization written there, and demanding it
+    # would invalidate a truthful artifact for the sole reason that the apparatus later grew.
+    for entry in sorted(authorization_surface()):
+        if blob_sha(surface_path(entry), snapshot) and entry not in manifest:
+            errors.append(f"{label}: did not cover result-bearing file {entry}, which existed then")
+
+    for rel, want in sorted(manifest.items()):
+        then = blob_sha(surface_path(rel), snapshot)
+        if then != want:
+            errors.append(
+                f"{label}: HISTORICAL MANIFEST FALSEHOOD {rel}: records {str(want)[:8] or 'ABSENT'}, "
+                f"but that tree held {then[:8] or 'ABSENT'}"
+            )
+
+    dev_then = blob_sha(DEVIATIONS, snapshot)
+    if rec.get("deviations_blob") != dev_then:
+        errors.append(
+            f"{label}: pins DEVIATIONS.md blob "
+            f"{str(rec.get('deviations_blob') or '')[:8] or 'ABSENT'}, but that tree held "
+            f"{dev_then[:8] or 'ABSENT'}"
+        )
+
+    # EXACT, in both directions, against the register AND history AS THEY WERE. A55's
+    # equivalent of A52's rule, asked of the past rather than the present.
+    required_then = required_deviation_ids(marker_boundary, head=snapshot, at=snapshot)
+    acknowledged = set(rec.get("acknowledged_deviations") or [])
+    for dev_id in sorted(required_then - acknowledged, key=str):
+        errors.append(f"{label}: did not acknowledge deviation {dev_id!r}, which it relied on then")
+    for dev_id in sorted(acknowledged - required_then, key=str):
+        errors.append(f"{label}: acknowledged deviation {dev_id!r}, which it did not rely on then")
+
+    errors.extend(f"{label}: {e}" for e in surface_provenance_errors(marker_boundary, snapshot, snapshot))
+    return errors
+
+
 def authorization_chain(marker_boundary: str) -> tuple[list[tuple[int, Path]], list[str]]:
     """The validated chain: ([(sequence, path), ...] in order, errors). ANY error invalidates it.
 
@@ -1112,10 +1208,12 @@ def authorization_chain(marker_boundary: str) -> tuple[list[tuple[int, Path]], l
     STOPS at the first bad link: a later, perfectly well-formed entry cannot cure an earlier
     one, because curing by appending is exactly how a broken chain would be laundered.
 
-    Predecessors are checked for IDENTITY and WRITE-ONCE INTEGRITY only, never for agreement
-    with the current tree. Going stale is what made a successor necessary in the first place,
-    so judging a predecessor on staleness would make every valid chain invalidate itself the
-    moment it grew.
+    Predecessors are never judged against the CURRENT tree -- going stale is what made a
+    successor necessary, so that would make every valid chain invalidate itself the moment it
+    grew. They are judged against THEIR OWN pre-authorization snapshot instead, by
+    `authorization_historical_errors`. "Not compared with today" must not mean "not compared
+    with anything": an entry whose payload was false when written is otherwise laundered by a
+    correctly bound successor, since write-once fixes the bytes without making them true.
     """
     entries, errors = discover_authorization_entries()
     if not entries:
@@ -1149,6 +1247,15 @@ def authorization_chain(marker_boundary: str) -> tuple[list[tuple[int, Path]], l
             else:
                 entry_errors.extend(
                     continuation_auth_errors(marker_boundary, path, against_current_tree=False)
+                )
+                # ...AND TRUE ABOUT THE TREE IT WAS WRITTEN AGAINST. Applied to every entry,
+                # the latest included: the latest is additionally compared with the live tree
+                # by `continuation_decision`, but it must also have been honest when written,
+                # or it would only start being checked once it acquired a successor.
+                entry_errors.extend(
+                    authorization_historical_errors(
+                        marker_boundary, path, pre_authorization_commit_of(path)
+                    )
                 )
                 if seq >= 2:
                     entry_errors.extend(
@@ -3209,6 +3316,102 @@ def a50_authorization_controls() -> list[tuple[str, bool]]:
                 checks.append(("A55-19 ...and still has exactly one modifying commit",
                                len(_a50_git(root, "log", "--format=%H", "--", seq1_rel).splitlines())
                                == seq1_commits_before))
+
+                # ---- HISTORICAL TRUTHFULNESS -----------------------------------
+                # A55-14 breaks a successor's BINDING. This breaks nothing structural
+                # at all: the entry is committed exactly once, retains its introduced
+                # blob, and names its predecessor correctly by path, commit and blob.
+                # Only its PAYLOAD was false when written. Before historical
+                # validation, chain checking skipped the manifest, the register pin,
+                # the relied-on set and provenance for every entry, so such an entry
+                # became permanent the moment a well-formed successor sat on top of
+                # it. Write-once fixes the bytes; it does not make them true.
+                def a55_false_payload(branch, label, needle, **rec_changes):
+                    _a50_git(root, "checkout", "-q", "-B", branch, base_v2)
+                    _a50_git(root, "reset", "-q", "--hard", base_v2)
+                    _a50_git(root, "clean", "-qfd")
+                    rec = json.loads(good_seq2)
+                    rec.update(rec_changes)
+                    seq2_path.write_text(json.dumps(rec, indent=1))
+                    _a50_git(root, "add", "-A")
+                    _a50_git(root, "commit", "-qm", f"{branch}: sequence 2, committed exactly once")
+                    # THE PREMISE, ASSERTED RATHER THAN ASSUMED. The refusal below must
+                    # not be attributable to write-once, to an uncommitted file, or to a
+                    # broken binding -- each of which already has its own control, and
+                    # any of which would make this one pass for the wrong reason.
+                    checks.append((f"{label} -- premise: the entry is VALID (committed once, blob retained)",
+                                   authorization_entry_state(seq2_path)[0] == "VALID"))
+                    sup = json.loads(seq2_path.read_text()).get("supersedes") or {}
+                    checks.append((f"{label} -- premise: its predecessor binding is CORRECT",
+                                   sup.get("sequence") == 1
+                                   and sup.get("path") == str(CONTINUATION_AUTH.relative_to(EV))
+                                   and sup.get("authorizing_commit") == authorizing_commit_of(CONTINUATION_AUTH)
+                                   and sup.get("blob") == blob_sha(CONTINUATION_AUTH)))
+                    snap = pre_authorization_commit_of(seq2_path)
+                    checks.append((label, any(needle in e for e in
+                                              authorization_historical_errors(cM, seq2_path, snap))))
+                    checks.append((f"{label} -- and the whole chain is INVALID",
+                                   any(needle in e for e in authorization_chain(cM)[1])))
+                    # A LEGITIMATE, DECLARED later change: the only thing between the
+                    # operator and a sequence 3 is the false sequence 2 beneath it.
+                    (root / "src" / "gamma.py").write_text("SEGMENT = 11\n")
+                    _a50_git(root, "add", "-A")
+                    _a50_git(root, "commit", "-qm", "a legitimate later surface change")
+                    _a50_declare_extra(ev, "L", _a50_git(root, "rev-parse", "HEAD"), ["repo:src/gamma.py"])
+                    _a50_git(root, "add", "-A")
+                    _a50_git(root, "commit", "-qm", "declare the later change")
+                    rc_ext, _ = _a50_try_authorize()
+                    checks.append((f"{label} -- the generator REFUSES to extend the chain", rc_ext != 0))
+                    checks.append((f"{label} -- and NO sequence 3 was written", not seq3_path.exists()))
+
+                bad_manifest = dict(json.loads(good_seq2)["current_methodology_blobs"])
+                bad_manifest["probes/alpha.py"] = "0" * 40
+                a55_false_payload(
+                    "a55falsemanifest",
+                    "A55-20 a sequence 2 whose MANIFEST was false when written cannot be laundered",
+                    "HISTORICAL MANIFEST FALSEHOOD",
+                    current_methodology_blobs=bad_manifest,
+                )
+                a55_false_payload(
+                    "a55falseackpad",
+                    "A55-21 a sequence 2 with a PADDED relied-on set cannot be laundered",
+                    "which it did not rely on then",
+                    acknowledged_deviations=sorted(req2) + irrelevant2[:1],
+                )
+                a55_false_payload(
+                    "a55falseackomit",
+                    "A55-21b a sequence 2 with an OMITTED relied-on set cannot be laundered",
+                    "which it relied on then",
+                    acknowledged_deviations=[],
+                )
+
+                # THE ATTRIBUTION CONTROL. Same fixture, same later declared change, a
+                # GENUINE sequence 2. Generation must SUCCEED, or the three refusals
+                # above could be caused by anything in the added history rather than by
+                # the false payload they name.
+                _a50_git(root, "checkout", "-q", "-B", "a55genuine", base_v2)
+                _a50_git(root, "reset", "-q", "--hard", base_v2)
+                _a50_git(root, "clean", "-qfd")
+                seq2_path.write_text(good_seq2)
+                _a50_git(root, "add", "-A")
+                _a50_git(root, "commit", "-qm", "a genuine sequence 2")
+                (root / "src" / "gamma.py").write_text("SEGMENT = 11\n")
+                _a50_git(root, "add", "-A")
+                _a50_git(root, "commit", "-qm", "a legitimate later surface change")
+                _a50_declare_extra(ev, "L", _a50_git(root, "rev-parse", "HEAD"), ["repo:src/gamma.py"])
+                _a50_git(root, "add", "-A")
+                _a50_git(root, "commit", "-qm", "declare the later change")
+                checks.append(("A55-22 the GENUINE sequence 2 passes historical validation",
+                               not authorization_historical_errors(
+                                   cM, seq2_path, pre_authorization_commit_of(seq2_path))))
+                rc_gen, _ = _a50_try_authorize()
+                checks.append(("A55-22 ...and the SAME later declared change then WRITES sequence 3",
+                               rc_gen == 0 and seq3_path.exists()))
+                seq3_path.unlink(missing_ok=True)
+
+                # Back to the real branch so the write-once tail below is unaffected.
+                _a50_git(root, "checkout", "-q", "main")
+                _a50_git(root, "clean", "-qfd")
 
             # 4b / 3b -- WRITE-ONCE, asserted on real second commits. Last, because they are
             # not revertible: a second modifying commit is a permanent property of history.
