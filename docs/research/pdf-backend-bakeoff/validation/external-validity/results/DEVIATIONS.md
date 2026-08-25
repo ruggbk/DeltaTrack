@@ -1035,7 +1035,7 @@ not done in this round.
 
 ```json
 {"id": "A55", "kind": "DEVIATION",
- "commits": ["e785f4cb"],
+ "commits": ["e785f4cb", "87d4d2f2"],
  "classification": "POST-BOUNDARY APPARATUS DEVIATION (AUTHORIZATION MECHANISM)",
  "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
  "results_already_visible": {
@@ -1053,7 +1053,7 @@ not done in this round.
  "affects_architecture_decision": false,
  "affects_execution_authorization": true,
  "affects_reproducibility_surface": false,
- "narrowing": "A55 changes only HOW A CONTINUATION AUTHORIZATION IS SUCCEEDED. It reads no holdout byte and changes no threshold, selection rule, metric definition, route derivation or architecture rule. It does not modify the population, the frames, the frozen key, the original execution marker or any existing authorization, and it never renames, edits, deletes, recommits or reinterprets the sequence-1 artifact. affects_execution_authorization is TRUE by construction: this record is about the authorization mechanism itself. affects_reproducibility_surface is FALSE, and that is AUDITED rather than assumed: `probes/x04_freeze_check.py` is a member of none of METHODOLOGY_SURFACE, RESULT_BEARING_DATA or AUTHORIZATION_EXTRAS, so no blob in the 31-entry authorization manifest moves. It is the gate that polices the surface, not a member of it. Verified against the real tree at 74ccf247: the repaired gate reports EXECUTION PERMITTED AS CONTINUATION with 31 current result-bearing blobs unchanged, the identical verdict the pre-A55 gate gives on the same commit.",
+ "narrowing": "A55 changes only HOW A CONTINUATION AUTHORIZATION IS SUCCEEDED. It reads no holdout byte and changes no threshold, selection rule, metric definition, route derivation or architecture rule. It does not modify the population, the frames, the frozen key, the original execution marker or any existing authorization, and it never renames, edits, deletes, recommits or reinterprets the sequence-1 artifact. A55 also validates every chain entry against its OWN pre-authorization snapshot: an entry must have been TRUE when committed, not merely immutable afterwards, so a successor cannot launder a predecessor whose payload was false when written. affects_execution_authorization is TRUE by construction: this record is about the authorization mechanism itself. affects_reproducibility_surface is FALSE, and that is AUDITED rather than assumed: `probes/x04_freeze_check.py` is a member of none of METHODOLOGY_SURFACE, RESULT_BEARING_DATA or AUTHORIZATION_EXTRAS, so no blob in the 31-entry authorization manifest moves. It is the gate that polices the surface, not a member of it. Verified against the real tree at 74ccf247: the repaired gate reports EXECUTION PERMITTED AS CONTINUATION with 31 current result-bearing blobs unchanged, the identical verdict the pre-A55 gate gives on the same commit.",
  "files_touched": ["probes/x04_freeze_check.py"]}
 ```
 
@@ -1102,6 +1102,22 @@ succeeded with its entire working-tree footprint being one new untracked file, s
 scientific artifact is touched. That generated artifact was discarded and the scratch
 worktrees removed; no successor authorization was committed anywhere.
 
+**Historical truthfulness.** Chain validation deliberately does not judge a predecessor
+by today's tree, because going stale is what made its successor necessary. An earlier
+spelling of this repair implemented that as not judging it by ANYTHING: the manifest, the
+pinned register blob, the relied-on deviation set and surface provenance were checked only
+for the latest entry and only against the live tree, so the moment an entry acquired a
+successor those claims stopped being checked. A sequence 2 whose payload was false when
+written therefore became permanent as soon as a correctly bound sequence 3 sat on top of
+it. Write-once fixes the bytes without making them true, and the binding checks only prove
+that entries point at each other.
+
+Every entry is now re-validated against its own immutable pre-authorization commit, derived
+from history as the authorizing commit's parent and never read from the artifact. Coverage,
+the register and history are all read AT that snapshot, so a truthful entry cannot be failed
+by later commits and a false one cannot be excused once the register catches up. The latest
+entry must satisfy both historical truthfulness and agreement with the current tree.
+
 **What A55 does not do.** It does not integrate `pdf-study-continuation-execution`, create
 any successor authorization, prepare a human-review packet, adjudicate, score, or decide the
 architecture. It creates no authorization of any kind. It makes one buildable, once, subject
@@ -1129,7 +1145,7 @@ to the same review every authorization has always required.
  "affects_architecture_decision": false,
  "affects_execution_authorization": false,
  "affects_reproducibility_surface": false,
- "narrowing": "A56 changes WHERE THE F7 AND F8 NEGATIVE CONTROLS PUT THEIR BAD BYTES, and nothing else. The gate is untouched: `check_freeze`'s F7 and F8 clauses, their wording and their verdicts are exactly as before, and only the self-test's own fixture moved. It reads no holdout byte for any research purpose, produces no metric, and changes no threshold, route, selection rule, scoring rule or architecture rule. The control count moves from 175 to 179: three isolation arms plus a pre-mutation cleanliness arm, with no control removed and no existing arm reworded. affects_execution_authorization is FALSE: the authorization state machine, its states, its refusals and every authorization artifact are untouched. affects_reproducibility_surface is FALSE on the same audited basis as A55: `probes/x04_freeze_check.py` is a member of none of METHODOLOGY_SURFACE, RESULT_BEARING_DATA or AUTHORIZATION_EXTRAS, so no blob in the 31-entry authorization manifest moves.",
+ "narrowing": "A56 changes WHERE THE F7 AND F8 NEGATIVE CONTROLS PUT THEIR BAD BYTES, and nothing else. The gate is untouched: `check_freeze`'s F7 and F8 clauses, their wording and their verdicts are exactly as before, and only the self-test's own fixture moved. It reads no holdout byte for any research purpose, produces no metric, and changes no threshold, route, selection rule, scoring rule or architecture rule. It adds four arms, three isolation checks plus a pre-mutation cleanliness check, removing no control and rewording no existing arm. affects_execution_authorization is FALSE: the authorization state machine, its states, its refusals and every authorization artifact are untouched. affects_reproducibility_surface is FALSE on the same audited basis as A55: `probes/x04_freeze_check.py` is a member of none of METHODOLOGY_SURFACE, RESULT_BEARING_DATA or AUTHORIZATION_EXTRAS, so no blob in the 31-entry authorization manifest moves.",
  "files_touched": ["probes/x04_freeze_check.py"]}
 ```
 
