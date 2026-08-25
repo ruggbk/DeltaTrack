@@ -16,7 +16,7 @@ _Last updated: 2026-08-11. Based on stress-test run across 7 bills (see `stress_
 | 117-hr-5376 | IRA (reconciliation) | 597 | 154 | 0 |
 | 118-hr-4368 | CJS FY2024 appropriations | 84 | 2 | 0 |
 
-"FP risk" = nodes labeled with a primary type (appropriation/transfer/rescission) that also contain AUTH_HINT language. After manual review, all 11 initially flagged were confirmed as real appropriation nodes that cross-reference authorization language — **zero actual false positives found**.
+"FP risk" = nodes labeled with a primary type (appropriation/transfer/rescission) that also contain AUTH_HINT language. After manual review, all 12 flagged nodes were confirmed as real spending nodes that cross-reference authorization language — **no false positives found among the auth-hint-flagged primary predictions that were manually reviewed**. The 607 primary predictions without an auth hint were not examined by this check; broader precision remains an open research question.
 
 ---
 
@@ -146,7 +146,7 @@ A single-token node containing only a dollar placeholder. One appears in MILCON,
 
 **Concern going in:** Would authorization bills (NDAA, Farm Bill, IIJA) produce false-positive `appropriation` labels?
 
-**Result:** Zero false positives across all three authorization bills. The classifier correctly avoids mislabeling:
+**Result:** No false positives found among auth-hint-flagged primary predictions in all three authorization bills. The classifier correctly avoids mislabeling:
 - "authorized to be appropriated" → APPROP_ALT only matches `there (?:is|are) appropriated` without "authorized" in front. Safe.
 - "For the purposes of…" in authorization context → APPROP `^\s*For\b` fires on this. **Check below.**
 
@@ -230,7 +230,7 @@ These are set-asides from already-appropriated IRA funding — semantically simi
 
 ## Applied changes (2026-08-09)
 
-All changes applied to `classify_bill.py`. Re-run stress test confirmed zero false positives in all authorization bills after changes.
+All changes applied to `classify_bill.py`. Re-run stress test confirmed no false positives among auth-hint-flagged primary predictions in all authorization bills after changes.
 
 **Applied:**
 1. Gap 3: RESCISSION plural — `(?:is|are) hereby rescinded` ✅
