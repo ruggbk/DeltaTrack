@@ -3,7 +3,7 @@ import re
 # Node-opening patterns
 RESTRICT = re.compile(r"^\s*(?:\([a-z0-9]+\)\s*)?None of the funds", re.IGNORECASE)
 RESTRICT_NOTWITHSTANDING = re.compile(r"^\s*Notwithstanding\b.{0,200}\bnone of the funds\b", re.IGNORECASE | re.DOTALL)
-TRANSFER = re.compile(r"^\s*Of (?:the )?amounts", re.IGNORECASE)
+TRANSFER = re.compile(r"^\s*Of (?:the )?amounts.{0,300}\btransferr?ed?\b", re.IGNORECASE | re.DOTALL)
 APPROP = re.compile(r"^\s*(?:\([a-z0-9]+\)\s*)?For\b", re.IGNORECASE | re.DOTALL)
 RESCISSION = re.compile(r"(?:is|are) hereby rescinded", re.IGNORECASE)
 DIRECTIVE = re.compile(r"^\s*The\s+\w[\w\s]+(?:shall|may not)\b", re.IGNORECASE)

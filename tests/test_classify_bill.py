@@ -52,6 +52,15 @@ class TestTransfer:
         text = "Of the amounts appropriated under this heading, $10,000,000 may be transferred"
         assert classify_text(text) == "transfer"
 
+    def test_of_amounts_without_transfer_is_not_transfer(self):
+        # "Of the amounts..." that allocates funds without transferring them is NOT a transfer
+        text = "Of the amounts made available under this heading, $10,000,000 shall be available for grants"
+        assert classify_text(text) != "transfer"
+
+    def test_of_amounts_availability_is_not_transfer(self):
+        text = "Of the amounts appropriated under this heading, $5,000,000 shall remain available until expended"
+        assert classify_text(text) != "transfer"
+
 
 class TestAppropriation:
     def test_plain_for(self):
