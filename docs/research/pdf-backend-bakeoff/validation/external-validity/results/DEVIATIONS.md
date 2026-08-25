@@ -870,3 +870,80 @@ green, so neither existing rejection was absorbed into the new one. On the real 
 oracle, adjudicate, score, or produce an architecture decision. It does not touch the
 preserved execution branch. It does not alter any section 4.7 NON-CONFIRMATORY status, or
 any value established by A47, A48, A49, A50 or A51.
+
+## A53 — POST-BOUNDARY AUTHORIZATION-FIELD DEVIATION
+
+```json
+{"id": "A53", "kind": "DEVIATION",
+ "commits": ["c223c6b1"],
+ "classification": "POST-BOUNDARY AUTHORIZATION-FIELD DEVIATION (APPARATUS)",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "members": 17,
+  "pages": 4190,
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": true,
+ "affects_reproducibility_surface": false,
+ "narrowing": "A53 changes ONE field of the continuation authorization -- `results_already_visible` -- its generation, and its validation. It reads no holdout byte, produces no metric, and changes no threshold, route, selection rule, scoring rule or architecture rule. It does not modify CONTINUATION.json, the canonical cross-engine artifact, the original marker, the population, the manifest, the deviations blob, provenance, merge attribution, or any write-once rule. It adds one derived read of the committed canonical cross-engine control, used ONLY to report exposure and never to re-decide anything that artifact measured. affects_execution_authorization is TRUE: the contract an authorization must satisfy to be VALID is narrower after this change, so an artifact that would have passed can now be refused. No authorization artifact exists at the time of this record, so nothing already issued is invalidated by it.",
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The defect.** `results_already_visible` was generated from `CONTINUATION.json`
+alone and validated only for being non-empty. That record is the truthful history of
+Run 1, and Run 1 stopped BEFORE the canonical cross-engine control -- it says so, under
+`prior_execution.stopped_before`. The control was measured afterwards over the same frozen
+population and committed as `results/cross_engine_control.json` (17 documents, n_qualified
+0). The generated summary therefore named Run 1's results and omitted a committed
+confirmatory-population measurement, and a non-empty check cannot tell an incomplete
+sentence from a complete one.
+
+**Why it matters in one direction only.** Overstating exposure is self-penalising and
+visible. Understating it is neither: a shorter list of already-visible results makes
+whatever the study has left to do look more independent than it is, and a reader holding
+only the authorization has nothing to compare it against. `continuation_auth_errors`
+already described the field as recording what was visible "when it was written", so the
+contract was right and only the check was weak.
+
+**Why it stayed invisible.** The register itself had disclosed the cross-engine result in
+prose since A52, so a human reading DEVIATIONS.md saw it; only the authorization did not
+carry it. The generator and the validator also agreed with each other -- both were built
+around the Run 1 record -- so the two halves of the contract were never in tension, which
+is the same shape as the A52 defect one field over.
+
+**The design.** Two phases, kept apart. `CONTINUATION.json` is preserved unchanged as the
+historical Run 1 record; `historical_exposure_summary` (renamed from
+`exposure_summary_for_authorization`, because it is no longer the whole answer) owns that
+half. `authorization_exposure_summary` is the union of Run 1 and everything committed
+since. The cross-engine phase is derived from the committed artifact and re-derived from
+its own document rows, so a summary disagreeing with its evidence, or an unreadable,
+incomplete or uncommitted artifact, is REFUSED at generation rather than silently omitted.
+The snapshot has a fixed lifetime: generation records the pre-authorization HEAD,
+validation independently derives the authorizing commit's parent, requires
+`head_at_authorization` to equal it, and reconstructs exposure from that tree -- so a later
+authorized result cannot retroactively falsify a summary that was truthful when written,
+and the record cannot nominate the tree it will be judged against.
+
+**Evidence.** The self-test goes from 104 to 118 gates. With the validator withheld and the
+controls in place, exactly two fail -- `A53-2 deleting the cross-engine fact from
+results_already_visible is REFUSED` and `A53-3 a head_at_authorization that is not the
+derived pre-authorization parent is REFUSED` -- and the generation-side controls stay
+green, so the refusal is attributable to the validator. With the generator withheld
+instead, 17 controls fail, because the repaired validator refuses a Run-1-only summary
+outright. After the repair the suite returns 118/118. The non-empty check is REPLACED
+rather than supplemented: the exact comparison subsumes it, and keeping both would be two
+mechanisms for one fact.
+
+**What A53 does not do.** It does not create the continuation authorization, regenerate the
+oracle, adjudicate, score, or produce an architecture decision. It does not touch the
+preserved execution branch. It does not modify `CONTINUATION.json`, the cross-engine
+result, `pyproject.toml`, or any production parser. It does not alter any section 4.7
+NON-CONFIRMATORY status, or any value established by A47, A48, A49, A50, A51 or A52.
