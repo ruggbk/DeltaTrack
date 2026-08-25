@@ -1031,3 +1031,162 @@ cannot change the architecture result.
 into `pdf-study-continuation-execution` requires a NEW continuation authorization; the one
 at 74ccf247 speaks for the apparatus as it stood before this repair. That is deliberately
 not done in this round.
+## A55 — POST-BOUNDARY APPARATUS DEVIATION
+
+```json
+{"id": "A55", "kind": "DEVIATION",
+ "commits": ["e785f4cb", "87d4d2f2"],
+ "classification": "POST-BOUNDARY APPARATUS DEVIATION (AUTHORIZATION MECHANISM)",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "members": 17,
+  "pages": 4190,
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": true,
+ "affects_reproducibility_surface": false,
+ "narrowing": "A55 changes only HOW A CONTINUATION AUTHORIZATION IS SUCCEEDED. It reads no holdout byte and changes no threshold, selection rule, metric definition, route derivation or architecture rule. It does not modify the population, the frames, the frozen key, the original execution marker or any existing authorization, and it never renames, edits, deletes, recommits or reinterprets the sequence-1 artifact. A55 also validates every chain entry against its OWN pre-authorization snapshot: an entry must have been TRUE when committed, not merely immutable afterwards, so a successor cannot launder a predecessor whose payload was false when written. affects_execution_authorization is TRUE by construction: this record is about the authorization mechanism itself. affects_reproducibility_surface is FALSE, and that is AUDITED rather than assumed: `probes/x04_freeze_check.py` is a member of none of METHODOLOGY_SURFACE, RESULT_BEARING_DATA or AUTHORIZATION_EXTRAS, so no blob in the 31-entry authorization manifest moves. It is the gate that polices the surface, not a member of it. Verified against the real tree at 74ccf247: the repaired gate reports EXECUTION PERMITTED AS CONTINUATION with 31 current result-bearing blobs unchanged, the identical verdict the pre-A55 gate gives on the same commit.",
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The defect.** A50 made the continuation authorization write-once, which is correct, and
+implemented that as a TERMINAL state. `--authorize-apparatus-continuation` refuses unless
+the authorization is ABSENT, so once a valid one exists the generator will not produce
+another under any circumstances. A50's own closing clause, "a further deviation requires a
+NEW explicit review and ruling; this does not chain", states the review requirement
+correctly. The code enforced it by making the required artifact unbuildable. Those are not
+the same thing, and the difference is invisible until a second reviewed deviation arrives.
+
+**Why it surfaces now.** A54 moves `probes/build_oracle.py` and `probes/score_metrics.py`,
+both members of the 31-entry authorization manifest. Projected onto
+`pdf-study-continuation-execution`, the authorization at 74ccf247 correctly goes stale: it
+still validates as an artifact, and it no longer speaks for the apparatus in force. Before
+this repair there was no lawful way forward. The only ways to resume were to edit a
+write-once file or to suppress the check, and both destroy the evidence the artifact exists
+to preserve.
+
+**The repair.** An append-only chain. Sequence 1 keeps its filename and is never renamed,
+edited, deleted or recommitted. Each successor is a NEW file,
+`EXECUTION-CONTINUATION-AUTHORIZATION-<n>.json`, committed exactly once, carrying an
+explicit integer sequence and binding its immediate predecessor by path, authorizing commit
+and blob. The chain is derived from repository history and exact filenames, never from what
+the newest artifact claims its own ancestry to be, so a successor cannot certify the one
+fact the chain exists to establish.
+
+**What it does not weaken.** Write-once is preserved exactly, because nothing is ever
+edited: a successor is an addition, not a revision. Authority does not roll forward. Every
+changed apparatus still requires its own separate reviewed, committed artifact, and the gate
+stays FORBIDDEN until that artifact is committed. An invalid, missing, mutated or deleted
+predecessor invalidates the whole chain, and a later entry cannot cure an earlier one, so
+appending is not a repair mechanism. "Is there something new to authorize" is asked against
+the LATEST authorization rather than the original marker, so an unchanged apparatus cannot
+receive a second licence. A55 supersedes A50 in exactly one respect: A50 provided no
+successor mechanism. Nothing else A50 established is changed.
+
+**Read-only verification against the real tree.** Established without modifying the
+preserved worktree, which remains clean at 74ccf247. At 74ccf247 the one-entry chain is
+valid and the gate reports PERMITTED AS CONTINUATION, with zero drift against the
+authorization itself. Projecting integration of d5330a54 onto a scratch branch: freeze
+integrity COMPLETE, execution readiness OPEN, sequence 1 still VALID but stale on exactly
+two manifest blobs, execution FORBIDDEN, and sequence 2 named as required. The relied-on
+deviation set derives from history to exactly `["A48", "A54"]`. Generating sequence 2 there
+succeeded with its entire working-tree footprint being one new untracked file, so no frozen
+scientific artifact is touched. That generated artifact was discarded and the scratch
+worktrees removed; no successor authorization was committed anywhere.
+
+**Historical truthfulness.** Chain validation deliberately does not judge a predecessor
+by today's tree, because going stale is what made its successor necessary. An earlier
+spelling of this repair implemented that as not judging it by ANYTHING: the manifest, the
+pinned register blob, the relied-on deviation set and surface provenance were checked only
+for the latest entry and only against the live tree, so the moment an entry acquired a
+successor those claims stopped being checked. A sequence 2 whose payload was false when
+written therefore became permanent as soon as a correctly bound sequence 3 sat on top of
+it. Write-once fixes the bytes without making them true, and the binding checks only prove
+that entries point at each other.
+
+Every entry is now re-validated against its own immutable pre-authorization commit, derived
+from history as the authorizing commit's parent and never read from the artifact. Coverage,
+the register and history are all read AT that snapshot, so a truthful entry cannot be failed
+by later commits and a false one cannot be excused once the register catches up. The latest
+entry must satisfy both historical truthfulness and agreement with the current tree.
+
+**What A55 does not do.** It does not integrate `pdf-study-continuation-execution`, create
+any successor authorization, prepare a human-review packet, adjudicate, score, or decide the
+architecture. It creates no authorization of any kind. It makes one buildable, once, subject
+to the same review every authorization has always required.
+
+## A56 — POST-BOUNDARY TEST-ISOLATION DEVIATION
+
+```json
+{"id": "A56", "kind": "DEVIATION",
+ "commits": ["e75111d9"],
+ "classification": "POST-BOUNDARY TEST-ISOLATION DEVIATION (TOOLING)",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "members": 17,
+  "pages": 4190,
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": false,
+ "affects_reproducibility_surface": false,
+ "narrowing": "A56 changes WHERE THE F7 AND F8 NEGATIVE CONTROLS PUT THEIR BAD BYTES, and nothing else. The gate is untouched: `check_freeze`'s F7 and F8 clauses, their wording and their verdicts are exactly as before, and only the self-test's own fixture moved. It reads no holdout byte for any research purpose, produces no metric, and changes no threshold, route, selection rule, scoring rule or architecture rule. It adds four arms, three isolation checks plus a pre-mutation cleanliness check, removing no control and rewording no existing arm. affects_execution_authorization is FALSE: the authorization state machine, its states, its refusals and every authorization artifact are untouched. affects_reproducibility_surface is FALSE on the same audited basis as A55: `probes/x04_freeze_check.py` is a member of none of METHODOLOGY_SURFACE, RESULT_BEARING_DATA or AUTHORIZATION_EXTRAS, so no blob in the 31-entry authorization manifest moves.",
+ "files_touched": ["probes/x04_freeze_check.py"]}
+```
+
+**The defect.** The F7 and F8 negative controls mutated the CANONICAL POPULATION. F8
+truncated the first manifested holdout file in place, to `<!DOCTYPE html>` followed by that
+file's own first 100 bytes; F7 created an intruder inside `holdout/`. Each was undone in a
+`finally`. Both controls are correct about what they assert and were wrong about where they
+assert it.
+
+**Why it stayed invisible.** A `finally` runs on exceptions and on ordinary interpreter
+exit, which covers every failure the controls were written against. It does not run on
+SIGKILL. Nothing in the self-test could report the difference either, because F2 (every
+holdout file matches its recorded SHA-256) and F10 (frozen artifacts have no uncommitted
+change) live in the GATE and not in `--self-test`. A self-test can therefore pass every one
+of its arms and still leave the frozen population corrupted, which is precisely the state a
+green run is read as excluding.
+
+**Measured, not argued.** A self-test run driven by a mutation harness was killed with
+SIGKILL mid-arm. It left `holdout/116-hr-7611/rh.pdf` at 116 bytes, down from 286,181, and
+a later `git add -A` committed the corrupted frozen artifact. The file was restored to blob
+`8a5d46f1`, verified identical to the blob at the population freeze commit `4e2b520d`, and
+that branch was abandoned rather than rewritten, since a mergeable history containing a
+post-freeze mutation of a frozen artifact is not repaired by a later restoring commit.
+
+**The repair.** `DOCS_DIR` is rebound to a temporary fixture for the duration of both
+controls, which isolates them together because F7 and F8 read nothing else. No canonical
+`holdout/**` path is opened for writing at any point. The `finally` now restores a global,
+not a file, so a hard kill at the worst possible moment destroys nothing that matters.
+Cleanup is deliberately no longer the thing that protects the population: `finally`, signal
+handlers and post-run repair are one bet, that the process survives to clean up, and a hard
+kill wins that bet every time.
+
+**Red before green.** Three arms assert the property that matters, where the bad bytes go,
+rather than whether cleanup happened to run. Measured against a faithful reconstruction of
+the direct-write implementation on a disposable worktree, all three fail: the mutation
+target is not outside the canonical tree; the canonical file is not byte-identical while
+the corrupt bytes exist, asserted before cleanup because afterwards the old code would
+satisfy it too; and the canonical tree gained a file. The F7 and F8 detection arms stay
+green under that same mutant, so the reds are attributable to isolation rather than to
+detection breaking.
+
+**What A56 does not do.** It changes no gate, no authorization, no scientific value, and no
+research artifact. It does not integrate any branch, create an authorization, prepare a
+packet, adjudicate, score, or decide the architecture.
