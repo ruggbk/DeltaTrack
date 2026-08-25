@@ -3295,31 +3295,98 @@ def self_test(contam: dict, exposure: dict) -> int:
     checks.append(("F4 rejects a protocol committed AFTER the population", not f4_ok(head, parent)))
     checks.append(("F4 rejects an uncommitted protocol", not f4_ok("", head)))
 
-    # F7 must close the gate when an unmanifested file appears in the population directory.
-    # This is the exact defect that shipped: an HTML error page named .pdf, left by a
-    # rejected download, invisible to every manifest-driven check.
     members = json.loads(MEMBERSHIP.read_text()).get("members", []) if MEMBERSHIP.exists() else []
-    intruder = DOCS_DIR / "_selftest_intruder" / "not_a_member.pdf"
-    try:
-        intruder.parent.mkdir(parents=True, exist_ok=True)
-        intruder.write_bytes(b"<!DOCTYPE html>\n")
-        f7 = dict((n[:2], ok) for n, ok, _ in check_freeze(members, lookup))
-        checks.append(("F7 detects an unmanifested file in holdout/", not f7["F7"]))
-    finally:
-        intruder.unlink(missing_ok=True)
-        intruder.parent.rmdir()
 
-    # F8 must reject a manifested file that is not actually a PDF.
-    victim = None
-    if members:
-        victim = DOCS_DIR / members[0]["files"][0]["path"]
-        saved_bytes = victim.read_bytes()
+    # F7 / F8 -- NEGATIVE CONTROLS ON A SYNTHETIC HOLDOUT, NEVER THE CANONICAL ONE.
+    #
+    # Both controls have to put bad bytes somewhere a freeze check will read them, and the
+    # implementation this replaces put them in the CANONICAL POPULATION: F8 truncated the
+    # first manifested holdout file in place, F7 created an intruder inside `holdout/`, each
+    # undone in a `finally`. That is safe exactly until the process does not reach its
+    # `finally`. It did not. A run killed with SIGKILL left the first manifested holdout at
+    # 116 bytes, `<!DOCTYPE html>` followed by its own first 100 bytes, and a later
+    # `git add -A` committed the corrupted frozen artifact. The self-test reported 175/175
+    # on the way past, because F2 and F10 live in the GATE, not in the self-test: a green
+    # self-test says nothing about whether the run left the population intact.
+    #
+    # `finally`, signal handlers and post-run repair are one bet -- that the process
+    # survives to clean up -- and a hard kill wins that bet every time. So cleanup is no
+    # longer what protects the population: the mutation target moved OUT of the canonical
+    # tree. `DOCS_DIR` is rebound to a temporary fixture for the duration, which isolates
+    # both controls at once because F7 and F8 read nothing else. No canonical `holdout/**`
+    # path is opened for writing at any point, so a kill at the worst possible moment now
+    # destroys nothing that matters. The `finally` below restores a global, not a file.
+    canonical_docs = DOCS_DIR
+    canonical_first = canonical_docs / members[0]["files"][0]["path"] if members else None
+    canonical_first_bytes = (
+        canonical_first.read_bytes() if canonical_first is not None and canonical_first.exists() else b""
+    )
+    minimal_pdf = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+
+    # INSIDE THE REPO, AND GITIGNORED. Both properties are load-bearing and pull in opposite
+    # directions. F10 resolves every frozen path with `p.relative_to(REPO)`, so a fixture in
+    # the system temp directory raises ValueError and takes the whole self-test down. But a
+    # fixture merely inside the repo is worse than the defect being repaired: a run killed
+    # before cleanup leaves an untracked tree that the next `git add -A` sweeps into a
+    # commit, which is exactly how the corrupted holdout reached the index in the first
+    # place. `.claude/*` is ignored wholesale, so a leftover is unreachable by `git add`
+    # while still resolving under REPO.
+    fixture_home = REPO / ".claude"
+    fixture_home.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=fixture_home, prefix="x04-selftest-holdout-") as fixture_root:
+        fixture = Path(fixture_root) / "holdout"
+        (fixture / "selftest").mkdir(parents=True)
+        victim = fixture / "selftest" / "doc.pdf"
+        victim.write_bytes(minimal_pdf)
+        synthetic = [
+            {
+                "id": "SELFTEST-HOLDOUT",
+                "kind": "bill",
+                "files": [{"path": "selftest/doc.pdf", "sha256": hashlib.sha256(minimal_pdf).hexdigest()}],
+            }
+        ]
+        globals()["DOCS_DIR"] = fixture
         try:
-            victim.write_bytes(b"<!DOCTYPE html>\n" + saved_bytes[:100])
-            f8 = dict((n[:2], ok) for n, ok, _ in check_freeze(members, lookup))
+            # THE REGRESSION CONTROL. Deterministic, and RED against the direct-write
+            # implementation this replaces, where the victim was
+            # `canonical_docs / members[0]["files"][0]["path"]` and therefore inside the
+            # canonical tree by construction. It asserts the property that actually matters
+            # -- where the bad bytes go -- rather than whether cleanup happened to run.
+            checks.append(
+                ("F7/F8 the negative-control mutation target is OUTSIDE the canonical holdout tree",
+                 not victim.is_relative_to(canonical_docs))
+            )
+            base = dict((n[:2], ok) for n, ok, _ in check_freeze(synthetic, lookup))
+            checks.append(("F7/F8 the synthetic holdout fixture is clean BEFORE mutation",
+                           base["F7"] and base["F8"]))
+
+            # F8 must reject a manifested file that is not actually a PDF.
+            victim.write_bytes(b"<!DOCTYPE html>\n" + minimal_pdf[:100])
+            f8 = dict((n[:2], ok) for n, ok, _ in check_freeze(synthetic, lookup))
             checks.append(("F8 detects a manifested file that is not a PDF", not f8["F8"]))
+            # ...ASSERTED WHILE THE CORRUPT BYTES STILL EXIST, before any cleanup. After
+            # cleanup the old implementation would satisfy this too, so checking afterwards
+            # would be the vacuous version of the same control.
+            checks.append(
+                ("F8 ...and the canonical holdout file is byte-identical WHILE the corrupt bytes exist",
+                 canonical_first is None or canonical_first.read_bytes() == canonical_first_bytes)
+            )
+            victim.write_bytes(minimal_pdf)
+
+            # F7 must close the gate when an unmanifested file appears in the population
+            # directory. That is the exact defect that shipped: an HTML error page named
+            # .pdf, left by a rejected download, invisible to every manifest-driven check.
+            intruder = fixture / "selftest" / "not_a_member.pdf"
+            intruder.write_bytes(b"<!DOCTYPE html>\n")
+            f7 = dict((n[:2], ok) for n, ok, _ in check_freeze(synthetic, lookup))
+            checks.append(("F7 detects an unmanifested file in holdout/", not f7["F7"]))
+            checks.append(
+                ("F7 ...and the canonical holdout tree gained no file",
+                 not (canonical_docs / "selftest").exists())
+            )
+            intruder.unlink()
         finally:
-            victim.write_bytes(saved_bytes)
+            globals()["DOCS_DIR"] = canonical_docs
 
     # F9 must reject an amendment that claims to change membership.
     saved_amend = AMENDMENTS.read_text() if AMENDMENTS.exists() else None
