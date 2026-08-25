@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import io
 import os
 from pathlib import Path
@@ -62,7 +63,29 @@ class TestCli:
 
         monkeypatch.setattr(diff_pdf, "render_pdf_diff_html", lambda *_args, **_kwargs: REPORT)
 
+        original_builtin_open = builtins.open
         original_io_open = io.open
+
+        def builtin_open_with_cp1252_default(
+            file,
+            mode="r",
+            buffering=-1,
+            encoding=None,
+            errors=None,
+            newline=None,
+            closefd=True,
+            opener=None,
+        ):
+            if (
+                isinstance(file, (str, bytes, os.PathLike))
+                and isinstance(mode, str)
+                and os.fspath(file) == os.fspath(output)
+                and mode.startswith("w")
+                and "b" not in mode
+                and encoding in (None, "locale")
+            ):
+                encoding = "cp1252"
+            return original_builtin_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
 
         def io_open_with_cp1252_default(
             file,
@@ -75,7 +98,9 @@ class TestCli:
             opener=None,
         ):
             if (
-                os.fspath(file) == os.fspath(output)
+                isinstance(file, (str, bytes, os.PathLike))
+                and isinstance(mode, str)
+                and os.fspath(file) == os.fspath(output)
                 and mode.startswith("w")
                 and "b" not in mode
                 and encoding in (None, "locale")
@@ -83,6 +108,7 @@ class TestCli:
                 encoding = "cp1252"
             return original_io_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
 
+        monkeypatch.setattr(builtins, "open", builtin_open_with_cp1252_default)
         monkeypatch.setattr(io, "open", io_open_with_cp1252_default)
 
         encoding_error = None
@@ -98,10 +124,15 @@ class TestCli:
         assert "→" in decoded
         assert "⚠" in decoded
 
-        unrelated = tmp_path / "unrelated.txt"
-        with open(unrelated, "w") as handle:
+        unrelated_builtin = tmp_path / "unrelated-builtins.txt"
+        with builtins.open(unrelated_builtin, "w") as handle:
             handle.write("→")
-        assert unrelated.read_bytes() == "→".encode("utf-8")
+        assert unrelated_builtin.read_bytes() == "→".encode("utf-8")
+
+        unrelated_io = tmp_path / "unrelated-io.txt"
+        with io.open(unrelated_io, "w") as handle:
+            handle.write("⚠")
+        assert unrelated_io.read_bytes() == "⚠".encode("utf-8")
 
     def test_stdout_when_no_output(self, capsys):
         main([str(V1), str(V2)])
