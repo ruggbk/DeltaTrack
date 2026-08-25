@@ -1,6 +1,4 @@
 import argparse
-import builtins
-import io
 import json
 import os
 import subprocess
@@ -646,6 +644,152 @@ def _run_compare(monkeypatch, *argv: str) -> None:
 
 REPORT = "<!doctype html><p>old → new</p><p>⚠ unanchored</p>"
 
+_UTF8_ROUTE_CHILD = r"""
+import locale
+import os
+import sys
+from pathlib import Path
+
+REPORT = "<!doctype html><p>old \u2192 new</p><p>\u26a0 unanchored</p>"
+
+
+def _ascii(value):
+    return str(value).encode("ascii", "backslashreplace").decode("ascii")
+
+
+def _status(name):
+    print("DT627_STATUS=" + name)
+    return 0
+
+
+def _utf8_name(value):
+    return str(value).lower().replace("-", "").replace("_", "") in {"utf8", "utf"}
+
+
+def main():
+    route, output, old_input, new_input = sys.argv[1:]
+    try:
+        locale_encoding = locale.getencoding()
+        with open(os.devnull, "w") as probe:
+            file_encoding = probe.encoding
+    except Exception as exc:
+        print("DT627_STATUS=locale-unavailable")
+        print("DT627_DETAIL=" + type(exc).__name__)
+        return 11
+
+    print("DT627_DEFAULT_ENCODING=" + _ascii(locale_encoding))
+    print("DT627_FILE_ENCODING=" + _ascii(file_encoding))
+    if _utf8_name(locale_encoding) or _utf8_name(file_encoding):
+        return _status("locale-unavailable")
+
+    try:
+        if route == "xml":
+            import deltatrack.diff_bill as diff_bill
+            from deltatrack.compare import xml as compare_xml
+
+            diff_bill.normalize_bill = lambda _path: object()
+            compare_xml.compare_xml_trees_html = lambda *_args, **_kwargs: REPORT
+            sys.argv = [
+                "diff_bill.py",
+                "compare",
+                old_input,
+                new_input,
+                "--format",
+                "html",
+                "-o",
+                output,
+            ]
+            route_main = diff_bill.main
+        elif route == "pdf":
+            import deltatrack.diff_pdf as diff_pdf
+
+            diff_pdf.render_pdf_diff_html = lambda *_args, **_kwargs: REPORT
+            route_main = lambda: diff_pdf.main(
+                [old_input, new_input, "--output", output]
+            )
+        else:
+            print("DT627_STATUS=setup-error")
+            print("DT627_DETAIL=unknown-route")
+            return 12
+    except Exception as exc:
+        print("DT627_STATUS=setup-error")
+        print("DT627_DETAIL=" + type(exc).__name__)
+        return 12
+
+    try:
+        route_main()
+    except UnicodeEncodeError:
+        return _status("unicode-error")
+    except SystemExit as exc:
+        print("DT627_STATUS=route-error")
+        print("DT627_DETAIL=SystemExit:" + _ascii(exc.code))
+        return 13
+    except Exception as exc:
+        print("DT627_STATUS=route-error")
+        print("DT627_DETAIL=" + type(exc).__name__)
+        return 13
+
+    try:
+        report = Path(output).read_bytes()
+    except Exception as exc:
+        print("DT627_STATUS=byte-mismatch")
+        print("DT627_DETAIL=" + type(exc).__name__)
+        return 0
+    if report != REPORT.encode("utf-8"):
+        return _status("byte-mismatch")
+    try:
+        decoded = report.decode("utf-8")
+    except UnicodeDecodeError:
+        return _status("decode-error")
+    if "\u2192" not in decoded or "\u26a0" not in decoded:
+        return _status("marker-mismatch")
+    return _status("ok")
+
+
+raise SystemExit(main())
+"""
+
+
+def _run_non_utf8_report_child(route: str, output: Path, old_input: Path, new_input: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    environment = os.environ.copy()
+    environment.update({"PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0", "LC_ALL": "C", "LANG": "C"})
+    pythonpath = [str(repo_root / "src"), str(repo_root)]
+    if environment.get("PYTHONPATH"):
+        pythonpath.append(environment["PYTHONPATH"])
+    environment["PYTHONPATH"] = os.pathsep.join(pythonpath)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _UTF8_ROUTE_CHILD,
+            route,
+            str(output),
+            str(old_input),
+            str(new_input),
+        ],
+        cwd=repo_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    status = next(
+        (line for line in result.stdout.splitlines() if line.startswith("DT627_STATUS=")),
+        "<missing>",
+    )
+    assert result.returncode == 0, (
+        f"child setup/route failure ({status}); stdout={result.stdout!r}; stderr={result.stderr!r}"
+    )
+    assert status == "DT627_STATUS=ok", (
+        f"report route did not preserve UTF-8 ({status}); stdout={result.stdout!r}; stderr={result.stderr!r}"
+    )
+
+    report = output.read_bytes()
+    assert report == REPORT.encode("utf-8")
+    decoded = report.decode("utf-8")
+    assert "→" in decoded
+    assert "⚠" in decoded
+
 
 class TestIntermixedSubParserGuard:
     """The re-entrancy guard in _IntermixedSubParser, pinned on ANY interpreter (#426).
@@ -876,175 +1020,14 @@ class TestCompareLegacyTwoPathForm:
         assert data["old_version"] == "reported-in-house"
         assert data["new_version"] == "enrolled-bill"
 
-    def test_html_output_uses_utf8_when_host_default_is_cp1252(self, tmp_path, monkeypatch):
-        """The real CLI writer preserves report bytes independently of the host default."""
+    def test_html_output_uses_utf8_when_host_default_is_cp1252(self, tmp_path):
+        """The real CLI writer is tested under a verified non-UTF-8 child locale."""
         old_xml = tmp_path / "old.xml"
         new_xml = tmp_path / "new.xml"
         output = tmp_path / "diff.html"
         old_xml.write_bytes(b"<bill />")
         new_xml.write_bytes(b"<bill />")
-
-        import deltatrack.diff_bill as diff_bill
-        from deltatrack.compare import xml as compare_xml
-
-        monkeypatch.setattr(diff_bill, "normalize_bill", lambda _path: object())
-        monkeypatch.setattr(compare_xml, "compare_xml_trees_html", lambda *_args, **_kwargs: REPORT)
-
-        original_builtin_open = builtins.open
-        original_io_open = io.open
-        original_os_open = os.open
-        target_fds = set()
-
-        class _TrackedTextHandle:
-            def __init__(self, handle, fd):
-                self._handle = handle
-                self._fd = fd
-
-            def __enter__(self):
-                self._handle.__enter__()
-                return self
-
-            def __exit__(self, exc_type, exc_value, traceback):
-                try:
-                    return self._handle.__exit__(exc_type, exc_value, traceback)
-                finally:
-                    target_fds.discard(self._fd)
-
-            def close(self):
-                try:
-                    return self._handle.close()
-                finally:
-                    target_fds.discard(self._fd)
-
-            def __getattr__(self, name):
-                return getattr(self._handle, name)
-
-            def __del__(self):
-                target_fds.discard(getattr(self, "_fd", None))
-
-        def is_output_path(file):
-            try:
-                return os.fspath(file) == os.fspath(output)
-            except TypeError:
-                return False
-
-        def is_target_descriptor(file):
-            return isinstance(file, int) and file in target_fds
-
-        def uses_default_text_encoding(file, mode, encoding):
-            return (
-                (is_output_path(file) or is_target_descriptor(file))
-                and isinstance(mode, str)
-                and mode.startswith("w")
-                and "b" not in mode
-                and encoding in (None, "locale")
-            )
-
-        def tracked_os_open(*args, **kwargs):
-            fd = original_os_open(*args, **kwargs)
-            path = args[0] if args else kwargs.get("path")
-            if is_output_path(path):
-                target_fds.add(fd)
-            return fd
-
-        monkeypatch.setattr(os, "open", tracked_os_open)
-
-        def builtin_open_with_cp1252_default(
-            file,
-            mode="r",
-            buffering=-1,
-            encoding=None,
-            errors=None,
-            newline=None,
-            closefd=True,
-            opener=None,
-        ):
-            target_descriptor = is_target_descriptor(file)
-            if uses_default_text_encoding(file, mode, encoding):
-                encoding = "cp1252"
-                handle = original_builtin_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
-                if target_descriptor:
-                    return _TrackedTextHandle(handle, file)
-                return handle
-            return original_builtin_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
-
-        def io_open_with_cp1252_default(
-            file,
-            mode="r",
-            buffering=-1,
-            encoding=None,
-            errors=None,
-            newline=None,
-            closefd=True,
-            opener=None,
-        ):
-            target_descriptor = is_target_descriptor(file)
-            if uses_default_text_encoding(file, mode, encoding):
-                encoding = "cp1252"
-                handle = original_io_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
-                if target_descriptor:
-                    return _TrackedTextHandle(handle, file)
-                return handle
-            return original_io_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
-
-        monkeypatch.setattr(builtins, "open", builtin_open_with_cp1252_default)
-        monkeypatch.setattr(io, "open", io_open_with_cp1252_default)
-
-        encoding_error = None
-        try:
-            _run_compare(
-                monkeypatch,
-                str(old_xml),
-                str(new_xml),
-                "--format",
-                "html",
-                "-o",
-                str(output),
-            )
-        except UnicodeEncodeError as exc:
-            encoding_error = exc
-
-        assert encoding_error is None, "report output depended on the host default encoding"
-        report = output.read_bytes()
-        assert report == REPORT.encode("utf-8")
-        decoded = report.decode("utf-8")
-        assert "→" in decoded
-        assert "⚠" in decoded
-
-        unrelated_builtin = tmp_path / "unrelated-builtins.txt"
-        with builtins.open(unrelated_builtin, "w") as handle:
-            handle.write("→")
-        assert unrelated_builtin.read_bytes() == "→".encode("utf-8")
-
-        unrelated_io = tmp_path / "unrelated-io.txt"
-        with io.open(unrelated_io, "w") as handle:
-            handle.write("⚠")
-        assert unrelated_io.read_bytes() == "⚠".encode("utf-8")
-
-        unrelated_builtin_fd_path = tmp_path / "unrelated-builtins-fd.txt"
-        unrelated_builtin_fd = os.open(unrelated_builtin_fd_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
-        try:
-            with builtins.open(unrelated_builtin_fd, "w") as handle:
-                handle.write("→")
-        finally:
-            try:
-                os.close(unrelated_builtin_fd)
-            except OSError:
-                pass
-        assert unrelated_builtin_fd_path.read_bytes() == "→".encode("utf-8")
-
-        unrelated_io_fd_path = tmp_path / "unrelated-io-fd.txt"
-        unrelated_io_fd = os.open(unrelated_io_fd_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
-        try:
-            with os.fdopen(unrelated_io_fd, "w") as handle:
-                handle.write("⚠")
-        finally:
-            try:
-                os.close(unrelated_io_fd)
-            except OSError:
-                pass
-        assert unrelated_io_fd_path.read_bytes() == "⚠".encode("utf-8")
-        assert not target_fds
+        _run_non_utf8_report_child("xml", output, old_xml, new_xml)
 
 
 class TestCompareVersionAddressableForm:
