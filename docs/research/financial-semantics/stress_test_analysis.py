@@ -1,7 +1,7 @@
 """
 Classifier stress-test: parse all 7 bills, report unknowns and false-positive risks.
 
-Run from DeltaTrack/:  uv run python financial_classifier/stress_test_analysis.py
+Run from DeltaTrack/:  uv run python docs/research/financial-semantics/stress_test_analysis.py
 """
 
 import re
@@ -9,11 +9,14 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+_HERE = Path(__file__).resolve().parent
+_REPO = _HERE.parent.parent.parent
+sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_HERE))
 
-from financial_classifier.classify_bill import DOLLAR, classify_text
+from classify_bill import DOLLAR, classify_text  # noqa: E402
 
-from bill_tree import normalize_bill
+from bill_tree import normalize_bill  # noqa: E402
 
 BILLS = [
     ("118", "hr", "4366", "MILCON/VA FY2024 approp"),

@@ -1,18 +1,21 @@
 """
 Detailed unknown-node inspection per bill.
-Run from DeltaTrack/:  uv run python financial_classifier/stress_test_detail.py
+Run from DeltaTrack/:  uv run python docs/research/financial-semantics/stress_test_detail.py
 """
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+_HERE = Path(__file__).resolve().parent
+_REPO = _HERE.parent.parent.parent
+sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_HERE))
 
-from financial_classifier.classify_bill import DOLLAR, classify_text
+from classify_bill import DOLLAR, classify_text  # noqa: E402
 
-from bill_tree import normalize_bill
+from bill_tree import normalize_bill  # noqa: E402
 
-BILLS_DIR = Path(__file__).parent.parent / "bills"
+BILLS_DIR = _REPO / "bills"
 
 TARGETS = {
     "approp": [

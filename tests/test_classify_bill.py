@@ -1,4 +1,4 @@
-"""Unit tests for financial_classifier/classify_bill.py — classify_text() behavior.
+"""Unit tests for docs/research/financial-semantics/classify_bill.py — classify_text() behavior.
 
 Covers every label outcome and the ordering/edge cases that matter:
 - subsection prefix variants (RESTRICT, APPROP) — fixed in #115
@@ -8,7 +8,12 @@ Covers every label outcome and the ordering/edge cases that matter:
 - unknown fallthrough
 """
 
-from financial_classifier.classify_bill import classify_text
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "docs" / "research" / "financial-semantics"))
+
+from classify_bill import classify_text  # noqa: E402
 
 
 class TestRestriction:
