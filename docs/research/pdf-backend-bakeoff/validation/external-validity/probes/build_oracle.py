@@ -161,40 +161,52 @@ ADJUDICATION_NAMESPACES = (ROUTE_AI, ROUTE_HUMAN)
 #: The `frame_counts` member holding the realized D census.
 D_FRAME_CENSUS_KEY = "d_frame"
 
-#: THE ONE FROZEN PRE-A48 KEY. `oracle_key/3` predates the A48 key fields, so it carries neither
-#: `d_frame_census` nor `d_decision_route_required`, and its per-record `adjudication_routes`
-#: were derived from RAW FRAME MEMBERSHIP. Pinned by IDENTITY rather than by shape: merely
-#: omitting the A48 fields does not earn the compatibility path, so a newly produced key whose
-#: stored routes contradict the frozen predicate still refuses.
-PRE_A48_FROZEN_KEY_IDENTITY = {
-    "schema": "oracle_key/3",
-    "n_stimuli": 15437,
-    "prompt_sha256": "2067821ddb0464059bdb9d0b7c0555458446b77c0af94029afbbfe620384a406",
-    "frame_counts": {
-        "ai_route": 122,
-        "c_and_d_overlap": 72,
-        "c_audit_selected": 25,
-        "c_frame": 96,
-        "d_frame": 13992,
-        "human_route": 15417,
-        "human_tasks": 15417,
-        "union_reported_for_information_only": 14016,
-    },
-}
+#: THE ONE FROZEN PRE-A48 KEY, identified CRYPTOGRAPHICALLY over its complete content.
+#:
+#: An earlier spelling pinned a summary fingerprint (schema, stimulus count, prompt digest,
+#: aggregate frame counts). That is not an identity: the entire `stimuli` mapping can change
+#: while every summary field holds. Because `effective_record_routes` trusts
+#: `human_answer_purposes`, a key could drop `c_audit` from one selected record, keep
+#: `frame_counts.c_audit_selected == 25`, receive the exception, and validate 24 audit answers
+#: while looking complete. The digest below covers every field, so any such edit denies it.
+PRE_A48_FROZEN_KEY_SHA256 = "669722351f95977d35b06006afec37c9ae1c4754773735e9d061840e8ca49048"
+
+#: Digest memo. Keyed by `id(key)` and holding a STRONG reference to the key itself, so the id
+#: cannot be recycled onto a different object while the answer is cached; the `is` re-check makes
+#: a stale hit impossible rather than merely unlikely. Without it the identity would be recomputed
+#: once per consumer.
+_FROZEN_IDENTITY_CACHE: dict = {}
+
+
+def canonical_sha256(obj) -> str:
+    """SHA-256 of the artifact's canonical serialization, computed by STREAMING.
+
+    `write_artifacts` writes `json.dumps(..., indent=1, sort_keys=True)`, so encoding the parsed
+    object with the same settings and hashing the chunks reproduces the committed FILE's digest
+    exactly. `iterencode` yields fragments, so the 307 MB serialization is never materialized.
+    """
+    digest = hashlib.sha256()
+    for chunk in json.JSONEncoder(indent=1, sort_keys=True).iterencode(obj):
+        digest.update(chunk.encode("utf-8"))
+    return digest.hexdigest()
 
 
 def is_pre_a48_frozen_key(key: dict) -> bool:
-    """Is this EXACTLY the frozen pre-A48 confirmatory key?
+    """Is this EXACTLY the frozen pre-A48 confirmatory artifact, byte for byte?
 
     A key carrying either A48 field is post-A48 and answers for itself; `score_metrics` already
-    cross-checks that answer against the frozen predicate. Everything else must match the pinned
-    identity field for field. Pinning rather than shape-matching is the whole point: the
-    compatibility path is a statement about ONE artifact that already exists, not a general
-    licence for any key that happens to omit the newer fields.
+    cross-checks that answer against the frozen predicate, so it never reaches the digest. Any
+    other key is compared against the committed artifact's content hash in full. The compatibility
+    path is a statement about ONE artifact that already exists, never a licence for a shape.
     """
     if "d_decision_route_required" in key or "d_frame_census" in key:
         return False
-    return all(key.get(field) == value for field, value in PRE_A48_FROZEN_KEY_IDENTITY.items())
+    cached = _FROZEN_IDENTITY_CACHE.get(id(key))
+    if cached is not None and cached[0] is key:
+        return cached[1]
+    verdict = canonical_sha256(key) == PRE_A48_FROZEN_KEY_SHA256
+    _FROZEN_IDENTITY_CACHE[id(key)] = (key, verdict)
+    return verdict
 
 
 def effective_d_decision_required(key: dict) -> bool:
@@ -207,9 +219,8 @@ def effective_d_decision_required(key: dict) -> bool:
     answers as a hard prerequisite for producing ANY metric on a route that cannot decide
     anything. That is not a conservative default, it is an unsatisfiable one.
 
-    So the census is read from the key's OWN committed frame counts and put through the frozen
-    predicate. The key's historical `adjudication_routes` bytes are left exactly as written and
-    are never reinterpreted as a current claim; they are simply no longer what consumers ask.
+    Post-A48 keys are unchanged: the stored field is returned, which is exactly what
+    `.get(..., True)` returned. An unrecognised pre-A48-shaped key is also unchanged: True.
     """
     if "d_decision_route_required" in key:
         return bool(key["d_decision_route_required"])
@@ -218,16 +229,23 @@ def effective_d_decision_required(key: dict) -> bool:
     return True
 
 
-def effective_record_routes(record: dict, d_decision_required: bool) -> tuple:
+def effective_record_routes(record: dict, d_decision_required: bool, *, reinterpret: bool = False) -> tuple:
     """The routes this stimulus ACTUALLY requires an answer on. THE ONE OWNER.
 
-    Derived from the record's purposes through `PURPOSE_ROUTE`, dropping `d_decision` when A27.3
-    has made the D route non-decision-bearing. A `c_audit` or `control_human` purpose keeps its
-    human requirement regardless, which is exactly what keeps all 25 seeded C-audit items
-    human-required even where they are also D-frame members.
+    REINTERPRETATION IS OFF BY DEFAULT, and that is the whole safety property. For every key but
+    the frozen artifact the stored `adjudication_routes` ARE the requirement, exactly as before
+    A54, so ordinary post-A48 validation is untouched and a key whose stored routes disagree with
+    its purposes is still judged on what it stored rather than being quietly re-derived into
+    something validatable.
 
-    AI requirements never move: a route stored as `ai` stays required whatever the D budget does.
+    Only for the frozen pre-A48 artifact are routes derived from `human_answer_purposes` through
+    `PURPOSE_ROUTE`, dropping `d_decision` where A27.3 denies the route. A `c_audit` or
+    `control_human` purpose keeps its human requirement regardless, which is what keeps all 25
+    seeded C-audit items required even where they are also D-frame members. AI requirements never
+    move: a route stored as `ai` stays required whatever the D budget does.
     """
+    if not reinterpret:
+        return tuple(record.get("adjudication_routes") or ())
     routes = set()
     for purpose in record.get("human_answer_purposes") or ():
         if purpose == PURPOSE_D_DECISION and not d_decision_required:
@@ -1433,9 +1451,10 @@ def validate_adjudicated(adjudicated: dict, key: dict) -> None:
     # the stored `adjudication_routes` were derived from raw frame membership, so honouring them
     # literally would require a human answer on a route A27.3 has already made non-decision-
     # bearing. `effective_record_routes` is the single owner both this and `score_metrics` ask.
+    reinterpret = is_pre_a48_frozen_key(key)
     d_required = effective_d_decision_required(key)
     for bid, record in key["stimuli"].items():
-        for route in effective_record_routes(record, d_required):
+        for route in effective_record_routes(record, d_required, reinterpret=reinterpret):
             if bid not in adjudicated.get(route, {}):
                 raise OracleBuildError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
 

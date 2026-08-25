@@ -966,11 +966,11 @@ NON-CONFIRMATORY status, or any value established by A47, A48, A49, A50, A51 or 
  },
  "affects_membership": false,
  "affects_scoring_rule": false,
- "affects_metric_values": false,
- "affects_architecture_decision": false,
+ "affects_metric_values": true,
+ "affects_architecture_decision": true,
  "affects_execution_authorization": false,
  "affects_reproducibility_surface": true,
- "narrowing": "A54 changes WHICH ROUTES A CONSUMER ASKS FOR on a key that predates the A48 fields, and nothing else. It reads no holdout byte, produces no metric, and changes no threshold, selection rule, scoring rule, metric definition or architecture rule. It does not modify the key, the blind artifact, the images, the membership, the frames, the original marker, the continuation authorization or any write-once rule, and it never rewrites or reinterprets the frozen key's historical bytes as a current claim. affects_metric_values is FALSE: for a post-A48 key `effective_d_decision_required` returns the key's own field, which is what `.get(..., True)` already returned, and x31's 33 controls show no post-A48 behaviour moves; for the frozen key no metric could be produced at all before this change, because validation refused. affects_architecture_decision is FALSE: Rule 1 already cannot select corrected extended glyph at a census of 13,992 under A27.3 as implemented by A48, and A54 does not change that outcome, it makes the outcome reachable. affects_reproducibility_surface is TRUE and is the one flag that matters downstream: `probes/build_oracle.py` and `probes/score_metrics.py` are both members of the 31-entry authorization manifest, so integrating this into the study branch moves two manifest blobs and the continuation authorization at 74ccf247 would no longer speak for the current apparatus.",
+ "narrowing": "A54 changes WHICH ROUTES A CONSUMER ASKS FOR, and only for the single frozen pre-A48 artifact identified by its complete content digest. Reinterpretation is OFF by default: for every other key the stored `adjudication_routes` remain the requirement exactly as before A54, so ordinary post-A48 validation is untouched and a key whose stored routes disagree with its purposes is still judged on what it stored. It reads no holdout byte and changes no threshold, selection rule, metric definition or architecture rule. It does not modify the key, the blind artifact, the images, the membership, the frames, the original marker, the continuation authorization or any write-once rule, and it never rewrites or reinterprets the frozen key's historical bytes as a current claim. affects_scoring_rule is FALSE: A54 implements the ALREADY-FROZEN A27.3 rule as A48 installed it, and introduces no rule of its own. affects_metric_values is TRUE, corrected from an earlier reading of this record: for the real key the R1 and evaluability path moves from REFUSAL to the effective population, so the metric block that gets produced is not the one the pre-A54 apparatus would have produced, and \"no metric could be produced before\" describes an unsatisfiable gate rather than an absence of effect. affects_architecture_decision is TRUE for the same reason at one remove: the repair makes the decision artifact REACHABLE at all, and can affect A48-dependent `decided_by` attribution, even though the outcome enum at a census above the budget remains constrained to INSUFFICIENT_COMPARATIVE_EVIDENCE and Rule 1 still cannot select corrected extended glyph. affects_reproducibility_surface is TRUE: `probes/build_oracle.py` and `probes/score_metrics.py` are both members of the 31-entry authorization manifest, so integrating this into the study branch moves two manifest blobs and the continuation authorization at 74ccf247 would no longer speak for the current apparatus."
  "files_touched": ["probes/build_oracle.py", "probes/score_metrics.py", "probes/x31_dframe_budget_routes.py", "probes/x32_effective_routes.py"]}
 ```
 
@@ -1005,10 +1005,22 @@ only `d_decision`, only where the predicate denies it, leaves `c_audit` and
 even where they are also D-frame members; 19 of them are. A rule that excluded anything
 carrying `d_decision` would have silently reduced the frozen 25-item C audit to six.
 
-**Scoped to one artifact, by identity.** `PRE_A48_FROZEN_KEY_IDENTITY` pins the schema,
-stimulus count, prompt digest and frame counts of the exact frozen key. A key that merely
-omits the A48 fields does not earn the compatibility path, so a newly produced key whose
-stored routes contradict the frozen predicate still refuses. x32 asserts both directions.
+**Scoped to one artifact, cryptographically.** `PRE_A48_FROZEN_KEY_SHA256` is the SHA-256 of
+the frozen key's complete canonical content, `66972235...`, the same digest as the committed
+file. It is computed by streaming `iterencode`, so the 307 MB serialization is never
+materialized, and memoized per object so each consumer does not recompute it.
+
+An earlier spelling of this record pinned a SUMMARY fingerprint instead: schema, stimulus
+count, prompt digest and aggregate frame counts. That is not an identity. The entire `stimuli`
+mapping can change while every one of those fields holds, and because routes are derived from
+`human_answer_purposes`, a key could drop `c_audit` from one selected record, keep
+`frame_counts.c_audit_selected == 25`, receive the exception, and validate 24 audit answers
+while looking complete. x32 asserts that exact mutation is denied with every summary field
+unchanged, and the same for a single altered stored route.
+
+**Reinterpretation is off by default.** Only the frozen artifact has its routes derived from
+purposes. Every other key keeps the pre-A54 meaning of its stored routes, so the exception
+cannot make a malformed post-A48 key easier to validate; x32 asserts that direction too.
 
 **What A54 does not do.** It does not create or modify any authorization, regenerate any
 oracle input, prepare a human-review packet, adjudicate, score, or decide the
