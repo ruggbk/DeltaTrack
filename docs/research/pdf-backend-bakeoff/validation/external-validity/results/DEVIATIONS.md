@@ -952,7 +952,7 @@ NON-CONFIRMATORY status, or any value established by A47, A48, A49, A50, A51 or 
 
 ```json
 {"id": "A54", "kind": "DEVIATION",
- "commits": ["4b5c2f6a"],
+ "commits": ["4b5c2f6a", "f4cd4fdc", "0a10f2f9"],
  "classification": "POST-BOUNDARY APPARATUS DEVIATION (ROUTE DERIVATION)",
  "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
  "results_already_visible": {
