@@ -171,13 +171,6 @@ D_FRAME_CENSUS_KEY = "d_frame"
 #: while looking complete. The digest below covers every field, so any such edit denies it.
 PRE_A48_FROZEN_KEY_SHA256 = "669722351f95977d35b06006afec37c9ae1c4754773735e9d061840e8ca49048"
 
-#: Digest memo. Keyed by `id(key)` and holding a STRONG reference to the key itself, so the id
-#: cannot be recycled onto a different object while the answer is cached; the `is` re-check makes
-#: a stale hit impossible rather than merely unlikely. Without it the identity would be recomputed
-#: once per consumer.
-_FROZEN_IDENTITY_CACHE: dict = {}
-
-
 def canonical_sha256(obj) -> str:
     """SHA-256 of the artifact's canonical serialization, computed by STREAMING.
 
@@ -198,15 +191,20 @@ def is_pre_a48_frozen_key(key: dict) -> bool:
     cross-checks that answer against the frozen predicate, so it never reaches the digest. Any
     other key is compared against the committed artifact's content hash in full. The compatibility
     path is a statement about ONE artifact that already exists, never a licence for a shape.
+
+    DELIBERATELY UNCACHED. An earlier spelling memoized the verdict by `id(key)` while holding a
+    strong reference, and claimed the identity re-check made a stale hit impossible. It does not:
+    holding the reference prevents the id being RECYCLED onto a different object, and prevents
+    nothing at all about the SAME object being mutated afterwards. A caller could pass the frozen
+    key, be recognised, then drop `c_audit` from one selected record and have the next check hand
+    back the cached True without re-reading a byte, after which route reinterpretation trusts the
+    altered purposes and a 24-of-25 audit validates. The digest is therefore recomputed whenever
+    identity is asked for. It costs about 18 s on the real artifact, which is acceptable for a
+    one-time research execution and is the price of the answer being about the key as it IS.
     """
     if "d_decision_route_required" in key or "d_frame_census" in key:
         return False
-    cached = _FROZEN_IDENTITY_CACHE.get(id(key))
-    if cached is not None and cached[0] is key:
-        return cached[1]
-    verdict = canonical_sha256(key) == PRE_A48_FROZEN_KEY_SHA256
-    _FROZEN_IDENTITY_CACHE[id(key)] = (key, verdict)
-    return verdict
+    return canonical_sha256(key) == PRE_A48_FROZEN_KEY_SHA256
 
 
 def effective_d_decision_required(key: dict) -> bool:

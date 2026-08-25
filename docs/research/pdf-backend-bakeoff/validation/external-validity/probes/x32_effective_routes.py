@@ -32,6 +32,7 @@ THE MUTATIONS THAT MUST BREAK IT
   * `is_pre_a48_frozen_key` always True         -> the SCOPING arm goes RED
   * reinterpretation forced on for every key    -> the POST-A48 arm goes RED
   * routes dropped for D members                -> the C-audit overlap arm goes RED
+  * memoizing identity against the dict object  -> the same-object-mutation arm goes RED
 All four are injected into the real functions below, not into copies of their output.
 """
 
@@ -101,7 +102,6 @@ def stale(key: dict) -> dict:
 def pin(key: dict) -> None:
     """Treat `key` as the frozen artifact, by its real content digest."""
     BO.PRE_A48_FROZEN_KEY_SHA256 = BO.canonical_sha256(key)
-    BO._FROZEN_IDENTITY_CACHE.clear()
 
 
 def summary_of(key: dict) -> dict:
@@ -158,7 +158,6 @@ def main() -> int:
                   "the A48 fields are absent, as in the frozen artifact", sorted(over)[:5])
 
             # ---- SCOPING: an unrecognised key earns nothing ---------------------------
-            BO._FROZEN_IDENTITY_CACHE.clear()
             check("SCOPING: an unpinned pre-A48-shaped key does NOT get the exception",
                   BO.effective_d_decision_required(over) is True,
                   "only the artifact matching the pinned content digest is excepted",
@@ -171,7 +170,6 @@ def main() -> int:
 
             irrelevant = copy.deepcopy(over)
             irrelevant["population"] = str(irrelevant.get("population")) + " "
-            BO._FROZEN_IDENTITY_CACHE.clear()
             check("IDENTITY: changing one otherwise irrelevant field DENIES it",
                   not BO.is_pre_a48_frozen_key(irrelevant),
                   "the identity is the whole artifact, not the fields routing happens to read",
@@ -183,7 +181,6 @@ def main() -> int:
                 p for p in no_audit["stimuli"][audit_ids[0]]["human_answer_purposes"]
                 if p != BO.PURPOSE_C_AUDIT
             ]
-            BO._FROZEN_IDENTITY_CACHE.clear()
             denies_with_same_summary(
                 "IDENTITY: removing one C-audit purpose, every summary field unchanged, DENIES it",
                 over, no_audit,
@@ -194,7 +191,6 @@ def main() -> int:
             victim = next(b for b, r in moved_route["stimuli"].items()
                           if BO.ROUTE_HUMAN in (r.get("adjudication_routes") or ()))
             moved_route["stimuli"][victim]["adjudication_routes"] = [BO.ROUTE_AI]
-            BO._FROZEN_IDENTITY_CACHE.clear()
             denies_with_same_summary(
                 "IDENTITY: changing one stored route, every summary field unchanged, DENIES it",
                 over, moved_route, "stored routes are part of the artifact's identity")
@@ -311,6 +307,42 @@ def main() -> int:
             finally:
                 BO.effective_record_routes = real_routes2
 
+            # ---- E: identity is RE-READ, never remembered -----------------------------
+            # A verdict memoized against a mutable dict is a verdict about the key as it WAS.
+            # Holding a strong reference stops the id being recycled onto a different object and
+            # stops nothing about this object being edited afterwards, so the mutation below is
+            # performed on the SAME dict, with no cache cleared and no copy taken.
+            live = stale(X31.build(61, 30, tmp))
+            pin(live)
+            check("E premise: the key is recognised BEFORE the mutation",
+                  BO.is_pre_a48_frozen_key(live), "its canonical digest matches the pin", "")
+            before = summary_of(live)
+            live_audit = [b for b, r in live["stimuli"].items() if r.get("is_c_audit_selected")]
+            victim_rec = live["stimuli"][live_audit[0]]
+            victim_rec["human_answer_purposes"] = [
+                p for p in victim_rec["human_answer_purposes"] if p != BO.PURPOSE_C_AUDIT
+            ]
+            check("E the mutation preserves every summary field",
+                  summary_of(live) == before and live["frame_counts"]["c_audit_selected"] == 25,
+                  "so nothing short of reading the content can catch it",
+                  live["frame_counts"]["c_audit_selected"])
+            check("E the SAME mutated object is DENIED the exception",
+                  not BO.is_pre_a48_frozen_key(live),
+                  "identity is recomputed from current content, not recalled from a prior answer",
+                  "")
+            live_human = effective_human(live)
+            still_required = [b for b in live_audit if b in live_human]
+            check("E ...and validation does NOT accept a reduced audit population",
+                  len(still_required) == len(live_audit),
+                  "denied reinterpretation falls back to stored routes, which still require it",
+                  f"{len(still_required)} of {len(live_audit)}")
+            live_adj = answers(live_human, effective_ai(live))
+            ok, obs = X31.refuses(
+                lambda: BO.validate_adjudicated(
+                    X31.drop(dict(live_adj, schema="x"), BO.ROUTE_HUMAN, live_audit[0]), live))
+            check("E ...and dropping that audit answer still REFUSES", ok,
+                  "the mutated key cannot validate 24 of 25", obs)
+
             # ---- D: within budget the complete census is still required ---------------
             pin(under)
             check("D D=60 pinned: the D decision route IS still result-bearing",
@@ -330,7 +362,6 @@ def main() -> int:
                   "the D route is result-bearing at this census", obs)
     finally:
         BO.PRE_A48_FROZEN_KEY_SHA256 = original_pin
-        BO._FROZEN_IDENTITY_CACHE.clear()
 
     failed = [r for r in RESULTS if not r["pass"]]
     for r in RESULTS:
