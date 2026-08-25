@@ -947,3 +947,75 @@ oracle, adjudicate, score, or produce an architecture decision. It does not touc
 preserved execution branch. It does not modify `CONTINUATION.json`, the cross-engine
 result, `pyproject.toml`, or any production parser. It does not alter any section 4.7
 NON-CONFIRMATORY status, or any value established by A47, A48, A49, A50, A51 or A52.
+
+## A54 — POST-BOUNDARY APPARATUS DEVIATION
+
+```json
+{"id": "A54", "kind": "DEVIATION",
+ "commits": ["4b5c2f6a"],
+ "classification": "POST-BOUNDARY APPARATUS DEVIATION (ROUTE DERIVATION)",
+ "made_after_boundary": "de60dddf906bc4b01e5ffbe9af4d3e833a9a2be7 (continuation boundary)",
+ "results_already_visible": {
+  "members": 17,
+  "pages": 4190,
+  "d_frame_census": 13992,
+  "s1_documents_firing": "17/17",
+  "p_head_documents": 12,
+  "p_head_pages": 2864,
+  "cross_engine": "17/17 measured, n_qualified 0"
+ },
+ "affects_membership": false,
+ "affects_scoring_rule": false,
+ "affects_metric_values": false,
+ "affects_architecture_decision": false,
+ "affects_execution_authorization": false,
+ "affects_reproducibility_surface": true,
+ "narrowing": "A54 changes WHICH ROUTES A CONSUMER ASKS FOR on a key that predates the A48 fields, and nothing else. It reads no holdout byte, produces no metric, and changes no threshold, selection rule, scoring rule, metric definition or architecture rule. It does not modify the key, the blind artifact, the images, the membership, the frames, the original marker, the continuation authorization or any write-once rule, and it never rewrites or reinterprets the frozen key's historical bytes as a current claim. affects_metric_values is FALSE: for a post-A48 key `effective_d_decision_required` returns the key's own field, which is what `.get(..., True)` already returned, and x31's 33 controls show no post-A48 behaviour moves; for the frozen key no metric could be produced at all before this change, because validation refused. affects_architecture_decision is FALSE: Rule 1 already cannot select corrected extended glyph at a census of 13,992 under A27.3 as implemented by A48, and A54 does not change that outcome, it makes the outcome reachable. affects_reproducibility_surface is TRUE and is the one flag that matters downstream: `probes/build_oracle.py` and `probes/score_metrics.py` are both members of the 31-entry authorization manifest, so integrating this into the study branch moves two manifest blobs and the continuation authorization at 74ccf247 would no longer speak for the current apparatus.",
+ "files_touched": ["probes/build_oracle.py", "probes/score_metrics.py", "probes/x31_dframe_budget_routes.py", "probes/x32_effective_routes.py"]}
+```
+
+**The defect.** A48 closed a real hole: a key must not self-certify its A27.3 state,
+so `d_frame_census` and `d_decision_route_required` are re-derived in
+`score_metrics.validate_inputs` from the committed frames and the frozen predicate.
+For keys that carry those fields that is complete. For a key that predates them, A48
+chose `key.get("d_decision_route_required", True)` at the consumers, reasoning that an
+older artifact should keep meaning exactly what it meant when it was built rather than
+being silently reinterpreted as having fewer required routes.
+
+That reasoning holds for every key but one. The frozen confirmatory key has a realized
+D-frame census of 13,992. A27.3, as implemented by A48, has already ruled that route
+non-decision-bearing: Rule 1 cannot select corrected extended glyph, and the outcome is
+INSUFFICIENT_COMPARATIVE_EVIDENCE. Defaulting that key to `True` therefore demands a
+human answer on all 15,417 stored human routes as a hard prerequisite for producing any
+metric at all, on a route that cannot decide anything. The effective human workload is
+45: 25 seeded C-audit items and 20 controls. A default that cannot be satisfied is not
+conservative.
+
+**Measured, not argued.** Against the real committed key, before this change,
+`build_oracle.validate_adjudicated` refused a complete 45-item human review with
+`ADJUDICATION_ROUTE_MISSING {'route': 'human'}`. After it, the same call accepts, with
+the effective human population at exactly 45 and the AI population unmoved at 122.
+
+**Why derivation is from purposes.** The stored `adjudication_routes` on a pre-A48 key
+were derived from raw frame membership, which is precisely the quantity A27.3 governs,
+so they cannot be the thing consumers ask. `human_answer_purposes` already records why
+each human answer exists, and `PURPOSE_ROUTE` already maps purpose to route. Dropping
+only `d_decision`, only where the predicate denies it, leaves `c_audit` and
+`control_human` untouched. That is what keeps all 25 seeded C-audit items human-required
+even where they are also D-frame members; 19 of them are. A rule that excluded anything
+carrying `d_decision` would have silently reduced the frozen 25-item C audit to six.
+
+**Scoped to one artifact, by identity.** `PRE_A48_FROZEN_KEY_IDENTITY` pins the schema,
+stimulus count, prompt digest and frame counts of the exact frozen key. A key that merely
+omits the A48 fields does not earn the compatibility path, so a newly produced key whose
+stored routes contradict the frozen predicate still refuses. x32 asserts both directions.
+
+**What A54 does not do.** It does not create or modify any authorization, regenerate any
+oracle input, prepare a human-review packet, adjudicate, score, or decide the
+architecture. It does not perform the optional 60-region descriptive D sample, which
+cannot change the architecture result.
+
+**What it obliges next.** Because two authorization-manifest files move, integrating this
+into `pdf-study-continuation-execution` requires a NEW continuation authorization; the one
+at 74ccf247 speaks for the apparatus as it stood before this repair. That is deliberately
+not done in this round.
