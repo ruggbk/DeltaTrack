@@ -71,14 +71,6 @@ def classify_text(text):
     return "unknown"
 
 
-def primary_amount(text):
-    if not text:
-        return None
-    pre_provided = text.split("Provided")[0]
-    m = DOLLAR.search(pre_provided)
-    return float(m.group(1).replace(",", "")) if m else None
-
-
 def split_clauses(text):
     """Split on Provided That → ; and in addition → of which, in that order."""
     if not text:
