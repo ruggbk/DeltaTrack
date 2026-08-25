@@ -266,3 +266,78 @@ class TestUnknown:
         # A dollar-bearing node that matches nothing — should fall through to unknown
         text = "Beginning in fiscal year 2025, $1,000,000 is available for these purposes"
         assert classify_text(text) == "unknown"
+
+
+class TestSplitClauses:
+    from classify_bill import split_clauses  # noqa: E402
+
+    def test_empty_string_returns_empty(self):
+        from classify_bill import split_clauses
+
+        assert split_clauses("") == []
+
+    def test_none_returns_empty(self):
+        from classify_bill import split_clauses
+
+        assert split_clauses(None) == []
+
+    def test_no_split_single_primary(self):
+        from classify_bill import split_clauses
+
+        text = "For necessary expenses, $1,000,000"
+        result = split_clauses(text)
+        assert len(result) == 1
+        assert result[0][1] == "primary"
+        assert "necessary expenses" in result[0][0]
+
+    def test_provided_that_splits_to_sub(self):
+        from classify_bill import split_clauses
+
+        text = "For necessary expenses, $1,000,000: Provided, That no funds may be used for travel"
+        result = split_clauses(text)
+        assert len(result) == 2
+        assert result[0][1] == "primary"
+        assert result[1][1] == "sub"
+        assert "no funds may be used" in result[1][0]
+
+    def test_provided_further_that_splits_to_sub(self):
+        from classify_bill import split_clauses
+
+        text = (
+            "For necessary expenses, $1,000,000: Provided, That amounts shall remain available: "
+            "Provided further, That no transfer may exceed $500,000"
+        )
+        result = split_clauses(text)
+        assert len(result) == 3
+        assert result[0][1] == "primary"
+        assert result[1][1] == "sub"
+        assert result[2][1] == "sub"
+
+    def test_in_addition_splits_to_sub(self):
+        from classify_bill import split_clauses
+
+        text = "For necessary expenses, $1,000,000; and, in addition, $200,000 for administrative costs"
+        result = split_clauses(text)
+        assert len(result) == 2
+        assert result[0][1] == "primary"
+        assert result[1][1] == "sub"
+        assert "$200,000" in result[1][0]
+
+    def test_of_which_splits_with_prefix(self):
+        from classify_bill import split_clauses
+
+        text = "For necessary expenses, $1,000,000, of which $200,000 shall remain available until expended"
+        result = split_clauses(text)
+        assert len(result) == 2
+        assert result[0][1] == "primary"
+        assert result[1][1] == "sub"
+        assert result[1][0].startswith("of which")
+
+    def test_of_which_prefix_added_to_clause(self):
+        from classify_bill import split_clauses
+
+        text = "For grants, $5,000,000, of which $1,000,000 is for rural areas"
+        result = split_clauses(text)
+        of_which_clause = result[1][0]
+        assert of_which_clause.startswith("of which ")
+        assert "$1,000,000" in of_which_clause
