@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -641,6 +642,9 @@ def _run_compare(monkeypatch, *argv: str) -> None:
     main()
 
 
+REPORT = "<!doctype html><p>old → new</p><p>⚠ unanchored</p>"
+
+
 class TestIntermixedSubParserGuard:
     """The re-entrancy guard in _IntermixedSubParser, pinned on ANY interpreter (#426).
 
@@ -869,6 +873,69 @@ class TestCompareLegacyTwoPathForm:
         data = json.loads(out.read_text())
         assert data["old_version"] == "reported-in-house"
         assert data["new_version"] == "enrolled-bill"
+
+    def test_html_output_uses_utf8_when_host_default_is_cp1252(self, tmp_path, monkeypatch):
+        """The real CLI writer preserves report bytes independently of the host default."""
+        old_xml = tmp_path / "old.xml"
+        new_xml = tmp_path / "new.xml"
+        output = tmp_path / "diff.html"
+        old_xml.write_bytes(b"<bill />")
+        new_xml.write_bytes(b"<bill />")
+
+        import deltatrack.diff_bill as diff_bill
+        from deltatrack.compare import xml as compare_xml
+
+        monkeypatch.setattr(diff_bill, "normalize_bill", lambda _path: object())
+        monkeypatch.setattr(compare_xml, "compare_xml_trees_html", lambda *_args, **_kwargs: REPORT)
+
+        original_open = open
+
+        def open_with_cp1252_default(
+            file,
+            mode="r",
+            buffering=-1,
+            encoding=None,
+            errors=None,
+            newline=None,
+            closefd=True,
+            opener=None,
+        ):
+            if (
+                os.fspath(file) == os.fspath(output)
+                and mode.startswith("w")
+                and "b" not in mode
+                and encoding in (None, "locale")
+            ):
+                encoding = "cp1252"
+            return original_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
+
+        monkeypatch.setattr("builtins.open", open_with_cp1252_default)
+
+        encoding_error = None
+        try:
+            _run_compare(
+                monkeypatch,
+                str(old_xml),
+                str(new_xml),
+                "--format",
+                "html",
+                "-o",
+                str(output),
+            )
+        except UnicodeEncodeError as exc:
+            encoding_error = exc
+
+        assert encoding_error is None, "report output depended on the host default encoding"
+        report = output.read_bytes()
+        assert report == REPORT.encode("utf-8")
+        decoded = report.decode("utf-8")
+        assert "→" in decoded
+        assert "⚠" in decoded
+
+        unrelated = tmp_path / "unrelated.txt"
+        with open(unrelated, "w") as handle:
+            handle.write("→")
+        assert unrelated.read_bytes() == "→".encode("utf-8")
 
 
 class TestCompareVersionAddressableForm:

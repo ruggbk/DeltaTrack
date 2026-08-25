@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import os
 from pathlib import Path
 
 from deltatrack.diff_pdf import build_parser, main
@@ -9,6 +11,7 @@ from tests.corpus_paths import fixture_path
 
 V1 = fixture_path("118-hr-8752", "1_reported-in-house.pdf")
 V2 = fixture_path("118-hr-8752", "2_engrossed-in-house.pdf")
+REPORT = "<!doctype html><p>old → new</p><p>⚠ unanchored</p>"
 
 
 def test_fixtures_committed():
@@ -46,6 +49,59 @@ class TestCli:
         # full-bill view + embedded export, not just the changed-section cards.
         assert "full-bill" in html
         assert "diff.json" in html
+
+    def test_html_output_uses_utf8_when_host_default_is_cp1252(self, tmp_path, monkeypatch):
+        """The real CLI writer preserves report bytes independently of the host default."""
+        output = tmp_path / "diff.html"
+        v1_pdf = tmp_path / "old.pdf"
+        v2_pdf = tmp_path / "new.pdf"
+        v1_pdf.write_bytes(b"old")
+        v2_pdf.write_bytes(b"new")
+
+        import deltatrack.diff_pdf as diff_pdf
+
+        monkeypatch.setattr(diff_pdf, "render_pdf_diff_html", lambda *_args, **_kwargs: REPORT)
+
+        original_io_open = io.open
+
+        def io_open_with_cp1252_default(
+            file,
+            mode="r",
+            buffering=-1,
+            encoding=None,
+            errors=None,
+            newline=None,
+            closefd=True,
+            opener=None,
+        ):
+            if (
+                os.fspath(file) == os.fspath(output)
+                and mode.startswith("w")
+                and "b" not in mode
+                and encoding in (None, "locale")
+            ):
+                encoding = "cp1252"
+            return original_io_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
+
+        monkeypatch.setattr(io, "open", io_open_with_cp1252_default)
+
+        encoding_error = None
+        try:
+            main([str(v1_pdf), str(v2_pdf), "-o", str(output)])
+        except UnicodeEncodeError as exc:
+            encoding_error = exc
+
+        assert encoding_error is None, "report output depended on the host default encoding"
+        report = output.read_bytes()
+        assert report == REPORT.encode("utf-8")
+        decoded = report.decode("utf-8")
+        assert "→" in decoded
+        assert "⚠" in decoded
+
+        unrelated = tmp_path / "unrelated.txt"
+        with open(unrelated, "w") as handle:
+            handle.write("→")
+        assert unrelated.read_bytes() == "→".encode("utf-8")
 
     def test_stdout_when_no_output(self, capsys):
         main([str(V1), str(V2)])
