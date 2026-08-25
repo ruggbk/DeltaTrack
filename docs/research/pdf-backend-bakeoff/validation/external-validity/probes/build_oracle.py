@@ -157,6 +157,89 @@ ESTIMAND_PURPOSES = (PURPOSE_C_METRICS, PURPOSE_D_DECISION, PURPOSE_C_AUDIT)
 # the SAME blind id. The schema requirement is frozen now; the artifact is not built here.
 ADJUDICATION_NAMESPACES = (ROUTE_AI, ROUTE_HUMAN)
 
+# ---------------------------------------------------------------- A54 / A27.3 / A48
+#: The `frame_counts` member holding the realized D census.
+D_FRAME_CENSUS_KEY = "d_frame"
+
+#: THE ONE FROZEN PRE-A48 KEY. `oracle_key/3` predates the A48 key fields, so it carries neither
+#: `d_frame_census` nor `d_decision_route_required`, and its per-record `adjudication_routes`
+#: were derived from RAW FRAME MEMBERSHIP. Pinned by IDENTITY rather than by shape: merely
+#: omitting the A48 fields does not earn the compatibility path, so a newly produced key whose
+#: stored routes contradict the frozen predicate still refuses.
+PRE_A48_FROZEN_KEY_IDENTITY = {
+    "schema": "oracle_key/3",
+    "n_stimuli": 15437,
+    "prompt_sha256": "2067821ddb0464059bdb9d0b7c0555458446b77c0af94029afbbfe620384a406",
+    "frame_counts": {
+        "ai_route": 122,
+        "c_and_d_overlap": 72,
+        "c_audit_selected": 25,
+        "c_frame": 96,
+        "d_frame": 13992,
+        "human_route": 15417,
+        "human_tasks": 15417,
+        "union_reported_for_information_only": 14016,
+    },
+}
+
+
+def is_pre_a48_frozen_key(key: dict) -> bool:
+    """Is this EXACTLY the frozen pre-A48 confirmatory key?
+
+    A key carrying either A48 field is post-A48 and answers for itself; `score_metrics` already
+    cross-checks that answer against the frozen predicate. Everything else must match the pinned
+    identity field for field. Pinning rather than shape-matching is the whole point: the
+    compatibility path is a statement about ONE artifact that already exists, not a general
+    licence for any key that happens to omit the newer fields.
+    """
+    if "d_decision_route_required" in key or "d_frame_census" in key:
+        return False
+    return all(key.get(field) == value for field, value in PRE_A48_FROZEN_KEY_IDENTITY.items())
+
+
+def effective_d_decision_required(key: dict) -> bool:
+    """Is the D DECISION route result-bearing for this key? THE ONE OWNER.
+
+    A48 gave the A27.3 predicate an executable owner but left `key.get(..., True)` at the
+    consumers, so a pre-A48 key kept meaning what it meant when it was built. For every key but
+    one that is correct. For the frozen confirmatory key it is not: its census is 13,992, A27.3
+    has already made that route non-decision-bearing, and defaulting to True demands 15,417 human
+    answers as a hard prerequisite for producing ANY metric on a route that cannot decide
+    anything. That is not a conservative default, it is an unsatisfiable one.
+
+    So the census is read from the key's OWN committed frame counts and put through the frozen
+    predicate. The key's historical `adjudication_routes` bytes are left exactly as written and
+    are never reinterpreted as a current claim; they are simply no longer what consumers ask.
+    """
+    if "d_decision_route_required" in key:
+        return bool(key["d_decision_route_required"])
+    if is_pre_a48_frozen_key(key):
+        return MC.d_decision_route_required(int(key["frame_counts"][D_FRAME_CENSUS_KEY]))
+    return True
+
+
+def effective_record_routes(record: dict, d_decision_required: bool) -> tuple:
+    """The routes this stimulus ACTUALLY requires an answer on. THE ONE OWNER.
+
+    Derived from the record's purposes through `PURPOSE_ROUTE`, dropping `d_decision` when A27.3
+    has made the D route non-decision-bearing. A `c_audit` or `control_human` purpose keeps its
+    human requirement regardless, which is exactly what keeps all 25 seeded C-audit items
+    human-required even where they are also D-frame members.
+
+    AI requirements never move: a route stored as `ai` stays required whatever the D budget does.
+    """
+    routes = set()
+    for purpose in record.get("human_answer_purposes") or ():
+        if purpose == PURPOSE_D_DECISION and not d_decision_required:
+            continue
+        route = PURPOSE_ROUTE.get(purpose)
+        if route is not None:
+            routes.add(route)
+    if ROUTE_AI in (record.get("adjudication_routes") or ()):
+        routes.add(ROUTE_AI)
+    return tuple(r for r in ROUTE_ORDER if r in routes)
+
+
 
 class OracleBuildError(Exception):
     """Construction cannot proceed as frozen. Deterministic, and never a value.
@@ -1346,8 +1429,13 @@ def validate_adjudicated(adjudicated: dict, key: dict) -> None:
                 missing = [f for f in ADJUDICATED_HEADING_FIELDS if f not in heading]
                 if missing:
                     raise OracleBuildError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "missing_fields": missing})
+    # A54 -- EFFECTIVE routes, not the bytes the builder happened to store. For a pre-A48 key
+    # the stored `adjudication_routes` were derived from raw frame membership, so honouring them
+    # literally would require a human answer on a route A27.3 has already made non-decision-
+    # bearing. `effective_record_routes` is the single owner both this and `score_metrics` ask.
+    d_required = effective_d_decision_required(key)
     for bid, record in key["stimuli"].items():
-        for route in record["adjudication_routes"]:
+        for route in effective_record_routes(record, d_required):
             if bid not in adjudicated.get(route, {}):
                 raise OracleBuildError(ADJUDICATION_ROUTE_MISSING, {"blind_id": bid, "route": route})
 
