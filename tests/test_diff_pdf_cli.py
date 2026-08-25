@@ -65,6 +65,62 @@ class TestCli:
 
         original_builtin_open = builtins.open
         original_io_open = io.open
+        original_os_open = os.open
+        target_fds = set()
+
+        class _TrackedTextHandle:
+            def __init__(self, handle, fd):
+                self._handle = handle
+                self._fd = fd
+
+            def __enter__(self):
+                self._handle.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                try:
+                    return self._handle.__exit__(exc_type, exc_value, traceback)
+                finally:
+                    target_fds.discard(self._fd)
+
+            def close(self):
+                try:
+                    return self._handle.close()
+                finally:
+                    target_fds.discard(self._fd)
+
+            def __getattr__(self, name):
+                return getattr(self._handle, name)
+
+            def __del__(self):
+                target_fds.discard(getattr(self, "_fd", None))
+
+        def is_output_path(file):
+            try:
+                return os.fspath(file) == os.fspath(output)
+            except TypeError:
+                return False
+
+        def is_target_descriptor(file):
+            return isinstance(file, int) and file in target_fds
+
+        def uses_default_text_encoding(file, mode, encoding):
+            return (
+                (is_output_path(file) or is_target_descriptor(file))
+                and isinstance(mode, str)
+                and mode.startswith("w")
+                and "b" not in mode
+                and encoding in (None, "locale")
+            )
+
+        def tracked_os_open(*args, **kwargs):
+            fd = original_os_open(*args, **kwargs)
+            path = args[0] if args else kwargs.get("path")
+            if is_output_path(path):
+                target_fds.add(fd)
+            return fd
+
+        monkeypatch.setattr(os, "open", tracked_os_open)
 
         def builtin_open_with_cp1252_default(
             file,
@@ -76,15 +132,13 @@ class TestCli:
             closefd=True,
             opener=None,
         ):
-            if (
-                isinstance(file, (str, bytes, os.PathLike))
-                and isinstance(mode, str)
-                and os.fspath(file) == os.fspath(output)
-                and mode.startswith("w")
-                and "b" not in mode
-                and encoding in (None, "locale")
-            ):
+            target_descriptor = is_target_descriptor(file)
+            if uses_default_text_encoding(file, mode, encoding):
                 encoding = "cp1252"
+                handle = original_builtin_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
+                if target_descriptor:
+                    return _TrackedTextHandle(handle, file)
+                return handle
             return original_builtin_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
 
         def io_open_with_cp1252_default(
@@ -97,15 +151,13 @@ class TestCli:
             closefd=True,
             opener=None,
         ):
-            if (
-                isinstance(file, (str, bytes, os.PathLike))
-                and isinstance(mode, str)
-                and os.fspath(file) == os.fspath(output)
-                and mode.startswith("w")
-                and "b" not in mode
-                and encoding in (None, "locale")
-            ):
+            target_descriptor = is_target_descriptor(file)
+            if uses_default_text_encoding(file, mode, encoding):
                 encoding = "cp1252"
+                handle = original_io_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
+                if target_descriptor:
+                    return _TrackedTextHandle(handle, file)
+                return handle
             return original_io_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
 
         monkeypatch.setattr(builtins, "open", builtin_open_with_cp1252_default)
@@ -133,6 +185,31 @@ class TestCli:
         with io.open(unrelated_io, "w") as handle:
             handle.write("⚠")
         assert unrelated_io.read_bytes() == "⚠".encode("utf-8")
+
+        unrelated_builtin_fd_path = tmp_path / "unrelated-builtins-fd.txt"
+        unrelated_builtin_fd = os.open(unrelated_builtin_fd_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+        try:
+            with builtins.open(unrelated_builtin_fd, "w") as handle:
+                handle.write("→")
+        finally:
+            try:
+                os.close(unrelated_builtin_fd)
+            except OSError:
+                pass
+        assert unrelated_builtin_fd_path.read_bytes() == "→".encode("utf-8")
+
+        unrelated_io_fd_path = tmp_path / "unrelated-io-fd.txt"
+        unrelated_io_fd = os.open(unrelated_io_fd_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+        try:
+            with os.fdopen(unrelated_io_fd, "w") as handle:
+                handle.write("⚠")
+        finally:
+            try:
+                os.close(unrelated_io_fd)
+            except OSError:
+                pass
+        assert unrelated_io_fd_path.read_bytes() == "⚠".encode("utf-8")
+        assert not target_fds
 
     def test_stdout_when_no_output(self, capsys):
         main([str(V1), str(V2)])
