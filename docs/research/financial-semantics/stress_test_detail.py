@@ -8,8 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from bill_tree import normalize_bill
 from financial_classifier.classify_bill import DOLLAR, classify_text
+
+from bill_tree import normalize_bill
 
 BILLS_DIR = Path(__file__).parent.parent / "bills"
 

@@ -11,8 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from bill_tree import normalize_bill
 from financial_classifier.classify_bill import DOLLAR, classify_text
+
+from bill_tree import normalize_bill
 
 BILLS = [
     ("118", "hr", "4366", "MILCON/VA FY2024 approp"),
