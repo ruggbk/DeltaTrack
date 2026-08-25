@@ -18,17 +18,20 @@ from classify_bill import DOLLAR, classify_text  # noqa: E402
 
 from bill_tree import normalize_bill  # noqa: E402
 
+# (congress, bill_type, number, label, pinned_version)
+# Version is pinned so results are reproducible regardless of which other
+# XML files are locally present. Re-pin intentionally if the corpus changes.
 BILLS = [
-    ("118", "hr", "4366", "MILCON/VA FY2024 approp"),
-    ("119", "hr", "1", "Big Beautiful Bill (reconciliation)"),
-    ("118", "s", "2226", "NDAA FY2024 (authorization)"),
-    ("115", "hr", "2", "2018 Farm Bill (authorization)"),
-    ("117", "hr", "3684", "IIJA (infrastructure auth)"),
-    ("117", "hr", "5376", "IRA (reconciliation)"),
-    ("118", "hr", "4368", "CJS FY2024 approp"),
+    ("118", "hr", "4366", "MILCON/VA FY2024 approp", "1_reported-in-house.xml"),
+    ("119", "hr", "1", "Big Beautiful Bill (reconciliation)", "1_reported-in-house.xml"),
+    ("118", "s", "2226", "NDAA FY2024 (authorization)", "1_reported-in-senate.xml"),
+    ("115", "hr", "2", "2018 Farm Bill (authorization)", "1_introduced-in-house.xml"),
+    ("117", "hr", "3684", "IIJA (infrastructure auth)", "1_introduced-in-house.xml"),
+    ("117", "hr", "5376", "IRA (reconciliation)", "1_reported-in-house.xml"),
+    ("118", "hr", "4368", "CJS FY2024 approp", "1_reported-in-house.xml"),
 ]
 
-BILLS_DIR = Path(__file__).parent.parent / "bills"
+BILLS_DIR = _REPO / "bills"
 
 # Patterns that suggest a node is an authorization (should NOT be appropriation)
 AUTH_HINTS = re.compile(
@@ -49,10 +52,9 @@ FP_PATTERNS = {
 }
 
 
-def find_xml(congress, bill_type, number):
-    pattern = BILLS_DIR / f"{congress}-{bill_type}-{number}"
-    xmls = sorted(pattern.glob("*.xml"))
-    return xmls[0] if xmls else None
+def find_xml(congress, bill_type, number, version):
+    path = BILLS_DIR / f"{congress}-{bill_type}-{number}" / version
+    return path if path.exists() else None
 
 
 def classify_node(node):
@@ -84,8 +86,8 @@ def run():
     all_fp_risks = []
     summary_rows = []
 
-    for congress, btype, number, label in BILLS:
-        xml_path = find_xml(congress, btype, number)
+    for congress, btype, number, label, version in BILLS:
+        xml_path = find_xml(congress, btype, number, version)
         if not xml_path:
             print(f"  ✗ {congress}-{btype}-{number}: XML not found")
             summary_rows.append(

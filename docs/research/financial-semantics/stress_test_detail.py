@@ -17,29 +17,29 @@ from bill_tree import normalize_bill  # noqa: E402
 
 BILLS_DIR = _REPO / "bills"
 
+# (congress, bill_type, number, label, pinned_version)
 TARGETS = {
     "approp": [
-        ("118", "hr", "4366", "MILCON/VA"),
-        ("118", "hr", "4368", "CJS FY2024"),
+        ("118", "hr", "4366", "MILCON/VA", "1_reported-in-house.xml"),
+        ("118", "hr", "4368", "CJS FY2024", "1_reported-in-house.xml"),
     ],
     "reconciliation": [
-        ("117", "hr", "5376", "IRA"),
-        ("119", "hr", "1", "BBB"),
+        ("117", "hr", "5376", "IRA", "1_reported-in-house.xml"),
+        ("119", "hr", "1", "BBB", "1_reported-in-house.xml"),
     ],
     "authorization": [
-        ("118", "s", "2226", "NDAA FY2024"),
-        ("115", "hr", "2", "Farm Bill 2018"),
-        ("117", "hr", "3684", "IIJA"),
+        ("118", "s", "2226", "NDAA FY2024", "1_reported-in-senate.xml"),
+        ("115", "hr", "2", "Farm Bill 2018", "1_introduced-in-house.xml"),
+        ("117", "hr", "3684", "IIJA", "1_introduced-in-house.xml"),
     ],
 }
 
 
-def get_unknowns(congress, btype, number):
-    pattern = BILLS_DIR / f"{congress}-{btype}-{number}"
-    xmls = sorted(pattern.glob("*.xml"))
-    if not xmls:
+def get_unknowns(congress, btype, number, version):
+    xml_path = BILLS_DIR / f"{congress}-{btype}-{number}" / version
+    if not xml_path.exists():
         return []
-    tree = normalize_bill(xmls[0])
+    tree = normalize_bill(xml_path)
     results = []
     for node in tree.nodes:
         text = node.body_text or ""
@@ -51,8 +51,8 @@ def get_unknowns(congress, btype, number):
     return results
 
 
-def show_unknowns(label, congress, btype, number, name, max_show=25):
-    unknowns = get_unknowns(congress, btype, number)
+def show_unknowns(label, congress, btype, number, name, version, max_show=25):
+    unknowns = get_unknowns(congress, btype, number, version)
     print(f"\n{'=' * 72}")
     print(f"[{label}] {congress}-{btype}-{number} — {name} — {len(unknowns)} unknowns")
     print("=" * 72)
