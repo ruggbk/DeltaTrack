@@ -103,9 +103,10 @@ def non_cap_amounts(text):
 def build_financial_df(tree):
     import pandas as pd
 
-    dollar_nodes = [n for n in tree.nodes if DOLLAR.search(n.body_text or "")]
     rows = []
-    for n in dollar_nodes:
+    for node_idx, n in enumerate(tree.nodes):
+        if not DOLLAR.search(n.body_text or ""):
+            continue
         account = " > ".join(n.display_path[-2:]) if n.display_path else ""
         node_label = classify_text(n.body_text)
         for clause_text, level in split_clauses(n.body_text):
@@ -116,6 +117,7 @@ def build_financial_df(tree):
             amount = float(m.group(1).replace(",", "")) if m else None
             rows.append(
                 {
+                    "node_idx": node_idx,
                     "account": account,
                     "level": level,
                     "type": node_label if level == "primary" else classify_text(clause_text),
@@ -129,12 +131,17 @@ def build_financial_df(tree):
 
 
 def check_coverage(df, tree):
-    """Return set of body_texts absent from df. Prints a one-line summary."""
-    dollar_node_texts = {n.body_text for n in tree.nodes if DOLLAR.search(n.body_text or "")}
-    df_texts = set(df["body_text"]) if not df.empty else set()
-    dropped = dollar_node_texts - df_texts
+    """Return set of dropped node ordinals. Prints a one-line summary.
+
+    Uses node ordinal (position in tree.nodes) as occurrence identity so that
+    two nodes with identical body_text are tracked separately. A set-of-texts
+    approach would silently pass if one of N identical-text occurrences was dropped.
+    """
+    dollar_idxs = {idx for idx, n in enumerate(tree.nodes) if DOLLAR.search(n.body_text or "")}
+    df_idxs = set(df["node_idx"]) if not df.empty else set()
+    dropped = dollar_idxs - df_idxs
     if dropped:
-        print(f"⚠  {len(dropped)} dollar-amount nodes missing from financial table")
+        print(f"⚠  {len(dropped)} of {len(dollar_idxs)} dollar-amount node occurrences missing from financial table")
     else:
-        print(f"✓  All {len(dollar_node_texts)} dollar-amount nodes represented ({len(df)} rows)")
+        print(f"✓  All {len(dollar_idxs)} dollar-amount node occurrences represented ({len(df)} rows)")
     return dropped

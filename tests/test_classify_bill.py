@@ -13,7 +13,59 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "docs" / "research" / "financial-semantics"))
 
-from classify_bill import classify_text  # noqa: E402
+import io
+from contextlib import redirect_stdout
+from dataclasses import dataclass
+from types import SimpleNamespace
+
+import pytest
+from classify_bill import build_financial_df, check_coverage, classify_text  # noqa: E402
+
+
+def _make_tree(texts):
+    """Minimal BillTree stub with one BillNode per text."""
+
+    @dataclass(frozen=True)
+    class _Node:
+        body_text: str
+        display_path: tuple = ()
+        match_path: tuple = ()
+        tag: str = ""
+        element_id: str = ""
+        header_text: str = ""
+        section_number: str = ""
+        division_label: str = ""
+        display_text: str = ""
+
+    nodes = [_Node(body_text=t) for t in texts]
+    return SimpleNamespace(congress=118, bill_type="hr", bill_number=0, version="test", nodes=nodes)
+
+
+class TestCheckCoverage:
+    def test_detects_dropped_duplicate_occurrence(self):
+        pytest.importorskip("pandas")
+        # Two nodes with identical body_text; build_financial_df from only one.
+        # A set-of-texts check would pass; an occurrence-aware check must fail.
+        text = "For necessary expenses, $1,000,000,000"
+        tree = _make_tree([text, text])
+        df_full = build_financial_df(tree)
+        # Drop rows from the second occurrence (node_idx == 1)
+        df_partial = df_full[df_full["node_idx"] == 0].copy()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            dropped = check_coverage(df_partial, tree)
+        assert dropped, "check_coverage should detect the missing second occurrence"
+        assert 1 in dropped
+
+    def test_passes_when_all_occurrences_represented(self):
+        pytest.importorskip("pandas")
+        text = "For necessary expenses, $1,000,000,000"
+        tree = _make_tree([text, text])
+        df = build_financial_df(tree)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            dropped = check_coverage(df, tree)
+        assert not dropped
 
 
 class TestRestriction:
