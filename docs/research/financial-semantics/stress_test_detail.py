@@ -8,12 +8,11 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _REPO = _HERE.parent.parent.parent
-sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_HERE))
 
 from classify_bill import DOLLAR, classify_text  # noqa: E402
 
-from bill_tree import normalize_bill  # noqa: E402
+from deltatrack.bill_tree import normalize_bill  # noqa: E402
 
 BILLS_DIR = _REPO / "bills"
 
