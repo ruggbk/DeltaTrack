@@ -2,15 +2,21 @@
 Classifier stress-test: parse all 7 bills, report unknowns and false-positive risks.
 
 Run from DeltaTrack/:  uv run python docs/research/financial-semantics/stress_test_analysis.py
+
+Bill XML digests are checked against run_manifest.toml at startup; the script exits
+immediately if bytes differ so no analysis runs against different source material.
 """
 
+import hashlib
 import re
 import sys
+import tomllib
 from collections import Counter, defaultdict
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _REPO = _HERE.parent.parent.parent
+_MANIFEST_PATH = _HERE / "run_manifest.toml"
 sys.path.insert(0, str(_HERE))
 
 from classify_bill import DOLLAR, classify_text  # noqa: E402
@@ -51,6 +57,28 @@ FP_PATTERNS = {
 }
 
 
+def _verify_digests():
+    """Exit immediately if any present bill XML does not match the recorded manifest digest."""
+    with open(_MANIFEST_PATH, "rb") as f:
+        manifest = tomllib.load(f)
+    mismatches = []
+    for entry in manifest["bills"]:
+        path = BILLS_DIR / entry["bill"] / entry["version"]
+        if not path.exists():
+            continue
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != entry["source_sha256"]:
+            mismatches.append(
+                f"  {entry['bill']}/{entry['version']}: expected {entry['source_sha256'][:16]}... got {actual[:16]}..."
+            )
+    if mismatches:
+        print("DIGEST MISMATCH — bill bytes differ from run_manifest.toml.")
+        print("Re-download the bill or update run_manifest.toml to re-pin.")
+        for m in mismatches:
+            print(m)
+        sys.exit(1)
+
+
 def find_xml(congress, bill_type, number, version):
     path = BILLS_DIR / f"{congress}-{bill_type}-{number}" / version
     return path if path.exists() else None
@@ -81,6 +109,7 @@ def fp_flags(text):
 
 
 def run():
+    _verify_digests()
     all_unknowns = []
     all_fp_risks = []
     summary_rows = []

@@ -1,22 +1,30 @@
 # Classifier Notes — `classify_bill.py`
 
-_Last updated: 2026-08-11. Based on stress-test run across 7 bills (see `stress_test_analysis.py`)._
+_Last updated: 2026-08-26. Based on stress-test run across 7 bills (see `stress_test_analysis.py`).
+Parser revision: `ea9192b`. Verified run manifest: `run_manifest.toml`._
 
 ---
 
 ## Bills tested
 
-| Bill | Description | Dollar nodes | Unknown | FP risk |
-|---|---|---|---|---|
-| 118-hr-4366 | MILCON/VA FY2024 appropriations | 67 | 1 | 0 |
-| 119-hr-1 | Big Beautiful Bill (reconciliation) | 206 | 128 | 0 |
-| 118-s-2226 | NDAA FY2024 (authorization) | 85 | 61 | 0 |
-| 115-hr-2 | 2018 Farm Bill (authorization) | 62 | 32 | 0 |
-| 117-hr-3684 | IIJA (infrastructure authorization) | 71 | 39 | 0 |
-| 117-hr-5376 | IRA (reconciliation) | 597 | 154 | 0 |
-| 118-hr-4368 | CJS FY2024 appropriations | 84 | 2 | 0 |
+"Flagged" = nodes labeled appropriation/transfer/rescission that also contain AUTH\_HINT language;
+these were manually reviewed (see `fp_risk_review.toml`). "Confirmed FP" = false positives found.
 
-"FP risk" = nodes labeled with a primary type (appropriation/transfer/rescission) that also contain AUTH_HINT language. After manual review, all 12 flagged nodes were confirmed as real spending nodes that cross-reference authorization language — **no false positives found among the auth-hint-flagged primary predictions that were manually reviewed**. The 607 primary predictions without an auth hint were not examined by this check; broader precision remains an open research question.
+| Bill | Description | Dollar nodes | Unknown | Flagged | Confirmed FP |
+|---|---|---|---|---|---|
+| 118-hr-4366 | MILCON/VA FY2024 appropriations | 72 | 2 | 2 | 0 |
+| 119-hr-1 | Big Beautiful Bill (reconciliation) | 221 | 132 | 1 | 0 |
+| 118-s-2226 | NDAA FY2024 (authorization) | 97 | 72 | 0 | 0 |
+| 115-hr-2 | 2018 Farm Bill (authorization) | 89 | 53 | 0 | 0 |
+| 117-hr-3684 | IIJA (infrastructure authorization) | 99 | 57 | 0 | 0 |
+| 117-hr-5376 | IRA (reconciliation) | 612 | 157 | 4 | 0 |
+| 118-hr-4368 | CJS FY2024 appropriations | 84 | 2 | 5 | 0 |
+
+All 12 flagged nodes were confirmed as real spending nodes that cross-reference authorization language
+(e.g., "as authorized by chapter X" or "there is authorized to be appropriated, and there is hereby
+appropriated"). No false positives found among the auth-hint-flagged primary predictions. Verdicts and
+full ADR 0019 identity fields recorded in `fp_risk_review.toml`. Broader precision for the ~619 primary
+predictions without an auth hint remains an open research question.
 
 ---
 
@@ -150,7 +158,7 @@ A single-token node containing only a dollar placeholder. One appears in MILCON,
 - "authorized to be appropriated" → APPROP_ALT only matches `there (?:is|are) appropriated` without "authorized" in front. Safe.
 - "For the purposes of…" in authorization context → APPROP `^\s*For\b` fires on this. **Check below.**
 
-The 11 initially flagged "fp-risk" nodes (nodes with an auth-hint phrase AND a primary label) were all confirmed as real appropriation nodes in appropriations bills that happen to cross-reference authorization statutes (e.g., "For necessary expenses of the Farm Service Agency... as authorized by section X of the Y Act"). These are correctly classified.
+The 12 flagged nodes (nodes with an auth-hint phrase AND a primary label) were all confirmed as real appropriation nodes in appropriations bills that happen to cross-reference authorization statutes (e.g., "For necessary expenses of the Farm Service Agency... as authorized by section X of the Y Act"). These are correctly classified.
 
 ---
 
@@ -240,19 +248,25 @@ All changes applied to `classify_bill.py`. Re-run stress test confirmed no false
 5. Gap 5: APPROP subsection prefix — `^\s*(?:\([a-z0-9]+\)\s*)?For\b`, verified zero FP in auth bills ✅
 6. New AUTHORIZATION label — `\bauthorized to be appropriated\b`, fires after APPROP_ALT (so "there is authorized to be appropriated, and there is hereby appropriated" correctly stays `appropriation`) ✅
 
-**Post-fix counts:**
+**Post-fix counts (at parser revision `ea9192b`, 2026-08-26):**
 
 | Bill | Before unknowns | After unknowns | Key changes |
 |---|---|---|---|
-| 118-hr-4366 MILCON | 1 | 1 | unchanged ($0. placeholder) |
-| 119-hr-1 BBB | 131 | 128 | 3 subsec-For nodes now `appropriation` |
-| 118-s-2226 NDAA | 71 | 61 | 14 new `authorization` nodes |
-| 115-hr-2 Farm Bill | 54 | 32 | 24 new `authorization` nodes |
-| 117-hr-3684 IIJA | 60 | 39 | 22 new `authorization` nodes |
-| 117-hr-5376 IRA | 156 | 154 | 2 new `appropriation` (there is hereby appropriated) |
-| 118-hr-4368 CJS | 10 | 2 | 8 newly classified (3 rescission, 3 restriction, 2 approp) |
+| 118-hr-4366 MILCON | 1 | 2 | +1 from parser emitting an additional dollar node |
+| 119-hr-1 BBB | 131 | 132 | 3 subsec-For nodes now `appropriation`; parser changes +4 nodes |
+| 118-s-2226 NDAA | 71 | 72 | 14 new `authorization` nodes; parser changes +11 unknowns |
+| 115-hr-2 Farm Bill | 54 | 53 | 24 new `authorization` nodes; parser changes +21 unknowns |
+| 117-hr-3684 IIJA | 60 | 57 | 22 new `authorization` nodes; parser changes +18 unknowns |
+| 117-hr-5376 IRA | 156 | 157 | 2 new `appropriation` (there is hereby appropriated); parser changes +3 unknowns |
+| 118-hr-4368 CJS | 10 | 2 | 8 newly classified (3 rescission, 3 restriction, 2 approp); unchanged |
 
-"fp-risk" count went from 11 → 12: the new entry is an IRA node that says "there is authorized to be appropriated, and **there is hereby appropriated**" — APPROP_ALT correctly fires first → `appropriation`. The auth hint in the same sentence trips the fp detector. Confirmed not a false positive.
+The "unknown" counts are higher than immediately after the 2026-08-09 apply run because the parser
+has evolved (rebase on `develop` brought in node-splitting changes that emit more dollar-bearing nodes).
+Classifier patterns are unchanged; the new dollar nodes are genuinely harder cases in the same categories.
+
+"Flagged" count went from 11 → 12: the new entry is an IRA node that says "there is authorized to be
+appropriated, and **there is hereby appropriated**" — APPROP_ALT correctly fires first → `appropriation`.
+The auth hint in the same sentence trips the fp detector. Confirmed not a false positive.
 
 **Not applied (pending scoping discussion):**
 - Gap 7: IRA reservation set-asides ("the Administrator shall reserve $X") → needs team input on whether set-asides from already-appropriated IRA funds should be surfaced as `sub_allocation`
