@@ -124,7 +124,7 @@ Draft legislation may be public or private information, depending on when and ho
 
 ### 5. Leave Nothing Behind
 
-DeltaTrack writes bill content and diff output only where the user directs it. It keeps no cache, index, or temporary copy of bill text the user did not ask for. Program state (which version is installed) and user preferences (default views, saved filters) are permitted and must contain no bill content. This binds the product; the acquisition tooling in `tools/` writes public bill versions to disk by design (see Scope). See [ADR 0005](decisions/0005-deltatrack-boundary.md), amended for this rule. 
+DeltaTrack writes bill content and diff output only where the user directs it. It keeps no cache, index, or temporary copy of bill text the user did not ask for. Program state (which version is installed) and user preferences (default views, saved filters) are permitted and must contain no bill content. This binds the product; the acquisition tooling in `tools/` writes public bill versions to disk by design (see Scope). See [ADR 0005](decisions/0005-contained-two-version-tool.md), whose scope test asks whether a feature stores bill data rather than whether it stores anything at all. 
 
 ### 6. AI Is A User, Not A Product
 

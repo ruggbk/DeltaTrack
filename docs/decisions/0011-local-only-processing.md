@@ -2,10 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-06-27
-- Amended: 2026-07-27 — recorded the currently-deployed hosted upload channel as a
-  known, deliberate, interim exception to this rule (see Consequences); its
-  retirement is tracked in
-  [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112).
 
 ## Context
 
@@ -16,21 +12,20 @@ is sensitive, pre-decisional material. A leaked draft appropriations bill — re
 what an office is proposing before it chooses to say so — is a real harm to the
 staffer and the office, not a hypothetical.
 
-[0005](0005-deltatrack-boundary.md) already made DeltaTrack local, offline,
-and stateless, but it framed the safety contract around **persistence**: no file
-writes, no stored state. There is a second axis that record did not spell out:
-**transmission.** A server that received an uploaded draft, diffed it, returned the
-result, and stored nothing would satisfy 0005's no-persistence rule and still violate
-the thing that actually matters here — the draft left the user's machine. Persistence
-and exfiltration are different risks, and the sensitive-draft case turns on the second
-one.
+[0005](0005-contained-two-version-tool.md) puts both halves of this in DeltaTrack's
+scope test: a feature is out of scope if it requires bill data to leave the user's
+local environment, or to be stored anywhere. That settles the principle. It does not
+settle what the principle costs, and the two halves are worth keeping distinct because
+a channel can honor one and breach the other. A server that received an uploaded
+draft, diffed it, returned the result, and stored nothing writes no file and keeps no
+state, yet the draft still left the user's machine. Persistence and exfiltration are
+different risks, and the sensitive-draft case turns on the second one.
 
 This question is live because the delivery channel is unsettled. Candidates include a
 static HTML file, a local native app, a packaged executable, a browser extension, and
-a server-rendered web app (the FastAPI path explored in DeltaTrack PR #15). They differ
-precisely on this axis: a server-rendered web app that ingests an uploaded bill sends
-that content to a server we operate; the others can run the comparison entirely on the
-user's machine.
+a server-rendered web app (the FastAPI path). They differ precisely on this axis: a
+server-rendered web app that ingests an uploaded bill sends that content to a server we
+operate; the others can run the comparison entirely on the user's machine.
 
 Two further constraints from the staffer environment bear on the channel choice, though
 not on the privacy rule itself. Congressional offices gate software through different
@@ -77,10 +72,11 @@ Alternatives:
   transmitted, and the consequence of that one error is severe. The marginal benefit
   (offloading work for public bills) does not justify a classification step that can
   fail open.
-- **Lean on 0005 and write nothing.** Rejected. 0005's contract is about persistence;
-  read literally it does not forbid a stateless server that processes and forgets. The
-  draft-bill case needs the transmission axis stated explicitly, or the gap gets
-  rediscovered the next time a hosted channel is proposed.
+- **Lean on 0005 and write nothing.** Rejected. 0005 states the rule but not what it
+  rules out. Which delivery channels the rule forecloses, why a published-bill exception
+  fails open, and what it means for telemetry all follow from the rule rather than
+  restating it, and without them the same ground gets re-argued the next time a hosted
+  channel is proposed.
 
 ## Consequences
 
@@ -90,26 +86,16 @@ Alternatives:
   also by the SAA/CAO install-gate reality above — is a separate open question to be
   decided on its own, tracked in
   [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112).
-- The server-rendered web channel (PR #15) is not invalidated as a way to serve the UI
-  or to work with already-public bills, but it **cannot be the path for user-supplied
-  drafts.** If a web channel ships, the sensitive-input path has to run client-side.
+- The server-rendered web channel is not invalidated as a way to serve the UI, or to
+  work with already-public bills where no user-provided content is transmitted. But a
+  hosted path that ingests uploaded bills **is noncompliant with this rule**, whoever
+  operates it. The sensitive-input path has to run client-side.
 - This is why the client-side PDF.js extraction result ([0003](0003-pdfjs-client-side-viability.md))
   matters beyond convenience: it is what makes a browser channel able to honor this rule
   for the hardest input.
 - The rule is conservative on purpose and costs little, because the engine is already
-  local and stateless ([0005](0005-deltatrack-boundary.md)); this record adds
-  the transmission guarantee on top of 0005's persistence guarantee.
+  local and stateless ([0005](0005-contained-two-version-tool.md)); this record works
+  out what that commitment requires of the delivery channel.
 - Telemetry, crash reporting, or "send us the file that failed" diagnostics that would
   carry bill content off-device are foreclosed by this rule. Diagnostics must be local
   or content-free.
-- **Known interim exception (2026-07-27).** The hosted upload page currently deployed
-  at deltatrack.agoradmv.org ([docs/web-compare.md](../web-compare.md)) processes
-  uploaded PDFs server-side and therefore does not meet this rule. It is a deliberate,
-  transitional state while the compliant channel (browser extension or similarly light
-  local install) is built, not a revision of the decision: the rule stands, the
-  deployment is out of compliance and known to be. The upload page carries a notice
-  telling users their files are processed on the project's server and warning against
-  uploading non-public drafts there. Retiring the exception is tracked in
-  [DeltaTrack#112](https://github.com/AgoraDMV/DeltaTrack/issues/112); this bullet
-  should be deleted when that lands.
-</content>

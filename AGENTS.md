@@ -109,7 +109,7 @@ Every **accepted** ADR, title as written. The titles are claims, so this list is
 - [2. Use pypdfium2 (PDFium) as the single PDF text engine](docs/decisions/0002-pdfium-single-engine.md)
 - [3. Client-side PDF.js extraction is viable for published bills](docs/decisions/0003-pdfjs-client-side-viability.md)
 - [4. Fetch bill discovery and text from govinfo bulk data, not the Congress.gov API](docs/decisions/0004-govinfo-bulk-data.md)
-- [5. Keep DeltaTrack a contained two-version tool; support other tools beyond this scope](docs/decisions/0005-deltatrack-boundary.md)
+- [5. Keep DeltaTrack a contained two-version tool](docs/decisions/0005-contained-two-version-tool.md)
 - [6. Make a versioned JSON document the contract between the diff engine and its consumers](docs/decisions/0006-canonical-diff-contract.md)
 - [7. Render every diff with one renderer, whatever source pipeline produced it](docs/decisions/0007-single-renderer.md)
 - [8. Keep the diff engine deterministic; a language model may read a diff, never compute one](docs/decisions/0008-deterministic-engine.md)

@@ -8,14 +8,14 @@ lives in [decisions/](decisions/). This file links to both rather than restating
 ## The one-sentence version
 
 Two versions of the same bill go in as bytes; a structured description of what changed
-between them comes out, as canonical JSON and as a standalone HTML report. No bill
-content is stored, nothing is fetched at compare time, and the same input always produces the same
+between them comes out, as canonical JSON and as a standalone HTML report. Nothing is
+stored, nothing is fetched at compare time, and the same input always produces the same
 output ([ADR 0008](decisions/0008-deterministic-engine.md),
 [0011](decisions/0011-local-only-processing.md)).
 
-That boundary is deliberate. Acquisition, persisted bill content and cross-version analysis are
-outside of DeltaTrack's Scope — [ADR 0005](decisions/0005-deltatrack-boundary.md)
-draws the line and gives the test for which side a new feature falls on.
+That boundary is deliberate. Acquisition, persistence and cross-version analysis are
+outside DeltaTrack's scope; [ADR 0005](decisions/0005-contained-two-version-tool.md)
+draws the line and gives the test a new feature is measured against.
 
 ## The shape
 
@@ -53,7 +53,7 @@ Both paths reach the same canonical JSON, then the same renderer.
 | Stage | Owner | What it does |
 |---|---|---|
 | Parse | `bill_tree.normalize_bill` | Bill XML → `BillTree` of `BillNode`s: divisions, titles, structural containers, flat sections. |
-| Diff | `diff_bill.diff_bills` | Structural comparison. Division-aware matching, similarity checks, move reconciliation. |
+| Diff | `diff_bill.diff_bills` | Structural comparison, as four named stages: retrieval → correspondence evidence → assignment → classification ([ADR 0020](decisions/0020-matching-stages.md)), over observations addressed by parser ordinal ([ADR 0019](decisions/0019-observation-identity.md)). Round 1 matches by path and division, a later assignment act applies the similarity cutoff, and round 2 reconciles moves. |
 | Shape | `diff_bill.bill_diff_to_dict` | Diff → dict, including the extracted dollar amounts. |
 | Full text | `formatters.text_serializer` | Readable plaintext per side, for the report's full-bill view. |
 | Canonicalize | `formatters.canonical.xml_diff_to_canonical` | Dict → canonical JSON. |
@@ -71,12 +71,51 @@ Both paths reach the same canonical JSON, then the same renderer.
 
 | Stage | Owner | What it does |
 |---|---|---|
-| View model | `formatters.canonical.view_from_canonical` | Canonical JSON → `DiffView` (`formatters.view_model`). |
-| Render | `formatters.diff_html.format_diff_html` | One renderer for both pipelines ([ADR 0007](decisions/0007-single-renderer.md)). |
+| Render | `formatters.diff_html.format_diff_html` | Canonical JSON → standalone report. One renderer for both pipelines ([ADR 0007](decisions/0007-single-renderer.md)). |
+| View model | `formatters.canonical.view_from_canonical` | Canonical JSON → `DiffView` (`formatters.view_model`). Called by the renderer, not by its callers, so the view cannot be assembled differently by different callers ([ADR 0006](decisions/0006-canonical-diff-contract.md)). |
 
 Alongside these, `structure_tree.py` derives the leveled heading tree both pipelines feed
 ([ADR 0012](decisions/0012-pdf-heading-levels.md),
 [0014](decisions/0014-leveled-heading-tree-scope.md)).
+
+### Inside the XML diff stage: four boundaries, one rule
+
+`diff_bill.diff_bills` is not one decision. It is a sequence of named stages, and the whole
+point of [ADR 0020](decisions/0020-matching-stages.md) is which of them is allowed to decide
+what:
+
+```
+Observations -> RETRIEVAL -> CandidateSet -> CORRESPONDENCE EVIDENCE
+             -> ASSIGNMENT -> Correspondence -> CLASSIFICATION -> Changes -> canonical diff
+```
+
+**Retrieval policy controls consideration. Assignment policy controls correspondence.** Retrieval
+decides which pairs are *worth evaluating* and materialises them as a `CandidateSet` with the
+provenance of every retriever that proposed them; it settles nothing. Correspondence evidence
+*describes* an admitted candidate with named signals and carries no verdict. Assignment is the
+only stage that decides which observations correspond. Classification then asks what kind of
+change a settled correspondence represents, and may not re-open the question of whether the two
+provisions correspond at all.
+
+Two consequences worth knowing before touching this code. Every pair that reaches assignment
+first passes through candidate admission, so a pairing cannot be produced by constructing a tuple
+directly — that bypass is what slice B3 removed. And the similarity cutoff is not part of the
+group competition: `apply_similarity_assignment_rule` is a separate, later assignment act that
+owns the only round-1 threshold, and folding the two together would delete a composition while
+leaving both names in place.
+
+The stages' invariants are bound by `tests/test_round1_stages.py`, and the correspondence they
+produce by `tests/test_round1_pairing_sentinel.py`, which pins one digest per committed version
+pair over the ordered pairing stream.
+
+**The PDF path runs the same four stages, and reached them separately.** It has its own retrieval,
+evidence, assignment and classification stages in `diff_pdf.py`, its own byte-identity gate
+(`tests/test_pdf_canonical_baseline.py`), and its own boundary tests. What the two paths share is
+the *rule* — retrieval controls consideration, assignment controls correspondence — and they do not
+currently share an implementation. XML observations address parsed tree nodes while PDF
+observations address reconstructed blocks. **ADR 0020 deliberately leaves open whether the two
+pipelines should eventually share more of their matching implementation; doing so requires separate
+validation.**
 
 ### Why the two paths exist at all
 
@@ -113,9 +152,11 @@ uses:
 
 - **Parser accuracy** (`bill_tree.py`, `parsers/`). A missed or mis-nested section corrupts
   everything downstream and does it silently — the report still renders. Guarded by the
-  corpus property gates and by external ground truth
+  corpus property gates, and on the money axis by independent external evidence: committee
+  reports validate appropriations **amount recall and attribution to the correct agency**
   ([ADR 0009](decisions/0009-validation-ground-truth.md),
-  [parser-validation.md](parser-validation.md)).
+  [parser-validation.md](parser-validation.md)). That evidence does not by itself cover
+  provision correspondence, structural interpretation, or PDF layout.
 - **Financial diff** (`diff_bill.py`). Dollar amounts are the product
   ([ADR 0001](decisions/0001-structured-money-diff.md)). Wrong money is worse than no
   money, because a staffer cannot tell it is wrong by looking.
@@ -137,8 +178,10 @@ Useful once you are making changes; none of it is part of the shipped engine.
 [`scripts/README.md`](../scripts/README.md) is the full catalog — the entry points worth
 knowing on day one:
 
-- `scripts/serve_compare.py` — side-by-side view of a diff in the browser. The fastest way
-  to answer "is this report actually right?", which passing tests do not answer.
+- `diff_pdf.py` / `diff_bill.py compare --format html` — render a diff to HTML and read it.
+  The fastest way to answer "is this report actually right?", which passing tests do not
+  answer. Rendering the same version pair through both is how the PDF and XML pipelines get
+  checked against each other ([TESTING.md](../TESTING.md#comparing-the-two-pipelines-by-eye)).
 - `scripts/render_examples.py` — regenerate the committed example reports under `examples/`.
 - `tools/fetch_bills.py` — pull bills beyond the committed test corpus. Not needed to run
   the suite; see [CONTRIBUTING](../CONTRIBUTING.md#the-test-suite-needs-no-downloads).
