@@ -21,6 +21,9 @@ from types import SimpleNamespace
 import pytest
 from classify_bill import build_financial_df, check_coverage, classify_text  # noqa: E402
 
+from deltatrack.bill_tree import normalize_bill
+from tests.corpus_paths import fixture_path
+
 
 def _make_tree(texts):
     """Minimal BillTree stub with one BillNode per text."""
@@ -341,3 +344,35 @@ class TestSplitClauses:
         of_which_clause = result[1][0]
         assert of_which_clause.startswith("of which ")
         assert "$1,000,000" in of_which_clause
+
+
+_MILCON = fixture_path("118-hr-4366", "1_reported-in-house.xml")
+_BBB = fixture_path("119-hr-1", "1_reported-in-house.xml")
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "xml_path",
+    [
+        pytest.param(
+            _MILCON,
+            id="118-hr-4366",
+            marks=pytest.mark.skipif(not _MILCON.exists(), reason="corpus bill not present"),
+        ),
+        pytest.param(
+            _BBB,
+            id="119-hr-1",
+            marks=pytest.mark.skipif(not _BBB.exists(), reason="corpus bill not present"),
+        ),
+    ],
+)
+def test_financial_df_covers_all_dollar_nodes(xml_path):
+    """Every dollar-bearing node occurrence emitted by the parser must appear in the
+    financial table. Dropping any occurrence would silently understate coverage."""
+    pytest.importorskip("pandas")
+    tree = normalize_bill(xml_path)
+    df = build_financial_df(tree)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        dropped = check_coverage(df, tree)
+    assert not dropped, f"{len(dropped)} dollar-bearing node occurrences missing from financial table"
