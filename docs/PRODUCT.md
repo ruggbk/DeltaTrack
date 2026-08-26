@@ -102,7 +102,7 @@ Bill acquisition (`tools/`) ships in this repository as supporting tooling, not 
 
 ## Product principles
 
-Architectural decisions are tracked in [Architectural Decision Records](/docs/decisions/). These guiding principles inform the overall product design in order of priority. 
+Architectural decisions are tracked in [Architectural Decision Records](decisions/). These guiding principles inform the overall product design in order of priority. 
 
 ### 1. Accuracy and trust
 
