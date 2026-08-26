@@ -20,7 +20,13 @@ these were manually reviewed (see `fp_risk_review.toml`). "Confirmed FP" = false
 | 117-hr-5376 | IRA (reconciliation) | 612 | 157 | 4 | 0 |
 | 118-hr-4368 | CJS FY2024 appropriations | 84 | 2 | 5 | 0 |
 
-All 12 flagged nodes were confirmed as real spending nodes that cross-reference authorization language
+**One additional false positive was found outside the auth-hint sweep:** NDAA sec. 1414 (ordinal 1085,
+118-s-2226) is an accounting reconciliation provision ("For purposes of an audit...") mislabeled
+`appropriation` because the APPROP pattern fires on the opening "For". The fix is a negative lookahead
+for "For purposes of", but a rigorous review of all primary-labeled nodes in authorization bills is
+the right next step before patching — similar openers likely exist. Deferred to a follow-on.
+
+All 12 auth-hint-flagged nodes were confirmed as real spending nodes that cross-reference authorization language
 (e.g., "as authorized by chapter X" or "there is authorized to be appropriated, and there is hereby
 appropriated"). No false positives found among the auth-hint-flagged primary predictions. Verdicts and
 full ADR 0019 identity fields recorded in `fp_risk_review.toml`. Broader precision for the ~619 primary
