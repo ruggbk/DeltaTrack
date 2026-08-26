@@ -31,10 +31,4 @@ uv run python tools/fetch_bills.py download 118 hr 4366
 
 ## Dependencies
 
-The scripts use only stdlib and the project's core dependencies — no extra install needed.
-
-The Jupyter notebooks use `pandas`. It is not in the project's `uv` env (it's analysis-only, not part of the library). Install it in your local environment:
-
-```bash
-pip install pandas   # or: uv pip install pandas
-```
+The scripts use only stdlib and the project's core dependencies. The Jupyter notebooks use `pandas`, which is in the `dev` dependency group. Running `uv sync` installs everything — no extra steps needed.

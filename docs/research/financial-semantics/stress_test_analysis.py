@@ -4,7 +4,8 @@ Classifier stress-test: parse all 7 bills, report unknowns and false-positive ri
 Run from DeltaTrack/:  uv run python docs/research/financial-semantics/stress_test_analysis.py
 
 Bill XML digests are checked against run_manifest.toml at startup; the script exits
-immediately if bytes differ so no analysis runs against different source material.
+nonzero if any manifested bill is missing or its bytes differ, so no analysis runs
+against incomplete or different source material.
 """
 
 import hashlib
@@ -57,20 +58,32 @@ FP_PATTERNS = {
 }
 
 
-def _verify_digests():
-    """Exit immediately if any present bill XML does not match the recorded manifest digest."""
-    with open(_MANIFEST_PATH, "rb") as f:
+def _verify_digests(bills_dir=None, manifest_path=None):
+    """Exit nonzero if any manifested bill is missing or its bytes differ from the recorded digest."""
+    if bills_dir is None:
+        bills_dir = BILLS_DIR
+    if manifest_path is None:
+        manifest_path = _MANIFEST_PATH
+    with open(manifest_path, "rb") as f:
         manifest = tomllib.load(f)
+    missing = []
     mismatches = []
     for entry in manifest["bills"]:
-        path = BILLS_DIR / entry["bill"] / entry["version"]
+        path = bills_dir / entry["bill"] / entry["version"]
         if not path.exists():
+            missing.append(f"  {entry['bill']}/{entry['version']}")
             continue
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
         if actual != entry["source_sha256"]:
             mismatches.append(
                 f"  {entry['bill']}/{entry['version']}: expected {entry['source_sha256'][:16]}... got {actual[:16]}..."
             )
+    if missing:
+        print("MISSING REQUIRED STUDY BILLS — cannot reproduce the research summary.")
+        print("Download the missing files with: uv run python tools/fetch_bills.py download <congress> <type> <number>")
+        for m in missing:
+            print(m)
+        sys.exit(1)
     if mismatches:
         print("DIGEST MISMATCH — bill bytes differ from run_manifest.toml.")
         print("Re-download the bill or update run_manifest.toml to re-pin.")

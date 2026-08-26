@@ -376,3 +376,13 @@ def test_financial_df_covers_all_dollar_nodes(xml_path):
     with redirect_stdout(buf):
         dropped = check_coverage(df, tree)
     assert not dropped, f"{len(dropped)} dollar-bearing node occurrences missing from financial table"
+
+
+class TestVerifyDigests:
+    def test_missing_required_bill_exits_nonzero(self, tmp_path):
+        """An empty bills dir makes all manifested sources missing — must exit non-zero."""
+        from stress_test_analysis import _MANIFEST_PATH, _verify_digests
+
+        with pytest.raises(SystemExit) as exc_info:
+            _verify_digests(bills_dir=tmp_path, manifest_path=_MANIFEST_PATH)
+        assert exc_info.value.code != 0
