@@ -2,6 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-06-29
+- Amended: 2026-07-27 — clarified that the semantic money rollup is deferred to
+  the financial-semantics epic #147, not dropped. The decision (ship the
+  conservation-checked tree now) is unchanged; earlier wording read as
+  abandoning rollups.
 
 ## Context
 
@@ -16,8 +20,7 @@ level in Defense-class bills — is indistinguishable from an account. The level
 terrain and the deterministic-geometry signal that *does* work are recorded in
 [0012](0012-pdf-heading-levels.md); this record does not restate them.
 
-**A mechanical money rollup is not meaningful; a semantic rollup is separate work,
-tracked in #147.** A read-only prototype summed
+**A mechanical money rollup is not meaningful.** A read-only prototype summed
 per-account amounts up the tree and overcounted the committee report's
 `Total, title I, Department of Commerce` by 32–44%. Isolating the true
 appropriation base from subtotals, reservations, and transfers needs
@@ -26,7 +29,7 @@ inside #54 would have coupled a structural feature to an open NLP problem.
 
 The engine constraints bound the options: deterministic and offline
 ([0008](0008-deterministic-engine.md)), no auto-fetching a bill's XML to enrich a
-PDF diff ([0005](0005-contained-two-version-tool.md)), and every consumer-visible
+PDF diff ([0005](0005-deltatrack-boundary.md)), and every consumer-visible
 level flows through the one canonical contract ([0006](0006-canonical-diff-contract.md) /
 [0007](0007-single-renderer.md)).
 
@@ -63,9 +66,9 @@ money gate rather than a semantic rollup.
 **Alternatives rejected.** Forcing a three-band size classifier (the distribution is
 bimodal — no third band exists to read); blocking #54 until prose-leading agencies are
 solved (holds the recoverable ~80% hostage to an open research question); surfacing a
-*mechanically* rolled total (the 32–44% overcount; the semantic rollup is deferred to
-#147, not rejected); a cross-source XML lookup to enrich a PDF diff (input automation
-+ a network call the engine forbids, 0005/0008).
+mechanical rolled total (the 32–44% overcount — what is rejected is the
+*mechanical* sum; the semantic rollup is deferred to #147, not rejected); a cross-source XML lookup to enrich a
+PDF diff (input automation + a network call the engine forbids, 0005/0008).
 
 ## Consequences
 

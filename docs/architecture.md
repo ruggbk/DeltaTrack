@@ -14,7 +14,7 @@ output ([ADR 0008](decisions/0008-deterministic-engine.md),
 [0011](decisions/0011-local-only-processing.md)).
 
 That boundary is deliberate. Acquisition, persistence and cross-version analysis are
-outside DeltaTrack's scope; [ADR 0005](decisions/0005-contained-two-version-tool.md)
+outside DeltaTrack's scope; [ADR 0005](decisions/0005-deltatrack-boundary.md)
 draws the line and gives the test a new feature is measured against.
 
 ## The shape
