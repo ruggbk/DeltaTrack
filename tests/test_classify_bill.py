@@ -378,6 +378,47 @@ def test_financial_df_covers_all_dollar_nodes(xml_path):
     assert not dropped, f"{len(dropped)} dollar-bearing node occurrences missing from financial table"
 
 
+class TestHtmlGrouping:
+    def test_sub_only_dollar_node_forms_own_group(self):
+        """A node whose only dollar-bearing clause is labeled 'sub' must get its own
+        node_idx group in the HTML table. The old level=='primary' boundary merged such
+        nodes into the preceding group, silently dropping their account name and text."""
+        pytest.importorskip("pandas")
+        # Node A: primary clause has $, sub clause also has $
+        node_a = "For grants, $1,000,000: Provided, That $500,000 shall be for research"
+        # Node B: primary clause has no $ (filtered out); only the sub clause has $
+        # split_clauses labels the first fragment "primary" — it contains no dollar amount,
+        # so build_financial_df skips it.  Only the Provided-That sub clause enters the df.
+        node_b = "For purposes of administration: Provided, That $200,000 shall be available"
+        tree = _make_tree([node_a, node_b])
+        df = build_financial_df(tree)
+
+        # Both node occurrences appear in the df
+        assert set(df["node_idx"].tolist()) == {0, 1}
+
+        # Correct (node_idx) grouping: 2 separate groups
+        correct_groups = [grp for _, grp in df.groupby("node_idx", sort=False)]
+        assert len(correct_groups) == 2
+
+        # Regression guard: level-based grouping collapses node B into node A because
+        # node B has no primary-level row in the df.  Reverting to this approach must
+        # produce only 1 group, causing this assertion to fail.
+        level_groups: list = []
+        current: list = []
+        for _, row in df.iterrows():
+            if row["level"] == "primary":
+                if current:
+                    level_groups.append(current)
+                current = [row]
+            else:
+                current.append(row)
+        if current:
+            level_groups.append(current)
+        assert len(level_groups) == 1, (
+            "level-based grouping must collapse the two nodes into one — this confirms node_idx grouping is necessary"
+        )
+
+
 class TestVerifyDigests:
     def test_missing_required_bill_exits_nonzero(self, tmp_path):
         """An empty bills dir makes all manifested sources missing — must exit non-zero."""
