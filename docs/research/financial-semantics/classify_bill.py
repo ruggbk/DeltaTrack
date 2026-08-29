@@ -122,6 +122,16 @@ def build_financial_df(tree):
     return pd.DataFrame(rows)
 
 
+def group_financial_rows(df):
+    """Group financial df rows into per-node lists, ordered by first appearance.
+
+    Uses node_idx as the group boundary so that a node whose only dollar-bearing
+    clause is labeled 'sub' still forms its own group. Grouping on level=='primary'
+    would silently merge such a node into the preceding node's group.
+    """
+    return [[row for _, row in grp.iterrows()] for _, grp in df.groupby("node_idx", sort=False)]
+
+
 def check_coverage(df, tree):
     """Return set of dropped node ordinals. Prints a one-line summary.
 
