@@ -3,13 +3,14 @@ import re
 # Node-opening patterns
 RESTRICT = re.compile(r"^\s*(?:\([a-z0-9]+\)\s*)?None of the funds", re.IGNORECASE)
 RESTRICT_NOTWITHSTANDING = re.compile(r"^\s*Notwithstanding\b.{0,200}\bnone of the funds\b", re.IGNORECASE | re.DOTALL)
+RESTRICT_EXCEPT = re.compile(r"^\s*Except\b.{0,200}\bnone of the funds\b", re.IGNORECASE | re.DOTALL)
 TRANSFER = re.compile(r"^\s*Of (?:the )?amounts.{0,300}\btransferr?ed?\b", re.IGNORECASE | re.DOTALL)
 APPROP = re.compile(r"^\s*(?:\([a-z0-9]+\)\s*)?For\b", re.IGNORECASE | re.DOTALL)
-RESCISSION = re.compile(r"(?:is|are) hereby rescinded", re.IGNORECASE)
+RESCISSION = re.compile(r"(?:is|are) hereby rescinded|is hereby reduced by \$", re.IGNORECASE)
 DIRECTIVE = re.compile(r"^\s*The\s+\w[\w\s]+(?:shall|may not)\b", re.IGNORECASE)
 REPROGRAM = re.compile(r"^\s*no project may be (?:increased|decreased)", re.IGNORECASE)
 DELAYED_APPROP = re.compile(r"^\s*\$[\d,]+.{0,50}\bshall become available\b", re.IGNORECASE | re.DOTALL)
-APPROP_ALT = re.compile(r"there (?:is|are)(?: hereby)? appropriated", re.IGNORECASE)
+APPROP_ALT = re.compile(r"(?:there\s+)?(?:is|are)(?: hereby)? appropriated", re.IGNORECASE)
 AUTHORIZATION = re.compile(r"\bauthorized to be appropriated\b", re.IGNORECASE)
 FEE = re.compile(r"fee in the amount of\s+\$|impose a fee|\bpays a fee of\s+\$|\ba fee of\s+\$", re.IGNORECASE)
 
@@ -37,6 +38,8 @@ def classify_text(text):
     if RESTRICT.match(text):
         return "restriction"
     if RESTRICT_NOTWITHSTANDING.match(text):
+        return "restriction"
+    if RESTRICT_EXCEPT.match(text):
         return "restriction"
     if TRANSFER.match(text):
         return "transfer"

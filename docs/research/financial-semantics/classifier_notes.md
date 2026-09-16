@@ -1,6 +1,6 @@
 # Classifier Notes — `classify_bill.py`
 
-_Last updated: 2026-08-26. Based on stress-test run across 7 bills (see `stress_test_analysis.py`).
+_Last updated: 2026-09-15. Based on stress-test run across 7 bills (see `stress_test_analysis.py`) and 225-bill appropriations corpus (see `approp_corpus_analysis.py`).
 Parser revision: `ea9192b`. Verified run manifest: `run_manifest.toml`._
 
 ---
@@ -42,10 +42,11 @@ predictions without an auth hint remains an open research question.
 |---|---|---|
 | `RESTRICT` | `^\s*(?:\([a-z0-9]+\)\s*)?None of the funds` | `restriction` |
 | `RESTRICT_NOTWITHSTANDING` | `^\s*Notwithstanding\b.{0,200}\bnone of the funds\b` | `restriction` |
+| `RESTRICT_EXCEPT` | `^\s*Except\b.{0,200}\bnone of the funds\b` | `restriction` |
 | `TRANSFER` | `^\s*Of (?:the )?amounts` | `transfer` |
 | `APPROP` | `^\s*(?:\([a-z0-9]+\)\s*)?For\b` | `appropriation` (or `rescission` if RESCISSION also fires) |
-| `APPROP_ALT` | `there (?:is\|are)(?: hereby)? appropriated` (anywhere) | `appropriation` (or `rescission`) |
-| `RESCISSION` | `(?:is\|are) hereby rescinded` (anywhere) | `rescission` |
+| `APPROP_ALT` | `(?:there\s+)?(?:is\|are)(?: hereby)? appropriated` (anywhere) | `appropriation` (or `rescission`) |
+| `RESCISSION` | `(?:is\|are) hereby rescinded\|is hereby reduced by \$` (anywhere) | `rescission` |
 | `DIRECTIVE` | `^\s*The\s+\w[\w\s]+(?:shall\|may not)\b` | `directive` |
 | `REPROGRAM` | `^\s*no project may be (?:increased\|decreased)` | `cap` |
 | `DELAYED_APPROP` | `^\s*\$[\d,]+.{0,50}\bshall become available\b` | `appropriation` |
@@ -277,3 +278,104 @@ The auth hint in the same sentence trips the fp detector. Confirmed not a false 
 **Not applied (pending scoping discussion):**
 - Gap 7: IRA reservation set-asides ("the Administrator shall reserve $X") → needs team input on whether set-asides from already-appropriated IRA funds should be surfaced as `sub_allocation`
 - Authorization label for NDAA project tables and "Using amounts appropriated pursuant to authorization" nodes → these don't say "authorized to be appropriated"; they'll stay `unknown`
+
+---
+
+## Appropriations corpus stress test (2026-09-15)
+
+**Run:** 225 annual appropriations bills, 113th–119th Congress, both chambers, all 12 subcommittees.
+Bill list: `data/annual_approp_bills.csv` (filtered from BillTrax `bills.csv` by subcommittee title keywords, excluding CRs, supplementals, and amendments). Version 1 of each bill (earliest downloaded XML). Script: `approp_corpus_analysis.py`.
+
+### Summary
+
+| Metric | Value |
+|---|---|
+| Bills classified | 225 |
+| Total dollar nodes | 21,859 |
+| Unknown nodes | 3,293 (15.1%) |
+| FP-risk flags (auth-hint on primary label) | 511 |
+
+The 2% unknown rate from the two pilot bills (MILCON/VA and CJS) was not representative. Those subcommittees happen to use text patterns the classifier covers well. The true corpus-wide rate for annual appropriations bills is **~15%**, varying significantly by subcommittee.
+
+### By Congress
+
+| Congress | Bills | Dollar nodes | Unknown | Unknown % |
+|---|---|---|---|---|
+| 113th | 31 | 2,929 | 453 | 15.5% |
+| 114th | 37 | 3,765 | 551 | 14.6% |
+| 115th | 40 | 3,714 | 513 | 13.8% |
+| 116th | 16 | 1,678 | 214 | 12.8% |
+| 117th | 39 | 3,901 | 549 | 14.1% |
+| 118th | 42 | 4,125 | 759 | 18.4% |
+| 119th | 20 | 1,747 | 254 | 14.5% |
+
+The 118th Congress spike to 18.4% is driven largely by several Senate State/Foreign Operations bills (118-s-2438 and 118-s-4797 both at 52%).
+
+### By subcommittee (approximate, from top/bottom rankings)
+
+| Subcommittee | Unknown range | Notes |
+|---|---|---|
+| MILCON / Veterans Affairs | 0–4% | Best-covered; "For" pattern and straightforward structure |
+| Agriculture | 2–7% | Consistently well-covered |
+| Legislative Branch | 4–8% | Well-covered |
+| Interior / Environment | 5–10% | Decent coverage |
+| Labor / HHS / Education | 5–10% | Decent coverage |
+| Commerce / Justice / Science | 6–14% | Moderate gaps |
+| Homeland Security | 11–19% | Moderate gaps |
+| Financial Services / Gen. Govt. | 12–18% | Moderate gaps |
+| Energy and Water | 10–18% | Moderate gaps |
+| Defense | 15–28% | Significant gap; within-bill sub-allocation language |
+| Transportation / HUD | 14–25% | Significant gap; loan guarantee and Amtrak grant language |
+| State / Foreign Operations | 25–52% | Worst-covered; OPIC/Ex-Im receipts, bilateral aid sub-allocations |
+
+### Top unknown patterns (count across all 225 bills)
+
+| Count | Leading text | Category | Patchable? |
+|---|---|---|---|
+| 110 | `Of the amounts appropriated in this Act under the headings...` | Within-bill sub-allocation | Design question (see below) |
+| 60 | `Notwithstanding any other provision of law, [funds] may be...` | Permission/exception (not restriction) | Yes, with scoping |
+| 45 | `The amount by which the applicable allocation of new budget authority...` | 302(b) suballocation notification | Intentionally unknown |
+| 37 | `$0.` | Zero-funded account | Intentionally unknown (per existing notes) |
+| 34 | `Except as otherwise provided in this Act, none of the funds...` | Restriction with "Except" prefix | Yes — low risk |
+| 32 | `To enable the Secretary of Transportation to make quarterly grants...` | Grant appropriation (Amtrak) | Yes, with scoping |
+| 22 | `In addition to the amounts appropriated or otherwise made available elsewhere in this Act, $X is hereby appropriated...` | Supplemental-within-bill appropriation | Yes — APPROP_ALT fix |
+| 22 | `Notwithstanding any other provision of this Act, to reflect savings due to favorable foreign exchange rates, the total amount...is hereby reduced` | Forex rescission | Yes — add "is hereby reduced" to RESCISSION |
+| 21 | `Of the unobligated balances from amounts made available...` | Rescission of unobligated balances | Yes — covered by fixing RESCISSION plural (Gap 3 applied) but "from amounts made available" prefix differs from TRANSFER |
+| 19 | `Receipts collected pursuant to the Export-Import Bank Act...shall be available` | Receipt-funded appropriation (Ex-Im, OPIC revolving fund) | Yes — new pattern |
+| 19 | `The Secretary of the Army may transfer to the Fish and Wildlife Service...` | Secretary-initiated transfer | Yes — TRANSFER broadening |
+| 17 | `New commitments to guarantee single family loans...shall not exceed $400,000,000,000` | Loan guarantee authority cap | Intentionally unknown |
+| 17 | `To conduct natural resource damage assessment...` | Grant/program appropriation (Interior) | Yes, with scoping |
+| 16 | `(a)Of the funds made available in this Act, not less than $X shall be available...` | Sub-allocation / set-aside | Design question (see below) |
+
+### FP-risk flags (511 total) — confirmed safe
+
+All 511 flagged nodes are genuine appropriation nodes that happen to cross-reference authorization statutes using "as authorized by chapter X" or "the program, as authorized by section Y, Act Z." These are true positives, not false positives. The auth-hint detector correctly surfaces them for review but the `For` opener and spending context confirm they are real appropriations. The pattern is especially common in Veterans Affairs, Agriculture, and Commerce/Justice/Science bills.
+
+### Patchability assessment
+
+**Short answer: yes, most gaps can be closed without architectural problems.** The patterns are distinct from existing ones and from each other, and the classifier's sequential match structure means new patterns can be inserted at the right priority level without affecting existing labels.
+
+**Low-risk patches (straightforward regex additions) — applied 2026-09-15:**
+1. `Except...none of the funds` → `restriction` — new `RESTRICT_EXCEPT` pattern; check inserted after `RESTRICT_NOTWITHSTANDING` in `classify_text()` ✅
+2. `is hereby reduced by $` → `rescission` — added to RESCISSION alongside "is hereby rescinded" ✅
+3. `In addition to...is hereby appropriated` → `appropriation` — APPROP_ALT broadened to `(?:there\s+)?(?:is|are)(?: hereby)? appropriated` (optional "there") ✅
+4. Forex rescission (`the total amount appropriated...is hereby reduced by $X`) → covered by fix 2 ✅
+
+**Post-patch corpus result (2026-09-15):** 21,859 total dollar nodes, **3,124 unknown (14.3%)** — down from 3,293 (15.1%) pre-patch, a reduction of 169 nodes.
+
+**Medium-risk patches (need scoping, low architectural risk):**
+5. `To enable the Secretary to make [grants/loans to Amtrak]` → `appropriation` — distinct Amtrak pattern; low FP risk since "To enable" is uncommon outside this context
+6. `To carry out [subtitle/section]` → `appropriation` — broader; verify against authorization bills where "To carry out...is authorized" may appear
+7. `Receipts collected pursuant to...shall be available` → `appropriation` (receipt-funded revolving account) — Ex-Im/OPIC-specific; low FP risk
+8. `The Secretary...may transfer to...` → `transfer` — broadens TRANSFER beyond "Of amounts"; verify no collision with DIRECTIVE
+9. `Notwithstanding any other provision of law, [funds] may be obligated` → `directive` (not restriction) — needs clear scoping away from RESTRICT_NOTWITHSTANDING form
+
+**One pattern needing a new regex, not a design change:**
+`Of the amounts appropriated in this Act under the headings...` (110 nodes) and `(a)Of the funds made available in this Act, not less than $X shall be available` (16 nodes) are **within-bill sub-allocations** — they direct how already-appropriated funds are divided, they don't create new budget authority. These should be `sub_allocation`. `classify_text` already returns `sub_allocation` at node level (for `of which...` and `$X shall be for/available`); `PRIMARY_LABELS` is just an external lookup for FP-risk flagging and does not constrain what the function emits. Adding a new node-level pattern here is consistent with the existing design — no structural change needed.
+
+**Intentionally unknown — leave as-is:**
+- 302(b) suballocation notifications (`The amount by which the applicable allocation...`) — procedural, not financial
+- `$0.` — zero-funded placeholder nodes
+- FHA/HUD/USDA loan guarantee authority caps (`New commitments to guarantee single family/multifamily loans...shall not exceed`) — these cap lending authority, not Treasury spending
+- `(b)(1)Unless the Secretary of Energy notifies...` — conditional reprogramming authority
+- `Amounts available for administrative expenses of any legislative branch entity...` — directive framing of already-available funds

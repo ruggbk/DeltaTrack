@@ -1,0 +1,1677 @@
+Downloading 225 bills from docs\research\financial-semantics\data\annual_approp_download_list.csv
+
+H.R. 2216 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2216.xml
+  Downloading version 1/4 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2216rh/xml/BILLS-113hr2216rh.xml
+  Saved: bills\113-hr-2216\1_reported-in-house.xml
+  Downloading version 2/4 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2216eh/xml/BILLS-113hr2216eh.xml
+  Saved: bills\113-hr-2216\2_engrossed-in-house.xml
+  Downloading version 3/4 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2216rfs/xml/BILLS-113hr2216rfs.xml
+  Saved: bills\113-hr-2216\3_referred-in-senate.xml
+  Downloading version 4/4 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2216rs/xml/BILLS-113hr2216rs.xml
+  Saved: bills\113-hr-2216\4_reported-in-senate.xml
+
+H.R. 2217 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2217.xml
+  Downloading version 1/5 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2217rh/xml/BILLS-113hr2217rh.xml
+  Saved: bills\113-hr-2217\1_reported-in-house.xml
+  Downloading version 2/5 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2217eh/xml/BILLS-113hr2217eh.xml
+  Saved: bills\113-hr-2217\2_engrossed-in-house.xml
+  Downloading version 3/5 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2217rfs/xml/BILLS-113hr2217rfs.xml
+  Saved: bills\113-hr-2217\3_referred-in-senate.xml
+  Downloading version 4/5 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2217rfs2/xml/BILLS-113hr2217rfs2.xml
+  Saved: bills\113-hr-2217\4_referred-in-senate.xml
+  Downloading version 5/5 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2217rs/xml/BILLS-113hr2217rs.xml
+  Saved: bills\113-hr-2217\5_reported-in-senate.xml
+
+H.R. 2397 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2397.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2397rh/xml/BILLS-113hr2397rh.xml
+  Saved: bills\113-hr-2397\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2397eh/xml/BILLS-113hr2397eh.xml
+  Saved: bills\113-hr-2397\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2397rfs/xml/BILLS-113hr2397rfs.xml
+  Saved: bills\113-hr-2397\3_referred-in-senate.xml
+
+H.R. 2410 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2410.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2410rh/xml/BILLS-113hr2410rh.xml
+  Saved: bills\113-hr-2410\1_reported-in-house.xml
+
+H.R. 2609 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2609.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2609rh/xml/BILLS-113hr2609rh.xml
+  Saved: bills\113-hr-2609\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2609eh/xml/BILLS-113hr2609eh.xml
+  Saved: bills\113-hr-2609\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2609pcs/xml/BILLS-113hr2609pcs.xml
+  Saved: bills\113-hr-2609\3_placed-on-calendar-senate.xml
+
+H.R. 2610 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2610.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2610rh/xml/BILLS-113hr2610rh.xml
+  Saved: bills\113-hr-2610\1_reported-in-house.xml
+
+H.R. 2786 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2786.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2786rh/xml/BILLS-113hr2786rh.xml
+  Saved: bills\113-hr-2786\1_reported-in-house.xml
+
+H.R. 2787 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2787.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2787rh/xml/BILLS-113hr2787rh.xml
+  Saved: bills\113-hr-2787\1_reported-in-house.xml
+
+H.R. 2792 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2792.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2792rh/xml/BILLS-113hr2792rh.xml
+  Saved: bills\113-hr-2792\1_reported-in-house.xml
+
+H.R. 2855 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr2855.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr2855rh/xml/BILLS-113hr2855rh.xml
+  Saved: bills\113-hr-2855\1_reported-in-house.xml
+
+H.R. 4486 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4486.xml
+  Downloading version 1/4 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4486rh/xml/BILLS-113hr4486rh.xml
+  Saved: bills\113-hr-4486\1_reported-in-house.xml
+  Downloading version 2/4 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4486eh/xml/BILLS-113hr4486eh.xml
+  Saved: bills\113-hr-4486\2_engrossed-in-house.xml
+  Downloading version 3/4 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4486rfs/xml/BILLS-113hr4486rfs.xml
+  Saved: bills\113-hr-4486\3_referred-in-senate.xml
+  Downloading version 4/4 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4486rs/xml/BILLS-113hr4486rs.xml
+  Saved: bills\113-hr-4486\4_reported-in-senate.xml
+
+H.R. 4487 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4487.xml
+  Downloading version 1/4 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4487rh/xml/BILLS-113hr4487rh.xml
+  Saved: bills\113-hr-4487\1_reported-in-house.xml
+  Downloading version 2/4 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4487eh/xml/BILLS-113hr4487eh.xml
+  Saved: bills\113-hr-4487\2_engrossed-in-house.xml
+  Downloading version 3/4 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4487rfs/xml/BILLS-113hr4487rfs.xml
+  Saved: bills\113-hr-4487\3_referred-in-senate.xml
+  Downloading version 4/4 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4487rs/xml/BILLS-113hr4487rs.xml
+  Saved: bills\113-hr-4487\4_reported-in-senate.xml
+
+H.R. 4660 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4660.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4660rh/xml/BILLS-113hr4660rh.xml
+  Saved: bills\113-hr-4660\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4660eh/xml/BILLS-113hr4660eh.xml
+  Saved: bills\113-hr-4660\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4660pcs/xml/BILLS-113hr4660pcs.xml
+  Saved: bills\113-hr-4660\3_placed-on-calendar-senate.xml
+
+H.R. 4745 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4745.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4745rh/xml/BILLS-113hr4745rh.xml
+  Saved: bills\113-hr-4745\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4745eh/xml/BILLS-113hr4745eh.xml
+  Saved: bills\113-hr-4745\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4745pcs/xml/BILLS-113hr4745pcs.xml
+  Saved: bills\113-hr-4745\3_placed-on-calendar-senate.xml
+
+H.R. 4800 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4800.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4800rh/xml/BILLS-113hr4800rh.xml
+  Saved: bills\113-hr-4800\1_reported-in-house.xml
+
+H.R. 4870 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4870.xml
+  Downloading version 1/4 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4870rh/xml/BILLS-113hr4870rh.xml
+  Saved: bills\113-hr-4870\1_reported-in-house.xml
+  Downloading version 2/4 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4870eh/xml/BILLS-113hr4870eh.xml
+  Saved: bills\113-hr-4870\2_engrossed-in-house.xml
+  Downloading version 3/4 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4870rfs/xml/BILLS-113hr4870rfs.xml
+  Saved: bills\113-hr-4870\3_referred-in-senate.xml
+  Downloading version 4/4 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4870rs/xml/BILLS-113hr4870rs.xml
+  Saved: bills\113-hr-4870\4_reported-in-senate.xml
+
+H.R. 4903 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4903.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4903rh/xml/BILLS-113hr4903rh.xml
+  Saved: bills\113-hr-4903\1_reported-in-house.xml
+
+H.R. 4923 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr4923.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4923rh/xml/BILLS-113hr4923rh.xml
+  Saved: bills\113-hr-4923\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4923eh/xml/BILLS-113hr4923eh.xml
+  Saved: bills\113-hr-4923\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr4923rfs/xml/BILLS-113hr4923rfs.xml
+  Saved: bills\113-hr-4923\3_referred-in-senate.xml
+
+H.R. 5013 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr5013.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr5013rh/xml/BILLS-113hr5013rh.xml
+  Saved: bills\113-hr-5013\1_reported-in-house.xml
+
+H.R. 5016 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr5016.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr5016rh/xml/BILLS-113hr5016rh.xml
+  Saved: bills\113-hr-5016\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr5016eh/xml/BILLS-113hr5016eh.xml
+  Saved: bills\113-hr-5016\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr5016rfs/xml/BILLS-113hr5016rfs.xml
+  Saved: bills\113-hr-5016\3_referred-in-senate.xml
+
+H.R. 5171 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr5171.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr5171rh/xml/BILLS-113hr5171rh.xml
+  Saved: bills\113-hr-5171\1_reported-in-house.xml
+
+H.R. 5464 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/hr/BILLSTATUS-113hr5464.xml
+  Downloading version 1/1 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113hr5464ih/xml/BILLS-113hr5464ih.xml
+  Saved: bills\113-hr-5464\1_introduced-in-house.xml
+
+S. 1244 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s1244.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s1244pcs/xml/BILLS-113s1244pcs.xml
+  Saved: bills\113-s-1244\1_placed-on-calendar-senate.xml
+
+S. 1245 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s1245.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s1245pcs/xml/BILLS-113s1245pcs.xml
+  Saved: bills\113-s-1245\1_placed-on-calendar-senate.xml
+
+S. 1283 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s1283.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s1283pcs/xml/BILLS-113s1283pcs.xml
+  Saved: bills\113-s-1283\1_placed-on-calendar-senate.xml
+
+S. 1372 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s1372.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s1372pcs/xml/BILLS-113s1372pcs.xml
+  Saved: bills\113-s-1372\1_placed-on-calendar-senate.xml
+
+S. 1429 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s1429.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s1429pcs/xml/BILLS-113s1429pcs.xml
+  Saved: bills\113-s-1429\1_placed-on-calendar-senate.xml
+
+S. 2389 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s2389.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s2389pcs/xml/BILLS-113s2389pcs.xml
+  Saved: bills\113-s-2389\1_placed-on-calendar-senate.xml
+
+S. 2499 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s2499.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s2499pcs/xml/BILLS-113s2499pcs.xml
+  Saved: bills\113-s-2499\1_placed-on-calendar-senate.xml
+
+S. 2534 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s2534.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s2534pcs/xml/BILLS-113s2534pcs.xml
+  Saved: bills\113-s-2534\1_placed-on-calendar-senate.xml
+
+S. 444 (113th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/113/s/BILLSTATUS-113s444.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-113s444is/xml/BILLS-113s444is.xml
+  Saved: bills\113-s-444\1_introduced-in-senate.xml
+
+H.R. 240 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr240.xml
+  Downloading version 1/6 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr240ih/xml/BILLS-114hr240ih.xml
+  Saved: bills\114-hr-240\1_introduced-in-house.xml
+  Downloading version 2/6 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr240eh/xml/BILLS-114hr240eh.xml
+  Saved: bills\114-hr-240\2_engrossed-in-house.xml
+  Downloading version 3/6 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr240pcs/xml/BILLS-114hr240pcs.xml
+  Saved: bills\114-hr-240\3_placed-on-calendar-senate.xml
+  Downloading version 4/6 (xml): Public Print...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr240pp/xml/BILLS-114hr240pp.xml
+  Saved: bills\114-hr-240\4_public-print.xml
+  Downloading version 5/6 (xml): Engrossed Amendment Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr240eas/xml/BILLS-114hr240eas.xml
+  Saved: bills\114-hr-240\5_engrossed-amendment-senate.xml
+  Downloading version 6/6 (xml): Enrolled Bill...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr240enr/xml/BILLS-114hr240enr.xml
+  Saved: bills\114-hr-240\6_enrolled-bill.xml
+
+H.R. 2578 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr2578.xml
+  Downloading version 1/4 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2578rh/xml/BILLS-114hr2578rh.xml
+  Saved: bills\114-hr-2578\1_reported-in-house.xml
+  Downloading version 2/4 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2578eh/xml/BILLS-114hr2578eh.xml
+  Saved: bills\114-hr-2578\2_engrossed-in-house.xml
+  Downloading version 3/4 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2578rfs/xml/BILLS-114hr2578rfs.xml
+  Saved: bills\114-hr-2578\3_referred-in-senate.xml
+  Downloading version 4/4 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2578rs/xml/BILLS-114hr2578rs.xml
+  Saved: bills\114-hr-2578\4_reported-in-senate.xml
+
+H.R. 2685 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr2685.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2685rh/xml/BILLS-114hr2685rh.xml
+  Saved: bills\114-hr-2685\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2685eh/xml/BILLS-114hr2685eh.xml
+  Saved: bills\114-hr-2685\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2685pcs/xml/BILLS-114hr2685pcs.xml
+  Saved: bills\114-hr-2685\3_placed-on-calendar-senate.xml
+
+H.R. 2772 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr2772.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2772rh/xml/BILLS-114hr2772rh.xml
+  Saved: bills\114-hr-2772\1_reported-in-house.xml
+
+H.R. 2822 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr2822.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2822rh/xml/BILLS-114hr2822rh.xml
+  Saved: bills\114-hr-2822\1_reported-in-house.xml
+
+H.R. 2995 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr2995.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr2995rh/xml/BILLS-114hr2995rh.xml
+  Saved: bills\114-hr-2995\1_reported-in-house.xml
+
+H.R. 3020 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr3020.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr3020rh/xml/BILLS-114hr3020rh.xml
+  Saved: bills\114-hr-3020\1_reported-in-house.xml
+
+H.R. 3049 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr3049.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr3049rh/xml/BILLS-114hr3049rh.xml
+  Saved: bills\114-hr-3049\1_reported-in-house.xml
+
+H.R. 3128 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr3128.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr3128rh/xml/BILLS-114hr3128rh.xml
+  Saved: bills\114-hr-3128\1_reported-in-house.xml
+
+H.R. 4974 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr4974.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr4974rh/xml/BILLS-114hr4974rh.xml
+  Saved: bills\114-hr-4974\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr4974eh/xml/BILLS-114hr4974eh.xml
+  Saved: bills\114-hr-4974\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr4974pcs/xml/BILLS-114hr4974pcs.xml
+  Saved: bills\114-hr-4974\3_placed-on-calendar-senate.xml
+
+H.R. 5054 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5054.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5054rh/xml/BILLS-114hr5054rh.xml
+  Saved: bills\114-hr-5054\1_reported-in-house.xml
+
+H.R. 5055 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5055.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5055rh/xml/BILLS-114hr5055rh.xml
+  Saved: bills\114-hr-5055\1_reported-in-house.xml
+
+H.R. 5293 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5293.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5293rh/xml/BILLS-114hr5293rh.xml
+  Saved: bills\114-hr-5293\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5293eh/xml/BILLS-114hr5293eh.xml
+  Saved: bills\114-hr-5293\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5293pcs/xml/BILLS-114hr5293pcs.xml
+  Saved: bills\114-hr-5293\3_placed-on-calendar-senate.xml
+
+H.R. 5393 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5393.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5393rh/xml/BILLS-114hr5393rh.xml
+  Saved: bills\114-hr-5393\1_reported-in-house.xml
+
+H.R. 5394 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5394.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5394rh/xml/BILLS-114hr5394rh.xml
+  Saved: bills\114-hr-5394\1_reported-in-house.xml
+
+H.R. 5485 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5485.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5485rh/xml/BILLS-114hr5485rh.xml
+  Saved: bills\114-hr-5485\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5485eh/xml/BILLS-114hr5485eh.xml
+  Saved: bills\114-hr-5485\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5485pcs/xml/BILLS-114hr5485pcs.xml
+  Saved: bills\114-hr-5485\3_placed-on-calendar-senate.xml
+
+H.R. 5538 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5538.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5538rh/xml/BILLS-114hr5538rh.xml
+  Saved: bills\114-hr-5538\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5538eh/xml/BILLS-114hr5538eh.xml
+  Saved: bills\114-hr-5538\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5538pcs/xml/BILLS-114hr5538pcs.xml
+  Saved: bills\114-hr-5538\3_placed-on-calendar-senate.xml
+
+H.R. 5634 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5634.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5634rh/xml/BILLS-114hr5634rh.xml
+  Saved: bills\114-hr-5634\1_reported-in-house.xml
+
+H.R. 5912 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5912.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5912rh/xml/BILLS-114hr5912rh.xml
+  Saved: bills\114-hr-5912\1_reported-in-house.xml
+
+H.R. 5926 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr5926.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr5926rh/xml/BILLS-114hr5926rh.xml
+  Saved: bills\114-hr-5926\1_reported-in-house.xml
+
+H.R. 861 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/hr/BILLSTATUS-114hr861.xml
+  Downloading version 1/1 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114hr861ih/xml/BILLS-114hr861ih.xml
+  Saved: bills\114-hr-861\1_introduced-in-house.xml
+
+S. 1558 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s1558.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s1558pcs/xml/BILLS-114s1558pcs.xml
+  Saved: bills\114-s-1558\1_placed-on-calendar-senate.xml
+
+S. 1619 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s1619.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s1619pcs/xml/BILLS-114s1619pcs.xml
+  Saved: bills\114-s-1619\1_placed-on-calendar-senate.xml
+
+S. 1645 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s1645.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s1645pcs/xml/BILLS-114s1645pcs.xml
+  Saved: bills\114-s-1645\1_placed-on-calendar-senate.xml
+
+S. 1695 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s1695.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s1695pcs/xml/BILLS-114s1695pcs.xml
+  Saved: bills\114-s-1695\1_placed-on-calendar-senate.xml
+
+S. 1725 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s1725.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s1725pcs/xml/BILLS-114s1725pcs.xml
+  Saved: bills\114-s-1725\1_placed-on-calendar-senate.xml
+
+S. 1800 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s1800.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s1800pcs/xml/BILLS-114s1800pcs.xml
+  Saved: bills\114-s-1800\1_placed-on-calendar-senate.xml
+
+S. 272 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s272.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s272pcs/xml/BILLS-114s272pcs.xml
+  Saved: bills\114-s-272\1_placed-on-calendar-senate.xml
+
+S. 2804 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s2804.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s2804pcs/xml/BILLS-114s2804pcs.xml
+  Saved: bills\114-s-2804\1_placed-on-calendar-senate.xml
+
+S. 2806 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s2806.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s2806pcs/xml/BILLS-114s2806pcs.xml
+  Saved: bills\114-s-2806\1_placed-on-calendar-senate.xml
+
+S. 2955 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s2955.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s2955pcs/xml/BILLS-114s2955pcs.xml
+  Saved: bills\114-s-2955\1_placed-on-calendar-senate.xml
+
+S. 2956 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s2956.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s2956pcs/xml/BILLS-114s2956pcs.xml
+  Saved: bills\114-s-2956\1_placed-on-calendar-senate.xml
+
+S. 3000 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s3000.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s3000pcs/xml/BILLS-114s3000pcs.xml
+  Saved: bills\114-s-3000\1_placed-on-calendar-senate.xml
+
+S. 3001 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s3001.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s3001pcs/xml/BILLS-114s3001pcs.xml
+  Saved: bills\114-s-3001\1_placed-on-calendar-senate.xml
+
+S. 3067 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s3067.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s3067pcs/xml/BILLS-114s3067pcs.xml
+  Saved: bills\114-s-3067\1_placed-on-calendar-senate.xml
+
+S. 3068 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s3068.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s3068pcs/xml/BILLS-114s3068pcs.xml
+  Saved: bills\114-s-3068\1_placed-on-calendar-senate.xml
+
+S. 3117 (114th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/114/s/BILLSTATUS-114s3117.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-114s3117pcs/xml/BILLS-114s3117pcs.xml
+  Saved: bills\114-s-3117\1_placed-on-calendar-senate.xml
+
+H.R. 2998 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr2998.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr2998rh/xml/BILLS-115hr2998rh.xml
+  Saved: bills\115-hr-2998\1_reported-in-house.xml
+
+H.R. 3162 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3162.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3162rh/xml/BILLS-115hr3162rh.xml
+  Saved: bills\115-hr-3162\1_reported-in-house.xml
+
+H.R. 3266 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3266.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3266rh/xml/BILLS-115hr3266rh.xml
+  Saved: bills\115-hr-3266\1_reported-in-house.xml
+
+H.R. 3267 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3267.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3267rh/xml/BILLS-115hr3267rh.xml
+  Saved: bills\115-hr-3267\1_reported-in-house.xml
+
+H.R. 3268 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3268.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3268rh/xml/BILLS-115hr3268rh.xml
+  Saved: bills\115-hr-3268\1_reported-in-house.xml
+
+H.R. 3280 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3280.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3280rh/xml/BILLS-115hr3280rh.xml
+  Saved: bills\115-hr-3280\1_reported-in-house.xml
+
+H.R. 3353 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3353.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3353rh/xml/BILLS-115hr3353rh.xml
+  Saved: bills\115-hr-3353\1_reported-in-house.xml
+
+H.R. 3355 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3355.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3355rh/xml/BILLS-115hr3355rh.xml
+  Saved: bills\115-hr-3355\1_reported-in-house.xml
+
+H.R. 3358 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3358.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3358rh/xml/BILLS-115hr3358rh.xml
+  Saved: bills\115-hr-3358\1_reported-in-house.xml
+
+H.R. 3362 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr3362.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr3362rh/xml/BILLS-115hr3362rh.xml
+  Saved: bills\115-hr-3362\1_reported-in-house.xml
+
+H.R. 4877 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr4877.xml
+  Downloading version 1/1 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr4877ih/xml/BILLS-115hr4877ih.xml
+  Saved: bills\115-hr-4877\1_introduced-in-house.xml
+
+H.R. 5786 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr5786.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5786rh/xml/BILLS-115hr5786rh.xml
+  Saved: bills\115-hr-5786\1_reported-in-house.xml
+
+H.R. 5894 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr5894.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5894rh/xml/BILLS-115hr5894rh.xml
+  Saved: bills\115-hr-5894\1_reported-in-house.xml
+
+H.R. 5895 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr5895.xml
+  Downloading version 1/5 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5895rh/xml/BILLS-115hr5895rh.xml
+  Saved: bills\115-hr-5895\1_reported-in-house.xml
+  Downloading version 2/5 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5895eh/xml/BILLS-115hr5895eh.xml
+  Saved: bills\115-hr-5895\2_engrossed-in-house.xml
+  Downloading version 3/5 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5895pcs/xml/BILLS-115hr5895pcs.xml
+  Saved: bills\115-hr-5895\3_placed-on-calendar-senate.xml
+  Downloading version 4/5 (xml): Engrossed Amendment Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5895eas/xml/BILLS-115hr5895eas.xml
+  Saved: bills\115-hr-5895\4_engrossed-amendment-senate.xml
+  Downloading version 5/5 (xml): Enrolled Bill...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5895enr/xml/BILLS-115hr5895enr.xml
+  Saved: bills\115-hr-5895\5_enrolled-bill.xml
+
+H.R. 5952 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr5952.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5952rh/xml/BILLS-115hr5952rh.xml
+  Saved: bills\115-hr-5952\1_reported-in-house.xml
+
+H.R. 5961 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr5961.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr5961rh/xml/BILLS-115hr5961rh.xml
+  Saved: bills\115-hr-5961\1_reported-in-house.xml
+
+H.R. 6072 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr6072.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6072rh/xml/BILLS-115hr6072rh.xml
+  Saved: bills\115-hr-6072\1_reported-in-house.xml
+
+H.R. 6147 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr6147.xml
+  Downloading version 1/4 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6147rh/xml/BILLS-115hr6147rh.xml
+  Saved: bills\115-hr-6147\1_reported-in-house.xml
+  Downloading version 2/4 (xml): Received in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6147rds/xml/BILLS-115hr6147rds.xml
+  Saved: bills\115-hr-6147\2_received-in-senate.xml
+  Downloading version 3/4 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6147eh/xml/BILLS-115hr6147eh.xml
+  Saved: bills\115-hr-6147\3_engrossed-in-house.xml
+  Downloading version 4/4 (xml): Engrossed Amendment Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6147eas/xml/BILLS-115hr6147eas.xml
+  Saved: bills\115-hr-6147\4_engrossed-amendment-senate.xml
+
+H.R. 6258 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr6258.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6258rh/xml/BILLS-115hr6258rh.xml
+  Saved: bills\115-hr-6258\1_reported-in-house.xml
+
+H.R. 6385 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr6385.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6385rh/xml/BILLS-115hr6385rh.xml
+  Saved: bills\115-hr-6385\1_reported-in-house.xml
+
+H.R. 6470 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr6470.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6470rh/xml/BILLS-115hr6470rh.xml
+  Saved: bills\115-hr-6470\1_reported-in-house.xml
+
+H.R. 6776 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr6776.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr6776rh/xml/BILLS-115hr6776rh.xml
+  Saved: bills\115-hr-6776\1_reported-in-house.xml
+
+H.R. 695 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/hr/BILLSTATUS-115hr695.xml
+  Downloading version 1/8 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695ih/xml/BILLS-115hr695ih.xml
+  Saved: bills\115-hr-695\1_introduced-in-house.xml
+  Downloading version 2/8 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695rh/xml/BILLS-115hr695rh.xml
+  Saved: bills\115-hr-695\2_reported-in-house.xml
+  Downloading version 3/8 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695eh/xml/BILLS-115hr695eh.xml
+  Saved: bills\115-hr-695\3_engrossed-in-house.xml
+  Downloading version 4/8 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695rfs/xml/BILLS-115hr695rfs.xml
+  Saved: bills\115-hr-695\4_referred-in-senate.xml
+  Downloading version 5/8 (xml): Engrossed Amendment Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695eas/xml/BILLS-115hr695eas.xml
+  Saved: bills\115-hr-695\5_engrossed-amendment-senate.xml
+  Downloading version 6/8 (xml): Engrossed Amendment House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695eah/xml/BILLS-115hr695eah.xml
+  Saved: bills\115-hr-695\6_engrossed-amendment-house.xml
+  Downloading version 7/8 (xml): Engrossed Amendment Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695eas2/xml/BILLS-115hr695eas2.xml
+  Saved: bills\115-hr-695\7_engrossed-amendment-senate.xml
+  Downloading version 8/8 (xml): Engrossed Amendment House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115hr695eah2/xml/BILLS-115hr695eah2.xml
+  Saved: bills\115-hr-695\8_engrossed-amendment-house.xml
+
+S. 1557 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1557.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1557pcs/xml/BILLS-115s1557pcs.xml
+  Saved: bills\115-s-1557\1_placed-on-calendar-senate.xml
+
+S. 1603 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1603.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1603pcs/xml/BILLS-115s1603pcs.xml
+  Saved: bills\115-s-1603\1_placed-on-calendar-senate.xml
+
+S. 1609 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1609.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1609pcs/xml/BILLS-115s1609pcs.xml
+  Saved: bills\115-s-1609\1_placed-on-calendar-senate.xml
+
+S. 1648 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1648.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1648pcs/xml/BILLS-115s1648pcs.xml
+  Saved: bills\115-s-1648\1_placed-on-calendar-senate.xml
+
+S. 1655 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1655.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1655pcs/xml/BILLS-115s1655pcs.xml
+  Saved: bills\115-s-1655\1_placed-on-calendar-senate.xml
+
+S. 1662 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1662.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1662pcs/xml/BILLS-115s1662pcs.xml
+  Saved: bills\115-s-1662\1_placed-on-calendar-senate.xml
+
+S. 1780 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s1780.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s1780pcs/xml/BILLS-115s1780pcs.xml
+  Saved: bills\115-s-1780\1_placed-on-calendar-senate.xml
+
+S. 2975 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s2975.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s2975pcs/xml/BILLS-115s2975pcs.xml
+  Saved: bills\115-s-2975\1_placed-on-calendar-senate.xml
+
+S. 2976 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s2976.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s2976pcs/xml/BILLS-115s2976pcs.xml
+  Saved: bills\115-s-2976\1_placed-on-calendar-senate.xml
+
+S. 3024 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3024.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3024pcs/xml/BILLS-115s3024pcs.xml
+  Saved: bills\115-s-3024\1_placed-on-calendar-senate.xml
+
+S. 3071 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3071.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3071pcs/xml/BILLS-115s3071pcs.xml
+  Saved: bills\115-s-3071\1_placed-on-calendar-senate.xml
+
+S. 3072 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3072.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3072pcs/xml/BILLS-115s3072pcs.xml
+  Saved: bills\115-s-3072\1_placed-on-calendar-senate.xml
+
+S. 3073 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3073.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3073pcs/xml/BILLS-115s3073pcs.xml
+  Saved: bills\115-s-3073\1_placed-on-calendar-senate.xml
+
+S. 3108 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3108.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3108pcs/xml/BILLS-115s3108pcs.xml
+  Saved: bills\115-s-3108\1_placed-on-calendar-senate.xml
+
+S. 3109 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3109.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3109pcs/xml/BILLS-115s3109pcs.xml
+  Saved: bills\115-s-3109\1_placed-on-calendar-senate.xml
+
+S. 3158 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3158.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3158pcs/xml/BILLS-115s3158pcs.xml
+  Saved: bills\115-s-3158\1_placed-on-calendar-senate.xml
+
+S. 3159 (115th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/115/s/BILLSTATUS-115s3159.xml
+  Downloading version 1/1 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-115s3159pcs/xml/BILLS-115s3159pcs.xml
+  Saved: bills\115-s-3159\1_placed-on-calendar-senate.xml
+
+H.R. 264 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr264.xml
+  Downloading version 1/3 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr264ih/xml/BILLS-116hr264ih.xml
+  Saved: bills\116-hr-264\1_introduced-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr264eh/xml/BILLS-116hr264eh.xml
+  Saved: bills\116-hr-264\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr264pcs/xml/BILLS-116hr264pcs.xml
+  Saved: bills\116-hr-264\3_placed-on-calendar-senate.xml
+
+H.R. 265 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr265.xml
+  Downloading version 1/3 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr265ih/xml/BILLS-116hr265ih.xml
+  Saved: bills\116-hr-265\1_introduced-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr265eh/xml/BILLS-116hr265eh.xml
+  Saved: bills\116-hr-265\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr265rfs/xml/BILLS-116hr265rfs.xml
+  Saved: bills\116-hr-265\3_referred-in-senate.xml
+
+H.R. 267 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr267.xml
+  Downloading version 1/3 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr267ih/xml/BILLS-116hr267ih.xml
+  Saved: bills\116-hr-267\1_introduced-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr267eh/xml/BILLS-116hr267eh.xml
+  Saved: bills\116-hr-267\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr267rfs/xml/BILLS-116hr267rfs.xml
+  Saved: bills\116-hr-267\3_referred-in-senate.xml
+
+H.R. 2740 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr2740.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr2740rh/xml/BILLS-116hr2740rh.xml
+  Saved: bills\116-hr-2740\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr2740eh/xml/BILLS-116hr2740eh.xml
+  Saved: bills\116-hr-2740\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr2740pcs/xml/BILLS-116hr2740pcs.xml
+  Saved: bills\116-hr-2740\3_placed-on-calendar-senate.xml
+
+H.R. 2745 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr2745.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr2745rh/xml/BILLS-116hr2745rh.xml
+  Saved: bills\116-hr-2745\1_reported-in-house.xml
+
+H.R. 2779 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr2779.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr2779rh/xml/BILLS-116hr2779rh.xml
+  Saved: bills\116-hr-2779\1_reported-in-house.xml
+
+H.R. 3351 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr3351.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr3351rh/xml/BILLS-116hr3351rh.xml
+  Saved: bills\116-hr-3351\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr3351eh/xml/BILLS-116hr3351eh.xml
+  Saved: bills\116-hr-3351\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr3351rfs/xml/BILLS-116hr3351rfs.xml
+  Saved: bills\116-hr-3351\3_referred-in-senate.xml
+
+H.R. 7608 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7608.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7608rh/xml/BILLS-116hr7608rh.xml
+  Saved: bills\116-hr-7608\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7608eh/xml/BILLS-116hr7608eh.xml
+  Saved: bills\116-hr-7608\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7608rfs/xml/BILLS-116hr7608rfs.xml
+  Saved: bills\116-hr-7608\3_referred-in-senate.xml
+
+H.R. 7609 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7609.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7609rh/xml/BILLS-116hr7609rh.xml
+  Saved: bills\116-hr-7609\1_reported-in-house.xml
+
+H.R. 7611 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7611.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7611rh/xml/BILLS-116hr7611rh.xml
+  Saved: bills\116-hr-7611\1_reported-in-house.xml
+
+H.R. 7612 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7612.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7612rh/xml/BILLS-116hr7612rh.xml
+  Saved: bills\116-hr-7612\1_reported-in-house.xml
+
+H.R. 7614 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7614.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7614rh/xml/BILLS-116hr7614rh.xml
+  Saved: bills\116-hr-7614\1_reported-in-house.xml
+
+H.R. 7617 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7617.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7617rh/xml/BILLS-116hr7617rh.xml
+  Saved: bills\116-hr-7617\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7617eh/xml/BILLS-116hr7617eh.xml
+  Saved: bills\116-hr-7617\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7617rfs/xml/BILLS-116hr7617rfs.xml
+  Saved: bills\116-hr-7617\3_referred-in-senate.xml
+
+H.R. 7667 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7667.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7667rh/xml/BILLS-116hr7667rh.xml
+  Saved: bills\116-hr-7667\1_reported-in-house.xml
+
+H.R. 7668 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7668.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7668rh/xml/BILLS-116hr7668rh.xml
+  Saved: bills\116-hr-7668\1_reported-in-house.xml
+
+H.R. 7669 (116th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/116/hr/BILLSTATUS-116hr7669.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-116hr7669rh/xml/BILLS-116hr7669rh.xml
+  Saved: bills\116-hr-7669\1_reported-in-house.xml
+
+H.R. 4345 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4345.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4345rh/xml/BILLS-117hr4345rh.xml
+  Saved: bills\117-hr-4345\1_reported-in-house.xml
+
+H.R. 4355 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4355.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4355rh/xml/BILLS-117hr4355rh.xml
+  Saved: bills\117-hr-4355\1_reported-in-house.xml
+
+H.R. 4356 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4356.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4356rh/xml/BILLS-117hr4356rh.xml
+  Saved: bills\117-hr-4356\1_reported-in-house.xml
+
+H.R. 4372 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4372.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4372rh/xml/BILLS-117hr4372rh.xml
+  Saved: bills\117-hr-4372\1_reported-in-house.xml
+
+H.R. 4431 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4431.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4431rh/xml/BILLS-117hr4431rh.xml
+  Saved: bills\117-hr-4431\1_reported-in-house.xml
+
+H.R. 4432 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4432.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4432rh/xml/BILLS-117hr4432rh.xml
+  Saved: bills\117-hr-4432\1_reported-in-house.xml
+
+H.R. 4502 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4502.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4502rh/xml/BILLS-117hr4502rh.xml
+  Saved: bills\117-hr-4502\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4502eh/xml/BILLS-117hr4502eh.xml
+  Saved: bills\117-hr-4502\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Received in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4502rds/xml/BILLS-117hr4502rds.xml
+  Saved: bills\117-hr-4502\3_received-in-senate.xml
+
+H.R. 4505 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4505.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4505rh/xml/BILLS-117hr4505rh.xml
+  Saved: bills\117-hr-4505\1_reported-in-house.xml
+
+H.R. 4549 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4549.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4549rh/xml/BILLS-117hr4549rh.xml
+  Saved: bills\117-hr-4549\1_reported-in-house.xml
+
+H.R. 4550 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr4550.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr4550rh/xml/BILLS-117hr4550rh.xml
+  Saved: bills\117-hr-4550\1_reported-in-house.xml
+
+H.R. 8236 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8236.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8236rh/xml/BILLS-117hr8236rh.xml
+  Saved: bills\117-hr-8236\1_reported-in-house.xml
+
+H.R. 8237 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8237.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8237rh/xml/BILLS-117hr8237rh.xml
+  Saved: bills\117-hr-8237\1_reported-in-house.xml
+
+H.R. 8238 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8238.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8238rh/xml/BILLS-117hr8238rh.xml
+  Saved: bills\117-hr-8238\1_reported-in-house.xml
+
+H.R. 8239 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8239.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8239rh/xml/BILLS-117hr8239rh.xml
+  Saved: bills\117-hr-8239\1_reported-in-house.xml
+
+H.R. 8254 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8254.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8254rh/xml/BILLS-117hr8254rh.xml
+  Saved: bills\117-hr-8254\1_reported-in-house.xml
+
+H.R. 8255 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8255.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8255rh/xml/BILLS-117hr8255rh.xml
+  Saved: bills\117-hr-8255\1_reported-in-house.xml
+
+H.R. 8256 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8256.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8256rh/xml/BILLS-117hr8256rh.xml
+  Saved: bills\117-hr-8256\1_reported-in-house.xml
+
+H.R. 8257 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8257.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8257rh/xml/BILLS-117hr8257rh.xml
+  Saved: bills\117-hr-8257\1_reported-in-house.xml
+
+H.R. 8262 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8262.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8262rh/xml/BILLS-117hr8262rh.xml
+  Saved: bills\117-hr-8262\1_reported-in-house.xml
+
+H.R. 8282 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8282.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8282rh/xml/BILLS-117hr8282rh.xml
+  Saved: bills\117-hr-8282\1_reported-in-house.xml
+
+H.R. 8294 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8294.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8294rh/xml/BILLS-117hr8294rh.xml
+  Saved: bills\117-hr-8294\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8294eh/xml/BILLS-117hr8294eh.xml
+  Saved: bills\117-hr-8294\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8294rfs/xml/BILLS-117hr8294rfs.xml
+  Saved: bills\117-hr-8294\3_referred-in-senate.xml
+
+H.R. 8295 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/hr/BILLSTATUS-117hr8295.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117hr8295rh/xml/BILLS-117hr8295rh.xml
+  Saved: bills\117-hr-8295\1_reported-in-house.xml
+
+S. 2599 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s2599.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s2599rs/xml/BILLS-117s2599rs.xml
+  Saved: bills\117-s-2599\1_reported-in-senate.xml
+
+S. 2604 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s2604.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s2604rs/xml/BILLS-117s2604rs.xml
+  Saved: bills\117-s-2604\1_reported-in-senate.xml
+
+S. 2605 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s2605.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s2605rs/xml/BILLS-117s2605rs.xml
+  Saved: bills\117-s-2605\1_reported-in-senate.xml
+
+S. 3045 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s3045.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s3045is/xml/BILLS-117s3045is.xml
+  Saved: bills\117-s-3045\1_introduced-in-senate.xml
+
+S. 3179 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s3179.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s3179is/xml/BILLS-117s3179is.xml
+  Saved: bills\117-s-3179\1_introduced-in-senate.xml
+
+S. 4659 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4659.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4659is/xml/BILLS-117s4659is.xml
+  Saved: bills\117-s-4659\1_introduced-in-senate.xml
+
+S. 4660 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4660.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4660is/xml/BILLS-117s4660is.xml
+  Saved: bills\117-s-4660\1_introduced-in-senate.xml
+
+S. 4661 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4661.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4661is/xml/BILLS-117s4661is.xml
+  Saved: bills\117-s-4661\1_introduced-in-senate.xml
+
+S. 4662 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4662.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4662is/xml/BILLS-117s4662is.xml
+  Saved: bills\117-s-4662\1_introduced-in-senate.xml
+
+S. 4663 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4663.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4663is/xml/BILLS-117s4663is.xml
+  Saved: bills\117-s-4663\1_introduced-in-senate.xml
+
+S. 4664 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4664.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4664is/xml/BILLS-117s4664is.xml
+  Saved: bills\117-s-4664\1_introduced-in-senate.xml
+
+S. 4670 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4670.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4670is/xml/BILLS-117s4670is.xml
+  Saved: bills\117-s-4670\1_introduced-in-senate.xml
+
+S. 4678 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4678.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4678is/xml/BILLS-117s4678is.xml
+  Saved: bills\117-s-4678\1_introduced-in-senate.xml
+
+S. 4685 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4685.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4685is/xml/BILLS-117s4685is.xml
+  Saved: bills\117-s-4685\1_introduced-in-senate.xml
+
+S. 4686 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4686.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4686is/xml/BILLS-117s4686is.xml
+  Saved: bills\117-s-4686\1_introduced-in-senate.xml
+
+S. 4720 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4720.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4720is/xml/BILLS-117s4720is.xml
+  Saved: bills\117-s-4720\1_introduced-in-senate.xml
+
+S. 4759 (117th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/117/s/BILLSTATUS-117s4759.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-117s4759is/xml/BILLS-117s4759is.xml
+  Saved: bills\117-s-4759\1_introduced-in-senate.xml
+
+H.R. 4364 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4364.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4364rh/xml/BILLS-118hr4364rh.xml
+  Saved: bills\118-hr-4364\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4364eh/xml/BILLS-118hr4364eh.xml
+  Saved: bills\118-hr-4364\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4364pcs/xml/BILLS-118hr4364pcs.xml
+  Saved: bills\118-hr-4364\3_placed-on-calendar-senate.xml
+
+H.R. 4365 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4365.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4365rh/xml/BILLS-118hr4365rh.xml
+  Saved: bills\118-hr-4365\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4365eh/xml/BILLS-118hr4365eh.xml
+  Saved: bills\118-hr-4365\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4365pcs/xml/BILLS-118hr4365pcs.xml
+  Saved: bills\118-hr-4365\3_placed-on-calendar-senate.xml
+
+H.R. 4367 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4367.xml
+  Downloading version 1/2 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4367rh/xml/BILLS-118hr4367rh.xml
+  Saved: bills\118-hr-4367\1_reported-in-house.xml
+  Downloading version 2/2 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4367eh/xml/BILLS-118hr4367eh.xml
+  Saved: bills\118-hr-4367\2_engrossed-in-house.xml
+
+H.R. 4368 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4368.xml
+  Already exists: bills\118-hr-4368\1_reported-in-house.xml
+
+H.R. 4394 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4394.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4394rh/xml/BILLS-118hr4394rh.xml
+  Saved: bills\118-hr-4394\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4394eh/xml/BILLS-118hr4394eh.xml
+  Saved: bills\118-hr-4394\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4394pcs/xml/BILLS-118hr4394pcs.xml
+  Saved: bills\118-hr-4394\3_placed-on-calendar-senate.xml
+
+H.R. 4665 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4665.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4665rh/xml/BILLS-118hr4665rh.xml
+  Saved: bills\118-hr-4665\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4665eh/xml/BILLS-118hr4665eh.xml
+  Saved: bills\118-hr-4665\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4665pcs/xml/BILLS-118hr4665pcs.xml
+  Saved: bills\118-hr-4665\3_placed-on-calendar-senate.xml
+
+H.R. 4820 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4820.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4820rh/xml/BILLS-118hr4820rh.xml
+  Saved: bills\118-hr-4820\1_reported-in-house.xml
+
+H.R. 4821 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr4821.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4821rh/xml/BILLS-118hr4821rh.xml
+  Saved: bills\118-hr-4821\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4821eh/xml/BILLS-118hr4821eh.xml
+  Saved: bills\118-hr-4821\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr4821pcs/xml/BILLS-118hr4821pcs.xml
+  Saved: bills\118-hr-4821\3_placed-on-calendar-senate.xml
+
+H.R. 5893 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr5893.xml
+  Downloading version 1/1 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr5893ih/xml/BILLS-118hr5893ih.xml
+  Saved: bills\118-hr-5893\1_introduced-in-house.xml
+
+H.R. 8580 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8580.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8580rh/xml/BILLS-118hr8580rh.xml
+  Saved: bills\118-hr-8580\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8580eh/xml/BILLS-118hr8580eh.xml
+  Saved: bills\118-hr-8580\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8580pcs/xml/BILLS-118hr8580pcs.xml
+  Saved: bills\118-hr-8580\3_placed-on-calendar-senate.xml
+
+H.R. 8752 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8752.xml
+  Downloading version 1/2 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8752rh/xml/BILLS-118hr8752rh.xml
+  Saved: bills\118-hr-8752\1_reported-in-house.xml
+  Downloading version 2/2 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8752eh/xml/BILLS-118hr8752eh.xml
+  Saved: bills\118-hr-8752\2_engrossed-in-house.xml
+
+H.R. 8771 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8771.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8771rh/xml/BILLS-118hr8771rh.xml
+  Saved: bills\118-hr-8771\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8771eh/xml/BILLS-118hr8771eh.xml
+  Saved: bills\118-hr-8771\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8771pcs/xml/BILLS-118hr8771pcs.xml
+  Saved: bills\118-hr-8771\3_placed-on-calendar-senate.xml
+
+H.R. 8772 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8772.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8772rh/xml/BILLS-118hr8772rh.xml
+  Saved: bills\118-hr-8772\1_reported-in-house.xml
+
+H.R. 8774 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8774.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8774rh/xml/BILLS-118hr8774rh.xml
+  Saved: bills\118-hr-8774\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8774eh/xml/BILLS-118hr8774eh.xml
+  Saved: bills\118-hr-8774\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8774pcs/xml/BILLS-118hr8774pcs.xml
+  Saved: bills\118-hr-8774\3_placed-on-calendar-senate.xml
+
+H.R. 8997 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8997.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8997rh/xml/BILLS-118hr8997rh.xml
+  Saved: bills\118-hr-8997\1_reported-in-house.xml
+
+H.R. 8998 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr8998.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8998rh/xml/BILLS-118hr8998rh.xml
+  Saved: bills\118-hr-8998\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8998eh/xml/BILLS-118hr8998eh.xml
+  Saved: bills\118-hr-8998\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr8998pcs/xml/BILLS-118hr8998pcs.xml
+  Saved: bills\118-hr-8998\3_placed-on-calendar-senate.xml
+
+H.R. 9027 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr9027.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr9027rh/xml/BILLS-118hr9027rh.xml
+  Saved: bills\118-hr-9027\1_reported-in-house.xml
+
+H.R. 9028 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr9028.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr9028rh/xml/BILLS-118hr9028rh.xml
+  Saved: bills\118-hr-9028\1_reported-in-house.xml
+
+H.R. 9029 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/hr/BILLSTATUS-118hr9029.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118hr9029rh/xml/BILLS-118hr9029rh.xml
+  Saved: bills\118-hr-9029\1_reported-in-house.xml
+
+S. 2127 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2127.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2127rs/xml/BILLS-118s2127rs.xml
+  Saved: bills\118-s-2127\1_reported-in-senate.xml
+
+S. 2131 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2131.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2131rs/xml/BILLS-118s2131rs.xml
+  Saved: bills\118-s-2131\1_reported-in-senate.xml
+
+S. 2302 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2302.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2302rs/xml/BILLS-118s2302rs.xml
+  Saved: bills\118-s-2302\1_reported-in-senate.xml
+
+S. 2309 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2309.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2309rs/xml/BILLS-118s2309rs.xml
+  Saved: bills\118-s-2309\1_reported-in-senate.xml
+
+S. 2321 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2321.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2321rs/xml/BILLS-118s2321rs.xml
+  Saved: bills\118-s-2321\1_reported-in-senate.xml
+
+S. 2437 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2437.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2437rs/xml/BILLS-118s2437rs.xml
+  Saved: bills\118-s-2437\1_reported-in-senate.xml
+
+S. 2438 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2438.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2438rs/xml/BILLS-118s2438rs.xml
+  Saved: bills\118-s-2438\1_reported-in-senate.xml
+
+S. 2443 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2443.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2443rs/xml/BILLS-118s2443rs.xml
+  Saved: bills\118-s-2443\1_reported-in-senate.xml
+
+S. 2587 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2587.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2587rs/xml/BILLS-118s2587rs.xml
+  Saved: bills\118-s-2587\1_reported-in-senate.xml
+
+S. 2605 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2605.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2605rs/xml/BILLS-118s2605rs.xml
+  Saved: bills\118-s-2605\1_reported-in-senate.xml
+
+S. 2624 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2624.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2624rs/xml/BILLS-118s2624rs.xml
+  Saved: bills\118-s-2624\1_reported-in-senate.xml
+
+S. 2625 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s2625.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s2625rs/xml/BILLS-118s2625rs.xml
+  Saved: bills\118-s-2625\1_reported-in-senate.xml
+
+S. 4677 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4677.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4677rs/xml/BILLS-118s4677rs.xml
+  Saved: bills\118-s-4677\1_reported-in-senate.xml
+
+S. 4678 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4678.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4678rs/xml/BILLS-118s4678rs.xml
+  Saved: bills\118-s-4678\1_reported-in-senate.xml
+
+S. 4690 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4690.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4690rs/xml/BILLS-118s4690rs.xml
+  Saved: bills\118-s-4690\1_reported-in-senate.xml
+
+S. 4795 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4795.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4795rs/xml/BILLS-118s4795rs.xml
+  Saved: bills\118-s-4795\1_reported-in-senate.xml
+
+S. 4796 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4796.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4796rs/xml/BILLS-118s4796rs.xml
+  Saved: bills\118-s-4796\1_reported-in-senate.xml
+
+S. 4797 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4797.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4797rs/xml/BILLS-118s4797rs.xml
+  Saved: bills\118-s-4797\1_reported-in-senate.xml
+
+S. 4802 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4802.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4802rs/xml/BILLS-118s4802rs.xml
+  Saved: bills\118-s-4802\1_reported-in-senate.xml
+
+S. 4921 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4921.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4921rs/xml/BILLS-118s4921rs.xml
+  Saved: bills\118-s-4921\1_reported-in-senate.xml
+
+S. 4927 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4927.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4927rs/xml/BILLS-118s4927rs.xml
+  Saved: bills\118-s-4927\1_reported-in-senate.xml
+
+S. 4928 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4928.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4928rs/xml/BILLS-118s4928rs.xml
+  Saved: bills\118-s-4928\1_reported-in-senate.xml
+
+S. 4942 (118th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/118/s/BILLSTATUS-118s4942.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-118s4942rs/xml/BILLS-118s4942rs.xml
+  Saved: bills\118-s-4942\1_reported-in-senate.xml
+
+H.R. 3944 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr3944.xml
+  Downloading version 1/5 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr3944rh/xml/BILLS-119hr3944rh.xml
+  Saved: bills\119-hr-3944\1_reported-in-house.xml
+  Downloading version 2/5 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr3944eh/xml/BILLS-119hr3944eh.xml
+  Saved: bills\119-hr-3944\2_engrossed-in-house.xml
+  Downloading version 3/5 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr3944rfs/xml/BILLS-119hr3944rfs.xml
+  Saved: bills\119-hr-3944\3_referred-in-senate.xml
+  Downloading version 4/5 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr3944rs/xml/BILLS-119hr3944rs.xml
+  Saved: bills\119-hr-3944\4_reported-in-senate.xml
+  Downloading version 5/5 (xml): Engrossed Amendment Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr3944eas/xml/BILLS-119hr3944eas.xml
+  Saved: bills\119-hr-3944\5_engrossed-amendment-senate.xml
+
+H.R. 4016 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4016.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4016rh/xml/BILLS-119hr4016rh.xml
+  Saved: bills\119-hr-4016\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4016eh/xml/BILLS-119hr4016eh.xml
+  Saved: bills\119-hr-4016\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4016pcs/xml/BILLS-119hr4016pcs.xml
+  Saved: bills\119-hr-4016\3_placed-on-calendar-senate.xml
+
+H.R. 4121 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4121.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4121rh/xml/BILLS-119hr4121rh.xml
+  Saved: bills\119-hr-4121\1_reported-in-house.xml
+
+H.R. 4213 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4213.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4213rh/xml/BILLS-119hr4213rh.xml
+  Saved: bills\119-hr-4213\1_reported-in-house.xml
+
+H.R. 4249 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4249.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4249rh/xml/BILLS-119hr4249rh.xml
+  Saved: bills\119-hr-4249\1_reported-in-house.xml
+
+H.R. 4552 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4552.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4552rh/xml/BILLS-119hr4552rh.xml
+  Saved: bills\119-hr-4552\1_reported-in-house.xml
+
+H.R. 4553 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4553.xml
+  Downloading version 1/3 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4553rh/xml/BILLS-119hr4553rh.xml
+  Saved: bills\119-hr-4553\1_reported-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4553eh/xml/BILLS-119hr4553eh.xml
+  Saved: bills\119-hr-4553\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Placed on Calendar Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4553pcs/xml/BILLS-119hr4553pcs.xml
+  Saved: bills\119-hr-4553\3_placed-on-calendar-senate.xml
+
+H.R. 4754 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr4754.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr4754rh/xml/BILLS-119hr4754rh.xml
+  Saved: bills\119-hr-4754\1_reported-in-house.xml
+
+H.R. 7481 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr7481.xml
+  Downloading version 1/1 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr7481ih/xml/BILLS-119hr7481ih.xml
+  Saved: bills\119-hr-7481\1_introduced-in-house.xml
+
+H.R. 7744 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr7744.xml
+  Downloading version 1/3 (xml): Introduced in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr7744ih/xml/BILLS-119hr7744ih.xml
+  Saved: bills\119-hr-7744\1_introduced-in-house.xml
+  Downloading version 2/3 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr7744eh/xml/BILLS-119hr7744eh.xml
+  Saved: bills\119-hr-7744\2_engrossed-in-house.xml
+  Downloading version 3/3 (xml): Referred in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr7744rfs/xml/BILLS-119hr7744rfs.xml
+  Saved: bills\119-hr-7744\3_referred-in-senate.xml
+
+H.R. 8646 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr8646.xml
+  Downloading version 1/2 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr8646rh/xml/BILLS-119hr8646rh.xml
+  Saved: bills\119-hr-8646\1_reported-in-house.xml
+  Downloading version 2/2 (xml): Engrossed in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr8646eh/xml/BILLS-119hr8646eh.xml
+  Saved: bills\119-hr-8646\2_engrossed-in-house.xml
+
+H.R. 8845 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr8845.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr8845rh/xml/BILLS-119hr8845rh.xml
+  Saved: bills\119-hr-8845\1_reported-in-house.xml
+
+H.R. 9022 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hr/BILLSTATUS-119hr9022.xml
+  Downloading version 1/1 (xml): Reported in House...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119hr9022rh/xml/BILLS-119hr9022rh.xml
+  Saved: bills\119-hr-9022\1_reported-in-house.xml
+
+S. 2256 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s2256.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s2256rs/xml/BILLS-119s2256rs.xml
+  Saved: bills\119-s-2256\1_reported-in-senate.xml
+
+S. 2257 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s2257.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s2257rs/xml/BILLS-119s2257rs.xml
+  Saved: bills\119-s-2257\1_reported-in-senate.xml
+
+S. 2431 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s2431.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s2431rs/xml/BILLS-119s2431rs.xml
+  Saved: bills\119-s-2431\1_reported-in-senate.xml
+
+S. 2465 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s2465.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s2465rs/xml/BILLS-119s2465rs.xml
+  Saved: bills\119-s-2465\1_reported-in-senate.xml
+
+S. 2572 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s2572.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s2572rs/xml/BILLS-119s2572rs.xml
+  Saved: bills\119-s-2572\1_reported-in-senate.xml
+
+S. 2587 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s2587.xml
+  Downloading version 1/1 (xml): Reported in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s2587rs/xml/BILLS-119s2587rs.xml
+  Saved: bills\119-s-2587\1_reported-in-senate.xml
+
+S. 3293 (119th Congress):
+[API]: https://www.govinfo.gov/bulkdata/BILLSTATUS/119/s/BILLSTATUS-119s3293.xml
+  Downloading version 1/1 (xml): Introduced in Senate...
+[API]: https://www.govinfo.gov/content/pkg/BILLS-119s3293is/xml/BILLS-119s3293is.xml
+  Saved: bills\119-s-3293\1_introduced-in-senate.xml
+Processed 225 bills, skipped 0 unusable rows.

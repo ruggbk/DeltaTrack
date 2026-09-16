@@ -97,6 +97,15 @@ class TestRestriction:
         text = preamble + "none of the funds made available herein shall be used"
         assert classify_text(text) == "restriction"
 
+    def test_except_prefix(self):
+        # "Except as otherwise provided" opener before "none of the funds" — corpus gap
+        text = (
+            "Except as otherwise provided in this Act, none of the funds provided in this Act, "
+            "provided by previous appropriations Acts to the agencies or entities funded in this Act, "
+            "or provided by this Act to such agencies may be used"
+        )
+        assert classify_text(text) == "restriction"
+
 
 class TestTransfer:
     def test_of_amounts(self):
@@ -149,6 +158,14 @@ class TestAppropriation:
         text = "$1,500,000,000 shall become available on October 1, 2025"
         assert classify_text(text) == "appropriation"
 
+    def test_in_addition_is_hereby_appropriated(self):
+        # "In addition to...is hereby appropriated" — corpus gap (22 nodes, mostly Defense)
+        text = (
+            "In addition to the amounts appropriated or otherwise made available elsewhere in this Act, "
+            "$44,000,000 is hereby appropriated to the Department of Defense"
+        )
+        assert classify_text(text) == "appropriation"
+
 
 class TestRescission:
     def test_approp_with_rescission(self):
@@ -166,6 +183,15 @@ class TestRescission:
 
     def test_plural_are_hereby_rescinded(self):
         text = "Amounts previously appropriated, $75,000,000, are hereby rescinded"
+        assert classify_text(text) == "rescission"
+
+    def test_forex_rescission(self):
+        # "is hereby reduced by $X" — foreign exchange savings rescission — corpus gap
+        text = (
+            "Notwithstanding any other provision of this Act, to reflect savings due to favorable "
+            "foreign exchange rates, the total amount appropriated in this Act is hereby reduced "
+            "by $750,000,000"
+        )
         assert classify_text(text) == "rescission"
 
 
