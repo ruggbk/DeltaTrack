@@ -13,6 +13,10 @@ DELAYED_APPROP = re.compile(r"^\s*\$[\d,]+.{0,50}\bshall become available\b", re
 APPROP_ALT = re.compile(r"(?:there\s+)?(?:is|are)(?: hereby)? appropriated", re.IGNORECASE)
 AUTHORIZATION = re.compile(r"\bauthorized to be appropriated\b", re.IGNORECASE)
 FEE = re.compile(r"fee in the amount of\s+\$|impose a fee|\bpays a fee of\s+\$|\ba fee of\s+\$", re.IGNORECASE)
+OF_AMOUNTS_APPROP = re.compile(
+    r"^\s*(?:\([a-z0-9]+\)\s*)?Of the (?:amounts|funds) (?:appropriated|made available)\b",
+    re.IGNORECASE,
+)
 
 # Sub-clause patterns
 PROVIDED_RE = re.compile(r"\bProvided(?:\s+further)?,?\s+That\b", re.IGNORECASE)
@@ -59,6 +63,8 @@ def classify_text(text):
         return "authorization"
     if FEE.search(text):
         return "fee"
+    if OF_AMOUNTS_APPROP.match(text):
+        return "sub_allocation"
     if EARMARK.search(text):
         return "earmark"
     if AVAILABILITY.search(text):

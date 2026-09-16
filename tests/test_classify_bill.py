@@ -283,6 +283,20 @@ class TestSubAllocation:
         text = "of which $100,000,000 is for construction projects in rural areas"
         assert classify_text(text) == "sub_allocation"
 
+    def test_of_amounts_appropriated_in_this_act(self):
+        text = (
+            "Of the amounts appropriated in this Act under the heading "
+            "'Economic Support Fund', $500,000,000 shall be available for assistance for Jordan"
+        )
+        assert classify_text(text) == "sub_allocation"
+
+    def test_of_funds_made_available_subsection_prefix(self):
+        text = (
+            "(a)Of the funds made available in this Act, not less than $300,000,000 "
+            "shall be available for assistance for Egypt"
+        )
+        assert classify_text(text) == "sub_allocation"
+
 
 class TestUnknown:
     def test_empty_string(self):
